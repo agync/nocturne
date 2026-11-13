@@ -518,7 +518,7 @@ async fn words_before_not_sure_make_the_whole_answer_not_sure() {
         let meta = meta.unwrap();
         assert!(meta.not_sure, "{meta:?}");
         assert!(meta.cited.is_empty() && meta.spans.is_empty(), "{meta:?}");
-        assert!(!text.contains("NOT_") && !text.contains("SURE"), "{text:?}");
+        assert_eq!(text, "", "no word of it reaches the person");
     }
 }
 
@@ -1088,10 +1088,7 @@ async fn an_engine_killed_mid_answer_is_unavailable_and_the_next_answer_works() 
     let (result, partial) = answer(&r, &facts).await;
     killer.await.unwrap();
     assert_eq!(result.unwrap_err(), MindError::Unavailable);
-    assert!(
-        partial.starts_with("word0"),
-        "some of it had been shown: {partial:?}"
-    );
+    assert_eq!(partial, "", "nothing of a cut answer is shown");
 
     let mut state = r.sup.state();
     tokio::time::timeout(Duration::from_secs(15), async {

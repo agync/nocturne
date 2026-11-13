@@ -233,49 +233,31 @@ impl LemonadeMind {
                 return Err(e.into());
             }
         };
-        let mut filter = CiteFilter::new(facts.len());
-        // Text not yet shown because it may be the start of the not-sure marker.
-        let mut held = String::new();
-        let mut not_sure = false;
-        let mut sent_any = false;
+        // The whole reply is read before any of it is shown: a reply that ends in the not-sure
+        // marker is an answer the mind did not stand behind, and none of it may reach the
+        // person. Answers are a sentence or two, so this costs little time.
+        let mut reply = String::new();
         while let Some(item) = stream.next().await {
-            let delta = match item {
-                Ok(d) => d,
+            match item {
+                Ok(delta) => reply.push_str(&delta),
                 Err(_) => {
                     self.forget_loaded().await;
                     return Err(MindError::Unavailable);
                 }
-            };
-            if not_sure {
-                continue;
             }
-            held.push_str(&delta);
-            // The marker anywhere makes the whole answer not sure: whatever came before it is
-            // an answer the mind did not stand behind.
-            if held.contains(prompts::NOT_SURE) {
-                not_sure = true;
-                continue;
-            }
-            let keep = marker_start_len(&held);
-            let ready: String = held.drain(..held.len() - keep).collect();
-            let text = filter.push(&ready);
+        }
+        let mut filter = CiteFilter::new(facts.len());
+        let not_sure = reply.contains(prompts::NOT_SURE);
+        let mut sent_any = false;
+        if !not_sure {
+            let mut text = filter.push(&reply);
+            text.push_str(&filter.finish());
             if !text.is_empty() {
                 sent_any = true;
                 if out.send(text).await.is_err() {
                     return Err(MindError::Failed("the reader went away".into()));
                 }
             }
-        }
-        let tail = if not_sure {
-            String::new()
-        } else {
-            let mut text = filter.push(&held);
-            text.push_str(&filter.finish());
-            text
-        };
-        if !tail.is_empty() {
-            sent_any = true;
-            let _ = out.send(tail).await;
         }
         let cited = if not_sure {
             Vec::new()
@@ -416,14 +398,6 @@ impl LemonadeMind {
             segments,
         })
     }
-}
-
-/// How many bytes at the end of `text` could be the start of the not-sure marker.
-fn marker_start_len(text: &str) -> usize {
-    (1..prompts::NOT_SURE.len())
-        .rev()
-        .find(|&n| text.ends_with(&prompts::NOT_SURE[..n]))
-        .unwrap_or(0)
 }
 
 fn non_empty(s: String) -> Option<String> {
