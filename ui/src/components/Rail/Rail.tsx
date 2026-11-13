@@ -10,6 +10,8 @@ import styles from "./Rail.module.css";
 interface RailProps {
   /** Called after a link is followed, so a menu sheet can close itself. */
   onNavigate?: () => void;
+  /** Show the Nocturne name and mark at the top. The menu sheet already has a title. */
+  brand?: boolean;
 }
 
 interface Entry {
@@ -44,6 +46,12 @@ function isCurrent(entry: Entry, location: string): boolean {
 
 const AWAY = "/settings/away";
 
+/** The rail entry a screen belongs to, or null when it has none (Ask, Listen, not found). */
+export function currentSection(location: string): CopyId | null {
+  const entry = [...MAIN, ...FOOT].find((e) => isCurrent(e, location));
+  return entry ? entry.label : null;
+}
+
 type Indicator = { kind: "on" | "use" | "relink" | "needs"; text: string };
 
 /** What the rail says about Away from home, or nothing while it is off or still being set up. */
@@ -69,7 +77,7 @@ export function indicatorFor(view: RemoteView | undefined): Indicator | null {
   }
 }
 
-export function Rail({ onNavigate }: RailProps) {
+export function Rail({ onNavigate, brand = true }: RailProps) {
   const [location] = useLocation();
   const { data: status } = useStatus();
   const { data: page } = usePage();
@@ -100,10 +108,12 @@ export function Rail({ onNavigate }: RailProps) {
 
   return (
     <nav className={styles.rail} aria-label={t("rail.label")} data-region="rail">
-      <div className={styles.brand}>
-        <Mark state="resting" size={20} decorative />
-        <span className={styles.wordmark}>{t("app.name")}</span>
-      </div>
+      {brand ? (
+        <div className={styles.brand}>
+          <Mark state="resting" size={20} decorative />
+          <span className={styles.wordmark}>{t("app.name")}</span>
+        </div>
+      ) : null}
       <div className={styles.links}>{MAIN.map(link)}</div>
       <div className={styles.foot}>
         <div className={styles.away} aria-live="polite">
@@ -127,7 +137,9 @@ export function Rail({ onNavigate }: RailProps) {
               {t(`status.state.${status.state}`)}
             </span>
             <span className={styles.internet}>
-              <span className={styles.label}>{t("status.internet.label")}</span>
+              <span className={styles.label}>
+                {t(status.sentMeasured ? "status.internet.label" : "status.internet.uses")}
+              </span>
               <span className={styles.value}>
                 {!status.sentMeasured
                   ? t("status.internet.unmeasured")

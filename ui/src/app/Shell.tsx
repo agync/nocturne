@@ -4,14 +4,16 @@ import { Dialog } from "../components/Dialog/Dialog";
 import { DropOverlay } from "../components/DropOverlay/DropOverlay";
 import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
 import { ScreenError } from "../components/ErrorBoundary/ScreenError";
+import { Icon } from "../components/Icon/Icon";
 import { KeepAskBar } from "../components/KeepAskBar/KeepAskBar";
 import { KeptToday } from "../components/KeptToday/KeptToday";
 import { Mark, markStateFor } from "../components/Mark/Mark";
 import { type NoticeHandlers, Notices } from "../components/Notices/Notices";
-import { Rail } from "../components/Rail/Rail";
+import { currentSection, Rail } from "../components/Rail/Rail";
 import { useToast } from "../components/Toast/Toast";
 import { addDays, formatDay } from "../copy/format";
 import { t } from "../copy/t";
+import { EngineError } from "../engine/client";
 import { useEngine, usePage, useRefresh, useSettings, useStatus } from "../engine/context";
 import { usePlatform } from "../platform/context";
 import { askRequests } from "./ask-request";
@@ -120,8 +122,10 @@ export function Shell({ children }: ShellProps) {
         await engine.keepFiles(paths, "drop");
         toast.show({ message: t("capture.files", { count: paths.length }) });
         refresh("items", "status", "page");
-      } catch {
+      } catch (error) {
         toast.show({ message: t("bar.kept.error") });
+        // The bar words a kind of file that cannot be kept itself.
+        if (error instanceof EngineError && /cannot be kept/.test(error.detail)) throw error;
       }
     },
     [engine, toast, refresh],
@@ -220,6 +224,7 @@ export function Shell({ children }: ShellProps) {
         onKeep={keep}
         onAsk={ask}
         shortcut={settings?.shortcutAvailable ? settings.shortcut : undefined}
+        onFiles={keepFiles}
         onTalk={{ start: recorder.start, stop: recorder.stop }}
         recordingSeconds={recorder.seconds}
         talkUnavailable={recorder.unavailable ? t(failureCopy(recorder.unavailable)) : undefined}
@@ -229,6 +234,8 @@ export function Shell({ children }: ShellProps) {
   );
 
   const title = t(route ? route.title : "screen.notFound.title");
+  const sectionId = currentSection(location);
+  const section = sectionId ? t(sectionId) : title;
 
   return (
     <div
@@ -240,22 +247,30 @@ export function Shell({ children }: ShellProps) {
       <button type="button" className={styles.skip} onClick={() => main.current?.focus()}>
         {t("shell.skip")}
       </button>
+      {!narrow ? (
+        // First in the document and on screen: the main navigation comes first in keyboard order.
+        // The skip link above it jumps past it to the page.
+        <div className={styles.railColumn}>
+          <Rail />
+        </div>
+      ) : null}
       <div className={styles.body}>
         {narrow ? (
           <header className={styles.narrowHeader}>
-            <span className={styles.narrowTitle}>
-              <Mark state={markStateFor(status?.state ?? "resting")} size={18} decorative />
-              <span>{title}</span>
-            </span>
             <button
               type="button"
-              className={styles.menuButton}
+              className={styles.titleButton}
               data-region="rail"
               aria-haspopup="dialog"
               aria-expanded={menuOpen}
+              aria-label={t("shell.menu.named", { section })}
               onClick={() => setMenuOpen(true)}
             >
-              {t("shell.menu")}
+              <Mark state={markStateFor(status?.state ?? "resting")} size={18} decorative />
+              <span className={styles.titleText}>{section}</span>
+              <span className={styles.chevron} aria-hidden="true">
+                <Icon name="chevron-down" size={16} />
+              </span>
             </button>
           </header>
         ) : (
@@ -290,15 +305,9 @@ export function Shell({ children }: ShellProps) {
         </div>
         {narrow ? <div className={styles.bottomBar}>{bar}</div> : null}
       </div>
-      {!narrow ? (
-        // Last in the document, first on screen: the design's focus order ends at the rail.
-        <div className={styles.railColumn}>
-          <Rail />
-        </div>
-      ) : null}
       {menuOpen ? (
         <Dialog title={t("shell.menu.title")} edge="start" onClose={() => setMenuOpen(false)}>
-          <Rail onNavigate={() => setMenuOpen(false)} />
+          <Rail brand={false} onNavigate={() => setMenuOpen(false)} />
         </Dialog>
       ) : null}
       <DropOverlay onDrop={keepFiles} />

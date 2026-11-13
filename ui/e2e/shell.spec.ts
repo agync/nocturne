@@ -34,6 +34,14 @@ test.describe("wide window", () => {
     await expect(page.getByRole("textbox", { name: "Keep something, or ask" })).toBeFocused();
   });
 
+  test("the first Tab stops land on the rail, before the bar and the page", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Skip to the page" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: /^Today/ })).toBeFocused();
+  });
+
   test("nothing has focus on load, and / jumps to the bar", async ({ page }) => {
     await ready(page);
     expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
@@ -89,7 +97,8 @@ test.describe("narrow window", () => {
 
   test("collapses the rail into Menu and docks the bar at the bottom", async ({ page }) => {
     await ready(page);
-    await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu, Today" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveCount(0);
     await expect(page.getByRole("navigation", { name: "Main" })).toHaveCount(0);
     const bar = await page.getByRole("textbox", { name: "Keep something, or ask" }).boundingBox();
     expect(bar).not.toBeNull();
@@ -97,9 +106,15 @@ test.describe("narrow window", () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
   });
 
+  test("the title button names the section, with no second Menu", async ({ page }) => {
+    await ready(page, "#/settings/away");
+    await expect(page.getByRole("button", { name: "Menu, Settings" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Menu", exact: true })).toHaveCount(0);
+  });
+
   test("Menu opens the rail, Escape closes it and focus returns", async ({ page }) => {
     await ready(page);
-    const menu = page.getByRole("button", { name: "Menu" });
+    const menu = page.getByRole("button", { name: /^Menu/ });
     await menu.click();
     const dialog = page.getByRole("dialog", { name: "Menu" });
     await expect(dialog).toBeVisible();
@@ -116,7 +131,7 @@ test.describe("text at 200%", () => {
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     await page.waitForTimeout(150);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
-    await expect(page.getByRole("button", { name: "Menu" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Menu/ })).toBeVisible();
     const bar = page.getByRole("textbox", { name: "Keep something, or ask" });
     await expect(bar).toBeVisible();
     const box = await bar.boundingBox();
@@ -196,7 +211,7 @@ for (const scheme of ["light", "dark"] as const) {
     });
     const page = await context.newPage();
     await ready(page);
-    await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("button", { name: /^Menu/ }).click();
     await page.getByRole("dialog", { name: "Menu" }).waitFor();
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])

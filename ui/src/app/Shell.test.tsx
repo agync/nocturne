@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -142,7 +144,9 @@ describe("rail", () => {
   it("does not claim nothing was sent while that is not measured", async () => {
     renderApp();
     const status = await screen.findByRole("region", { name: "Nocturne status" });
-    expect(within(status).getByText("Not measured on this computer")).toBeInTheDocument();
+    expect(within(status).getByText("Uses the internet for")).toBeInTheDocument();
+    expect(within(status).getByText("Downloads you agreed to")).toBeInTheDocument();
+    expect(within(status).queryByText("Sent to the internet")).toBeNull();
     expect(within(status).queryByText("Nothing")).toBeNull();
   });
 
@@ -157,17 +161,18 @@ describe("rail", () => {
     const real2 = engine2.getStatus.bind(engine2);
     engine2.getStatus = async () => ({ ...(await real2()), sentMeasured: false });
     renderApp({ engine: engine2 });
-    expect(await screen.findByText("Not measured on this computer")).toBeInTheDocument();
+    expect(await screen.findByText("Downloads you agreed to")).toBeInTheDocument();
   });
 });
 
 describe("narrow window", () => {
   beforeEach(() => setViewport(400));
 
-  it("replaces the rail with Menu and docks the bar at the bottom", async () => {
+  it("replaces the rail with one menu button and docks the bar at the bottom", async () => {
     const { container } = renderApp();
-    const menu = await screen.findByRole("button", { name: "Menu" });
-    expect(menu).toBeInTheDocument();
+    const menu = await screen.findByRole("button", { name: /^Menu/ });
+    expect(menu).toHaveAccessibleName("Menu, Today");
+    expect(screen.getAllByRole("button", { name: /^Menu/ })).toHaveLength(1);
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     const bar = container.querySelector('[data-placement="bottom"]');
     expect(bar).not.toBeNull();
@@ -178,12 +183,38 @@ describe("narrow window", () => {
     expect(container.querySelector('[data-placement="top"]')).toBeNull();
   });
 
+  it("names the rail section in the menu button, not the screen", async () => {
+    renderApp({ hash: "#/items/item-letter" });
+    expect(
+      await screen.findByRole("button", { name: "Menu, What Nocturne remembers" }),
+    ).toBeVisible();
+    cleanup();
+    renderApp({ hash: "#/settings/away" });
+    expect(await screen.findByRole("button", { name: "Menu, Settings" })).toBeVisible();
+    cleanup();
+    renderApp({ hash: "#/pages/2026-11-12" });
+    expect(await screen.findByRole("button", { name: "Menu, Today" })).toBeVisible();
+    cleanup();
+    renderApp({ hash: "#/ask" });
+    expect(await screen.findByRole("button", { name: "Menu, Ask" })).toBeVisible();
+  });
+
+  it("keeps the menu title on one line with an ellipsis", async () => {
+    renderApp();
+    const menu = await screen.findByRole("button", { name: /^Menu/ });
+    const text = within(menu).getByText("Today");
+    expect(text.className).toMatch(/titleText/);
+    const css = readFileSync(resolve(__dirname, "Shell.module.css"), "utf8");
+    expect(css).toMatch(/\.titleText \{[^}]*text-overflow: ellipsis/);
+  });
+
   it("opens the rail as a menu, closes on a link, and returns focus on Escape", async () => {
     renderApp();
-    const menu = await screen.findByRole("button", { name: "Menu" });
+    const menu = await screen.findByRole("button", { name: /^Menu/ });
     await userEvent.click(menu);
     const dialog = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(dialog).getByRole("link", { name: "Privacy" })).toBeInTheDocument();
+    expect(within(dialog).queryByText("Nocturne")).toBeNull();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(menu).toHaveFocus();
@@ -198,10 +229,10 @@ describe("narrow window", () => {
 
   it("goes back to the wide layout when the window grows", async () => {
     renderApp();
-    await screen.findByRole("button", { name: "Menu" });
+    await screen.findByRole("button", { name: /^Menu/ });
     act(() => setViewport(1280));
     expect(await screen.findByRole("navigation", { name: "Main" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Menu/ })).toBeNull();
   });
 });
 
@@ -213,7 +244,7 @@ describe("wide window", () => {
     ).toBeInTheDocument();
     expect(container.querySelector('[data-placement="top"]')).not.toBeNull();
     expect(screen.getByText("or drop files anywhere")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Menu" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Menu/ })).toBeNull();
     expect(await screen.findByRole("complementary", { name: "Recently kept" })).toBeInTheDocument();
   });
 
@@ -269,13 +300,15 @@ describe("wide window", () => {
     dialog.remove();
   });
 
-  it("keeps the design's focus order: the bar, the page, then the rail", async () => {
+  it("puts the rail first in keyboard order, then the bar, then the page", async () => {
     renderApp();
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     const rail = screen.getByRole("navigation", { name: "Main" });
     const main = screen.getByRole("main");
+    const skip = screen.getByRole("button", { name: "Skip to the page" });
+    expect(skip.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rail.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(bar.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(main.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("cycles focus with F6: bar, page, rail, bar", async () => {
@@ -558,7 +591,7 @@ describe("narrow header mark", () => {
     const engine = createMockEngine();
     await engine.pause(null);
     const { container } = renderApp({ engine });
-    await screen.findByRole("button", { name: "Menu" });
+    await screen.findByRole("button", { name: /^Menu/ });
     await waitFor(() =>
       expect(container.querySelector('header [data-state="paused"]')).not.toBeNull(),
     );

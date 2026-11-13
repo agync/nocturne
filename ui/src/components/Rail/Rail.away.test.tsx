@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RemoteView } from "../../engine/bindings";
 import { createMockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
-import { indicatorFor } from "./Rail";
+import { currentSection, indicatorFor } from "./Rail";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
@@ -76,5 +76,19 @@ describe("rail", () => {
       ({ nav } = await rail(scenario));
       expect(within(nav).queryByText("Sent to your phones"), scenario).toBeNull();
     }
+  });
+});
+
+describe("currentSection", () => {
+  it("names the rail entry a screen belongs to", () => {
+    expect(currentSection("/today")).toBe("rail.today");
+    expect(currentSection("/pages/2026-11-12")).toBe("rail.today");
+    expect(currentSection("/pages")).toBe("rail.pages");
+    expect(currentSection("/items/x")).toBe("rail.memories");
+    expect(currentSection("/memories/ent-leo")).toBe("rail.memories");
+    expect(currentSection("/settings/away")).toBe("rail.settings");
+    expect(currentSection("/settings/advanced")).toBe("rail.settings");
+    expect(currentSection("/ask")).toBeNull();
+    expect(currentSection("/nowhere")).toBeNull();
   });
 });

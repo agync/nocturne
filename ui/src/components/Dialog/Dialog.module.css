@@ -34,6 +34,7 @@
 
 .backdrop[data-edge="start"] .panel {
   width: min(100%, 320px);
+  padding: var(--s-4) var(--s-3);
   border-radius: 0;
   background: var(--bg);
 }
@@ -43,6 +44,10 @@
   align-items: flex-start;
   justify-content: space-between;
   gap: var(--s-4);
+}
+
+.backdrop[data-edge="start"] .head {
+  padding-inline: 10px;
 }
 
 .title {

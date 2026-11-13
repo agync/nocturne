@@ -206,9 +206,6 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 test.describe("add a photo or file from the keep bar", () => {
-  // The shell passes `onFiles` to the bar in the shell task; until then the button is not there.
-  test.fixme(true, "needs the shell to pass onFiles to the keep bar");
-
   test("a chosen JPEG is kept and the toast says so", async ({ page }) => {
     await page.goto("/#/today");
     const add = page.getByRole("button", { name: "Add a photo or file" });

@@ -27,7 +27,6 @@
 .railColumn {
   display: flex;
   flex-direction: column;
-  order: -1;
   width: var(--size-rail);
   flex: none;
   overflow-y: auto;
@@ -107,34 +106,45 @@
 .narrowHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--s-3);
   padding: var(--s-2) var(--s-4);
   border-bottom: 1px solid var(--rule);
   background: var(--bg);
 }
 
-.narrowTitle {
+.titleButton {
   display: flex;
   align-items: center;
   gap: var(--s-2);
   min-width: 0;
+  max-width: 100%;
+  min-height: var(--size-touch);
+  margin-inline-start: calc(-1 * var(--s-2));
+  padding: 0 var(--s-2);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink);
   font-size: 0.9375rem;
   font-weight: 500;
 }
 
-.menuButton {
-  min-height: var(--size-touch);
-  padding: 0 var(--s-3);
-  border: 0;
-  border-radius: var(--r-sm);
-  background: transparent;
-  color: var(--ink2);
-  font-size: 0.8125rem;
+.titleButton:hover {
+  background: color-mix(in srgb, var(--sheet) 60%, transparent);
 }
 
-.menuButton:hover {
-  color: var(--ink);
+.titleText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chevron {
+  display: inline-flex;
+  flex: none;
+  color: var(--ink3);
 }
 
 .bottomBar {

@@ -376,7 +376,7 @@ describe("good defaults", () => {
 
   it("says it is not measured rather than claiming nothing was sent", async () => {
     await open("downloading");
-    expect(await screen.findByText("Not measured on this computer")).toBeInTheDocument();
+    expect(await screen.findByText("Downloads you agreed to")).toBeInTheDocument();
     expect(screen.queryByText("Nothing")).toBeNull();
   });
 });

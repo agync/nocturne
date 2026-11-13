@@ -117,10 +117,10 @@
 }
 
 .secondary .link[aria-current="page"] {
+  background: var(--sheet);
   color: var(--ink);
   font-weight: 500;
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  box-shadow: 0 0 0 1px var(--rule);
 }
 
 .away:empty {
