@@ -1,8 +1,9 @@
 # Every `uses:` carries a PLACEHOLDER all-zero commit SHA: replace each with the full commit SHA
 # of the release named in its comment before the first run.
 # Builds nocturne-tailnet (helpers/tailnet) for every platform, for Away from home (Most private).
-# Run by hand or on a release. Two independent builds must agree on every binary before the macOS
-# and Windows ones are signed and all four are attached to the release.
+# Run by hand or on a release. Two independent builds must agree on every binary and the licence
+# report must be written before the macOS and Windows ones are signed (in the release-signing
+# environment); then all four are attached to the release, which never replaces a file.
 name: tailnet
 
 on:
@@ -28,6 +29,8 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+        with:
+          persist-credentials: false
       - id: pins
         name: pinned Go version (from helpers.lock)
         run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailnet")["go_version"].removeprefix("go"))' >> "$GITHUB_OUTPUT"
@@ -65,9 +68,52 @@ jobs:
           done
           cat tailnet-first/SHA256SUMS
 
-  sign-macos:
+  # The licence report is written before anything is signed, so a module whose licence is not
+  # known stops the release early.
+  licenses:
     needs: reproduce
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+        with:
+          persist-credentials: false
+      - id: pins
+        name: pinned versions (from helpers.lock)
+        run: |
+          python3 -I - >> "$GITHUB_OUTPUT" << 'PY'
+          import tomllib
+          lock = tomllib.load(open("helpers.lock", "rb"))
+          helper = next(h for h in lock["helpers"] if h["kind"] == "tailnet")
+          print("go=" + helper["go_version"].removeprefix("go"))
+          print("licenses=" + helper["go_licenses_version"])
+          PY
+      - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
+        with:
+          go-version: ${{ steps.pins.outputs.go }}
+          cache: false
+      - name: write the licence report
+        env:
+          GO_LICENSES_VERSION: ${{ steps.pins.outputs.licenses }}
+        run: |
+          set -euo pipefail
+          case "$GO_LICENSES_VERSION" in PLACEHOLDER*) echo "go-licenses is not pinned yet" >&2; exit 2 ;; esac
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/google/go-licenses@$GO_LICENSES_VERSION"
+          tags=$(scripts/tailnet-tags.sh)
+          cd helpers/tailnet
+          for goos in linux darwin windows; do
+            GOOS=$goos GOFLAGS="-tags=$tags" "$RUNNER_TEMP/bin/go-licenses" report .
+          done | sort -u > ../../tailnet-licenses.txt
+          test -s ../../tailnet-licenses.txt
+      - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+        with:
+          name: tailnet-licenses
+          path: tailnet-licenses.txt
+
+  sign-macos:
+    needs: [reproduce, licenses]
     runs-on: macos-14
+    # Signing secrets live only in this protected environment, which needs a maintainer's approval.
+    environment: release-signing
     steps:
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
@@ -104,8 +150,9 @@ jobs:
           path: out/nocturne-tailnet-macos-aarch64
 
   sign-windows:
-    needs: reproduce
+    needs: [reproduce, licenses]
     runs-on: windows-2022
+    environment: release-signing
     defaults:
       run:
         shell: bash
@@ -138,20 +185,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
-      - id: pins
-        name: pinned versions (from helpers.lock)
-        run: |
-          python3 -I - >> "$GITHUB_OUTPUT" << 'PY'
-          import tomllib
-          lock = tomllib.load(open("helpers.lock", "rb"))
-          helper = next(h for h in lock["helpers"] if h["kind"] == "tailnet")
-          print("go=" + helper["go_version"].removeprefix("go"))
-          print("licenses=" + helper["go_licenses_version"])
-          PY
-      - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
-          go-version: ${{ steps.pins.outputs.go }}
-          cache: false
+          persist-credentials: false
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: tailnet-first
@@ -161,11 +196,15 @@ jobs:
           pattern: signed-*
           path: signed
           merge-multiple: true
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+        with:
+          name: tailnet-licenses
+          path: out
       - name: collect the files, list the checksums for helpers.lock
         run: |
           set -euo pipefail
           (cd unsigned && sha256sum -c SHA256SUMS)
-          mkdir out
+          mkdir -p out
           cp unsigned/nocturne-tailnet-linux-* out/
           cp signed/nocturne-tailnet-macos-aarch64 signed/nocturne-tailnet-windows-x86_64.exe out/
           cd out
@@ -173,19 +212,6 @@ jobs:
             printf '%s  %s  %s\n' "$(sha256sum "$f" | cut -d ' ' -f 1)" "$f" "$(stat -c %s "$f")"
           done | tee ../pins.txt
           test "$(wc -l < ../pins.txt)" -eq 4
-      - name: write the licence report
-        env:
-          GO_LICENSES_VERSION: ${{ steps.pins.outputs.licenses }}
-        run: |
-          set -euo pipefail
-          case "$GO_LICENSES_VERSION" in PLACEHOLDER*) echo "go-licenses is not pinned yet" >&2; exit 2 ;; esac
-          GOBIN="$RUNNER_TEMP/bin" go install "github.com/google/go-licenses@$GO_LICENSES_VERSION"
-          tags=$(scripts/tailnet-tags.sh)
-          cd helpers/tailnet
-          for goos in linux darwin windows; do
-            GOOS=$goos GOFLAGS="-tags=$tags" "$RUNNER_TEMP/bin/go-licenses" report .
-          done | sort -u > ../../out/tailnet-licenses.txt
-          test -s ../../out/tailnet-licenses.txt
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: tailnet-release-files
@@ -197,4 +223,4 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" out/nocturne-tailnet-* out/tailnet-licenses.txt --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" out/nocturne-tailnet-* out/tailnet-licenses.txt
