@@ -19,7 +19,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/pages/2026-11-12", "One thing needs you today."],
   ["#/needs-you", "2 things are waiting"],
   ["#/ask", "Ask about anything you’ve kept."],
-  ["#/recent", "Recently kept"],
+  ["#/recent", "Today and yesterday"],
   ["#/quick-capture", "Keep something"],
   ["#/memories", "What Nocturne remembers"],
   ["#/memories/ent-leo", "Leo"],
