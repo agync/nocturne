@@ -126,11 +126,13 @@ export default function Privacy() {
             {measured ? t("privacy.sent.label") : t("privacy.sent.label.unmeasured")}
           </p>
           <h1 className={`t-display ${styles.nothing}`}>
-            {!measured
-              ? t("privacy.sent.unmeasured")
-              : view.sentToInternetBytes > 0
-                ? t("privacy.sent.amount", { size: formatBytes(view.sentToInternetBytes) })
-                : t("privacy.sent.nothing")}
+            {view.remoteOn
+              ? t("privacy.headline.awayOn")
+              : !measured
+                ? t("privacy.sent.unmeasured")
+                : view.sentToInternetBytes > 0
+                  ? t("privacy.sent.amount", { size: formatBytes(view.sentToInternetBytes) })
+                  : t("privacy.sent.nothing")}
           </h1>
           {measured ? (
             <p className={styles.watching}>

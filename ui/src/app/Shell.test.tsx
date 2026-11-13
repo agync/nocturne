@@ -27,7 +27,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/fading", "Fading & let go"],
   ["#/pages", "Past pages"],
   ["#/setup", "Nocturne is ready."],
-  ["#/privacy", "Privacy"],
+  ["#/privacy", "Only downloads you agreed to."],
   ["#/settings", "Settings"],
   ["#/settings/advanced", "Advanced details"],
   ["#/listen/2026-11-13", "Two things need you today."],
@@ -82,7 +82,7 @@ describe("routes", () => {
 
   it("names the window after the screen", async () => {
     renderApp({ hash: "#/privacy" });
-    await screen.findByRole("heading", { level: 1, name: "Privacy" });
+    await screen.findByRole("heading", { level: 1, name: "Only downloads you agreed to." });
     expect(document.title).toBe("Privacy · Nocturne");
   });
 
@@ -485,7 +485,7 @@ describe("a screen asked for by the quick capture window", () => {
   it("ignores a route that is not a screen of the main window", async () => {
     const platform = fakePlatform();
     renderApp({ hash: "#/privacy", platform });
-    await screen.findByRole("heading", { level: 1, name: "Privacy" });
+    await screen.findByRole("heading", { level: 1, name: "Only downloads you agreed to." });
     for (const forged of ["/quick-capture", "/setup", "/print/2026-11-13", "/nowhere", "today"]) {
       await act(async () => platform.openInMain(forged));
       expect(window.location.hash).toBe("#/privacy");
@@ -530,7 +530,9 @@ describe("when a screen fails", () => {
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Keep something, or ask" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("link", { name: "Privacy" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Privacy" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Only downloads you agreed to." }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("alert")).toBeNull();
     error.mockRestore();
   });

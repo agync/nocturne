@@ -5,6 +5,7 @@
   "privacy.sent.amount": "{size}.",
   "privacy.sent.label.unmeasured": "What Nocturne uses the internet for",
   "privacy.sent.unmeasured": "Only downloads you agreed to.",
+  "privacy.headline.awayOn": "Only downloads you agreed to, and Away from home.",
   "privacy.sent.unmeasured.detail": "This computer can’t count what leaves it, so Nocturne lists every download below instead.",
   "privacy.watching": "Watching live · checked {ago}",
   "privacy.watching.at": "Watching live · checked at {time}",

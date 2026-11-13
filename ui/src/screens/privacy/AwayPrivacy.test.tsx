@@ -59,7 +59,10 @@ describe("privacy", () => {
     expect(screen.queryByText(/Watching live/)).toBeNull();
     expect(screen.queryByText("Not measured.")).toBeNull();
     expect(
-      screen.getByRole("heading", { level: 1, name: "Only downloads you agreed to." }),
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Only downloads you agreed to, and Away from home.",
+      }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/can’t count what the connection part itself sends to Cloudflare/),
@@ -82,6 +85,20 @@ describe("privacy", () => {
   it("only says it cannot tell what is sent when measuring is unavailable", async () => {
     await open("on", false);
     expect(screen.getByText(/can’t tell Nocturne what it sends/)).toBeInTheDocument();
+  });
+
+  it("headline_says_away_from_home_is_on: never says only downloads go out while phones are reached", async () => {
+    await open("on", true);
+    expect(
+      screen.getByRole("heading", {
+        level: 1,
+        name: "Only downloads you agreed to, and Away from home.",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { level: 1, name: "Nothing." })).toBeNull();
+    expect(
+      screen.getByText(/can’t count what the connection part itself sends/),
+    ).toBeInTheDocument();
   });
 
   it("the promise says what Away from home uses", async () => {
