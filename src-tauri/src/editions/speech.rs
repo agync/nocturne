@@ -129,7 +129,13 @@ async fn make<R: Runtime>(
                 .await
                 .map_err(|e| match e {
                     MindError::Busy => CommandError::new(ErrorCode::Busy, e),
-                    other => CommandError::unavailable(other),
+                    // Not there at all: the interface says Nocturne is still getting ready.
+                    MindError::Unavailable => CommandError::unavailable(e),
+                    // The voice ran and failed: a different thing to say to the person.
+                    other => {
+                        tracing::warn!("the voice failed: {other}");
+                        CommandError::internal(other)
+                    }
                 })?;
             parts.push((section.kind, bytes));
         }
@@ -159,7 +165,7 @@ async fn make<R: Runtime>(
 
 fn unusable(e: WavError) -> CommandError {
     tracing::warn!("the voice returned audio that could not be used: {e}");
-    CommandError::unavailable("the voice returned audio that could not be used")
+    CommandError::internal("the voice returned audio that could not be used")
 }
 
 /// Whether the spoken page should be made now, ahead of the person asking: it was used in the

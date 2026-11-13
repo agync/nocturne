@@ -50,6 +50,8 @@ struct Voice {
     delay: Duration,
     /// Sample rate by call number, to make a voice that changes format.
     rate: Box<dyn Fn(usize) -> u32 + Send + Sync>,
+    /// Say the voice failed, as when it ran and could not speak.
+    failing: std::sync::atomic::AtomicBool,
 }
 
 impl Voice {
@@ -61,6 +63,7 @@ impl Voice {
             hook: Mutex::new(None),
             delay: Duration::ZERO,
             rate: Box::new(|_| 24_000),
+            failing: Default::default(),
         })
     }
 
@@ -123,6 +126,9 @@ impl Mind for Voice {
             }
             if !self.delay.is_zero() {
                 tokio::time::sleep(self.delay).await;
+            }
+            if self.failing.load(Ordering::SeqCst) {
+                return Err(MindError::Failed("the voice could not speak".into()));
             }
             Ok(wav((self.rate)(n), 100))
         })
@@ -216,6 +222,7 @@ fn two_calls_one_synthesis() {
         hook: Mutex::new(None),
         delay: Duration::from_millis(40),
         rate: Box::new(|_| 24_000),
+        failing: Default::default(),
     });
     let h = harness_with_mind(voice.clone());
     page_with_two_memories(&h);
@@ -283,7 +290,7 @@ fn stale_stamp_retries_then_busy() {
 }
 
 #[test]
-fn a_voice_that_changes_format_is_unavailable_not_a_crash() {
+fn a_voice_that_changes_format_fails_quietly_not_a_crash() {
     let voice = Arc::new(Voice {
         inner: FakeMind::new(),
         said: Mutex::default(),
@@ -291,12 +298,14 @@ fn a_voice_that_changes_format_is_unavailable_not_a_crash() {
         hook: Mutex::new(None),
         delay: Duration::ZERO,
         rate: Box::new(|n| if n == 0 { 24_000 } else { 16_000 }),
+        failing: Default::default(),
     });
     let h = harness_with_mind(voice);
     page_with_two_memories(&h);
     assert_eq!(
         h.code("speak_page", json!({"date": "2026-11-13"})),
-        "unavailable"
+        "internal",
+        "a voice that ran and failed is not 'still getting ready'"
     );
 }
 
@@ -420,4 +429,22 @@ fn the_background_check_prunes_old_pages() {
     let app = h.app.handle().clone();
     tauri::async_runtime::block_on(prepare_if_due(&app));
     assert!(!old.exists());
+}
+
+#[test]
+fn a_voice_that_ran_and_failed_is_internal_and_one_that_is_absent_is_unavailable() {
+    let voice = Voice::new();
+    voice.failing.store(true, Ordering::SeqCst);
+    let h = harness_with_mind(voice);
+    page_with_two_memories(&h);
+    assert_eq!(
+        h.code("speak_page", json!({"date": "2026-11-13"})),
+        "internal"
+    );
+    let none = common::harness();
+    none.save_todays_page();
+    assert_eq!(
+        none.code("speak_page", json!({"date": "2026-11-13"})),
+        "unavailable"
+    );
 }
