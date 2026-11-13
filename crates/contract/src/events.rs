@@ -24,8 +24,12 @@ pub const EVENT_REMOTE: &str = "remote-changed";
 pub const EVENT_PAIRING: &str = "pairing-request";
 /// Payload: `DeviceView`.
 pub const EVENT_DEVICE: &str = "device-active";
+/// Payload: `OnlineView`.
+pub const EVENT_ONLINE: &str = "online-changed";
+/// Payload: `ModelsView`.
+pub const EVENT_MODELS: &str = "models-changed";
 
-pub const ALL_EVENTS: [&str; 10] = [
+pub const ALL_EVENTS: [&str; 12] = [
     EVENT_STATUS,
     EVENT_ITEM,
     EVENT_SETUP,
@@ -36,4 +40,6 @@ pub const ALL_EVENTS: [&str; 10] = [
     EVENT_REMOTE,
     EVENT_PAIRING,
     EVENT_DEVICE,
+    EVENT_ONLINE,
+    EVENT_MODELS,
 ];

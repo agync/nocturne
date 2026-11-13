@@ -85,6 +85,11 @@ impl Engine {
             remote_on: false,
             remote_connection: None,
             remote_last_on_at: None,
+            sent_online_bytes: 0.0,
+            online_questions: 0,
+            online_on: false,
+            online_host: None,
+            online_last_on_at: None,
         })
     }
 

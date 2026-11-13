@@ -168,6 +168,7 @@ pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView,
             agents,
             log_dir: state.log_dir().to_string_lossy().into_owned(),
             remote: crate::remote::advanced(&app),
+            online: None,
         })
     })
     .await

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{RemoteAdvanced, RemoteConnection};
+use crate::{OnlineAdvanced, RemoteAdvanced, RemoteConnection};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +63,14 @@ pub enum NoticeCode {
     TidyPausedBattery,
     UpdateRolledBack,
     ReReading,
+    /// The online provider refused the key; Online answers is paused.
+    OnlineKeyRefused,
+    /// The online provider says the account has no credit; Online answers is paused.
+    OnlineNoCredit,
+    /// The month's online limit is reached.
+    OnlineLimit,
+    /// A model download for a job stopped before it finished.
+    ModelDownloadStopped,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -231,6 +239,12 @@ pub enum LedgerKind {
     RemoteHelper,
     /// Away from home turned on or off.
     RemoteOnOff,
+    /// Online answers turned on or off.
+    OnlineOnOff,
+    /// A connection check reached the person's provider.
+    OnlineConnected,
+    /// A model downloaded for a job the person changed.
+    ModelDownload,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -260,9 +274,14 @@ pub struct PrivacyView {
     pub remote_on: bool,
     pub remote_connection: Option<RemoteConnection>,
     pub remote_last_on_at: Option<String>,
+    pub sent_online_bytes: f64,
+    pub online_questions: u32,
+    pub online_on: bool,
+    pub online_host: Option<String>,
+    pub online_last_on_at: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum ComponentRole {
@@ -316,6 +335,7 @@ pub struct AdvancedView {
     pub agents: bool,
     pub log_dir: String,
     pub remote: Option<RemoteAdvanced>,
+    pub online: Option<OnlineAdvanced>,
 }
 
 /// What an export wrote. `path` is the fresh folder created inside the chosen directory.

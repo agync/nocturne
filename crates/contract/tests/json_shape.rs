@@ -67,3 +67,74 @@ fn remote_state_and_answers_are_tagged_by_type() {
         r#""unused30Days""#
     );
 }
+
+#[test]
+fn online_types_are_tagged_and_keyless() {
+    let by = AnsweredBy::Computer {
+        reason: Some(LocalReason::KeptHere),
+    };
+    assert_eq!(
+        serde_json::to_string(&by).unwrap(),
+        r#"{"type":"computer","reason":"keptHere"}"#
+    );
+    let paused = OnlineState::Paused {
+        pause: OnlinePause::Limit {
+            until: "2026-12-01T00:00:00+00:00".into(),
+        },
+    };
+    assert_eq!(
+        serde_json::to_string(&paused).unwrap(),
+        r#"{"type":"paused","pause":{"type":"limit","until":"2026-12-01T00:00:00+00:00"}}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&SentLine::Memory {
+            n: 2,
+            text: None,
+            state: SentMemory::Changed,
+        })
+        .unwrap(),
+        r#"{"type":"memory","n":2,"text":null,"state":"changed"}"#
+    );
+    assert_eq!(AskPlace::default(), AskPlace::Auto);
+    assert_eq!(OnlineLimit::default().questions, 200);
+    let form: OnlineForm = serde_json::from_str(
+        r#"{"baseUrl":"https://api.example.com/v1","key":"sk-secret-value","model":"m"}"#,
+    )
+    .unwrap();
+    assert_eq!(form.base_url, "https://api.example.com/v1");
+    assert!(!format!("{form:?}").contains("sk-secret-value"));
+    assert_eq!(
+        serde_json::to_string(&CheckOutcome::AddressNotAllowed).unwrap(),
+        r#"{"type":"addressNotAllowed"}"#
+    );
+}
+
+#[test]
+fn ask_delta_reads_without_the_online_fields() {
+    let delta: AskDelta = serde_json::from_str(
+        r#"{"askId":"a","phase":"done","textDelta":null,"receipts":[],"memoryIds":[],
+            "near":[],"found":null,"etaSeconds":null}"#,
+    )
+    .unwrap();
+    assert_eq!(delta.answered_by, None);
+    assert_eq!(delta.left_out, None);
+    assert_eq!(delta.send_id, None);
+}
+
+#[test]
+fn model_types_are_tagged() {
+    let reason = FitReason::Disk { short_bytes: 1.0 };
+    assert_eq!(
+        serde_json::to_string(&reason).unwrap(),
+        r#"{"type":"disk","shortBytes":1.0}"#
+    );
+    let phase = ChangePhase::Downloading {
+        received: 1.0,
+        total: 2.0,
+        paused: false,
+    };
+    assert_eq!(
+        serde_json::to_string(&phase).unwrap(),
+        r#"{"type":"downloading","received":1.0,"total":2.0,"paused":false}"#
+    );
+}

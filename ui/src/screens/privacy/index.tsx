@@ -34,6 +34,9 @@ function ledgerLabel(entry: LedgerEntry): string {
     updateCheck: "privacy.ledger.updateCheck",
     remoteHelper: "privacy.ledger.remoteHelper",
     remoteOnOff: "privacy.ledger.remoteOnOff",
+    onlineOnOff: "privacy.ledger.onlineOnOff",
+    onlineConnected: "privacy.ledger.onlineConnected",
+    modelDownload: "privacy.ledger.modelDownload",
   } as const;
   return t(id[entry.kind], { label: entry.label });
 }

@@ -20,6 +20,10 @@ const CODES: Record<NoticeCode, true> = {
   tidyPausedBattery: true,
   updateRolledBack: true,
   reReading: true,
+  onlineKeyRefused: true,
+  onlineNoCredit: true,
+  onlineLimit: true,
+  modelDownloadStopped: true,
 };
 
 const make = (code: NoticeCode, extra: Partial<Notice> = {}): Notice => ({

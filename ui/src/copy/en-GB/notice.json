@@ -34,5 +34,13 @@
   "notice.updateRolledBack.text": "The update couldn’t finish. Nocturne went back to the version you had.",
   "notice.updateRolledBack.action": "Try again tonight",
   "notice.reReading.text": "Nocturne is re-reading what you kept. Nothing is lost, and pages keep arriving.",
-  "notice.reReading.action": "OK"
+  "notice.reReading.action": "OK",
+  "notice.onlineKeyRefused.text": "Online answers is paused: the key wasn’t accepted. Answers are written on this computer meanwhile.",
+  "notice.onlineKeyRefused.action": "Check the key",
+  "notice.onlineNoCredit.text": "Online answers is paused: the account has no credit left. Answers are written on this computer meanwhile.",
+  "notice.onlineNoCredit.action": "Check again",
+  "notice.onlineLimit.text": "This month’s online questions are used up. Answers are written on this computer until the 1st.",
+  "notice.onlineLimit.action": "OK",
+  "notice.modelDownloadStopped.text": "A download for a job you changed stopped. What you use now keeps working.",
+  "notice.modelDownloadStopped.action": "Try again"
 }

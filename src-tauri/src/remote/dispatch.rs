@@ -872,6 +872,9 @@ fn blank(ask_id: &str, phase: AskPhase) -> AskDelta {
         found: None,
         eta_seconds: None,
         plain: false,
+        answered_by: None,
+        left_out: None,
+        send_id: None,
     }
 }
 

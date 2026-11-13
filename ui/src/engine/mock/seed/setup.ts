@@ -138,5 +138,6 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
     agents: false,
     logDir: "~/.local/share/nocturne/logs",
     remote: null,
+    online: null,
   };
 }

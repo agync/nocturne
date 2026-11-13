@@ -232,6 +232,9 @@ impl<R: Runtime> Sink<R> {
             found: None,
             eta_seconds: None,
             plain: false,
+            answered_by: None,
+            left_out: None,
+            send_id: None,
         };
         edit(&mut delta);
         let cancelled = self

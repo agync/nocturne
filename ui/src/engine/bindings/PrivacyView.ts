@@ -2,4 +2,4 @@
 import type { LedgerEntry } from "./LedgerEntry";
 import type { RemoteConnection } from "./RemoteConnection";
 
-export type PrivacyView = { sentToInternetBytes: number, sentMeasured: boolean, checkedAt: string | null, ledger: Array<LedgerEntry>, keptBytes: number, mindBytes: number, dataDir: string, lock: boolean, checkUpdates: boolean, sentToPhonesBytes: number, remoteOn: boolean, remoteConnection: RemoteConnection | null, remoteLastOnAt: string | null, };
+export type PrivacyView = { sentToInternetBytes: number, sentMeasured: boolean, checkedAt: string | null, ledger: Array<LedgerEntry>, keptBytes: number, mindBytes: number, dataDir: string, lock: boolean, checkUpdates: boolean, sentToPhonesBytes: number, remoteOn: boolean, remoteConnection: RemoteConnection | null, remoteLastOnAt: string | null, sentOnlineBytes: number, onlineQuestions: number, onlineOn: boolean, onlineHost: string | null, onlineLastOnAt: string | null, };

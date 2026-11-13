@@ -54,6 +54,14 @@ export function noticeText(notice: Notice): string {
       return t("notice.updateRolledBack.text");
     case "reReading":
       return t("notice.reReading.text");
+    case "onlineKeyRefused":
+      return t("notice.onlineKeyRefused.text");
+    case "onlineNoCredit":
+      return t("notice.onlineNoCredit.text");
+    case "onlineLimit":
+      return t("notice.onlineLimit.text");
+    case "modelDownloadStopped":
+      return t("notice.modelDownloadStopped.text");
   }
 }
 
@@ -87,6 +95,14 @@ export function noticeAction(code: NoticeCode): string {
       return t("notice.updateRolledBack.action");
     case "reReading":
       return t("notice.reReading.action");
+    case "onlineKeyRefused":
+      return t("notice.onlineKeyRefused.action");
+    case "onlineNoCredit":
+      return t("notice.onlineNoCredit.action");
+    case "onlineLimit":
+      return t("notice.onlineLimit.action");
+    case "modelDownloadStopped":
+      return t("notice.modelDownloadStopped.action");
   }
 }
 

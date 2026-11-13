@@ -1362,6 +1362,11 @@ export class MockEngine implements EngineClient {
       lock: this.settings.lock,
       checkUpdates: this.settings.checkUpdates,
       ...remote,
+      sentOnlineBytes: 0,
+      onlineQuestions: 0,
+      onlineOn: false,
+      onlineHost: null,
+      onlineLastOnAt: null,
     };
   }
 
