@@ -35,6 +35,8 @@ tauri-plugin-global-shortcut = "2"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std"] }
 tracing-appender = "0.2"
 base64 = "0.22"
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+url = "2"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

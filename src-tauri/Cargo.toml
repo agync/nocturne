@@ -39,6 +39,11 @@ fake-helpers = ["nocturne-helpers/fake"]
 # loopback, for use from a browser. Never in `default`, never built by packaging; the package
 # checks fail if it shows up. See docs/contribution/building.md.
 preview = ["tauri/test", "axum/json", "axum/query", "dep:tower", "dep:tower-http", "dep:futures-util"]
+# Lets Online answers use the stand-in provider on loopback (tests, the network check and S1).
+# Never in `default`, never packaged.
+online-stand-in = ["nocturne-lemonade/online-stand-in"]
+# A scripted driver for the network check of Online answers. Never in packages.
+netcheck-script = []
 # Set by `cargo tauri build`: embed the interface instead of loading the dev server.
 custom-protocol = ["tauri/custom-protocol"]
 
@@ -82,6 +87,8 @@ sha2_10 = { package = "sha2", version = "0.10" }
 qrcode = { version = "0.14", default-features = false }
 base64.workspace = true
 zeroize = "1"
+keyring.workspace = true
+url.workspace = true
 tower = { version = "0.5", optional = true, features = ["util"] }
 tower-http = { version = "0.6", optional = true, default-features = false, features = ["fs"] }
 futures-util = { version = "0.3", optional = true, default-features = false }

@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote e2e-real preview-real helpers-pin phone tailnet/test
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models preview-real helpers-pin phone tailnet/test
 
 UI_PRESENT := $(wildcard ui/package.json)
 GO ?= go
@@ -92,10 +92,19 @@ netcheck: ## Run the built binary in a loopback-only namespace and fail on any o
 netcheck-remote: ## Run the built binary with Away from home on through a fake helper and judge its traffic
 	scripts/net-check.sh remote binary
 
+netcheck-online: ## Run the built binary with Online answers on against a stand-in provider and judge its traffic
+	scripts/net-check.sh online binary
+
 ##@ Real models
 
 e2e-real: ## Run the whole product against the real small mind (downloads about 4.8 GB once), then again with the network cut
 	scripts/e2e-real.sh all
+
+e2e-online: ## Run the real small mind with Online answers on against the stand-in provider
+	scripts/e2e-real.sh online
+
+e2e-models: ## Run the real models with a model chosen for each job
+	scripts/e2e-real.sh models
 
 ##@ Away from home
 

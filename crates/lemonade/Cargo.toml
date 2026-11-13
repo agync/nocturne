@@ -9,10 +9,18 @@ rust-version.workspace = true
 [features]
 # The fake lemond used by tests in this crate and in crates that depend on it.
 fake-server = ["dep:axum"]
+# Lets the online route reach the stand-in provider over plain HTTP on loopback. Tests, the
+# network check and the S1 measurement only: never in `default`, never packaged.
+online-stand-in = []
 
 [[bin]]
 name = "fake-lemond"
 path = "src/bin/fake-lemond.rs"
+required-features = ["fake-server"]
+
+[[bin]]
+name = "fake-provider"
+path = "src/bin/fake-provider.rs"
 required-features = ["fake-server"]
 
 [[bin]]
@@ -42,6 +50,12 @@ lopdf = { version = "0.42", default-features = false }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 quick-xml = "0.39"
 axum = { version = "0.8", optional = true, features = ["multipart"] }
+zeroize = "1"
+url.workspace = true
+
+# Core dumps off for the app and the engine, which may hold the Online answers key.
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31", default-features = false, features = ["resource", "process"] }
 
 [dev-dependencies]
 nocturne-lemonade = { workspace = true, features = ["fake-server"] }
