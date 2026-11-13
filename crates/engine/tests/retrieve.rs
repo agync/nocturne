@@ -407,9 +407,8 @@ fn who_someone_is_comes_first_when_asked_who_they_are() {
     assert_ne!(hits[0].memory.id, son);
 }
 
-#[test]
-fn an_open_which_is_right_question_names_both_sides() {
-    let f = fixture();
+/// Two memories of book club disagreeing, and an unrelated one.
+fn club_dispute(f: &Fixture) -> (String, String) {
     let (_, a) = learn(
         &f.engine,
         "Club on Tuesday",
@@ -433,7 +432,18 @@ fn an_open_which_is_right_question_names_both_sides() {
             )],
         )
         .unwrap();
-    let b = r.created[0].clone();
+    (a, r.created[0].clone())
+}
+
+fn sql(f: &Fixture, statement: &str, id: &str) {
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(statement, [id]).unwrap();
+}
+
+#[test]
+fn an_open_which_is_right_question_names_both_sides() {
+    let f = fixture();
+    let (a, b) = club_dispute(&f);
     let (_, other) = learn(
         &f.engine,
         "Gran in York",
@@ -457,4 +467,33 @@ fn an_open_which_is_right_question_names_both_sides() {
     };
     f.engine.resolve_which(&conflict, &b).unwrap();
     assert!(f.engine.open_disputes(&[a, b]).unwrap().is_empty());
+}
+
+/// A side that is no longer current is not a side: replaced, let go or being forgotten, the
+/// question is left out, as Needs you leaves it out.
+#[test]
+fn a_question_with_a_side_that_is_gone_is_not_open() {
+    for statement in [
+        "UPDATE memories SET superseded_at = '2026-11-13T08:00:00Z' WHERE id = ?1",
+        "UPDATE memories SET status = 'letGo', let_go_at = '2026-11-13T08:00:00Z' WHERE id = ?1",
+        "UPDATE memories SET forgetting = 1 WHERE id = ?1",
+    ] {
+        let f = fixture();
+        let (a, b) = club_dispute(&f);
+        assert_eq!(
+            f.engine
+                .open_disputes(std::slice::from_ref(&a))
+                .unwrap()
+                .len(),
+            1
+        );
+        sql(&f, statement, &b);
+        assert!(
+            f.engine
+                .open_disputes(&[a.clone(), b.clone()])
+                .unwrap()
+                .is_empty(),
+            "{statement}"
+        );
+    }
 }

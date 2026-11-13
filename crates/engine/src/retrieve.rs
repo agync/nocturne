@@ -214,12 +214,18 @@ impl Engine {
     }
 
     /// The open which-is-right questions that involve any of `ids`, each as the two memories it
-    /// is between.
+    /// is between. A question with a side that is no longer current (replaced, let go or being
+    /// forgotten) is left out, as Needs you leaves it out.
     pub fn open_disputes(&self, ids: &[MemoryId]) -> Result<Vec<(MemoryId, MemoryId)>> {
         self.read(|conn| {
             let mut stmt = conn.prepare_cached(
-                "SELECT a, b FROM conflicts WHERE resolved_at IS NULL AND (a = ?1 OR b = ?1) \
-                 ORDER BY created_at, id",
+                "SELECT c.a, c.b FROM conflicts c \
+                 JOIN memories ma ON ma.id = c.a JOIN memories mb ON mb.id = c.b \
+                 WHERE c.resolved_at IS NULL AND (c.a = ?1 OR c.b = ?1) \
+                 AND ma.superseded_at IS NULL AND mb.superseded_at IS NULL \
+                 AND ma.forgetting = 0 AND mb.forgetting = 0 \
+                 AND ma.status != 'letGo' AND mb.status != 'letGo' \
+                 ORDER BY c.created_at, c.id",
             )?;
             let mut out: Vec<(MemoryId, MemoryId)> = Vec::new();
             for id in ids {
