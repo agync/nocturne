@@ -205,6 +205,33 @@ test.describe("O2 to O6, setting up", () => {
     await expect(page.getByText("Health, money and ID details")).toBeVisible();
   });
 
+  test("Tab alone: through the form, the check and on to Continue", async ({ page }) => {
+    await open(page, "/settings/online/setup");
+    await press(page, "button", "Continue");
+    const address = page.getByLabel(/^Address/);
+    await address.focus();
+    await page.keyboard.type("https://api.example.com/v1");
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel(/^Key/)).toBeFocused();
+    await page.keyboard.type("sk-example-not-a-real-key");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Show" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel(/^Which one to use/)).toBeFocused();
+    await page.keyboard.type("llama-3.3-70b-instruct");
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Check" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    const result = page.locator('[role=status][tabindex="-1"]');
+    await expect(page.getByText(/It works\. api\.example\.com answered/)).toBeVisible();
+    await expect(result).toBeFocused();
+    await expect(page.getByRole("button", { name: "Check again" })).toBeDisabled();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Continue" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Online answers · step 3 of 5")).toBeVisible();
+  });
+
   test("leaving at the connect step goes back to the page", async ({ page }) => {
     await open(page, "/settings/online/setup");
     await press(page, "button", "Continue");

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckOutcome } from "../../engine/bindings";
@@ -296,7 +296,7 @@ describe("setup", () => {
     await click("Turn on online answers");
     await waitFor(() => expect(on).toHaveBeenCalledTimes(1));
     expect(on).toHaveBeenCalledWith({
-      phones: true,
+      phones: false,
       sendSensitive: false,
       limit: { kind: "questions", questions: 200, usd: null },
     });
@@ -305,15 +305,123 @@ describe("setup", () => {
     expect(engine.online.abandoned).toBe(0);
   });
 
-  it("a failed turn on says so and offers another go, nothing turned on", async () => {
+  it("a failed turn on gives one message, offers another go, and turns nothing on", async () => {
     const { engine } = await toLimit();
     await click("Continue");
     await heading(STEP5);
-    vi.spyOn(engine, "turnOnOnline").mockRejectedValueOnce(new Error("no"));
+    const on = vi.spyOn(engine, "turnOnOnline").mockRejectedValueOnce(new Error("no"));
     await click("Turn on online answers");
-    expect(await screen.findByRole("alert")).toHaveTextContent(/nothing was turned on/);
+    const alerts = await screen.findAllByRole("alert");
+    expect(alerts).toHaveLength(1);
+    expect(alerts[0]).toHaveTextContent(
+      "Nocturne couldn’t save this, so nothing was turned on. Try again.",
+    );
+    expect(screen.queryByText("That didn’t work. Nothing was changed.")).toBeNull();
+    expect(on).toHaveBeenCalledTimes(1);
     expect(engine.online.view().state).toEqual({ type: "off" });
-    expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    expect(window.location.hash).toBe("#/settings/online/setup");
+    expect(screen.queryByRole("switch", { name: "Online answers are on" })).toBeNull();
+    await click("Try again");
+    await waitFor(() => expect(on).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole("switch", { name: "Online answers are on" })).toBeChecked();
+  });
+
+  const KEY = "sk-example-not-a-real-key";
+  const keyAbsent = () => {
+    expect(document.body.textContent ?? "").not.toContain(KEY);
+    for (const input of document.querySelectorAll("input")) {
+      expect((input as HTMLInputElement).value).not.toContain(KEY);
+    }
+  };
+
+  it("key_not_kept: the key is gone from the page once the check passes, and after Back and on Consent", async () => {
+    await toConnect();
+    await fill();
+    expect(screen.getByLabelText(/^Key/)).toHaveValue(KEY);
+    await click("Check");
+    await screen.findByText(/It works\./);
+    keyAbsent();
+    expect(screen.getByLabelText(/^Key/)).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Check again" })).toBeDisabled();
+    await click("Continue");
+    await heading(STEP3);
+    keyAbsent();
+    await click("Back");
+    await heading(STEP2);
+    keyAbsent();
+    expect(screen.getByLabelText(/^Key/)).toHaveValue("");
+    await click("Continue");
+    await heading(STEP3);
+    await click("Continue");
+    await heading(STEP4);
+    await click("Continue");
+    await heading(STEP5);
+    keyAbsent();
+    await userEvent.click(screen.getByRole("button", { name: "Change: Service" }));
+    await heading(STEP2);
+    keyAbsent();
+  });
+
+  it("key_not_kept: typing a key again after a pass asks for a new check", async () => {
+    await toConnect();
+    await fill();
+    await click("Check");
+    await screen.findByText(/It works\./);
+    await enter(/^Key/, KEY);
+    expect(screen.queryByText(/It works\./)).toBeNull();
+    expect(screen.getByRole("button", { name: "Check" })).toBeEnabled();
+  });
+
+  it("race: fields are read-only while checking, and an answer for an old form is dropped", async () => {
+    const { engine } = await toConnect();
+    await fill();
+    let settle: (o: CheckOutcome) => void = () => undefined;
+    vi.spyOn(engine, "checkOnline").mockImplementationOnce(
+      () => new Promise<CheckOutcome>((resolve) => (settle = resolve)),
+    );
+    await click("Check");
+    for (const label of [/^Address/, /^Key/, /^Which one to use/]) {
+      expect(screen.getByLabelText(label)).toHaveAttribute("readonly");
+    }
+    fireEvent.change(screen.getByLabelText(/^Which one to use/), {
+      target: { value: "another-name" },
+    });
+    settle({ type: "works", host: "api.example.com", model: "llama-3.3-70b-instruct" });
+    await waitFor(() => expect(screen.queryByText(/Checking with/)).toBeNull());
+    expect(screen.queryByText(/It works\./)).toBeNull();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+  });
+
+  it("focus: stays on the step while checking and when the result arrives", async () => {
+    const { engine } = await toConnect();
+    await fill();
+    engine.online.setCheckMs(50);
+    await click("Check");
+    const region = screen.getByText(/Checking with/).closest("[role=status]") as HTMLElement;
+    expect(region).toHaveFocus();
+    await screen.findByText(/It works\./);
+    expect(region).toHaveFocus();
+  });
+
+  it("errors are tied to their fields, the name field included", async () => {
+    const { engine } = await toConnect();
+    engine.online.forceOutcome({ type: "modelMissing" });
+    await fill();
+    await click("Check");
+    await screen.findByText(/doesn’t know a name like/);
+    const model = screen.getByLabelText(/^Which one to use/);
+    expect(model).toHaveAccessibleDescription(/doesn’t know a name like/);
+    expect(screen.getByLabelText(/^Key/)).not.toHaveAccessibleDescription(/doesn’t know a name/);
+  });
+
+  it("invalid count in money mode says the count message, not the amount one", async () => {
+    await toLimit("cost");
+    await userEvent.click(screen.getByRole("radio", { name: /A number of questions/ }));
+    const input = screen.getByLabelText("A number of questions", { selector: "input[inputmode]" });
+    await userEvent.clear(input);
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Enter a whole number from 1 upwards, like 200.",
+    );
   });
 
   it("leaving_abandons: leaving after a check tells the computer to drop it", async () => {

@@ -53,8 +53,9 @@ function Row({
 export function OnlinePage({ view }: { view: OnlineView }) {
   const back = { to: "/settings", label: t("screen.settings.title") };
   switch (view.state.type) {
-    case "off":
     case "checking":
+      return <CheckingPage back={back} />;
+    case "off":
       return view.setUp ? (
         <OffBefore view={view} back={back} />
       ) : (
@@ -63,6 +64,18 @@ export function OnlinePage({ view }: { view: OnlineView }) {
     default:
       return <OnPage view={view} back={back} />;
   }
+}
+
+/** A connection is being checked: nothing is on, and nothing here can turn it on. */
+function CheckingPage({ back }: { back: Back }) {
+  return (
+    <Frame back={back}>
+      <Title tag={t("online.tag.checking")} />
+      <p className={styles.lede} role="status">
+        {t("online.checking.body")}
+      </p>
+    </Frame>
+  );
 }
 
 function NeverSetUp({ view, back }: { view: OnlineView; back: Back }) {
@@ -350,7 +363,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
       <Title tag={t(trouble ? "online.tag.trouble" : "online.tag.on")} trouble={trouble} />
       <p className={styles.lede}>{t("online.on.lead")}</p>
       {warning ? (
-        <div className={styles.card} data-kind="warn" role="status">
+        <div className={styles.card} data-kind="warn">
           {warning}
           <Button variant="quiet" disabled={turn.busy} onClick={() => void turn.turnOff()}>
             {t("online.turnOff")}
@@ -450,7 +463,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
 function Warning({ title, body, children }: { title: string; body: string; children: ReactNode }) {
   return (
     <>
-      <span className={styles.cardText}>
+      <span className={styles.cardText} role="status">
         <span className={styles.name}>{title}</span>
         <span className={styles.body}>{body}</span>
       </span>

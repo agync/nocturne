@@ -154,7 +154,7 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
               <p className={styles.sub}>{t("online.limit.usdNote")}</p>
               {invalid ? (
                 <p id={`${id}-err`} role="alert" className={styles.error}>
-                  {t("online.limit.invalidUsd")}
+                  {t(mode === "usd" ? "online.limit.invalidUsd" : "online.limit.invalid")}
                 </p>
               ) : null}
             </fieldset>

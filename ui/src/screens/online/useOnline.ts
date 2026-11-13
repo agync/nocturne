@@ -35,7 +35,10 @@ export function useOnlineAct() {
   const flying = useRef(false);
   const [busy, setBusy] = useState(false);
   const run = useCallback(
-    async <T>(call: () => Promise<T>): Promise<{ value: T } | null> => {
+    async <T>(
+      call: () => Promise<T>,
+      options: { quiet?: boolean } = {},
+    ): Promise<{ value: T } | null> => {
       if (flying.current) return null;
       flying.current = true;
       setBusy(true);
@@ -46,7 +49,7 @@ export function useOnlineAct() {
         void client.invalidateQueries({ queryKey: ["advanced"] });
         return { value };
       } catch {
-        toast.show({ message: t("online.failed") });
+        if (!options.quiet) toast.show({ message: t("online.failed") });
         return null;
       } finally {
         flying.current = false;

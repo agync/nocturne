@@ -13,6 +13,8 @@
   "online.failed": "That didn’t work. Nothing was changed.",
   "online.tag.off": "Off",
   "online.tag.on": "On",
+  "online.tag.checking": "Checking",
+  "online.checking.body": "Nocturne is checking a connection. Nothing is turned on yet.",
   "online.tag.trouble": "On · answering here",
 
   "online.off.lead": "Have your answers written by a larger mind that an online service you choose runs. Nocturne still finds what you kept on this computer, and only sends what each answer needs.",

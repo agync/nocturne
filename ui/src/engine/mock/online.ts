@@ -22,6 +22,7 @@ export const ONLINE_SCENARIOS = [
   "noCredit",
   "problem",
   "keyUnavailable",
+  "checking",
 ] as const;
 export type OnlineScenario = (typeof ONLINE_SCENARIOS)[number];
 
@@ -104,7 +105,7 @@ export class OnlineSim {
       host: null,
       baseUrl: null,
       model: null,
-      phones: true,
+      phones: false,
       phonesAvailable: false,
       sendSensitive: false,
       limit: { kind: "questions", questions: 200, usd: null },
@@ -124,6 +125,7 @@ export class OnlineSim {
       baseUrl: BASE_URL,
       model: MODEL,
       keyStorage: "keychain",
+      phones: true,
       phonesAvailable: true,
       sentBytes: 46_000,
       questionsThisMonth: 38,
@@ -166,6 +168,8 @@ export class OnlineSim {
             since: new Date(now - 3_600_000).toISOString(),
           },
         };
+      case "checking":
+        return { ...base, state: { type: "checking" } };
       case "keyUnavailable":
         return {
           ...on,

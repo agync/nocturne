@@ -31,6 +31,23 @@ describe("online", () => {
     expect(screen.getByText("Always stays here")).toBeInTheDocument();
   });
 
+  it("checking: has its own view, with no switch and nothing to turn on", async () => {
+    await openOnline(PAGE, "checking");
+    expect(screen.getByText("Checking", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText(/Nothing is turned on yet/)).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Set up|Turn on/ })).toBeNull();
+  });
+
+  it("warnings keep their buttons outside the status text", async () => {
+    await openOnline(PAGE, "refused");
+    const button = screen.getByRole("button", { name: "Check the key…" });
+    expect(button.closest("[role=status]")).toBeNull();
+    expect(
+      screen.getByText("Your provider refused the key").closest("[role=status]"),
+    ).not.toBeNull();
+  });
+
   it("off_before: turning on again takes one switch and sends no form", async () => {
     const { engine } = await openOnline(PAGE, "offBefore");
     expect(screen.getByText("Your provider (api.example.com)")).toBeInTheDocument();

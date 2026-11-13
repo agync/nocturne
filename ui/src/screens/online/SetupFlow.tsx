@@ -23,7 +23,7 @@ export function SetupFlow({ view, start }: { view: OnlineView; start: "connect" 
   });
   const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
   const [draft, setDraft] = useState<Draft>({
-    phones: view.phones,
+    phones: view.phonesAvailable ? view.phones : false,
     sendSensitive: view.sendSensitive,
     limit: view.limit,
   });

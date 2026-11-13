@@ -38,7 +38,7 @@ export function Consent({
 
   const turnOn = async () => {
     setFailed(false);
-    const done = await run(() => engine.turnOnOnline(draft));
+    const done = await run(() => engine.turnOnOnline(draft), { quiet: true });
     if (!done) {
       setFailed(true);
       return;

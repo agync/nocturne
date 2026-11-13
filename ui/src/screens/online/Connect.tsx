@@ -1,4 +1,4 @@
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { type CopyId, t } from "../../copy/t";
 import type { CheckOutcome, OnlineForm } from "../../engine/bindings";
@@ -98,6 +98,9 @@ export function Connect({
   const id = useId();
   const [checking, setChecking] = useState(false);
   const [shown, setShown] = useState(false);
+  const live = useRef(form);
+  live.current = form;
+  const region = useRef<HTMLDivElement>(null);
   const host = hostOfAddress(form.baseUrl);
   const filled = form.baseUrl.trim() !== "" && form.key.trim() !== "" && form.model.trim() !== "";
   const works = outcome?.type === "works";
@@ -115,24 +118,39 @@ export function Connect({
   const check = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!filled || checking) return;
+    const asked = {
+      baseUrl: form.baseUrl.trim(),
+      key: form.key.trim(),
+      model: form.model.trim(),
+    };
     setChecking(true);
     setOutcome(null);
     onChecking();
+    region.current?.focus({ preventScroll: true });
+    let result: CheckOutcome;
     try {
-      const result = await engine.checkOnline({
-        baseUrl: form.baseUrl.trim(),
-        key: form.key.trim(),
-        model: form.model.trim(),
-      });
-      setOutcome(result.type === "cancelled" ? null : result);
+      result = await engine.checkOnline(asked);
     } catch {
-      setOutcome({ type: "unreachable" });
-    } finally {
-      setChecking(false);
+      result = { type: "unreachable" };
     }
+    setChecking(false);
+    // An answer about a form that is no longer on screen says nothing about this one.
+    const now = live.current;
+    const same =
+      now.baseUrl.trim() === asked.baseUrl &&
+      now.key.trim() === asked.key &&
+      now.model.trim() === asked.model;
+    if (!same || result.type === "cancelled") return;
+    setOutcome(result);
+    // The computer holds the key now; the page does not keep a second copy.
+    if (result.type === "works") setForm({ ...now, key: "" });
+    region.current?.focus({ preventScroll: true });
   };
 
   const invalid = (field: "baseUrl" | "key" | "model") => failure?.field === field;
+  const errorId = `${id}-error`;
+  const describe = (field: "baseUrl" | "key" | "model", hint?: string) =>
+    [hint, invalid(field) ? errorId : null].filter(Boolean).join(" ") || undefined;
 
   return (
     <Frame
@@ -167,7 +185,8 @@ export function Connect({
             spellCheck={false}
             value={form.baseUrl}
             aria-invalid={invalid("baseUrl")}
-            aria-describedby={`${id}-address-hint`}
+            aria-describedby={describe("baseUrl", `${id}-address-hint`)}
+            readOnly={checking}
             onChange={(event) => edit({ baseUrl: event.target.value })}
           />
           <span id={`${id}-address-hint`} className={styles.sub}>
@@ -184,12 +203,13 @@ export function Connect({
               id={`${id}-key`}
               className={styles.input}
               type={shown ? "text" : "password"}
-              autoComplete="off"
+              autoComplete="new-password"
               autoCapitalize="off"
               spellCheck={false}
               value={form.key}
               aria-invalid={invalid("key")}
-              aria-describedby={`${id}-key-hint`}
+              aria-describedby={describe("key", `${id}-key-hint`)}
+              readOnly={checking}
               onChange={(event) => edit({ key: event.target.value })}
             />
             <Button variant="secondary" touch aria-pressed={shown} onClick={() => setShown(!shown)}>
@@ -215,13 +235,15 @@ export function Connect({
             placeholder={t("online.connect.name.placeholder")}
             value={form.model}
             aria-invalid={invalid("model")}
+            aria-describedby={describe("model")}
+            readOnly={checking}
             onChange={(event) => edit({ model: event.target.value })}
           />
         </div>
         <button type="submit" hidden />
       </form>
 
-      <div role="status" aria-live="polite">
+      <div ref={region} tabIndex={-1} role="status" aria-live="polite">
         {checking ? (
           <div className={styles.result}>
             <span className={styles.dot} aria-hidden="true" />
@@ -248,7 +270,7 @@ export function Connect({
           </div>
         ) : null}
         {outcome && failure ? (
-          <div className={styles.result} data-kind="bad">
+          <div className={styles.result} data-kind="bad" id={errorId}>
             <span className={styles.resultText}>
               <span className={styles.resultTitle}>
                 {t(failure.title, { host: named, used: form.model.trim() })}
@@ -278,7 +300,7 @@ export function Connect({
             )}
             {works ? (
               <>
-                <Button variant="quiet" onClick={() => void check()}>
+                <Button variant="quiet" disabled={!filled} onClick={() => void check()}>
                   {t("online.connect.checkAgain")}
                 </Button>
                 <Button variant="primary" onClick={onNext}>
