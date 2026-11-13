@@ -7,6 +7,8 @@ interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "cla
   variant?: ButtonVariant;
   /** 44 px target for touch. The default is 40 px. */
   touch?: boolean;
+  /** Quiet only: pulls the label back so its text lines up with the content edge. */
+  flush?: boolean;
   /** Forget only: the confirm step, the one place it may be filled. */
   confirming?: boolean;
   children: ReactNode;
@@ -15,6 +17,7 @@ interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "cla
 export function Button({
   variant = "secondary",
   touch = false,
+  flush = false,
   confirming = false,
   type = "button",
   children,
@@ -30,6 +33,7 @@ export function Button({
       data-state={confirming ? "confirming" : "rest"}
       data-filled={filled}
       data-touch={touch}
+      data-flush={flush}
       {...rest}
     >
       {children}

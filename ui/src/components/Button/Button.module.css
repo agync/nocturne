@@ -74,6 +74,10 @@
   color: var(--ink2);
 }
 
+.button[data-variant="quiet"][data-flush="true"] {
+  margin-inline-start: calc(-1 * var(--s-3));
+}
+
 .button[data-variant="quiet"]:disabled {
   border-color: transparent;
 }

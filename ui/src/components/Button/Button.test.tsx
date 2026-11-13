@@ -50,4 +50,15 @@ describe("Button", () => {
     render(<Button touch>Keep</Button>);
     expect(screen.getByRole("button")).toHaveAttribute("data-touch", "true");
   });
+
+  it("marks the flush variant", () => {
+    const { rerender } = render(<Button variant="quiet">Undo</Button>);
+    expect(screen.getByRole("button")).toHaveAttribute("data-flush", "false");
+    rerender(
+      <Button variant="quiet" flush>
+        Undo
+      </Button>,
+    );
+    expect(screen.getByRole("button")).toHaveAttribute("data-flush", "true");
+  });
 });
