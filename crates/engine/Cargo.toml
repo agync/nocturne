@@ -1,0 +1,31 @@
+[package]
+name = "nocturne-engine"
+description = "The Nocturne memory engine: store, capture, memories, forgetting, pages and retrieval"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+# A scripted Mind for tests in this crate and in crates that depend on it.
+fake = []
+
+[dependencies]
+nocturne-contract.workspace = true
+rusqlite.workspace = true
+jiff.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tokio = { workspace = true, features = ["sync"] }
+getrandom = "0.3"
+
+[dev-dependencies]
+nocturne-engine = { workspace = true, features = ["fake"] }
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt", "macros"] }
+
+[lints]
+workspace = true
