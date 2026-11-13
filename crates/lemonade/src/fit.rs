@@ -1,7 +1,7 @@
 //! Whether a model fits this computer for a job: the memory budget, the busiest moment of the
 //! chosen set, the engine's own size cap and the free disk.
 
-use nocturne_contract::{ComponentRole, Fit, FitReason, Job, ModelChoice, Tier};
+use nocturne_contract::{ComponentRole, Fit, FitReason, Job, ModelChoice};
 
 use crate::client::{BackendState, ModelInfo, SystemInfo};
 use crate::fit_table::{self, PRESET_PEAKS};
@@ -142,24 +142,38 @@ pub fn peak_with(picks: &Picks, alone_voice: bool, mem: impl Fn(&str) -> u64) ->
     read.max(speak).max(IDLE)
 }
 
-/// Reading: the mind, recall and speech together, or a tier preset's measured figure where the
-/// three are its own and the figure is larger.
+/// Reading: the mind, recall and speech together, plus what the end-to-end runs measured above
+/// the table's figures for the preset whose mind this is. That excess is the mind's working
+/// memory beside the others, so it follows the mind whatever speech and recall are chosen.
 pub fn read_set_with(picks: &Picks, mem: impl Fn(&str) -> u64) -> u64 {
-    let read = mem(&picks.mind) + mem(&picks.recall) + mem(&picks.speech);
-    PRESET_PEAKS
-        .iter()
-        .find(|p| reads_like(p.tier, picks))
-        .map_or(read, |p| read.max(p.busiest))
+    mem(&picks.mind) + mem(&picks.recall) + mem(&picks.speech) + measured_excess(&picks.mind)
 }
 
-fn reads_like(tier: Tier, picks: &Picks) -> bool {
-    [
-        ComponentRole::Mind,
-        ComponentRole::Speech,
-        ComponentRole::Recall,
-    ]
-    .into_iter()
-    .all(|r| tier::model_for(tier, r) == Some(picks.get(r)))
+/// How much more a measured preset needed at its busiest than its models' table figures add up
+/// to, for the preset whose mind is `mind`.
+pub fn measured_excess(mind: &str) -> u64 {
+    PRESET_PEAKS
+        .iter()
+        .filter(|p| p.measured && tier::model_for(p.tier, ComponentRole::Mind) == Some(mind))
+        .map(|p| {
+            let own = Picks {
+                mind: mind.to_string(),
+                speech: tier::model_for(p.tier, ComponentRole::Speech)
+                    .unwrap_or_default()
+                    .to_string(),
+                voice: String::new(),
+                recall: tier::model_for(p.tier, ComponentRole::Recall)
+                    .unwrap_or_default()
+                    .to_string(),
+            };
+            let sum: u64 = [&own.mind, &own.speech, &own.recall]
+                .into_iter()
+                .map(|m| memory_of(m, None))
+                .sum();
+            p.busiest.saturating_sub(sum)
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// Whether `m` may be offered for `job` at all: the engine and labels the job needs, no

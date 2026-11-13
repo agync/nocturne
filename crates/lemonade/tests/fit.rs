@@ -290,7 +290,7 @@ fn fits_tight_wont_thresholds() {
     assert_eq!(gemma.fit, Fit::WontFit);
     assert!(gemma.reason.is_some());
     // A finding model that lands between 0.85 of the budget and the budget is tight.
-    let (s, b) = (Selection::preset(Tier::Small), budget(16 * GIB, 0, PLENTY));
+    let (s, b) = standard_on(24);
     let list = choices(Job::Finding, &catalogue(), &info(), &s, &b);
     let mid = find(&list, "Qwen3-Embedding-4B-GGUF");
     assert_eq!(mid.fit, Fit::Tight, "{mid:?}");
@@ -504,4 +504,37 @@ fn table_covers_every_tier_model() {
     ids.sort_unstable();
     ids.dedup();
     assert_eq!(ids.len(), fit_table::TABLE.len());
+}
+
+#[test]
+fn measured_excess_follows_the_mind() {
+    let small = Selection::preset(Tier::Small);
+    let mem = |m: &str| memory_of(m, None);
+    // The preset reads at its measured figure.
+    assert_eq!(
+        peak(&picks(&small), true),
+        preset_peak(Tier::Small).unwrap().busiest
+    );
+    // Another speech model keeps the mind's measured excess rather than dropping it.
+    let mut lighter = small.clone();
+    lighter
+        .custom
+        .insert(ComponentRole::Speech, "Whisper-Tiny".into());
+    let want =
+        preset_peak(Tier::Small).unwrap().busiest - mem("Whisper-Base") + mem("Whisper-Tiny");
+    assert_eq!(peak(&picks(&lighter), true), want);
+    // Another mind carries no excess measured for this one; an unmeasured preset has none.
+    let mut other = small.clone();
+    other
+        .custom
+        .insert(ComponentRole::Mind, "Qwen3.5-2B-GGUF".into());
+    let p = picks(&other);
+    assert_eq!(
+        peak(&p, true),
+        mem(&p.mind) + mem(&p.recall) + mem(&p.speech)
+    );
+    assert_eq!(
+        nocturne_lemonade::fit::measured_excess("Qwen3.5-9B-GGUF"),
+        0
+    );
 }
