@@ -590,9 +590,9 @@ async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
         "not settled which is right",
         "Copy times, numbers, names and dates exactly",
         "Never put details of different things or people into one sentence",
-        "Asked who someone is: when a fact says in words how they are related",
+        "start with how they are related to the person only when a fact says so",
         "Never guess a relationship",
-        "Say you only for the person asking",
+        "add (not confirmed)",
         "Never write a sentence and then NOT_SURE",
     ] {
         assert!(system.contains(rule), "{rule}\n{system}");
