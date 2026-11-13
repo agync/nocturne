@@ -46,6 +46,13 @@ async fn exits_when_stdin_closes() {
 #[tokio::test]
 async fn crash_mode_comes_from_config_and_exits_nonzero() {
     let mut fake = common::Fake::start(Some("crash-after-ms=200"));
+    fake.wait_live().await;
+    std::thread::sleep(Duration::from_millis(400));
+    assert!(
+        fake.child.try_wait().unwrap().is_none(),
+        "the crash clock waits for the first health check"
+    );
+    fake.client.health().await.unwrap();
     let status = fake.wait_exit(Duration::from_secs(5));
     assert!(status.is_some_and(|s| !s.success()), "{status:?}");
 }

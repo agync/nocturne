@@ -219,11 +219,7 @@ async fn a_crash_loop_backs_off_then_fails_after_three_restarts() {
         sup.client().live().await,
         Err(RuntimeError::Unavailable)
     ));
-    let launches: u64 = std::fs::read_to_string(dirs.cache().join("fake-launches"))
-        .unwrap()
-        .trim()
-        .parse()
-        .unwrap();
+    let launches = common::settled_launch_count(&dirs);
     assert_eq!(launches, 4, "no busy loop: one launch per crash");
     sup.shutdown().await.unwrap();
 }
@@ -234,8 +230,8 @@ async fn a_taken_port_is_retried_with_a_new_one() {
     let dirs = common::dirs(tmp.path());
     let sup = start(&dirs, Some("fail-bind-first=2")).await;
     assert!(ready_port(&sup.state().borrow()).is_some());
-    let launches = std::fs::read_to_string(dirs.cache().join("fake-launches")).unwrap();
-    assert_eq!(launches.trim(), "3");
+    let launches = common::launch_count(&dirs);
+    assert_eq!(launches, 3);
     assert_eq!(sup.restarts(), 0, "port retries are not crashes");
     sup.shutdown().await.unwrap();
 }
@@ -250,8 +246,8 @@ async fn giving_up_on_ports_after_five_tries() {
         .err()
         .unwrap();
     assert!(matches!(err, RuntimeError::Start(_)), "{err:?}");
-    let launches = std::fs::read_to_string(dirs.cache().join("fake-launches")).unwrap();
-    assert_eq!(launches.trim(), "5");
+    let launches = common::launch_count(&dirs);
+    assert_eq!(launches, 5);
     #[cfg(target_os = "linux")]
     assert_eq!(
         common::processes_mentioning(&dirs.cache().to_string_lossy()),
@@ -299,10 +295,10 @@ async fn online_relaunches_the_engine_and_survives_a_crash() {
         ),
         (Some(false), Some(false))
     );
-    let launches = |d: &Dirs| std::fs::read_to_string(d.cache().join("fake-launches")).unwrap();
-    assert_eq!(launches(&dirs).trim(), "2");
+    let launches = |d: &Dirs| common::launch_count(d);
+    assert_eq!(launches(&dirs), 2);
     sup.set_online(true).await.unwrap();
-    assert_eq!(launches(&dirs).trim(), "2", "no change, no relaunch");
+    assert_eq!(launches(&dirs), 2, "no change, no relaunch");
 
     let pid = sup.pid().unwrap();
     let _ = std::process::Command::new("kill")

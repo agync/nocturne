@@ -286,7 +286,7 @@ async fn statuses_map_to_error_variants() {
 
 #[tokio::test]
 async fn no_engine_means_unavailable() {
-    let closed = Client::new(common::free_port(), "k");
+    let closed = Client::new(common::CLOSED_PORT, "k");
     assert_eq!(closed.live().await.unwrap_err(), RuntimeError::Unavailable);
     assert_eq!(
         closed.health().await.unwrap_err(),

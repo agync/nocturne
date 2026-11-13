@@ -87,6 +87,7 @@ struct App {
     models_dir: String,
     sleeper: Mutex<Option<std::process::Child>>,
     leak: bool,
+    crash_ms: Mutex<Option<u64>>,
     inner: Mutex<Inner>,
 }
 
@@ -185,7 +186,10 @@ impl App {
             "downloaded": inner.downloaded,
             "backends": inner.backends,
         });
-        let _ = std::fs::write(self.cache.join("fake-state.json"), state.to_string());
+        let staged = self.cache.join("fake-state.json.tmp");
+        if std::fs::write(&staged, state.to_string()).is_ok() {
+            let _ = std::fs::rename(&staged, self.cache.join("fake-state.json"));
+        }
     }
 
     /// Like the real engine, any use of a registered model that is not on disk downloads it first.
@@ -343,7 +347,11 @@ async fn main() {
         .and_then(|s| s.trim().parse::<u64>().ok())
         .unwrap_or(0)
         + 1;
-    let _ = std::fs::write(&counter_path, launches.to_string());
+    // Written to a temporary name and renamed, so a reader never sees a half-written count.
+    let staged = cache.join("fake-launches.tmp");
+    if std::fs::write(&staged, launches.to_string()).is_ok() {
+        let _ = std::fs::rename(&staged, &counter_path);
+    }
 
     if let Some(ms) = modes
         .get("slow-start-ms")
@@ -410,6 +418,7 @@ async fn main() {
         modes: RwLock::new(modes),
         sleeper: Mutex::new(sleeper),
         leak,
+        crash_ms: Mutex::new(None),
         cache,
         models_dir,
         inner: Mutex::new(inner),
@@ -426,21 +435,14 @@ async fn main() {
             std::process::exit(0);
         });
     }
-    let crash = app.mode_u64("crash-after-ms").or_else(|| {
-        if launches == 1 {
-            app.mode_u64("crash-first-after-ms")
-        } else {
-            None
-        }
-    });
-    if let Some(ms) = crash {
-        let app = app.clone();
-        tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(ms)).await;
-            app.persist();
-            std::process::exit(1);
+    // The crash clock starts when the engine is first asked for its health, that is, when the
+    // supervisor has taken it as ready, so a slow start cannot be mistaken for a crash at launch.
+    *app.crash_ms.lock().unwrap_or_else(|e| e.into_inner()) =
+        app.mode_u64("crash-after-ms").or_else(|| {
+            (launches == 1)
+                .then(|| app.mode_u64("crash-first-after-ms"))
+                .flatten()
         });
-    }
 
     let versioned = Router::new()
         .route("/health", get(health))
@@ -520,6 +522,19 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
 }
 
 async fn health(State(app): State<Shared>) -> Json<Value> {
+    let crash = app
+        .crash_ms
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .take();
+    if let Some(ms) = crash {
+        let app = app.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(ms)).await;
+            app.persist();
+            std::process::exit(1);
+        });
+    }
     let loaded = app.inner().loaded.clone();
     Json(json!({
         "status": "ok",

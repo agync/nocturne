@@ -766,7 +766,7 @@ async fn an_unsupported_tier_is_unavailable_everywhere() {
 #[tokio::test]
 async fn no_engine_is_unavailable() {
     let mind = LemonadeMind::new(
-        nocturne_lemonade::Client::new(common::free_port(), "k"),
+        nocturne_lemonade::Client::new(common::CLOSED_PORT, "k"),
         Tier::Small,
     );
     assert_eq!(

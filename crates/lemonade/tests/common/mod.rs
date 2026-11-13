@@ -42,13 +42,25 @@ pub fn set_mode(dirs: &Dirs, mode: &str) {
     std::fs::write(path, v.to_string()).unwrap();
 }
 
+/// A port nothing nearby is using, never handed out twice in one test binary.
 pub fn free_port() -> u16 {
-    std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port()
+    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
+    loop {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let mut given = GIVEN.lock().unwrap();
+        if !given.contains(&port) {
+            given.push(port);
+            return port;
+        }
+    }
 }
+
+/// A port nothing listens on, for "no engine" tests: connecting is refused, always.
+pub const CLOSED_PORT: u16 = 1;
 
 /// True while a process exists and is not a zombie.
 #[cfg(target_os = "linux")]
@@ -227,4 +239,35 @@ impl Drop for Fake {
         let _ = self.child.kill();
         let _ = self.child.wait();
     }
+}
+
+/// How many times the fake has been launched in this root. Retries a moment in case the count
+/// is being replaced as it is read.
+pub fn launch_count(dirs: &Dirs) -> u64 {
+    for _ in 0..40 {
+        if let Ok(text) = std::fs::read_to_string(dirs.cache().join("fake-launches"))
+            && let Ok(n) = text.trim().parse()
+        {
+            return n;
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    panic!("no launch count");
+}
+
+/// The launch count once it has held still for a while.
+pub fn settled_launch_count(dirs: &Dirs) -> u64 {
+    let mut last = launch_count(dirs);
+    let mut steady = 0;
+    while steady < 10 {
+        std::thread::sleep(Duration::from_millis(50));
+        let now = launch_count(dirs);
+        if now == last {
+            steady += 1;
+        } else {
+            last = now;
+            steady = 0;
+        }
+    }
+    last
 }
