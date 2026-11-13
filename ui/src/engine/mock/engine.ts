@@ -323,7 +323,7 @@ export class MockEngine implements EngineClient {
   /** Away from home. Tests drive its scripted parts through this. */
   readonly remote: RemoteSim;
   /** Online answers. */
-  readonly online = new OnlineSim();
+  readonly online = new OnlineSim({ onChange: (v) => this.emit("online-changed", v) });
   /** Choosing the model for each job. */
   readonly models = new ModelsSim();
 

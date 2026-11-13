@@ -116,3 +116,17 @@ describe("mock.online", () => {
     expect(paused.state.type).toBe("paused");
   });
 });
+
+describe("mock.online.events", () => {
+  it("emits online-changed when the state changes", async () => {
+    const { createMockEngine } = await import("./engine");
+    const engine = createMockEngine();
+    const seen: string[] = [];
+    engine.on("online-changed", (view) => seen.push(view.state.type));
+    engine.online.setCheckMs(0);
+    await engine.checkOnline(form());
+    await engine.turnOnOnline(settings);
+    await engine.turnOffOnline(false);
+    expect(seen).toEqual(["checking", "off", "on", "off"]);
+  });
+});
