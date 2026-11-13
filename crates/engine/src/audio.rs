@@ -150,6 +150,7 @@ impl Engine {
                 let name = e.file_name().to_string_lossy().into_owned();
                 let stem = name.split('.').next().unwrap_or("");
                 if name.starts_with(".tmp-") || !shas.iter().any(|s| s == stem) {
+                    self.bump_forget();
                     fsutil::shred(&e.path());
                 }
             }

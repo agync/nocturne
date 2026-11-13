@@ -63,6 +63,28 @@ fn copy_new_hashed(src: &Path, dest: &Path) -> std::io::Result<String> {
     Ok(crate::util::hex(&hasher.finalize()))
 }
 
+/// Shreds the export folder when dropped, unless the export was committed. Every exit path
+/// (an error part way, a panic, a stale generation) leaves nothing behind.
+struct ExportGuard {
+    root: PathBuf,
+    committed: bool,
+}
+
+impl ExportGuard {
+    fn commit(mut self) -> PathBuf {
+        self.committed = true;
+        std::mem::take(&mut self.root)
+    }
+}
+
+impl Drop for ExportGuard {
+    fn drop(&mut self) {
+        if !self.committed {
+            shred_tree(&self.root);
+        }
+    }
+}
+
 /// Overwrite and remove every file under a folder, then the folder.
 fn shred_tree(path: &Path) {
     if let Ok(entries) = std::fs::read_dir(path) {
@@ -209,7 +231,11 @@ impl Engine {
                 Err(e) => return Err(e.into()),
             }
         };
-        let dir = root.as_path();
+        let guard = ExportGuard {
+            root,
+            committed: false,
+        };
+        let dir = guard.root.as_path();
         fsutil::create_private_dir_new(&dir.join("pages"))?;
         fsutil::create_private_dir_new(&dir.join("originals"))?;
         let mut report = self.read(|conn| {
@@ -224,7 +250,11 @@ impl Engine {
             // Each item once, by id: its view and its stored columns come from one row.
             let rows: Vec<ItemExport> = {
                 let mut stmt = conn.prepare(&format!(
-                    "SELECT {}, i.origin, i.metadata FROM items i ORDER BY i.kept_at, i.id",
+                    "SELECT {}, i.origin, i.metadata FROM items i \
+                     WHERE NOT EXISTS (SELECT 1 FROM forget_jobs j \
+                       WHERE (j.kind = 'unkeep' OR j.include_originals = 1) \
+                       AND instr(j.items, '\"' || i.id || '\"') > 0) \
+                     ORDER BY i.kept_at, i.id",
                     crate::rows::ITEM_COLS
                 ))?;
                 let to_view = crate::rows::item_view(&originals_src);
@@ -399,10 +429,9 @@ impl Engine {
             .load(std::sync::atomic::Ordering::SeqCst)
             != generation
         {
-            shred_tree(&root);
             return Err(Error::Busy);
         }
-        report.path = root.to_string_lossy().into_owned();
+        report.path = guard.commit().to_string_lossy().into_owned();
         Ok(report)
     }
 
@@ -414,7 +443,9 @@ impl Engine {
                 "type the phrase exactly to delete everything",
             ));
         }
-        self.write(|tx| {
+        // Anything exporting now is void, and so is anything that starts before the rows go.
+        self.bump_forget();
+        let wrote = self.write(|tx| {
             for table in [
                 "page_line_memories",
                 "page_lines",
@@ -440,7 +471,9 @@ impl Engine {
             )?;
             tx.execute("INSERT INTO items_fts(items_fts) VALUES ('optimize')", [])?;
             Ok(())
-        })?;
+        });
+        self.bump_forget();
+        wrote?;
         for sub in ["originals", "audio"] {
             let path = self.inner.dir.join(sub);
             if let Ok(entries) = std::fs::read_dir(&path) {

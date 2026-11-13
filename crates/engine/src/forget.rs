@@ -199,6 +199,12 @@ impl Engine {
         self.forget_begin(token).map(|_| ())
     }
 
+    /// Finish every pending job, as the next open does. For tests that stop part way.
+    #[cfg(any(test, feature = "fake"))]
+    pub fn resume_forgets_for_test(&self) -> Result<()> {
+        self.resume_forgets()
+    }
+
     fn forget_begin(&self, token: &str) -> Result<(i64, u32)> {
         let now = self.clock().now();
         let stamp_now = fmt_ts(now);
@@ -421,6 +427,9 @@ impl Engine {
                 ))
             })?;
 
+        // Items and originals are about to go; an export that is running is void.
+        self.bump_forget();
+
         // Phase 2: remove the memories in chunks, so capture never waits long. Each chunk
         // first redacts any page that has come to cite it since phase 1.
         for chunk in closure_ids.chunks(200) {
@@ -509,6 +518,7 @@ impl Engine {
         })?;
         self.invalidate_vectors();
         self.bump_audio();
+        self.bump_forget();
         let fully_scrubbed = self.checkpoint_truncate()?;
 
         Ok(ForgetOutcome {

@@ -325,3 +325,126 @@ fn export_folders_and_files_are_owner_only() {
         assert_eq!(mode(&f), 0o600, "{f:?}");
     }
 }
+
+// ---- export fails closed ----
+
+fn kept_photo(f: &Fixture, bytes: &[u8], name: &str) -> String {
+    let src = tempfile::tempdir().unwrap();
+    match f
+        .engine
+        .keep_file(&write_file(src.path(), name, bytes), Source::Screenshot)
+        .unwrap()
+    {
+        Kept::New { item } => item.id,
+        _ => unreachable!(),
+    }
+}
+
+#[test]
+fn an_error_inside_the_export_leaves_no_folder_behind() {
+    let f = fixture();
+    kept_photo(&f, b"JPEG bytes", "card.jpg");
+    // Replace the stored original with a directory: opening it works, reading it fails.
+    let originals = f.dir.path().join("originals");
+    let stored = std::fs::read_dir(&originals)
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    std::fs::remove_file(&stored).unwrap();
+    std::fs::create_dir(&stored).unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    assert!(f.engine.export_to(out.path()).is_err());
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn an_item_in_a_pending_forget_that_removes_originals_is_not_exported() {
+    let f = fixture();
+    let photo = kept_photo(&f, b"JPEG bytes of the secret card", "secret.jpg");
+    let plain = keep(&f.engine, "an ordinary note");
+    f.engine
+        .apply(
+            &photo,
+            vec![cand("Zed", Predicate::Knows, "x", "Zed knows x.")],
+        )
+        .unwrap();
+    let mem = f.engine.memories(Default::default()).unwrap()[0].id.clone();
+    let p = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), true)
+        .unwrap();
+    // The forget has started and not finished (as when the app stopped part way).
+    f.engine.forget_begin_only(&p.token).unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    let root = std::path::PathBuf::from(f.engine.export_to(out.path()).unwrap().path);
+    let data: Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("nocturne.json")).unwrap())
+            .unwrap();
+    let ids: Vec<&str> = data["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, [plain.as_str()]);
+    assert_eq!(
+        std::fs::read_dir(root.join("originals")).unwrap().count(),
+        0
+    );
+}
+
+#[test]
+fn an_export_that_ran_across_delete_everything_is_discarded() {
+    let f = fixture();
+    keep(&f.engine, "a note");
+    kept_photo(&f, b"JPEG bytes", "card.jpg");
+    let out = tempfile::tempdir().unwrap();
+    let fired = std::cell::Cell::new(false);
+    let err = f
+        .engine
+        .export_to_with(out.path(), &|done, _| {
+            if done == 1 && !fired.get() {
+                fired.set(true);
+                f.engine.delete_everything(DELETE_PHRASE).unwrap();
+            }
+        })
+        .unwrap_err();
+    assert!(fired.get());
+    assert!(matches!(err, nocturne_engine::Error::Busy), "{err:?}");
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+}
+
+#[test]
+fn an_export_that_ran_across_a_finishing_forget_is_discarded() {
+    let f = fixture();
+    let (_, mem) = learn(
+        &f.engine,
+        "Zed note",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    let p = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), true)
+        .unwrap();
+    f.engine.forget_begin_only(&p.token).unwrap();
+    keep(&f.engine, "another note");
+    let out = tempfile::tempdir().unwrap();
+    let fired = std::cell::Cell::new(false);
+    let err = f
+        .engine
+        .export_to_with(out.path(), &|done, _| {
+            if done == 1 && !fired.get() {
+                fired.set(true);
+                // Finishing the pending job (as the next open does) removes items and files.
+                f.engine.resume_forgets_for_test().unwrap();
+            }
+        })
+        .unwrap_err();
+    assert!(fired.get());
+    assert!(matches!(err, nocturne_engine::Error::Busy), "{err:?}");
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+}
