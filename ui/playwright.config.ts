@@ -1,7 +1,8 @@
 import { existsSync } from "node:fs";
 import { chromium, defineConfig, devices, webkit } from "@playwright/test";
 
-const PORT = 4174;
+// Each worktree can run its own preview: set PW_PORT to avoid serving another lane's build.
+const PORT = Number(process.env.PW_PORT ?? 4174);
 
 function chromiumChannel(): string | undefined {
   if (process.env.PW_CHANNEL) return process.env.PW_CHANNEL;
@@ -37,7 +38,8 @@ export default defineConfig({
   webServer: {
     command: `npx vite build --mode mock && npx vite preview --mode mock --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Reusing a running server is opt-in, so a stale or foreign build is never tested by accident.
+    reuseExistingServer: process.env.PW_REUSE === "1",
     timeout: 120_000,
   },
 });
