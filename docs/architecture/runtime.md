@@ -185,7 +185,11 @@ The NPU and GPU run sequentially by default; concurrent use is an experiment
 
 ## Staying local
 
-The engine listens on 127.0.0.1 with a per-launch key, the app makes no other network connection,
+The engine listens on 127.0.0.1 with a per-launch key. A second per-launch key, held only by the
+supervisor, guards the engine's `/internal/*` endpoints and is never given to the client that
+talks to the models. The engine's browser-origin list names an origin that cannot exist, so no
+web page is allowed by the list; the engine still admits loopback and desktop-app origins by
+rule, and the key is what stops those. The app makes no other network connection,
 and the only downloads are the engine's models and app updates the person allowed, listed in the
 download ledger. Because a live count of what a program sends needs privileges the app does not
 have, the proof is a release-time check: the app and the engine run in a private network
