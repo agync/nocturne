@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
@@ -7,8 +7,15 @@ import { patch } from "../settings/patch";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
+  vi.useRealTimers();
   window.location.hash = "";
 });
+
+/** Lets the "Marked as done" toast run out, which is when the press is committed. */
+const toastEnds = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(10_500);
+  });
 
 const open = async (engine = createMockEngine()) => {
   const view = renderApp({ hash: "#/today", engine });
@@ -46,25 +53,53 @@ describe("the morning page on Today", () => {
     );
   });
 
-  it("marks the trip form done and strikes the line", async () => {
+  it("marks the trip form done and strikes the line, committing when the toast ends", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const { engine } = await open();
     const spy = vi.spyOn(engine, "markDone");
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
-    expect(spy).toHaveBeenCalledWith("mem-trip");
+    expect(spy).not.toHaveBeenCalled();
+    expect(screen.getByText("Marked as done.")).toBeInTheDocument();
     expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toBeInTheDocument();
     expect(screen.getByText(/The Year 4 trip form is due/).closest("p")).toHaveAttribute(
       "data-done",
       "true",
     );
     expect(screen.queryByRole("button", { name: "Mark as done" })).toBeNull();
+    await toastEnds();
+    expect(spy).toHaveBeenCalledWith("mem-trip");
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it("says Nothing needs you once both are done", async () => {
+  it("Undo brings the line back and never commits", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "markDone");
+    await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("button", { name: "Mark as done" })).toBeInTheDocument();
+    expect(screen.queryByText("Done. Nocturne won’t bring it up again.")).toBeNull();
+    await toastEnds();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("commits a press that is still waiting when the screen goes away", async () => {
+    const { engine, unmount } = await open();
+    const spy = vi.spyOn(engine, "markDone");
+    await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    expect(spy).not.toHaveBeenCalled();
+    unmount();
+    expect(spy).toHaveBeenCalledWith("mem-trip");
+  });
+
+  it("says Nothing needs you once both are done and the press is committed", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const { engine } = await open();
     const page = await engine.getPage();
     const thursday = page.needsYou.find((l) => l.kind === "which")?.choices[1]?.text ?? "";
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
     await userEvent.click(screen.getByRole("button", { name: new RegExp(thursday) }));
+    await toastEnds();
     expect(
       await screen.findByRole("heading", { level: 1, name: "Nothing needs you today." }),
     ).toBeInTheDocument();
@@ -105,8 +140,10 @@ describe("the morning page on Today", () => {
 
   it("puts the change back and says so when the engine refuses", async () => {
     const { engine } = await open();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.spyOn(engine, "markDone").mockRejectedValue(new Error("no"));
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    await toastEnds();
     expect(
       await screen.findByText("That did not go through, so nothing was changed. Try again."),
     ).toBeInTheDocument();
@@ -187,7 +224,7 @@ describe("the morning page on Today", () => {
     );
   });
 
-  describe("Not true, forget it", () => {
+  describe("Not true, delete it", () => {
     /** The gran line waits to be confirmed, so the page offers the choice. */
     const unconfirmedGran = (memoryIds?: string[]) => {
       const engine = createMockEngine();
@@ -211,7 +248,7 @@ describe("the morning page on Today", () => {
       const confirm = vi.spyOn(engine, "confirmMemory");
       const forget = vi.spyOn(engine, "forget");
       await open(engine);
-      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
       const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
       expect(screen.queryByText(/^Forgotten\./)).toBeNull();
       expect(confirm).not.toHaveBeenCalled();
@@ -219,7 +256,7 @@ describe("the morning page on Today", () => {
       expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
       expect(forget).toHaveBeenCalledOnce();
       await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
-      const gone = await screen.findByText("Forgotten. This line is gone from the page.");
+      const gone = await screen.findByText("Deleted. This line is gone from the page.");
       await waitFor(() => expect(gone).toHaveFocus());
       expect(document.body.textContent).not.toContain("4471");
     });
@@ -228,7 +265,7 @@ describe("the morning page on Today", () => {
       const engine = unconfirmedGran(["mem-gran", "mem-swim"]);
       const preview = vi.spyOn(engine, "previewForget");
       await open(engine);
-      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
       await screen.findByRole("dialog", { name: "Forget 2 memories?" });
       expect(preview.mock.calls[0]?.[0]).toEqual(["mem-gran", "mem-swim"]);
     });
@@ -237,11 +274,11 @@ describe("the morning page on Today", () => {
       const engine = unconfirmedGran();
       const forget = vi.spyOn(engine, "forget");
       await open(engine);
-      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
       await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
       expect(forget).not.toHaveBeenCalled();
       expect(screen.queryByRole("dialog")).toBeNull();
-      expect(screen.getByRole("button", { name: "Not true, forget it…" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Not true, delete it…" })).toBeInTheDocument();
     });
   });
 
@@ -251,7 +288,7 @@ describe("the morning page on Today", () => {
     await engine.forget(preview.token);
     await open(engine);
     expect(
-      await screen.findByText("Forgotten. This line is gone from the page."),
+      await screen.findByText("Deleted. This line is gone from the page."),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("4471");
   });
@@ -259,8 +296,10 @@ describe("the morning page on Today", () => {
   it("gives way to fresh data once it has arrived instead of keeping its own guess", async () => {
     const { engine } = await open();
     // The engine accepts the change but its page still says the line is open.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.spyOn(engine, "markDone").mockResolvedValue(undefined);
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    await toastEnds();
     expect(await screen.findByRole("button", { name: "Mark as done" })).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
 import { PageSheet, type SheetAction } from "../../components/PageSheet/PageSheet";
@@ -89,6 +89,37 @@ function TodayPage({ date }: { date: string | undefined }) {
     [settle, toast],
   );
 
+  /** "Mark as done" waits out its toast: line id -> the memory to mark. */
+  const pendingDone = useRef(new Map<string, string>());
+
+  const commitDone = useCallback(
+    (id: string) => {
+      const memoryId = pendingDone.current.get(id);
+      if (memoryId === undefined) return;
+      pendingDone.current.delete(id);
+      // The held press still counts as in flight until `run` has taken over.
+      void run(
+        () => {},
+        () => setOverrides((o) => ({ ...o, done: o.done.filter((x) => x !== id) })),
+        () => engine.markDone(memoryId),
+      );
+      inflight.current -= 1;
+    },
+    [engine, run],
+  );
+
+  // A press that is still waiting for its toast to end must not be lost.
+  useEffect(() => {
+    const flush = () => {
+      for (const id of [...pendingDone.current.keys()]) commitDone(id);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [commitDone]);
+
   const onAction = useCallback(
     (action: SheetAction) => {
       if (!page) return;
@@ -97,14 +128,26 @@ function TodayPage({ date }: { date: string | undefined }) {
         case "done": {
           const id = action.line.id;
           const memoryId = action.line.memoryIds[0];
-          void run(
-            () => set((o) => ({ ...o, done: [...o.done, id] })),
-            () => set((o) => ({ ...o, done: o.done.filter((x) => x !== id) })),
-            async () => {
-              if (!memoryId) throw new Error("This line has nothing to mark");
-              await engine.markDone(memoryId);
+          if (!memoryId) {
+            toast.show({ message: t("page.action.failed") });
+            break;
+          }
+          pendingDone.current.set(id, memoryId);
+          inflight.current += 1;
+          set((o) => ({ ...o, done: [...o.done, id] }));
+          toast.show({
+            key: `done:${id}`,
+            message: t("page.done.toast"),
+            action: {
+              label: t("page.done.undo"),
+              onAction: () => {
+                if (!pendingDone.current.delete(id)) return;
+                inflight.current -= 1;
+                set((o) => ({ ...o, done: o.done.filter((x) => x !== id) }));
+              },
             },
-          );
+            onExpire: () => commitDone(id),
+          });
           break;
         }
         case "which": {
@@ -169,7 +212,7 @@ function TodayPage({ date }: { date: string | undefined }) {
           break;
       }
     },
-    [page, engine, navigate, refresh, run],
+    [page, engine, navigate, refresh, run, toast, commitDone],
   );
 
   const forgetDialog = forgetting ? (
