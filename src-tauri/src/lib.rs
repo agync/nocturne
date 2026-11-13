@@ -207,17 +207,27 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .build(tauri::generate_context!())
         .expect("the Nocturne window could not start");
-    {
-        use tauri_plugin_opener::OpenerExt;
-        let handle = app.handle().clone();
-        app.state::<AppState>().set_opener(Arc::new(move |path| {
-            handle
-                .opener()
-                .open_path(path.to_string_lossy(), None::<&str>)
-                .map_err(|e| e.to_string())
-        }));
-    }
-    app.run(|app, event| handle_run_event(app, &event));
+    app.run(|app, event| {
+        // The setup hook, which manages `AppState`, runs inside `run` before `Ready`.
+        if matches!(event, RunEvent::Ready) {
+            install_opener(app);
+        }
+        handle_run_event(app, &event);
+    });
+}
+
+fn install_opener(app: &AppHandle) {
+    use tauri_plugin_opener::OpenerExt;
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let handle = app.clone();
+    state.set_opener(Arc::new(move |path| {
+        handle
+            .opener()
+            .open_path(path.to_string_lossy(), None::<&str>)
+            .map_err(|e| e.to_string())
+    }));
 }
 
 #[cfg(test)]
