@@ -25,6 +25,8 @@
 }
 
 .railColumn {
+  display: flex;
+  flex-direction: column;
   order: -1;
   width: var(--size-rail);
   flex: none;
@@ -75,6 +77,8 @@
 }
 
 .aside {
+  display: flex;
+  flex-direction: column;
   width: 280px;
   flex: none;
   overflow: auto;

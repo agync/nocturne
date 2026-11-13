@@ -6,7 +6,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
 import { ScreenError } from "../components/ErrorBoundary/ScreenError";
 import { KeepAskBar } from "../components/KeepAskBar/KeepAskBar";
 import { KeptToday } from "../components/KeptToday/KeptToday";
-import { Mark } from "../components/Mark/Mark";
+import { Mark, markStateFor } from "../components/Mark/Mark";
 import { type NoticeHandlers, Notices } from "../components/Notices/Notices";
 import { Rail } from "../components/Rail/Rail";
 import { useToast } from "../components/Toast/Toast";
@@ -161,7 +161,7 @@ export function Shell({ children }: ShellProps) {
         {narrow ? (
           <header className={styles.narrowHeader}>
             <span className={styles.narrowTitle}>
-              <Mark state="resting" size={18} decorative />
+              <Mark state={markStateFor(status?.state ?? "resting")} size={18} decorative />
               <span>{title}</span>
             </span>
             <button

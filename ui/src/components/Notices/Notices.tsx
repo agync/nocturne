@@ -79,12 +79,18 @@ export function noticeAction(code: NoticeCode): string {
   }
 }
 
+/** Problems that stop something working are announced at once; the rest wait their turn. */
+const URGENT: ReadonlySet<NoticeCode> = new Set<NoticeCode>([
+  "diskFull",
+  "downloadStalled",
+  "repairNeeded",
+]);
+
 export function Notices({ notices, handlers = {} }: NoticesProps) {
-  if (notices.length === 0) return null;
-  return (
-    <section className={styles.notices} aria-label={t("notice.region")}>
-      <ul className={styles.list}>
-        {notices.map((notice) => {
+  const render = (list: Notice[]) =>
+    list.length === 0 ? null : (
+      <ul className={styles.list} aria-label={t("notice.region")}>
+        {list.map((notice) => {
           const handler = handlers[notice.code];
           return (
             <li key={notice.id} className={styles.notice} data-code={notice.code}>
@@ -98,6 +104,16 @@ export function Notices({ notices, handlers = {} }: NoticesProps) {
           );
         })}
       </ul>
-    </section>
+    );
+  const urgent = notices.filter((n) => URGENT.has(n.code));
+  const calm = notices.filter((n) => !URGENT.has(n.code));
+  // The two live regions stay mounted even when empty, so the first notice is announced.
+  return (
+    <div className={styles.notices} data-empty={notices.length === 0}>
+      <div role="alert">{render(urgent)}</div>
+      <div role="status" aria-live="polite">
+        {render(calm)}
+      </div>
+    </div>
   );
 }

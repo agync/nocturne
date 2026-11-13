@@ -1,5 +1,6 @@
 .kept {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: 14px;
   min-width: 0;

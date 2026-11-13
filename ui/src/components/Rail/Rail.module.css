@@ -1,8 +1,9 @@
 .rail {
   display: flex;
+  flex: 1;
   flex-direction: column;
   gap: var(--s-5);
-  min-height: 0;
+  min-height: min-content;
   padding: 20px 14px;
 }
 

@@ -1,5 +1,12 @@
 .notices {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
   padding: var(--s-3) var(--s-5) 0;
+}
+
+.notices[data-empty="true"] {
+  padding: 0;
 }
 
 .list {

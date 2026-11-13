@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { copyDeck } from "../../copy/t";
@@ -68,8 +68,25 @@ describe("Notices", () => {
     expect(onRetry).toHaveBeenCalledWith(notices[0]);
   });
 
-  it("renders nothing for no notices", () => {
-    const { container } = render(<Notices notices={[]} />);
-    expect(container).toBeEmptyDOMElement();
+  it("keeps both live regions mounted, even with nothing to say", () => {
+    render(<Notices notices={[]} />);
+    expect(screen.getByRole("alert")).toBeEmptyDOMElement();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("listitem")).toBeNull();
+  });
+
+  it("announces what stops something working at once, and the rest politely", () => {
+    const urgent: NoticeCode[] = ["diskFull", "downloadStalled", "repairNeeded"];
+    const all = (Object.keys(CODES) as NoticeCode[]).map((c) => make(c));
+    render(<Notices notices={all} />);
+    const alert = screen.getByRole("alert");
+    const status = screen.getByRole("status");
+    expect(within(alert).getAllByRole("listitem")).toHaveLength(urgent.length);
+    for (const code of urgent) {
+      expect(alert.querySelector(`[data-code="${code}"]`), code).not.toBeNull();
+      expect(status.querySelector(`[data-code="${code}"]`), code).toBeNull();
+    }
+    expect(status.querySelector('[data-code="restarts"]')).not.toBeNull();
+    expect(status).toHaveAttribute("aria-live", "polite");
   });
 });

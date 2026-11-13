@@ -256,7 +256,7 @@ describe("notices", () => {
       ],
     });
     renderApp({ engine });
-    const region = await screen.findByRole("region", { name: "Things to know" });
+    const region = await screen.findByRole("list", { name: "Things to know" });
     expect(within(region).getAllByRole("listitem")).toHaveLength(2);
     await userEvent.click(within(region).getByRole("button", { name: "Show details" }));
     await waitFor(() => expect(window.location.hash).toBe("#/settings/advanced"));
@@ -336,5 +336,18 @@ describe("when a screen fails", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Start again" })).toBeInTheDocument();
     error.mockRestore();
+  });
+});
+
+describe("narrow header mark", () => {
+  it("shows the engine's state, not a fixed mark", async () => {
+    setViewport(400);
+    const engine = createMockEngine();
+    await engine.pause(null);
+    const { container } = renderApp({ engine });
+    await screen.findByRole("button", { name: "Menu" });
+    await waitFor(() =>
+      expect(container.querySelector('header [data-state="paused"]')).not.toBeNull(),
+    );
   });
 });
