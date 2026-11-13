@@ -12,12 +12,22 @@ const NAME: Record<Exclude<Tier, "unsupported">, CopyId> = {
   large: "setup.tier.large",
   standard: "setup.tier.standard",
   small: "setup.tier.small",
+  tiny: "setup.tier.tiny",
 };
 
 const RESULT: Record<Exclude<Tier, "unsupported">, CopyId> = {
   large: "setup.result.large",
   standard: "setup.result.standard",
   small: "setup.result.small",
+  tiny: "setup.result.tiny",
+};
+
+/** What each size gives and costs, in a few words after its memory and download. */
+const DETAIL: Record<Exclude<Tier, "unsupported">, CopyId> = {
+  large: "setup.tier.detail.fastest",
+  standard: "setup.tier.detail",
+  small: "setup.tier.detail.slower",
+  tiny: "setup.tier.detail.simpler",
 };
 
 /** Why nothing fits: not enough memory, or not enough free space for the smallest. */
@@ -26,7 +36,7 @@ function shortfall(
 ): { kind: "memory"; min: number } | { kind: "disk"; needed: number } {
   const smallest = [...view.options].sort((a, b) => a.minRamGib - b.minRamGib)[0];
   if (!smallest || view.ramGib < smallest.minRamGib) {
-    return { kind: "memory", min: smallest?.minRamGib ?? 14 };
+    return { kind: "memory", min: smallest?.minRamGib ?? 7 };
   }
   return { kind: "disk", needed: smallest.downloadBytes + 2e9 };
 }
@@ -37,7 +47,7 @@ interface Props {
   onStarted: () => void;
 }
 
-/** H2, second half: what this computer can run, the three tiers, and the one button. */
+/** H2, second half: what this computer can run, the four tiers, and the one button. */
 export function Choosing({ view, onStarted }: Props) {
   const heading = useArrivalFocus();
   const engine = useEngine();
@@ -113,12 +123,7 @@ export function Choosing({ view, onStarted }: Props) {
         {view.options.map((o) => {
           const tier = o.tier as Exclude<Tier, "unsupported">;
           const here = o.tier === view.detected;
-          const detail =
-            o.tier === "large"
-              ? "setup.tier.detail.fastest"
-              : o.tier === "small"
-                ? "setup.tier.detail.slower"
-                : "setup.tier.detail";
+          const tooBig = view.ramGib < o.minRamGib ? "setup.tier.toobig" : "setup.tier.toobig.disk";
           return (
             <label key={o.tier} className={styles.tier} data-disabled={!o.fits}>
               <input
@@ -135,11 +140,9 @@ export function Choosing({ view, onStarted }: Props) {
                   {here ? t("setup.tier.here", { name: t(NAME[tier]) }) : t(NAME[tier])}
                 </span>
                 <span className={styles.tierDetail}>
-                  {t(detail, { ram: o.minRamGib, size: formatBytes(o.downloadBytes) })}
+                  {t(DETAIL[tier], { ram: o.minRamGib, size: formatBytes(o.downloadBytes) })}
                 </span>
-                {!o.fits ? (
-                  <span className={styles.tierDetail}>{t("setup.tier.toobig")}</span>
-                ) : null}
+                {!o.fits ? <span className={styles.tierDetail}>{t(tooBig)}</span> : null}
               </span>
             </label>
           );
@@ -171,6 +174,7 @@ export function Choosing({ view, onStarted }: Props) {
             large: ram("large"),
             standard: ram("standard"),
             small: ram("small"),
+            tiny: ram("tiny"),
           })}
         </p>
       ) : null}

@@ -6,7 +6,7 @@ import { Progress } from "../../components/Progress/Progress";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, formatEta } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { SetupView } from "../../engine/bindings";
+import type { SetupView, Tier } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { Defaults } from "./Defaults";
@@ -78,7 +78,7 @@ export function GettingReady({ view }: { view: SetupView }) {
       view.phase === "failed" &&
       (view.chosen ?? view.detected) &&
       (view.chosen ?? view.detected) !== "unsupported"
-        ? engine.startSetup((view.chosen ?? view.detected) as "large" | "standard" | "small")
+        ? engine.startSetup((view.chosen ?? view.detected) as Tier)
         : engine.resumeSetup(),
     );
 

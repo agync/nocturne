@@ -64,7 +64,7 @@ describe("the welcome", () => {
 });
 
 describe("what this computer can run", () => {
-  it("shows the three tiers, the detected one chosen, and what it needs", async () => {
+  it("shows the four tiers, the detected one chosen, and what it needs", async () => {
     await open("choosing", "#/setup?step=choosing");
     expect(
       await screen.findByRole("heading", {
@@ -78,6 +78,7 @@ describe("what this computer can run", () => {
       "large",
       "standard",
       "small",
+      "tiny",
     ]);
     expect(within(group).getByRole("radio", { name: /Standard · this computer/ })).toBeChecked();
     expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
@@ -96,7 +97,59 @@ describe("what this computer can run", () => {
     expect(
       within(group).getByText("For computers with 28 GB memory or more · 8.4 GB download"),
     ).toBeInTheDocument();
-    expect(within(group).getByText(/· 4\.8 GB download · slower$/)).toBeInTheDocument();
+    expect(
+      within(group).getByText(/· 4\.8 GB download · slower · uses less memory, space and battery$/),
+    ).toBeInTheDocument();
+    expect(
+      within(group).getByText(
+        "For computers with 7 GB memory or more · 3.2 GB download · uses the least memory, space and battery · answers are simpler and may miss details",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("lets a powerful computer choose the tiny mind", async () => {
+    const { engine } = await open("large", "#/setup?step=choosing");
+    const spy = vi.spyOn(engine, "startSetup");
+    const group = await screen.findByRole("group", { name: "How much to set up" });
+    expect(within(group).getByRole("radio", { name: /Large · this computer/ })).toBeChecked();
+    const tiny = within(group).getByRole("radio", { name: /Tiny/ });
+    expect(tiny).toBeEnabled();
+    await userEvent.click(tiny);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Nocturne will use its lightest mind. Everything works, but answers are simpler and it may miss details.",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Set up · 3.2 GB" }));
+    expect(spy).toHaveBeenCalledWith("tiny");
+  });
+
+  it("offers only the tiny mind on an 8 GB computer, already chosen", async () => {
+    await open("tiny", "#/setup?step=choosing");
+    const group = await screen.findByRole("group", { name: "How much to set up" });
+    const enabled = within(group)
+      .getAllByRole("radio")
+      .filter((r) => !(r as HTMLInputElement).disabled)
+      .map((r) => (r as HTMLInputElement).value);
+    expect(enabled).toEqual(["tiny"]);
+    expect(within(group).getByRole("radio", { name: /Tiny · this computer/ })).toBeChecked();
+  });
+
+  it("chooses Small on a 16 GB computer and still allows Tiny", async () => {
+    await open("small", "#/setup?step=choosing");
+    const group = await screen.findByRole("group", { name: "How much to set up" });
+    expect(within(group).getByRole("radio", { name: /Small · this computer/ })).toBeChecked();
+    expect(within(group).getByRole("radio", { name: /Tiny/ })).toBeEnabled();
+    expect(within(group).getByRole("radio", { name: /Standard/ })).toBeDisabled();
+  });
+
+  it("says when a size needs more free space rather than more memory", async () => {
+    await open("shortOfSpace", "#/setup?step=choosing");
+    const group = await screen.findByRole("group", { name: "How much to set up" });
+    expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
+    expect(within(group).getAllByText("Needs more free space than this computer has")).toHaveLength(
+      2,
+    );
+    expect(within(group).queryByText("Needs more computer memory than this one has")).toBeNull();
+    expect(within(group).getByRole("radio", { name: /Small · this computer/ })).toBeChecked();
   });
 
   it("puts focus on the new step's heading after Get started and after Set up", async () => {
@@ -136,7 +189,9 @@ describe("what this computer can run", () => {
     await userEvent.click(why);
     expect(why).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByText(/32 GB here. Large needs 60 GB or more, Standard 28 GB and Small 14 GB/),
+      screen.getByText(
+        /32 GB here. Large needs 60 GB or more, Standard 28 GB, Small 14 GB and Tiny 7 GB/,
+      ),
     ).toBeInTheDocument();
   });
 
@@ -163,7 +218,7 @@ describe("what this computer can run", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This computer has 8 GB of computer memory. Nocturne needs 14 GB or more. Nothing has been downloaded.",
+        "This computer has 6 GB of computer memory. Nocturne needs 7 GB or more. Nothing has been downloaded.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
@@ -175,7 +230,7 @@ describe("what this computer can run", () => {
       await screen.findByRole("heading", { level: 1, name: /needs more free space/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/It has 3 GB free\. Nocturne needs 6\.8 GB to set up/),
+      screen.getByText(/It has 3 GB free\. Nocturne needs 5\.2 GB to set up/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
   });
