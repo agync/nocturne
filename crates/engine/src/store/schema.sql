@@ -77,6 +77,9 @@ CREATE VIRTUAL TABLE items_fts USING fts5(
   title, text, summary, content='items', content_rowid='rowid');
 CREATE VIRTUAL TABLE memories_fts USING fts5(
   sentence, subject, object, content='memories', content_rowid='rowid');
+-- Deleted terms are overwritten in the index, not left in free pages.
+INSERT INTO items_fts(items_fts, rank) VALUES('secure-delete', 1);
+INSERT INTO memories_fts(memories_fts, rank) VALUES('secure-delete', 1);
 
 CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
   INSERT INTO items_fts(rowid, title, text, summary)

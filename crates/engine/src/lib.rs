@@ -9,14 +9,24 @@
 //! Every public method is synchronous. Callers on an async runtime use `spawn_blocking`.
 //! Policy (decay, ranking, windows) takes its time from the [`Clock`], so tests control it.
 
+mod capture;
 mod clock;
 mod error;
+mod fsutil;
+mod mind;
+mod rows;
+mod types;
 mod util;
 
 pub mod store;
 
+pub use capture::{MAX_AUDIO_MS, MAX_PAGES, kind_for_ext, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
+pub use mind::{AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding};
+#[cfg(any(test, feature = "fake"))]
+pub use mind::{FAKE_DIM, FakeMind, hash_embedding};
+pub use types::*;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,8 +54,8 @@ pub(crate) struct Inner {
 impl Engine {
     /// Open (creating if needed) the store in `dir`.
     pub fn open(dir: &Path, clock: Arc<dyn Clock>) -> Result<Engine> {
-        std::fs::create_dir_all(dir)?;
-        std::fs::create_dir_all(dir.join("originals"))?;
+        fsutil::create_private_dir(dir)?;
+        fsutil::create_private_dir(&dir.join("originals"))?;
         let db = dir.join(DB_FILE);
         let writer = store::open(&db)?;
         let mut readers = Vec::with_capacity(READERS);
@@ -61,6 +71,9 @@ impl Engine {
                 next_reader: AtomicUsize::new(0),
             }),
         };
+        // Items a worker was reading when the app last stopped go back in the queue.
+        let now = util::fmt_ts(engine.clock().now());
+        engine.write(|tx| capture::reset_expired_leases(tx, &now).map(|_| ()))?;
         Ok(engine)
     }
 
@@ -94,6 +107,23 @@ impl Engine {
     pub(crate) fn write_raw<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         let guard = lock(&self.inner.writer);
         f(&guard)
+    }
+
+    /// Fold the write-ahead log into the store and truncate it, so nothing deleted lingers in the
+    /// `-wal` file. A busy reader blocks the truncate, so retry briefly and warn on failure.
+    pub(crate) fn checkpoint_truncate(&self) -> Result<()> {
+        for attempt in 0..10 {
+            let busy: i64 = self.write_raw(|conn| {
+                Ok(conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?)
+            })?;
+            if busy == 0 {
+                store::restrict_store_files(&self.db_path());
+                return Ok(());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(20 * (attempt + 1)));
+        }
+        tracing::warn!("the write-ahead log could not be truncated because a reader is busy");
+        Ok(())
     }
 
     /// Run `f` on a read-only connection from the pool.

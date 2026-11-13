@@ -47,13 +47,21 @@ fn configure(conn: &Connection) -> Result<()> {
 
 /// Open the single writer connection, creating and migrating the store.
 pub fn open(path: &Path) -> Result<Connection> {
+    // Create the file first so it is private from the start; SQLite gives -wal and -shm the
+    // same mode.
+    if !path.exists() {
+        crate::fsutil::create_private_file(path)?;
+    }
     let mut conn = Connection::open(path)?;
     configure(&conn)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
+    // Do not let the -wal file linger at its high-water size.
+    conn.pragma_update(None, "journal_size_limit", 0)?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
     // Freed pages are overwritten, so forgotten text does not linger in the file.
     conn.pragma_update(None, "secure_delete", "ON")?;
     migrate(&mut conn)?;
+    restrict_store_files(path);
     Ok(conn)
 }
 
@@ -85,4 +93,13 @@ fn migrate(conn: &mut Connection) -> Result<()> {
         tx.commit()?;
     }
     Ok(())
+}
+
+/// The store, its write-ahead log and its shared-memory file are for the owner only.
+pub(crate) fn restrict_store_files(db: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let mut name = db.as_os_str().to_owned();
+        name.push(suffix);
+        crate::fsutil::restrict_file(Path::new(&name));
+    }
 }
