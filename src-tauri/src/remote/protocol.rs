@@ -121,6 +121,24 @@ pub const WRONG_CODES: u32 = 5;
 pub const PAGES_BACK: u32 = 7;
 pub const EVENTS_KEPT_DAYS: u32 = 90;
 
+/// The build of the phone code in this tree.
+pub const PHONE_BUILD: u32 = 1;
+/// The oldest phone build the computer accepts.
+pub const MIN_PHONE_BUILD: u32 = 1;
+
+/// HTTP statuses between the listener and the phone.
+///
+/// - `HTTP_OFF` (503): Away from home is off.
+/// - `HTTP_ENDED` (410): the session or pairing has ended; open a new one.
+/// - `HTTP_POLL_BUSY` (409): another poll is already held.
+/// - `HTTP_REFUSED` (403): unsealed refusal.
+/// - `HTTP_NOT_FOUND` (404): anything else.
+pub const HTTP_OFF: u16 = 503;
+pub const HTTP_ENDED: u16 = 410;
+pub const HTTP_POLL_BUSY: u16 = 409;
+pub const HTTP_REFUSED: u16 = 403;
+pub const HTTP_NOT_FOUND: u16 = 404;
+
 /// Code points a device name may not hold, inclusive: C0 and C1 controls, DEL, the bidi
 /// controls (with U+061C), zero-width characters, the line and paragraph separators and the
 /// byte order mark.
@@ -293,6 +311,13 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         WRONG_CODES,
         PAGES_BACK,
         EVENTS_KEPT_DAYS,
+        PHONE_BUILD,
+        MIN_PHONE_BUILD,
+        HTTP_OFF,
+        HTTP_ENDED,
+        HTTP_POLL_BUSY,
+        HTTP_REFUSED,
+        HTTP_NOT_FOUND,
     );
     let forbidden: Vec<_> = NAME_FORBIDDEN.iter().map(|(a, b)| json!([a, b])).collect();
     m.insert("NAME_FORBIDDEN".into(), json!(forbidden));
@@ -335,6 +360,11 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>();
         let listed = v.constants().keys().cloned().collect();
         assert_eq!(declared, listed, "every constant here is in the reference");
+    }
+
+    #[test]
+    fn the_oldest_accepted_build_is_not_newer_than_this_one() {
+        const { assert!(MIN_PHONE_BUILD <= PHONE_BUILD) };
     }
 
     #[test]

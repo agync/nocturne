@@ -138,6 +138,13 @@ LIMIT_KEEPS = 30
 WRONG_CODES = 5
 PAGES_BACK = 7
 EVENTS_KEPT_DAYS = 90
+PHONE_BUILD = 1
+MIN_PHONE_BUILD = 1
+HTTP_OFF = 503
+HTTP_ENDED = 410
+HTTP_POLL_BUSY = 409
+HTTP_REFUSED = 403
+HTTP_NOT_FOUND = 404
 
 # Code points a device name may not hold: C0 and C1 controls, DEL, the bidi controls (with
 # U+061C), zero-width characters, the line and paragraph separators and the byte order mark.
@@ -643,6 +650,8 @@ def constants():
         "LIMIT_NO_KEY", "LIMIT_STATIC", "LIMIT_PAIRING_FRAMES", "LIMIT_FAILED_SESSION_OPEN",
         "LIMIT_SESSION_OPENS_PER_DEVICE", "LIMIT_REQUESTS", "LIMIT_ASKS", "LIMIT_KEEPS",
         "WRONG_CODES", "PAGES_BACK", "EVENTS_KEPT_DAYS",
+        "PHONE_BUILD", "MIN_PHONE_BUILD", "HTTP_OFF", "HTTP_ENDED", "HTTP_POLL_BUSY", "HTTP_REFUSED",
+        "HTTP_NOT_FOUND",
     ]
     g = globals()
     out = {name: g[name] for name in names}
@@ -836,7 +845,8 @@ def build():
 
     # Envelopes and data frames ------------------------------------------------------------------
     hello_body = js({"id": 0, "answer": {"type": "hello", "hello": {
-        "computerName": "Kitchen laptop", "deviceName": name, "connection": "simple", "version": "0.1.0"}}})
+        "computerName": "Kitchen laptop", "deviceName": name, "connection": "simple", "version": "0.1.0",
+        "minPhoneBuild": MIN_PHONE_BUILD}}})
     status_req = js({"id": 1, "call": {"cmd": "getStatus"}})
     keep_req = js({"id": 2, "call": {"cmd": "keepText", "text": "Bin day moved to Thursday", "clientId": "c-0001"}})
     status_reply = js({"id": 1, "answer": {"type": "status", "status": {"readiness": "ready", "pageDate": "2026-11-13", "needsYou": 2}}})

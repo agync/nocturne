@@ -292,6 +292,8 @@ pub struct PhoneHello {
     pub device_name: String,
     pub connection: RemoteConnection,
     pub version: String,
+    // The oldest phone build the computer accepts; an older phone must ask for a fresh link.
+    pub min_phone_build: u32,
 }
 
 /// What a phone may know of the computer's state. `needs_you` counts the public needs-you

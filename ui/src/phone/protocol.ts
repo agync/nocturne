@@ -123,6 +123,23 @@ export const WRONG_CODES = 5;
 export const PAGES_BACK = 7;
 export const EVENTS_KEPT_DAYS = 90;
 
+/** The build of the phone code in this tree. */
+export const PHONE_BUILD = 1;
+/** The oldest phone build the computer accepts. */
+export const MIN_PHONE_BUILD = 1;
+
+/** HTTP statuses between the listener and the phone. */
+/** Away from home is off. */
+export const HTTP_OFF = 503;
+/** The session or pairing has ended; open a new one. */
+export const HTTP_ENDED = 410;
+/** Another poll is already held. */
+export const HTTP_POLL_BUSY = 409;
+/** Unsealed refusal. */
+export const HTTP_REFUSED = 403;
+/** Anything else. */
+export const HTTP_NOT_FOUND = 404;
+
 /**
  * Code points a device name may not hold, inclusive: C0 and C1 controls, DEL, the bidi controls
  * (with U+061C), zero-width characters, the line and paragraph separators and the byte order
