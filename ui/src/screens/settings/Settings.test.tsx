@@ -46,13 +46,10 @@ describe("Settings", () => {
     expect(screen.getByText("English (UK)")).toBeInTheDocument();
   });
 
-  it("has update checks off by default", async () => {
+  it("offers no update checks, because nothing in this version can update itself", async () => {
     await open();
-    expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
-    expect(screen.getByText("Off. Nocturne only checks when you ask.")).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: /update/i })).toBeNull();
+    expect(screen.queryByText(/update/i)).toBeNull();
   });
 
   it("settings.no_auto_print_or_reminders", async () => {
@@ -65,13 +62,15 @@ describe("Settings", () => {
   it("saves a change at once and says Saved.", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "updateSettings");
-    await userEvent.click(screen.getByRole("switch", { name: "Checking for updates" }));
+    const before = screen.getByRole("switch", { name: "Start with this computer" });
+    const was = before.getAttribute("aria-checked") === "true";
+    await userEvent.click(before);
     expect(spy).toHaveBeenCalledWith(
-      expect.objectContaining({ checkUpdates: true, pageTime: null }),
+      expect.objectContaining({ startAtLogin: !was, pageTime: null }),
     );
-    expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Start with this computer" })).toHaveAttribute(
       "aria-checked",
-      "true",
+      String(!was),
     );
     expect(await screen.findByText("Saved.")).toBeInTheDocument();
   });
@@ -109,11 +108,13 @@ describe("Settings", () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "updateSettings").mockRejectedValue(new Error("no"));
     await open(engine);
-    await userEvent.click(screen.getByRole("switch", { name: "Checking for updates" }));
+    const toggle = screen.getByRole("switch", { name: "Start with this computer" });
+    const was = toggle.getAttribute("aria-checked");
+    await userEvent.click(toggle);
     expect(await screen.findByText("That didn’t save. Nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Start with this computer" })).toHaveAttribute(
       "aria-checked",
-      "false",
+      was,
     );
   });
 

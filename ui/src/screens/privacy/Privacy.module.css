@@ -90,18 +90,9 @@
   border-bottom: 1px solid var(--rule);
 }
 
-.ledger .quiet {
-  color: var(--ink2);
-}
-
 .mono {
   color: var(--ink2);
   font: 400 0.75rem / 1.33 var(--font-mono);
-}
-
-.link {
-  align-self: flex-start;
-  font-size: 0.875rem;
 }
 
 .promise {

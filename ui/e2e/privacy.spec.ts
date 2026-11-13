@@ -73,12 +73,10 @@ test.describe("using it", () => {
     await page.screenshot({ path: `${SHOTS}/privacy-export-light.png` });
   });
 
-  test("the lock switch works from the keyboard", async ({ page }) => {
+  test("there is no lock switch and no update checks to promise", async ({ page }) => {
     await ready(page);
-    const lock = page.getByRole("switch", { name: "Lock with your computer sign-in" });
-    await lock.focus();
-    await page.keyboard.press("Space");
-    await expect(lock).toHaveAttribute("aria-checked", "true");
+    await expect(page.getByRole("switch")).toHaveCount(0);
+    await expect(page.getByText(/sign-in|checking for updates/i)).toHaveCount(0);
   });
 
   test("delete everything needs the phrase, then goes back to the welcome", async ({ page }) => {

@@ -3,14 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Progress } from "../../components/Progress/Progress";
-import { useToast } from "../../components/Toast/Toast";
-import { Toggle } from "../../components/Toggle/Toggle";
 import { formatBytes, formatDayMonth, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ExportProgress, ExportReport, LedgerEntry } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
-import { patch } from "../settings/patch";
 import { DeleteEverythingDialog } from "./DeleteEverythingDialog";
 import styles from "./Privacy.module.css";
 
@@ -47,7 +44,6 @@ type Exporting =
 export default function Privacy() {
   const engine = useEngine();
   const platform = usePlatform();
-  const toast = useToast();
   const refresh = useRefresh();
   const query = useQuery({
     queryKey: ["privacy"],
@@ -56,7 +52,6 @@ export default function Privacy() {
   });
   const [now, setNow] = useState(() => Date.now());
   const [exporting, setExporting] = useState<Exporting>({ state: "idle" });
-  const [lock, setLock] = useState<boolean | null>(null);
   const [deleting, setDeleting] = useState(false);
   const exportBox = useRef<HTMLDivElement>(null);
 
@@ -95,17 +90,6 @@ export default function Privacy() {
     }
   };
 
-  const changeLock = async (next: boolean) => {
-    setLock(next);
-    try {
-      await engine.updateSettings(patch({ lock: next }));
-      refresh("privacy", "settings");
-    } catch {
-      setLock(null);
-      toast.show({ message: t("privacy.lock.failed") });
-    }
-  };
-
   if (query.isError) {
     return (
       <div className={styles.message} role="alert">
@@ -127,7 +111,6 @@ export default function Privacy() {
 
   const measured = view.sentMeasured;
   const total = view.keptBytes + view.mindBytes;
-  const lockOn = lock ?? view.lock;
 
   return (
     <div className={styles.frame}>
@@ -170,17 +153,8 @@ export default function Privacy() {
                     </span>
                   </li>
                 ))}
-                <li className={styles.quiet}>
-                  <span>{t("privacy.updates.label")}</span>
-                  <span className={styles.mono}>
-                    {t(view.checkUpdates ? "settings.updates.on" : "settings.updates.off")}
-                  </span>
-                </li>
               </ul>
             )}
-            <a className={styles.link} href="#/settings">
-              {t("privacy.updates.change")}
-            </a>
           </section>
 
           <p className={styles.promise}>{t("privacy.promise")}</p>
@@ -266,15 +240,6 @@ export default function Privacy() {
                 {t("privacy.export.failed")}
               </p>
             ) : null}
-          </section>
-
-          <section className={styles.block}>
-            <Toggle
-              label={t("privacy.lock.label")}
-              hint={t("privacy.lock.hint")}
-              checked={lockOn}
-              onChange={(next) => void changeLock(next)}
-            />
           </section>
 
           <section aria-labelledby="delete" className={`${styles.block} ${styles.danger}`}>

@@ -107,14 +107,6 @@ export function Defaults() {
               onChange={(startAtLogin) => void save({ startAtLogin })}
             />
           </li>
-          <li className={styles.toggle}>
-            <Toggle
-              label={t("setup.defaults.updates")}
-              hint={t(view.checkUpdates ? "settings.updates.on" : "settings.updates.off")}
-              checked={view.checkUpdates}
-              onChange={(checkUpdates) => void save({ checkUpdates })}
-            />
-          </li>
         </ul>
       ) : null}
       <section className={styles.tonight} aria-labelledby="tonight">

@@ -163,7 +163,6 @@ test.describe("using it", () => {
     await select.selectOption("06:30");
     await select.blur();
     await expect(page.getByText("06:30")).toBeVisible();
-    const updates = page.getByRole("switch", { name: "Check for updates" });
-    await expect(updates).toHaveAttribute("aria-checked", "false");
+    await expect(page.getByRole("switch", { name: /update/i })).toHaveCount(0);
   });
 });

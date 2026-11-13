@@ -73,10 +73,11 @@ for (const scheme of ["light", "dark"] as const) {
 test.describe("using it", () => {
   test("a switch saves from the keyboard and says Saved.", async ({ page }) => {
     await ready(page, "#/settings", "Settings");
-    const print = page.getByRole("switch", { name: "Checking for updates" });
-    await print.focus();
+    const login = page.getByRole("switch", { name: "Start with this computer" });
+    const was = await login.getAttribute("aria-checked");
+    await login.focus();
     await page.keyboard.press("Space");
-    await expect(print).toHaveAttribute("aria-checked", "true");
+    await expect(login).toHaveAttribute("aria-checked", was === "true" ? "false" : "true");
     await expect(page.getByText("Saved.")).toBeVisible();
   });
 

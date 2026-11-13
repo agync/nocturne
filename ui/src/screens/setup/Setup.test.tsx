@@ -254,7 +254,7 @@ describe("getting ready", () => {
 });
 
 describe("good defaults", () => {
-  it("shows the page time, shortcut, start with this computer and opt-in update checks", async () => {
+  it("shows the page time, shortcut and start with this computer, and no update checks", async () => {
     await open("downloading");
     const panel = await screen.findByRole("complementary", { name: /Good defaults/ });
     expect(within(panel).getByText("07:00")).toBeInTheDocument();
@@ -263,9 +263,8 @@ describe("good defaults", () => {
       "aria-checked",
       "true",
     );
-    const updates = within(panel).getByRole("switch", { name: "Check for updates" });
-    expect(updates).toHaveAttribute("aria-checked", "false");
-    expect(within(panel).getByText("Off. Nocturne only checks when you ask.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("switch", { name: /update/i })).toBeNull();
+    expect(within(panel).queryByText(/update/i)).toBeNull();
   });
 
   it("says Tonight as the corrected copy, never promising a minute", async () => {
@@ -276,7 +275,7 @@ describe("good defaults", () => {
     expect(screen.queryByText(/under a minute/)).toBeNull();
   });
 
-  it("changes the page time and the update opt-in", async () => {
+  it("changes the page time", async () => {
     const { engine } = await open("downloading");
     const spy = vi.spyOn(engine, "updateSettings");
     await userEvent.click(await screen.findByRole("button", { name: "Change page time" }));
@@ -284,8 +283,6 @@ describe("good defaults", () => {
     expect(select).toHaveFocus();
     await userEvent.selectOptions(select, "06:30");
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ pageTime: "06:30" }));
-    await userEvent.click(screen.getByRole("switch", { name: "Check for updates" }));
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ checkUpdates: true }));
   });
 
   it("shows the privacy line, measured or not", async () => {

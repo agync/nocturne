@@ -258,15 +258,6 @@ export function Settings() {
             />
             <span className={styles.value}>{t("settings.language.value")}</span>
           </Row>
-
-          <li className={styles.toggleRow}>
-            <Toggle
-              label={t("settings.updates.title")}
-              hint={t(view.checkUpdates ? "settings.updates.on" : "settings.updates.off")}
-              checked={view.checkUpdates}
-              onChange={(checkUpdates) => void save({ checkUpdates })}
-            />
-          </li>
         </ul>
         <a className={styles.advanced} href="#/settings/advanced">
           {t("settings.advanced.show")}

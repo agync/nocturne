@@ -65,16 +65,13 @@ describe("Privacy", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists what was downloaded with your say-so, and says update checks are off", async () => {
+  it("lists what was downloaded with your say-so, and promises no update checks", async () => {
     await open();
     const ledger = screen.getByRole("region", { name: "Downloaded, with your say-so" });
     expect(within(ledger).getByText("Setup: Nocturne’s mind")).toBeInTheDocument();
     expect(within(ledger).getByText("App update 1.0.3")).toBeInTheDocument();
-    expect(within(ledger).getByText("Off. Nocturne only checks when you ask.")).toBeInTheDocument();
-    expect(within(ledger).getByRole("link", { name: "Change in Settings" })).toHaveAttribute(
-      "href",
-      "#/settings",
-    );
+    expect(screen.queryByText(/Checking for updates/)).toBeNull();
+    expect(screen.queryByRole("link", { name: "Change in Settings" })).toBeNull();
     expect(screen.getByText(/no account, no analytics and no crash reports/)).toBeInTheDocument();
   });
 
@@ -159,24 +156,10 @@ describe("Privacy", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("The export didn’t finish.");
   });
 
-  it("locks with the computer's sign-in", async () => {
-    const { engine } = await open();
-    const spy = vi.spyOn(engine, "updateSettings");
-    const toggle = screen.getByRole("switch", { name: "Lock with your computer sign-in" });
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-    await userEvent.click(toggle);
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ lock: true, theme: null }));
-    expect(toggle).toHaveAttribute("aria-checked", "true");
-  });
-
-  it("puts the switch back and says so when locking fails", async () => {
-    const engine = createMockEngine({ sentMeasured: true });
-    vi.spyOn(engine, "updateSettings").mockRejectedValue(new Error("no"));
-    await open(engine);
-    const toggle = screen.getByRole("switch", { name: "Lock with your computer sign-in" });
-    await userEvent.click(toggle);
-    expect(await screen.findByText("That didn’t save. Nothing was changed.")).toBeInTheDocument();
-    expect(toggle).toHaveAttribute("aria-checked", "false");
+  it("offers no lock, because nothing would enforce it", async () => {
+    await open();
+    expect(screen.queryByRole("switch", { name: /Lock with your computer sign-in/ })).toBeNull();
+    expect(screen.queryByText(/sign-in/i)).toBeNull();
   });
 });
 

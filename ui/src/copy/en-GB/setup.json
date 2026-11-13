@@ -66,7 +66,6 @@
   "setup.defaults.shortcut": "Quick keep shortcut",
   "setup.defaults.login": "Start with this computer",
   "setup.defaults.login.hint": "So the tidy can run overnight",
-  "setup.defaults.updates": "Check for updates",
   "setup.tonight.title": "Tonight",
   "setup.tonight.body": "When this computer is plugged in and idle, Nocturne reads what you kept, links it together and writes your first page. If the lid is closed, it catches up when you open it.",
   "setup.error.chooseSmaller": "Choose a smaller size"
