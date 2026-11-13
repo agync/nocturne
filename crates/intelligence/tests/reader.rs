@@ -651,7 +651,7 @@ async fn a_forget_that_lands_between_listing_and_leasing_a_re_read_is_refused() 
     let mem = w.engine.memories(Default::default()).unwrap()[0].id.clone();
     w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
     // The re-read is listed; then the forget lands before the reader leases it.
-    assert_eq!(w.engine.rereads(10).unwrap(), [id.clone()]);
+    assert_eq!(w.engine.rereads(10).unwrap(), std::slice::from_ref(&id));
     let preview = w
         .engine
         .preview_forget(std::slice::from_ref(&mem), false)
