@@ -230,11 +230,12 @@ pub async fn prepare_if_due<R: Runtime>(app: &AppHandle<R>) -> bool {
     if kept {
         return false;
     }
-    let attempts = os.audio_attempts(today);
-    if should_prepare(now, &tz, &page_time, used, saved, paused, tidying, attempts).is_none() {
+    if should_prepare(now, &tz, &page_time, used, saved, paused, tidying, 0).is_none() {
         return false;
     }
-    os.note_audio_attempt(today);
+    if !os.claim_audio_attempt(today, MAX_ATTEMPTS) {
+        return false;
+    }
     match spoken_page(app, today).await {
         Ok(_) => tracing::info!("the spoken page is ready"),
         Err(e) => tracing::info!("the spoken page was not made ahead: {:?}", e.code),

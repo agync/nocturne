@@ -129,8 +129,19 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> bool {
     let Some(date) = decide(now, &tz, &settings, saved, opened, paused, notified) else {
         return false;
     };
-    // Recorded before sending: a notification that fails is not retried every minute.
-    os.update(|f| f.notified = Some(date.to_string()));
+    // Claimed before sending, in one step: the minute timer, a page-ready event and a forged
+    // event can all arrive together, and only one may send. A notification that fails is not
+    // retried every minute either.
+    let claimed = os.update(|f| {
+        if f.notified.as_deref() == Some(date.to_string().as_str()) {
+            return false;
+        }
+        f.notified = Some(date.to_string());
+        true
+    });
+    if !claimed {
+        return false;
+    }
     match notifier.notify(copy::NOTICE_TITLE, &body(public)) {
         Ok(()) => {
             tracing::info!("page notification sent");

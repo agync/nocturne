@@ -155,25 +155,21 @@ impl OsState {
         *self.inbox_timing.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// How many times today the spoken page was tried in the background.
-    pub fn audio_attempts(&self, day: jiff::civil::Date) -> u32 {
-        let g = self
-            .audio_attempts
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        if g.0 == Some(day) { g.1 } else { 0 }
-    }
-
-    pub fn note_audio_attempt(&self, day: jiff::civil::Date) {
+    /// Take one of today's background tries at the spoken page, if any are left. Counting and
+    /// taking are one step, so two checks at once cannot both take the last one.
+    pub fn claim_audio_attempt(&self, day: jiff::civil::Date, most: u32) -> bool {
         let mut g = self
             .audio_attempts
             .lock()
             .unwrap_or_else(|e| e.into_inner());
-        *g = if g.0 == Some(day) {
-            (g.0, g.1 + 1)
-        } else {
-            (Some(day), 1)
-        };
+        if g.0 != Some(day) {
+            *g = (Some(day), 0);
+        }
+        if g.1 >= most {
+            return false;
+        }
+        g.1 += 1;
+        true
     }
 
     pub fn set_notifier(&self, notifier: Arc<dyn Notifier>) {
@@ -215,6 +211,22 @@ mod tests {
         );
         std::fs::write(dir.path().join(FILE), b"{ not json").unwrap();
         assert_eq!(load(dir.path()), OsFile::default());
+    }
+
+    #[test]
+    fn background_tries_are_counted_per_day_and_taken_one_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = OsState::new(dir.path());
+        let today: jiff::civil::Date = "2026-11-13".parse().unwrap();
+        let taken = (0..10)
+            .filter(|_| state.claim_audio_attempt(today, 3))
+            .count();
+        assert_eq!(taken, 3);
+        let tomorrow: jiff::civil::Date = "2026-11-14".parse().unwrap();
+        assert!(
+            state.claim_audio_attempt(tomorrow, 3),
+            "a new day starts again"
+        );
     }
 
     #[cfg(unix)]

@@ -794,3 +794,53 @@ fn quick_capture_may_undo_a_recording_and_a_picture_it_kept() {
     let id = image["item"]["id"].as_str().unwrap();
     h.call_from(&quick, "get_item", json!({"id": id})).unwrap();
 }
+
+#[test]
+fn checks_that_arrive_together_send_one_notification() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    h.save_todays_page();
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let app = h.app.handle().clone();
+            tauri::async_runtime::spawn(async move { notify::check(&app).await })
+        })
+        .collect();
+    let results: Vec<bool> = tauri::async_runtime::block_on(async {
+        let mut out = Vec::new();
+        for handle in handles {
+            out.push(handle.await.unwrap());
+        }
+        out
+    });
+    assert_eq!(results.iter().filter(|sent| **sent).count(), 1);
+    assert_eq!(sent.0.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn the_notification_count_leaves_out_a_private_item_that_needs_you() {
+    use nocturne_engine::{Candidate, Predicate};
+    let h = harness();
+    let sent = with_notifier(&h);
+    let due = |subject: &str, sentence: &str| {
+        let mut c = Candidate::new(subject, Predicate::Due, "x", sentence, 0.9);
+        c.due = Some("2026-11-13".parse().unwrap());
+        c
+    };
+    let (_, public) = h.learn_candidate("rent note", due("Rent", "Rent is due today."));
+    let (_, secret) =
+        h.learn_candidate("clinic note", due("Clinic", "A clinic visit is due today."));
+    let _ = public;
+    h.ok("set_private", json!({"id": secret[0], "private": true}));
+    assert_eq!(
+        h.engine().needs_you().unwrap().len(),
+        2,
+        "both need the person"
+    );
+    h.save_todays_page();
+    h.app.emit("page-ready", json!({})).unwrap();
+    wait_for("the notification", || !sent.0.lock().unwrap().is_empty());
+    let body = sent.0.lock().unwrap()[0].1.clone();
+    assert!(body.starts_with("One thing needs you today."), "{body}");
+    assert!(!body.to_lowercase().contains("clinic"), "{body}");
+}
