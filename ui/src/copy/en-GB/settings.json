@@ -29,6 +29,7 @@
   "settings.inbox.choose": "Choose inbox folder…",
   "settings.login.label": "Start with this computer",
   "settings.login.hint": "Needed for the overnight tidy",
+  "settings.login.move": "Move Nocturne to the Applications folder first, then turn this on.",
   "settings.letting.label": "Letting go",
   "settings.letting.hint": "How soon unused things fade",
   "settings.letting.gentle": "Gentle · fades after {days} days",

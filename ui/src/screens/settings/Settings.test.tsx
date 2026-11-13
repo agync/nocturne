@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EngineError } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
 import { comboFromEvent } from "./ShortcutField";
@@ -127,6 +128,32 @@ describe("Settings", () => {
       String(!was),
     );
     expect(await screen.findByText("Saved.")).toBeInTheDocument();
+  });
+
+  it("says to move Nocturne to Applications when start with this computer is refused for that", async () => {
+    const { engine } = await open();
+    vi.spyOn(engine, "updateSettings").mockRejectedValueOnce(
+      new EngineError("unavailable", "move-to-applications"),
+    );
+    const toggle = screen.getByRole("switch", { name: "Start with this computer" });
+    const was = toggle.getAttribute("aria-checked");
+    await userEvent.click(toggle);
+    expect(
+      await screen.findByText("Move Nocturne to the Applications folder first, then turn this on."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Start with this computer" })).toHaveAttribute(
+      "aria-checked",
+      was,
+    );
+  });
+
+  it("says nothing was saved for any other refusal", async () => {
+    const { engine } = await open();
+    vi.spyOn(engine, "updateSettings").mockRejectedValueOnce(
+      new EngineError("unavailable", "start with this computer could not be changed"),
+    );
+    await userEvent.click(screen.getByRole("switch", { name: "Start with this computer" }));
+    expect(await screen.findByText("That didn’t save. Nothing was changed.")).toBeInTheDocument();
   });
 
   it("changes the page time, delivery, voice, speed, pace and theme", async () => {

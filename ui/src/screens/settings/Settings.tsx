@@ -12,6 +12,7 @@ import type {
   SettingsView,
   Theme,
 } from "../../engine/bindings";
+import { EngineError } from "../../engine/client";
 import { useEngine, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { patch } from "./patch";
@@ -115,9 +116,14 @@ export function Settings() {
         setSaved(true);
         if (timer.current) clearTimeout(timer.current);
         timer.current = setTimeout(() => setSaved(false), 2500);
-      } catch {
+      } catch (error) {
         client.setQueryData(["settings"], before);
-        toast.show({ message: t("settings.failed") });
+        // The one refusal with something to do: a Mac running Nocturne from the disk image.
+        const moveFirst =
+          fields.startAtLogin !== undefined &&
+          error instanceof EngineError &&
+          error.detail === "move-to-applications";
+        toast.show({ message: t(moveFirst ? "settings.login.move" : "settings.failed") });
       }
     },
     [client, engine, toast],
