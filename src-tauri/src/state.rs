@@ -3,7 +3,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use jiff::Timestamp;
 use nocturne_contract::{
@@ -16,6 +16,7 @@ use tokio::sync::Notify;
 
 use crate::ask::AskRegistry;
 use crate::error::{CommandError, blocking};
+use crate::runtime::Services;
 use crate::status::{Counts, MindState, StatusHub};
 
 /// Overrides the data directory (tests and development).
@@ -23,16 +24,26 @@ pub const DATA_DIR_ENV: &str = "NOCTURNE_DATA_DIR";
 /// Fills the mind slot with a scripted mind (development and tests, `fake-mind` feature).
 pub const FAKE_MIND_ENV: &str = "NOCTURNE_FAKE_MIND";
 
-/// Where the mind lives. The intelligence lane fills it with the real mind once the private
-/// engine is up; until then it is empty and anything that needs the mind says "unavailable".
+/// Where the mind lives. The runtime fills it with the real mind once the private engine is
+/// up and clears it when the engine gives up; while it is empty anything that needs the mind
+/// says "unavailable".
 ///
 /// The mind goes into the slot first and then reports `MindError::Busy` while a model loads
 /// (the status shows "starting" and an ask shows "waking"); it is not held back until it is
-/// ready. Use [`set_mind`] so the status and the setup view follow.
-#[derive(Default)]
+/// ready. Use [`set_mind`] so the status and the setup view follow. The slot is the same one
+/// the reader and the tidy hold (see [`MindSlot::shared`]).
 pub struct MindSlot {
-    inner: RwLock<Option<Arc<dyn Mind>>>,
+    inner: nocturne_intelligence::MindSlot,
     loading: AtomicBool,
+}
+
+impl Default for MindSlot {
+    fn default() -> Self {
+        MindSlot {
+            inner: nocturne_intelligence::new_mind_slot(),
+            loading: AtomicBool::new(false),
+        }
+    }
 }
 
 impl MindSlot {
@@ -47,6 +58,11 @@ impl MindSlot {
 
     pub fn clear(&self) {
         *self.inner.write().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    /// The slot as the reader and the tidy hold it.
+    pub fn shared(&self) -> nocturne_intelligence::MindSlot {
+        self.inner.clone()
     }
 
     /// The mind is starting (a model is being loaded); the slot may already hold it.
@@ -109,6 +125,7 @@ pub struct AppState {
     /// One status refresh at a time, so two events cannot publish out of order.
     refresh: tokio::sync::Mutex<()>,
     exit_hooks: Mutex<Vec<ExitHook>>,
+    services: OnceLock<Arc<Services>>,
 }
 
 /// Opens a path with the system's own app (installed by `run`).
@@ -188,7 +205,17 @@ impl AppState {
             start_hidden: AtomicBool::new(false),
             refresh: tokio::sync::Mutex::new(()),
             exit_hooks: Mutex::new(Vec::new()),
+            services: OnceLock::new(),
         }
+    }
+
+    /// The running reader, tidy and scheduler, once [`crate::runtime::start`] has run.
+    pub fn services(&self) -> Option<Arc<Services>> {
+        self.services.get().cloned()
+    }
+
+    pub(crate) fn install_services(&self, services: Arc<Services>) -> bool {
+        self.services.set(services).is_ok()
     }
 
     /// Remember files the person dropped or picked.
@@ -305,6 +332,9 @@ impl AppState {
     /// Tell the reading pipeline there is work.
     pub fn wake_pipeline(&self) {
         self.work.notify_one();
+        if let Some(services) = self.services() {
+            services.reader.wake();
+        }
     }
 
     fn setup_view(&self) -> SetupView {
@@ -320,28 +350,29 @@ impl AppState {
     }
 }
 
-// Counts are read with item queries capped at 1000 each; the intelligence lane is adding
-// `Engine::status_counts()`, which replaces this.
+/// How many "couldn't read" notices can show at once; the ids are only looked up when some
+/// item could not be read.
+const COULDNT_READ_SHOWN: u32 = 10;
+
 fn read_counts(engine: &Engine) -> Counts {
-    let needs_you = engine.needs_you().map(|v| v.len() as u32).unwrap_or(0);
-    let count = |status| {
+    let counts = engine.status_counts().unwrap_or_default();
+    let couldnt_read = if counts.couldnt_read == 0 {
+        Vec::new()
+    } else {
         engine
             .items(ItemFilter {
-                status: Some(status),
-                limit: Some(1000),
+                status: Some(ItemStatus::CouldntRead),
+                limit: Some(COULDNT_READ_SHOWN),
                 ..Default::default()
             })
             .unwrap_or_default()
+            .into_iter()
+            .map(|i| i.id)
+            .collect()
     };
-    let waiting = count(ItemStatus::Kept).len() + count(ItemStatus::Reading).len();
-    let couldnt_read = count(ItemStatus::CouldntRead)
-        .into_iter()
-        .take(10)
-        .map(|i| i.id)
-        .collect();
     Counts {
-        needs_you,
-        waiting_to_read: waiting as u32,
+        needs_you: counts.needs_you,
+        waiting_to_read: counts.waiting_to_read,
         couldnt_read,
     }
 }
@@ -351,6 +382,7 @@ fn read_counts(engine: &Engine) -> Counts {
 pub async fn refresh_status<R: Runtime>(app: &AppHandle<R>) -> EngineStatus {
     let state = app.state::<AppState>();
     let _one_at_a_time = state.refresh.lock().await;
+    crate::runtime::follow_pause(&state);
     state.status.set_mind(state.mind.state());
     let counts = match state.engine() {
         Ok(engine) => blocking(move || Ok(read_counts(&engine)))

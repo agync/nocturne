@@ -220,6 +220,9 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         sink.phase(AskPhase::Unavailable);
         return;
     };
+    // The reader reads nothing while a question is being answered: the model serves one
+    // request at a time, and the person is waiting.
+    let _reader_waits = state.services().map(|s| s.reader.ask_begin());
     sink.phase(AskPhase::Searching);
 
     // Meaning-based search needs the mind to embed the question. A sleeping mind is woken

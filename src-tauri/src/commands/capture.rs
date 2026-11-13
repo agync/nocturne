@@ -275,12 +275,17 @@ pub async fn unkeep<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), Com
 /// Read an item next: it moves to the front of the queue and the pipeline is woken.
 #[tauri::command]
 pub async fn read_now<R: Runtime>(app: AppHandle<R>, id: String) -> Result<ItemView, CommandError> {
+    let reading = id.clone();
     let item = change(app.clone(), move |e| {
         e.prioritize(&id)?;
         e.get_item(&id)
     })
     .await?;
-    app.state::<AppState>().wake_pipeline();
+    let state = app.state::<AppState>();
+    match state.services() {
+        Some(services) => services.reader.read_now(Some(&reading)).await,
+        None => state.wake_pipeline(),
+    }
     Ok(item)
 }
 

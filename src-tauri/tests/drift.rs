@@ -12,6 +12,8 @@ const SHELL_ONLY: &[&str] = &[
     "print_page",
     "open_sound_settings",
     "quick_keep_command",
+    // The battery notice's "Tidy anyway"; the interface wires it to the notice action.
+    "tidy_anyway",
 ];
 
 fn read(rel: &str) -> String {

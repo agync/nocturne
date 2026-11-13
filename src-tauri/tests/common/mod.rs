@@ -6,18 +6,30 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use nocturne_app_lib::runtime::{self, Services, StartOptions};
 use nocturne_app_lib::{AppState, configure};
 use nocturne_contract::{AskDelta, AskPhase, MemoryView, PageView};
 use nocturne_engine::{
     AnswerMeta, BoxFuture, Candidate, Engine, ExtractContext, FakeMind, ManualClock, Mind,
     MindError, Predicate, Transcript, Understanding,
 };
+use nocturne_intelligence::FakeHost;
 use serde_json::Value;
 use tauri::ipc::{CallbackFn, InvokeBody};
 use tauri::test::{INVOKE_KEY, MockRuntime, mock_builder, mock_context, noop_assets};
 use tauri::webview::InvokeRequest;
 use tauri::{App, Listener, Manager, WebviewWindow, WebviewWindowBuilder};
 use tokio::sync::mpsc;
+
+/// Start the reader, the tidy and the scheduler over this harness's engine and mind slot, with a
+/// host the test steers (nothing reads the real machine).
+pub fn start_runtime(h: &Harness, host: Arc<FakeHost>) -> Arc<Services> {
+    start(h, StartOptions::with_host(host))
+}
+
+pub fn start(h: &Harness, opts: StartOptions) -> Arc<Services> {
+    runtime::start(h.app.handle(), opts).expect("the runtime starts once")
+}
 
 pub struct Harness {
     pub app: App<MockRuntime>,

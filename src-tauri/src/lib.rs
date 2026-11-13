@@ -4,9 +4,10 @@
 //! validate, run the engine on a blocking thread, map the result to a value or a `CommandError`.
 //! Events (`status-changed`, `item-changed`, `ask-delta`, ...) are named in `nocturne_contract`.
 //!
-//! Wiring for the next lanes: the runtime lane replaces the setup stubs in `commands/system.rs`,
-//! puts its mind in with [`set_mind`], publishes progress with [`publish_setup`] and stops its
-//! engine in an [`AppState::on_exit`] hook. The OS integration lane sets `tray_available`,
+//! The reader, the tidy and the scheduler live in [`runtime`]; they share the mind slot with
+//! `AppState`. Whatever fills the slot is published with [`set_mind`], setup progress with
+//! [`publish_setup`], and the engine is stopped in an [`AppState::on_exit`] hook. The OS
+//! integration lane sets `tray_available`,
 //! `set_start_hidden` and its own exit hooks, and gives the quick-capture window its own
 //! capability file (`capabilities/` only grants the `main` window).
 
@@ -17,6 +18,7 @@ pub mod error;
 pub mod fsutil;
 pub mod logging;
 pub mod os;
+pub mod runtime;
 pub mod state;
 pub mod status;
 pub mod window;
@@ -65,6 +67,7 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
         state.set_start_hidden(window::wants_hidden(&args));
         app.manage(state);
     }
+    runtime::start(app, runtime::StartOptions::default());
     allow_originals_in_the_interface(app);
     window::match_system_theme(app);
     window::show_after_grace(app);
@@ -191,7 +194,13 @@ pub fn handle_run_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
                 api.prevent_exit();
             }
         }
-        RunEvent::Exit => state.run_exit_hooks(),
+        RunEvent::Exit => {
+            // Out of sight at once; stopping the engine can take a moment.
+            for window in app.webview_windows().values() {
+                let _ = window.hide();
+            }
+            state.run_exit_hooks();
+        }
         _ => {}
     }
 }

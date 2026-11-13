@@ -174,6 +174,19 @@ impl StatusHub {
         g.pause.is_some()
     }
 
+    /// The person's pause as an instant: `None` when not paused, the end of a timed pause, or
+    /// the far future for one that lasts until the person resumes.
+    pub fn paused_until(&self, now: Timestamp) -> Option<Timestamp> {
+        let mut g = self.lock();
+        self.expire(&mut g, now);
+        g.pause.as_ref().map(|p| {
+            p.until
+                .as_deref()
+                .and_then(|u| u.parse::<Timestamp>().ok())
+                .unwrap_or(Timestamp::MAX)
+        })
+    }
+
     fn expire(&self, g: &mut Inner, now: Timestamp) {
         let ended = g.pause.as_ref().is_some_and(|p| {
             p.until

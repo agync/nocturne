@@ -31,6 +31,8 @@ serde_json.workspace = true
 [dependencies]
 nocturne-contract.workspace = true
 nocturne-engine.workspace = true
+nocturne-intelligence = { path = "../crates/intelligence" }
+nocturne-lemonade.workspace = true
 tauri = { workspace = true, features = ["tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-dialog.workspace = true
@@ -49,6 +51,8 @@ jiff.workspace = true
 thiserror.workspace = true
 getrandom = "0.3"
 notify = "8"
+sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+tokio-util = { version = "0.7", default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 zbus = "5"
@@ -56,6 +60,8 @@ zbus = "5"
 [dev-dependencies]
 tempfile.workspace = true
 nocturne-engine = { workspace = true, features = ["fake"] }
+nocturne-intelligence = { path = "../crates/intelligence", features = ["fake"] }
+nocturne-lemonade = { workspace = true, features = ["fake-server"] }
 tauri = { workspace = true, features = ["test"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 

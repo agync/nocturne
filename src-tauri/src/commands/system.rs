@@ -41,6 +41,21 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
     Err(not_yet("setup"))
 }
 
+/// "Tidy anyway": the battery rule is set aside until this tidy is done. The scheduler starts the
+/// tidy on its next look, which is at most half a minute away.
+#[tauri::command]
+pub async fn tidy_anyway<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    run(app, |app| async move {
+        let state = app.state::<AppState>();
+        let services = state
+            .services()
+            .ok_or_else(|| CommandError::unavailable("the tidy is not running"))?;
+        services.tidy.tidy_anyway();
+        Ok(())
+    })
+    .await
+}
+
 /// The main interface has drawn its first frame: show the window. Another window being ready
 /// shows nothing.
 #[tauri::command]

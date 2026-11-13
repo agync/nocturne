@@ -1,30 +1,49 @@
 //! The morning page, the day's question, which-is-right and ticking things off.
 
 use nocturne_contract::{
-    Edition, NeedsYouEntry, PageSummary, PageView, QuestionChoice, WhichResolved,
+    Edition, NeedsYouEntry, PageSummary, PageVariant, PageView, QuestionChoice, WhichResolved,
 };
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
-use super::{change, parse_date, read};
-use crate::error::CommandError;
+use super::{change, engine, parse_date, read, run};
+use crate::error::{CommandError, blocking};
+use crate::state::AppState;
 
 /// A saved page, or the latest. When nothing is saved for the day being written (the next page
-/// date), the page is composed on the spot (and not saved: the scheduler owns saving).
+/// date), the page is composed on the spot (and not saved: the scheduler owns saving). While a
+/// tidy is writing it, the page says so (`beingWritten`) and counts what is still to be read.
+/// Opening a page is not recorded here: the window's focus does that.
 #[tauri::command]
 pub async fn get_page<R: Runtime>(
     app: AppHandle<R>,
     date: Option<String>,
 ) -> Result<PageView, CommandError> {
     let day = date.as_deref().map(parse_date).transpose()?;
-    read(app, move |e| {
-        if let Some(p) = e.page(day)? {
-            return Ok(p);
+    let services = app.state::<AppState>().services();
+    run(app, move |app| async move {
+        let engine = engine(&app)?;
+        let (mut page, composed) = blocking(move || {
+            if let Some(p) = engine.page(day)? {
+                return Ok((p, false));
+            }
+            let next = engine.next_page_date()?;
+            match day {
+                Some(d) if d != next => Err(nocturne_engine::Error::NotFound(format!("page {d}"))),
+                _ => Ok((engine.compose_page(next, Edition::Screen)?, true)),
+            }
+        })
+        .await?;
+        if composed
+            && let Some(services) = services
+            && services.tidy.running().await
+        {
+            page.variant = PageVariant::BeingWritten;
+            let progress = services.tidy.progress().borrow().clone();
+            if let Some(p) = progress {
+                page.pending = page.pending.max(p.total.saturating_sub(p.done));
+            }
         }
-        let next = e.next_page_date()?;
-        match day {
-            Some(d) if d != next => Err(nocturne_engine::Error::NotFound(format!("page {d}"))),
-            _ => e.compose_page(next, Edition::Screen),
-        }
+        Ok(page)
     })
     .await
 }
