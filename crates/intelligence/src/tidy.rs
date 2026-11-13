@@ -14,7 +14,7 @@ use jiff::civil::Date;
 use jiff::{SignedDuration, Timestamp};
 use nocturne_contract::{Edition, NoticeCode, PageSummary, PageView, TidyProgress, TidyReport};
 use nocturne_engine::day::page_instant;
-use nocturne_engine::{Clock, Engine, Error as EngineError, MindError};
+use nocturne_engine::{Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
 use crate::events::{Events, notice};
@@ -447,6 +447,7 @@ impl Tidy {
             if self.inner.reader.is_asking() {
                 return;
             }
+            let model = self.inner.engine.recall_model();
             let Ok(rows) = self
                 .eng(|e| e.memories_without_embedding(BACKFILL_CHUNK))
                 .await
@@ -457,20 +458,23 @@ impl Tidy {
                 return;
             }
             let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
-            // The vectors are marked with the store's finding model, so they are made with it.
-            let model = self.inner.engine.recall_model();
-            let embedded = async {
-                match mind.embed_with(&model, &texts).await {
-                    Err(MindError::Unsupported(_)) => mind.embed(&texts).await,
-                    other => other,
-                }
-            };
-            match tokio::time::timeout(EMBED_LIMIT, embedded).await {
+            // Made with the finding model the store names, and marked with that one.
+            match tokio::time::timeout(
+                EMBED_LIMIT,
+                crate::reindex::embed_as(mind.as_ref(), &model, &texts),
+            )
+            .await
+            {
                 Ok(Ok(vecs)) if vecs.len() == rows.len() => {
                     let n = rows.len();
                     let pairs: Vec<(String, Vec<f32>)> =
                         rows.into_iter().map(|r| r.0).zip(vecs).collect();
-                    if self.eng(move |e| e.store_embeddings(pairs)).await.is_err() {
+                    let model = model.clone();
+                    if self
+                        .eng(move |e| e.store_embeddings_from(&model, pairs))
+                        .await
+                        .is_err()
+                    {
                         return;
                     }
                     if n < BACKFILL_CHUNK {

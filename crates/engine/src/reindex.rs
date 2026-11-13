@@ -166,23 +166,30 @@ impl Engine {
 
     /// Swaps the new vectors in, in one transaction, once every current memory has one and the
     /// old index has nothing waiting either (a memory re-worded meanwhile is read again first).
-    /// False when that is not so yet, or no re-read is running. The caller then names the new
-    /// finding model (`set_recall_model`) and saves the choice.
+    /// The new model becomes the finding model in the same step, so no vector of the old one
+    /// can be stored after the swap. False when that is not so yet, or no re-read is running.
+    /// The caller then saves the choice.
     pub fn finish_reindex(&self) -> Result<bool> {
         let now = fmt_ts(self.clock().now());
+        let mut recall = self
+            .inner
+            .recall_model
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         let swapped = self.write(|tx| {
             let Some(model) = running_model(tx)? else {
-                return Ok(false);
+                return Ok(None);
             };
             let waiting: i64 = tx.query_row(
                 "SELECT COUNT(*) FROM memories m WHERE m.superseded_at IS NULL AND ( \
                    NOT EXISTS (SELECT 1 FROM embeddings_next n WHERE n.memory_id = m.id) \
-                   OR NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.memory_id = m.id))",
-                [],
+                   OR NOT EXISTS (SELECT 1 FROM embeddings e \
+                                  WHERE e.memory_id = m.id AND e.model = ?1))",
+                [recall.as_str()],
                 |r| r.get(0),
             )?;
             if waiting > 0 {
-                return Ok(false);
+                return Ok(None);
             }
             tx.execute("DELETE FROM embeddings", [])?;
             tx.execute(
@@ -195,12 +202,15 @@ impl Engine {
                 "UPDATE reindex_state SET finished_at = ?1, phase = ?2 WHERE id = 1",
                 params![now, enum_str(&ReindexPhase::Done)],
             )?;
-            Ok(true)
+            Ok(Some(model))
         })?;
-        if swapped {
-            self.invalidate_vectors();
-        }
-        Ok(swapped)
+        let Some(model) = swapped else {
+            return Ok(false);
+        };
+        *recall = model;
+        drop(recall);
+        self.invalidate_vectors();
+        Ok(true)
     }
 
     /// Stops the re-read and drops what it built. The old vectors were never touched.

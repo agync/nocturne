@@ -319,3 +319,97 @@ fn dimension_change_handled() {
         .unwrap();
     assert_eq!(top(&f.engine, &[0.0, 1.0, 0.0]), Some(tooth));
 }
+
+#[test]
+fn vectors_are_marked_with_the_model_that_made_them() {
+    let f = fixture();
+    let (tooth, _) = two(&f.engine);
+    // Made with a model that is not the finding model: not kept, so never mislabelled.
+    assert_eq!(
+        f.engine
+            .store_embeddings_from(NEW, vec![(tooth.clone(), vec![0.0, 0.0, 1.0])])
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            &format!("SELECT COUNT(*) FROM embeddings WHERE model = '{NEW}'")
+        ),
+        0
+    );
+    assert_eq!(
+        f.engine
+            .store_embeddings_from(DEFAULT_RECALL_MODEL, vec![(tooth, vec![1.0, 0.0])])
+            .unwrap(),
+        1
+    );
+}
+
+#[test]
+fn a_capture_stored_with_the_old_model_after_the_swap_is_redone() {
+    let f = fixture();
+    let (tooth, _) = two(&f.engine);
+    f.engine.begin_reindex(NEW, Some(3)).unwrap();
+    read_all(&f.engine, &tooth);
+    assert!(f.engine.finish_reindex().unwrap());
+    // The swap names the new model itself: there is no moment between them.
+    assert_eq!(f.engine.recall_model(), NEW);
+    // A reading that embedded with the old model just before the swap stores just after it.
+    let (_, bins) = learn(
+        &f.engine,
+        "n3",
+        cand(
+            "Bins",
+            Predicate::Scheduled,
+            "Monday",
+            "The bins go out on Monday.",
+        ),
+    );
+    let kept = f
+        .engine
+        .store_embeddings_from(
+            DEFAULT_RECALL_MODEL,
+            vec![
+                (bins.clone(), vec![1.0, 0.0]),
+                (tooth.clone(), vec![1.0, 0.0]),
+            ],
+        )
+        .unwrap();
+    assert_eq!(kept, 0);
+    // Never labelled new: the new memory waits for a vector of the new model, and the swapped
+    // vector of the old memory stays as it was.
+    let waiting = f.engine.memories_without_embedding(10).unwrap();
+    assert_eq!(waiting.len(), 1);
+    assert_eq!(waiting[0].0, bins);
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            &format!("SELECT COUNT(*) FROM embeddings WHERE model != '{NEW}'")
+        ),
+        0
+    );
+    f.engine
+        .store_embeddings_from(NEW, vec![(bins.clone(), vec![0.0, 0.0, 1.0])])
+        .unwrap();
+    assert_eq!(top(&f.engine, &[0.0, 0.0, 1.0]), Some(bins));
+}
+
+#[test]
+fn a_memory_without_a_vector_is_still_found_by_its_words() {
+    let f = fixture();
+    let (tooth, swim) = two(&f.engine);
+    f.engine.begin_reindex(NEW, Some(3)).unwrap();
+    // The worker gave up on one memory: it is stored with no vector.
+    f.engine
+        .store_reindexed(vec![
+            (tooth.clone(), Vec::new()),
+            (swim.clone(), vec![1.0, 0.0, 0.0]),
+        ])
+        .unwrap();
+    assert!(f.engine.finish_reindex().unwrap());
+    let hits = f.engine.retrieve("dentist", None, 5).unwrap();
+    assert_eq!(hits[0].memory.id, tooth);
+    assert_eq!(top(&f.engine, &[1.0, 0.0, 0.0]), Some(swim));
+    assert!(f.engine.memories_without_embedding(10).unwrap().is_empty());
+}

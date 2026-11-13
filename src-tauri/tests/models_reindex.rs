@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 
 const NEW: &str = "Qwen3-Embedding-4B-GGUF";
 
-/// A mind whose re-read vectors have three numbers, and that counts them.
+/// A mind whose vectors from the new model have three numbers, and that counts them.
 struct ReMind {
     inner: FakeMind,
     with: AtomicU32,
@@ -64,7 +64,12 @@ impl Mind for ReMind {
         texts: &'a [String],
     ) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
         Box::pin(async move {
-            assert_eq!(model, NEW);
+            if model != NEW {
+                return self.inner.embed(texts).await;
+            }
+            if texts.iter().any(|t| t.contains("unreadable")) {
+                return Err(MindError::Failed("the text could not be embedded".into()));
+            }
             self.with.fetch_add(texts.len() as u32, Ordering::SeqCst);
             Ok(texts.iter().map(|_| vec![0.0, 0.0, 1.0]).collect())
         })
@@ -258,4 +263,43 @@ fn backfill_uses_the_finding_model_the_store_names() {
     // Vectors from the old model do not count for the new one.
     let waiting = e.memories_without_embedding(10).unwrap();
     assert_eq!(waiting.len(), 2);
+}
+
+#[test]
+fn a_memory_that_cannot_be_embedded_does_not_hold_the_re_read() {
+    let r = rig(3);
+    r.h.learn("odd note", "Sam keeps an unreadable diary.", "Sam", "diary");
+    let e = r.h.engine();
+    e.begin_reindex(NEW, Some(3)).unwrap();
+    let end = block_on(async {
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            r.worker().run(NEW, CancellationToken::new(), |_, _| {}),
+        )
+        .await
+    });
+    assert_eq!(end.expect("the re-read ends"), ReindexEnd::Done);
+    assert_eq!(r.mind.with.load(Ordering::SeqCst), 3);
+    // Without a vector it is still found by its words.
+    let hits = e.retrieve("diary", None, 5).unwrap();
+    assert!(
+        hits.iter()
+            .any(|h| h.memory.sentence.contains("unreadable"))
+    );
+}
+
+#[test]
+fn a_mind_that_is_away_never_skips_a_memory() {
+    let r = rig(2);
+    r.h.engine().begin_reindex(NEW, Some(3)).unwrap();
+    r.h.state().mind.clear();
+    let ended = block_on(async {
+        tokio::time::timeout(
+            Duration::from_millis(300),
+            r.worker().run(NEW, CancellationToken::new(), |_, _| {}),
+        )
+        .await
+    });
+    assert!(ended.is_err(), "the re-read waits for the mind");
+    assert_eq!(r.h.engine().reindex_progress().unwrap().0, 0);
 }

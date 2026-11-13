@@ -1277,12 +1277,33 @@ impl Engine {
             .clone()
     }
 
-    /// Store vectors for memories, in chunks so capture never waits long. Unknown ids are ignored.
-    /// Each is marked with the current finding model. A memory given a new vector here (new, or
-    /// re-worded) is read again by a re-read under way: what it built for the memory is dropped.
+    /// Store vectors the current finding model made. See [`Engine::store_embeddings_from`].
     pub fn store_embeddings(&self, rows: Vec<(String, Vec<f32>)>) -> Result<()> {
         let model = self.recall_model();
+        self.store_embeddings_from(&model, rows).map(|_| ())
+    }
+
+    /// Store vectors that `model` made, in chunks so capture never waits long, marked with it.
+    /// Unknown ids are ignored. Vectors from a model that is no longer the finding model (it
+    /// changed while they were being made) are dropped: those memories stay without a vector of
+    /// the current model, and the backfill makes them again. A memory given a vector here (new,
+    /// or re-worded) is read again by a re-read under way. Returns how many were kept.
+    pub fn store_embeddings_from(
+        &self,
+        model: &str,
+        rows: Vec<(String, Vec<f32>)>,
+    ) -> Result<usize> {
+        let mut kept = 0;
         for chunk in rows.chunks(200) {
+            // Held while writing, so the swap of a re-read cannot change the model in between.
+            let current = self
+                .inner
+                .recall_model
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
+            if *current != model {
+                return Ok(kept);
+            }
             self.write(|tx| {
                 for (id, vec) in chunk {
                     let blob: Vec<u8> = vec.iter().flat_map(|f| f.to_le_bytes()).collect();
@@ -1295,9 +1316,11 @@ impl Engine {
                 }
                 Ok(())
             })?;
+            drop(current);
+            kept += chunk.len();
         }
         self.invalidate_vectors();
-        Ok(())
+        Ok(kept)
     }
 
     /// Memories that need a vector from the current finding model, newest first.

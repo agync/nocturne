@@ -1053,11 +1053,15 @@ impl Reader {
             return;
         }
         let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
-        match mind.embed(&texts).await {
+        // Made with the finding model the store names now, and marked with that one.
+        let model = self.inner.engine.recall_model();
+        match crate::reindex::embed_as(mind.as_ref(), &model, &texts).await {
             Ok(vecs) if vecs.len() == rows.len() => {
                 let pairs: Vec<(String, Vec<f32>)> =
                     rows.into_iter().map(|r| r.0).zip(vecs).collect();
-                let _ = self.eng(move |e| e.store_embeddings(pairs)).await;
+                let _ = self
+                    .eng(move |e| e.store_embeddings_from(&model, pairs))
+                    .await;
             }
             Ok(_) => tracing::warn!("the mind returned the wrong number of vectors"),
             Err(e) => tracing::debug!("vectors left for the tidy: {e}"),

@@ -5,11 +5,11 @@
 //! with the model in use), then reads the next chunk with the new model. The store swaps only
 //! when both are complete, so nothing kept during the re-read is missing from either side.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use nocturne_contract::ReindexPhase;
-use nocturne_engine::{Engine, Error as EngineError};
+use nocturne_engine::{Engine, Error as EngineError, Mind, MindError};
 use tokio_util::sync::CancellationToken;
 
 use crate::reader::Reader;
@@ -82,11 +82,43 @@ pub fn estimate_seconds(remaining: u32, per_second: f64) -> Option<u32> {
     (per_second > 0.0).then(|| (f64::from(remaining) / per_second).ceil() as u32)
 }
 
+/// Embeds `texts` with `model`. A mind that cannot name its model (a test's fixed mind) embeds
+/// with its own, which is then the only model it has.
+pub async fn embed_as(
+    mind: &dyn Mind,
+    model: &str,
+    texts: &[String],
+) -> Result<Vec<Vec<f32>>, MindError> {
+    match mind.embed_with(model, texts).await {
+        Err(MindError::Unsupported(_)) => mind.embed(texts).await,
+        other => other,
+    }
+}
+
+/// How many times one memory may fail to embed, for a reason of its own, before a re-read goes
+/// on without a vector for it. It stays findable by its words.
+pub const TRIES: u32 = 3;
+
+/// Whether `e` says something about the text rather than the mind's state at the moment.
+fn about_the_text(e: &MindError) -> bool {
+    matches!(
+        e,
+        MindError::TooLong | MindError::Language(_) | MindError::Failed(_)
+    )
+}
+
 pub struct Reindexer {
     engine: Engine,
     slot: MindSlot,
     reader: Reader,
     opts: ReindexOptions,
+}
+
+/// Which side of the re-read a chunk is for: the index in use, or the one being built.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Side {
+    Old,
+    New,
 }
 
 impl Reindexer {
@@ -118,6 +150,60 @@ impl Reindexer {
             .is_some_and(|r| r.phase == ReindexPhase::Running)
     }
 
+    /// Embeds `rows` with `model` and stores them on `side`. A chunk that fails for a reason
+    /// of its text is tried one memory at a time; a memory that keeps failing is stored with
+    /// no vector, so the re-read can finish. False when the mind could not be used at all.
+    async fn embed_chunk(
+        &self,
+        mind: &dyn Mind,
+        side: Side,
+        model: &str,
+        rows: Vec<(String, String)>,
+        tries: &mut HashMap<(Side, String), u32>,
+    ) -> bool {
+        let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
+        let whole =
+            tokio::time::timeout(self.opts.embed_limit, embed_as(mind, model, &texts)).await;
+        let pairs: Vec<(String, Vec<f32>)> = match whole {
+            Ok(Ok(vecs)) if vecs.len() == rows.len() => {
+                rows.into_iter().map(|r| r.0).zip(vecs).collect()
+            }
+            Ok(Err(e)) if !about_the_text(&e) => return false,
+            Err(_) => return false,
+            _ => {
+                let mut pairs = Vec::new();
+                for (id, text) in rows {
+                    let one = std::slice::from_ref(&text);
+                    let got =
+                        tokio::time::timeout(self.opts.embed_limit, embed_as(mind, model, one))
+                            .await;
+                    match got {
+                        Ok(Ok(mut v)) if v.len() == 1 => pairs.push((id, v.remove(0))),
+                        Ok(Err(e)) if !about_the_text(&e) => return false,
+                        Err(_) => return false,
+                        _ => {
+                            let n = tries.entry((side, id.clone())).or_insert(0);
+                            *n += 1;
+                            if *n >= TRIES {
+                                tracing::info!("a memory is left without a vector of {model}");
+                                pairs.push((id, Vec::new()));
+                            }
+                        }
+                    }
+                }
+                pairs
+            }
+        };
+        let model = model.to_string();
+        match side {
+            Side::Old => self
+                .eng(move |e| e.store_embeddings_from(&model, pairs))
+                .await
+                .is_ok(),
+            Side::New => self.eng(move |e| e.store_reindexed(pairs)).await.is_ok(),
+        }
+    }
+
     /// Reads every memory with `model` until the store swaps, or `stop` fires. `progress` hears
     /// how many of how many are done after each chunk. The re-read must have been begun in the
     /// store (`begin_reindex`).
@@ -127,6 +213,7 @@ impl Reindexer {
         stop: CancellationToken,
         progress: impl Fn(u32, u32) + Send,
     ) -> ReindexEnd {
+        let mut tries: HashMap<(Side, String), u32> = HashMap::new();
         loop {
             if stop.is_cancelled() {
                 return ReindexEnd::Stopped;
@@ -143,53 +230,42 @@ impl Reindexer {
                 return ReindexEnd::Stopped;
             }
             let chunk = self.opts.chunk;
+            let in_use = self.engine.recall_model();
             let old = self
                 .eng(move |e| e.memories_without_embedding(chunk))
                 .await
                 .unwrap_or_default();
             if !old.is_empty() {
-                let texts: Vec<String> = old.iter().map(|r| r.1.clone()).collect();
-                match tokio::time::timeout(self.opts.embed_limit, mind.embed(&texts)).await {
-                    Ok(Ok(vecs)) if vecs.len() == old.len() => {
-                        let pairs = old.into_iter().map(|r| r.0).zip(vecs).collect();
-                        let _ = self.eng(move |e| e.store_embeddings(pairs)).await;
-                    }
-                    _ => {
-                        self.nap(&stop, self.opts.retry).await;
-                        continue;
-                    }
+                if !self
+                    .embed_chunk(mind.as_ref(), Side::Old, &in_use, old, &mut tries)
+                    .await
+                {
+                    self.nap(&stop, self.opts.retry).await;
                 }
+                continue;
             }
             let Ok(todo) = self.eng(move |e| e.reindex_todo(chunk)).await else {
                 self.nap(&stop, self.opts.retry).await;
                 continue;
             };
             if todo.is_empty() {
-                match self.eng(|e| e.finish_reindex()).await {
-                    Ok(true) => return ReindexEnd::Done,
-                    _ => {
-                        self.nap(&stop, self.opts.pause).await;
-                        continue;
-                    }
+                if let Ok(true) = self.eng(|e| e.finish_reindex()).await {
+                    return ReindexEnd::Done;
                 }
+                self.nap(&stop, self.opts.pause).await;
+                continue;
             }
-            let texts: Vec<String> = todo.iter().map(|r| r.1.clone()).collect();
-            let embedded =
-                tokio::time::timeout(self.opts.embed_limit, mind.embed_with(model, &texts)).await;
-            match embedded {
-                Ok(Ok(vecs)) if vecs.len() == todo.len() => {
-                    let pairs = todo.into_iter().map(|r| r.0).zip(vecs).collect();
-                    if self.eng(move |e| e.store_reindexed(pairs)).await.is_err() {
-                        self.nap(&stop, self.opts.retry).await;
-                        continue;
-                    }
-                    if let Ok((done, total)) = self.eng(|e| e.reindex_progress()).await {
-                        progress(done, total);
-                    }
-                    self.nap(&stop, self.opts.pause).await;
-                }
-                _ => self.nap(&stop, self.opts.retry).await,
+            if !self
+                .embed_chunk(mind.as_ref(), Side::New, model, todo, &mut tries)
+                .await
+            {
+                self.nap(&stop, self.opts.retry).await;
+                continue;
             }
+            if let Ok((done, total)) = self.eng(|e| e.reindex_progress()).await {
+                progress(done, total);
+            }
+            self.nap(&stop, self.opts.pause).await;
         }
     }
 
