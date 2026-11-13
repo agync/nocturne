@@ -66,7 +66,7 @@ impl From<RuntimeError> for MindError {
             RuntimeError::LoadFailed {
                 out_of_memory: true,
                 ..
-            } => MindError::Failed("load: out of memory".into()),
+            } => MindError::OutOfMemory,
             RuntimeError::Timeout => MindError::Failed("the engine took too long".into()),
             other => MindError::Failed(other.to_string()),
         }
@@ -96,7 +96,8 @@ mod tests {
                 out_of_memory: true,
                 message: "x".into()
             }),
-            MindError::Failed("load: out of memory".into())
+            MindError::OutOfMemory,
+            "a load that failed for memory is never the item's fault"
         );
         assert!(matches!(
             m(RuntimeError::LoadFailed { out_of_memory: false, message: "bad file".into() }),

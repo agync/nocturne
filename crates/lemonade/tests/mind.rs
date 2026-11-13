@@ -1069,14 +1069,14 @@ async fn an_answer_with_no_valid_citation_is_not_sure() {
 }
 
 #[tokio::test]
-async fn a_load_that_runs_out_of_memory_is_a_failure_not_an_absence() {
+async fn a_load_that_runs_out_of_memory_is_reported_as_such_and_other_load_errors_are_failures() {
     let r = rig_with("downloaded=all,load-oom", Tier::Standard).await;
     assert_eq!(
         r.mind
             .extract("Sam likes tea", &context())
             .await
             .unwrap_err(),
-        MindError::Failed("load: out of memory".into())
+        MindError::OutOfMemory
     );
     let r = rig_with("downloaded=all,load-error", Tier::Standard).await;
     let err = r
