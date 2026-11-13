@@ -29,6 +29,11 @@ pub(crate) fn new_id(prefix: &str) -> String {
     format!("{prefix}_{}", random_hex(8))
 }
 
+/// A 128-bit random token as 32 hex characters.
+pub(crate) fn new_id_hex() -> String {
+    random_hex(16)
+}
+
 pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }

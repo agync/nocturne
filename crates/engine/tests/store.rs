@@ -95,3 +95,26 @@ fn engine_is_send_sync_clone() {
     fn assert<T: Send + Sync + Clone>() {}
     assert::<Engine>();
 }
+
+#[test]
+fn deleted_text_is_overwritten_in_the_store_and_in_both_search_indexes() {
+    let dir = tempfile::tempdir().unwrap();
+    drop(engine(dir.path()));
+    let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+    for table in ["items_fts", "memories_fts"] {
+        let v: String = conn
+            .query_row(
+                &format!("SELECT v FROM {table}_config WHERE k = 'secure-delete'"),
+                [],
+                |r| {
+                    r.get::<_, rusqlite::types::Value>(0).map(|v| match v {
+                        rusqlite::types::Value::Integer(i) => i.to_string(),
+                        rusqlite::types::Value::Text(t) => t,
+                        other => format!("{other:?}"),
+                    })
+                },
+            )
+            .unwrap();
+        assert_eq!(v, "1", "{table} deletes securely");
+    }
+}

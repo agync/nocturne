@@ -1,0 +1,368 @@
+//! Forget completely: a confirmed, undoable-never removal of a memory, its history and
+//! everything derived from it.
+//!
+//! `preview_forget` says exactly what will go and hands back a token. `forget` takes the token,
+//! checks nothing it covers has changed, and removes the memories and every earlier version,
+//! their sources, vectors, search rows, conflicts and questions; redacts the lines of past pages
+//! that cited them; deletes cached audio for those pages; and, when asked, removes the original
+//! items nothing else depends on. Afterwards the search indexes are compacted and the
+//! write-ahead log is truncated so no trace stays in the store files.
+
+use std::collections::BTreeSet;
+
+use nocturne_contract::{ForgetOriginal, ForgetPreview, ForgetReport, ForgetRow, PageView};
+use rusqlite::{Connection, OptionalExtension, Transaction, params};
+
+use crate::Engine;
+use crate::audio::{drop_audio_rows, pages_citing, shred_all};
+use crate::capture::original_path;
+use crate::error::{Error, Result};
+use crate::fsutil;
+use crate::page::{template_dek, template_headline};
+use crate::util::{fmt_ts, new_id_hex, parse_enum, parse_ts};
+
+/// A preview is good for ten minutes.
+const TOKEN_MINUTES: i64 = 10;
+
+/// The requested memories plus every earlier version they replaced or ended.
+fn closure(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
+    let mut set: BTreeSet<String> = BTreeSet::new();
+    let mut frontier: Vec<String> = Vec::new();
+    for id in ids {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?1)",
+            [id],
+            |r| r.get(0),
+        )?;
+        if exists && set.insert(id.clone()) {
+            frontier.push(id.clone());
+        }
+    }
+    while let Some(id) = frontier.pop() {
+        let mut stmt = conn.prepare_cached("SELECT id FROM memories WHERE superseded_by = ?1")?;
+        let older: Vec<String> = stmt
+            .query_map([&id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for o in older {
+            if set.insert(o.clone()) {
+                frontier.push(o);
+            }
+        }
+    }
+    Ok(set.into_iter().collect())
+}
+
+/// Changes if anything the preview covers is used, corrected, resolved or re-sourced.
+fn stamp(conn: &Connection, ids: &[String]) -> Result<String> {
+    let mut latest = String::new();
+    let mut sources = 0i64;
+    for id in ids {
+        let (a, b, c, s): (String, Option<String>, Option<String>, i64) = conn.query_row(
+            "SELECT recorded_at, last_used, superseded_at, \
+             (SELECT COUNT(*) FROM memory_sources WHERE memory_id = memories.id) \
+             FROM memories WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )?;
+        for v in [Some(a), b, c].into_iter().flatten() {
+            if v > latest {
+                latest = v;
+            }
+        }
+        sources += s;
+    }
+    Ok(format!("{latest}|{}|{sources}", ids.len()))
+}
+
+fn source_items(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
+    let mut out: BTreeSet<String> = BTreeSet::new();
+    for id in ids {
+        let mut stmt =
+            conn.prepare_cached("SELECT item_id FROM memory_sources WHERE memory_id = ?1")?;
+        for r in stmt.query_map([id], |r| r.get::<_, String>(0))? {
+            out.insert(r?);
+        }
+    }
+    Ok(out.into_iter().collect())
+}
+
+fn other_memories(conn: &Connection, item: &str, ids: &[String]) -> Result<u32> {
+    let mut stmt =
+        conn.prepare_cached("SELECT DISTINCT memory_id FROM memory_sources WHERE item_id = ?1")?;
+    let all: Vec<String> = stmt
+        .query_map([item], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(all.iter().filter(|m| !ids.contains(m)).count() as u32)
+}
+
+impl Engine {
+    /// Say exactly what forgetting these memories removes. Nothing changes until `forget`.
+    pub fn preview_forget(&self, ids: &[String], include_originals: bool) -> Result<ForgetPreview> {
+        let now = self.clock().now();
+        let expires = now
+            .checked_add(jiff::SignedDuration::from_mins(TOKEN_MINUTES))
+            .map_err(Error::from)?;
+        self.write(|tx| {
+            tx.execute(
+                "DELETE FROM forget_tokens WHERE expires_at <= ?1",
+                [fmt_ts(now)],
+            )?;
+            let all = closure(tx, ids)?;
+            if all.is_empty() {
+                return Err(Error::not_found("those memories"));
+            }
+            let mut memories = Vec::new();
+            for id in &all {
+                let (sentence, recorded): (String, String) = tx.query_row(
+                    "SELECT sentence, recorded_at FROM memories WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?;
+                memories.push((recorded, id.clone(), sentence));
+            }
+            memories.sort();
+            let mut originals = Vec::new();
+            for item in source_items(tx, &all)? {
+                let (title, kind, kept_at, duration_ms): (String, String, String, Option<u32>) = tx
+                    .query_row(
+                        "SELECT title, kind, kept_at, duration_ms FROM items WHERE id = ?1",
+                        [&item],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    )?;
+                let others = other_memories(tx, &item, &all)?;
+                originals.push(ForgetOriginal {
+                    item_id: item,
+                    label: title,
+                    kind: parse_enum(&kind)?,
+                    kept_at,
+                    duration_ms,
+                    removable: others == 0,
+                    other_memories: others,
+                });
+            }
+            let pages_affected = pages_citing(tx, &all)?.len() as u32;
+            let token = new_id_hex();
+            tx.execute(
+                "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    token,
+                    serde_json::to_string(ids)?,
+                    include_originals,
+                    stamp(tx, &all)?,
+                    fmt_ts(expires),
+                ],
+            )?;
+            Ok(ForgetPreview {
+                token,
+                memories: memories
+                    .into_iter()
+                    .map(|(_, memory_id, sentence)| ForgetRow {
+                        memory_id,
+                        sentence,
+                    })
+                    .collect(),
+                originals,
+                include_originals,
+                pages_affected,
+            })
+        })
+    }
+
+    /// Carry out a previewed forget. The token is single use and expires; it is refused if
+    /// anything it covers has changed since the preview.
+    pub fn forget(&self, token: &str) -> Result<ForgetReport> {
+        let now = self.clock().now();
+
+        struct Plan {
+            closure: Vec<String>,
+            items: Vec<String>,
+            include_originals: bool,
+        }
+
+        // Phase 1: validate the token, spend it, redact pages and drop audio. One transaction.
+        let (plan, pages_redacted, files) = self.write(|tx| {
+            let row: Option<(String, bool, String, String)> = tx
+                .query_row(
+                    "SELECT ids, include_originals, stamp, expires_at FROM forget_tokens WHERE token = ?1",
+                    [token],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .optional()?;
+            let Some((ids, include_originals, saved_stamp, expires)) = row else {
+                return Err(Error::StaleToken);
+            };
+            tx.execute("DELETE FROM forget_tokens WHERE token = ?1", [token])?;
+            if parse_ts(&expires)? <= now {
+                // Refused; an expired token is purged by the next preview.
+                return Err(Error::StaleToken);
+            }
+            let ids: Vec<String> = serde_json::from_str(&ids)?;
+            let all = closure(tx, &ids)?;
+            if all.is_empty() || stamp(tx, &all)? != saved_stamp {
+                return Err(Error::StaleToken);
+            }
+            let items = source_items(tx, &all)?;
+            let pages = pages_citing(tx, &all)?;
+            redact_pages(tx, &all, &pages)?;
+            let files = drop_audio_rows(tx, &pages)?;
+            Ok((
+                Plan {
+                    closure: all,
+                    items,
+                    include_originals,
+                },
+                pages.len() as u32,
+                files,
+            ))
+        })?;
+        shred_all(files);
+
+        // Phase 2: remove the memories, in chunks so capture never waits long.
+        for chunk in plan.closure.chunks(200) {
+            self.write(|tx| {
+                for id in chunk {
+                    purge_memory(tx, id)?;
+                }
+                Ok(())
+            })?;
+        }
+
+        // Phase 3: originals nothing else depends on, when the person asked.
+        let mut originals_removed = 0u32;
+        if plan.include_originals {
+            let dir = self.originals_dir();
+            for chunk in plan.items.chunks(200) {
+                let doomed = self.write(|tx| {
+                    let mut doomed = Vec::new();
+                    for item in chunk {
+                        let left: u32 = tx.query_row(
+                            "SELECT COUNT(*) FROM memory_sources WHERE item_id = ?1",
+                            [item],
+                            |r| r.get(0),
+                        )?;
+                        if left > 0 {
+                            continue;
+                        }
+                        let row: Option<(String, Option<String>, Option<String>)> = tx
+                            .query_row(
+                                "SELECT sha256, ext, file_name FROM items WHERE id = ?1",
+                                [item],
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                            )
+                            .optional()?;
+                        if let Some((sha, ext, file_name)) = row {
+                            tx.execute("DELETE FROM items WHERE id = ?1", [item])?;
+                            if file_name.is_some() {
+                                doomed.push(original_path(&dir, &sha, ext.as_deref()));
+                            }
+                            originals_removed += 1;
+                        }
+                    }
+                    Ok(doomed)
+                })?;
+                for f in doomed {
+                    fsutil::shred(&f);
+                }
+            }
+        }
+
+        // Phase 4: orphaned entity names, compacted indexes, a truncated log.
+        self.write(|tx| {
+            tx.execute(
+                "DELETE FROM entities WHERE id NOT IN \
+                 (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL)",
+                [],
+            )?;
+            tx.execute(
+                "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
+                [],
+            )?;
+            tx.execute("INSERT INTO items_fts(items_fts) VALUES ('optimize')", [])?;
+            Ok(())
+        })?;
+        self.invalidate_vectors();
+        self.checkpoint_truncate()?;
+
+        Ok(ForgetReport {
+            memories_removed: plan.closure.len() as u32,
+            originals_removed,
+            pages_redacted,
+        })
+    }
+}
+
+/// Remove one memory and everything that hangs off it. Sources and vectors cascade; search rows
+/// go through the delete trigger.
+fn purge_memory(tx: &Transaction<'_>, id: &str) -> Result<()> {
+    tx.execute("DELETE FROM conflicts WHERE a = ?1 OR b = ?1", [id])?;
+    tx.execute("DELETE FROM questions WHERE memory_id = ?1", [id])?;
+    tx.execute("DELETE FROM page_line_memories WHERE memory_id = ?1", [id])?;
+    tx.execute("DELETE FROM memories WHERE id = ?1", [id])?;
+    Ok(())
+}
+
+/// Lines citing a forgotten memory are redacted in the line table and in the saved snapshot; the
+/// page keeps its shape, and its headline and dek fall back to the template (no mind call).
+fn redact_pages(tx: &Transaction<'_>, ids: &[String], pages: &[String]) -> Result<()> {
+    let mut lines: BTreeSet<String> = BTreeSet::new();
+    for id in ids {
+        let mut stmt =
+            tx.prepare_cached("SELECT line_id FROM page_line_memories WHERE memory_id = ?1")?;
+        for r in stmt.query_map([id], |r| r.get::<_, String>(0))? {
+            lines.insert(r?);
+        }
+    }
+    for line in &lines {
+        tx.execute(
+            "UPDATE page_lines SET forgotten = 1, text = '' WHERE id = ?1",
+            [line],
+        )?;
+    }
+    for date in pages {
+        let body: String = tx.query_row("SELECT body FROM pages WHERE date = ?1", [date], |r| {
+            r.get(0)
+        })?;
+        let mut view: PageView = serde_json::from_str(&body)?;
+        for list in [
+            &mut view.needs_you,
+            &mut view.changed,
+            &mut view.let_go,
+            &mut view.upcoming,
+            &mut view.learned,
+        ] {
+            for line in list.iter_mut() {
+                let hit = lines.contains(&line.id)
+                    || line.memory_ids.iter().any(|m| ids.contains(m))
+                    || line.choices.iter().any(|c| ids.contains(&c.memory_id));
+                if hit {
+                    line.forgotten = true;
+                    line.text.clear();
+                    line.memory_ids.clear();
+                    line.receipts.clear();
+                    line.choices.clear();
+                    line.on = None;
+                    line.last_used = None;
+                    line.done = false;
+                }
+            }
+        }
+        if view
+            .question
+            .as_ref()
+            .and_then(|q| q.memory_id.as_ref())
+            .is_some_and(|m| ids.contains(m))
+        {
+            view.question = None;
+        }
+        let needs = view.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        let date_parsed: jiff::civil::Date = date.parse()?;
+        view.headline = template_headline(date_parsed);
+        view.dek = template_dek(view.kept_count, needs, view.let_go_count);
+        tx.execute(
+            "UPDATE pages SET body = ?2, headline = ?3, dek = ?4 WHERE date = ?1",
+            params![date, serde_json::to_string(&view)?, view.headline, view.dek],
+        )?;
+    }
+    Ok(())
+}

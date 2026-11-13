@@ -1,0 +1,772 @@
+//! The morning page: composing, ranking, variants, the daily question and saved pages.
+//!
+//! `compose_page` only reads. The caller (the intelligence layer) may write a headline and dek
+//! and then `save_page`, which stores a screen-edition snapshot with every line, private ones
+//! included. Audio and print editions are filtered at read time against each memory's current
+//! `private` flag, so marking something private takes effect on pages already saved.
+
+use std::collections::{HashMap, HashSet};
+
+use jiff::civil::Date;
+use jiff::tz::TimeZone;
+use jiff::{SignedDuration, Timestamp};
+use nocturne_contract::{
+    Choice, Edition, LineKind, MemoryView, NeedsYouEntry, PageLine, PageSummary, PageVariant,
+    Question, QuestionChoice, QuestionKind, Receipt,
+};
+use rusqlite::{Connection, OptionalExtension, params};
+
+use crate::Engine;
+use crate::day::{PrevPage, Window, window};
+use crate::error::{Error, Result};
+use crate::lifecycle::mark_used_tx;
+use crate::memory::{confirm_tx, needs_you_on};
+use crate::rows::{MemRow, mem_view, query_mems};
+use crate::settings::{parse_page_time, read_settings, set_page_time};
+use crate::util::{enum_str, fmt_ts, new_id, opt_enum, parse_enum, parse_ts};
+
+/// The page shows about this many needs-you and changed lines; the rest are counted.
+pub const PAGE_LINE_CAP: usize = 12;
+const LET_GO_CAP: usize = 3;
+const UPCOMING_CAP: usize = 4;
+/// More items than this in a window makes a heavy page.
+pub const HEAVY_ITEMS: u32 = 40;
+const QUESTION_GAP_DAYS: i64 = 14;
+const UPCOMING_DAYS: i32 = 6;
+
+/// The headline used when no mind has written one.
+pub(crate) fn template_headline(date: Date) -> String {
+    date.strftime("%A %-d %B").to_string()
+}
+
+pub(crate) fn template_dek(kept: u32, needs: u32, let_go: u32) -> String {
+    let things = if kept == 1 { "thing" } else { "things" };
+    let need = if needs == 1 { "needs" } else { "need" };
+    let were = if let_go == 1 { "was" } else { "were" };
+    format!(
+        "Last night Nocturne read {kept} {things} you kept. {needs} {need} you. {let_go} {were} let go."
+    )
+}
+
+fn bold(sentence: &str, object: &str) -> String {
+    if !object.is_empty() && sentence.contains(object) {
+        sentence.replacen(object, &format!("**{object}**"), 1)
+    } else {
+        sentence.to_string()
+    }
+}
+
+fn local_date(ts: &str, tz: &TimeZone) -> Option<String> {
+    parse_ts(ts)
+        .ok()
+        .map(|t| t.to_zoned(tz.clone()).date().to_string())
+}
+
+fn base_line(kind: LineKind, text: String) -> PageLine {
+    PageLine {
+        id: new_id("pln"),
+        kind,
+        text,
+        memory_ids: Vec::new(),
+        receipts: Vec::new(),
+        choices: Vec::new(),
+        conflict_id: None,
+        done: false,
+        forgotten: false,
+        on: None,
+        last_used: None,
+    }
+}
+
+fn memory_line(kind: LineKind, m: &MemoryView) -> PageLine {
+    let mut line = base_line(kind, bold(&m.sentence, &m.object));
+    line.memory_ids = vec![m.id.clone()];
+    line.receipts = m.receipts.clone();
+    line.done = false;
+    line
+}
+
+struct Planned {
+    line: PageLine,
+    private: bool,
+}
+
+fn is_private(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn
+        .query_row("SELECT private FROM memories WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .optional()?
+        .unwrap_or(false))
+}
+
+fn prev_page(conn: &Connection, day: Date) -> Result<Option<PrevPage>> {
+    let row: Option<(String, String)> = conn
+        .query_row(
+            "SELECT date, window_end FROM pages WHERE date < ?1 ORDER BY date DESC LIMIT 1",
+            [day.to_string()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    row.map(|(d, e)| {
+        Ok(PrevPage {
+            date: d.parse()?,
+            end: parse_ts(&e)?,
+        })
+    })
+    .transpose()
+}
+
+fn window_for(conn: &Connection, day: Date, tz: &TimeZone) -> Result<Window> {
+    let hm = parse_page_time(&read_settings(conn)?.page_time)?;
+    let earliest: Option<String> =
+        conn.query_row("SELECT MIN(kept_at) FROM items", [], |r| r.get(0))?;
+    let earliest = earliest.map(|e| parse_ts(&e)).transpose()?;
+    window(day, hm, tz, prev_page(conn, day)?, earliest)
+}
+
+fn page_number(conn: &Connection, day: Date) -> Result<u32> {
+    let existing: Option<u32> = conn
+        .query_row(
+            "SELECT number FROM pages WHERE date = ?1",
+            [day.to_string()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    match existing {
+        Some(n) => Ok(n),
+        None => Ok(conn.query_row(
+            "SELECT COUNT(*) + 1 FROM pages WHERE date < ?1",
+            [day.to_string()],
+            |r| r.get(0),
+        )?),
+    }
+}
+
+fn first_receipt(m: &MemoryView) -> Option<Receipt> {
+    m.receipts.first().cloned()
+}
+
+fn question_for(
+    conn: &Connection,
+    day: Date,
+    number: u32,
+    edition: Edition,
+    now: Timestamp,
+    page_time: &str,
+) -> Result<Option<Question>> {
+    let saved: Option<(Option<String>, String, String, Option<String>)> = conn
+        .query_row(
+            "SELECT memory_id, kind, text, answer FROM questions WHERE page_date = ?1",
+            [day.to_string()],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()?;
+    let last_asked = |id: &str| -> Result<Option<String>> {
+        Ok(conn.query_row(
+            "SELECT MAX(asked_at) FROM questions WHERE memory_id = ?1 AND page_date != ?2",
+            params![id, day.to_string()],
+            |r| r.get(0),
+        )?)
+    };
+    if let Some((memory_id, kind, text, answer)) = saved {
+        let answered: Option<QuestionChoice> = opt_enum(answer)?;
+        let kind: QuestionKind = parse_enum(&kind)?;
+        return Ok(match memory_id {
+            None => Some(Question {
+                kind,
+                text,
+                memory_id: None,
+                receipt: None,
+                last_asked: None,
+                answered,
+            }),
+            Some(id) => {
+                let Some(row) = crate::rows::load_mem(conn, &id)? else {
+                    return Ok(None);
+                };
+                let view = mem_view(conn, &row)?;
+                if edition != Edition::Screen && view.private {
+                    return Ok(None);
+                }
+                Some(Question {
+                    kind,
+                    text,
+                    memory_id: Some(id.clone()),
+                    receipt: first_receipt(&view),
+                    last_asked: last_asked(&id)?,
+                    answered,
+                })
+            }
+        });
+    }
+    if number == 1 {
+        return Ok(Some(Question {
+            kind: QuestionKind::PageTime,
+            text: page_time.to_string(),
+            memory_id: None,
+            receipt: None,
+            last_asked: None,
+            answered: None,
+        }));
+    }
+    // Eligible: active, not a safety memory, not keep-forever, not asked in the last 14 days.
+    let cutoff = now
+        .checked_sub(SignedDuration::from_hours(24 * QUESTION_GAP_DAYS))
+        .map_err(Error::from)?;
+    let mut rows: Vec<MemRow> = query_mems(
+        conn,
+        "m.superseded_at IS NULL AND m.status = 'active' AND m.keep_forever = 0 \
+         AND m.id NOT IN (SELECT memory_id FROM questions \
+                          WHERE memory_id IS NOT NULL AND asked_at > ?1 AND page_date != ?2)",
+        params![fmt_ts(cutoff), day.to_string()],
+    )?;
+    rows.retain(|m| !m.is_safety() && (edition == Edition::Screen || !m.private));
+    // Prefer memories with one source, then ones the person has not confirmed, oldest first.
+    rows.sort_by(|a, b| {
+        ((a.sources != 1), a.confirmed, &a.recorded_at, &a.id).cmp(&(
+            (b.sources != 1),
+            b.confirmed,
+            &b.recorded_at,
+            &b.id,
+        ))
+    });
+    let Some(m) = rows.first() else {
+        return Ok(None);
+    };
+    let view = mem_view(conn, m)?;
+    Ok(Some(Question {
+        kind: QuestionKind::YesNo,
+        text: view.sentence.clone(),
+        memory_id: Some(view.id.clone()),
+        receipt: first_receipt(&view),
+        last_asked: last_asked(&view.id)?,
+        answered: None,
+    }))
+}
+
+fn compose(
+    conn: &Connection,
+    now: Timestamp,
+    tz: &TimeZone,
+    day: Date,
+    edition: Edition,
+) -> Result<nocturne_contract::PageView> {
+    let settings = read_settings(conn)?;
+    let w = window_for(conn, day, tz)?;
+    let (start, end) = (fmt_ts(w.start), fmt_ts(w.end));
+    let number = page_number(conn, day)?;
+    let screen = edition == Edition::Screen;
+    let mut skipped = 0u32;
+
+    let kept_count: u32 = conn.query_row(
+        "SELECT COUNT(*) FROM items WHERE kept_at >= ?1 AND kept_at < ?2",
+        [&start, &end],
+        |r| r.get(0),
+    )?;
+    let pending: u32 = conn.query_row(
+        "SELECT COUNT(*) FROM items WHERE kept_at >= ?1 AND kept_at < ?2 \
+         AND status IN ('kept', 'reading')",
+        [&start, &end],
+        |r| r.get(0),
+    )?;
+
+    // Needs you, already ranked by `needs_you_on` (due soonest, promises, which, unconfirmed).
+    let mut needs_ids: HashSet<String> = HashSet::new();
+    let mut needs: Vec<Planned> = Vec::new();
+    for entry in needs_you_on(conn, day)? {
+        let planned = match entry {
+            NeedsYouEntry::Due { memory, due, .. } => {
+                let mut line = memory_line(LineKind::Due, &memory);
+                line.on = Some(due);
+                needs_ids.insert(memory.id.clone());
+                Planned {
+                    private: memory.private,
+                    line,
+                }
+            }
+            NeedsYouEntry::Promise { memory, .. } => {
+                needs_ids.insert(memory.id.clone());
+                Planned {
+                    private: memory.private,
+                    line: memory_line(LineKind::Promise, &memory),
+                }
+            }
+            NeedsYouEntry::Unconfirmed { memory, .. } => {
+                needs_ids.insert(memory.id.clone());
+                Planned {
+                    private: memory.private,
+                    line: memory_line(LineKind::Unconfirmed, &memory),
+                }
+            }
+            NeedsYouEntry::Which {
+                conflict_id,
+                title,
+                options,
+            } => {
+                let mut line = base_line(LineKind::Which, title);
+                line.conflict_id = Some(conflict_id);
+                let mut private = false;
+                for o in options {
+                    private |= is_private(conn, &o.memory_id)?;
+                    needs_ids.insert(o.memory_id.clone());
+                    line.memory_ids.push(o.memory_id.clone());
+                    line.receipts.push(o.receipt.clone());
+                    line.choices.push(Choice {
+                        memory_id: o.memory_id,
+                        text: o.text,
+                        receipt: o.receipt,
+                    });
+                }
+                Planned { line, private }
+            }
+        };
+        if screen || !planned.private {
+            needs.push(planned);
+        } else {
+            skipped += 1;
+        }
+    }
+
+    // What changed and what was learned in the window, by how often the subject is used.
+    let freq: HashMap<String, u32> = {
+        let mut stmt = conn.prepare(
+            "SELECT m.subject_key, COUNT(*) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+             WHERE m.superseded_at IS NULL GROUP BY m.subject_key",
+        )?;
+        stmt.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, u32>(1)?)))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let fresh = query_mems(
+        conn,
+        "m.recorded_at >= ?1 AND m.recorded_at < ?2 AND m.superseded_at IS NULL \
+         AND m.status != 'unconfirmed'",
+        [&start, &end],
+    )?;
+    let mut changes: Vec<(u32, String, String, bool, Planned)> = Vec::new();
+    for m in fresh.iter().filter(|m| !needs_ids.contains(&m.id)) {
+        let view = mem_view(conn, m)?;
+        if !screen && view.private {
+            skipped += 1;
+            continue;
+        }
+        let kind = if m.was.is_some() {
+            LineKind::Changed
+        } else {
+            LineKind::Learned
+        };
+        changes.push((
+            freq.get(&m.subject_key).copied().unwrap_or(0),
+            m.recorded_at.clone(),
+            m.id.clone(),
+            m.was.is_some(),
+            Planned {
+                private: view.private,
+                line: memory_line(kind, &view),
+            },
+        ));
+    }
+    changes.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| b.1.cmp(&a.1))
+            .then_with(|| a.2.cmp(&b.2))
+    });
+
+    // The cap: about twelve lines of needs you and changed together; neither starves the other.
+    let (ny_total, ch_total) = (needs.len(), changes.len());
+    let (ny_show, ch_show) = if ny_total + ch_total <= PAGE_LINE_CAP {
+        (ny_total, ch_total)
+    } else {
+        let ny = ny_total.min(PAGE_LINE_CAP - ch_total.min(4));
+        (ny, ch_total.min(PAGE_LINE_CAP - ny))
+    };
+    needs.truncate(ny_show);
+    changes.truncate(ch_show);
+    let mut changed = Vec::new();
+    let mut learned = Vec::new();
+    for (_, _, _, is_changed, p) in changes {
+        if is_changed {
+            changed.push(p.line)
+        } else {
+            learned.push(p.line)
+        }
+    }
+
+    // Let go during the window.
+    let gone = query_mems(
+        conn,
+        "m.let_go_at >= ?1 AND m.let_go_at < ?2 AND m.superseded_at IS NULL \
+         ORDER BY m.let_go_at DESC, m.id",
+        [&start, &end],
+    )?;
+    let mut let_go: Vec<PageLine> = Vec::new();
+    let mut let_go_count = 0u32;
+    for m in &gone {
+        let view = mem_view(conn, m)?;
+        if !screen && view.private {
+            skipped += 1;
+            continue;
+        }
+        let_go_count += 1;
+        if let_go.len() < LET_GO_CAP {
+            let mut line = memory_line(LineKind::LetGo, &view);
+            line.last_used = local_date(m.last_used.as_deref().unwrap_or(&m.recorded_at), tz);
+            let_go.push(line);
+        }
+    }
+
+    // Upcoming this week: scheduled things not already above.
+    let until = day
+        .checked_add(jiff::Span::new().days(UPCOMING_DAYS))
+        .map_err(Error::from)?;
+    let soon = query_mems(
+        conn,
+        "m.predicate = 'scheduled' AND m.superseded_at IS NULL AND m.done = 0 \
+         AND m.status IN ('active', 'fading') AND COALESCE(m.due, m.valid_from) >= ?1 \
+         AND COALESCE(m.due, m.valid_from) <= ?2 \
+         ORDER BY COALESCE(m.due, m.valid_from), m.id",
+        [day.to_string(), until.to_string()],
+    )?;
+    let mut upcoming: Vec<PageLine> = Vec::new();
+    for m in soon.iter().filter(|m| !needs_ids.contains(&m.id)) {
+        let view = mem_view(conn, m)?;
+        if !screen && view.private {
+            skipped += 1;
+            continue;
+        }
+        if upcoming.len() < UPCOMING_CAP {
+            let mut line = memory_line(LineKind::Upcoming, &view);
+            line.on = m.due.clone().or_else(|| m.valid_from.clone());
+            upcoming.push(line);
+        }
+    }
+
+    let question = question_for(conn, day, number, edition, now, &settings.page_time)?;
+
+    let variant = if pending > 0 {
+        PageVariant::BeingWritten
+    } else if w.catch_up_days >= 1 {
+        PageVariant::CatchUp
+    } else if number == 1 {
+        PageVariant::First
+    } else if kept_count > HEAVY_ITEMS {
+        PageVariant::Heavy
+    } else if kept_count == 0 {
+        PageVariant::Quiet
+    } else {
+        PageVariant::Normal
+    };
+
+    let needs_total = ny_total as u32;
+    Ok(nocturne_contract::PageView {
+        date: day.to_string(),
+        page_number: number,
+        edition,
+        variant,
+        headline: template_headline(day),
+        dek: template_dek(kept_count, needs_total, let_go_count),
+        needs_you: needs.into_iter().map(|p| p.line).collect(),
+        changed,
+        let_go,
+        upcoming,
+        learned,
+        question,
+        more_needs_you: (ny_total - ny_show) as u32,
+        more_changed: (ch_total - ch_show) as u32,
+        kept_count,
+        changes_count: ch_total as u32,
+        let_go_count,
+        catch_up_days: w.catch_up_days,
+        private_skipped: skipped,
+        pending,
+        tidied_from: None,
+        tidied_to: None,
+        update: None,
+    })
+}
+
+impl Engine {
+    /// Compose the page for `day`. Reads only: nothing is saved and nothing counts as used.
+    pub fn compose_page(&self, day: Date, edition: Edition) -> Result<nocturne_contract::PageView> {
+        let now = self.clock().now();
+        let tz = self.clock().tz();
+        self.read(|conn| compose(conn, now, &tz, day, edition))
+    }
+
+    /// Save a composed page (screen edition, every line) as the snapshot for its date. Cited
+    /// memories count as used once; let-go lines do not, or the page would undo its own news.
+    pub fn save_page(&self, page: &nocturne_contract::PageView) -> Result<()> {
+        if page.edition != Edition::Screen {
+            return Err(Error::invalid(
+                "only the screen edition is saved: it holds every line",
+            ));
+        }
+        let day: Date = page.date.parse()?;
+        let tz = self.clock().tz();
+        let now = fmt_ts(self.clock().now());
+        self.write(|tx| {
+            let w = window_for(tx, day, &tz)?;
+            let number = page_number(tx, day)?;
+            let already: HashSet<String> = {
+                let mut stmt = tx.prepare(
+                    "SELECT DISTINCT pm.memory_id FROM page_line_memories pm \
+                     JOIN page_lines l ON l.id = pm.line_id WHERE l.page_date = ?1",
+                )?;
+                stmt.query_map([&page.date], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?
+            };
+            tx.execute("DELETE FROM page_lines WHERE page_date = ?1", [&page.date])?;
+            tx.execute(
+                "INSERT INTO pages(date, number, window_start, window_end, headline, dek, variant, \
+                 tidied_from, tidied_to, body) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) \
+                 ON CONFLICT(date) DO UPDATE SET window_start = excluded.window_start, \
+                 window_end = excluded.window_end, headline = excluded.headline, dek = excluded.dek, \
+                 variant = excluded.variant, tidied_from = excluded.tidied_from, \
+                 tidied_to = excluded.tidied_to, body = excluded.body",
+                params![
+                    page.date,
+                    number,
+                    fmt_ts(w.start),
+                    fmt_ts(w.end),
+                    page.headline,
+                    page.dek,
+                    enum_str(&page.variant),
+                    page.tidied_from,
+                    page.tidied_to,
+                    serde_json::to_string(page)?,
+                ],
+            )?;
+            let sections: [(&str, &Vec<PageLine>); 5] = [
+                ("needsYou", &page.needs_you),
+                ("changed", &page.changed),
+                ("learned", &page.learned),
+                ("upcoming", &page.upcoming),
+                ("letGo", &page.let_go),
+            ];
+            let mut used: Vec<&str> = Vec::new();
+            for (section, lines) in sections {
+                for (ord, line) in lines.iter().enumerate() {
+                    tx.execute(
+                        "INSERT INTO page_lines(id, page_date, section, kind, ord, text, done, forgotten) \
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                        params![
+                            line.id,
+                            page.date,
+                            section,
+                            enum_str(&line.kind),
+                            ord as i64,
+                            line.text,
+                            line.done,
+                            line.forgotten,
+                        ],
+                    )?;
+                    for m in &line.memory_ids {
+                        tx.execute(
+                            "INSERT OR IGNORE INTO page_line_memories(line_id, memory_id) VALUES (?1, ?2)",
+                            params![line.id, m],
+                        )?;
+                        if section != "letGo" && !already.contains(m) && !used.contains(&m.as_str()) {
+                            used.push(m);
+                        }
+                    }
+                }
+            }
+            for m in used {
+                mark_used_tx(tx, m, &now)?;
+            }
+            if let Some(q) = &page.question {
+                tx.execute(
+                    "INSERT OR IGNORE INTO questions(page_date, memory_id, kind, text, asked_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                    params![page.date, q.memory_id, enum_str(&q.kind), q.text, now],
+                )?;
+            }
+            Ok(())
+        })
+    }
+
+    /// A saved page (screen edition), or the latest when `day` is `None`.
+    pub fn page(&self, day: Option<Date>) -> Result<Option<nocturne_contract::PageView>> {
+        self.read(|conn| load_page(conn, day))
+    }
+
+    /// A saved page for an edition. Audio and print drop lines about memories that are private
+    /// now, whatever they were when the page was saved.
+    pub fn page_for(
+        &self,
+        day: Option<Date>,
+        edition: Edition,
+    ) -> Result<Option<nocturne_contract::PageView>> {
+        self.read(|conn| {
+            let Some(mut page) = load_page(conn, day)? else {
+                return Ok(None);
+            };
+            page.edition = edition;
+            if edition == Edition::Screen {
+                return Ok(Some(page));
+            }
+            let mut skipped = 0u32;
+            for list in [
+                &mut page.needs_you,
+                &mut page.changed,
+                &mut page.let_go,
+                &mut page.upcoming,
+                &mut page.learned,
+            ] {
+                let mut kept = Vec::new();
+                for line in std::mem::take(list) {
+                    let mut private = false;
+                    for m in &line.memory_ids {
+                        private |= is_private(conn, m)?;
+                    }
+                    if private {
+                        skipped += 1;
+                    } else {
+                        kept.push(line);
+                    }
+                }
+                *list = kept;
+            }
+            if let Some(q) = &page.question
+                && let Some(m) = &q.memory_id
+                && is_private(conn, m)?
+            {
+                page.question = None;
+            }
+            page.private_skipped += skipped;
+            Ok(Some(page))
+        })
+    }
+
+    /// Every saved page, newest first.
+    pub fn pages(&self) -> Result<Vec<PageSummary>> {
+        self.read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT p.date, p.number, p.headline, \
+                 (SELECT COUNT(*) FROM page_lines l WHERE l.page_date = p.date \
+                    AND l.section = 'needsYou' AND l.forgotten = 0) \
+                 FROM pages p ORDER BY p.date DESC",
+            )?;
+            let rows = stmt.query_map([], |r| {
+                Ok(PageSummary {
+                    date: r.get(0)?,
+                    page_number: r.get(1)?,
+                    headline: r.get(2)?,
+                    needs_you: r.get(3)?,
+                })
+            })?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
+    }
+
+    /// The person answers the day's question. Yes confirms and counts as use; No makes the memory
+    /// unconfirmed and asks for the right value; Not sure only records. On page one, Earlier and
+    /// Later move the page time by half an hour.
+    pub fn answer_question(&self, day: Date, choice: QuestionChoice) -> Result<()> {
+        let now = fmt_ts(self.clock().now());
+        let date = day.to_string();
+        self.write(|tx| {
+            let row: Option<(Option<String>, String, Option<String>)> = tx
+                .query_row(
+                    "SELECT memory_id, kind, answer FROM questions WHERE page_date = ?1",
+                    [&date],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .optional()?;
+            let (memory_id, kind, answer) =
+                row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
+            if answer.is_some() {
+                return Err(Error::invalid("that question has already been answered"));
+            }
+            let kind: QuestionKind = parse_enum(&kind)?;
+            match (kind, choice, &memory_id) {
+                (QuestionKind::YesNo, QuestionChoice::Yes, Some(id)) => {
+                    confirm_tx(tx, id, true, &now)?
+                }
+                (QuestionKind::YesNo, QuestionChoice::No, Some(id)) => {
+                    confirm_tx(tx, id, false, &now)?
+                }
+                (QuestionKind::YesNo, QuestionChoice::NotSure, _) => {}
+                (QuestionKind::PageTime, QuestionChoice::Right, _) => {}
+                (
+                    QuestionKind::PageTime,
+                    c @ (QuestionChoice::Earlier | QuestionChoice::Later),
+                    _,
+                ) => {
+                    let (h, m) = parse_page_time(&read_settings(tx)?.page_time)?;
+                    let minutes = i32::from(h) * 60 + i32::from(m);
+                    let shifted = if c == QuestionChoice::Earlier {
+                        minutes - 30
+                    } else {
+                        minutes + 30
+                    };
+                    let shifted = shifted.clamp(0, 23 * 60 + 30);
+                    set_page_time(tx, (shifted / 60) as i8, (shifted % 60) as i8)?;
+                }
+                _ => return Err(Error::invalid("that answer does not fit this question")),
+            }
+            tx.execute(
+                "UPDATE questions SET answer = ?2, answered_at = ?3 WHERE page_date = ?1",
+                params![date, enum_str(&choice), now],
+            )?;
+            Ok(())
+        })
+    }
+}
+
+fn load_page(conn: &Connection, day: Option<Date>) -> Result<Option<nocturne_contract::PageView>> {
+    let row: Option<(String, String)> = match day {
+        Some(d) => conn
+            .query_row(
+                "SELECT date, body FROM pages WHERE date = ?1",
+                [d.to_string()],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?,
+        None => conn
+            .query_row(
+                "SELECT date, body FROM pages ORDER BY date DESC LIMIT 1",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?,
+    };
+    let Some((date, body)) = row else {
+        return Ok(None);
+    };
+    let mut page: nocturne_contract::PageView = serde_json::from_str(&body)?;
+    // Ticks and redactions made since the snapshot was taken.
+    let mut stmt =
+        conn.prepare("SELECT id, done, forgotten FROM page_lines WHERE page_date = ?1")?;
+    let state: HashMap<String, (bool, bool)> = stmt
+        .query_map([&date], |r| {
+            Ok((r.get::<_, String>(0)?, (r.get(1)?, r.get(2)?)))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    for list in [
+        &mut page.needs_you,
+        &mut page.changed,
+        &mut page.let_go,
+        &mut page.upcoming,
+        &mut page.learned,
+    ] {
+        for line in list.iter_mut() {
+            if let Some((done, forgotten)) = state.get(&line.id) {
+                line.done = *done;
+                line.forgotten = *forgotten || line.forgotten;
+            }
+        }
+    }
+    if let Some(q) = page.question.as_mut() {
+        let answer: Option<String> = conn
+            .query_row(
+                "SELECT answer FROM questions WHERE page_date = ?1",
+                [&date],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+        q.answered = opt_enum(answer)?;
+    }
+    Ok(Some(page))
+}

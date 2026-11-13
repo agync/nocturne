@@ -13,16 +13,19 @@ mod audio;
 mod capture;
 mod clock;
 mod error;
+mod forget;
 mod fsutil;
 mod lifecycle;
 mod memory;
 mod mind;
+mod page;
 mod retrieve;
 mod rows;
 mod settings;
 mod types;
 mod util;
 
+pub mod day;
 pub mod store;
 
 pub use capture::{MAX_AUDIO_MS, MAX_PAGES, kind_for_ext, trust_for};
@@ -31,6 +34,7 @@ pub use error::{Error, Result};
 pub use mind::{AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding};
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, hash_embedding};
+pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP};
 pub use types::*;
 
 use std::path::{Path, PathBuf};
