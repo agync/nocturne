@@ -7,9 +7,13 @@ use std::collections::BTreeSet;
 
 use common::harness;
 use nocturne_app_lib::COMMAND_NAMES;
-use nocturne_app_lib::os::{on_second_launch, quick_capture, window_may_call};
+use std::sync::{Arc, Mutex};
+
+use nocturne_app_lib::os::shortcut::{self, Registrar};
+use nocturne_app_lib::os::{OsState, on_second_launch, quick_capture, window_may_call};
 use serde_json::{Value, json};
 use tauri::Manager;
+use tauri_plugin_global_shortcut::Shortcut;
 
 const CAPTURE_ALLOWED: &[&str] = &[
     "get_status",
@@ -114,4 +118,99 @@ fn the_window_is_made_once_and_a_second_open_focuses_it() {
             .count(),
         1
     );
+}
+
+#[derive(Default)]
+struct Fake {
+    held: Mutex<Vec<Shortcut>>,
+    refuse: Mutex<Vec<Shortcut>>,
+}
+
+impl Registrar for Fake {
+    fn register(&self, s: &Shortcut) -> Result<(), String> {
+        if self.refuse.lock().unwrap().contains(s) {
+            return Err("taken".into());
+        }
+        self.held.lock().unwrap().push(*s);
+        Ok(())
+    }
+
+    fn unregister(&self, s: &Shortcut) -> Result<(), String> {
+        self.held.lock().unwrap().retain(|h| h != s);
+        Ok(())
+    }
+}
+
+#[test]
+fn failed_change_keeps_old() {
+    let h = harness();
+    let fake = Arc::new(Fake::default());
+    h.app.manage(OsState::new(h.dir.path()));
+    let os = h.app.state::<OsState>();
+    os.set_registrar(fake.clone());
+    shortcut::install(&os, "CommandOrControl+Shift+Space", true);
+    let old = shortcut::parse("Ctrl+Shift+Space").unwrap();
+    assert_eq!(*fake.held.lock().unwrap(), vec![old]);
+    assert_eq!(h.ok("get_settings", json!({}))["shortcutAvailable"], true);
+
+    let taken = shortcut::parse("Ctrl+Alt+K").unwrap();
+    fake.refuse.lock().unwrap().push(taken);
+    assert_eq!(
+        h.code(
+            "update_settings",
+            json!({"patch": {"shortcut": "Ctrl+Alt+K"}})
+        ),
+        "invalid"
+    );
+    assert_eq!(
+        h.code(
+            "update_settings",
+            json!({"patch": {"shortcut": "Ctrl+Shift"}})
+        ),
+        "invalid"
+    );
+    let settings = h.ok("get_settings", json!({}));
+    assert_eq!(
+        settings["shortcut"], "CommandOrControl+Shift+Space",
+        "not saved"
+    );
+    assert_eq!(settings["shortcutAvailable"], true);
+    assert_eq!(*fake.held.lock().unwrap(), vec![old]);
+
+    fake.refuse.lock().unwrap().clear();
+    let saved = h.ok(
+        "update_settings",
+        json!({"patch": {"shortcut": "Ctrl+Alt+K"}}),
+    );
+    assert_eq!(saved["shortcut"], "Ctrl+Alt+K");
+    assert_eq!(*fake.held.lock().unwrap(), vec![taken]);
+}
+
+#[test]
+fn a_session_that_cannot_grab_says_the_shortcut_is_not_available() {
+    let h = harness();
+    let fake = Arc::new(Fake::default());
+    h.app.manage(OsState::new(h.dir.path()));
+    let os = h.app.state::<OsState>();
+    os.set_registrar(fake.clone());
+    shortcut::install(&os, "CommandOrControl+Shift+Space", false);
+    assert!(fake.held.lock().unwrap().is_empty());
+    assert_eq!(h.ok("get_settings", json!({}))["shortcutAvailable"], false);
+    let saved = h.ok(
+        "update_settings",
+        json!({"patch": {"shortcut": "Ctrl+Alt+K"}}),
+    );
+    assert_eq!(
+        saved["shortcut"], "Ctrl+Alt+K",
+        "saved for when it can be used"
+    );
+    assert_eq!(saved["shortcutAvailable"], false);
+    assert!(fake.held.lock().unwrap().is_empty());
+}
+
+#[test]
+fn the_quick_keep_command_is_a_flagged_launch() {
+    let h = harness();
+    let cmd = h.ok("quick_keep_command", json!({}));
+    assert!(cmd.as_str().unwrap().ends_with(" --quick-capture"), "{cmd}");
 }

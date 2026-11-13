@@ -10,6 +10,15 @@ use tauri::{AppHandle, Runtime};
 use crate::error::CommandError;
 
 pub mod quick_capture;
+pub mod shortcut;
+pub mod state;
+
+use std::sync::Arc;
+
+pub use state::OsState;
+use tauri::Manager;
+
+use crate::state::AppState;
 
 /// The commands the quick capture window may call. Everything else is refused for it.
 const QUICK_CAPTURE_COMMANDS: &[&str] = &[
@@ -26,7 +35,26 @@ const QUICK_CAPTURE_COMMANDS: &[&str] = &[
 
 /// Start the desktop integrations. Runs once, from `RunEvent::Ready`, never from setup: tests
 /// run setup, and the integrations touch the person's desktop.
-pub fn install<R: Runtime>(_app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
+pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
+    let Some(shell) = app.try_state::<AppState>() else {
+        return Ok(());
+    };
+    if app.try_state::<OsState>().is_some() {
+        return Ok(());
+    }
+    app.manage(OsState::new(&shell.data_dir));
+    let os = app.state::<OsState>();
+
+    os.set_registrar(Arc::new(shortcut::PluginRegistrar(app.clone())));
+    if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
+        shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
+    }
+    let handle = app.clone();
+    shell.on_exit(Box::new(move || {
+        if let Some(os) = handle.try_state::<OsState>() {
+            shortcut::release(&os);
+        }
+    }));
     Ok(())
 }
 
@@ -50,16 +78,27 @@ pub fn window_may_call(label: &str, command: &str) -> bool {
 }
 
 /// Fill in what only the desktop knows (the shortcut is registered, the folder is watched).
-pub fn adjust_settings<R: Runtime>(_app: &AppHandle<R>, view: SettingsView) -> SettingsView {
+pub fn adjust_settings<R: Runtime>(app: &AppHandle<R>, mut view: SettingsView) -> SettingsView {
+    if let Some(os) = app.try_state::<OsState>() {
+        view.shortcut_available = os.shortcut_registered();
+    }
     view
 }
 
 /// Apply a settings change to the desktop before it is saved, so a refusal keeps the old value.
 pub async fn apply_settings<R: Runtime>(
-    _app: &AppHandle<R>,
-    _before: &SettingsView,
-    _patch: &SettingsPatch,
+    app: &AppHandle<R>,
+    before: &SettingsView,
+    patch: &SettingsPatch,
 ) -> Result<(), CommandError> {
+    let Some(os) = app.try_state::<OsState>() else {
+        return Ok(());
+    };
+    if let Some(new) = &patch.shortcut
+        && *new != before.shortcut
+    {
+        shortcut::change(&os, new)?;
+    }
     Ok(())
 }
 

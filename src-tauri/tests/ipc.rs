@@ -923,7 +923,7 @@ fn get_edition_serves_a_saved_page_in_the_edition_asked_for() {
 #[test]
 fn the_os_commands_say_they_are_not_available_yet() {
     let h = harness();
-    for cmd in ["print_page", "open_sound_settings", "quick_keep_command"] {
+    for cmd in ["print_page", "open_sound_settings"] {
         assert_eq!(h.code(cmd, json!({})), "unavailable", "{cmd}");
     }
 }
