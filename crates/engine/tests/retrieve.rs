@@ -497,3 +497,27 @@ fn a_question_with_a_side_that_is_gone_is_not_open() {
         );
     }
 }
+
+/// Only a predicate that names a relationship is brought forward: "Leo is tall" is not who
+/// Leo is.
+#[test]
+fn a_plain_is_does_not_say_who_someone_is() {
+    let f = fixture();
+    learn(
+        &f.engine,
+        "Leo swims",
+        cand(
+            "Leo",
+            Predicate::Prefers,
+            "swimming",
+            "Leo likes swimming, Leo says.",
+        ),
+    );
+    let (_, tall) = learn(
+        &f.engine,
+        "Leo is tall",
+        cand("Leo", Predicate::Other("is".into()), "tall", "Leo is tall."),
+    );
+    let hits = f.engine.retrieve("Who is Leo?", None, 1).unwrap();
+    assert_ne!(hits[0].memory.id, tall);
+}

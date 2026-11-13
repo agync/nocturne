@@ -26,8 +26,8 @@ const POOL: usize = 60;
 /// Vectors less similar than this to the query are not hits at all.
 const MIN_COSINE: f32 = 0.25;
 /// Predicates that say how someone is related to the person or to someone else: `knows`, and
-/// the words a mind writes when it reaches for one of its own.
-const RELATION_PREDICATES: [&str; 5] = ["knows", "relationship", "relation", "related_to", "is"];
+/// the words a mind writes when it names a relationship predicate of its own.
+const RELATION_PREDICATES: [&str; 4] = ["knows", "relationship", "relation", "related_to"];
 /// How a question about who someone is can start.
 const WHO_IS: [&str; 4] = ["who is ", "who's ", "who was ", "who are "];
 
@@ -181,7 +181,10 @@ impl Engine {
                 }
             }
             if let Some(name) = who_is(query) {
-                let marks = vec!["?"; RELATION_PREDICATES.len()].join(", ");
+                let marks = (2..RELATION_PREDICATES.len() + 2)
+                    .map(|n| format!("?{n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 let mut params: Vec<&str> = vec![&name];
                 params.extend(RELATION_PREDICATES);
                 let related = query_mems(
@@ -189,7 +192,7 @@ impl Engine {
                     &format!(
                         "m.subject_key = ?1 AND m.predicate IN ({marks}) \
                          AND m.superseded_at IS NULL AND m.forgetting = 0 \
-                         AND m.status != 'letGo' ORDER BY m.recorded_at DESC, m.id"
+                         AND m.status != 'letGo' ORDER BY m.recorded_at DESC, m.id LIMIT {k}"
                     ),
                     rusqlite::params_from_iter(params),
                 )?;
