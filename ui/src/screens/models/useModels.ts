@@ -5,13 +5,6 @@ import { useEngine, useEngineEvent } from "../../engine/context";
 export const MODELS_KEY = ["models"] as const;
 export const choicesKey = (job: Job) => ["models", "choices", job] as const;
 
-/**
- * Whether the Settings row and the Advanced link for choosing models are shown. They stay hidden
- * until the real engine answers; tests turn it on to see them. The screens themselves read the
- * view whatever this says.
- */
-export const modelsReads = { on: false };
-
 /** How often a download or a re-read is asked after while one is under way, in milliseconds. */
 export const MODELS_POLL_MS = 1000;
 
@@ -22,7 +15,7 @@ const busy = (view: ModelsView | undefined) =>
 
 /**
  * The model for each job as the computer last said it, following `models-changed`. `screen` is
- * for the screens of choosing models, which read it always and ask again while a change runs.
+ * for the screens of choosing models, which ask again while a change runs.
  */
 export function useModels(options: { screen?: boolean } = {}): {
   data?: ModelsView;
@@ -30,16 +23,14 @@ export function useModels(options: { screen?: boolean } = {}): {
 } {
   const engine = useEngine();
   const client = useQueryClient();
-  const reading = options.screen === true || modelsReads.on;
   const query = useQuery({
     queryKey: MODELS_KEY,
     queryFn: () => engine.getModels(),
-    enabled: reading,
     staleTime: 5_000,
     refetchInterval: (q) => (options.screen && busy(q.state.data) ? MODELS_POLL_MS : false),
   });
   useEngineEvent("models-changed", (view) => {
-    if (reading) client.setQueryData(MODELS_KEY, view);
+    client.setQueryData(MODELS_KEY, view);
   });
   return { data: query.data, refetch: () => void query.refetch() };
 }
