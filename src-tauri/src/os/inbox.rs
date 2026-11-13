@@ -23,7 +23,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::Notify;
 
 use super::state::OsState;
-use crate::error::ErrorCode;
+use crate::error::{CommandError, ErrorCode};
 
 /// The most files remembered.
 pub const LEDGER_CAP: usize = 100_000;
@@ -197,9 +197,10 @@ fn walk(root: &Path, dir: &Path, depth: usize, limit: usize, out: &mut Listing) 
 /// may have been swapped for a link to somewhere else. So just before keeping, every folder
 /// between `root` and the file must still be a real folder, the file must still be a regular
 /// file, and its real path must still be under the real `root`. What is left is a window of
-/// microseconds between this check and the open inside the store, which only another process
-/// of the same user could use, and that process could read the file itself. (Opening without
-/// following links needs `libc`, which this app does not depend on.)
+/// time between this check and the open inside the store. A batch confirms each file right
+/// before that file's own keep, so the gap is one file's keep, not the whole batch's. Only
+/// another process of the same user could use it, and that process could read the file itself.
+/// (Opening without following links needs `libc`, which this app does not depend on.)
 pub fn confirm_inside(root: &Path, rel: &str) -> Option<PathBuf> {
     let root = std::fs::canonicalize(root).ok()?;
     let mut at = root.clone();
@@ -265,15 +266,46 @@ fn fresh_salt() -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// How many times a file that could not be kept for a reason that may pass is tried.
+/// How many times a file that could not be kept, for a reason that may not pass, is tried.
+/// A busy store, an unavailable engine or a full disk is not counted: those are waited out.
 pub const MAX_TRIES: u8 = 20;
+
+/// The longest wait between two tries of the same file.
+const MAX_BACKOFF: SignedDuration = SignedDuration::from_secs(600);
+
+/// The wait after the `failures`th failure in a row: the base, doubled each time, up to
+/// [`MAX_BACKOFF`].
+fn backoff(base: SignedDuration, failures: u32) -> SignedDuration {
+    let doubled = base
+        .as_millis()
+        .saturating_mul(1i128 << failures.saturating_sub(1).min(30));
+    SignedDuration::from_millis(doubled.min(MAX_BACKOFF.as_millis()) as i64)
+}
 
 #[derive(Debug, Clone)]
 struct Pending {
     size: u64,
     mtime: i64,
     looked: Timestamp,
+    /// Failures that count towards giving up.
     tries: u8,
+    /// Failures in a row of any kind, for the wait between tries.
+    failures: u32,
+    /// Not tried again before this.
+    retry_at: Option<Timestamp>,
+}
+
+impl Pending {
+    fn new(e: &Entry, looked: Timestamp) -> Pending {
+        Pending {
+            size: e.size,
+            mtime: e.mtime,
+            looked,
+            tries: 0,
+            failures: 0,
+            retry_at: None,
+        }
+    }
 }
 
 /// Decides which files are new and stable. Knows nothing about disks or clocks.
@@ -341,28 +373,15 @@ impl Scanner {
             }
             match self.pending.get_mut(&e.rel) {
                 Some(p) if p.size == e.size && p.mtime == e.mtime => {
-                    if now.duration_since(p.looked) >= stable_after {
+                    if now.duration_since(p.looked) >= stable_after
+                        && p.retry_at.is_none_or(|at| now >= at)
+                    {
                         ready.push(e.rel.clone());
                     }
                 }
-                Some(p) => {
-                    *p = Pending {
-                        size: e.size,
-                        mtime: e.mtime,
-                        looked: now,
-                        tries: 0,
-                    };
-                }
+                Some(p) => *p = Pending::new(e, now),
                 None => {
-                    self.pending.insert(
-                        e.rel.clone(),
-                        Pending {
-                            size: e.size,
-                            mtime: e.mtime,
-                            looked: now,
-                            tries: 0,
-                        },
-                    );
+                    self.pending.insert(e.rel.clone(), Pending::new(e, now));
                 }
             }
         }
@@ -377,12 +396,23 @@ impl Scanner {
         }
     }
 
-    /// A file could not be kept for a reason that may pass (the store was busy, the disk was
-    /// full). It stays pending to be tried again; after [`MAX_TRIES`] it is given up on.
-    /// Returns true when it was given up on.
-    pub fn failed(&mut self, rel: &str) -> bool {
+    /// A file could not be kept for a reason that may pass. It stays pending and is tried again
+    /// after a wait that doubles from `base` up to ten minutes. When `counts` it also moves
+    /// towards [`MAX_TRIES`], after which it is given up on; a failure that is the engine's or
+    /// the disk's, not the file's, does not count. Returns true when it was given up on.
+    pub fn failed(
+        &mut self,
+        rel: &str,
+        now: Timestamp,
+        base: SignedDuration,
+        counts: bool,
+    ) -> bool {
         let gave_up = self.pending.get_mut(rel).is_some_and(|p| {
-            p.tries += 1;
+            p.failures = p.failures.saturating_add(1);
+            p.retry_at = Some(now + backoff(base, p.failures));
+            if counts {
+                p.tries += 1;
+            }
             p.tries >= MAX_TRIES
         });
         if gave_up {
@@ -588,7 +618,7 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing, cance
                         if cancel.stopped() {
                             return;
                         }
-                        keep_batch(&app, &root, batch, &mut scanner, &cancel).await;
+                        keep_batch(&app, &root, batch, &mut scanner, &cancel, stable).await;
                         os.update(|f| f.inbox = Some(scanner.ledger()));
                         tokio::time::sleep(Duration::from_millis(5)).await;
                     }
@@ -629,65 +659,81 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing, cance
     }
 }
 
-/// Keep one batch of stable files. Each is checked again just before it is kept: it may have
-/// become a link since it was listed. What cannot be kept for good is given up on; what failed
-/// for a reason that may pass is tried again on the next look.
+/// What to do with a file that could not be kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    /// Never look at it as new again.
+    Settle,
+    /// Try again later; `counts` when the failure moves it towards being given up on.
+    Retry { counts: bool },
+}
+
+/// Only a file that is gone, or that can never be kept, is settled. A busy store, an unavailable
+/// engine or a full disk is waited out and does not count. A NotFound from the store while the
+/// file is still there is not the file's absence: it is tried again, and counted.
+fn outcome(code: ErrorCode, still_there: bool) -> Outcome {
+    match code {
+        ErrorCode::NotFound if !still_there => Outcome::Settle,
+        ErrorCode::Invalid => Outcome::Settle,
+        ErrorCode::Unavailable | ErrorCode::Internal | ErrorCode::Busy => {
+            Outcome::Retry { counts: false }
+        }
+        _ => Outcome::Retry { counts: true },
+    }
+}
+
+/// Keep one batch of stable files. Each is confirmed right before its own keep, inside the
+/// blocking work: it may have become a link since it was listed, and a long batch must not widen
+/// that window for the files at its end. What cannot be kept for good is given up on; what
+/// failed for a reason that may pass is tried again later, after a wait that grows.
 async fn keep_batch<R: Runtime>(
     app: &AppHandle<R>,
     root: &Path,
     batch: &[String],
     scanner: &mut Scanner,
     cancel: &Cancel,
+    base: SignedDuration,
 ) {
-    let mut checked: Vec<(&String, PathBuf)> = Vec::new();
-    for rel in batch {
-        match confirm_inside(root, rel) {
-            Some(path) => checked.push((rel, path)),
-            None => {
-                tracing::debug!(
-                    "a file in the watched folder was left out: it is no longer a plain file"
-                );
-                scanner.settle(rel);
-            }
-        }
-    }
-    if checked.is_empty() || cancel.stopped() {
+    if cancel.stopped() {
         return;
     }
-    let paths: Vec<PathBuf> = checked.iter().map(|(_, p)| p.clone()).collect();
-    match crate::keep_paths(app, paths, Source::WatchedFolder).await {
-        Ok(kept) if kept.len() == checked.len() => {
-            for (rel, _) in &checked {
-                scanner.settle(rel);
-            }
-            return;
+    let owned = root.to_path_buf();
+    let results = crate::keep_each(app, batch.to_vec(), Source::WatchedFolder, move |rel| {
+        confirm_inside(&owned, rel).ok_or_else(|| CommandError::not_found("not a plain file"))
+    })
+    .await;
+    let Ok(results) = results else {
+        for rel in batch {
+            scanner.failed(rel, Timestamp::now(), base, false);
         }
-        _ => {}
-    }
-    // Something in the batch failed: find out which, one at a time.
-    for (rel, path) in checked {
-        if cancel.stopped() {
-            return;
-        }
-        match crate::keep_paths(app, vec![path], Source::WatchedFolder).await {
-            Ok(_) => scanner.settle(rel),
-            Err(e) if matches!(e.code, ErrorCode::NotFound | ErrorCode::Invalid) => {
+        return;
+    };
+    for (rel, result) in batch.iter().zip(results) {
+        let Err(e) = result else {
+            scanner.settle(rel);
+            continue;
+        };
+        // The store reports its own missing things as NotFound too: the file is gone only if it
+        // is no longer there as a plain file.
+        let still_there = e.code == ErrorCode::NotFound && confirm_inside(root, rel).is_some();
+        let counts = match outcome(e.code, still_there) {
+            Outcome::Settle => {
                 tracing::debug!("a file in the watched folder cannot be kept: {:?}", e.code);
                 scanner.settle(rel);
+                continue;
             }
-            Err(e) => {
-                let gave_up = scanner.failed(rel);
-                tracing::warn!(
-                    "a file in the watched folder was not kept ({:?}){}",
-                    e.code,
-                    if gave_up {
-                        ": given up"
-                    } else {
-                        ": trying again"
-                    }
-                );
+            Outcome::Retry { counts } => counts,
+        };
+        let gave_up = scanner.failed(rel, Timestamp::now(), base, counts);
+        tracing::warn!(
+            "a file in the watched folder was not kept ({:?}){}",
+            e.code,
+            if gave_up {
+                ": given up"
+            } else {
+                ": trying again"
             }
-        }
+        );
     }
 }
 
@@ -817,20 +863,79 @@ mod tests {
         let e = [entry("a.pdf", 1, 1)];
         let t0 = at("2026-11-13T09:00:00Z");
         s.observe(&e, t0, STABLE);
+        let mut now = t0;
         for round in 1..MAX_TRIES {
-            let now = t0 + SignedDuration::from_secs(10 * i64::from(round));
+            now += SignedDuration::from_secs(3600);
             assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"], "round {round}");
-            assert!(!s.failed("a.pdf"));
+            assert!(!s.failed("a.pdf", now, STABLE, true));
         }
+        now += SignedDuration::from_secs(3600);
+        assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"]);
+        assert!(s.failed("a.pdf", now, STABLE, true), "given up on");
+        now += SignedDuration::from_secs(3600);
+        assert!(s.observe(&e, now, STABLE).is_empty());
+    }
+
+    #[test]
+    fn a_failure_that_is_not_the_files_is_waited_out_for_as_long_as_it_lasts() {
+        let mut s = Scanner::new("/f", None);
+        s.baseline(&[]);
+        let e = [entry("a.pdf", 1, 1)];
+        let t0 = at("2026-11-13T09:00:00Z");
+        s.observe(&e, t0, STABLE);
+        let mut now = t0 + SignedDuration::from_secs(10);
+        for _ in 0..(u32::from(MAX_TRIES) * 3) {
+            assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"]);
+            assert!(!s.failed("a.pdf", now, STABLE, false), "never given up on");
+            now += SignedDuration::from_secs(601);
+        }
+        assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"], "still tried");
+    }
+
+    #[test]
+    fn retries_back_off_by_doubling_up_to_ten_minutes() {
+        let mut s = Scanner::new("/f", None);
+        s.baseline(&[]);
+        let e = [entry("a.pdf", 1, 1)];
+        let t0 = at("2026-11-13T09:00:00Z");
+        s.observe(&e, t0, STABLE);
+        let mut now = t0 + SignedDuration::from_secs(10);
+        for wait in [3, 6, 12, 24, 48, 96, 192, 384, 600, 600, 600] {
+            assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"]);
+            s.failed("a.pdf", now, STABLE, false);
+            let early = now + SignedDuration::from_secs(wait - 1);
+            assert!(s.observe(&e, early, STABLE).is_empty(), "{wait}s: too soon");
+            now += SignedDuration::from_secs(wait);
+        }
+    }
+
+    #[test]
+    fn a_changed_file_starts_again() {
+        let mut s = Scanner::new("/f", None);
+        s.baseline(&[]);
+        let t0 = at("2026-11-13T09:00:00Z");
+        s.observe(&[entry("a.pdf", 1, 1)], t0, STABLE);
+        let now = t0 + SignedDuration::from_secs(10);
+        s.observe(&[entry("a.pdf", 1, 1)], now, STABLE);
+        s.failed("a.pdf", now, STABLE, false);
+        s.observe(&[entry("a.pdf", 2, 2)], now, STABLE);
+        let later = now + STABLE + SignedDuration::from_secs(1);
+        assert_eq!(s.observe(&[entry("a.pdf", 2, 2)], later, STABLE), ["a.pdf"]);
+    }
+
+    #[test]
+    fn only_a_file_that_is_gone_or_can_never_be_kept_is_settled() {
+        use ErrorCode::*;
+        assert_eq!(outcome(NotFound, false), Outcome::Settle);
+        assert_eq!(outcome(Invalid, true), Outcome::Settle);
         assert_eq!(
-            s.observe(&e, t0 + SignedDuration::from_secs(500), STABLE),
-            ["a.pdf"]
+            outcome(NotFound, true),
+            Outcome::Retry { counts: true },
+            "the store's own NotFound is not the file's absence"
         );
-        assert!(s.failed("a.pdf"), "given up on");
-        assert!(
-            s.observe(&e, t0 + SignedDuration::from_secs(600), STABLE)
-                .is_empty()
-        );
+        for waited_out in [Unavailable, Internal, Busy] {
+            assert_eq!(outcome(waited_out, true), Outcome::Retry { counts: false });
+        }
     }
 
     #[test]

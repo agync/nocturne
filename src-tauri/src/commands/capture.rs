@@ -80,6 +80,37 @@ fn check_file(path: &std::path::Path) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Keep each of `items` and say how each went. `resolve` turns an item into the path to keep and
+/// runs right before that item's own keep, so a check it makes is as fresh as the keep.
+pub async fn keep_each<R, T>(
+    app: &AppHandle<R>,
+    items: Vec<T>,
+    source: Source,
+    resolve: impl Fn(&T) -> Result<PathBuf, CommandError> + Send + 'static,
+) -> Result<Vec<Result<Kept, CommandError>>, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+{
+    let e = engine(app)?;
+    let results = blocking_cmd(move || {
+        Ok(items
+            .iter()
+            .map(|item| {
+                let path = resolve(item)?;
+                check_file(&path)?;
+                e.keep_file(&path, source).map_err(CommandError::from)
+            })
+            .collect::<Vec<_>>())
+    })
+    .await?;
+    let new: Vec<Kept> = results.iter().flatten().cloned().collect();
+    if !new.is_empty() {
+        announce(app, &new).await;
+    }
+    Ok(results)
+}
+
 /// Keep files by path (a drop, a second launch, the tray). Files that cannot be kept are logged
 /// and skipped; if none could be kept the first error is returned.
 pub async fn keep_paths<R: Runtime>(
@@ -87,17 +118,7 @@ pub async fn keep_paths<R: Runtime>(
     paths: Vec<PathBuf>,
     source: Source,
 ) -> Result<Vec<Kept>, CommandError> {
-    let e = engine(app)?;
-    let results = blocking_cmd(move || {
-        Ok(paths
-            .iter()
-            .map(|p| {
-                check_file(p)?;
-                e.keep_file(p, source).map_err(CommandError::from)
-            })
-            .collect::<Vec<_>>())
-    })
-    .await?;
+    let results = keep_each(app, paths, source, |p| Ok(p.clone())).await?;
     let mut kept = Vec::new();
     let mut first_error = None;
     for r in results {
@@ -114,7 +135,6 @@ pub async fn keep_paths<R: Runtime>(
     {
         return Err(err);
     }
-    announce(app, &kept).await;
     Ok(kept)
 }
 

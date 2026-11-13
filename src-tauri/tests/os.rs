@@ -589,9 +589,12 @@ mod inbox {
         std::fs::write(outside.path().join("secret.txt"), "not yours to keep").unwrap();
         let target = outside.path().join("secret.txt");
         let swapped = folder.path().to_path_buf();
+        let ran = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = ran.clone();
         h.app
             .state::<OsState>()
             .set_before_keep(Arc::new(move |ready| {
+                counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 for rel in ready {
                     let path = swapped.join(rel);
                     std::fs::remove_file(&path).unwrap();
@@ -604,13 +607,59 @@ mod inbox {
         );
         wait_for("the baseline", || ledger_folder(&h).is_some());
         std::fs::write(folder.path().join("new.txt"), "arrived later").unwrap();
-        std::thread::sleep(Duration::from_millis(900));
+        wait_for("the swap", || {
+            ran.load(std::sync::atomic::Ordering::SeqCst) >= 1
+        });
+        wait_for("the file settled", || {
+            h.app
+                .state::<OsState>()
+                .file()
+                .inbox
+                .is_some_and(|l| !l.entries.is_empty())
+        });
         assert!(kept(&h).is_empty(), "a file outside the folder was kept");
         let stored = h.dir.path().join("store").join("originals");
         for entry in std::fs::read_dir(stored).unwrap().flatten() {
             let bytes = std::fs::read(entry.path()).unwrap_or_default();
             assert!(!String::from_utf8_lossy(&bytes).contains("not yours to keep"));
         }
+    }
+
+    #[test]
+    fn each_file_of_a_batch_is_confirmed_right_before_its_own_keep() {
+        use nocturne_contract::{ItemFilter, Source};
+        let h = harness();
+        let src = tempfile::tempdir().unwrap();
+        let files: Vec<_> = (0..3)
+            .map(|i| {
+                common::write_file(
+                    src.path(),
+                    &format!("f{i}.txt"),
+                    format!("file {i}").as_bytes(),
+                )
+            })
+            .collect();
+        let engine = h.engine();
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let log = seen.clone();
+        let results = tauri::async_runtime::block_on(nocturne_app_lib::keep_each(
+            h.app.handle(),
+            files,
+            Source::Drop,
+            move |p| {
+                log.lock()
+                    .unwrap()
+                    .push(engine.items(ItemFilter::default()).unwrap().len());
+                Ok(p.clone())
+            },
+        ))
+        .unwrap();
+        assert!(results.iter().all(|r| r.is_ok()));
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [0, 1, 2],
+            "a file is confirmed after the one before it was kept, not before all of them"
+        );
     }
 
     #[cfg(unix)]

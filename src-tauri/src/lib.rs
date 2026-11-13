@@ -31,7 +31,7 @@ use nocturne_contract::{Notice, NoticeCode, Source};
 use nocturne_engine::SystemClock;
 use tauri::{AppHandle, Builder, Manager, RunEvent, Runtime};
 
-pub use commands::{COMMAND_NAMES, invoke_handler, keep_paths};
+pub use commands::{COMMAND_NAMES, invoke_handler, keep_each, keep_paths};
 pub use state::{
     AppState, DATA_DIR_ENV, FAKE_MIND_ENV, MindSlot, publish_setup, refresh_status, set_mind,
 };

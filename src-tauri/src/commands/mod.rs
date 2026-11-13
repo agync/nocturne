@@ -14,7 +14,7 @@ use crate::state::{AppState, refresh_status};
 mod capture;
 mod editions;
 mod files;
-pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_paths};
+pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_each, keep_paths};
 mod forget;
 mod memories;
 mod needs;
