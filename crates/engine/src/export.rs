@@ -346,10 +346,12 @@ impl Engine {
             }
         }
         self.invalidate_vectors();
+        self.bump_audio();
         self.write_raw(|conn| {
             conn.execute_batch("VACUUM")?;
             Ok(())
         })?;
-        self.checkpoint_truncate()
+        self.checkpoint_truncate()?;
+        Ok(())
     }
 }

@@ -52,7 +52,7 @@ fn a_capture_at_0130_on_the_night_clocks_go_back_lands_in_the_right_page() {
     ] {
         f.clock.set_str(when);
         let id = keep(&f.engine, text);
-        f.engine.apply_candidates(&id, vec![]).unwrap();
+        f.engine.apply(&id, vec![]).unwrap();
         ids.push(id);
     }
     f.clock.set_str("2026-10-25T07:00:00Z");
@@ -71,7 +71,7 @@ fn a_capture_at_0130_on_the_night_clocks_go_back_lands_in_the_right_page() {
 fn a_time_zone_change_between_pages_loses_and_duplicates_nothing() {
     let f = fixture_at("2026-11-10T06:00:00Z", "Europe/London");
     let a = keep(&f.engine, "in London");
-    f.engine.apply_candidates(&a, vec![]).unwrap();
+    f.engine.apply(&a, vec![]).unwrap();
     f.clock.set_str("2026-11-10T08:00:00Z");
     let p10 = save_day(&f, "2026-11-10");
     assert_eq!(p10.kept_count, 1);
@@ -85,7 +85,7 @@ fn a_time_zone_change_between_pages_loses_and_duplicates_nothing() {
     ] {
         f.clock.set_str(when);
         let id = keep(&f.engine, text);
-        f.engine.apply_candidates(&id, vec![]).unwrap();
+        f.engine.apply(&id, vec![]).unwrap();
     }
     f.clock.set_str("2026-11-11T23:00:00Z");
     let p11 = save_day(&f, "2026-11-11");
@@ -110,7 +110,7 @@ fn three_days_off_is_one_catch_up_page_covering_all_three() {
     ] {
         f.clock.set_str(&format!("{d}T12:00:00Z"));
         let id = keep(&f.engine, text);
-        f.engine.apply_candidates(&id, vec![]).unwrap();
+        f.engine.apply(&id, vec![]).unwrap();
     }
     f.clock.set_str("2026-11-13T07:00:00Z");
     let p = compose(&f, "2026-11-13");
@@ -148,7 +148,7 @@ fn needs_you_is_ranked_due_soonest_then_promises_then_which_then_unconfirmed() {
     );
     let item = keep(&f.engine, "d2");
     f.engine
-        .apply_candidates(
+        .apply(
             &item,
             vec![cand(
                 "Dentist appointment",
@@ -160,7 +160,7 @@ fn needs_you_is_ranked_due_soonest_then_promises_then_which_then_unconfirmed() {
         .unwrap();
     let web = keep_as(&f.engine, "web", Source::PastedWeb);
     f.engine
-        .apply_candidates(
+        .apply(
             &web,
             vec![cand(
                 "Clinic",
@@ -322,7 +322,9 @@ fn a_changed_value_is_a_changed_line_and_a_new_one_is_learned() {
     );
     save_day(&f, "2026-11-14");
     f.clock.set_str("2026-11-14T12:00:00Z");
-    f.engine.correct(&id, "Monday").unwrap();
+    f.engine
+        .correct(&id, nocturne_engine::CorrectPatch::object("Monday"))
+        .unwrap();
     learn(
         &f.engine,
         "new",
@@ -361,6 +363,7 @@ fn variants() {
     dentist.valid_from = Some(date("2026-11-17"));
     f.clock.set_str("2026-11-14T08:00:00Z");
     let (_, _) = learn(&f.engine, "dentist", dentist);
+    f.clock.set_str("2026-11-15T07:00:00Z");
     let p2 = save_day(&f, "2026-11-15");
     assert_eq!(p2.page_number, 2);
     f.clock.set_str("2026-11-15T09:00:00Z");
@@ -379,15 +382,16 @@ fn variants() {
         (writing.variant, writing.pending),
         (PageVariant::BeingWritten, 1)
     );
-    f.engine.apply_candidates(&unread, vec![]).unwrap();
+    f.engine.apply(&unread, vec![]).unwrap();
     assert_eq!(compose(&f, "2026-11-17").variant, PageVariant::Normal);
+    f.clock.set_str("2026-11-17T07:00:00Z");
     save_day(&f, "2026-11-17");
 
     // heavy
     f.clock.set_str("2026-11-17T12:00:00Z");
     for i in 0..=HEAVY_ITEMS {
         let id = keep(&f.engine, &format!("item {i}"));
-        f.engine.apply_candidates(&id, vec![]).unwrap();
+        f.engine.apply(&id, vec![]).unwrap();
     }
     f.clock.set_str("2026-11-17T20:00:00Z");
     let heavy = compose(&f, "2026-11-18");
@@ -774,7 +778,7 @@ fn a_dst_page_time_in_the_spring_gap_still_composes() {
         .unwrap();
     save_day(&f, "2026-03-28");
     let id = keep(&f.engine, "just before the gap");
-    f.engine.apply_candidates(&id, vec![]).unwrap();
+    f.engine.apply(&id, vec![]).unwrap();
     f.clock.set_str("2026-03-29T05:00:00Z");
     let p = compose(&f, "2026-03-29");
     assert_eq!(p.kept_count, 1);

@@ -17,10 +17,11 @@ use nocturne_contract::{
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::Engine;
+use crate::audio::{drop_audio_rows, shred_all};
 use crate::day::{PrevPage, Window, window};
 use crate::error::{Error, Result};
 use crate::lifecycle::mark_used_tx;
-use crate::memory::{confirm_tx, needs_you_on};
+use crate::memory::{confirm_tx, is_private_chain, needs_you_on};
 use crate::rows::{MemRow, mem_view, query_mems};
 use crate::settings::{parse_page_time, read_settings, set_page_time};
 use crate::util::{enum_str, fmt_ts, new_id, opt_enum, parse_enum, parse_ts};
@@ -91,13 +92,9 @@ struct Planned {
     private: bool,
 }
 
+/// Private now, in any version of the memory. Fails closed: an unknown id counts as private.
 fn is_private(conn: &Connection, id: &str) -> Result<bool> {
-    Ok(conn
-        .query_row("SELECT private FROM memories WHERE id = ?1", [id], |r| {
-            r.get(0)
-        })
-        .optional()?
-        .unwrap_or(false))
+    is_private_chain(conn, id)
 }
 
 fn prev_page(conn: &Connection, day: Date) -> Result<Option<PrevPage>> {
@@ -278,7 +275,7 @@ fn compose(
         let planned = match entry {
             NeedsYouEntry::Due { memory, due, .. } => {
                 let mut line = memory_line(LineKind::Due, &memory);
-                line.on = Some(due);
+                line.on = Some(due).filter(|d| !d.is_empty());
                 needs_ids.insert(memory.id.clone());
                 Planned {
                     private: memory.private,
@@ -504,11 +501,16 @@ impl Engine {
         let day: Date = page.date.parse()?;
         let tz = self.clock().tz();
         let now = fmt_ts(self.clock().now());
-        self.write(|tx| {
+        let files = self.write(|tx| {
+            // Anything that cached audio for this page is now stale.
+            self.bump_audio();
             // A page composed before a forget finished may cite what is now gone or going.
             let stripped = strip_stale(tx, page)?;
             let page = &stripped;
             let w = window_for(tx, day, &tz)?;
+            // A page saved before its time ends at now, so what is kept between now and the page
+            // time belongs to the next page instead of falling between two.
+            let end = w.end.min(self.clock().now()).max(w.start);
             let number = page_number(tx, day)?;
             let already: HashSet<String> = {
                 let mut stmt = tx.prepare(
@@ -530,7 +532,7 @@ impl Engine {
                     page.date,
                     number,
                     fmt_ts(w.start),
-                    fmt_ts(w.end),
+                    fmt_ts(end),
                     page.headline,
                     page.dek,
                     enum_str(&page.variant),
@@ -584,8 +586,27 @@ impl Engine {
                     params![page.date, q.memory_id, enum_str(&q.kind), q.text, now],
                 )?;
             }
-            Ok(())
-        })
+            drop_audio_rows(tx, std::slice::from_ref(&page.date))
+        })?;
+        shred_all(files);
+        Ok(())
+    }
+
+    /// The date of the next page to write: today until today's page is saved, then tomorrow.
+    pub fn next_page_date(&self) -> Result<Date> {
+        let today: Date = self.today().parse()?;
+        let saved: bool = self.read(|conn| {
+            Ok(conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pages WHERE date = ?1)",
+                [today.to_string()],
+                |r| r.get(0),
+            )?)
+        })?;
+        if saved {
+            Ok(today.tomorrow()?)
+        } else {
+            Ok(today)
+        }
     }
 
     /// A saved page (screen edition), or the latest when `day` is `None`.
@@ -689,6 +710,7 @@ impl Engine {
     /// Later move the page time by half an hour.
     pub fn answer_question(&self, day: Date, choice: QuestionChoice) -> Result<()> {
         let now = fmt_ts(self.clock().now());
+        let today = self.today();
         let date = day.to_string();
         self.write(|tx| {
             let row: Option<(Option<String>, String, Option<String>)> = tx
@@ -706,10 +728,10 @@ impl Engine {
             let kind: QuestionKind = parse_enum(&kind)?;
             match (kind, choice, &memory_id) {
                 (QuestionKind::YesNo, QuestionChoice::Yes, Some(id)) => {
-                    confirm_tx(tx, id, true, &now)?
+                    confirm_tx(tx, id, true, &now, &today)?
                 }
                 (QuestionKind::YesNo, QuestionChoice::No, Some(id)) => {
-                    confirm_tx(tx, id, false, &now)?
+                    confirm_tx(tx, id, false, &now, &today)?
                 }
                 (QuestionKind::YesNo, QuestionChoice::NotSure, _) => {}
                 (QuestionKind::PageTime, QuestionChoice::Right, _) => {}
@@ -735,7 +757,9 @@ impl Engine {
                 params![date, enum_str(&choice), now],
             )?;
             Ok(())
-        })
+        })?;
+        self.bump_audio();
+        Ok(())
     }
 }
 

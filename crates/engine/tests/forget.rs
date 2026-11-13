@@ -74,12 +74,12 @@ fn world() -> World {
         .unwrap());
     for item in [&note, &photo, &pdf] {
         f.engine
-            .apply_candidates(item, vec![candidate_for_m1("on Tuesday")])
+            .apply(item, vec![candidate_for_m1("on Tuesday")])
             .unwrap();
     }
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &pdf,
             vec![
                 candidate_for_m1("on Tuesday"),
@@ -98,7 +98,13 @@ fn world() -> World {
         .id
         .clone();
     f.clock.set_str("2026-11-13T09:00:00Z");
-    let m1 = f.engine.correct(&m1_old, "on Wednesday").unwrap();
+    let m1 = f
+        .engine
+        .correct(
+            &m1_old,
+            nocturne_engine::CorrectPatch::object("on Wednesday"),
+        )
+        .unwrap();
     f.engine
         .store_embeddings(vec![
             (m1.clone(), vec![1.0, 0.0]),
@@ -112,7 +118,7 @@ fn world() -> World {
     let page = f.engine.compose_page(day, Edition::Screen).unwrap();
     f.engine.save_page(&page).unwrap();
     f.engine
-        .cache_audio(
+        .cache(
             "2026-11-14",
             "af_heart",
             b"spoken: Dr Zebrafish47 sees you on Wednesday",
@@ -170,7 +176,7 @@ fn forget_leaves_no_trace() {
     // Previewing changes nothing.
     assert_eq!(f.engine.memories(MemoryFilter::default()).unwrap().len(), 2);
 
-    let report = f.engine.forget(&preview.token).unwrap();
+    let report = f.engine.forget(&preview.token).unwrap().report;
     assert_eq!(report.memories_removed, 2);
     assert_eq!(report.originals_removed, 2);
     assert_eq!(report.pages_redacted, 1);
@@ -287,7 +293,7 @@ fn forgetting_without_originals_keeps_the_items() {
         w.f.engine
             .preview_forget(std::slice::from_ref(&w.m1), false)
             .unwrap();
-    let r = w.f.engine.forget(&preview.token).unwrap();
+    let r = w.f.engine.forget(&preview.token).unwrap().report;
     assert_eq!(r.originals_removed, 0);
     assert!(w.f.engine.get_item(&w.note).is_ok());
     assert!(w.f.engine.get_item(&w.photo).is_ok());
@@ -355,7 +361,7 @@ fn forgetting_one_side_of_a_conflict_removes_the_conflict() {
     let item = keep(&f.engine, "Thursday");
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &item,
             vec![cand(
                 "Dentist appointment",
@@ -428,14 +434,14 @@ fn a_page_that_cites_a_memory_only_through_the_daily_question_is_redacted() {
         "no line cites it"
     );
     f.engine
-        .cache_audio(
+        .cache(
             "2026-11-15",
             "af_heart",
             b"spoken: Zebrafish47 likes swimming",
         )
         .unwrap();
     f.engine
-        .cache_audio(
+        .cache(
             "2026-11-14",
             "af_heart",
             b"spoken: Zebrafish47 likes swimming",

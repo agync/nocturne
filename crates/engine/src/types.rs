@@ -4,6 +4,7 @@ use std::path::PathBuf;
 
 use jiff::civil::Date;
 use nocturne_contract::{EntityKind, ItemKind, MemoryView, Span, Trust};
+use serde::{Deserialize, Serialize};
 
 pub type ItemId = String;
 pub type MemoryId = String;
@@ -108,7 +109,7 @@ impl Candidate {
 }
 
 /// An item waiting to be read.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PendingItem {
     pub id: ItemId,
     pub kind: ItemKind,
@@ -121,6 +122,16 @@ pub struct PendingItem {
     /// Text already known: the note itself, or a transcript recorded before a restart.
     pub text: Option<String>,
     pub attempts: u32,
+    /// The token to present on every later call about this item. Empty if only peeked at.
+    pub lease: String,
+}
+
+/// What recording a reading did to the item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecordOutcome {
+    Recorded,
+    /// The recording or document is over the limit: the item is kept but not read.
+    TooLong,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -130,7 +141,7 @@ pub enum UseKind {
     Confirmed,
 }
 
-#[derive(Debug, Clone, Default, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct ApplyReport {
     pub created: Vec<MemoryId>,
     pub reinforced: Vec<MemoryId>,
@@ -139,22 +150,25 @@ pub struct ApplyReport {
     pub conflicts: Vec<ConflictId>,
     /// Memories from an earlier reading of this item that this reading no longer supports.
     pub removed: Vec<MemoryId>,
+    /// Memories whose sentence changed on a re-read: their old vector was dropped and they need
+    /// embedding again.
+    pub reworded: Vec<MemoryId>,
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DecayReport {
     pub faded: u32,
     pub let_go: u32,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Hit {
     pub memory: MemoryView,
     pub score: f32,
     pub let_go: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ExportReport {
     pub memories: u32,
     pub pages: u32,
@@ -163,10 +177,41 @@ pub struct ExportReport {
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stats {
     pub store_version: u32,
     pub memory_count: u32,
     pub item_count: u32,
     pub integrity_ok: bool,
+}
+
+/// What a correction changes. `object` is required; the rest keep their value when `None`.
+/// For the date fields, `Some(None)` clears the date and `Some(Some(d))` sets it.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CorrectPatch {
+    pub object: String,
+    /// The corrected sentence. When absent, the new object replaces the old one inside the old
+    /// sentence if it appears there, otherwise the object becomes the sentence.
+    pub sentence: Option<String>,
+    pub due: Option<Option<Date>>,
+    pub valid_from: Option<Option<Date>>,
+    pub valid_to: Option<Option<Date>>,
+}
+
+impl CorrectPatch {
+    /// A correction of the object alone.
+    pub fn object(object: &str) -> Self {
+        CorrectPatch {
+            object: object.to_string(),
+            ..Default::default()
+        }
+    }
+}
+
+/// The result of a completed forget. `fully_scrubbed` is false when the write-ahead log could
+/// not be truncated yet (a reader was busy); it is retried at the next open, forget or tidy.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ForgetOutcome {
+    pub report: nocturne_contract::ForgetReport,
+    pub fully_scrubbed: bool,
 }

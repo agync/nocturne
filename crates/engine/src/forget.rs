@@ -9,6 +9,7 @@
 //! write-ahead log is truncated so no trace stays in the store files.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use nocturne_contract::{ForgetOriginal, ForgetPreview, ForgetReport, ForgetRow, PageView};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -19,6 +20,7 @@ use crate::capture::original_path;
 use crate::error::{Error, Result};
 use crate::fsutil;
 use crate::page::{template_dek, template_headline};
+use crate::types::ForgetOutcome;
 use crate::util::{fmt_ts, new_id_hex, parse_enum, parse_ts};
 
 /// A preview is good for ten minutes.
@@ -97,6 +99,11 @@ fn other_memories(conn: &Connection, item: &str, ids: &[String]) -> Result<u32> 
 
 impl Engine {
     /// Say exactly what forgetting these memories removes. Nothing changes until `forget`.
+    ///
+    /// Originals are listed with `removable`. An original is removed only when the preview was
+    /// asked to include originals and no other memory cites it. When it stays (not included, or
+    /// still cited), its transcript, summary and search row stay with it: they are the person's
+    /// own item, not something derived from the forgotten memory.
     pub fn preview_forget(&self, ids: &[String], include_originals: bool) -> Result<ForgetPreview> {
         let now = self.clock().now();
         let expires = now
@@ -176,11 +183,11 @@ impl Engine {
     /// page, search, answer or list can show them from this moment), redacts the pages that cite
     /// them and drops their cached audio, and records a job. The job is then finished in chunks;
     /// if the app stops in between, the next `open` finishes it.
-    pub fn forget(&self, token: &str) -> Result<ForgetReport> {
+    pub fn forget(&self, token: &str) -> Result<ForgetOutcome> {
         let (job, pages_redacted) = self.forget_begin(token)?;
-        let mut report = self.finish_forget(job)?;
-        report.pages_redacted = pages_redacted;
-        Ok(report)
+        let mut outcome = self.finish_forget(job)?;
+        outcome.report.pages_redacted = pages_redacted;
+        Ok(outcome)
     }
 
     /// Phase 1 only, for tests that simulate stopping part way. Not for production use.
@@ -224,6 +231,7 @@ impl Engine {
                 ],
             )?;
             let job = tx.last_insert_rowid();
+            self.bump_audio();
             for id in &all {
                 tx.execute(
                     "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \
@@ -233,6 +241,9 @@ impl Engine {
             }
             redact_pages(tx, &all, &pages)?;
             let files = drop_audio_rows(tx, &pages)?;
+            // Recorded before the commit, so a crash before the files are shredded still
+            // finds them.
+            append_job_files(tx, job, &files)?;
             Ok((job, pages.len() as u32, files))
         })?;
         self.invalidate_vectors();
@@ -254,7 +265,7 @@ impl Engine {
         Ok(())
     }
 
-    fn finish_forget(&self, job: i64) -> Result<ForgetReport> {
+    fn finish_forget(&self, job: i64) -> Result<ForgetOutcome> {
         let (closure_ids, items, include_originals): (Vec<String>, Vec<String>, bool) =
             self.read(|conn| {
                 let (ids, items, inc): (String, String, bool) = conn.query_row(
@@ -278,7 +289,9 @@ impl Engine {
                     Vec::new()
                 } else {
                     redact_pages(tx, &closure_ids, &pages)?;
-                    drop_audio_rows(tx, &pages)?
+                    let files = drop_audio_rows(tx, &pages)?;
+                    append_job_files(tx, job, &files)?;
+                    files
                 };
                 for id in chunk {
                     purge_memory(tx, id)?;
@@ -319,6 +332,7 @@ impl Engine {
                             originals_removed += 1;
                         }
                     }
+                    append_job_files(tx, job, &doomed)?;
                     Ok(doomed)
                 })?;
                 for f in doomed {
@@ -327,7 +341,17 @@ impl Engine {
             }
         }
 
-        // Phase 4: orphaned entity names, the finished job, compacted indexes, a truncated log.
+        // Phase 4: remove every file the job recorded (a resumed job may find some already
+        // gone), orphaned entity names, the finished job, compacted indexes, a truncated log.
+        let recorded: Vec<PathBuf> = self.read(|conn| {
+            let files: String =
+                conn.query_row("SELECT files FROM forget_jobs WHERE id = ?1", [job], |r| {
+                    r.get(0)
+                })?;
+            let paths: Vec<String> = serde_json::from_str(&files)?;
+            Ok(paths.into_iter().map(PathBuf::from).collect())
+        })?;
+        shred_all(recorded);
         self.write(|tx| {
             tx.execute(
                 "DELETE FROM entities WHERE id NOT IN \
@@ -343,14 +367,36 @@ impl Engine {
             Ok(())
         })?;
         self.invalidate_vectors();
-        self.checkpoint_truncate()?;
+        self.bump_audio();
+        let fully_scrubbed = self.checkpoint_truncate()?;
 
-        Ok(ForgetReport {
-            memories_removed: closure_ids.len() as u32,
-            originals_removed,
-            pages_redacted: 0,
+        Ok(ForgetOutcome {
+            report: ForgetReport {
+                memories_removed: closure_ids.len() as u32,
+                originals_removed,
+                pages_redacted: 0,
+            },
+            fully_scrubbed,
         })
     }
+}
+
+/// Remember files a forget must shred, in the same transaction that makes them unreachable.
+fn append_job_files(tx: &Transaction<'_>, job: i64, files: &[PathBuf]) -> Result<()> {
+    if files.is_empty() {
+        return Ok(());
+    }
+    let current: String =
+        tx.query_row("SELECT files FROM forget_jobs WHERE id = ?1", [job], |r| {
+            r.get(0)
+        })?;
+    let mut paths: Vec<String> = serde_json::from_str(&current)?;
+    paths.extend(files.iter().map(|p| p.to_string_lossy().into_owned()));
+    tx.execute(
+        "UPDATE forget_jobs SET files = ?2 WHERE id = ?1",
+        params![job, serde_json::to_string(&paths)?],
+    )?;
+    Ok(())
 }
 
 /// Remove one memory and everything that hangs off it. Sources and vectors cascade; search rows

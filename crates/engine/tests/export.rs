@@ -30,7 +30,7 @@ fn world() -> World {
         _ => unreachable!(),
     };
     f.engine
-        .apply_candidates(
+        .apply(
             &photo,
             vec![cand(
                 "Dentist appointment",
@@ -56,10 +56,12 @@ fn world() -> World {
         "Gran lives in Leeds",
         cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds."),
     );
-    f.engine.correct(&old, "York").unwrap();
+    f.engine
+        .correct(&old, nocturne_engine::CorrectPatch::object("York"))
+        .unwrap();
     let web = keep_as(&f.engine, "web claim", Source::PastedWeb);
     f.engine
-        .apply_candidates(
+        .apply(
             &web,
             vec![cand(
                 "Clinic",
@@ -179,7 +181,7 @@ fn delete_everything_needs_the_phrase_and_leaves_an_empty_working_store() {
     let w = world();
     let dir = w.f.dir.path();
     w.f.engine
-        .cache_audio(w.day, "af_heart", b"spoken Zebrafish47")
+        .cache(w.day, "af_heart", b"spoken Zebrafish47")
         .unwrap();
     w.f.engine
         .record_download(LedgerKind::Setup, "model", Some("example.org"), 10.0)

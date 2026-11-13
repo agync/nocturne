@@ -173,7 +173,7 @@ fn unconfirmed_hits_are_flagged_so_they_are_never_stated_as_true() {
     let f = fixture();
     let web = keep_as(&f.engine, "web", Source::PastedWeb);
     f.engine
-        .apply_candidates(
+        .apply(
             &web,
             vec![cand(
                 "Clinic",
@@ -212,7 +212,10 @@ fn only_current_memories_are_found_and_forgotten_ones_never_come_back() {
             .len(),
         1
     );
-    let new = f.engine.correct(&old, "Monday").unwrap();
+    let new = f
+        .engine
+        .correct(&old, nocturne_engine::CorrectPatch::object("Monday"))
+        .unwrap();
     let hits = f.engine.retrieve("swims", Some(&[1.0, 0.0]), 5).unwrap();
     assert_eq!(hits.len(), 1, "the superseded row is history, not a hit");
     assert_eq!(hits[0].memory.id, new);
@@ -281,7 +284,7 @@ fn bench_retrieve_10k_memories() {
         ));
     }
     let t = Instant::now();
-    f.engine.apply_candidates(&item, cands).unwrap();
+    f.engine.apply(&item, cands).unwrap();
     println!("bench: applied 10000 candidates in {:?}", t.elapsed());
     let mems = f.engine.memories(Default::default()).unwrap();
     assert_eq!(mems.len(), 10_000);

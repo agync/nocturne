@@ -16,6 +16,10 @@ pub enum Error {
     NotFound(String),
     #[error("invalid request: {0}")]
     Invalid(String),
+    /// The worker no longer holds the read of this item: its lease ran out or was taken by
+    /// another, the item could not be read, or it is part of a forget.
+    #[error("the lease on this item is gone")]
+    LeaseLost,
     /// The forget token is unknown, used, expired, or what it covers has changed since.
     #[error("the forget preview is no longer valid")]
     StaleToken,

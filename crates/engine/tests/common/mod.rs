@@ -62,7 +62,7 @@ pub fn cand(subject: &str, predicate: Predicate, object: &str, sentence: &str) -
 /// Keep a note and apply one candidate from it; returns (item id, memory id).
 pub fn learn(engine: &Engine, text: &str, c: Candidate) -> (String, String) {
     let item = keep(engine, text);
-    let report = engine.apply_candidates(&item, vec![c]).unwrap();
+    let report = engine.apply(&item, vec![c]).unwrap();
     let id = report
         .created
         .first()
@@ -70,4 +70,44 @@ pub fn learn(engine: &Engine, text: &str, c: Candidate) -> (String, String) {
         .cloned()
         .expect("a memory was created or reinforced");
     (item, id)
+}
+
+/// Test conveniences that hide the lease and the audio stamp.
+pub trait EngineExt {
+    /// Lease the item, then apply candidates under that lease.
+    fn apply(
+        &self,
+        item: &str,
+        cands: Vec<Candidate>,
+    ) -> nocturne_engine::Result<nocturne_engine::ApplyReport>;
+    /// Cache audio with a fresh stamp (the page cannot have changed in between).
+    fn cache(
+        &self,
+        date: &str,
+        voice: &str,
+        bytes: &[u8],
+    ) -> nocturne_engine::Result<std::path::PathBuf>;
+}
+
+impl EngineExt for Engine {
+    fn apply(
+        &self,
+        item: &str,
+        cands: Vec<Candidate>,
+    ) -> nocturne_engine::Result<nocturne_engine::ApplyReport> {
+        let p = self.lease_item(item, std::time::Duration::from_secs(60))?;
+        self.apply_candidates(item, &p.lease, cands)
+    }
+
+    fn cache(
+        &self,
+        date: &str,
+        voice: &str,
+        bytes: &[u8],
+    ) -> nocturne_engine::Result<std::path::PathBuf> {
+        let stamp = self.audio_stamp(date);
+        Ok(self
+            .cache_audio(date, voice, bytes, stamp)?
+            .expect("the stamp is current"))
+    }
 }

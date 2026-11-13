@@ -67,26 +67,49 @@ pub(crate) fn shred_all(files: Vec<PathBuf>) {
 }
 
 impl Engine {
-    /// Keep the spoken edition of a page for a voice.
-    pub fn cache_audio(&self, page_date: &str, voice: &str, bytes: &[u8]) -> Result<PathBuf> {
+    /// A stamp for the spoken edition of `page_date`. Take it before reading the page to speak,
+    /// hand it back with the audio. It changes whenever the page's content may have changed or
+    /// something it cites was forgotten, made private, corrected or re-read, so audio made from
+    /// stale content is refused rather than cached. (One counter covers every page: refusing
+    /// too much is safe, caching stale speech is not.)
+    pub fn audio_stamp(&self, _page_date: &str) -> u64 {
+        self.inner
+            .audio_gen
+            .load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Keep the spoken edition of a page for a voice, if `stamp` is still current. Returns
+    /// `None` (and keeps nothing) when the page changed since the stamp was taken.
+    pub fn cache_audio(
+        &self,
+        page_date: &str,
+        voice: &str,
+        bytes: &[u8],
+        stamp: u64,
+    ) -> Result<Option<PathBuf>> {
         let dir = self.inner.dir.join("audio");
         fsutil::create_private_dir(&dir)?;
         let path = dir.join(format!("{}-{}.audio", safe(page_date), safe(voice)));
-        {
-            use std::io::Write;
-            let mut f = fsutil::create_private_file(&path)?;
-            f.write_all(bytes)?;
-            f.sync_all()?;
-        }
         let stored = path.to_string_lossy().into_owned();
-        self.write(|tx| {
+        // Checked under the write lock, which every change to what audio may say also holds, so
+        // nothing can slip in between the check and the file.
+        let ok = self.write(|tx| {
+            if self.audio_stamp(page_date) != stamp {
+                return Ok(false);
+            }
+            {
+                use std::io::Write;
+                let mut f = fsutil::create_private_file(&path)?;
+                f.write_all(bytes)?;
+                f.sync_all()?;
+            }
             tx.execute(
                 "INSERT OR REPLACE INTO audio_cache(page_date, voice, path) VALUES (?1, ?2, ?3)",
                 params![page_date, voice, stored],
             )?;
-            Ok(())
+            Ok(true)
         })?;
-        Ok(path)
+        Ok(ok.then_some(path))
     }
 
     /// The cached spoken edition, when there is one.
@@ -101,5 +124,44 @@ impl Engine {
                 .ok();
             Ok(p.map(PathBuf::from).filter(|p| p.exists()))
         })
+    }
+
+    /// Shred files in `originals/` and `audio/` that no row accounts for: leftovers of a crash
+    /// between a commit and a removal, or of a copy that never finished (`.tmp-*`).
+    pub(crate) fn sweep_orphan_files(&self) -> Result<()> {
+        let (shas, audio): (Vec<String>, Vec<String>) = self.read(|conn| {
+            let mut stmt = conn.prepare("SELECT sha256 FROM items WHERE file_name IS NOT NULL")?;
+            let shas = stmt
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut stmt = conn.prepare("SELECT path FROM audio_cache")?;
+            let paths: Vec<String> = stmt
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let names = paths
+                .iter()
+                .filter_map(|p| std::path::Path::new(p).file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .collect();
+            Ok((shas, names))
+        })?;
+        if let Ok(entries) = std::fs::read_dir(self.originals_dir()) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                let stem = name.split('.').next().unwrap_or("");
+                if name.starts_with(".tmp-") || !shas.iter().any(|s| s == stem) {
+                    fsutil::shred(&e.path());
+                }
+            }
+        }
+        if let Ok(entries) = std::fs::read_dir(self.inner.dir.join("audio")) {
+            for e in entries.flatten() {
+                let name = e.file_name().to_string_lossy().into_owned();
+                if !audio.contains(&name) {
+                    fsutil::shred(&e.path());
+                }
+            }
+        }
+        Ok(())
     }
 }

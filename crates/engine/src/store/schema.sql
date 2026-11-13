@@ -117,3 +117,8 @@ CREATE TRIGGER memories_au AFTER UPDATE OF sentence, subject, object ON memories
   INSERT INTO memories_fts(rowid, sentence, subject, object)
   VALUES (new.rowid, new.sentence, new.subject, new.object);
 END;
+
+-- migration 2
+-- Who holds the read of an item, and the files a started forget must still remove.
+ALTER TABLE items ADD COLUMN lease_token TEXT;
+ALTER TABLE forget_jobs ADD COLUMN files TEXT NOT NULL DEFAULT '[]';

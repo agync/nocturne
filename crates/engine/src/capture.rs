@@ -14,7 +14,7 @@ use crate::Engine;
 use crate::error::{Error, Result};
 use crate::mind::{Transcript, Understanding};
 use crate::rows::{ITEM_COLS, get_item_view, item_view};
-use crate::types::PendingItem;
+use crate::types::{PendingItem, RecordOutcome};
 use crate::util::{enum_str, fmt_ts, hex, new_id, random_hex, sha256_hex};
 
 /// Recordings longer than this are kept but not read.
@@ -273,39 +273,70 @@ impl Engine {
         })
     }
 
-    /// Items waiting to be read, oldest first, without leasing them.
+    /// Items waiting to be read, oldest first, without leasing them (their `lease` is empty).
     pub fn pending_items(&self, limit: usize) -> Result<Vec<PendingItem>> {
         let dir = self.originals_dir();
-        self.read(|conn| pending(conn, &dir, limit))
+        self.read(|conn| pending(conn, &dir, Some(limit), None))
     }
 
-    /// Atomically take up to `limit` waiting items: they become `reading` with a lease, so two
-    /// workers never read the same item. An expired lease puts the item back in the queue.
+    /// Atomically take up to `limit` waiting items: they become `reading` under a lease token,
+    /// so two workers never read the same item. Every later call about the item (`record_*`,
+    /// `apply_candidates`, `fail_item`) must present the token. An expired lease puts the item
+    /// back in the queue and voids its token.
     pub fn lease_pending(&self, limit: usize, lease: Duration) -> Result<Vec<PendingItem>> {
         let now = self.clock().now();
-        let until = now
-            .checked_add(SignedDuration::try_from(lease).map_err(Error::invalid)?)
-            .map_err(Error::invalid)?;
+        let until = lease_until(now, lease)?;
         let dir = self.originals_dir();
         self.write(|tx| {
             reset_expired_leases(tx, &fmt_ts(now))?;
-            let mut items = pending(tx, &dir, limit)?;
+            let mut items = pending(tx, &dir, Some(limit), None)?;
             for item in &mut items {
-                item.attempts += 1;
-                tx.execute(
-                    "UPDATE items SET status = 'reading', lease_until = ?2, attempts = attempts + 1 \
-                     WHERE id = ?1",
-                    params![item.id, fmt_ts(until)],
-                )?;
+                take_lease(tx, item, &fmt_ts(until))?;
             }
             Ok(items)
         })
     }
 
-    /// Store a transcript for an audio item. A recording over two hours is kept but not read.
-    pub fn record_transcript(&self, item: &str, t: Transcript) -> Result<()> {
+    /// Lease one particular item to read it again (a retry, or a re-read after the mind improved).
+    /// Refused for an item that cannot be read, that someone else is reading, or that is part of
+    /// a forget.
+    pub fn lease_item(&self, id: &str, lease: Duration) -> Result<PendingItem> {
+        let now = self.clock().now();
+        let until = lease_until(now, lease)?;
+        let dir = self.originals_dir();
+        self.write(|tx| {
+            reset_expired_leases(tx, &fmt_ts(now))?;
+            let status: Option<String> = tx
+                .query_row("SELECT status FROM items WHERE id = ?1", [id], |r| r.get(0))
+                .optional()?;
+            match status.as_deref() {
+                None => return Err(Error::not_found(format!("item {id}"))),
+                Some("reading") | Some("couldntRead") => return Err(Error::LeaseLost),
+                _ => {}
+            }
+            if in_forget_job(tx, id)? {
+                return Err(Error::LeaseLost);
+            }
+            let mut items = pending(tx, &dir, None, Some(id))?;
+            let mut item = items
+                .pop()
+                .ok_or_else(|| Error::not_found(format!("item {id}")))?;
+            take_lease(tx, &mut item, &fmt_ts(until))?;
+            Ok(item)
+        })
+    }
+
+    /// Store a transcript for an audio item. A recording over two hours is kept but not read
+    /// (`RecordOutcome::TooLong`, status `couldntRead`).
+    pub fn record_transcript(
+        &self,
+        item: &str,
+        lease: &str,
+        t: Transcript,
+    ) -> Result<RecordOutcome> {
         let meta = serde_json::json!({ "segments": t.segments });
         self.write(|tx| {
+            check_lease(tx, item, lease)?;
             if t.duration_ms > MAX_AUDIO_MS {
                 fail(
                     tx,
@@ -314,44 +345,93 @@ impl Engine {
                     Some(t.duration_ms),
                     None,
                 )?;
-                return Ok(());
+                return Ok(RecordOutcome::TooLong);
             }
-            let n = tx.execute(
+            tx.execute(
                 "UPDATE items SET text = ?2, language = ?3, duration_ms = ?4, \
                  metadata = json_patch(metadata, ?5) WHERE id = ?1",
                 params![item, t.text, t.language, t.duration_ms, meta.to_string()],
             )?;
-            if n == 0 {
-                return Err(Error::not_found(format!("item {item}")));
-            }
-            Ok(())
+            Ok(RecordOutcome::Recorded)
         })
     }
 
     /// Store what the mind read from an image or document. A document over 100 pages is kept but
     /// not read.
-    pub fn record_understanding(&self, item: &str, u: Understanding) -> Result<()> {
+    pub fn record_understanding(
+        &self,
+        item: &str,
+        lease: &str,
+        u: Understanding,
+    ) -> Result<RecordOutcome> {
         self.write(|tx| {
+            check_lease(tx, item, lease)?;
             if u.pages.is_some_and(|p| p > MAX_PAGES) {
                 fail(tx, item, CouldntReadReason::TooLong, None, u.pages)?;
-                return Ok(());
+                return Ok(RecordOutcome::TooLong);
             }
-            let n = tx.execute(
+            tx.execute(
                 "UPDATE items SET title = CASE WHEN ?2 = '' THEN title ELSE ?2 END, text = ?3, \
                  summary = ?4, language = ?5, pages = ?6 WHERE id = ?1",
                 params![item, u.title.trim(), u.text, u.summary, u.language, u.pages],
             )?;
-            if n == 0 {
-                return Err(Error::not_found(format!("item {item}")));
-            }
-            Ok(())
+            Ok(RecordOutcome::Recorded)
         })
     }
 
     /// Mark an item as one the mind could not read, with the reason.
-    pub fn fail_item(&self, item: &str, reason: CouldntReadReason) -> Result<()> {
-        self.write(|tx| fail(tx, item, reason, None, None))
+    pub fn fail_item(&self, item: &str, lease: &str, reason: CouldntReadReason) -> Result<()> {
+        self.write(|tx| {
+            check_lease(tx, item, lease)?;
+            fail(tx, item, reason, None, None)
+        })
     }
+}
+
+fn lease_until(now: jiff::Timestamp, lease: Duration) -> Result<jiff::Timestamp> {
+    now.checked_add(SignedDuration::try_from(lease).map_err(Error::invalid)?)
+        .map_err(Error::invalid)
+}
+
+fn take_lease(tx: &Transaction<'_>, item: &mut PendingItem, until: &str) -> Result<()> {
+    item.attempts += 1;
+    item.lease = random_hex(16);
+    tx.execute(
+        "UPDATE items SET status = 'reading', lease_until = ?2, lease_token = ?3, \
+         attempts = attempts + 1 WHERE id = ?1",
+        params![item.id, until, item.lease],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn in_forget_job(conn: &rusqlite::Connection, item: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || ?1 || '\"') > 0)",
+        [item],
+        |r| r.get(0),
+    )?)
+}
+
+/// The caller must hold the current lease on an item that is being read and is not part of a
+/// forget.
+pub(crate) fn check_lease(conn: &rusqlite::Connection, item: &str, lease: &str) -> Result<()> {
+    let row: Option<(String, Option<String>)> = conn
+        .query_row(
+            "SELECT status, lease_token FROM items WHERE id = ?1",
+            [item],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((status, token)) = row else {
+        return Err(Error::not_found(format!("item {item}")));
+    };
+    if status != "reading" || lease.is_empty() || token.as_deref() != Some(lease) {
+        return Err(Error::LeaseLost);
+    }
+    if in_forget_job(conn, item)? {
+        return Err(Error::LeaseLost);
+    }
+    Ok(())
 }
 
 fn fail(
@@ -363,7 +443,8 @@ fn fail(
 ) -> Result<()> {
     let n = tx.execute(
         "UPDATE items SET status = 'couldntRead', reason = ?2, lease_until = NULL, \
-         duration_ms = COALESCE(?3, duration_ms), pages = COALESCE(?4, pages) WHERE id = ?1",
+         lease_token = NULL, duration_ms = COALESCE(?3, duration_ms), \
+         pages = COALESCE(?4, pages) WHERE id = ?1",
         params![item, enum_str(&reason), duration_ms, pages],
     )?;
     if n == 0 {
@@ -374,18 +455,30 @@ fn fail(
 
 pub(crate) fn reset_expired_leases(conn: &rusqlite::Connection, now: &str) -> Result<usize> {
     Ok(conn.execute(
-        "UPDATE items SET status = 'kept', lease_until = NULL \
+        "UPDATE items SET status = 'kept', lease_until = NULL, lease_token = NULL \
          WHERE status = 'reading' AND (lease_until IS NULL OR lease_until <= ?1)",
         [now],
     )?)
 }
 
-fn pending(conn: &rusqlite::Connection, dir: &Path, limit: usize) -> Result<Vec<PendingItem>> {
-    let mut stmt = conn.prepare(
+/// Queue rows: waiting items (`status = 'kept'`), or exactly the one named.
+fn pending(
+    conn: &rusqlite::Connection,
+    dir: &Path,
+    limit: Option<usize>,
+    only: Option<&str>,
+) -> Result<Vec<PendingItem>> {
+    let mut sql = String::from(
         "SELECT id, kind, source, trust, kept_at, sha256, ext, file_name, mime, text, attempts \
-         FROM items WHERE status = 'kept' ORDER BY kept_at, id LIMIT ?1",
-    )?;
-    let rows = stmt.query_map([limit as i64], |r| {
+         FROM items WHERE ",
+    );
+    sql.push_str(if only.is_some() {
+        "id = ?1"
+    } else {
+        "status = 'kept' ORDER BY kept_at, id LIMIT ?1"
+    });
+    let mut stmt = conn.prepare(&sql)?;
+    let map = |r: &rusqlite::Row<'_>| {
         let sha: String = r.get(5)?;
         let ext: Option<String> = r.get(6)?;
         let file_name: Option<String> = r.get(7)?;
@@ -399,9 +492,21 @@ fn pending(conn: &rusqlite::Connection, dir: &Path, limit: usize) -> Result<Vec<
             mime: r.get(8)?,
             text: r.get(9)?,
             attempts: r.get(10)?,
+            lease: String::new(),
         })
-    })?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
+    };
+    let rows = match only {
+        Some(id) => stmt
+            .query_map([id], map)?
+            .collect::<rusqlite::Result<_>>()?,
+        None => stmt
+            .query_map(
+                [limit.unwrap_or(usize::MAX).min(i64::MAX as usize) as i64],
+                map,
+            )?
+            .collect::<rusqlite::Result<_>>()?,
+    };
+    Ok(rows)
 }
 
 /// Where an original lives: `originals/<sha256>.<ext>`.

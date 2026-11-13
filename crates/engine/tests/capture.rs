@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use common::*;
 use nocturne_contract::{CouldntReadReason, ItemFilter, ItemKind, ItemStatus, Kept, Source, Trust};
-use nocturne_engine::{Transcript, Understanding};
+use nocturne_engine::{RecordOutcome, Transcript, Understanding};
 
 fn new_item(k: Kept) -> nocturne_contract::ItemView {
     match k {
@@ -162,19 +162,39 @@ fn long_items_are_kept_and_flagged_only_after_understanding_reports_length() {
         duration_ms: ms,
         ..Default::default()
     };
-    f.engine
-        .record_transcript(&audio.id, t(2 * 60 * 60 * 1000))
-        .unwrap();
+    let lease = |id: &str| {
+        f.engine
+            .lease_item(id, Duration::from_secs(60))
+            .unwrap()
+            .lease
+    };
+    let l = lease(&audio.id);
+    assert_eq!(
+        f.engine
+            .record_transcript(&audio.id, &l, t(2 * 60 * 60 * 1000))
+            .unwrap(),
+        RecordOutcome::Recorded
+    );
     assert_eq!(
         f.engine.get_item(&audio.id).unwrap().status,
-        ItemStatus::Kept
+        ItemStatus::Reading
     );
-    f.engine
-        .record_transcript(&audio.id, t(2 * 60 * 60 * 1000 + 1))
-        .unwrap();
+    assert_eq!(
+        f.engine
+            .record_transcript(&audio.id, &l, t(2 * 60 * 60 * 1000 + 1))
+            .unwrap(),
+        RecordOutcome::TooLong
+    );
     let got = f.engine.get_item(&audio.id).unwrap();
     assert_eq!(got.status, ItemStatus::CouldntRead);
     assert_eq!(got.reason, Some(CouldntReadReason::TooLong));
+    assert!(
+        matches!(
+            f.engine.record_transcript(&audio.id, &l, t(1)),
+            Err(nocturne_engine::Error::LeaseLost)
+        ),
+        "an item that could not be read takes no more readings"
+    );
 
     let doc = new_item(
         f.engine
@@ -186,9 +206,15 @@ fn long_items_are_kept_and_flagged_only_after_understanding_reports_length() {
         pages: Some(pages),
         ..Default::default()
     };
-    f.engine.record_understanding(&doc.id, u(100)).unwrap();
-    assert_eq!(f.engine.get_item(&doc.id).unwrap().status, ItemStatus::Kept);
-    f.engine.record_understanding(&doc.id, u(101)).unwrap();
+    let l = lease(&doc.id);
+    assert_eq!(
+        f.engine.record_understanding(&doc.id, &l, u(100)).unwrap(),
+        RecordOutcome::Recorded
+    );
+    assert_eq!(
+        f.engine.record_understanding(&doc.id, &l, u(101)).unwrap(),
+        RecordOutcome::TooLong
+    );
     let got = f.engine.get_item(&doc.id).unwrap();
     assert_eq!(
         (got.status, got.reason),

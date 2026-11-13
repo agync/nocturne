@@ -9,6 +9,7 @@ use rusqlite::params;
 use crate::Engine;
 use crate::audio::{drop_audio_rows, pages_citing, shred_all};
 use crate::error::{Error, Result};
+use crate::memory::chain;
 use crate::rows::{MemRow, query_mems};
 use crate::settings::{read_settings, thresholds};
 use crate::types::{DecayReport, UseKind};
@@ -25,7 +26,7 @@ pub(crate) fn effective_last_use(
     if let Some(lu) = &m.last_used {
         eff = eff.max(parse_ts(lu)?);
     }
-    if matches!(m.predicate.as_str(), "scheduled" | "promised")
+    if matches!(m.predicate.as_str(), "scheduled" | "promised" | "due")
         && let Some(d) = m.due.as_deref().or(m.valid_from.as_deref())
     {
         let d = parse_date(d)?;
@@ -57,8 +58,8 @@ impl Engine {
                 [],
             )
         })?;
-        let mut changes: Vec<(String, MemoryStatus)> = Vec::new();
-        let mut report = DecayReport::default();
+        // (id, status seen, last_used seen, status to move to)
+        let mut changes: Vec<(String, MemoryStatus, Option<String>, MemoryStatus)> = Vec::new();
         for m in &rows {
             let Some(eff) = effective_last_use(m, today, &tz)? else {
                 continue;
@@ -72,27 +73,39 @@ impl Engine {
                 MemoryStatus::Active
             };
             match (m.status, target) {
-                (MemoryStatus::Active, MemoryStatus::Fading) => {
-                    report.faded += 1;
-                    changes.push((m.id.clone(), target));
-                }
-                (MemoryStatus::Active | MemoryStatus::Fading, MemoryStatus::LetGo) => {
-                    report.let_go += 1;
-                    changes.push((m.id.clone(), target));
+                (MemoryStatus::Active, MemoryStatus::Fading)
+                | (MemoryStatus::Active | MemoryStatus::Fading, MemoryStatus::LetGo) => {
+                    changes.push((m.id.clone(), m.status, m.last_used.clone(), target));
                 }
                 _ => {}
             }
         }
         let stamp = fmt_ts(now);
+        let mut report = DecayReport::default();
         for chunk in changes.chunks(200) {
             self.write(|tx| {
-                for (id, status) in chunk {
-                    tx.execute(
+                for (id, seen_status, seen_used, status) in chunk {
+                    // Only if nothing happened since it was read: a memory used, restored,
+                    // made keep-forever, superseded or forgotten in between is left alone.
+                    let n = tx.execute(
                         "UPDATE memories SET status = ?2, \
                          let_go_at = CASE WHEN ?2 = 'letGo' THEN ?3 ELSE let_go_at END \
-                         WHERE id = ?1",
-                        params![id, enum_str(status), stamp],
+                         WHERE id = ?1 AND status = ?4 AND last_used IS ?5 AND keep_forever = 0 \
+                           AND superseded_at IS NULL AND forgetting = 0",
+                        params![
+                            id,
+                            enum_str(status),
+                            stamp,
+                            enum_str(seen_status),
+                            seen_used
+                        ],
                     )?;
+                    if n > 0 {
+                        match status {
+                            MemoryStatus::LetGo => report.let_go += 1,
+                            _ => report.faded += 1,
+                        }
+                    }
                 }
                 Ok(())
             })?;
@@ -156,16 +169,21 @@ impl Engine {
     /// private memory cannot be played back.
     pub fn set_private(&self, id: &str, on: bool) -> Result<()> {
         let files = self.write(|tx| {
-            let n = tx.execute(
-                "UPDATE memories SET private = ?2 WHERE id = ?1",
-                params![id, on],
-            )?;
-            if n == 0 {
+            // The whole version chain, so an earlier version cited on an old page is covered.
+            let versions = chain(tx, id)?;
+            if versions.is_empty() {
                 return Err(Error::not_found(format!("memory {id}")));
             }
-            let pages = pages_citing(tx, &[id.to_string()])?;
+            for v in &versions {
+                tx.execute(
+                    "UPDATE memories SET private = ?2 WHERE id = ?1",
+                    params![v, on],
+                )?;
+            }
+            let pages = pages_citing(tx, &versions)?;
             drop_audio_rows(tx, &pages)
         })?;
+        self.bump_audio();
         shred_all(files);
         Ok(())
     }

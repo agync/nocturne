@@ -258,7 +258,7 @@ fn decay_handles_more_than_one_chunk() {
             )
         })
         .collect();
-    f.engine.apply_candidates(&item, cands).unwrap();
+    f.engine.apply(&item, cands).unwrap();
     f.clock.advance_days(100);
     let r = f.engine.decay().unwrap();
     assert_eq!(r.let_go, 450);

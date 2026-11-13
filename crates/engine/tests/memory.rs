@@ -37,13 +37,11 @@ fn applying_an_item_again_replaces_what_it_said_and_is_not_a_second_voice() {
     let item = keep(&f.engine, "Gran lives in Leeds, the cat is called Pip");
     let leeds = cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds.");
     let pip = cand("Cat", Predicate::Knows, "Pip", "The cat is called Pip.");
-    f.engine
-        .apply_candidates(&item, vec![leeds.clone(), pip])
-        .unwrap();
+    f.engine.apply(&item, vec![leeds.clone(), pip]).unwrap();
     assert_eq!(all(&f).len(), 2);
 
     f.clock.set_str("2026-11-14T09:00:00Z");
-    let report = f.engine.apply_candidates(&item, vec![leeds]).unwrap();
+    let report = f.engine.apply(&item, vec![leeds]).unwrap();
     assert_eq!(report.removed.len(), 1, "what the item no longer says goes");
     let rows = all(&f);
     assert_eq!(rows.len(), 1);
@@ -61,7 +59,7 @@ fn a_confirmed_memory_survives_its_item_being_reread() {
         cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds."),
     );
     f.engine.confirm(&id, true).unwrap();
-    f.engine.apply_candidates(&item, vec![]).unwrap();
+    f.engine.apply(&item, vec![]).unwrap();
     let rows = all(&f);
     assert_eq!(rows.len(), 1);
     assert_eq!(
@@ -83,7 +81,7 @@ fn untrusted_sources_never_create_active_memories() {
             "The clinic opens at 9.",
         )
     };
-    let r = f.engine.apply_candidates(&web, vec![c()]).unwrap();
+    let r = f.engine.apply(&web, vec![c()]).unwrap();
     assert_eq!(r.unconfirmed.len(), 1);
     let m = &all(&f)[0];
     assert_eq!(m.status, MemoryStatus::Unconfirmed);
@@ -104,12 +102,12 @@ fn untrusted_sources_never_create_active_memories() {
 
     // A second untrusted voice does not promote it.
     let agent = keep_as(&f.engine, "agent says clinic opens at 9", Source::Agent);
-    f.engine.apply_candidates(&agent, vec![c()]).unwrap();
+    f.engine.apply(&agent, vec![c()]).unwrap();
     assert_eq!(all(&f)[0].status, MemoryStatus::Unconfirmed);
 
     // A trusted, independent item does.
     let note = keep(&f.engine, "I rang: the clinic opens at 9");
-    let r = f.engine.apply_candidates(&note, vec![c()]).unwrap();
+    let r = f.engine.apply(&note, vec![c()]).unwrap();
     assert_eq!(r.promoted.len(), 1);
     let m = &all(&f)[0];
     assert_eq!(m.status, MemoryStatus::Active);
@@ -136,7 +134,7 @@ fn a_trusted_item_from_the_same_origin_does_not_corroborate() {
             "The clinic opens at 9.",
         )
     };
-    f.engine.apply_candidates(&web, vec![c()]).unwrap();
+    f.engine.apply(&web, vec![c()]).unwrap();
     let mirrored = match f
         .engine
         .keep_text_from("copy of that page", Source::Paste, Some("example.org"))
@@ -145,7 +143,7 @@ fn a_trusted_item_from_the_same_origin_does_not_corroborate() {
         nocturne_contract::Kept::New { item } => item.id,
         _ => unreachable!(),
     };
-    f.engine.apply_candidates(&mirrored, vec![c()]).unwrap();
+    f.engine.apply(&mirrored, vec![c()]).unwrap();
     assert_eq!(all(&f)[0].status, MemoryStatus::Unconfirmed);
 }
 
@@ -187,7 +185,7 @@ fn scheduled_with_different_object_and_overlapping_validity_conflicts() {
     let item_b = keep(&f.engine, "Dentist moved to Thursday 10:00");
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &item_b,
             vec![cand(
                 "dentist appointment",
@@ -248,7 +246,7 @@ fn contradiction_detection_ignores_memories_whose_valid_time_does_not_overlap() 
     let item = keep(&f.engine, "Gran lives in Hull");
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &item,
             vec![cand(
                 "Gran",
@@ -281,7 +279,7 @@ fn a_real_world_change_closes_the_old_value_at_the_new_start() {
     let mut moved = cand("Gran", Predicate::LivesIn, "York", "Gran moved to York.");
     moved.valid_from = Some(date("2026-03-01"));
     let item = keep(&f.engine, "Gran moved to York in March");
-    let r = f.engine.apply_candidates(&item, vec![moved]).unwrap();
+    let r = f.engine.apply(&item, vec![moved]).unwrap();
     assert!(r.conflicts.is_empty());
     let rows = all(&f);
     let leeds = rows.iter().find(|m| m.object == "Leeds").unwrap();
@@ -301,7 +299,7 @@ fn only_single_valued_predicates_conflict() {
     let item = keep(&f.engine, "b");
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &item,
             vec![cand("Leo", Predicate::Knows, "Maya", "Leo knows Maya.")],
         )
@@ -316,11 +314,7 @@ fn only_single_valued_predicates_conflict() {
     coffee.tags = vec!["drink".into()];
     let item = keep(&f.engine, "d");
     assert_eq!(
-        f.engine
-            .apply_candidates(&item, vec![coffee])
-            .unwrap()
-            .conflicts
-            .len(),
+        f.engine.apply(&item, vec![coffee]).unwrap().conflicts.len(),
         1
     );
     let mut blue = cand("Mum", Predicate::Prefers, "blue", "Mum prefers blue.");
@@ -328,7 +322,7 @@ fn only_single_valued_predicates_conflict() {
     let item = keep(&f.engine, "e");
     assert!(
         f.engine
-            .apply_candidates(&item, vec![blue])
+            .apply(&item, vec![blue])
             .unwrap()
             .conflicts
             .is_empty()
@@ -346,7 +340,7 @@ fn an_untrusted_disagreement_creates_unconfirmed_and_never_a_which() {
     let agent = keep_as(&f.engine, "gran lives in Hull", Source::Agent);
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &agent,
             vec![cand(
                 "Gran",
@@ -379,7 +373,10 @@ fn correct_closes_the_old_row_into_history_and_cites_the_same_sources() {
     c.valid_from = Some(date("2026-11-01"));
     let (item, old) = learn(&f.engine, "Leo swims on Wednesday", c);
     f.clock.set_str("2026-11-15T10:00:00Z");
-    let new = f.engine.correct(&old, "Monday").unwrap();
+    let new = f
+        .engine
+        .correct(&old, nocturne_engine::CorrectPatch::object("Monday"))
+        .unwrap();
     assert_ne!(new, old);
 
     let rows = all(&f);
@@ -418,7 +415,9 @@ fn correct_closes_the_old_row_into_history_and_cites_the_same_sources() {
         1
     );
     assert!(
-        f.engine.correct(&old, "Tuesday").is_err(),
+        f.engine
+            .correct(&old, nocturne_engine::CorrectPatch::object("Tuesday"))
+            .is_err(),
         "only current rows can be corrected"
     );
 
@@ -430,7 +429,7 @@ fn correct_closes_the_old_row_into_history_and_cites_the_same_sources() {
         "Leo swims on Wednesday.",
     );
     again.valid_from = Some(date("2026-11-01"));
-    let r = f.engine.apply_candidates(&item, vec![again]).unwrap();
+    let r = f.engine.apply(&item, vec![again]).unwrap();
     assert!(r.created.is_empty() && r.conflicts.is_empty());
     assert_eq!(all(&f).len(), 1);
 }
@@ -535,7 +534,7 @@ fn a_new_dose_closes_the_old_one_and_the_same_dose_agrees() {
     let item = keep(&f.engine, "aspirin");
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &item,
             vec![cand(
                 "Leo",
@@ -629,7 +628,7 @@ fn an_untrusted_reread_cannot_rewrite_a_memory_trusted_sources_support() {
         "opens at 9",
         "The clinic opens at 9.",
     );
-    f.engine.apply_candidates(&web, vec![agrees]).unwrap();
+    f.engine.apply(&web, vec![agrees]).unwrap();
 
     // Read again, now claiming different wording, confidence and dates.
     let mut rewritten = cand(
@@ -641,7 +640,7 @@ fn an_untrusted_reread_cannot_rewrite_a_memory_trusted_sources_support() {
     rewritten.confidence = 0.1;
     rewritten.valid_from = Some(date("2020-01-01"));
     rewritten.due = Some(date("2020-01-02"));
-    f.engine.apply_candidates(&web, vec![rewritten]).unwrap();
+    f.engine.apply(&web, vec![rewritten]).unwrap();
     let m = f.engine.get_memory(&id).unwrap();
     assert_eq!(m.sentence, "The clinic opens at 9.");
     assert_eq!(
@@ -659,7 +658,7 @@ fn an_untrusted_reread_may_refine_an_unconfirmed_memory_it_alone_supports() {
     let web = keep_as(&f.engine, "page", Source::PastedWeb);
     let r = f
         .engine
-        .apply_candidates(
+        .apply(
             &web,
             vec![cand(
                 "Clinic",
@@ -670,7 +669,7 @@ fn an_untrusted_reread_may_refine_an_unconfirmed_memory_it_alone_supports() {
         )
         .unwrap();
     f.engine
-        .apply_candidates(
+        .apply(
             &web,
             vec![cand(
                 "Clinic",
@@ -696,7 +695,7 @@ fn a_date_only_match_never_promotes_an_unconfirmed_memory() {
         "The trip form is due Friday.",
     );
     a.due = Some(date("2026-11-14"));
-    let r = f.engine.apply_candidates(&web, vec![a]).unwrap();
+    let r = f.engine.apply(&web, vec![a]).unwrap();
     let unconfirmed = r.created[0].clone();
 
     // An untrusted candidate with the same date but different words: a new unconfirmed memory.
@@ -708,7 +707,7 @@ fn a_date_only_match_never_promotes_an_unconfirmed_memory() {
         "The trip form is due on 14 November.",
     );
     b.due = Some(date("2026-11-14"));
-    let r = f.engine.apply_candidates(&agent, vec![b]).unwrap();
+    let r = f.engine.apply(&agent, vec![b]).unwrap();
     assert_eq!(r.created.len(), 1);
     assert!(r.promoted.is_empty() && r.reinforced.is_empty());
     assert_eq!(
@@ -725,7 +724,7 @@ fn a_date_only_match_never_promotes_an_unconfirmed_memory() {
         "The trip form is due on Fri 14th.",
     );
     c.due = Some(date("2026-11-14"));
-    let r = f.engine.apply_candidates(&note, vec![c]).unwrap();
+    let r = f.engine.apply(&note, vec![c]).unwrap();
     assert!(r.promoted.is_empty());
     assert_eq!(
         f.engine.get_memory(&unconfirmed).unwrap().status,

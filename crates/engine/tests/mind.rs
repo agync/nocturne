@@ -102,11 +102,14 @@ async fn a_voice_note_goes_through_the_engine_with_a_scripted_mind() {
 
     let transcript = mind.transcribe(p.original.as_ref().unwrap()).await.unwrap();
     f.engine
-        .record_transcript(&p.id, transcript.clone())
+        .record_transcript(&p.id, &p.lease, transcript.clone())
         .unwrap();
     let cx = context(&f.engine, p.kind);
     let candidates = mind.extract(&transcript.text, &cx).await.unwrap();
-    let report = f.engine.apply_candidates(&p.id, candidates).unwrap();
+    let report = f
+        .engine
+        .apply_candidates(&p.id, &p.lease, candidates)
+        .unwrap();
     assert_eq!(report.created.len(), 1);
     let got = f.engine.get_item(&p.id).unwrap();
     assert_eq!(

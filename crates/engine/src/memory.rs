@@ -9,9 +9,11 @@ use nocturne_contract::{
 use rusqlite::{OptionalExtension, Transaction, params};
 
 use crate::Engine;
+use crate::audio::pages_citing;
+use crate::capture::check_lease;
 use crate::error::{Error, Result};
 use crate::rows::{MEM_COLS, MemRow, load_mem, mem_row, mem_view, query_mems, receipts_for};
-use crate::types::{ApplyReport, Candidate, Predicate};
+use crate::types::{ApplyReport, Candidate, CorrectPatch, Predicate};
 use crate::util::{enum_str, fmt_ts, fts_and, key_of, new_id, overlaps};
 
 /// A real-world change (moved house, new dose) closes the old row at the new row's start date.
@@ -119,6 +121,109 @@ fn delete_memory(tx: &Transaction<'_>, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Conflicts for a memory that has just become active (corroborated or confirmed): it competes
+/// with other active memories in the same slot whose validity overlaps. Returns new conflict ids.
+fn create_conflicts(tx: &Transaction<'_>, id: &str, now: &str, today: &str) -> Result<Vec<String>> {
+    let Some(row) = load_mem(tx, id)? else {
+        return Ok(Vec::new());
+    };
+    if row.status != MemoryStatus::Active {
+        return Ok(Vec::new());
+    }
+    let others = query_mems(
+        tx,
+        "m.subject_key = ?1 AND m.predicate = ?2 AND m.superseded_at IS NULL AND m.id != ?3 \
+         AND m.status IN ('active', 'fading') ORDER BY m.recorded_at, m.id",
+        params![row.subject_key, row.predicate, row.id],
+    )?;
+    let mut made = Vec::new();
+    for e in &others {
+        if e.object_key == row.object_key || !same_slot(&row.predicate, &row.object, &row.tags, e) {
+            continue;
+        }
+        if !overlaps(
+            e.valid_from.as_deref(),
+            e.valid_to.as_deref(),
+            Some(row.valid_from.as_deref().unwrap_or(today)),
+            row.valid_to.as_deref(),
+        ) {
+            continue;
+        }
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM conflicts WHERE resolved_at IS NULL \
+             AND ((a = ?1 AND b = ?2) OR (a = ?2 AND b = ?1)))",
+            params![e.id, row.id],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            let cid = new_id("cfl");
+            tx.execute(
+                "INSERT INTO conflicts(id, a, b, created_at) VALUES (?1, ?2, ?3, ?4)",
+                params![cid, e.id, row.id, now],
+            )?;
+            made.push(cid);
+        }
+    }
+    Ok(made)
+}
+
+/// Every version of one memory: what it replaced or ended and what replaced or ended it,
+/// followed in both directions. Empty if the id does not exist.
+pub(crate) fn chain(conn: &rusqlite::Connection, id: &str) -> Result<Vec<String>> {
+    let exists: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?1)",
+        [id],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        return Ok(Vec::new());
+    }
+    let mut seen: Vec<String> = vec![id.to_string()];
+    let mut i = 0;
+    while i < seen.len() {
+        let cur = seen[i].clone();
+        i += 1;
+        let mut older = conn.prepare_cached("SELECT id FROM memories WHERE superseded_by = ?1")?;
+        let mut neighbours: Vec<String> = older
+            .query_map([&cur], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        let newer: Option<String> = conn
+            .query_row(
+                "SELECT superseded_by FROM memories WHERE id = ?1",
+                [&cur],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+        neighbours.extend(newer);
+        for n in neighbours {
+            if !seen.contains(&n) {
+                seen.push(n);
+            }
+        }
+    }
+    Ok(seen)
+}
+
+/// Whether a memory, or any version of it, is private. Unknown ids fail closed: they count as
+/// private, so a line citing something that no longer exists never reaches audio or print.
+pub(crate) fn is_private_chain(conn: &rusqlite::Connection, id: &str) -> Result<bool> {
+    let ids = chain(conn, id)?;
+    if ids.is_empty() {
+        return Ok(true);
+    }
+    for v in &ids {
+        let private: bool =
+            conn.query_row("SELECT private FROM memories WHERE id = ?1", [v], |r| {
+                r.get(0)
+            })?;
+        if private {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn span_json(c: &Candidate) -> Option<String> {
     c.span.as_ref().and_then(|s| serde_json::to_string(s).ok())
 }
@@ -132,8 +237,10 @@ fn apply(
     now: &str,
     today: &str,
     item_id: &str,
+    lease: &str,
     cands: Vec<Candidate>,
 ) -> Result<ApplyReport> {
+    check_lease(tx, item_id, lease)?;
     let (trust, origin): (String, Option<String>) = tx
         .query_row(
             "SELECT trust, origin FROM items WHERE id = ?1",
@@ -189,15 +296,30 @@ fn apply(
         let Some(row) = load_mem(tx, mid)? else {
             continue;
         };
-        if row.superseded_at.is_none() && !row.confirmed {
+        // Nothing now supports this memory. It is deleted only if nothing else depends on it:
+        // a memory the person kept forever, used, confirmed or marked private, or that a saved
+        // page cites, is never silently dropped by a re-read.
+        let protected = row.keep_forever
+            || row.last_used.is_some()
+            || row.confirmed
+            || row.private
+            || !pages_citing(tx, std::slice::from_ref(mid))?.is_empty();
+        if row.superseded_at.is_none() && !protected {
             delete_memory(tx, mid)?;
             report.removed.push(mid.clone());
         } else {
-            // History and confirmed memories keep their one source: every memory has a receipt.
+            // It keeps a tombstone link to this item (every memory has a receipt) and, unless
+            // the person confirmed it, goes back to unconfirmed: nothing supports it now.
             tx.execute(
                 "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
                 params![mid, item_id, span],
             )?;
+            if row.superseded_at.is_none() && !row.confirmed {
+                tx.execute(
+                    "UPDATE memories SET status = 'unconfirmed', let_go_at = NULL WHERE id = ?1",
+                    [mid],
+                )?;
+            }
         }
     }
 
@@ -209,7 +331,7 @@ fn apply(
         "understood"
     };
     tx.execute(
-        "UPDATE items SET status = ?2, lease_until = NULL WHERE id = ?1",
+        "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL WHERE id = ?1",
         params![item_id, status],
     )?;
     Ok(report)
@@ -289,8 +411,13 @@ fn apply_one(
                 tx.execute(
                     "UPDATE memories SET sentence = ?2, confidence = ?3, valid_from = ?4, \
                      valid_to = ?5, due = ?6 WHERE id = ?1",
-                    params![m.id, c.sentence, confidence, vf, vt, due],
+                    params![m.id, c.sentence.trim(), confidence, vf, vt, due],
                 )?;
+                if m.sentence != c.sentence.trim() {
+                    // The old vector described the old words.
+                    tx.execute("DELETE FROM embeddings WHERE memory_id = ?1", [&m.id])?;
+                    report.reworded.push(m.id.clone());
+                }
             }
             return Ok(());
         }
@@ -320,6 +447,9 @@ fn apply_one(
         )?;
         if promote {
             report.promoted.push(m.id.clone());
+            // Becoming active makes it compete with what is already active.
+            let made = create_conflicts(tx, &m.id, now, today)?;
+            report.conflicts.extend(made);
         }
         report.reinforced.push(m.id.clone());
         return Ok(());
@@ -442,13 +572,14 @@ pub(crate) fn needs_you_on(
         .to_string();
     let mut out: Vec<NeedsYouEntry> = Vec::new();
 
+    // Due items, soonest first; an undated one waits at the end like an undated promise.
     let dated = query_mems(
         conn,
         "m.predicate = 'due' AND m.superseded_at IS NULL AND m.done = 0 \
          AND m.status IN ('active', 'fading') \
-         AND COALESCE(m.due, m.valid_from) IS NOT NULL \
-         AND COALESCE(m.due, m.valid_from) <= ?1 \
-         ORDER BY COALESCE(m.due, m.valid_from), m.id",
+         AND (COALESCE(m.due, m.valid_from) IS NULL OR COALESCE(m.due, m.valid_from) <= ?1) \
+         ORDER BY COALESCE(m.due, m.valid_from) IS NULL, COALESCE(m.due, m.valid_from), \
+         m.recorded_at, m.id",
         [&horizon],
     )?;
     for m in dated {
@@ -529,7 +660,13 @@ pub(crate) fn needs_you_on(
     Ok(out)
 }
 
-pub(crate) fn confirm_tx(tx: &Transaction<'_>, id: &str, is_true: bool, now: &str) -> Result<()> {
+pub(crate) fn confirm_tx(
+    tx: &Transaction<'_>,
+    id: &str,
+    is_true: bool,
+    now: &str,
+    today: &str,
+) -> Result<()> {
     let m = load_mem(tx, id)?.ok_or_else(|| Error::not_found(format!("memory {id}")))?;
     if is_true {
         tx.execute(
@@ -537,6 +674,10 @@ pub(crate) fn confirm_tx(tx: &Transaction<'_>, id: &str, is_true: bool, now: &st
              let_go_at = NULL WHERE id = ?1",
             params![m.id, now],
         )?;
+        if m.status == MemoryStatus::Unconfirmed {
+            // Becoming active, it competes with what is already active.
+            create_conflicts(tx, &m.id, now, today)?;
+        }
     } else {
         tx.execute(
             "UPDATE memories SET confirmed = 0, status = 'unconfirmed', let_go_at = NULL \
@@ -552,9 +693,16 @@ pub(crate) fn mem_views(conn: &rusqlite::Connection, rows: &[MemRow]) -> Result<
 }
 
 impl Engine {
-    /// Turn what the mind found in an item into memories. Idempotent per item: it replaces what
-    /// the same item said the last time it was applied.
-    pub fn apply_candidates(&self, item: &str, candidates: Vec<Candidate>) -> Result<ApplyReport> {
+    /// Turn what the mind found in an item into memories. The caller must hold the item's lease.
+    /// Idempotent per item: it replaces what the same item said the last time it was applied.
+    /// What a re-read no longer supports is deleted only if nothing depends on it (see
+    /// `apply`); otherwise it goes back to unconfirmed with a link to the item.
+    pub fn apply_candidates(
+        &self,
+        item: &str,
+        lease: &str,
+        candidates: Vec<Candidate>,
+    ) -> Result<ApplyReport> {
         let now = fmt_ts(self.clock().now());
         let today = self
             .clock()
@@ -562,10 +710,11 @@ impl Engine {
             .to_zoned(self.clock().tz())
             .date()
             .to_string();
-        let report = self.write(|tx| apply(tx, &now, &today, item, candidates))?;
-        if !report.removed.is_empty() {
+        let report = self.write(|tx| apply(tx, &now, &today, item, lease, candidates))?;
+        if !report.removed.is_empty() || !report.reworded.is_empty() {
             self.invalidate_vectors();
         }
+        self.bump_audio();
         Ok(report)
     }
 
@@ -655,7 +804,10 @@ impl Engine {
     /// unconfirmed again and asks again.
     pub fn confirm(&self, id: &str, is_true: bool) -> Result<()> {
         let now = fmt_ts(self.clock().now());
-        self.write(|tx| confirm_tx(tx, id, is_true, &now))
+        let today = self.today();
+        self.write(|tx| confirm_tx(tx, id, is_true, &now, &today))?;
+        self.bump_audio();
+        Ok(())
     }
 
     /// Choose which of two conflicting memories is right. The other stays as history.
@@ -699,14 +851,15 @@ impl Engine {
             Ok(())
         })?;
         self.invalidate_vectors();
+        self.bump_audio();
         Ok(())
     }
 
     /// The person corrects a memory. The old row closes into history (its dates untouched: it
     /// was wrong, not ended) and the new row cites the same sources. `new_object` replaces the
     /// old object inside the sentence when it appears there, otherwise it becomes the sentence.
-    pub fn correct(&self, id: &str, new_object: &str) -> Result<String> {
-        let new_object = new_object.trim();
+    pub fn correct(&self, id: &str, patch: CorrectPatch) -> Result<String> {
+        let new_object = patch.object.trim().to_string();
         if new_object.is_empty() {
             return Err(Error::invalid("a correction needs some text"));
         }
@@ -716,10 +869,12 @@ impl Engine {
             if old.superseded_at.is_some() {
                 return Err(Error::invalid("only a current memory can be corrected"));
             }
-            let sentence = if !old.object.is_empty() && old.sentence.contains(&old.object) {
-                old.sentence.replacen(&old.object, new_object, 1)
-            } else {
-                new_object.to_string()
+            let sentence = match patch.sentence.as_deref().map(str::trim) {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ if !old.object.is_empty() && old.sentence.contains(&old.object) => {
+                    old.sentence.replacen(&old.object, &new_object, 1)
+                }
+                _ => new_object.clone(),
             };
             let new_id = new_memory_id();
             tx.execute(
@@ -729,8 +884,20 @@ impl Engine {
                  SELECT ?2, subject, subject_key, entity_id, predicate, ?3, ?4, ?5, valid_from, \
                  valid_to, due, ?6, 1.0, 'active', 1, ?6, done, keep_forever, private, \
                  suggest_private, tags FROM memories WHERE id = ?1",
-                params![id, new_id, new_object, key_of(new_object), sentence, now],
+                params![id, new_id, new_object, key_of(&new_object), sentence, now],
             )?;
+            for (column, value) in [
+                ("due", patch.due),
+                ("valid_from", patch.valid_from),
+                ("valid_to", patch.valid_to),
+            ] {
+                if let Some(v) = value {
+                    tx.execute(
+                        &format!("UPDATE memories SET {column} = ?2 WHERE id = ?1"),
+                        params![new_id, date_str(v)],
+                    )?;
+                }
+            }
             tx.execute(
                 "INSERT INTO memory_sources(memory_id, item_id, span) \
                  SELECT ?2, item_id, span FROM memory_sources WHERE memory_id = ?1",
@@ -751,7 +918,60 @@ impl Engine {
             Ok(new_id)
         })?;
         self.invalidate_vectors();
+        self.bump_audio();
         Ok(created)
+    }
+
+    /// Every version of a memory, newest first: what it is now, and what it replaced or ended.
+    pub fn history(&self, memory_id: &str) -> Result<Vec<MemoryView>> {
+        self.read(|conn| {
+            let ids = chain(conn, memory_id)?;
+            if ids.is_empty() {
+                return Err(Error::not_found(format!("memory {memory_id}")));
+            }
+            let mut rows = Vec::new();
+            for id in &ids {
+                if let Some(r) = load_mem(conn, id)? {
+                    rows.push(r);
+                }
+            }
+            rows.sort_by(|a, b| {
+                b.recorded_at
+                    .cmp(&a.recorded_at)
+                    .then_with(|| a.id.cmp(&b.id))
+            });
+            mem_views(conn, &rows)
+        })
+    }
+
+    /// The same entries as `needs_you`, without anything private, for places that must never
+    /// show private content: notifications, the tray, a locked window.
+    pub fn needs_you_public(&self) -> Result<Vec<NeedsYouEntry>> {
+        let tz = self.clock().tz();
+        let today = self.clock().now().to_zoned(tz).date();
+        self.read(|conn| {
+            let mut out = Vec::new();
+            for entry in needs_you_on(conn, today)? {
+                let private = match &entry {
+                    NeedsYouEntry::Due { memory, .. }
+                    | NeedsYouEntry::Promise { memory, .. }
+                    | NeedsYouEntry::Unconfirmed { memory, .. } => {
+                        is_private_chain(conn, &memory.id)?
+                    }
+                    NeedsYouEntry::Which { options, .. } => {
+                        let mut any = false;
+                        for o in options {
+                            any |= is_private_chain(conn, &o.memory_id)?;
+                        }
+                        any
+                    }
+                };
+                if !private {
+                    out.push(entry);
+                }
+            }
+            Ok(out)
+        })
     }
 
     /// Tick off a due or promised memory. Counts as use.

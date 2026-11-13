@@ -41,13 +41,14 @@ pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP};
 pub use types::*;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 const READERS: usize = 4;
 const DB_FILE: &str = "nocturne.db";
+const TRUNCATE_PENDING: &str = "_truncatePending";
 
 /// The engine. Cheap to clone; all clones share one store.
 #[derive(Clone)]
@@ -62,6 +63,11 @@ pub(crate) struct Inner {
     readers: Vec<Mutex<Connection>>,
     next_reader: AtomicUsize,
     pub(crate) vectors: RwLock<Option<Arc<retrieve::VecIndex>>>,
+    /// Bumped whenever the vector index may be stale; a rebuilt index is installed only if it
+    /// did not move while it was being built.
+    pub(crate) vec_gen: AtomicU64,
+    /// Bumped by anything that can change what a spoken edition should say.
+    pub(crate) audio_gen: AtomicU64,
 }
 
 impl Engine {
@@ -83,6 +89,8 @@ impl Engine {
                 readers,
                 next_reader: AtomicUsize::new(0),
                 vectors: RwLock::new(None),
+                vec_gen: AtomicU64::new(0),
+                audio_gen: AtomicU64::new(0),
             }),
         };
         // Items a worker was reading when the app last stopped go back in the queue.
@@ -90,6 +98,10 @@ impl Engine {
         engine.write(|tx| capture::reset_expired_leases(tx, &now).map(|_| ()))?;
         // A forget that was under way when the app stopped is finished before anything else.
         engine.resume_forgets()?;
+        // Files with no row (a crash between a commit and the removal, or a half-copied
+        // original) are shredded, and a log that could not be truncated last time is retried.
+        engine.sweep_orphan_files()?;
+        engine.retry_scrub()?;
         Ok(engine)
     }
 
@@ -107,6 +119,16 @@ impl Engine {
         self.inner.clock.as_ref()
     }
 
+    /// Today's local date, as stored text.
+    pub(crate) fn today(&self) -> String {
+        self.inner
+            .clock
+            .now()
+            .to_zoned(self.inner.clock.tz())
+            .date()
+            .to_string()
+    }
+
     pub(crate) fn originals_dir(&self) -> PathBuf {
         self.inner.dir.join("originals")
     }
@@ -117,6 +139,7 @@ impl Engine {
 
     /// Drop the in-memory vector index; the next search rebuilds it.
     pub(crate) fn invalidate_vectors(&self) {
+        self.inner.vec_gen.fetch_add(1, Ordering::SeqCst);
         *self
             .inner
             .vectors
@@ -139,21 +162,66 @@ impl Engine {
         f(&guard)
     }
 
+    /// Mark spoken editions as possibly stale (see `audio_stamp`).
+    pub(crate) fn bump_audio(&self) {
+        self.inner.audio_gen.fetch_add(1, Ordering::SeqCst);
+    }
+
     /// Fold the write-ahead log into the store and truncate it, so nothing deleted lingers in the
-    /// `-wal` file. A busy reader blocks the truncate, so retry briefly and warn on failure.
-    pub(crate) fn checkpoint_truncate(&self) -> Result<()> {
+    /// `-wal` file. A busy reader blocks the truncate (no waiting inside SQLite: the retries
+    /// here are short and the writer is free in between). Returns whether the log is now empty;
+    /// if not, a `truncate pending` mark is stored and the next open, forget or tidy retries.
+    pub(crate) fn checkpoint_truncate(&self) -> Result<bool> {
+        // Clear the mark first (only if there is one), so the write it takes lands before the
+        // truncate and not after it.
+        self.write(|tx| {
+            tx.execute("DELETE FROM settings WHERE key = ?1", [TRUNCATE_PENDING])?;
+            Ok(())
+        })?;
+        let mut done = false;
         for attempt in 0..10 {
             let busy: i64 = self.write_raw(|conn| {
-                Ok(conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0))?)
+                conn.busy_timeout(std::time::Duration::ZERO)?;
+                let r = conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(0));
+                conn.busy_timeout(std::time::Duration::from_millis(5000))?;
+                Ok(r?)
             })?;
             if busy == 0 {
-                store::restrict_store_files(&self.db_path());
-                return Ok(());
+                done = true;
+                break;
             }
             std::thread::sleep(std::time::Duration::from_millis(20 * (attempt + 1)));
         }
-        tracing::warn!("the write-ahead log could not be truncated because a reader is busy");
-        Ok(())
+        if done {
+            store::restrict_store_files(&self.db_path());
+        } else {
+            tracing::warn!("the write-ahead log could not be truncated because a reader is busy");
+            self.write(|tx| {
+                tx.execute(
+                    "INSERT OR REPLACE INTO settings(key, value) VALUES (?1, 'true')",
+                    [TRUNCATE_PENDING],
+                )?;
+                Ok(())
+            })?;
+        }
+        Ok(done)
+    }
+
+    /// Retry a truncate that could not finish earlier (for example after the next overnight
+    /// tidy). Returns true when nothing is pending any more.
+    pub fn retry_scrub(&self) -> Result<bool> {
+        let pending: bool = self.read(|conn| {
+            Ok(conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
+                [TRUNCATE_PENDING],
+                |r| r.get(0),
+            )?)
+        })?;
+        if pending {
+            self.checkpoint_truncate()
+        } else {
+            Ok(true)
+        }
     }
 
     /// Run `f` on a read-only connection from the pool.
