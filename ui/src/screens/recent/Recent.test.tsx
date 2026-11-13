@@ -65,7 +65,9 @@ describe("the list", () => {
     await open();
     expect(within(screen.getByRole("main")).getByText("Recently kept")).toBeInTheDocument();
     expect(
-      screen.getByText("1 waiting to be read · next: tonight, or now if idle"),
+      screen.getByText(
+        "1 waiting to be read. Nocturne reads it tonight, or sooner if the computer is free.",
+      ),
     ).toBeInTheDocument();
     const rows = within(screen.getByRole("list", { name: /today and yesterday/ })).getAllByRole(
       "listitem",
@@ -269,10 +271,17 @@ describe("describe helpers", () => {
       ...patch,
     }) as ItemView;
 
-  it("thumb codes use the file's own ending, else a plain default", () => {
-    expect(thumbCode(item({ fileName: "a.pdf", kind: "document" }))).toBe("PDF");
-    expect(thumbCode(item({ kind: "audio" }))).toBe("M4A");
+  it("thumbnails say what a thing is in plain words, never a file ending", () => {
+    expect(thumbCode(item({ fileName: "a.pdf", kind: "document" }))).toBe("Document");
+    expect(thumbCode(item({ fileName: "memo.m4a", kind: "audio" }))).toBe("Recording");
+    expect(thumbCode(item({ fileName: "notes.txt", kind: "text" }))).toBe("Note");
+    expect(thumbCode(item({ kind: "web" }))).toBe("Web page");
     expect(thumbCode(item({ kind: "image" }))).toBe("");
+    for (const kind of ["text", "audio", "web", "document"] as const) {
+      expect(
+        thumbCode(item({ kind, fileName: `x.${kind === "audio" ? "m4a" : "pdf"}` })),
+      ).not.toMatch(/^[A-Z0-9]{3,4}$/);
+    }
   });
 
   it("a locked file has no action and a kept one reads now", () => {

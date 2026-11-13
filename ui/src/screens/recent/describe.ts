@@ -2,18 +2,17 @@ import { formatDuration, formatTime, localDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { CouldntReadReason, ItemKind, ItemView, Source } from "../../engine/bindings";
 
-/** The small code on a thumbnail that is not a picture: the file's own ending, or a plain default. */
+/** The word on a thumbnail that is not a picture: what it is in plain words, never a file ending. */
 export function thumbCode(item: ItemView): string {
-  const ext = item.fileName?.split(".").pop();
-  if (ext && ext.length <= 4 && ext !== item.fileName) return ext.toUpperCase();
-  const fallback: Record<ItemKind, string> = {
-    text: "TXT",
-    audio: "M4A",
-    web: "WEB",
-    document: "PDF",
-    image: "",
+  const word: Record<ItemKind, Parameters<typeof t>[0] | null> = {
+    text: "recent.badge.text",
+    audio: "recent.badge.audio",
+    web: "recent.badge.web",
+    document: "recent.badge.document",
+    image: null,
   };
-  return fallback[item.kind];
+  const id = word[item.kind];
+  return id === null ? "" : t(id);
 }
 
 function kindWord(item: ItemView): string {

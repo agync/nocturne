@@ -71,8 +71,8 @@ describe("quick capture, empty", () => {
     await open();
     expect(box()).toHaveFocus();
     expect(screen.getByText("Esc closes")).toBeInTheDocument();
-    expect(screen.getByText(/Type, paste or drop · hold/)).toHaveTextContent(
-      "hold Space on empty to talk",
+    expect(screen.getByText(/Type, paste or drop\. Hold/)).toHaveTextContent(
+      "Hold Space in an empty box to talk.",
     );
     expect(screen.queryByRole("navigation", { name: "Main" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Keep" })).toBeNull();

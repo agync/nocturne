@@ -28,7 +28,9 @@ test.describe("Recently kept", () => {
     await ready(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Today and yesterday");
     await expect(
-      page.getByText("1 waiting to be read · next: tonight, or now if idle"),
+      page.getByText(
+        "1 waiting to be read. Nocturne reads it tonight, or sooner if the computer is free.",
+      ),
     ).toBeVisible();
     await expect(row(page, "Parking permit renewal")).toContainText("Photo · 06:41 · quick keep");
     await expect(row(page, "Parking permit renewal")).toContainText("Reading…");
