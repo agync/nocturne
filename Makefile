@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck e2e-real
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -76,6 +76,11 @@ smoke: ## Launch the built binary and packages under a virtual display and judge
 
 netcheck: ## Run the built binary in a loopback-only namespace and fail on any outbound traffic
 	scripts/net-check.sh launch binary
+
+##@ Real models
+
+e2e-real: ## Run the whole product against the real small mind (downloads about 4.8 GB once), then again with the network cut
+	scripts/e2e-real.sh all
 
 ##@ Lemonade
 
