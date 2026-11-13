@@ -39,10 +39,13 @@ export function captureSeed({ at }: BaseContext): ItemView[] {
         "A letter from Willow Primary about the Year 4 trip: signature and £12 by the deadline.",
       memoryCount: 2,
     }),
+    // The two sources that disagree about the dentist wait on the Needs you screen.
     item("item-card", "image", "Appointment card", "drop", at(-10, 9, 30), {
+      status: "needsYou",
       summary: "An appointment card from the dentist.",
     }),
-    item("item-dentist-voice", "audio", "Dentist moved", "recording", at(-3, 12, 40), {
+    item("item-dentist-voice", "audio", "Dentist moved", "recording", at(-1, 8, 30), {
+      status: "needsYou",
       durationMs: 8000,
       text: "They moved me to Thursday at ten.",
     }),
@@ -106,15 +109,6 @@ export function captureSeed({ at }: BaseContext): ItemView[] {
     }),
     item("item-whatsapp", "text", "Class WhatsApp, 3 messages", "paste", at(0, 5, 58), {
       text: "Class WhatsApp: reminders about swimming kit and the school trip.",
-    }),
-    item("item-inbox-card", "image", "Dentist appointment card", "watchedFolder", at(-1, 8, 30), {
-      status: "needsYou",
-      memoryCount: 0,
-      understoodInMs: null,
-    }),
-    item("item-lunchbox", "web", "Lunchbox recipe ideas", "pastedWeb", at(-1, 13, 5), {
-      status: "unconfirmed",
-      text: "Quick lunchbox recipes for school days.",
     }),
     item("item-timetable", "image", "Swimming timetable", "drop", at(-1, 10, 0), {
       summary: "The pool timetable for the winter term.",

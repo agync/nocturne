@@ -82,18 +82,36 @@ describe("the list", () => {
     expect(rowOf("Parking permit renewal")).toHaveTextContent("Photo · 06:41 · quick keep");
     expect(rowOf("Ask Sam about Saturday")).toHaveTextContent("Voice note · 0:06 · 06:15");
     expect(rowOf("Class WhatsApp, 3 messages")).toHaveTextContent("Pasted · 05:58");
-    expect(rowOf("Dentist appointment card")).toHaveTextContent(
-      "Photo · yesterday · Nocturne inbox folder",
-    );
-    expect(rowOf("Lunchbox recipe ideas")).toHaveTextContent("Web page you pasted · yesterday");
+    expect(rowOf("Dentist moved")).toHaveTextContent("Voice note · 0:08 · yesterday");
+    expect(rowOf("Swimming timetable")).toHaveTextContent("Photo · yesterday");
+  });
+
+  it("a watched folder, a web page and a screenshot say where they came from", async () => {
+    const engine = new Kept();
+    engine.extra = [
+      await base(engine, "inbox", {
+        kind: "image",
+        source: "watchedFolder",
+        status: "understood",
+        reason: null,
+      }),
+      await base(engine, "page", {
+        kind: "web",
+        source: "pastedWeb",
+        status: "understood",
+        reason: null,
+      }),
+    ];
+    await open(engine);
+    expect(rowOf("inbox")).toHaveTextContent("Photo · yesterday · Nocturne inbox folder");
+    expect(rowOf("page")).toHaveTextContent("Web page you pasted · yesterday");
   });
 
   it("each row has its status in words", async () => {
     await open();
     expect(within(rowOf("Parking permit renewal")).getByText("Reading…")).toBeInTheDocument();
     expect(within(rowOf("Ask Sam about Saturday")).getByText("Understood")).toBeInTheDocument();
-    expect(within(rowOf("Dentist appointment card")).getByText("Needs you")).toBeInTheDocument();
-    expect(within(rowOf("Lunchbox recipe ideas")).getByText("Unconfirmed")).toBeInTheDocument();
+    expect(within(rowOf("Dentist moved")).getByText("Needs you")).toBeInTheDocument();
     expect(within(rowOf("council-tax-2026.pdf")).getByText("Couldn’t read")).toBeInTheDocument();
   });
 
@@ -113,10 +131,17 @@ describe("the list", () => {
   });
 
   it("Which is right? and Confirm take the person to Needs you", async () => {
-    await open();
-    await userEvent.click(
-      screen.getByRole("button", { name: "Which is right?: Dentist appointment card" }),
-    );
+    const engine = new Kept();
+    engine.extra = [
+      await base(engine, "Lunchbox recipe ideas", {
+        kind: "web",
+        source: "pastedWeb",
+        status: "unconfirmed",
+        reason: null,
+      }),
+    ];
+    await open(engine);
+    await userEvent.click(screen.getByRole("button", { name: "Which is right?: Dentist moved" }));
     expect(window.location.hash).toBe("#/needs-you");
     window.location.hash = "#/recent";
     await userEvent.click(

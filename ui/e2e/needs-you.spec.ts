@@ -23,6 +23,95 @@ const rows = (page: Page) =>
 
 const said = (page: Page) => page.locator("p[class*=said]");
 
+/**
+ * Keeps a pasted web page from the quick-keep window, waits for it to be read, and leaves the app
+ * on Needs you. The page stays loaded, so the mock engine remembers it.
+ */
+const withWebPage = async (page: Page) => {
+  await page.goto("/#/quick-capture");
+  const box = page.getByRole("textbox", { name: "Keep something, or ask" });
+  await box.waitFor();
+  await page.evaluate(() => {
+    const input = document.querySelector("textarea") as HTMLTextAreaElement;
+    const data = new DataTransfer();
+    data.setData("text/plain", "Leo is allergic to nuts so I always make nut-free lunches");
+    data.setData("text/html", "<p>Leo is allergic to nuts so I always make nut-free lunches</p>");
+    input.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true }));
+  });
+  await box.fill("Leo is allergic to nuts so I always make nut-free lunches");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Kept as unconfirmed. I’ll read it tonight.")).toBeVisible();
+  await page.waitForTimeout(5200);
+  await page.evaluate(() => {
+    window.location.hash = "#/needs-you";
+  });
+  await page.getByRole("heading", { level: 1 }).waitFor();
+};
+
+test.describe("an unconfirmed web page", () => {
+  test("waits on Needs you with where it came from and the three ways to answer", async ({
+    page,
+  }) => {
+    await withWebPage(page);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
+    await expect(page.getByText("Unconfirmed", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Source: web page you pasted/ })).toBeVisible();
+    for (const name of ["It’s true", "Not true, forget it", "Leave unconfirmed"]) {
+      await expect(page.getByRole("button", { name })).toBeVisible();
+    }
+    await expect(
+      page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
+    ).toContainText("3");
+    await page.screenshot({ path: `${SHOTS}/needs-you-unconfirmed-light.png` });
+    await page.getByRole("button", { name: "It’s true" }).click();
+    await expect(said(page)).toContainText("Marked as sure because you said so.");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
+  });
+
+  test("Leave unconfirmed removes it and the rail count follows", async ({ page }) => {
+    await withWebPage(page);
+    await page.getByRole("button", { name: "Leave unconfirmed" }).click();
+    await expect(said(page)).toContainText("Left unconfirmed.");
+    await expect(
+      page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
+    ).toContainText("2");
+  });
+
+  test("Recently kept shows it as Unconfirmed and Confirm leads here", async ({ page }) => {
+    await withWebPage(page);
+    await page.evaluate(() => {
+      window.location.hash = "#/recent";
+    });
+    const row = page
+      .getByRole("list", { name: "Things you kept today and yesterday" })
+      .locator("li", {
+        hasText: "Leo is allergic",
+      });
+    await expect(row).toContainText("Unconfirmed");
+    await page.screenshot({ path: `${SHOTS}/recent-unconfirmed-light.png` });
+    await row.getByRole("button", { name: /^Confirm:/ }).click();
+    await expect(page).toHaveURL(/#\/needs-you$/);
+  });
+
+  test("dark and narrow", async ({ browser }) => {
+    const context = await browser.newContext({
+      colorScheme: "dark",
+      locale: "en-GB",
+      timezoneId: "Europe/London",
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
+    await withWebPage(page);
+    expect(await axe(page), "dark").toEqual([]);
+    await page.screenshot({ path: `${SHOTS}/needs-you-unconfirmed-dark.png` });
+    await page.setViewportSize({ width: 400, height: 760 });
+    await page.waitForTimeout(200);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+    await page.screenshot({ path: `${SHOTS}/needs-you-unconfirmed-narrow.png` });
+    await context.close();
+  });
+});
+
 test.describe("Needs you", () => {
   test("says how many are waiting and how to move", async ({ page }) => {
     await ready(page);

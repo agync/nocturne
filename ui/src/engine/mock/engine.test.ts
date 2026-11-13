@@ -297,6 +297,22 @@ describe("MockEngine, shared by the screen lanes", () => {
     expect(after).toBe(before + 1);
   });
 
+  it("a pasted web page, once read, waits on Needs you as unconfirmed and can be left", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const before = (await engine.getStatus()).needsYou;
+    const kept = await engine.keepText("Quick lunchbox recipes", "pastedWeb");
+    await vi.advanceTimersByTimeAsync(6000);
+    const waiting = (await engine.listNeedsYou()).find((e) => e.type === "unconfirmed");
+    expect(waiting?.type === "unconfirmed" && waiting.memory.receipts[0]?.itemId).toBe(
+      kept.item.id,
+    );
+    expect((await engine.getStatus()).needsYou).toBe(before + 1);
+    if (waiting?.type !== "unconfirmed") throw new Error("expected an unconfirmed entry");
+    await engine.snooze(waiting.memory.id, 7);
+    expect((await engine.listNeedsYou()).some((e) => e.type === "unconfirmed")).toBe(false);
+    expect((await engine.getStatus()).needsYou).toBe(before);
+  });
+
   it("keeps pasted bytes by what they are", async () => {
     const engine = createMockEngine({ now: NOW });
     const photo = await engine.keepBytes(new Uint8Array([1]), "image/png", "paste");

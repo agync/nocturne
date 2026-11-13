@@ -132,6 +132,7 @@ export class MockEngine implements EngineClient {
   private readonly listeners = new Map<EngineEventName, Set<(payload: never) => void>>();
   private readonly previews = new Map<string, { ids: string[]; includeOriginals: boolean }>();
   private counter = 0;
+  private readonly snoozed = new Set<string>();
 
   constructor(options: MockOptions = {}) {
     const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
@@ -191,11 +192,18 @@ export class MockEngine implements EngineClient {
     return this.todayPage().needsYou.filter((l) => !l.done && !l.forgotten).length;
   }
 
+  /** Web pages kept during this session wait for the person to say whether they are true. */
+  private waitingUnconfirmed(): MemoryView[] {
+    return this.memories.filter(
+      (m) => m.id.startsWith("mem-new-") && m.status === "unconfirmed" && !this.snoozed.has(m.id),
+    );
+  }
+
   private refreshStatus(emit = false): void {
     const waiting = this.items.filter((i) => i.status === "kept" || i.status === "reading").length;
     this.status = {
       ...this.status,
-      needsYou: this.openNeeds(),
+      needsYou: this.openNeeds() + this.waitingUnconfirmed().length,
       waitingToRead: waiting,
     };
     if (this.status.state !== "paused") {
@@ -295,15 +303,56 @@ export class MockEngine implements EngineClient {
       this.emit("item-changed", found);
     };
     setTimeout(() => change({ status: "reading" }), 1500);
-    setTimeout(
-      () =>
-        change({
-          status: web ? "unconfirmed" : "understood",
-          understoodInMs: 3000,
-          memoryCount: 1,
-        }),
-      4500,
-    );
+    setTimeout(() => {
+      change({
+        status: web ? "unconfirmed" : "understood",
+        understoodInMs: 3000,
+        memoryCount: 1,
+      });
+      if (web) this.learnUnconfirmed(id);
+    }, 4500);
+  }
+
+  /** What was read from a pasted web page is remembered as unconfirmed and waits on Needs you. */
+  private learnUnconfirmed(itemId: string): void {
+    const item = this.items.find((i) => i.id === itemId);
+    if (!item) return;
+    const first = (item.text ?? item.title).trim().split("\n")[0] ?? item.title;
+    const sentence = /[.!?]$/.test(first) ? first : `${first}.`;
+    this.memories.push({
+      id: `mem-new-${itemId}`,
+      sentence,
+      subject: item.title,
+      entityId: null,
+      predicate: "says",
+      object: item.title,
+      certainty: "notSure",
+      status: "unconfirmed",
+      validFrom: null,
+      validTo: null,
+      due: null,
+      learnedAt: item.keptAt,
+      lastUsed: null,
+      letGoAt: null,
+      keepForever: false,
+      private: false,
+      suggestPrivate: false,
+      was: null,
+      receipts: [
+        {
+          itemId,
+          kind: item.kind,
+          source: item.source,
+          label: item.title,
+          keptAt: item.keptAt,
+          durationMs: null,
+          span: null,
+          unconfirmed: true,
+        },
+      ],
+    });
+    this.refreshStatus(true);
+    this.emit("needs-you-changed", this.status.needsYou);
   }
 
   private firstLine(text: string): string {
@@ -647,6 +696,11 @@ export class MockEngine implements EngineClient {
 
   async snooze(memoryId: string, _days: number): Promise<void> {
     const m = this.memory(memoryId);
+    if (m.status === "unconfirmed") {
+      this.snoozed.add(memoryId);
+      this.needsChanged();
+      return;
+    }
     if (m.status === "fading") m.status = "active";
     m.lastUsed = this.clock.toISOString();
   }
@@ -796,6 +850,9 @@ export class MockEngine implements EngineClient {
           done: line.done,
         });
       }
+    }
+    for (const memory of this.waitingUnconfirmed()) {
+      out.push({ type: "unconfirmed", memory: clone(memory), agreeingSources: 0, used: false });
     }
     return out;
   }

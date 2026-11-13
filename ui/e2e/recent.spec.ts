@@ -32,8 +32,7 @@ test.describe("Recently kept", () => {
     ).toBeVisible();
     await expect(row(page, "Parking permit renewal")).toContainText("Photo · 06:41 · quick keep");
     await expect(row(page, "Parking permit renewal")).toContainText("Reading…");
-    await expect(row(page, "Dentist appointment card")).toContainText("Needs you");
-    await expect(row(page, "Lunchbox recipe ideas")).toContainText("Unconfirmed");
+    await expect(row(page, "Dentist moved")).toContainText("Needs you");
     await expect(row(page, "council-tax-2026.pdf")).toContainText(
       "Save an unlocked copy and drop it here",
     );
@@ -87,7 +86,7 @@ test.describe("Recently kept", () => {
     await page.getByRole("button", { name: "Open: Class WhatsApp, 3 messages" }).click();
     await expect(page).toHaveURL(/#\/items\/item-whatsapp$/);
     await page.goBack();
-    await page.getByRole("button", { name: "Which is right?: Dentist appointment card" }).click();
+    await page.getByRole("button", { name: "Which is right?: Dentist moved" }).click();
     await expect(page).toHaveURL(/#\/needs-you$/);
   });
 
@@ -101,11 +100,7 @@ test.describe("Recently kept", () => {
         await page.evaluate(() => document.activeElement?.getAttribute("aria-label") ?? ""),
       );
     }
-    for (const name of [
-      "Open: Ask Sam about Saturday",
-      "Which is right?: Dentist appointment card",
-      "Confirm: Lunchbox recipe ideas",
-    ]) {
+    for (const name of ["Open: Ask Sam about Saturday", "Which is right?: Dentist moved"]) {
       expect(reached, name).toContain(name);
     }
   });
@@ -126,7 +121,7 @@ test.describe("a narrow window", () => {
     await ready(page);
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     const parking = await row(page, "Parking permit renewal").boundingBox();
-    const dentist = await row(page, "Dentist appointment card").getByRole("button").boundingBox();
+    const dentist = await row(page, "Dentist moved").getByRole("button").boundingBox();
     expect(parking?.width ?? 999).toBeLessThanOrEqual(400);
     expect(dentist?.x ?? 0).toBeGreaterThan(40);
     await page.screenshot({ path: `${SHOTS}/recent-narrow.png` });
