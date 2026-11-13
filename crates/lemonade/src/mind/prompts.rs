@@ -69,11 +69,12 @@ pub fn extraction_schema() -> Value {
                             "properties": {"quote": {"type": "string", "minLength": 1}},
                             "required": ["quote"]
                         },
-                        "tags": {"type": "array", "items": {"type": "string"}}
+                        "tags": {"type": "array", "items": {"type": "string"}},
+                        "moved": {"type": "boolean"}
                     },
                     "required": [
                         "sentence", "subject", "subjectKind", "predicate", "object", "validFrom",
-                        "validTo", "due", "confidence", "span", "tags"
+                        "validTo", "due", "confidence", "span", "tags", "moved"
                     ]
                 }
             }
@@ -87,7 +88,7 @@ pub fn extraction_schema() -> Value {
 pub const EXAMPLE_NOTE: &str = "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12. \
 She will send the results by 13 March. Ana lives in Hull now, since 1 March.";
 pub const EXAMPLE_KEPT: &str = "2026-03-02";
-pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "validFrom": null, "validTo": null, "due": "2026-03-06", "confidence": 0.95, "span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "tags": ["health", "appointment"]}, {"sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "validFrom": null, "validTo": null, "due": "2026-03-13", "confidence": 0.9, "span": {"quote": "She will send the results by 13 March"}, "tags": ["health"]}, {"sentence": "Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "validFrom": "2026-03-01", "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "Ana lives in Hull now, since 1 March"}, "tags": ["home"]}]}"#;
+pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "validFrom": null, "validTo": null, "due": "2026-03-06", "confidence": 0.95, "span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "tags": ["health", "appointment"], "moved": true}, {"sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "validFrom": null, "validTo": null, "due": "2026-03-13", "confidence": 0.9, "span": {"quote": "She will send the results by 13 March"}, "tags": ["health"], "moved": false}, {"sentence": "Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "validFrom": "2026-03-01", "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "Ana lives in Hull now, since 1 March"}, "tags": ["home"], "moved": false}]}"#;
 
 pub fn extraction_system(nonce: &str) -> String {
     format!(
@@ -106,6 +107,7 @@ Rules:\n\
 - confidence: 0 to 1, how sure the text makes it.\n\
 - span: {{\"quote\": the words of the item that support it, copied character for character}}. A memory without one is thrown away.\n\
 - tags: a few lower-case words.\n\
+- moved: true only when the text says this value replaces an earlier one (moved, changed, rescheduled, now instead of); otherwise false.\n\
 Skip small talk and anything that will not matter later. Never invent facts. An empty list is fine.\n\
 Example. A note kept on {EXAMPLE_KEPT}: {EXAMPLE_NOTE}\n\
 Reply: {EXAMPLE_REPLY}\n{}",

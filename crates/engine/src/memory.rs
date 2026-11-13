@@ -4,7 +4,8 @@
 use std::collections::HashSet;
 
 use nocturne_contract::{
-    EntityKind, EntityView, MemoryFilter, MemoryStatus, MemoryView, NeedsYouEntry, WhichOption,
+    EntityKind, EntityView, MemoryFilter, MemoryStatus, MemoryView, NeedsYouEntry, Span,
+    WhichOption,
 };
 use rusqlite::{OptionalExtension, Transaction, params};
 
@@ -56,6 +57,113 @@ fn last_kept(tx: &Transaction<'_>, memory: &str) -> Result<Option<String>> {
     )?)
 }
 
+/// Words that say a value replaces an earlier one ("it has moved", "now on Thursday").
+const MOVE_WORDS: [&str; 6] = [
+    "moved",
+    "changed",
+    "now",
+    "instead",
+    "rescheduled",
+    "postponed",
+];
+
+/// Whether the item says this candidate replaces an earlier value: the mind marked it so, or the
+/// words it quotes say so.
+fn says_moved(c: &Candidate) -> bool {
+    c.moved || c.span.as_ref().is_some_and(quote_says_moved)
+}
+
+fn quote_says_moved(span: &Span) -> bool {
+    let Span::Quote { text } = span else {
+        return false;
+    };
+    let words: Vec<String> = text
+        .to_lowercase()
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect();
+    words.iter().any(|w| MOVE_WORDS.contains(&w.as_str()))
+        || words
+            .windows(2)
+            .any(|p| p[0] == "brought" && p[1] == "forward")
+}
+
+/// Whether a trusted item behind a memory quotes words that say it moved.
+fn quotes_a_move(tx: &Transaction<'_>, memory: &str) -> Result<bool> {
+    let mut stmt = tx.prepare(
+        "SELECT s.span FROM memory_sources s JOIN items i ON i.id = s.item_id \
+         WHERE s.memory_id = ?1 AND i.trust = 'trusted' AND s.span IS NOT NULL",
+    )?;
+    let spans: Vec<String> = stmt
+        .query_map([memory], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(spans
+        .iter()
+        .any(|json| serde_json::from_str::<Span>(json).is_ok_and(|s| quote_says_moved(&s))))
+}
+
+/// What a new appointment does to an existing one in its slot.
+enum Meets {
+    /// Two dated appointments, nothing saying one moved: two separate events.
+    Separate,
+    /// The new one is the old one moved: it replaces it.
+    Replaces,
+    /// They may be the same event and cannot be put in order: ask the person.
+    Asks,
+}
+
+/// A dated appointment replaces another only when the item says it moved, the item is trusted
+/// and was kept clearly later than the trusted items behind the old value, the old date was
+/// still ahead when it was kept, the new date is not already past, and the person did not
+/// choose the old value themselves. `None` when either is undated: the usual rules apply.
+fn appointment_meets(
+    tx: &Transaction<'_>,
+    c: &Candidate,
+    new_date: Option<&String>,
+    e: &MemRow,
+    item: &ItemInfo,
+) -> Result<Option<Meets>> {
+    let (Some(new_date), Some(old_date)) = (new_date, e.due.as_ref().or(e.valid_from.as_ref()))
+    else {
+        return Ok(None);
+    };
+    if !says_moved(c) {
+        // Read out of order, the newer note may be the one that said it moved: then this may be
+        // the same appointment, and only the person can say.
+        let same = new_date == old_date || quotes_a_move(tx, &e.id)?;
+        return Ok(Some(if same { Meets::Asks } else { Meets::Separate }));
+    }
+    let newer = last_kept(tx, &e.id)?.and_then(|old| kept_order(&item.kept_at, &old))
+        == Some(std::cmp::Ordering::Greater);
+    let ahead =
+        old_date.as_str() >= item.kept_on.as_str() && new_date.as_str() >= item.kept_on.as_str();
+    Ok(Some(if newer && ahead && !e.confirmed {
+        Meets::Replaces
+    } else {
+        Meets::Asks
+    }))
+}
+
+/// The current memory this reading made or kept in the same slot as `row`, to take over the
+/// history `row` held.
+fn successor_in_slot(
+    tx: &Transaction<'_>,
+    row: &MemRow,
+    touched: &HashSet<String>,
+) -> Result<Option<String>> {
+    let candidates = query_mems(
+        tx,
+        "m.subject_key = ?1 AND m.predicate = ?2 AND m.superseded_at IS NULL AND m.id != ?3 \
+         ORDER BY m.recorded_at DESC, m.id",
+        params![row.subject_key, row.predicate, row.id],
+    )?;
+    Ok(candidates
+        .into_iter()
+        .find(|m| touched.contains(&m.id))
+        .map(|m| m.id))
+}
+
 /// The first word of an object, casefolded: "Metformin 500mg" and "metformin 850mg" are one drug.
 fn head(s: &str) -> String {
     key_of(s)
@@ -94,6 +202,8 @@ struct ItemInfo {
     private: bool,
     origin: Option<String>,
     kept_at: String,
+    /// The local day it was kept, YYYY-MM-DD.
+    kept_on: String,
 }
 
 fn upsert_entity(
@@ -299,6 +409,7 @@ fn apply(
     tx: &Transaction<'_>,
     now: &str,
     today: &str,
+    tz: &jiff::tz::TimeZone,
     item_id: &str,
     lease: &str,
     cands: Vec<Candidate>,
@@ -336,11 +447,16 @@ fn apply(
         )
         .optional()?
         .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
+    let kept_on = kept_at
+        .parse::<jiff::Timestamp>()
+        .map(|t| t.to_zoned(tz.clone()).date().to_string())
+        .unwrap_or_else(|_| today.to_string());
     let item = ItemInfo {
         trusted: trust == "trusted",
         private,
         origin,
         kept_at,
+        kept_on,
     };
     let mut report = ApplyReport::default();
 
@@ -393,7 +509,28 @@ fn apply(
             || row.confirmed
             || row.private
             || !pages_citing(tx, std::slice::from_ref(mid))?.is_empty();
-        if row.superseded_at.is_none() && !protected {
+        // A memory that replaced others is their history's link: it goes only when this
+        // reading has a new value in its slot to take that link over, and is kept otherwise.
+        let replaced_others: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memories WHERE superseded_by = ?1 \
+             AND superseded_at IS NOT NULL)",
+            [mid],
+            |r| r.get(0),
+        )?;
+        let successor = if replaced_others {
+            successor_in_slot(tx, &row, &touched)?
+        } else {
+            None
+        };
+        if let Some(next) = &successor {
+            tx.execute(
+                "UPDATE memories SET superseded_by = ?2 \
+                 WHERE superseded_by = ?1 AND superseded_at IS NOT NULL",
+                params![mid, next],
+            )?;
+        }
+        let removable = !replaced_others || successor.is_some();
+        if row.superseded_at.is_none() && !protected && removable {
             delete_memory(tx, mid)?;
             report.removed.push(mid.clone());
         } else {
@@ -411,6 +548,20 @@ fn apply(
             }
         }
     }
+
+    // A question raised against a memory that has since gone is gone with it.
+    let mut open_conflicts = Vec::new();
+    for cid in std::mem::take(&mut report.conflicts) {
+        let open: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM conflicts WHERE id = ?1)",
+            [&cid],
+            |r| r.get(0),
+        )?;
+        if open {
+            open_conflicts.push(cid);
+        }
+    }
+    report.conflicts = open_conflicts;
 
     // What a private item says is private: every memory now linked to it, whether it made the
     // memory, agreed with it, or kept a tombstone link. (Early returns in `apply_one` skip the
@@ -563,6 +714,27 @@ fn apply_one(
         return Ok(());
     }
 
+    // The same item read again, saying what a later item has since replaced: the old row is
+    // linked again as history, not made a second time.
+    let history: Option<String> = tx
+        .query_row(
+            "SELECT m.id FROM memories m WHERE m.subject_key = ?1 AND m.predicate = ?2 \
+             AND m.object_key = ?3 AND m.superseded_at IS NOT NULL \
+             ORDER BY m.recorded_at DESC, m.id LIMIT 1",
+            params![subject_key, predicate, object_key],
+            |r| r.get(0),
+        )
+        .optional()?
+        .filter(|id: &String| relinked.contains(id.as_str()));
+    if let Some(old) = history {
+        tx.execute(
+            "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
+            params![old, item_id, span],
+        )?;
+        touched.insert(old);
+        return Ok(());
+    }
+
     // A new memory.
     let status = if !item.trusted || c.predicate.is_other() {
         MemoryStatus::Unconfirmed
@@ -572,7 +744,6 @@ fn apply_one(
     let id = new_id("mem");
     let mut to_close: Vec<String> = Vec::new();
     let mut to_replace: Vec<String> = Vec::new();
-    let mut replaced_by: Option<String> = None;
     let mut in_conflict: Vec<String> = Vec::new();
     if status == MemoryStatus::Active {
         for e in &current {
@@ -592,23 +763,23 @@ fn apply_one(
                 (Some(t), Some(f)) => t > f,
                 _ => false,
             };
-            // A dated appointment kept again later with another date has moved; one with no
-            // date (a club that meets monthly) said two ways is a contradiction. This loop runs
-            // only for a trusted item: an untrusted one makes an unconfirmed memory instead.
-            let moved = predicate == "scheduled"
-                && due.as_ref().or(vf.as_ref()).is_some()
-                && e.due.as_ref().or(e.valid_from.as_ref()).is_some();
-            let order = if moved {
-                last_kept(tx, &e.id)?.and_then(|old| kept_order(&item.kept_at, &old))
+            // Two dated appointments: separate events, a move, or a question (see
+            // `appointment_meets`). An undated one (a club that meets monthly) said two ways is
+            // a contradiction. This loop runs only for a trusted item: an untrusted one makes an
+            // unconfirmed memory instead.
+            let meets = if predicate == "scheduled" {
+                appointment_meets(tx, c, due.as_ref().or(vf.as_ref()), e, item)?
             } else {
                 None
             };
             if closes_old_value(&predicate) && later_start && still_open {
                 to_close.push(e.id.clone());
-            } else if order == Some(std::cmp::Ordering::Greater) {
-                to_replace.push(e.id.clone());
-            } else if order == Some(std::cmp::Ordering::Less) && replaced_by.is_none() {
-                replaced_by = Some(e.id.clone());
+            } else if let Some(meets) = meets {
+                match meets {
+                    Meets::Separate => {}
+                    Meets::Replaces => to_replace.push(e.id.clone()),
+                    Meets::Asks => in_conflict.push(e.id.clone()),
+                }
             } else if overlaps(
                 e.valid_from.as_deref(),
                 e.valid_to.as_deref(),
@@ -668,13 +839,6 @@ fn apply_one(
             params![old, now, id],
         )?;
         report.replaced.push(old.clone());
-    }
-    if let Some(newer) = &replaced_by {
-        tx.execute(
-            "UPDATE memories SET superseded_at = ?2, superseded_by = ?3 WHERE id = ?1",
-            params![id, now, newer],
-        )?;
-        report.replaced.push(id.clone());
     }
     for old in &in_conflict {
         let exists: bool = tx.query_row(
@@ -852,13 +1016,10 @@ impl Engine {
         candidates: Vec<Candidate>,
     ) -> Result<ApplyReport> {
         let now = fmt_ts(self.clock().now());
-        let today = self
-            .clock()
-            .now()
-            .to_zoned(self.clock().tz())
-            .date()
-            .to_string();
-        let (report, files) = self.write(|tx| apply(tx, &now, &today, item, lease, candidates))?;
+        let tz = self.clock().tz();
+        let today = self.clock().now().to_zoned(tz.clone()).date().to_string();
+        let (report, files) =
+            self.write(|tx| apply(tx, &now, &today, &tz, item, lease, candidates))?;
         crate::audio::shred_all(files);
         if !report.removed.is_empty() || !report.reworded.is_empty() || !report.replaced.is_empty()
         {

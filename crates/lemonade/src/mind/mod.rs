@@ -597,6 +597,7 @@ fn candidate(raw: &Value) -> Result<Candidate, String> {
         confidence,
         span,
         tags,
+        moved: raw["moved"].as_bool().unwrap_or(false),
     })
 }
 

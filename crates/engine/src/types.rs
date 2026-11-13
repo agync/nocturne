@@ -81,6 +81,8 @@ pub struct Candidate {
     pub confidence: f32,
     pub span: Option<Span>,
     pub tags: Vec<Tag>,
+    /// The item says this replaces an earlier value (an appointment moved).
+    pub moved: bool,
 }
 
 impl Candidate {
@@ -104,6 +106,7 @@ impl Candidate {
             confidence,
             span: None,
             tags: Vec::new(),
+            moved: false,
         }
     }
 }

@@ -150,6 +150,7 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
     assert_eq!(got[1].predicate, Predicate::Other("collects".into()));
     assert_eq!(got[1].subject_kind, None);
     assert_eq!(got[2].predicate, Predicate::Other("likes_cheese".into()));
+    assert!(!c.moved, "not marked as moved");
 
     r.mind
         .extract("Sam likes tea again", &context())
@@ -189,15 +190,33 @@ async fn the_extraction_schema_requires_a_quote_for_every_memory() {
     assert!(required.contains(&"span"), "{required:?}");
     // A field the grammar may leave out, the small model does leave out: every date must be
     // decided, even if only as null.
-    for key in ["validFrom", "validTo", "due", "subjectKind", "tags"] {
+    for key in [
+        "validFrom",
+        "validTo",
+        "due",
+        "subjectKind",
+        "tags",
+        "moved",
+    ] {
         assert!(required.contains(&key), "{key} in {required:?}");
     }
     assert_eq!(item["properties"]["span"]["type"], "object");
+    assert_eq!(item["properties"]["moved"]["type"], "boolean");
     assert_eq!(item["properties"]["span"]["required"], json!(["quote"]));
     assert_eq!(
         item["properties"]["span"]["properties"]["quote"]["minLength"],
         1
     );
+}
+
+#[tokio::test]
+async fn a_memory_the_mind_marks_as_moved_says_so() {
+    let r = rig().await;
+    let mut m = good_memory();
+    m["moved"] = json!(true);
+    r.script(json!([reply(vec![m])])).await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert!(got[0].moved);
 }
 
 #[tokio::test]
