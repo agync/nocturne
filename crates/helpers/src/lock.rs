@@ -46,6 +46,9 @@ pub struct LockedHelper {
     pub base_url: String,
     #[serde(default)]
     pub placeholder: bool,
+    /// Hosts a download may be redirected to, besides the one in `base_url`.
+    #[serde(default)]
+    pub redirect_hosts: Vec<String>,
     pub assets: BTreeMap<String, LockedAsset>,
 }
 
@@ -57,6 +60,9 @@ pub struct LockedAsset {
     pub base_url: Option<String>,
     /// Lowercase hex of the download.
     pub sha256: String,
+    /// Exact size in bytes of the download.
+    #[serde(default)]
+    pub size: u64,
     /// The binary inside an archive, by its exact name.
     #[serde(default)]
     pub member: Option<String>,

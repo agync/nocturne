@@ -4,8 +4,8 @@
 # Usage: scripts/helpers-pin.sh [--write]
 #
 # Reads helpers.lock, downloads each pinned download with GET (nothing is sent but the request),
-# and prints the sha256 of the download and of every binary inside it. With --write the checksums
-# go into helpers.lock and a helper is no longer marked as a placeholder once every platform was
+# and prints the size and sha256 of the download and of every binary inside it. With --write the checksums and
+# sizes go into helpers.lock and a helper is no longer marked as a placeholder once every platform was
 # pinned. Then, for the binary of this machine, it captures the help text of every command
 # Nocturne uses, in an empty environment and a network namespace with only loopback
 # (`unshare -rn`), into crates/helpers/fixtures/help/<kind>/<version>/<command>.txt.
@@ -54,6 +54,7 @@ while IFS=$'\t' read -r kind version platform url file member extras; do
         continue
     fi
     archive_sum=$(sha256_of "$dir/$file")
+    size=$(stat -c %s "$dir/$file" 2> /dev/null || stat -f %z "$dir/$file")
     member_sum=""
     extra_sums=""
     if [[ -n "$member" ]]; then
@@ -68,10 +69,10 @@ while IFS=$'\t' read -r kind version platform url file member extras; do
             [[ -n "$e" ]] && extra_sums+="${e}=$(sha256_of "$dir/x/$e"),"
         done
     fi
-    printf '  sha256 %s\n' "$archive_sum"
+    printf '  sha256 %s\n  size   %s\n' "$archive_sum" "$size"
     [[ -n "$member_sum" ]] && printf '  member %s\n' "$member_sum"
     [[ -n "$extra_sums" ]] && printf '  extras %s\n' "$extra_sums"
-    printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$platform" "$archive_sum" "$member_sum" "$extra_sums" >> "$results"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$platform" "$archive_sum" "$member_sum" "$extra_sums" "$size" >> "$results"
 done < "$scratch/assets.tsv"
 
 if ((write)); then
@@ -85,12 +86,13 @@ def block(kind, platform):
     pattern = re.compile(r"(?ms)^(\[\[helpers\]\]\nkind = \"%s\".*?^\[helpers\.assets\.%s\]\n)(.*?)(?=^\[|\Z)" % (kind, platform))
     return pattern
 
-for kind, platform, archive, member, extras in rows:
+for kind, platform, archive, member, extras, size in rows:
     m = block(kind, platform).search(text)
     if not m:
         continue
     body = m.group(2)
     body = re.sub(r'(?m)^sha256 = ".*"$', 'sha256 = "%s"' % archive, body, count=1)
+    body = re.sub(r'(?m)^size = .*$', 'size = %s' % size, body, count=1)
     if member:
         body = re.sub(r'(?m)^member_sha256 = ".*"$', 'member_sha256 = "%s"' % member, body, count=1)
         for pair in filter(None, extras.split(",")):

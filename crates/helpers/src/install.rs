@@ -27,6 +27,10 @@ pub(crate) struct Source {
     pub member: Option<String>,
     pub member_sha256: Option<String>,
     pub extras: Vec<(String, String)>,
+    /// The download's exact size: nothing larger is accepted or kept.
+    pub max_bytes: u64,
+    /// Hosts a redirect may lead to (https only).
+    pub hosts: Vec<String>,
 }
 
 pub(crate) fn kind_dir(kind: HelperKind) -> &'static str {
@@ -96,6 +100,23 @@ pub(crate) fn extras_with(
         .collect()
 }
 
+/// The hosts a download may come from: the one in the lock, and the ones the lock names for
+/// redirects.
+fn allowed_hosts(
+    helper: &crate::lock::LockedHelper,
+    asset: &crate::lock::LockedAsset,
+) -> Vec<String> {
+    let base = asset.base_url.as_deref().unwrap_or(&helper.base_url);
+    let mut hosts: Vec<String> = helper.redirect_hosts.clone();
+    if let Some(h) = base
+        .strip_prefix("https://")
+        .and_then(|r| r.split('/').next())
+    {
+        hosts.push(h.to_string());
+    }
+    hosts
+}
+
 pub(crate) fn source_for(lock: &HelpersLock, kind: HelperKind) -> Result<Source, HelperError> {
     let helper = lock.helper(kind).ok_or(HelperError::Unsupported)?;
     let asset = platform()
@@ -117,6 +138,8 @@ pub(crate) fn source_for(lock: &HelpersLock, kind: HelperKind) -> Result<Source,
             .iter()
             .map(|e| (e.member.clone(), e.sha256.clone()))
             .collect(),
+        max_bytes: asset.size,
+        hosts: allowed_hosts(helper, asset),
     })
 }
 
@@ -130,12 +153,25 @@ pub(crate) async fn install_embedded(
     if !source.url.starts_with("https://") {
         return Err(HelperError::Unsupported);
     }
-    let client = client(false)?;
+    let client = client(false, &source.hosts)?;
     install_source(&source, dirs, progress, cancel, &client).await
 }
 
-pub(crate) fn client(no_proxy: bool) -> Result<reqwest::Client, HelperError> {
+pub(crate) fn client(no_proxy: bool, hosts: &[String]) -> Result<reqwest::Client, HelperError> {
+    let hosts = hosts.to_vec();
+    let policy = reqwest::redirect::Policy::custom(move |attempt| {
+        let url = attempt.url();
+        let ok = url.scheme() == "https"
+            && url.host_str().is_some_and(|h| hosts.iter().any(|a| a == h))
+            && attempt.previous().len() < 5;
+        if ok {
+            attempt.follow()
+        } else {
+            attempt.error("a redirect that is not allowed")
+        }
+    });
     let mut builder = reqwest::Client::builder()
+        .redirect(policy)
         .user_agent("nocturne-helper-download")
         .connect_timeout(Duration::from_secs(20))
         .read_timeout(Duration::from_secs(60));
@@ -241,7 +277,9 @@ async fn spawn_blocking<T: Send + 'static>(
 }
 
 fn net_error(e: reqwest::Error) -> HelperError {
-    if e.is_connect() || e.is_timeout() {
+    if e.is_redirect() {
+        HelperError::Download("the server redirected somewhere that is not allowed".into())
+    } else if e.is_connect() || e.is_timeout() {
         HelperError::NoInternet
     } else {
         HelperError::Download(e.to_string())
@@ -297,6 +335,11 @@ async fn download(
         }
     };
     let total = response.content_length().map_or(0, |n| n + offset);
+    if total > source.max_bytes {
+        return Err(HelperError::Download(
+            "the download is larger than expected".into(),
+        ));
+    }
     let mut file = open_part(part, append).await?;
     let mut received = offset;
     progress.send_replace(InstallProgress { received, total });
@@ -311,6 +354,13 @@ async fn download(
         let Some(chunk) = chunk else { break };
         file.write_all(&chunk).await.map_err(disk_error)?;
         received += chunk.len() as u64;
+        if received > source.max_bytes {
+            drop(file);
+            let _ = tokio::fs::remove_file(part).await;
+            return Err(HelperError::Download(
+                "the download is larger than expected".into(),
+            ));
+        }
         progress.send_replace(InstallProgress { received, total });
     }
     file.flush().await.map_err(disk_error)?;
@@ -595,6 +645,8 @@ mod tests {
             member: None,
             member_sha256: None,
             extras: Vec::new(),
+            max_bytes: 1 << 20,
+            hosts: Vec::new(),
         }
     }
 
@@ -636,7 +688,7 @@ mod tests {
         watch::Receiver<InstallProgress>,
     ) {
         let (tx, rx) = watch::channel(InstallProgress::default());
-        let client = client(true).unwrap();
+        let client = client(true, &source.hosts).unwrap();
         let result = install_source(source, dirs, tx, CancellationToken::new(), &client).await;
         (result, rx)
     }
@@ -710,7 +762,7 @@ mod tests {
         let server = serve(body.clone(), Some(8_000)).await;
         let source = raw_source(&server, &body);
         let dirs = tmp.dirs();
-        let client = client(true).unwrap();
+        let client = client(true, &source.hosts).unwrap();
 
         let (tx, mut rx) = watch::channel(InstallProgress::default());
         let cancel = CancellationToken::new();
@@ -745,7 +797,7 @@ mod tests {
         let server = serve(body.clone(), Some(4_000)).await;
         let source = raw_source(&server, &body);
         let dirs = tmp.dirs();
-        let client = client(true).unwrap();
+        let client = client(true, &source.hosts).unwrap();
         let (tx, mut rx) = watch::channel(InstallProgress::default());
         let cancel = CancellationToken::new();
         let stopper = cancel.clone();
@@ -783,6 +835,8 @@ mod tests {
             member: None,
             member_sha256: None,
             extras: Vec::new(),
+            max_bytes: 1 << 20,
+            hosts: Vec::new(),
         };
         let (result, _) = run(&source, &tmp.dirs()).await;
         assert_eq!(result, Err(HelperError::NoInternet));
@@ -898,5 +952,99 @@ mod tests {
             assert!(is_unpinned(&found.sha256));
             assert_eq!(crate::verify(&found), Err(HelperError::Mismatch));
         }
+    }
+
+    /// Answers every request with exactly these bytes, then closes.
+    async fn serve_raw(response: Vec<u8>) -> u16 {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut stream, _)) = listener.accept().await {
+                let response = response.clone();
+                tokio::spawn(async move {
+                    let mut head = Vec::new();
+                    let mut byte = [0u8; 1];
+                    while !head.ends_with(b"\r\n\r\n") {
+                        if stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                            return;
+                        }
+                        head.push(byte[0]);
+                    }
+                    let _ = stream.write_all(&response).await;
+                });
+            }
+        });
+        port
+    }
+
+    fn capped(port: u16, max_bytes: u64) -> Source {
+        Source {
+            kind: HelperKind::Cloudflared,
+            version: "9.9.9".into(),
+            url: format!("http://127.0.0.1:{port}/x"),
+            file: "x".into(),
+            sha256: sha(b"x"),
+            member: None,
+            member_sha256: None,
+            extras: Vec::new(),
+            max_bytes,
+            hosts: vec!["127.0.0.1".into()],
+        }
+    }
+
+    #[tokio::test]
+    async fn a_body_without_a_length_cannot_outgrow_the_pin() {
+        let tmp = TempDir::new("nolen");
+        let mut response = b"HTTP/1.0 200 OK\r\n\r\n".to_vec();
+        response.extend(vec![1u8; 100_000]);
+        let source = capped(serve_raw(response).await, 10_000);
+        let dirs = tmp.dirs();
+        let (result, _) = run(&source, &dirs).await;
+        assert!(
+            matches!(result, Err(HelperError::Download(_))),
+            "{result:?}"
+        );
+        assert!(!part_path(&dirs, HelperKind::Cloudflared, "9.9.9").exists());
+    }
+
+    #[tokio::test]
+    async fn a_length_above_the_pin_is_refused_before_writing() {
+        let tmp = TempDir::new("biglen");
+        let response = b"HTTP/1.0 200 OK\r\ncontent-length: 5000000\r\n\r\nabc".to_vec();
+        let source = capped(serve_raw(response).await, 1 << 20);
+        let dirs = tmp.dirs();
+        let (result, progress) = run(&source, &dirs).await;
+        assert!(
+            matches!(result, Err(HelperError::Download(_))),
+            "{result:?}"
+        );
+        assert!(!part_path(&dirs, HelperKind::Cloudflared, "9.9.9").exists());
+        assert_eq!(progress.borrow().received, 0);
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_http_is_refused() {
+        let tmp = TempDir::new("redir-http");
+        let response =
+            b"HTTP/1.1 302 Found\r\nlocation: http://127.0.0.1:1/x\r\ncontent-length: 0\r\n\r\n"
+                .to_vec();
+        let source = capped(serve_raw(response).await, 1 << 20);
+        let (result, _) = run(&source, &tmp.dirs()).await;
+        assert!(
+            matches!(result, Err(HelperError::Download(_))),
+            "{result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_redirect_to_another_host_is_refused() {
+        let tmp = TempDir::new("redir-host");
+        let response = b"HTTP/1.1 302 Found\r\nlocation: https://evil.example.invalid/x\r\ncontent-length: 0\r\n\r\n".to_vec();
+        let source = capped(serve_raw(response).await, 1 << 20);
+        let (result, _) = run(&source, &tmp.dirs()).await;
+        assert!(
+            matches!(result, Err(HelperError::Download(_))),
+            "{result:?}"
+        );
     }
 }
