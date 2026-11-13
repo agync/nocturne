@@ -175,6 +175,13 @@ test.describe("the Ask page", () => {
     ).toBeVisible();
   });
 
+  test("the whole panel is not ringed when a screen opens", async ({ page }) => {
+    await ready(page, "#/today");
+    await ask(page, "What is Gran’s new number?");
+    await expect(page.getByRole("main")).toBeFocused();
+    await expect(page.getByRole("main")).toHaveCSS("outline-style", "none");
+  });
+
   test("an example moves focus to the question", async ({ page }) => {
     await ready(page);
     await page.getByRole("button", { name: "What is Gran’s new number?" }).click();

@@ -72,8 +72,9 @@
   overflow: auto;
 }
 
+/* The panel takes focus when a screen opens; the whole page ringed would say nothing useful. */
 .main:focus-visible {
-  outline-offset: -2px;
+  outline: 0;
 }
 
 .aside {
