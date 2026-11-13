@@ -2,23 +2,14 @@ import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
-import { onlineReads } from "../online/useOnline";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
   window.location.hash = "";
-  onlineReads.on = false;
 });
 
 describe("settings", () => {
-  it("settings.online_row_hidden_without_a_view", async () => {
-    renderApp({ hash: "#/settings", engine: createMockEngine() });
-    await screen.findByRole("combobox", { name: "Voice, name" });
-    expect(screen.queryByText("Online answers")).toBeNull();
-  });
-
   it("settings.rows_link_when_present", async () => {
-    onlineReads.on = true;
     renderApp({ hash: "#/settings", engine: createMockEngine() });
     await screen.findByRole("combobox", { name: "Voice, name" });
     expect(await screen.findByRole("link", { name: "Online answers, Off. Open" })).toHaveAttribute(

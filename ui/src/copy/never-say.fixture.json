@@ -30,5 +30,9 @@
       "security key"
     ],
     "say": "(never shown outside advanced details)"
+  },
+  {
+    "never": ["API", "provider", "endpoint", "LLM", "prompt"],
+    "say": "(never shown outside advanced details; only the phrases API URL, API key, model name and your provider are allowed whole)"
   }
 ]
