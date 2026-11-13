@@ -187,6 +187,11 @@ async fn the_extraction_schema_requires_a_quote_for_every_memory() {
         .filter_map(Value::as_str)
         .collect();
     assert!(required.contains(&"span"), "{required:?}");
+    // A field the grammar may leave out, the small model does leave out: every date must be
+    // decided, even if only as null.
+    for key in ["validFrom", "validTo", "due", "subjectKind", "tags"] {
+        assert!(required.contains(&key), "{key} in {required:?}");
+    }
     assert_eq!(item["properties"]["span"]["type"], "object");
     assert_eq!(item["properties"]["span"]["required"], json!(["quote"]));
     assert_eq!(
@@ -249,6 +254,31 @@ async fn extract_retries_once_on_bad_output_then_gives_up() {
         .unwrap_err();
     assert!(matches!(err, MindError::Failed(_)), "{err:?}");
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 2 + 2 + 2);
+}
+
+/// "He works on the sensor project" says nothing on its own: a memory about a pronoun is sent
+/// back once to be named, and dropped if it comes back unnamed.
+#[tokio::test]
+async fn a_pronoun_is_not_a_subject() {
+    let r = rig().await;
+    let mut he = good_memory();
+    he["subject"] = json!("He");
+    let mut named = good_memory();
+    named["subject"] = json!("Sam");
+    r.script(json!([reply(vec![he.clone()]), reply(vec![named])]))
+        .await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].subject, "Sam");
+    let calls = r.seen("/v1/chat/completions").await;
+    let retry = calls[1]["body"]["messages"][3]["content"].as_str().unwrap();
+    assert!(retry.contains("pronoun"), "{retry}");
+
+    let mut they = good_memory();
+    they["subject"] = json!(" they ");
+    r.script(json!([reply(vec![he]), reply(vec![they])])).await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert!(got.is_empty(), "{got:?}");
 }
 
 #[tokio::test]

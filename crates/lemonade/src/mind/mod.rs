@@ -533,9 +533,29 @@ fn date_field(raw: &Value, key: &str) -> Result<Option<Date>, String> {
     }
 }
 
+/// Words that stand for someone or something named elsewhere: a memory about one of them, or
+/// about "her birthday", cannot say whose it is.
+const PRONOUNS: [&str; 16] = [
+    "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their", "theirs",
+    "this", "that", "these", "those",
+];
+const POSSESSIVES: [&str; 4] = ["his", "her", "its", "their"];
+
+fn named_subject(subject: &str) -> Result<(), String> {
+    let lower = subject.to_lowercase();
+    let first = lower.split_whitespace().next().unwrap_or("");
+    if PRONOUNS.contains(&lower.as_str()) || POSSESSIVES.contains(&first) {
+        return Err(format!(
+            "subject \"{subject}\" is a pronoun; name who or what it stands for"
+        ));
+    }
+    Ok(())
+}
+
 fn candidate(raw: &Value) -> Result<Candidate, String> {
     let sentence = text_field(raw, "sentence")?;
     let subject = text_field(raw, "subject")?;
+    named_subject(&subject)?;
     let object = text_field(raw, "object")?;
     let predicate = predicate(&text_field(raw, "predicate")?);
     let confidence = raw["confidence"]
@@ -655,5 +675,43 @@ impl Mind for LemonadeMind {
             let model = self.installed(ComponentRole::Voice).await?;
             Ok(self.client.speech(&model, voice, text).await?)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_worked_example_is_a_reply_the_mind_would_keep_whole() {
+        let source = normalise(prompts::EXAMPLE_NOTE);
+        let (items, invalid) = parse_candidates(prompts::EXAMPLE_REPLY, &source).unwrap();
+        assert!(invalid.is_empty(), "{invalid:?}");
+        assert_eq!(items.len(), 3, "every memory in it is grounded");
+        let system = prompts::extraction_system("n");
+        assert!(system.contains(prompts::EXAMPLE_NOTE) && system.contains(prompts::EXAMPLE_REPLY));
+    }
+
+    #[test]
+    fn every_predicate_offered_is_one_the_engine_knows() {
+        for (name, _) in prompts::PREDICATES {
+            assert!(!predicate(name).is_other(), "{name}");
+        }
+    }
+
+    #[test]
+    fn pronouns_and_their_possessions_are_not_subjects() {
+        for bad in ["He", " they", "It", "her birthday", "Their car", "this"] {
+            assert!(named_subject(bad.trim()).is_err(), "{bad}");
+        }
+        for good in [
+            "Tom",
+            "Gran's birthday",
+            "Theatre trip",
+            "Hermione",
+            "Itinerary",
+        ] {
+            assert!(named_subject(good).is_ok(), "{good}");
+        }
     }
 }
