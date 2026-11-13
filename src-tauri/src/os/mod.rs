@@ -11,6 +11,7 @@ use crate::error::CommandError;
 
 pub mod autostart;
 pub mod copy;
+pub mod inbox;
 pub mod notify;
 pub mod quick_capture;
 pub mod shortcut;
@@ -66,6 +67,9 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
             Err(e) => tracing::warn!("start with this computer could not be reconciled: {e}"),
         }
     }
+    if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
+        resume_inbox(app, &shell.data_dir, settings.inbox_folder.as_deref());
+    }
     tray::install(app);
     notify::install(app, &os);
     let handle = app.clone();
@@ -93,6 +97,19 @@ pub fn window_may_call(label: &str, command: &str) -> bool {
         crate::window::MAIN => true,
         quick_capture::LABEL => QUICK_CAPTURE_COMMANDS.contains(&command),
         _ => false,
+    }
+}
+
+/// Watch the saved folder again. A folder that is not there yet is watched anyway: it is looked
+/// for quietly until it appears (a drive that is not mounted).
+fn resume_inbox<R: Runtime>(app: &AppHandle<R>, data_dir: &std::path::Path, folder: Option<&str>) {
+    let Some(folder) = folder.filter(|f| !f.trim().is_empty()) else {
+        return;
+    };
+    match inbox::validate(folder, data_dir, inbox::home_dir().as_deref()) {
+        Ok(root) => inbox::start(app, root),
+        Err(inbox::InboxError::Missing) => inbox::start(app, folder.into()),
+        Err(e) => tracing::warn!("the watched folder is not used: {e}"),
     }
 }
 
@@ -143,6 +160,7 @@ fn start_at_login_now<R: Runtime>(app: &AppHandle<R>, os: &OsState) -> Option<bo
 
 /// Fill in what only the desktop knows (the shortcut is registered, the folder is watched).
 pub fn adjust_settings<R: Runtime>(app: &AppHandle<R>, mut view: SettingsView) -> SettingsView {
+    view.inbox_folder = view.inbox_folder.filter(|f| !f.is_empty());
     if let Some(os) = app.try_state::<OsState>() {
         view.shortcut_available = os.shortcut_registered();
         if let Some(on) = start_at_login_now(app, &os) {
@@ -166,6 +184,11 @@ pub async fn apply_settings<R: Runtime>(
     {
         shortcut::change(&os, new)?;
     }
+    if let Some(folder) = &patch.inbox_folder
+        && Some(folder) != before.inbox_folder.as_ref()
+    {
+        change_inbox(app, &os, folder).await?;
+    }
     if let Some(want) = patch.start_at_login {
         set_start_at_login(app, &os, want).map_err(|e| {
             tracing::warn!("start with this computer was not changed: {e}");
@@ -175,9 +198,39 @@ pub async fn apply_settings<R: Runtime>(
     Ok(())
 }
 
+/// Start, change or stop the watched folder (`""` stops it). Refuses a folder that is not
+/// allowed before anything changes.
+async fn change_inbox<R: Runtime>(
+    app: &AppHandle<R>,
+    os: &OsState,
+    folder: &str,
+) -> Result<(), CommandError> {
+    if folder.trim().is_empty() {
+        inbox::stop(app);
+        os.update(|f| f.inbox = None);
+        return Ok(());
+    }
+    let data_dir = os.data_dir().to_path_buf();
+    let chosen = folder.to_string();
+    let root = tokio::task::spawn_blocking(move || {
+        let root = inbox::validate(&chosen, &data_dir, inbox::home_dir().as_deref())?;
+        if inbox::too_many(&root, inbox::LEDGER_CAP) {
+            return Err(inbox::InboxError::TooMany);
+        }
+        Ok(root)
+    })
+    .await
+    .map_err(CommandError::internal)?
+    .map_err(CommandError::invalid)?;
+    os.update(|f| f.inbox = None);
+    inbox::start(app, root);
+    Ok(())
+}
+
 /// Everything was deleted: drop what the desktop side remembers.
 pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     if let Some(os) = app.try_state::<OsState>() {
+        os.replace_inbox(None);
         os.forget_all();
     }
 }

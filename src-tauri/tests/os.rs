@@ -346,3 +346,184 @@ fn a_start_at_login_that_cannot_be_written_is_refused_and_not_saved() {
     );
     assert!(!h.engine().settings().unwrap().start_at_login);
 }
+
+mod inbox {
+    use std::path::Path;
+    use std::time::{Duration, Instant};
+
+    use super::*;
+    use nocturne_app_lib::os::inbox::Timing;
+
+    fn fast() -> Timing {
+        Timing {
+            stable_after: Duration::from_millis(120),
+            rescan: Duration::from_millis(150),
+            debounce: Duration::from_millis(20),
+        }
+    }
+
+    fn watching(h: &common::Harness) -> tempfile::TempDir {
+        h.app.manage(OsState::new(h.dir.path()));
+        h.app.state::<OsState>().set_inbox_timing(fast());
+        tempfile::tempdir().unwrap()
+    }
+
+    fn kept(h: &common::Harness) -> Vec<Value> {
+        h.ok("list_items", json!({"filter": {}}))
+            .as_array()
+            .unwrap()
+            .clone()
+    }
+
+    fn listing(dir: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut v: Vec<_> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| {
+                let e = e.unwrap();
+                (
+                    e.file_name().to_string_lossy().into_owned(),
+                    std::fs::read(e.path()).unwrap(),
+                )
+            })
+            .collect();
+        v.sort();
+        v
+    }
+
+    fn ledger_folder(h: &common::Harness) -> Option<String> {
+        h.app.state::<OsState>().file().inbox.map(|l| l.folder)
+    }
+
+    #[test]
+    fn existing_files_are_not_kept_and_new_ones_are_kept_once_without_touching_the_folder() {
+        let h = harness();
+        let folder = watching(&h);
+        std::fs::write(folder.path().join("old.txt"), "already here").unwrap();
+        let saved = h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        assert!(saved["inboxFolder"].is_string());
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        std::thread::sleep(Duration::from_millis(400));
+        assert!(kept(&h).is_empty(), "what was there is not kept");
+
+        std::fs::write(folder.path().join("new.txt"), "arrived later").unwrap();
+        std::fs::write(folder.path().join("half.pdf.part"), "partial").unwrap();
+        std::fs::write(folder.path().join(".hidden.txt"), "hidden").unwrap();
+        let before = listing(folder.path());
+        wait_for("the new file", || !kept(&h).is_empty());
+        std::thread::sleep(Duration::from_millis(500));
+        let items = kept(&h);
+        assert_eq!(items.len(), 1, "kept once: {items:?}");
+        assert_eq!(items[0]["source"], "watchedFolder");
+        assert_eq!(
+            listing(folder.path()),
+            before,
+            "nothing in the folder changed"
+        );
+        let stored = h.dir.path().join("store").join("originals");
+        assert!(
+            std::fs::read_dir(stored).unwrap().count() >= 1,
+            "the original is copied into the store"
+        );
+    }
+
+    #[test]
+    fn a_file_still_growing_is_not_kept_until_it_stops() {
+        let h = harness();
+        let folder = watching(&h);
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        let path = folder.path().join("growing.txt");
+        let end = Instant::now() + Duration::from_millis(600);
+        let mut n = 0;
+        while Instant::now() < end {
+            n += 1;
+            std::fs::write(&path, "x".repeat(n)).unwrap();
+            std::thread::sleep(Duration::from_millis(40));
+            assert!(kept(&h).is_empty(), "kept while it was still changing");
+        }
+        wait_for("it stops growing", || !kept(&h).is_empty());
+    }
+
+    #[test]
+    fn empty_string_clears() {
+        let h = harness();
+        let folder = watching(&h);
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        assert!(h.state().engine().is_ok());
+        assert!(h.app.state::<OsState>().inbox_running());
+        let cleared = h.ok("update_settings", json!({"patch": {"inboxFolder": ""}}));
+        assert!(cleared["inboxFolder"].is_null(), "{cleared}");
+        assert!(h.ok("get_settings", json!({}))["inboxFolder"].is_null());
+        assert!(
+            !h.app.state::<OsState>().inbox_running(),
+            "the watcher stopped"
+        );
+        assert!(h.app.state::<OsState>().file().inbox.is_none());
+        std::fs::write(folder.path().join("late.txt"), "late").unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(kept(&h).is_empty());
+    }
+
+    #[test]
+    fn a_folder_that_is_not_allowed_is_refused_and_not_saved() {
+        let h = harness();
+        let _folder = watching(&h);
+        for bad in [
+            "/".to_string(),
+            "relative".to_string(),
+            "/no/such/folder/here".to_string(),
+            h.dir.path().to_string_lossy().into_owned(),
+            h.dir.path().join("store").to_string_lossy().into_owned(),
+        ] {
+            assert_eq!(
+                h.code("update_settings", json!({"patch": {"inboxFolder": bad}})),
+                "invalid",
+                "{bad}"
+            );
+        }
+        assert!(h.ok("get_settings", json!({}))["inboxFolder"].is_null());
+        assert!(!h.app.state::<OsState>().inbox_running());
+    }
+
+    #[test]
+    fn burst_of_500_does_not_block_keep_text() {
+        let h = harness();
+        let folder = watching(&h);
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        for i in 0..500 {
+            std::fs::write(folder.path().join(format!("f{i}.txt")), format!("file {i}")).unwrap();
+        }
+        let mut slowest = Duration::ZERO;
+        let mut kept_text = 0;
+        let end = Instant::now() + Duration::from_secs(20);
+        while kept(&h).len() < 500 && Instant::now() < end {
+            let start = Instant::now();
+            h.ok(
+                "keep_text",
+                json!({"text": format!("note {kept_text}"), "source": "quickCapture"}),
+            );
+            slowest = slowest.max(start.elapsed());
+            kept_text += 1;
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(kept_text > 0);
+        assert!(
+            slowest < Duration::from_millis(100),
+            "a keep_text took {slowest:?} during the burst"
+        );
+        wait_for("all 500", || kept(&h).len() >= 500 + kept_text);
+    }
+}

@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use serde::{Deserialize, Serialize};
 
 use super::autostart::Target;
+use super::inbox::{InboxLedger, Timing};
 use super::notify::Notifier;
 use super::shortcut::{Registrar, ShortcutSlot};
 
@@ -23,6 +24,8 @@ pub struct OsFile {
     pub audio_used: Option<String>,
     /// The page date the person opened.
     pub seen: Option<String>,
+    /// The watched folder's ledger.
+    pub inbox: Option<InboxLedger>,
 }
 
 /// Read the file; a missing or damaged one is an empty one.
@@ -46,6 +49,8 @@ pub struct OsState {
     shortcut: Mutex<ShortcutSlot>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
     autostart: Mutex<Option<Target>>,
+    inbox: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    inbox_timing: Mutex<Timing>,
 }
 
 impl OsState {
@@ -56,6 +61,8 @@ impl OsState {
             shortcut: Mutex::new(ShortcutSlot::default()),
             notifier: Mutex::new(None),
             autostart: Mutex::new(None),
+            inbox: Mutex::new(None),
+            inbox_timing: Mutex::new(Timing::default()),
         }
     }
 
@@ -101,6 +108,32 @@ impl OsState {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+
+    /// Replace the running folder watcher (stopping the old one), or stop it with `None`.
+    pub fn replace_inbox(&self, task: Option<tauri::async_runtime::JoinHandle<()>>) {
+        let old = std::mem::replace(
+            &mut *self.inbox.lock().unwrap_or_else(|e| e.into_inner()),
+            task,
+        );
+        if let Some(old) = old {
+            old.abort();
+        }
+    }
+
+    pub fn inbox_running(&self) -> bool {
+        self.inbox
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
+    pub fn set_inbox_timing(&self, timing: Timing) {
+        *self.inbox_timing.lock().unwrap_or_else(|e| e.into_inner()) = timing;
+    }
+
+    pub fn inbox_timing(&self) -> Timing {
+        *self.inbox_timing.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn set_notifier(&self, notifier: Arc<dyn Notifier>) {
