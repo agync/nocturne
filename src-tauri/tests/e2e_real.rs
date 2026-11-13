@@ -1472,18 +1472,33 @@ fn the_whole_product_works_with_real_models() {
             .map(|r| format!("{} {}", r["status"], r["reason"]))
             .unwrap_or_default(),
     );
+    let all_memories = h.ok("list_memories", json!({"filter": {"limit": 500}}));
+    // A memory a later item replaced (a moved appointment) is history, not gone: its item still
+    // counts as read into a memory.
+    let in_history: HashSet<String> = all_memories
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| !m["was"].is_null())
+        .filter_map(|m| m["id"].as_str())
+        .flat_map(|id| h.engine().history(id).unwrap_or_default())
+        .flat_map(|m| m.receipts.into_iter().map(|r| r.item_id))
+        .collect();
     let none_made = item_rows
         .iter()
         .filter(|r| r["memories"] == 0 && r["key"] != "voice_raw")
+        .filter(|r| {
+            let key = r["key"].as_str().unwrap_or("?");
+            !ids.get(key).is_some_and(|id| in_history.contains(id))
+        })
         .map(|r| r["key"].as_str().unwrap_or("?").to_string())
         .collect::<Vec<_>>();
     run.check(
         "read.memories",
-        "every item yields at least one memory",
+        "every item yields at least one memory (current, or history of one)",
         none_made.is_empty(),
         format!("no memory from: {none_made:?}"),
     );
-    let all_memories = h.ok("list_memories", json!({"filter": {"limit": 500}}));
     run.put(
         "reading",
         json!({
