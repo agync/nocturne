@@ -20,7 +20,6 @@
   "kind.web": "Web page you pasted",
   "kind.audio.spoken": "voice note",
   "kind.text.spoken": "note",
-  "kind.paste.spoken": "message you pasted",
   "kind.image.spoken": "photo",
   "kind.document.spoken": "document",
   "kind.web.spoken": "web page you pasted",
