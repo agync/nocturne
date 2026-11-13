@@ -32,6 +32,29 @@ const open = async (
   return { engine, platform };
 };
 
+describe("night", () => {
+  it.each([
+    ["checking", "#/setup?step=choosing"],
+    ["choosing", "#/setup?step=choosing"],
+    ["unsupported", "#/setup?step=choosing"],
+    ["downloading", "#/setup"],
+    ["diskFull", "#/setup"],
+    ["done", "#/setup"],
+  ])("stays dark on the %s step, whatever the system theme is", async (name, hash) => {
+    await open(name, hash, fakePlatform("light"));
+    await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("gives the normal theme back after setup", async () => {
+    await open("done", "#/setup", fakePlatform("light"));
+    await screen.findByRole("heading", { level: 1, name: "Nocturne is ready." });
+    window.location.hash = "#/today";
+    await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("light"));
+  });
+});
+
 describe("the welcome", () => {
   it("is the night screen, with the promise, and Get started moves on to checking", async () => {
     await open("notStarted");
@@ -51,7 +74,7 @@ describe("the welcome", () => {
     expect(
       screen.getByText(/computer memory and free space/).closest("[role=status]"),
     ).not.toBeNull();
-    expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
   it("can be opened again from a finished setup", async () => {

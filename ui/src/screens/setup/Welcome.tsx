@@ -2,11 +2,9 @@ import { Button } from "../../components/Button/Button";
 import { Mark } from "../../components/Mark/Mark";
 import { t } from "../../copy/t";
 import styles from "./Setup.module.css";
-import { useNight } from "./useNight";
 
-/** H1: the welcome, always at night. */
+/** H1: the welcome, at night. */
 export function Welcome({ onStart }: { onStart: () => void }) {
-  useNight(true);
   return (
     <section className={`${styles.card} ${styles.night}`} aria-labelledby="welcome">
       <Mark state="resting" size={36} decorative />

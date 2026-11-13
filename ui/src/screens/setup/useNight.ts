@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 
 /**
- * Holds the window in the dark theme while the welcome is up, whatever the setting says, and puts
+ * Holds the window in the dark theme through every setup step, whatever the setting says, and puts
  * the old theme back afterwards. The theme sync may run again meanwhile, so it is watched.
  */
 export function useNight(active: boolean): void {

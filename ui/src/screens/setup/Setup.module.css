@@ -7,15 +7,6 @@
   padding: var(--s-6);
   background: var(--bg);
   color: var(--ink);
-  transition:
-    background-color 300ms ease,
-    color 300ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .window {
-    transition: none;
-  }
 }
 
 .card {

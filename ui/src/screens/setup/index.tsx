@@ -9,10 +9,12 @@ import { Choosing } from "./Choosing";
 import { Done } from "./Done";
 import { GettingReady } from "./GettingReady";
 import styles from "./Setup.module.css";
+import { useNight } from "./useNight";
 import { Welcome } from "./Welcome";
 
 /** Serves #/setup, which draws its own window. Every phase of getting ready has a state here. */
 export default function Setup() {
+  useNight(true);
   const engine = useEngine();
   const step = useQueryParam("step");
   const [begun, setBegun] = useState(false);

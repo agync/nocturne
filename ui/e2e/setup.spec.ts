@@ -93,6 +93,10 @@ for (const scheme of ["light", "dark"] as const) {
     const page = await context.newPage();
     for (const [name, scenario, hash, heading] of SCREENS) {
       await ready(page, scenario, hash, heading);
+      await expect(page.locator("html"), `${name} stays at night`).toHaveAttribute(
+        "data-theme",
+        "dark",
+      );
       const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
       expect(
         results.violations.map(
@@ -107,13 +111,14 @@ for (const scheme of ["light", "dark"] as const) {
 test.describe("using it", () => {
   test.use({ viewport: { width: 1100, height: 760 } });
 
-  test("the welcome is always at night, and Get started leaves it", async ({ page }) => {
+  test("the welcome is at night, and Get started stays at night", async ({ page }) => {
     await ready(page, "notStarted", "#/setup", /Keep anything/);
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.getByRole("button", { name: "Get started" }).click();
     await expect(
       page.getByRole("heading", { level: 1, name: "Checking this computer…" }),
     ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 
   test("choosing a tier changes the button, and setting up moves to getting ready", async ({
