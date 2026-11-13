@@ -1,9 +1,9 @@
 # Every `uses:` carries a PLACEHOLDER all-zero commit SHA: replace each with the full commit SHA
 # of the release named in its comment before the first run.
-# Builds tailscaled and tailscale for macOS and Windows from the pinned upstream tag, for Away from
-# home (Most private). Run by hand or on a release. Two independent builds must agree on the
-# checksums before the signed programs are packaged and attached to the release.
-name: tailscaled
+# Builds nocturne-tailnet (helpers/tailnet) for every platform, for Away from home (Most private).
+# Run by hand or on a release. Two independent builds must agree on every binary before the macOS
+# and Windows ones are signed and all four are attached to the release.
+name: tailnet
 
 on:
   workflow_dispatch:
@@ -15,13 +15,11 @@ permissions:
 
 jobs:
   build:
-    name: build ${{ matrix.target }} (${{ matrix.copy }})
+    name: build (${{ matrix.copy }})
     strategy:
       fail-fast: true
       matrix:
-        target: [darwin-arm64, windows-amd64]
         # The two copies run on different machines, in different folders.
-        copy: [first, second]
         include:
           - copy: first
             runs-on: ubuntu-24.04
@@ -32,50 +30,49 @@ jobs:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
       - id: pins
         name: pinned Go version (from helpers.lock)
-        run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailscaled")["go_version"])' >> "$GITHUB_OUTPUT"
+        run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailnet")["go_version"].removeprefix("go"))' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
           go-version: ${{ steps.pins.outputs.go }}
           cache: false
-      - run: scripts/build-tailscaled.sh build ${{ matrix.target }} "$RUNNER_TEMP/${{ matrix.copy }}"
+      - name: build
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/${{ matrix.copy }}"
+          mkdir -p "$out"
+          GO="$(command -v go)" scripts/build-tailnet.sh "$out" | tee "$out/SHA256SUMS"
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: unsigned-${{ matrix.target }}-${{ matrix.copy }}
-          path: ${{ runner.temp }}/${{ matrix.copy }}/${{ matrix.target }}/unsigned
+          name: tailnet-${{ matrix.copy }}
+          path: ${{ runner.temp }}/${{ matrix.copy }}
 
   reproduce:
     needs: build
     runs-on: ubuntu-24.04
-    strategy:
-      matrix:
-        target: [darwin-arm64, windows-amd64]
     steps:
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          pattern: unsigned-${{ matrix.target }}-*
+          pattern: tailnet-*
       - name: the two builds agree
         run: |
           set -euo pipefail
-          t=${{ matrix.target }}
           for copy in first second; do
-            (cd "unsigned-$t-$copy" && sha256sum -c SHA256SUMS)
+            (cd "tailnet-$copy" && sha256sum -c SHA256SUMS)
           done
-          diff "unsigned-$t-first/SHA256SUMS" "unsigned-$t-second/SHA256SUMS"
-          for f in unsigned-$t-first/tailscale*; do
-            [ "$(basename "$f")" = SHA256SUMS ] && continue
-            cmp "$f" "unsigned-$t-second/$(basename "$f")"
+          diff tailnet-first/SHA256SUMS tailnet-second/SHA256SUMS
+          for f in tailnet-first/nocturne-tailnet-*; do
+            cmp "$f" "tailnet-second/$(basename "$f")"
           done
-          cat "unsigned-$t-first/SHA256SUMS"
+          cat tailnet-first/SHA256SUMS
 
   sign-macos:
     needs: reproduce
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: unsigned-darwin-arm64-first
-          path: out/darwin-arm64/signed
+          name: tailnet-first
+          path: out
       - name: sign and notarise
         env:
           DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
@@ -86,6 +83,8 @@ jobs:
           NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
+          cd out
+          shasum -a 256 -c SHA256SUMS
           keychain="$RUNNER_TEMP/build.keychain"
           security create-keychain -p "$DEVELOPER_ID_PASSWORD" "$keychain"
           security default-keychain -s "$keychain"
@@ -94,18 +93,15 @@ jobs:
           security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$DEVELOPER_ID_PASSWORD" "$keychain"
           xcrun notarytool store-credentials nocturne-notary --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --keychain "$keychain"
-          cd out/darwin-arm64/signed
-          shasum -a 256 -c SHA256SUMS
-          rm -f SHA256SUMS
-          codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" tailscaled tailscale
-          zip -q notarise.zip tailscaled tailscale
-          xcrun notarytool submit notarise.zip --keychain-profile nocturne-notary --keychain "$keychain" --wait
-          rm notarise.zip
-          codesign --verify --strict --verbose=2 tailscaled tailscale
+          bin=nocturne-tailnet-macos-aarch64
+          codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" "$bin"
+          zip -q "$RUNNER_TEMP/notarise.zip" "$bin"
+          xcrun notarytool submit "$RUNNER_TEMP/notarise.zip" --keychain-profile nocturne-notary --keychain "$keychain" --wait
+          codesign --verify --strict --verbose=2 "$bin"
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: signed-darwin-arm64
-          path: out/darwin-arm64/signed
+          name: signed-macos
+          path: out/nocturne-tailnet-macos-aarch64
 
   sign-windows:
     needs: reproduce
@@ -114,29 +110,26 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: unsigned-windows-amd64-first
-          path: out/windows-amd64/signed
+          name: tailnet-first
+          path: out
       - name: Authenticode
         env:
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PASSWORD }}
         run: |
           set -euo pipefail
-          printf '%s' "$WINDOWS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/code-signing.pfx"
-          cd out/windows-amd64/signed
+          cd out
           sha256sum -c SHA256SUMS
-          rm -f SHA256SUMS
-          for f in tailscaled.exe tailscale.exe; do
-            signtool sign //f "$RUNNER_TEMP/code-signing.pfx" //p "$WINDOWS_CERTIFICATE_PASSWORD" //fd SHA256 //tr http://timestamp.digicert.com //td SHA256 "$f"
-            signtool verify //pa "$f"
-          done
+          printf '%s' "$WINDOWS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/code-signing.pfx"
+          bin=nocturne-tailnet-windows-x86_64.exe
+          signtool sign //f "$RUNNER_TEMP/code-signing.pfx" //p "$WINDOWS_CERTIFICATE_PASSWORD" //fd SHA256 //tr http://timestamp.digicert.com //td SHA256 "$bin"
+          signtool verify //pa "$bin"
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: signed-windows-amd64
-          path: out/windows-amd64/signed
+          name: signed-windows
+          path: out/nocturne-tailnet-windows-x86_64.exe
 
   publish:
     needs: [sign-macos, sign-windows]
@@ -146,34 +139,62 @@ jobs:
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
       - id: pins
-        name: pinned Go version (from helpers.lock)
-        run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailscaled")["go_version"])' >> "$GITHUB_OUTPUT"
+        name: pinned versions (from helpers.lock)
+        run: |
+          python3 -I - >> "$GITHUB_OUTPUT" << 'PY'
+          import tomllib
+          lock = tomllib.load(open("helpers.lock", "rb"))
+          helper = next(h for h in lock["helpers"] if h["kind"] == "tailnet")
+          print("go=" + helper["go_version"].removeprefix("go"))
+          print("licenses=" + helper["go_licenses_version"])
+          PY
       - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
           go-version: ${{ steps.pins.outputs.go }}
           cache: false
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
+          name: tailnet-first
+          path: unsigned
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+        with:
           pattern: signed-*
-      - name: package, list the checksums for helpers.lock, write the licence report
+          path: signed
+          merge-multiple: true
+      - name: collect the files, list the checksums for helpers.lock
         run: |
           set -euo pipefail
-          for target in darwin-arm64 windows-amd64; do
-            mkdir -p "out/$target"
-            mv "signed-$target" "out/$target/signed"
-            scripts/build-tailscaled.sh package "$target" out | tee -a out/pins.txt
-          done
-          scripts/build-tailscaled.sh licenses out
+          (cd unsigned && sha256sum -c SHA256SUMS)
+          mkdir out
+          cp unsigned/nocturne-tailnet-linux-* out/
+          cp signed/nocturne-tailnet-macos-aarch64 signed/nocturne-tailnet-windows-x86_64.exe out/
+          cd out
+          for f in nocturne-tailnet-*; do
+            printf '%s  %s  %s\n' "$(sha256sum "$f" | cut -d ' ' -f 1)" "$f" "$(stat -c %s "$f")"
+          done | tee ../pins.txt
+          test "$(wc -l < ../pins.txt)" -eq 4
+      - name: write the licence report
+        env:
+          GO_LICENSES_VERSION: ${{ steps.pins.outputs.licenses }}
+        run: |
+          set -euo pipefail
+          case "$GO_LICENSES_VERSION" in PLACEHOLDER*) echo "go-licenses is not pinned yet" >&2; exit 2 ;; esac
+          GOBIN="$RUNNER_TEMP/bin" go install "github.com/google/go-licenses@$GO_LICENSES_VERSION"
+          tags=$(scripts/tailnet-tags.sh)
+          cd helpers/tailnet
+          for goos in linux darwin windows; do
+            GOOS=$goos GOFLAGS="-tags=$tags" "$RUNNER_TEMP/bin/go-licenses" report .
+          done | sort -u > ../../out/tailnet-licenses.txt
+          test -s ../../out/tailnet-licenses.txt
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
-          name: tailscaled-release-files
+          name: tailnet-release-files
           path: |
-            out/tailscaled-*.tgz
-            out/tailscaled-*.zip
-            out/tailscale-licenses.txt
-            out/pins.txt
+            out/nocturne-tailnet-*
+            out/tailnet-licenses.txt
+            pins.txt
       - name: attach to the release
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" out/tailscaled-*.tgz out/tailscaled-*.zip out/tailscale-licenses.txt --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" out/nocturne-tailnet-* out/tailnet-licenses.txt --clobber
