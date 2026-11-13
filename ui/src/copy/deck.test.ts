@@ -15,6 +15,7 @@ describe("the copy deck is split by area", () => {
     ).toEqual([
       "advanced",
       "ask",
+      "away",
       "capture",
       "common",
       "editions",
@@ -23,6 +24,7 @@ describe("the copy deck is split by area", () => {
       "needs-you",
       "notice",
       "page",
+      "phone",
       "privacy",
       "recent",
       "settings",

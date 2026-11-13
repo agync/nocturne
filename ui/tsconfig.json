@@ -17,6 +17,13 @@
     "noEmit": true,
     "types": ["node", "vite/client", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["src", "e2e", "scripts", "vite.config.ts", "playwright.config.ts"],
+  "include": [
+    "src",
+    "e2e",
+    "scripts",
+    "vite.config.ts",
+    "vite.phone.config.ts",
+    "playwright.config.ts"
+  ],
   "exclude": ["src/engine/bindings"]
 }

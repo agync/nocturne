@@ -108,6 +108,24 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["cancelAsk", ["ask_1"], "cancel_ask", ["askId"]],
   ["appReady", [], "app_ready", []],
   ["reportRecording", ["no-devices"], "report_recording", ["state"]],
+  ["getRemote", [], "get_remote", []],
+  ["startRemote", ["simple", true], "start_remote", ["connection", "allowDownload"]],
+  ["stopRemote", [false], "stop_remote", ["removeAll"]],
+  ["pauseRemoteDownload", [], "pause_remote_download", []],
+  ["beginPairing", [], "begin_pairing", []],
+  ["decidePairing", ["p1", true], "decide_pairing", ["pairingId", "allow"]],
+  ["cancelPairing", [], "cancel_pairing", []],
+  ["renameDevice", ["d1", "Pixel"], "rename_device", ["id", "name"]],
+  ["removeDevice", ["d1"], "remove_device", ["id"]],
+  ["listRemoteEvents", [50], "list_remote_events", ["limit"]],
+  [
+    "updateRemoteSettings",
+    [{ connection: null, autoOff: "never", keepAwake: null }],
+    "update_remote_settings",
+    ["patch"],
+  ],
+  ["openRemoteSignIn", [], "open_remote_sign_in", []],
+  ["newComputerKey", [], "new_computer_key", []],
 ];
 
 describe("TauriEngine commands", () => {

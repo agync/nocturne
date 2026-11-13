@@ -1,5 +1,6 @@
 import advanced from "./en-GB/advanced.json";
 import ask from "./en-GB/ask.json";
+import away from "./en-GB/away.json";
 import capture from "./en-GB/capture.json";
 import common from "./en-GB/common.json";
 import editions from "./en-GB/editions.json";
@@ -8,6 +9,7 @@ import memories from "./en-GB/memories.json";
 import needsYou from "./en-GB/needs-you.json";
 import notice from "./en-GB/notice.json";
 import page from "./en-GB/page.json";
+import phone from "./en-GB/phone.json";
 import privacy from "./en-GB/privacy.json";
 import recent from "./en-GB/recent.json";
 import settings from "./en-GB/settings.json";
@@ -35,4 +37,6 @@ export const enGB = {
   ...settings,
   ...advanced,
   ...editions,
+  ...away,
+  ...phone,
 };

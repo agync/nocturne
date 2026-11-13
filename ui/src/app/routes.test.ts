@@ -19,6 +19,11 @@ describe("route table", () => {
       "/privacy": "privacy",
       "/settings": "settings",
       "/settings/advanced": "settings",
+      "/settings/away": "away",
+      "/settings/away/setup": "away",
+      "/settings/away/add": "away",
+      "/settings/away/phones": "away",
+      "/settings/away/activity": "away",
       "/listen/2026-11-13": "editions",
       "/print/2026-11-13": "editions",
     };

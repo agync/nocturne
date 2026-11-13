@@ -2,6 +2,7 @@ import { formatLongDay, localDay } from "../../copy/format";
 import type {
   AdvancedView,
   AskDelta,
+  DeviceView,
   Edition,
   EngineStatus,
   EntityKind,
@@ -21,9 +22,12 @@ import type {
   PageLine,
   PageSummary,
   PageView,
+  PairingOffer,
   PrivacyView,
   QuestionChoice,
   Receipt,
+  RemoteEvent,
+  RemoteView,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -33,12 +37,13 @@ import type {
   Tier,
   WhichResolved,
 } from "../bindings";
-import type {
-  EngineClient,
-  EngineEventName,
-  EngineEvents,
-  RecordingState,
-  Unsubscribe,
+import {
+  type EngineClient,
+  EngineError,
+  type EngineEventName,
+  type EngineEvents,
+  type RecordingState,
+  type Unsubscribe,
 } from "../client";
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
@@ -1298,6 +1303,43 @@ export class MockEngine implements EngineClient {
   async quickKeepCommand(): Promise<string> {
     return "nocturne --quick-capture";
   }
+
+  // Away from home: off, and nothing else yet.
+
+  async getRemote(): Promise<RemoteView> {
+    return {
+      state: { type: "off" },
+      connection: "simple",
+      autoOff: "unused30Days",
+      keepAwake: false,
+      devices: [],
+      sentToPhonesBytes: 0,
+      lastOnAt: null,
+      onSince: null,
+      setUpBefore: false,
+      installed: [],
+      trial: true,
+      pairing: null,
+      computerName: "Kitchen laptop",
+    };
+  }
+
+  private async remoteNotYet(): Promise<never> {
+    throw new EngineError("unavailable", "Away from home is not in the mock yet");
+  }
+
+  startRemote = (): Promise<RemoteView> => this.remoteNotYet();
+  stopRemote = (): Promise<RemoteView> => this.remoteNotYet();
+  pauseRemoteDownload = (): Promise<RemoteView> => this.remoteNotYet();
+  beginPairing = (): Promise<PairingOffer> => this.remoteNotYet();
+  decidePairing = (): Promise<void> => this.remoteNotYet();
+  cancelPairing = (): Promise<void> => this.remoteNotYet();
+  renameDevice = (): Promise<DeviceView> => this.remoteNotYet();
+  removeDevice = (): Promise<void> => this.remoteNotYet();
+  listRemoteEvents = (): Promise<RemoteEvent[]> => this.remoteNotYet();
+  updateRemoteSettings = (): Promise<RemoteView> => this.remoteNotYet();
+  openRemoteSignIn = (): Promise<void> => this.remoteNotYet();
+  newComputerKey = (): Promise<RemoteView> => this.remoteNotYet();
 }
 
 export function createMockEngine(options: MockOptions = {}): MockEngine {

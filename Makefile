@@ -59,6 +59,9 @@ ui/install: ## Install UI dependencies
 ui/build: ui/node_modules ## Build the interface
 	cd ui && npm run build
 
+phone: ui/node_modules ## Build the phone app alone (Away from home)
+	npm --prefix ui run build:phone
+
 ui/test: ui/node_modules ## Unit-test the interface
 	cd ui && npm test
 

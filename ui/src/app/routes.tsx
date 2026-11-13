@@ -24,6 +24,7 @@ const setup = lazy(() => import("../screens/setup"));
 const privacy = lazy(() => import("../screens/privacy"));
 const settings = lazy(() => import("../screens/settings"));
 const editions = lazy(() => import("../screens/editions"));
+const away = lazy(() => import("../screens/away"));
 
 /** The route table is fixed: later lanes replace screen folders, never this list. */
 export const routes: readonly AppRoute[] = [
@@ -113,6 +114,41 @@ export const routes: readonly AppRoute[] = [
     title: "screen.advanced.title",
     shell: true,
     Component: settings,
+  },
+  {
+    path: "/settings/away",
+    folder: "away",
+    title: "screen.away.title",
+    shell: true,
+    Component: away,
+  },
+  {
+    path: "/settings/away/setup",
+    folder: "away",
+    title: "screen.away.setup.title",
+    shell: true,
+    Component: away,
+  },
+  {
+    path: "/settings/away/add",
+    folder: "away",
+    title: "screen.away.add.title",
+    shell: true,
+    Component: away,
+  },
+  {
+    path: "/settings/away/phones",
+    folder: "away",
+    title: "screen.away.phones.title",
+    shell: true,
+    Component: away,
+  },
+  {
+    path: "/settings/away/activity",
+    folder: "away",
+    title: "screen.away.activity.title",
+    shell: true,
+    Component: away,
   },
   {
     path: "/listen/:date",

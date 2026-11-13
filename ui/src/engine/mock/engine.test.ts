@@ -767,3 +767,16 @@ describe("MockEngine spoken page", () => {
     expect(starts.at(-1) as number).toBeLessThan(spoken.durationMs);
   });
 });
+
+describe("MockEngine Away from home", () => {
+  it("is off, and the rest is not available yet", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const view = await engine.getRemote();
+    expect(view.state).toEqual({ type: "off" });
+    expect(view.connection).toBe("simple");
+    expect(view.autoOff).toBe("unused30Days");
+    expect(view.devices).toEqual([]);
+    await expect(engine.startRemote()).rejects.toMatchObject({ code: "unavailable" });
+    await expect(engine.beginPairing()).rejects.toMatchObject({ code: "unavailable" });
+  });
+});

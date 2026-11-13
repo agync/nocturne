@@ -268,4 +268,24 @@ export class HttpEngine implements EngineClient {
     this.call("get_edition", { date, edition });
   openSoundSettings: EngineClient["openSoundSettings"] = () => this.call("open_sound_settings");
   quickKeepCommand: EngineClient["quickKeepCommand"] = () => this.call("quick_keep_command");
+
+  getRemote: EngineClient["getRemote"] = () => this.call("get_remote");
+  startRemote: EngineClient["startRemote"] = (connection, allowDownload) =>
+    this.call("start_remote", { connection, allowDownload });
+  stopRemote: EngineClient["stopRemote"] = (removeAll) => this.call("stop_remote", { removeAll });
+  pauseRemoteDownload: EngineClient["pauseRemoteDownload"] = () =>
+    this.call("pause_remote_download");
+  beginPairing: EngineClient["beginPairing"] = () => this.call("begin_pairing");
+  decidePairing: EngineClient["decidePairing"] = (pairingId, allow) =>
+    this.call("decide_pairing", { pairingId, allow });
+  cancelPairing: EngineClient["cancelPairing"] = () => this.call("cancel_pairing");
+  renameDevice: EngineClient["renameDevice"] = (id, name) =>
+    this.call("rename_device", { id, name });
+  removeDevice: EngineClient["removeDevice"] = (id) => this.call("remove_device", { id });
+  listRemoteEvents: EngineClient["listRemoteEvents"] = (limit) =>
+    this.call("list_remote_events", { limit });
+  updateRemoteSettings: EngineClient["updateRemoteSettings"] = (patch) =>
+    this.call("update_remote_settings", { patch });
+  openRemoteSignIn: EngineClient["openRemoteSignIn"] = () => this.call("open_remote_sign_in");
+  newComputerKey: EngineClient["newComputerKey"] = () => this.call("new_computer_key");
 }

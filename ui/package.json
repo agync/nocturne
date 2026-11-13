@@ -5,8 +5,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite --mode mock",
+    "dev:phone": "vite --config vite.phone.config.ts",
     "dev:tauri": "vite --mode tauri",
-    "build": "tsc --noEmit && vite build --mode tauri",
+    "build": "tsc --noEmit && vite build --mode tauri && vite build --config vite.phone.config.ts",
+    "build:phone": "vite build --config vite.phone.config.ts",
     "build:preview-real": "vite build --mode preview-real",
     "build:mock": "vite build --mode mock",
     "preview": "vite preview --mode mock --port 4174 --strictPort",

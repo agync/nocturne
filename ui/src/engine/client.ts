@@ -1,6 +1,7 @@
 import type {
   AdvancedView,
   AskDelta,
+  DeviceView,
   Edition,
   EngineStatus,
   EntityKind,
@@ -17,8 +18,14 @@ import type {
   NeedsYouEntry,
   PageSummary,
   PageView,
+  PairingOffer,
+  PairingRequest,
   PrivacyView,
   QuestionChoice,
+  RemoteConnection,
+  RemoteEvent,
+  RemoteSettingsPatch,
+  RemoteView,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -63,6 +70,9 @@ export interface EngineEvents {
   "ask-delta": AskDelta;
   "page-ready": PageSummary;
   "needs-you-changed": number;
+  "remote-changed": RemoteView;
+  "pairing-request": PairingRequest;
+  "device-active": DeviceView;
 }
 
 export type EngineEventName = keyof EngineEvents;
@@ -75,6 +85,9 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "ask-delta",
   "page-ready",
   "needs-you-changed",
+  "remote-changed",
+  "pairing-request",
+  "device-active",
 ];
 
 /** What a window can do about recording: `available`, or why it cannot. */
@@ -165,6 +178,27 @@ export interface EngineClient {
   openSoundSettings(): Promise<void>;
   /** The command line that opens quick capture, for a desktop shortcut. */
   quickKeepCommand(): Promise<string>;
+
+  /** Away from home: reaching Nocturne from the person's own phones. Main window only. */
+  getRemote(): Promise<RemoteView>;
+  /** Turns it on; `allowDownload` is the person's yes to fetching what the connection needs. */
+  startRemote(connection: RemoteConnection, allowDownload: boolean): Promise<RemoteView>;
+  /** Turns it off; `removeAll` also unpairs every phone. */
+  stopRemote(removeAll: boolean): Promise<RemoteView>;
+  pauseRemoteDownload(): Promise<RemoteView>;
+  /** Opens the one offer to add a phone, cancelling any other. */
+  beginPairing(): Promise<PairingOffer>;
+  decidePairing(pairingId: string, allow: boolean): Promise<void>;
+  cancelPairing(): Promise<void>;
+  renameDevice(id: string, name: string): Promise<DeviceView>;
+  removeDevice(id: string): Promise<void>;
+  listRemoteEvents(limit: number): Promise<RemoteEvent[]>;
+  /** A new `connection` unpairs every phone. */
+  updateRemoteSettings(patch: RemoteSettingsPatch): Promise<RemoteView>;
+  /** Opens the sign-in page the computer holds; the interface never names the address. */
+  openRemoteSignIn(): Promise<void>;
+  /** A new key for this computer; every phone has to be added again. */
+  newComputerKey(): Promise<RemoteView>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

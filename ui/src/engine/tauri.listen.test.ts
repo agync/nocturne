@@ -4,6 +4,7 @@ const listen = vi.fn();
 vi.mock("@tauri-apps/api/event", () => ({ listen: (...a: unknown[]) => listen(...a) }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: vi.fn() }));
 
+import { ENGINE_EVENT_NAMES } from "./client";
 import { TauriEngine } from "./tauri";
 
 beforeEach(() => {
@@ -26,8 +27,8 @@ describe("TauriEngine subscribing", () => {
       expect.stringContaining("status-changed"),
       expect.any(Error),
     );
-    // 7 events, plus one retry for the one that failed.
-    expect(listen).toHaveBeenCalledTimes(8);
+    // Every event, plus one retry for the one that failed.
+    expect(listen).toHaveBeenCalledTimes(ENGINE_EVENT_NAMES.length + 1);
     expect(unhandled).not.toHaveBeenCalled();
     engine.dispose();
     process.off("unhandledRejection", unhandled);
@@ -39,7 +40,7 @@ describe("TauriEngine subscribing", () => {
     listen.mockRejectedValue(new Error("down"));
     const engine = new TauriEngine();
     await vi.advanceTimersByTimeAsync(2000);
-    expect(listen).toHaveBeenCalledTimes(14);
+    expect(listen).toHaveBeenCalledTimes(ENGINE_EVENT_NAMES.length * 2);
     engine.dispose();
     error.mockRestore();
   });
