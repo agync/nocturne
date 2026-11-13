@@ -61,6 +61,8 @@ struct Plan {
     installed: Option<Tier>,
     restart_limit: u32,
     retry_after: Duration,
+    /// Memory the machine reports as free.
+    free_memory: u64,
 }
 
 impl Plan {
@@ -70,6 +72,7 @@ impl Plan {
             installed: None,
             restart_limit: 3,
             retry_after: Duration::from_secs(3600),
+            free_memory: 64 * GIB,
         }
     }
 
@@ -132,6 +135,8 @@ fn lab(plan: Plan) -> Lab {
     };
     opts.retry_after = plan.retry_after;
     opts.quit_budget = Duration::from_secs(5);
+    let free = plan.free_memory;
+    opts.available_memory = Some(Arc::new(move || free));
     let services = start(&h, opts);
     Lab {
         h,
@@ -375,4 +380,85 @@ fn an_upgrade_reads_recent_items_again_and_a_drop_retries_unread_ones() {
         h.engine().get_item(&stuck).unwrap().status,
         ItemStatus::Kept
     );
+}
+
+#[test]
+fn two_failed_loads_with_little_memory_offer_the_smaller_mind() {
+    let lab = lab(Plan {
+        free_memory: 2 * GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    let app = lab.h.app.handle();
+
+    runtime::out_of_memory(app);
+    assert!(!lab.has_notice("tierDropped"), "one failure is not enough");
+    // The second is too long after the first.
+    lab.h.clock.set_str("2026-11-13T07:20:00Z");
+    runtime::out_of_memory(app);
+    assert!(
+        !lab.has_notice("tierDropped"),
+        "the first has been forgotten"
+    );
+    lab.h.clock.set_str("2026-11-13T07:25:00Z");
+    runtime::out_of_memory(app);
+    wait_for("the offer", || lab.has_notice("tierDropped"));
+    let notice = lab.h.ok("get_status", json!({}))["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["code"] == "tierDropped")
+        .cloned()
+        .unwrap();
+    assert!(
+        notice["bytes"].as_f64().unwrap() > 0.0,
+        "it says what the download is"
+    );
+}
+
+#[test]
+fn plenty_of_memory_means_no_offer() {
+    let lab = lab(Plan::new("downloaded=all").installed(Tier::Standard));
+    wait_for("the mind to arrive", || lab.has_mind());
+    for _ in 0..3 {
+        runtime::out_of_memory(lab.h.app.handle());
+    }
+    assert!(!lab.has_notice("tierDropped"));
+}
+
+/// The whole path: the engine cannot load the model, the reader says so, the person agrees to
+/// the smaller mind, it is swapped in and the waiting note is read with it.
+#[test]
+fn agreeing_to_the_smaller_mind_swaps_it_in_and_the_note_is_read() {
+    let lab = lab(Plan {
+        free_memory: 2 * GIB,
+        ..Plan::new("downloaded=all,load-oom").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    let note = id_of(&lab.h.ok(
+        "keep_text",
+        json!({"text": "Gran lives in Leeds", "source": "paste"}),
+    ));
+    wait_for("the offer", || {
+        lab.services.reader.retry_now();
+        lab.has_notice("tierDropped")
+    });
+    let status = lab.h.engine().get_item(&note).unwrap().status;
+    assert!(
+        matches!(status, ItemStatus::Kept | ItemStatus::Reading),
+        "nothing is read while the model will not load: {status:?}"
+    );
+
+    // Choosing the smaller mind relaunches the engine, which reads its mode from disk again.
+    lab.fake_mode("downloaded=all");
+    set_mode(&lab.h.dir.path().join("engine"), "downloaded=all");
+    lab.h.ok("start_setup", json!({"tier": "small"}));
+    wait_for("the smaller mind", || {
+        lab.services.tier() == Some(Tier::Small)
+    });
+    wait_for("the offer to go", || !lab.has_notice("tierDropped"));
+    wait_for("the note to be read", || {
+        lab.services.reader.retry_now();
+        lab.h.engine().get_item(&note).unwrap().status != ItemStatus::Kept
+    });
 }

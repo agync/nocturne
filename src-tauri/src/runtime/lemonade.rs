@@ -240,6 +240,9 @@ async fn fill<R: Runtime>(
         return;
     }
     tracing::info!("the mind is ready ({tier:?})");
+    if previous.is_some() {
+        super::memory_settled(&state, services);
+    }
     let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, tier));
     state
         .status

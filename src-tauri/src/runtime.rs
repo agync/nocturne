@@ -35,6 +35,11 @@ const STOP_TASKS: Duration = Duration::from_secs(2);
 const QUIT_BUDGET: Duration = Duration::from_secs(5);
 /// How long after the engine gives up another start is tried.
 const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
+/// Two failed loads for want of memory inside this long mean the machine is short of it.
+const OOM_WINDOW: jiff::SignedDuration = jiff::SignedDuration::from_secs(10 * 60);
+const GIB: u64 = 1 << 30;
+/// The id of the notice that offers the smaller mind.
+pub const TIER_DROPPED_NOTICE: &str = "tierDropped";
 /// Items kept this recently are read again after an upgrade.
 const REREAD_DAYS: i64 = 30;
 
@@ -64,6 +69,8 @@ pub struct StartOptions {
     pub retry_after: Duration,
     /// How long quitting waits for the engine to stop.
     pub quit_budget: Duration,
+    /// Memory free for use right now, in bytes. `None` asks the machine.
+    pub available_memory: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
 }
 
 impl Default for StartOptions {
@@ -75,6 +82,7 @@ impl Default for StartOptions {
             setup: SetupOptions::default(),
             retry_after: RETRY_AFTER,
             quit_budget: QUIT_BUDGET,
+            available_memory: None,
         }
     }
 }
@@ -112,6 +120,8 @@ pub struct Services {
     /// The tier of the mind in the slot, once there is one.
     tier: Mutex<Option<Tier>>,
     retry_pending: AtomicBool,
+    /// When loads last failed for want of memory (the last ten minutes).
+    out_of_memory: Mutex<Vec<Timestamp>>,
 }
 
 impl Services {
@@ -205,6 +215,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         lemonade: tokio::sync::Mutex::new(None),
         tier: Mutex::new(None),
         retry_pending: AtomicBool::new(false),
+        out_of_memory: Mutex::new(Vec::new()),
     });
     if !state.install_services(services.clone()) {
         services.token.cancel();
@@ -238,6 +249,71 @@ pub(crate) fn follow_pause(state: &AppState) {
     services.scheduler.set_paused_until(until);
     if until.is_some() {
         tauri::async_runtime::spawn(async move { services.unload_models().await });
+    }
+}
+
+/// A model could not be loaded for want of memory. Two of these within ten minutes, with less
+/// memory free than the tier is meant for, offer the next smaller tier in a notice: the person
+/// agrees by choosing it (`start_setup`), which downloads it and swaps the mind. Until then the
+/// reader keeps trying the mind it has, with backoff.
+pub fn out_of_memory<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    let Some(services) = state.services() else {
+        return;
+    };
+    let Some(current) = services.tier() else {
+        return;
+    };
+    let Some(smaller) = smaller(current) else {
+        return;
+    };
+    let now = state.now();
+    let short = {
+        let mut seen = services
+            .out_of_memory
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        seen.retain(|at| now.duration_since(*at) < OOM_WINDOW);
+        seen.push(now);
+        seen.len() >= 2
+    };
+    let free = match &services.opts.available_memory {
+        Some(probe) => probe(),
+        None => available_memory(),
+    };
+    if short && free < u64::from(nocturne_lemonade::tier::min_ram_gib(current)) * GIB {
+        tracing::warn!("memory is short; offering the smaller mind ({smaller:?})");
+        state.status.add_notice(Notice {
+            id: TIER_DROPPED_NOTICE.to_string(),
+            code: NoticeCode::TierDropped,
+            item_id: None,
+            eta_seconds: None,
+            bytes: Some(nocturne_lemonade::tier::download_bytes(smaller) as f64),
+        });
+    }
+}
+
+/// Forget the failed loads and the offer once the mind is for a different tier.
+fn memory_settled(state: &AppState, services: &Services) {
+    services
+        .out_of_memory
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clear();
+    state.status.clear_notices_of(NoticeCode::TierDropped);
+}
+
+fn available_memory() -> u64 {
+    let mut system = sysinfo::System::new();
+    system.refresh_memory();
+    system.available_memory()
+}
+
+fn smaller(tier: Tier) -> Option<Tier> {
+    match tier {
+        Tier::Large => Some(Tier::Standard),
+        Tier::Standard => Some(Tier::Small),
+        Tier::Small | Tier::Unsupported => None,
     }
 }
 
@@ -347,6 +423,11 @@ impl<R: Runtime> Events for AppEvents<R> {
 
     fn tidy_progress(&self, progress: Option<TidyProgress>) {
         self.app.state::<AppState>().status.set_tidy(progress);
+        self.refresh();
+    }
+
+    fn out_of_memory(&self) {
+        out_of_memory(&self.app);
         self.refresh();
     }
 
