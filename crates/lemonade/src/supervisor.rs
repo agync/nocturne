@@ -16,7 +16,7 @@ use crate::bundle::{self, Dirs};
 use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
 use crate::error::RuntimeError;
-use crate::tier;
+use crate::residency;
 
 const PORT_TRIES: u32 = 5;
 const RESTART_WINDOW: Duration = Duration::from_secs(3600);
@@ -462,9 +462,12 @@ impl Actor {
                     whispercpp_backend: whisper.as_deref(),
                 },
             )?;
-            let mut recall = serde_json::Map::new();
-            recall.insert("ctx_size".into(), tier::RECALL_CONTEXT.into());
-            config::write_model_options(&self.dirs.config(), tier::RECALL.model, &recall)?;
+            let saved = residency::saved_options();
+            // Without them the engine still runs, only with its own sizes and timeouts.
+            if let Err(e) = config::write_model_options(&self.dirs.config(), &saved) {
+                tracing::warn!("could not save the models' load options: {e}");
+            }
+            self.client.set_saved_options(saved);
             let mut running = self.spawn(port, &key)?;
             match self.await_ready(&mut running, port, ws_port, &key).await {
                 Ok(version) => {

@@ -7,6 +7,7 @@ pub mod config;
 mod error;
 pub mod mind;
 pub mod record;
+pub mod residency;
 pub mod setup;
 pub mod supervisor;
 pub mod tier;

@@ -428,3 +428,22 @@ async fn the_first_word_gets_longer_than_the_words_after_it() {
         "{outcome:?}"
     );
 }
+
+#[tokio::test]
+async fn a_saving_load_keeps_the_other_saved_options() {
+    let fake = Fake::started(Some("downloaded=all")).await;
+    let c = &fake.client;
+    let mut saved = serde_json::Map::new();
+    saved.insert("evict_idle_timeout".into(), json!(180));
+    saved.insert("ctx_size".into(), json!(4096));
+    c.set_saved_options(vec![("Qwen3.5-2B-GGUF", saved)]);
+    let opts = LoadOptions {
+        ctx_size: Some(8192),
+        ..LoadOptions::default()
+    };
+    c.load("Qwen3.5-2B-GGUF", &opts).await.unwrap();
+    assert_eq!(
+        only(fake.seen("/v1/load").await)["body"],
+        json!({"model_name": "Qwen3.5-2B-GGUF", "ctx_size": 8192, "save_options": true, "evict_idle_timeout": 180})
+    );
+}

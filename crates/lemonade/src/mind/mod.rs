@@ -99,11 +99,7 @@ impl LemonadeMind {
         let model = self.installed(ComponentRole::Mind).await?;
         let mut seen = self.seen.lock().await;
         if !seen.loaded.contains(&model) {
-            let ctx = if self.tier == Tier::Large {
-                16384
-            } else {
-                8192
-            };
+            let ctx = crate::residency::mind_context(self.tier);
             self.client
                 .load(
                     &model,

@@ -48,6 +48,10 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
         ("auto_update_models", json!(false)),
         ("inhibit_suspend", json!(false)),
         ("auto_evict", json!(true)),
+        // One model of each kind at a time.
+        ("max_loaded_models", json!(1)),
+        // A model loaded with no saved context would otherwise be sized to fill the free memory.
+        ("ctx_size", json!(8192)),
         ("log_level", json!("info")),
         ("websocket_port", json!(settings.websocket_port)),
     ];
@@ -70,13 +74,12 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
     Ok(())
 }
 
-/// Saved load options the engine applies whenever it loads `model` by itself, merged into
-/// `<config_dir>/recipe_options.json` under the built-in model's key. Other models' entries and
-/// other options are kept.
+/// Saved load options the engine applies whenever it loads a model by itself, merged into
+/// `<config_dir>/recipe_options.json` under each built-in model's key in one write. Other
+/// models' entries and other options are kept.
 pub fn write_model_options(
     config_dir: &Path,
-    model: &str,
-    options: &Map<String, Value>,
+    models: &[(&str, Map<String, Value>)],
 ) -> Result<(), RuntimeError> {
     std::fs::create_dir_all(config_dir)?;
     let path = config_dir.join("recipe_options.json");
@@ -87,8 +90,10 @@ pub fn write_model_options(
         },
         Err(_) => Map::new(),
     };
-    for (key, value) in options {
-        set_nested(&mut root, &format!("builtin.{model}"), key, value.clone());
+    for (model, options) in models {
+        for (key, value) in options {
+            set_nested(&mut root, &format!("builtin.{model}"), key, value.clone());
+        }
     }
     let tmp = config_dir.join("recipe_options.json.tmp");
     let text = serde_json::to_string_pretty(&Value::Object(root))
@@ -144,6 +149,8 @@ mod tests {
         assert_eq!(v["auto_update_models"], false);
         assert_eq!(v["models_dir"], models.to_string_lossy().as_ref());
         assert_eq!(v["llamacpp"]["args"], LLAMACPP_ARGS);
+        assert_eq!(v["max_loaded_models"], 1);
+        assert_eq!(v["ctx_size"], 8192);
     }
 
     #[test]
@@ -177,13 +184,16 @@ mod tests {
         .unwrap();
         let mut options = Map::new();
         options.insert("ctx_size".into(), json!(4096));
-        write_model_options(tmp.path(), "Recall", &options).unwrap();
+        let mut voice = Map::new();
+        voice.insert("evict_idle_timeout".into(), json!(60));
+        write_model_options(tmp.path(), &[("Recall", options), ("Voice", voice)]).unwrap();
         let v: Value =
             serde_json::from_slice(&std::fs::read(tmp.path().join("recipe_options.json")).unwrap())
                 .unwrap();
         assert_eq!(v["builtin.Recall"]["ctx_size"], 4096);
         assert_eq!(v["builtin.Recall"]["llamacpp_args"], "-x");
         assert_eq!(v["builtin.Other"]["ctx_size"], 8192);
+        assert_eq!(v["builtin.Voice"]["evict_idle_timeout"], 60);
     }
 
     #[test]

@@ -1,7 +1,7 @@
 //! A typed client for the private engine's HTTP API. Cheap to clone; it follows the engine
 //! across restarts because the supervisor updates the address it points at.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
@@ -64,6 +64,7 @@ struct Shared {
     timeouts: Timeouts,
     endpoint: RwLock<Option<Endpoint>>,
     generation: AtomicU64,
+    saved: RwLock<HashMap<String, serde_json::Map<String, Value>>>,
 }
 
 #[derive(Clone)]
@@ -138,6 +139,7 @@ impl Client {
                 timeouts,
                 endpoint: RwLock::new(None),
                 generation: AtomicU64::new(0),
+                saved: RwLock::new(HashMap::new()),
             }),
         }
     }
@@ -155,6 +157,15 @@ impl Client {
             .endpoint
             .write()
             .unwrap_or_else(|e| e.into_inner()) = endpoint;
+    }
+
+    /// The load options saved for each model in the engine's `recipe_options.json`. A load that
+    /// saves its own options sends these too, so that saving does not drop them.
+    pub fn set_saved_options(&self, options: Vec<(&str, serde_json::Map<String, Value>)>) {
+        *self.shared.saved.write().unwrap_or_else(|e| e.into_inner()) = options
+            .into_iter()
+            .map(|(m, o)| (m.to_string(), o))
+            .collect();
     }
 
     pub fn endpoint(&self) -> Option<Endpoint> {
@@ -598,6 +609,20 @@ impl Client {
             body["ctx_size"] = json!(n);
             // So that an automatic reload after eviction keeps the context size.
             body["save_options"] = json!(true);
+            // Saving replaces the stored options: send the others Nocturne saves for this model.
+            if let Some(saved) = self
+                .shared
+                .saved
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(model)
+            {
+                for (key, value) in saved {
+                    if body.get(key).is_none() {
+                        body[key.as_str()] = value.clone();
+                    }
+                }
+            }
         }
         if let Some(b) = &options.llamacpp_backend {
             body["llamacpp_backend"] = json!(b);
