@@ -43,3 +43,24 @@ pub(crate) fn restrict_file(path: &Path) {
     #[cfg(not(unix))]
     let _ = path;
 }
+
+/// Overwrite a file with zeros, then remove it. Best effort: a missing file is fine.
+pub(crate) fn shred(path: &Path) {
+    use std::io::Write;
+    if let Ok(meta) = std::fs::metadata(path)
+        && meta.is_file()
+        && let Ok(mut f) = std::fs::OpenOptions::new().write(true).open(path)
+    {
+        let zeros = vec![0u8; 64 * 1024];
+        let mut left = meta.len();
+        while left > 0 {
+            let n = left.min(zeros.len() as u64) as usize;
+            if f.write_all(&zeros[..n]).is_err() {
+                break;
+            }
+            left -= n as u64;
+        }
+        let _ = f.sync_all();
+    }
+    let _ = std::fs::remove_file(path);
+}

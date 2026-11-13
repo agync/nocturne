@@ -9,14 +9,17 @@
 //! Every public method is synchronous. Callers on an async runtime use `spawn_blocking`.
 //! Policy (decay, ranking, windows) takes its time from the [`Clock`], so tests control it.
 
+mod audio;
 mod capture;
 mod clock;
 mod error;
 mod fsutil;
+mod lifecycle;
 mod memory;
 mod mind;
 mod retrieve;
 mod rows;
+mod settings;
 mod types;
 mod util;
 
