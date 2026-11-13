@@ -7,7 +7,9 @@ export async function createEngine(): Promise<EngineClient> {
     return createMockEngine();
   }
   const { TauriEngine } = await import("./tauri");
-  return new TauriEngine();
+  // The quick capture window may not listen to events: it has no need to, and what travels on
+  // them (answers, kept items) is not for it.
+  return new TauriEngine({ listen: !window.location.hash.startsWith("#/quick-capture") });
 }
 
 export type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "./client";

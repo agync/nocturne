@@ -41,6 +41,25 @@ pub async fn announce<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
     refresh_status(app).await;
 }
 
+/// Remember what the quick capture window kept: it may read and take back those items and no
+/// others (it has no business with the rest of what the person has kept).
+fn note_quick<R: Runtime>(app: &AppHandle<R>, webview: &tauri::Webview<R>, kept: &[Kept]) {
+    if webview.label() != crate::os::quick_capture::LABEL {
+        return;
+    }
+    let state = app.state::<AppState>();
+    for k in kept {
+        let (Kept::New { item } | Kept::Duplicate { item }) = k;
+        state.note_quick_item(&item.id);
+    }
+}
+
+/// Whether the window may touch this item: every window but quick capture may; quick capture
+/// only items it kept itself.
+fn may_touch<R: Runtime>(app: &AppHandle<R>, webview: &tauri::Webview<R>, id: &str) -> bool {
+    webview.label() != crate::os::quick_capture::LABEL || app.state::<AppState>().quick_item(id)
+}
+
 /// Only a regular file of a sensible size is kept by path: no folders, devices or pipes.
 fn check_file(path: &std::path::Path) -> Result<(), CommandError> {
     let meta = std::fs::metadata(path).map_err(|e| {
@@ -100,12 +119,14 @@ pub async fn keep_paths<R: Runtime>(
 #[tauri::command]
 pub async fn keep_text<R: Runtime>(
     app: AppHandle<R>,
+    webview: tauri::Webview<R>,
     text: String,
     source: Source,
 ) -> Result<Kept, CommandError> {
     run(app, move |app| async move {
         let e = engine(&app)?;
         let kept = blocking(move || e.keep_text(&text, source)).await?;
+        note_quick(&app, &webview, std::slice::from_ref(&kept));
         announce(&app, std::slice::from_ref(&kept)).await;
         Ok(kept)
     })
@@ -115,6 +136,7 @@ pub async fn keep_text<R: Runtime>(
 #[tauri::command]
 pub async fn keep_files<R: Runtime>(
     app: AppHandle<R>,
+    webview: tauri::Webview<R>,
     paths: Vec<String>,
     source: Source,
 ) -> Result<Vec<Kept>, CommandError> {
@@ -130,7 +152,9 @@ pub async fn keep_files<R: Runtime>(
             let _ = p;
             return Err(CommandError::invalid("that file was not chosen"));
         }
-        keep_paths(&app, paths, source).await
+        let kept = keep_paths(&app, paths, source).await?;
+        note_quick(&app, &webview, &kept);
+        Ok(kept)
     })
     .await
 }
@@ -162,6 +186,7 @@ fn extension_for(mime: &str) -> Option<&'static str> {
 /// caller does not fix it) the source in `x-nocturne-source`.
 async fn keep_raw<R: Runtime>(
     app: AppHandle<R>,
+    webview: tauri::Webview<R>,
     request: Request<'_>,
     fixed_source: Option<Source>,
 ) -> Result<Kept, CommandError> {
@@ -209,6 +234,7 @@ async fn keep_raw<R: Runtime>(
         }
         let e = engine(&app)?;
         let kept = blocking(move || e.keep_bytes(&bytes, ext, source)).await?;
+        note_quick(&app, &webview, std::slice::from_ref(&kept));
         announce(&app, std::slice::from_ref(&kept)).await;
         Ok(kept)
     })
@@ -219,9 +245,10 @@ async fn keep_raw<R: Runtime>(
 #[tauri::command]
 pub async fn keep_recording<R: Runtime>(
     app: AppHandle<R>,
+    webview: tauri::Webview<R>,
     request: Request<'_>,
 ) -> Result<Kept, CommandError> {
-    keep_raw(app, request, Some(Source::Recording)).await
+    keep_raw(app, webview, request, Some(Source::Recording)).await
 }
 
 /// Any file's bytes (a pasted or captured image, a dropped file's content), with headers
@@ -229,9 +256,10 @@ pub async fn keep_recording<R: Runtime>(
 #[tauri::command]
 pub async fn keep_bytes<R: Runtime>(
     app: AppHandle<R>,
+    webview: tauri::Webview<R>,
     request: Request<'_>,
 ) -> Result<Kept, CommandError> {
-    keep_raw(app, request, None).await
+    keep_raw(app, webview, request, None).await
 }
 
 #[tauri::command]
@@ -243,7 +271,14 @@ pub async fn list_items<R: Runtime>(
 }
 
 #[tauri::command]
-pub async fn get_item<R: Runtime>(app: AppHandle<R>, id: String) -> Result<ItemView, CommandError> {
+pub async fn get_item<R: Runtime>(
+    app: AppHandle<R>,
+    webview: tauri::Webview<R>,
+    id: String,
+) -> Result<ItemView, CommandError> {
+    if !may_touch(&app, &webview, &id) {
+        return Err(CommandError::not_found("that item"));
+    }
     read(app, move |e| e.get_item(&id)).await
 }
 
@@ -267,7 +302,14 @@ pub async fn retry_item<R: Runtime>(
 /// Take back an item kept in the last few minutes, with everything read from it. Too late
 /// answers `tooLate`. Answers in flight are stopped: they may have read what is now gone.
 #[tauri::command]
-pub async fn unkeep<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
+pub async fn unkeep<R: Runtime>(
+    app: AppHandle<R>,
+    webview: tauri::Webview<R>,
+    id: String,
+) -> Result<(), CommandError> {
+    if !may_touch(&app, &webview, &id) {
+        return Err(CommandError::not_found("that item"));
+    }
     app.state::<AppState>().asks.cancel_all();
     change(app, move |e| e.unkeep(&id).map(|_| ())).await
 }

@@ -171,6 +171,17 @@ impl Harness {
         bytes: Vec<u8>,
         headers: &[(&str, &str)],
     ) -> Result<Value, Value> {
+        self.call_raw_from(&self.webview, cmd, bytes, headers)
+    }
+
+    /// A raw call made from another window.
+    pub fn call_raw_from(
+        &self,
+        from: &WebviewWindow<MockRuntime>,
+        cmd: &str,
+        bytes: Vec<u8>,
+        headers: &[(&str, &str)],
+    ) -> Result<Value, Value> {
         let mut map = tauri::http::HeaderMap::new();
         for (k, v) in headers {
             map.insert(
@@ -179,7 +190,7 @@ impl Harness {
             );
         }
         let req = request(cmd, InvokeBody::Raw(bytes), map);
-        tauri::test::get_ipc_response(&self.webview, req).map(|b| b.deserialize::<Value>().unwrap())
+        tauri::test::get_ipc_response(from, req).map(|b| b.deserialize::<Value>().unwrap())
     }
 
     /// Install an opener that records what it was asked to open.

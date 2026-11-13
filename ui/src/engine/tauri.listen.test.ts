@@ -44,3 +44,17 @@ describe("TauriEngine subscribing", () => {
     error.mockRestore();
   });
 });
+
+describe("TauriEngine in a window that may not listen", () => {
+  it("never subscribes, so nothing is refused or logged", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const engine = new TauriEngine({ listen: false });
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(listen).not.toHaveBeenCalled();
+    expect(error).not.toHaveBeenCalled();
+    const heard = vi.fn();
+    engine.on("status-changed", heard)();
+    engine.dispose();
+    error.mockRestore();
+  });
+});

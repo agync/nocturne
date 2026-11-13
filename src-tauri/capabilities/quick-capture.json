@@ -1,16 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "quick-capture",
-  "description": "What the quick capture window may do: keep one thing, then close or hand it to the main window. Files and folders go through the app's own commands, and the commands themselves are limited by the app's per-window allowlist.",
+  "description": "What the quick capture window may do: keep one thing, then close or hand it to the main window. It cannot listen to events: answers and kept items travel on them, and this window needs neither. Files and folders go through the app's own commands, and the commands themselves are limited by the app's per-window allowlist.",
   "windows": ["quick-capture"],
   "permissions": [
-    "core:event:default",
+    "core:event:allow-emit-to",
     "core:window:allow-close",
     "core:window:allow-show",
-    "core:window:allow-hide",
     "core:window:allow-set-focus",
-    "core:window:allow-get-all-windows",
-    "core:webview:default",
-    "core:app:default"
+    "core:window:allow-get-all-windows"
   ]
 }

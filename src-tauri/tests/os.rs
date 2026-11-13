@@ -65,17 +65,19 @@ fn quick_capture_capability_is_exact() {
         .map(|p| p.as_str().unwrap())
         .collect();
     let exact: BTreeSet<&str> = [
-        "core:event:default",
+        "core:event:allow-emit-to",
         "core:window:allow-close",
         "core:window:allow-show",
-        "core:window:allow-hide",
         "core:window:allow-set-focus",
         "core:window:allow-get-all-windows",
-        "core:webview:default",
-        "core:app:default",
     ]
     .into();
     assert_eq!(granted, exact);
+    // Answers and kept items travel on events, and this window needs neither.
+    for p in &granted {
+        assert!(!p.contains("listen"), "{p}");
+        assert_ne!(*p, "core:event:default", "it includes listening");
+    }
     assert!(c.get("remote").is_none(), "no remote origins");
 }
 
@@ -104,8 +106,7 @@ fn quick_capture_capability_covers_what_the_adapter_calls_for_it() {
         ("Window.getByLabel(", "core:window:allow-get-all-windows"),
         (".show()", "core:window:allow-show"),
         (".setFocus()", "core:window:allow-set-focus"),
-        ("emitTo(", "core:event:default"),
-        ("listen<", "core:event:default"),
+        ("emitTo(", "core:event:allow-emit-to"),
     ] {
         assert!(src.contains(call), "the adapter no longer uses {call}");
         assert!(granted.contains(permission), "{call} needs {permission}");
@@ -730,4 +731,66 @@ mod inbox {
         std::fs::write(folder.path().join("still.txt"), "still watched").unwrap();
         wait_for("it keeps watching", || kept(&h).len() == 1);
     }
+}
+
+#[test]
+fn quick_capture_can_only_read_and_undo_what_it_kept_itself() {
+    let h = harness();
+    let other = match h
+        .engine()
+        .keep_text(
+            "a note from the main window",
+            nocturne_contract::Source::Paste,
+        )
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let quick = h.window("quick-capture");
+    assert_eq!(
+        h.code_from(&quick, "get_item", json!({"id": other})),
+        "notFound"
+    );
+    assert_eq!(
+        h.code_from(&quick, "unkeep", json!({"id": other})),
+        "notFound"
+    );
+    let mine = h
+        .call_from(
+            &quick,
+            "keep_text",
+            json!({"text": "a note from quick capture", "source": "quickCapture"}),
+        )
+        .unwrap()["item"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    h.call_from(&quick, "get_item", json!({"id": mine}))
+        .unwrap();
+    h.call_from(&quick, "unkeep", json!({"id": mine})).unwrap();
+    assert!(
+        h.call("get_item", json!({"id": other})).is_ok(),
+        "the main window still reads anything"
+    );
+}
+
+#[test]
+fn quick_capture_may_undo_a_recording_and_a_picture_it_kept() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    let image = h
+        .call_raw_from(
+            &quick,
+            "keep_bytes",
+            vec![137, 80, 78, 71, 1, 2, 3],
+            &[
+                ("x-nocturne-mime", "image/png"),
+                ("x-nocturne-source", "paste"),
+            ],
+        )
+        .unwrap();
+    let id = image["item"]["id"].as_str().unwrap();
+    h.call_from(&quick, "get_item", json!({"id": id})).unwrap();
 }

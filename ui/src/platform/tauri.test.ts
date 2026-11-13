@@ -69,3 +69,24 @@ describe("TauriPlatform shared pieces", () => {
     off();
   });
 });
+
+describe("TauriPlatform without permission to listen", () => {
+  it("is refused quietly, with no unhandled rejection", async () => {
+    clearMocks();
+    mockIPC(
+      (cmd) => {
+        if (cmd.startsWith("plugin:event|")) throw new Error("event.listen not allowed");
+        return null;
+      },
+      { shouldMockEvents: false },
+    );
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    const off = new TauriPlatform().onAskHandOff(() => undefined);
+    await new Promise((r) => setTimeout(r, 20));
+    off();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(unhandled).not.toHaveBeenCalled();
+    process.off("unhandledRejection", unhandled);
+  });
+});

@@ -7,9 +7,12 @@ import type { Platform, SystemTheme, Unsubscribe } from "./types";
 /** Defers to a promise-returning subscription while handing back a synchronous unsubscribe. */
 function lazyUnlisten(pending: Promise<() => void>): Unsubscribe {
   let cancelled = false;
-  void pending.then((unlisten) => {
-    if (cancelled) unlisten();
-  });
+  // A window without permission to listen (quick capture) is refused: that is not an error.
+  void pending
+    .then((unlisten) => {
+      if (cancelled) unlisten();
+    })
+    .catch(() => undefined);
   return () => {
     cancelled = true;
     void pending.then((unlisten) => unlisten()).catch(() => undefined);

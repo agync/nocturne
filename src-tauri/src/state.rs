@@ -115,6 +115,9 @@ pub struct AppState {
     pub work: Notify,
     /// Files the person dropped or picked in this session: the only paths `keep_files` takes.
     chosen_paths: Mutex<HashSet<PathBuf>>,
+    /// Items the quick capture window kept in this session: the only ones it may read or take
+    /// back.
+    quick_items: Mutex<HashSet<String>>,
     /// Folders made by an export in this session: the only ones `open_export` opens.
     exports: Mutex<HashSet<PathBuf>>,
     opener: Mutex<Option<OpenFn>>,
@@ -199,6 +202,7 @@ impl AppState {
             tray_available: AtomicBool::new(false),
             work: Notify::new(),
             chosen_paths: Mutex::new(HashSet::new()),
+            quick_items: Mutex::new(HashSet::new()),
             exports: Mutex::new(HashSet::new()),
             opener: Mutex::new(None),
             window_shown: AtomicBool::new(false),
@@ -216,6 +220,22 @@ impl AppState {
 
     pub(crate) fn install_services(&self, services: Arc<Services>) -> bool {
         self.services.set(services).is_ok()
+    }
+
+    /// The quick capture window kept this item.
+    pub fn note_quick_item(&self, id: &str) {
+        let mut set = self.quick_items.lock().unwrap_or_else(|e| e.into_inner());
+        if set.len() >= MAX_CHOSEN {
+            set.clear();
+        }
+        set.insert(id.to_string());
+    }
+
+    pub fn quick_item(&self, id: &str) -> bool {
+        self.quick_items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(id)
     }
 
     /// Remember files the person dropped or picked.
@@ -249,6 +269,10 @@ impl AppState {
     }
 
     pub fn forget_session(&self) {
+        self.quick_items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         self.exports
             .lock()
             .unwrap_or_else(|e| e.into_inner())

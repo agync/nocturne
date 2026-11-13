@@ -20,10 +20,14 @@ export class TauriEngine implements EngineClient {
   private readonly listeners = new Map<EngineEventName, Set<Listener>>();
   private readonly unlisten: Array<Promise<UnlistenFn>> = [];
 
-  constructor() {
+  /**
+   * `listen: false` for a window that is not allowed to hear events (quick capture: answers and
+   * kept items travel on them). It then never asks, so nothing is refused or logged.
+   */
+  constructor(options: { listen?: boolean } = {}) {
     for (const name of ENGINE_EVENT_NAMES) {
       this.listeners.set(name, new Set());
-      this.unlisten.push(this.subscribe(name));
+      if (options.listen !== false) this.unlisten.push(this.subscribe(name));
     }
   }
 
