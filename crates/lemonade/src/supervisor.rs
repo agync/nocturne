@@ -301,6 +301,15 @@ fn new_key() -> Result<String, RuntimeError> {
         .collect())
 }
 
+/// Whether a loopback port can be taken. The probe only binds: it never listens, so the app is
+/// never, even for an instant, a listener of its own (the network check reads any listen by the
+/// app as a break of "off means off").
+fn port_is_free(port: u16) -> bool {
+    tokio::net::TcpSocket::new_v4()
+        .and_then(|socket| socket.bind(std::net::SocketAddr::from(([127, 0, 0, 1], port))))
+        .is_ok()
+}
+
 /// A random loopback port nothing is listening on right now.
 fn free_port(avoid: Option<u16>) -> Result<u16, RuntimeError> {
     for _ in 0..50 {
@@ -309,7 +318,7 @@ fn free_port(avoid: Option<u16>) -> Result<u16, RuntimeError> {
         if Some(port) == avoid {
             continue;
         }
-        if std::net::TcpListener::bind(("127.0.0.1", port)).is_ok() {
+        if port_is_free(port) {
             return Ok(port);
         }
     }
@@ -823,6 +832,24 @@ pub fn group_members(_pgid: u32) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_taken_port_is_not_free_and_a_probe_takes_nothing() {
+        let held = std::net::TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let taken = held.local_addr().unwrap().port();
+        assert!(!port_is_free(taken));
+        drop(held);
+        assert!(port_is_free(taken));
+        // The probe let go: the port can be listened on straight after.
+        assert!(std::net::TcpListener::bind(("127.0.0.1", taken)).is_ok());
+    }
+
+    #[test]
+    fn free_port_gives_a_port_that_can_be_listened_on() {
+        let port = free_port(None).unwrap();
+        assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
+        assert_ne!(free_port(Some(port)).unwrap(), port);
+    }
 
     #[test]
     fn ps_output_yields_the_live_members_of_one_group() {
