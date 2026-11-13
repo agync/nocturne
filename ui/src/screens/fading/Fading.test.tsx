@@ -164,6 +164,36 @@ describe("Fading & let go", () => {
     expect(screen.getByText("The pizza place on Elm Street is good.")).toBeInTheDocument();
   });
 
+  it("refreshes the lists when forgetting finishes even after the screen has been left", async () => {
+    motion(true);
+    const { engine } = await open();
+    let finish: (r: {
+      memoriesRemoved: number;
+      originalsRemoved: number;
+      pagesRedacted: number;
+    }) => void = () => undefined;
+    vi.spyOn(engine, "forget").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget 1 completely…" }));
+    const dialog = await screen.findByRole("dialog", { name: "Forget 2 things?" });
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
+    act(() => {
+      window.location.hash = "#/today";
+    });
+    await screen.findByRole("heading", { level: 1, name: /need/i });
+    expect(screen.queryByRole("heading", { name: "Fading & let go" })).toBeNull();
+    const status = vi.spyOn(engine, "getStatus");
+    await act(async () => {
+      finish({ memoriesRemoved: 1, originalsRemoved: 1, pagesRedacted: 0 });
+    });
+    await waitFor(() => expect(status).toHaveBeenCalled());
+  });
+
   it("fades a row away before removing it, unless motion is reduced", async () => {
     motion(false);
     vi.useFakeTimers({ shouldAdvanceTime: true });

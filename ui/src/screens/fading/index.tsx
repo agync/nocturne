@@ -291,6 +291,10 @@ export default function Fading() {
             defaultIncludeOriginals
             onDone={() => {
               forgotten.current = forgetting;
+              // Leaving the screen while it works means nothing here will close the dialog, so
+              // the lists are refreshed now instead of at the next visit.
+              if (!alive.current)
+                refresh("fading", "memories", "entities", "page", "pages", "status", "needsYou");
             }}
             onClose={() => {
               setForgetting(null);

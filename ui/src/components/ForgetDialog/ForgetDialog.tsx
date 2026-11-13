@@ -251,7 +251,10 @@ export function ForgetDialog({
                     label={t("forget.originals.also", { count: removable })}
                     checked={wanted}
                     disabled={!idle}
-                    onChange={(next) => void prepare(next)}
+                    onChange={(next) => {
+                      setRefreshed(false);
+                      void prepare(next);
+                    }}
                   />
                 ) : null}
                 <div className={styles.stays}>

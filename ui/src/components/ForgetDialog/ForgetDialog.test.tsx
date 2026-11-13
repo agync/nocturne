@@ -310,4 +310,83 @@ describe("ForgetDialog", () => {
     expect(forget).toHaveBeenLastCalledWith("no-originals");
     expect(await screen.findByText(/The original is kept\./)).toBeInTheDocument();
   });
+
+  it("keeps the title and the original line to the token's choice while a new list is read, and after it fails", async () => {
+    const engine = createMockEngine();
+    let reject: (e: Error) => void = () => undefined;
+    vi.spyOn(engine, "previewForget")
+      .mockResolvedValueOnce(preview({ token: "full" }))
+      .mockResolvedValueOnce(preview({ token: "full" }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, no) => {
+            reject = no;
+          }),
+      );
+    open({ memoryIds: ["a"] }, engine);
+    const box = await screen.findByRole("checkbox", { name: "Also delete the original" });
+    expect(box).toBeChecked();
+    expect(screen.getByRole("dialog", { name: "Forget 2 things?" })).toBeInTheDocument();
+    await userEvent.click(box);
+    // The box shows the new wish at once; what a press would do is still the old token's.
+    await waitFor(() => expect(box).not.toBeChecked());
+    expect(screen.getByRole("dialog", { name: "Forget 2 things?" })).toBeInTheDocument();
+    expect(screen.queryByText(/The original stays/)).toBeNull();
+    await act(async () => {
+      reject(new Error("no"));
+    });
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Forget 2 things?" })).toBeInTheDocument();
+    expect(screen.queryByText(/The original stays/)).toBeNull();
+  });
+
+  it("clears the note about a refreshed list on the next change of the box", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "previewForget").mockResolvedValue(preview());
+    vi.spyOn(engine, "forget").mockRejectedValueOnce(new Error("That preview has expired"));
+    open({ memoryIds: ["a"] }, engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
+    expect(await screen.findByText(/That list was out of date/)).toBeInTheDocument();
+    const box = await screen.findByRole("checkbox", { name: "Also delete the original" });
+    await waitFor(() => expect(box).toBeEnabled());
+    await userEvent.click(box);
+    await waitFor(() => expect(screen.queryByText(/That list was out of date/)).toBeNull());
+  });
+
+  it("ignores a list that arrives after a newer one", async () => {
+    const engine = createMockEngine();
+    const resolvers: Array<(p: ForgetPreview) => void> = [];
+    vi.spyOn(engine, "previewForget").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    const props = { defaultIncludeOriginals: true, onClose: vi.fn(), onDone: vi.fn() };
+    const view = render(
+      <EngineProvider engine={engine}>
+        <ForgetDialog memoryIds={["old"]} {...props} />
+      </EngineProvider>,
+    );
+    await waitFor(() => expect(resolvers.length).toBeGreaterThan(0));
+    const asked = resolvers.length;
+    view.rerender(
+      <EngineProvider engine={engine}>
+        <ForgetDialog memoryIds={["new"]} {...props} />
+      </EngineProvider>,
+    );
+    await waitFor(() => expect(resolvers.length).toBeGreaterThan(asked));
+    const newer = resolvers.slice(asked);
+    const answer = (token: string, sentence: string) =>
+      preview({ token, memories: [{ memoryId: "x", sentence }] });
+    await act(async () => {
+      for (const resolve of newer) resolve(answer("new", "The newer list"));
+    });
+    expect(await screen.findByText("The newer list")).toBeInTheDocument();
+    await act(async () => {
+      for (const resolve of resolvers.slice(0, asked)) resolve(answer("old", "The older list"));
+    });
+    expect(screen.getByText("The newer list")).toBeInTheDocument();
+    expect(screen.queryByText("The older list")).toBeNull();
+  });
 });
