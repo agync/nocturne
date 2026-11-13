@@ -213,22 +213,35 @@ impl Fake {
         format!("http://127.0.0.1:{}{path}", self.port)
     }
 
-    pub async fn wait_live(&self) {
-        for _ in 0..100 {
+    async fn live_within(&self, tries: u32) -> bool {
+        for _ in 0..tries {
             if let Ok(r) = self.http.get(self.url("/live")).send().await
                 && r.status().is_success()
             {
-                return;
+                return true;
             }
             tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        panic!("fake did not come up");
+        false
     }
 
+    pub async fn wait_live(&self) {
+        assert!(self.live_within(100).await, "fake did not come up");
+    }
+
+    /// Start a fake and wait for it. A free port is chosen, then released, then bound by the
+    /// child, and another test's connection can take it in between (a Mac hands out the same
+    /// range for both), so a fake that does not come up is started again on a new port.
     pub async fn started(mode: Option<&str>) -> Fake {
-        let fake = Fake::start(mode);
-        fake.wait_live().await;
-        fake
+        for _ in 0..3 {
+            let mut fake = Fake::start(mode);
+            if fake.live_within(60).await {
+                return fake;
+            }
+            let _ = fake.child.kill();
+            let _ = fake.child.wait();
+        }
+        panic!("fake did not come up");
     }
 
     pub fn wait_exit(&mut self, within: Duration) -> Option<std::process::ExitStatus> {
