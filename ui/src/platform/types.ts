@@ -27,4 +27,8 @@ export interface Platform {
   handOffAsk(question: string): Promise<void>;
   /** Hears questions handed off from the quick-capture window. */
   onAskHandOff(cb: (question: string) => void): Unsubscribe;
+  /** Shows a screen (`/items/abc`) in the main window, bringing it forward. In a browser it is just a move. */
+  openInMain(path: string): Promise<void>;
+  /** Hears screens the quick-capture window asked the main window to show. */
+  onOpenInMain(cb: (path: string) => void): Unsubscribe;
 }

@@ -299,6 +299,19 @@ describe("a question handed off from quick capture", () => {
   });
 });
 
+describe("a screen asked for by the quick capture window", () => {
+  it("is shown in the main window", async () => {
+    const platform = fakePlatform();
+    renderApp({ platform });
+    await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    await act(async () => platform.openInMain("/items/item-letter"));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Something you kept" }),
+    ).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/items/item-letter");
+  });
+});
+
 describe("theme", () => {
   it("follows the system theme and can be forced by the setting", async () => {
     const platform = fakePlatform("dark");

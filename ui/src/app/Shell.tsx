@@ -52,6 +52,14 @@ export function Shell({ children }: ShellProps) {
     [platform, navigate],
   );
 
+  useEffect(
+    () =>
+      platform.onOpenInMain((path) => {
+        window.location.hash = `#${path}`;
+      }),
+    [platform],
+  );
+
   useEffect(() => {
     document.title = route ? `${t(route.title)} · ${t("app.name")}` : t("app.name");
   }, [route]);

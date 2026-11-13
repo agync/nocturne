@@ -106,6 +106,15 @@ export class WebPlatform implements Platform {
     };
   }
 
+  async openInMain(path: string): Promise<void> {
+    window.location.hash = `#${path}`;
+  }
+
+  onOpenInMain(_cb: (path: string) => void): Unsubscribe {
+    // One window: openInMain moves it directly, so there is nothing to hear.
+    return () => undefined;
+  }
+
   pickFiles(): Promise<string[]> {
     return new Promise((resolve) => {
       const input = document.createElement("input");

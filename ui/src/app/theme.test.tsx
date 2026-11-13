@@ -26,6 +26,8 @@ function fakePlatform(initial: SystemTheme | null) {
     originalSrc: (path) => `file:${path}`,
     closeQuickCapture: async () => undefined,
     handOffAsk: async () => undefined,
+    openInMain: async () => undefined,
+    onOpenInMain: () => () => undefined,
     onAskHandOff: () => () => undefined,
   };
   return { platform, change: (t: SystemTheme) => listener?.(t) };

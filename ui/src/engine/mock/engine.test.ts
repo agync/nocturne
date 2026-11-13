@@ -277,6 +277,26 @@ describe("MockEngine, shared by the screen lanes", () => {
     await expect(engine.getItem(kept.item.id)).rejects.toThrow();
   });
 
+  it("only takes back what was kept in the last ten minutes", async () => {
+    const engine = createMockEngine({ now: NOW });
+    await expect(engine.unkeep("item-letter")).rejects.toThrow(/too long ago/);
+    await expect(engine.getItem("item-letter")).resolves.toBeDefined();
+  });
+
+  it("says a file kept twice is a duplicate and adds nothing", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const before = (await engine.listItems({ since: null, status: null, limit: null })).length;
+    const [again, fresh] = await engine.keepFiles(
+      ["/somewhere/council-tax-2026.pdf", "/somewhere/new-scan.jpg"],
+      "drop",
+    );
+    expect(again?.type).toBe("duplicate");
+    expect(again?.item.id).toBe("item-counciltax");
+    expect(fresh?.type).toBe("new");
+    const after = (await engine.listItems({ since: null, status: null, limit: null })).length;
+    expect(after).toBe(before + 1);
+  });
+
   it("keeps pasted bytes by what they are", async () => {
     const engine = createMockEngine({ now: NOW });
     const photo = await engine.keepBytes(new Uint8Array([1]), "image/png", "paste");

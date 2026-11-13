@@ -9,6 +9,8 @@ export interface FakePlatform extends Platform {
   drop(paths: string[]): void;
   theme(theme: SystemTheme): void;
   handOff(question: string): void;
+  /** What the quick-capture window last asked the main window to show. */
+  opened(): string | null;
 }
 
 export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
@@ -16,6 +18,8 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
   let onHover: (count: number | null) => void = () => undefined;
   let onTheme: (theme: SystemTheme) => void = () => undefined;
   let onHandOff: (question: string) => void = () => undefined;
+  let onOpen: (path: string) => void = () => undefined;
+  let lastOpened: string | null = null;
   return {
     onFileDrop(drop, hover) {
       onDrop = drop;
@@ -39,6 +43,15 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
       onHandOff = cb;
       return () => undefined;
     },
+    openInMain: async (path) => {
+      lastOpened = path;
+      onOpen(path);
+    },
+    onOpenInMain: (cb) => {
+      onOpen = cb;
+      return () => undefined;
+    },
+    opened: () => lastOpened,
     hover: (count) => {
       onHover(count);
     },

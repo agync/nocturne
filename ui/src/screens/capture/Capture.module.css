@@ -6,6 +6,10 @@
   background: var(--bg);
 }
 
+.page:focus {
+  outline: 0;
+}
+
 .stack {
   display: flex;
   flex-direction: column;

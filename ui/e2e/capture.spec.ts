@@ -63,6 +63,40 @@ test.describe("the floating window", () => {
     await expect(box(page)).toBeVisible();
   });
 
+  test("Undo with the pointer, then a second keep, still closes by itself", async ({ page }) => {
+    await ready(page);
+    await box(page).fill("Buy milk");
+    await page.keyboard.press("Enter");
+    await page.getByRole("button", { name: "Undo" }).click();
+    await box(page).fill("Buy eggs");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Kept.", { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/#\/today$/, { timeout: 4000 });
+  });
+
+  test("Ctrl Z takes it back and Escape leaves, straight from the Kept. pill", async ({ page }) => {
+    await ready(page);
+    await box(page).fill("Buy milk");
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Kept.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("main")).toBeFocused();
+    await page.keyboard.press("Control+z");
+    await expect(box(page)).toBeVisible();
+    await box(page).fill("Buy eggs");
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/#\/today$/);
+  });
+
+  test("Escape leaves the duplicate view", async ({ page }) => {
+    await ready(page);
+    await box(page).fill("Gran’s new number ends 4471.");
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("button", { name: "Open it" })).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(/#\/today$/);
+  });
+
   test("a question goes to the Ask page", async ({ page }) => {
     await ready(page);
     await box(page).fill("When is the dentist?");
@@ -122,6 +156,15 @@ test.describe("recording", () => {
     await page.screenshot({ path: `${SHOTS}/capture-recording-light.png` });
     await page.keyboard.up(" ");
     await expect(page.getByText(/Voice note, 0:0\d\. Reading it now\./)).toBeVisible();
+  });
+
+  test("a quick tap of Space does not leave the microphone on", async ({ page }) => {
+    await ready(page);
+    await page.keyboard.down(" ");
+    await page.keyboard.up(" ");
+    await page.waitForTimeout(1500);
+    await expect(page.getByText("Listening")).toHaveCount(0);
+    await expect(box(page)).toBeVisible();
   });
 
   test("Discard throws the recording away", async ({ page }) => {

@@ -54,4 +54,13 @@ describe("TauriPlatform shared pieces", () => {
     expect(heard).toHaveBeenCalledWith("When is the dentist?");
     off();
   });
+
+  it("hears a screen another window asked the main window to show", async () => {
+    const heard = vi.fn();
+    const off = new TauriPlatform().onOpenInMain(heard);
+    await new Promise((r) => setTimeout(r, 0));
+    await emit("open-in-main", "/items/item-1");
+    expect(heard).toHaveBeenCalledWith("/items/item-1");
+    off();
+  });
 });

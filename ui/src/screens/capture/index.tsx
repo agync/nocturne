@@ -26,7 +26,7 @@ export const CLOSE_AFTER_MS = 1600;
 
 type View =
   | { name: "compose" }
-  | { name: "kept"; message: string; itemId: string | null }
+  | { name: "kept"; message: string; itemIds: string[] }
   | { name: "duplicate"; item: ItemView };
 
 const MIC_DENIED: Notice = {
@@ -42,6 +42,9 @@ const spokenKind = (kind: ItemKind) => t(`kind.${kind}.spoken`);
 const kindOfMime = (mime: string): ItemKind =>
   mime.startsWith("image/") ? "image" : mime.startsWith("audio/") ? "audio" : "document";
 
+/** A press of Space shorter than this was a slip of the finger, not a voice note. */
+export const MIN_HOLD_MS = 300;
+
 /** The floating window from the shortcut: type, paste, drop or talk, and it is kept. */
 export default function Capture() {
   const engine = useEngine();
@@ -56,7 +59,10 @@ export default function Capture() {
   const [pausedClose, setPausedClose] = useState(false);
   const { data: status } = useStatus();
   const input = useRef<HTMLTextAreaElement>(null);
+  const page = useRef<HTMLElement>(null);
   const heldBySpace = useRef(false);
+  const pressedAt = useRef(0);
+  const working = useRef(false);
 
   useEffect(() => {
     document.title = `${t("screen.capture.title")} · ${t("app.name")}`;
@@ -71,11 +77,13 @@ export default function Capture() {
   const finishKept = useCallback((kept: Kept[], message: string, spoken: string) => {
     const first = kept[0];
     if (!first) return;
-    if (first.type === "duplicate" && kept.length === 1) {
+    // Only what is new can be taken back: a duplicate is an older thing that must stay.
+    const itemIds = kept.flatMap((k) => (k.type === "new" ? [k.item.id] : []));
+    if (itemIds.length === 0) {
       setView({ name: "duplicate", item: first.item });
       return;
     }
-    setView({ name: "kept", message, itemId: first.item.id });
+    setView({ name: "kept", message, itemIds });
     setAnnouncement(spoken);
   }, []);
 
@@ -102,6 +110,13 @@ export default function Capture() {
     onFailed,
   });
 
+  // A pill that was replaced never sent its mouse-leave, so nothing carries over to the next view.
+  useEffect(() => {
+    setPausedClose(false);
+    // The pill replaces the field, so focus waits on the window itself, where Escape and Ctrl Z work.
+    if (view.name === "kept") page.current?.focus({ preventScroll: true });
+  }, [view]);
+
   // Close by itself, unless the person is reading the pill or has a hand on it.
   useEffect(() => {
     if (view.name !== "kept" || pausedClose) return;
@@ -126,6 +141,8 @@ export default function Capture() {
 
   const keep = useCallback(
     async (value: string) => {
+      if (working.current) return;
+      working.current = true;
       const source: Source = fromWeb ? "pastedWeb" : "quickCapture";
       try {
         const kept = await engine.keepText(value, source);
@@ -138,6 +155,8 @@ export default function Capture() {
         );
       } catch {
         failed();
+      } finally {
+        working.current = false;
       }
     },
     [engine, fromWeb, finishKept, failed],
@@ -145,9 +164,12 @@ export default function Capture() {
 
   const ask = useCallback(
     async (value: string) => {
+      if (working.current) return;
+      working.current = true;
       askRequests.request(value);
       await platform.handOffAsk(value);
       if (!(await close())) goTo("/ask");
+      working.current = false;
     },
     [platform, close],
   );
@@ -202,17 +224,12 @@ export default function Capture() {
     setError(null);
     setMicDenied(false);
     heldBySpace.current = bySpace;
+    pressedAt.current = Date.now();
     setAnnouncement(t("capture.announce.recording"));
     recorder.start();
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      if (recorder.recording) stopRecording(false);
-      else void close();
-      return;
-    }
     if (event.nativeEvent.isComposing) return;
     if (recorder.recording) {
       if (event.key === "Enter") {
@@ -230,13 +247,35 @@ export default function Capture() {
     }
     if (event.key !== "Enter" || event.shiftKey) return;
     event.preventDefault();
+    // Holding Enter must not keep the same thing again and again.
+    if (event.repeat) return;
     if (event.ctrlKey || event.metaKey) send("keep");
     else if (event.altKey) send("ask");
     else send(defaultVerb(text));
   };
 
   const onKeyUp = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key === " " && heldBySpace.current && recorder.recording) stopRecording(true);
+    if (event.key !== " " || !heldBySpace.current) return;
+    // The microphone may still be opening: the recorder remembers the release and stops at once.
+    // A press this short was an accident, so nothing is kept.
+    const long = Date.now() - pressedAt.current >= MIN_HOLD_MS;
+    stopRecording(long);
+  };
+
+  /** Escape leaves from every view; Ctrl Z takes back what the pill says was kept. */
+  const onPageKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      if (recorder.recording) stopRecording(false);
+      else void close();
+    } else if (
+      view.name === "kept" &&
+      (event.ctrlKey || event.metaKey) &&
+      event.key.toLowerCase() === "z"
+    ) {
+      event.preventDefault();
+      void undo();
+    }
   };
 
   // Only the microphone matters in this window; every other notice belongs to the main one.
@@ -248,9 +287,9 @@ export default function Capture() {
   const hasText = text.trim().length > 0;
 
   const undo = async () => {
-    if (view.name !== "kept" || !view.itemId) return;
+    if (view.name !== "kept" || view.itemIds.length === 0) return;
     try {
-      await engine.unkeep(view.itemId);
+      await Promise.all(view.itemIds.map((id) => engine.unkeep(id)));
       setAnnouncement(t("capture.undone"));
       setView({ name: "compose" });
       setTimeout(() => input.current?.focus(), 0);
@@ -260,11 +299,19 @@ export default function Capture() {
   };
 
   const openItem = async (id: string) => {
-    if (!(await close())) goTo(`/items/${id}`);
+    await platform.openInMain(`/items/${id}`);
+    // A browser has one window: opening the item already left this screen.
+    if (window.location.hash.startsWith("#/quick-capture")) await platform.closeQuickCapture();
   };
 
   return (
-    <main className={styles.page} aria-label={t("capture.region")}>
+    <main
+      ref={page}
+      className={styles.page}
+      tabIndex={-1}
+      aria-label={t("capture.region")}
+      onKeyDown={onPageKeyDown}
+    >
       <h1 className="sr-only">{t("screen.capture.title")}</h1>
       <div className={styles.stack}>
         <div className={styles.live} role="status" aria-live="polite" aria-atomic="true">
@@ -278,14 +325,19 @@ export default function Capture() {
             data-view="kept"
             onMouseEnter={() => setPausedClose(true)}
             onMouseLeave={() => setPausedClose(false)}
-            onFocus={() => setPausedClose(true)}
-            onBlur={() => setPausedClose(false)}
           >
             <span className={styles.pillMark} aria-hidden="true" />
             <strong className={styles.pillLead}>{t("capture.kept.lead")}</strong>
             <span className={styles.pillMessage}>{view.message}</span>
-            {view.itemId ? (
-              <button type="button" className={styles.pillUndo} onClick={() => void undo()}>
+            {view.itemIds.length > 0 ? (
+              <button
+                type="button"
+                className={styles.pillUndo}
+                aria-keyshortcuts="Control+Z"
+                onFocus={() => setPausedClose(true)}
+                onBlur={() => setPausedClose(false)}
+                onClick={() => void undo()}
+              >
                 {t("capture.undo")}
               </button>
             ) : null}
@@ -307,6 +359,9 @@ export default function Capture() {
               onClick={() => void openItem(view.item.id)}
             >
               {t("capture.duplicate.open")}
+            </button>
+            <button type="button" className={styles.link} onClick={() => void close()}>
+              {t("button.close")}
             </button>
           </div>
         ) : (

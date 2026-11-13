@@ -72,6 +72,12 @@ describe("WebPlatform shared pieces", () => {
     expect(heard).toEqual(["When is the dentist?"]);
   });
 
+  it("opens a screen in the one window by moving to it", async () => {
+    window.location.hash = "#/quick-capture";
+    await new WebPlatform().openInMain("/items/item-1");
+    expect(window.location.hash).toBe("#/items/item-1");
+  });
+
   it("closes the quick capture screen by going back to today, and picks a stand-in folder", async () => {
     const platform = new WebPlatform();
     window.location.hash = "#/quick-capture";

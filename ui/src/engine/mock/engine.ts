@@ -38,6 +38,9 @@ export interface MockOptions {
   now?: Date | string;
 }
 
+/** How long after keeping something it can still be taken back. */
+const UNKEEP_MINUTES = 10;
+
 const clone = <T>(value: T): T => structuredClone(value);
 
 const STOP_WORDS = new Set([
@@ -323,6 +326,9 @@ export class MockEngine implements EngineClient {
   async keepFiles(paths: string[], source: Source): Promise<Kept[]> {
     return paths.map((path) => {
       const name = path.split(/[\\/]/).pop() ?? path;
+      // The same file kept twice is the same thing: say so, never add a second copy.
+      const duplicate = this.items.find((i) => i.fileName === name);
+      if (duplicate) return { type: "duplicate", item: clone(duplicate) } satisfies Kept;
       const item = this.newItem(kindFromName(name), name, source, { fileName: name });
       return { type: "new", item: clone(item) } satisfies Kept;
     });
@@ -352,6 +358,10 @@ export class MockEngine implements EngineClient {
   async unkeep(id: string): Promise<void> {
     const found = this.items.find((i) => i.id === id);
     if (!found) throw new Error(`No item ${id}`);
+    // Taking back is only for something kept a moment ago, as in the real engine.
+    if (this.clock.getTime() - new Date(found.keptAt).getTime() > UNKEEP_MINUTES * 60_000) {
+      throw new Error(`Item ${id} was kept too long ago to take back`);
+    }
     this.items = this.items.filter((i) => i.id !== id);
     this.memories = this.memories.filter(
       (m) => !(m.receipts.length > 0 && m.receipts.every((r) => r.itemId === id)),

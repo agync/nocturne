@@ -18,6 +18,7 @@ function lazyUnlisten(pending: Promise<() => void>): Unsubscribe {
 
 /** The event the quick-capture window sends to the main window with a question. */
 const ASK_HANDOFF = "ask-handoff";
+const OPEN_IN_MAIN = "open-in-main";
 
 export class TauriPlatform implements Platform {
   onFileDrop(
@@ -78,6 +79,17 @@ export class TauriPlatform implements Platform {
 
   onAskHandOff(cb: (question: string) => void): Unsubscribe {
     return lazyUnlisten(listen<string>(ASK_HANDOFF, (event) => cb(event.payload)));
+  }
+
+  async openInMain(path: string): Promise<void> {
+    await emitTo("main", OPEN_IN_MAIN, path);
+    const main = await Window.getByLabel("main");
+    await main?.show();
+    await main?.setFocus();
+  }
+
+  onOpenInMain(cb: (path: string) => void): Unsubscribe {
+    return lazyUnlisten(listen<string>(OPEN_IN_MAIN, (event) => cb(event.payload)));
   }
 
   async pickFiles(): Promise<string[]> {

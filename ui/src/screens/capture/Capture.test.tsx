@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
 import { type FakePlatform, fakePlatform, renderApp, setViewport } from "../../test/render";
-import { CLOSE_AFTER_MS } from "./index";
+import { CLOSE_AFTER_MS, MIN_HOLD_MS } from "./index";
 
 class FakeRecorder {
   state: "inactive" | "recording" = "inactive";
@@ -145,13 +145,14 @@ describe("keeping words", () => {
   });
 
   it("says a duplicate kindly and offers to open it", async () => {
-    const { close } = await open();
+    const { close, platform } = await open();
     await userEvent.type(box(), "Gran’s new number ends 4471.{Enter}");
     expect(await screen.findByText(/You already kept this note on/)).toHaveTextContent(
       "Nothing new to add.",
     );
     expect(screen.queryByRole("button", { name: "Keep anyway" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Open it" }));
+    expect(platform.opened()).toBe("/items/item-gran");
     expect(close).toHaveBeenCalledOnce();
   });
 
@@ -229,16 +230,23 @@ describe("dropping files", () => {
 });
 
 describe("recording", () => {
-  const hold = async () => {
+  /** Holds Space for `ms` of the clock, then leaves the key down. */
+  const hold = async (ms = 0) => {
     box().focus();
     fireEvent.keyDown(box(), { key: " " });
     await screen.findByText("Listening");
+    if (ms > 0) now.mockReturnValue(start + ms);
   };
+  const start = 1_700_000_000_000;
+  let now: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    now = vi.spyOn(Date, "now").mockReturnValue(start);
+  });
 
   it("hold Space on empty records with a meter and timer, release keeps a voice note", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "keepRecording");
-    await hold();
+    await hold(1200);
     expect(live()).toHaveTextContent("Recording started");
     expect(screen.getByText("Release Space to keep · long recordings are fine")).toBeVisible();
     expect(screen.getByRole("button", { name: "Discard" })).toBeVisible();
@@ -296,5 +304,157 @@ describe("recording", () => {
     expect(
       await screen.findByText("Nocturne can’t hear you. Microphone access is turned off for it."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("a slow microphone", () => {
+  const start = 1_700_000_000_000;
+  let now: ReturnType<typeof vi.spyOn>;
+  beforeEach(() => {
+    now = vi.spyOn(Date, "now").mockReturnValue(start);
+  });
+
+  /** getUserMedia that answers only when the test says so, like a permission prompt. */
+  const late = () => {
+    let release: () => void = () => undefined;
+    getUserMedia.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ getTracks: () => [track] });
+        }),
+    );
+    return () => release();
+  };
+
+  it("a tap of Space released before the microphone opens does not leave it recording", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "keepRecording");
+    const open_ = late();
+    box().focus();
+    fireEvent.keyDown(box(), { key: " " });
+    now.mockReturnValue(start + MIN_HOLD_MS - 100);
+    fireEvent.keyUp(box(), { key: " " });
+    await act(async () => open_());
+    await waitFor(() => expect(track.stop).toHaveBeenCalled());
+    expect(screen.queryByText("Listening")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a long enough press released before it opens is still kept", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "keepRecording");
+    const open_ = late();
+    box().focus();
+    fireEvent.keyDown(box(), { key: " " });
+    now.mockReturnValue(start + MIN_HOLD_MS + 500);
+    fireEvent.keyUp(box(), { key: " " });
+    await act(async () => open_());
+    await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    expect(screen.queryByText("Listening")).toBeNull();
+  });
+});
+
+describe("taking back", () => {
+  it("Undo then a second keep still closes by itself", async () => {
+    const { close } = await open();
+    await userEvent.type(box(), "Buy milk{Enter}");
+    const pill = await screen.findByText("Kept.", { selector: "strong" });
+    // The pointer is on the pill when Undo is pressed, so the pill never sees it leave.
+    await userEvent.hover(pill);
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    await userEvent.type(box(), "Buy eggs{Enter}");
+    await screen.findByText("Kept.", { selector: "strong" });
+    await waitFor(() => expect(close).toHaveBeenCalledOnce(), { timeout: CLOSE_AFTER_MS + 1500 });
+  });
+
+  it("Undo after several files takes back every new one and says so truthfully", async () => {
+    const { engine, platform } = await open();
+    const spy = vi.spyOn(engine, "unkeep");
+    act(() => platform.drop(["/tmp/a.jpg", "/tmp/b.jpg", "/tmp/c.jpg"]));
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(spy).toHaveBeenCalledTimes(3);
+    expect(live()).toHaveTextContent("Taken back. Nothing was kept.");
+    expect(await engine.listItems({ since: null, status: null, limit: null })).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ title: "a.jpg" })]),
+    );
+  });
+
+  it("never takes back a duplicate: only the new file in a mixed drop", async () => {
+    const { engine, platform } = await open();
+    const spy = vi.spyOn(engine, "unkeep");
+    act(() => platform.drop(["/tmp/council-tax-2026.pdf", "/tmp/fresh.jpg"]));
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls[0]?.[0]).not.toBe("item-counciltax");
+    await expect(engine.getItem("item-counciltax")).resolves.toBeDefined();
+  });
+
+  it("a drop of only duplicates says so and offers no Undo", async () => {
+    const { platform } = await open();
+    act(() => platform.drop(["/tmp/council-tax-2026.pdf"]));
+    expect(await screen.findByText(/You already kept this document on/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
+  });
+
+  it("Ctrl Z takes it back from the keyboard while the pill is shown", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "unkeep");
+    await userEvent.type(box(), "Buy milk{Enter}");
+    await screen.findByText("Kept.", { selector: "strong" });
+    expect(screen.getByRole("main")).toHaveFocus();
+    await userEvent.keyboard("{Control>}z{/Control}");
+    await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    expect(live()).toHaveTextContent("Taken back. Nothing was kept.");
+  });
+});
+
+describe("leaving from every view", () => {
+  it("Escape closes from the Kept. pill", async () => {
+    const { close } = await open();
+    await userEvent.type(box(), "Buy milk{Enter}");
+    await screen.findByText("Kept.", { selector: "strong" });
+    await userEvent.keyboard("{Escape}");
+    expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("Escape and a Close button leave the duplicate view", async () => {
+    const { close } = await open();
+    await userEvent.type(box(), "Gran’s new number ends 4471.{Enter}");
+    await screen.findByText(/You already kept this note/);
+    await userEvent.keyboard("{Escape}");
+    expect(close).toHaveBeenCalledOnce();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(close).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("keeping once", () => {
+  it("holding Enter keeps one thing, not many", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "keepText");
+    await userEvent.type(box(), "Buy milk");
+    fireEvent.keyDown(box(), { key: "Enter" });
+    fireEvent.keyDown(box(), { key: "Enter", repeat: true });
+    fireEvent.keyDown(box(), { key: "Enter", repeat: true });
+    await screen.findByText("Kept.", { selector: "strong" });
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("a second Enter while the first keep is still on its way does nothing", async () => {
+    const { engine } = await open();
+    let finish: () => void = () => undefined;
+    const real = engine.keepText.bind(engine);
+    const spy = vi.spyOn(engine, "keepText").mockImplementation(
+      (text, source) =>
+        new Promise((resolve) => {
+          finish = () => resolve(real(text, source));
+        }),
+    );
+    await userEvent.type(box(), "Buy milk");
+    fireEvent.keyDown(box(), { key: "Enter" });
+    fireEvent.keyDown(box(), { key: "Enter" });
+    expect(spy).toHaveBeenCalledOnce();
+    await act(async () => finish());
+    await screen.findByText("Kept.", { selector: "strong" });
   });
 });
