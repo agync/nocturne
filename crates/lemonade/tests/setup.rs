@@ -607,7 +607,7 @@ async fn a_download_that_stops_on_its_own_is_cleared_and_started_again_through_a
         32,
     )
     .await;
-    let mut rx = rig.setup.view();
+    let rx = rig.setup.view();
     rig.setup.start(Tier::Small).await.unwrap();
     // The engine forgets its log when it restarts at the end, so watch while it runs.
     let mut calls: Vec<String> = Vec::new();
