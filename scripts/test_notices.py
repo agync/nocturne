@@ -151,6 +151,22 @@ class Output(unittest.TestCase):
         for work in notices.WORKS:
             self.assertTrue(notices.evaluate(work["license"]))
 
+    def test_helpers_notices_present(self):
+        out = notices.build_notices([crate("bare", "MIT")], "x", "1", "example.com/mod,https://example.com/LICENSE,MIT")
+        self.assertIn("cloudflared", out)
+        self.assertIn("Cloudflare, Inc.", out)
+        self.assertIn("Apache License, Version 2.0", out)
+        self.assertIn("tailscale (tailscaled and the tailscale command)", out)
+        self.assertIn("Tailscale Inc. and AUTHORS", out)
+        self.assertIn("Redistribution and use in source and binary forms", out)
+        self.assertIn("example.com/mod,https://example.com/LICENSE,MIT", out)
+        for helper in notices.HELPERS:
+            self.assertTrue(notices.evaluate(helper["license"]))
+
+    def test_without_a_report_the_notice_says_where_it_is(self):
+        out = notices.build_notices([crate("bare", "MIT")], "x")
+        self.assertIn("tailscale-licenses.txt", out)
+
     def test_identical_texts_are_printed_once(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)

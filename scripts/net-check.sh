@@ -1,13 +1,24 @@
 #!/usr/bin/env bash
 # Prove Nocturne talks to nothing outside this computer.
 #
-# Usage: scripts/net-check.sh [launch|prepared|attach] [binary|appimage|deb|rpm]
+# Usage: scripts/net-check.sh [launch|prepared|remote|attach] [binary|appimage|deb|rpm]
 #   launch    fresh data folder, no setup: idle NET_SECONDS (default 120), then a second launch
 #             with a text file. Needs no input. This is what `make netcheck` runs on the binary.
 #   prepared  NET_CHECK_DIR names a data folder where setup finished (never the person's own
 #             app data). It runs on a scratch copy of its store/ with engine/models linked in
 #             place (not copied), keeps a text note and an image so the mind loads and reads,
 #             and idles NET_SECONDS (default 300).
+#   remote    Away from home on, through the stand-in helpers (`make netcheck-remote`). Needs a binary
+#             built with the helpers crate's `fake` feature (never packaged), NET_CHECK_DIR as for
+#             prepared but with Away from home turned on in its store, and the stand-in helpers
+#             built beside it (NET_CHECK_FAKES, default target/debug: fake-cloudflared,
+#             fake-tailscaled, fake-tailscale; NET_CHECK_CONNECTION=simple|private picks which one
+#             the app is expected to start, default simple). The script installs the stand-ins as
+#             the pinned helpers under the scratch data folder with a lock of their own
+#             (NOCTURNE_FAKE_HELPERS_LOCK) and asks them to try 198.51.100.1:7844 and to bind UDP on
+#             every interface. NET_CHECK_PHONE may name a command that plays a scripted phone against
+#             the app's data folder (passed as its argument). The judge allows non-loopback attempts
+#             and the any-interface UDP bind for helper programs only; the app and lemond never.
 #   attach    wraps a manual session on a real display: ask, listen, print; Ctrl+C ends it and
 #             the report is printed. Pass the display by socket path, because abstract sockets
 #             (the usual X11 form) do not cross the network namespace:
@@ -19,8 +30,10 @@
 # How: the app runs in a private user and network namespace (`unshare -rn`) where only loopback
 # exists, under `strace -f -e trace=%network`. scripts/netlog.py fails on any non-loopback
 # destination, any port 53, and any connection to a name-service socket, and the run must show
-# the app really worked (interface ready, and a kept file for the launch modes). Nothing is
-# installed; processes are stopped by the pid found for the app.
+# the app really worked (interface ready, and a kept file for the launch modes). In the modes
+# with Away from home off it also fails on any listen by the app, any exec of a helper and any
+# file under <data>/remote/helpers. Nothing is installed; processes are stopped by the pid found
+# for the app.
 set -uo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 repo=$PWD
@@ -42,20 +55,74 @@ if [[ "${1:-}" == --inner ]]; then
     mode=$1 launch=$2 procexe=$3 bundle=$4 scratch=$5 label=$6
     seconds=${NET_SECONDS:-120}
     [[ "$mode" == prepared ]] && seconds=${NET_SECONDS:-300}
+    [[ "$mode" == remote ]] && seconds=${NET_SECONDS:-60}
     # The scratch environment was exported before the namespace and the session bus started.
     mkdir -p "$scratch/stderr"
     result=$scratch/result.txt
     fail=0
     bad() { printf 'FAIL  %s: %s\n' "$label" "$*" >> "$result"; fail=1; }
     good() { printf 'ok    %s: %s\n' "$label" "$*" >> "$result"; }
-    trace() { strace -f -qq -e trace=%network,io_uring_setup -s 256 -o "$1" "${@:2}"; }
+    traced=%network,io_uring_setup,execve,clone,clone3,fork,vfork
+    trace() { strace -f -qq -e trace="$traced" -s 256 -o "$1" "${@:2}"; }
+    helpers_dir=$scratch/data/remote/helpers
+    on_or_off=off
+    [[ "$mode" == remote ]] && on_or_off=remote
 
-    if [[ "$mode" == prepared ]]; then
-        src=${NET_CHECK_DIR:?prepared needs NET_CHECK_DIR}
+    if [[ "$mode" == prepared || "$mode" == remote ]]; then
+        src=${NET_CHECK_DIR:?this mode needs NET_CHECK_DIR}
         [[ -d "$src/store" ]] || { printf 'NET_CHECK_DIR has no store/\n' >&2; exit 2; }
         cp -a "$src/store" "$scratch/data/store"
         mkdir -p "$scratch/data/engine"
         [[ -d "$src/engine/models" ]] && ln -s "$src/engine/models" "$scratch/data/engine/models"
+    fi
+
+    # Away from home on: the stand-in helpers stand in for the pinned ones, each beside its own
+    # control file, under a lock that pins their checksums.
+    if [[ "$mode" == remote ]]; then
+        fakes=${NET_CHECK_FAKES:-$repo/target/debug}
+        connection=${NET_CHECK_CONNECTION:-simple}
+        case "$connection" in
+            simple) kinds="cloudflared:fake-cloudflared" ;;
+            private) kinds="tailscaled:fake-tailscaled tailscaled:fake-tailscale" ;;
+            *) printf 'NET_CHECK_CONNECTION is simple or private\n' >&2; exit 2 ;;
+        esac
+        expected=
+        for pair in $kinds; do
+            kind=${pair%%:*} fake=${pair##*:}
+            [[ -x "$fakes/$fake" ]] || { printf 'missing %s/%s (cargo build -p nocturne-helpers --features fake)\n' "$fakes" "$fake" >&2; exit 2; }
+            dest=$helpers_dir/$kind/fake
+            mkdir -p "$dest" && chmod 700 "$helpers_dir" "$helpers_dir/$kind" "$dest"
+            name=${fake#fake-}
+            cp "$fakes/$fake" "$dest/$name"
+            printf '{"edge_attempt": true}\n' > "$dest/fake-control.json"
+            expected+=" $dest"
+        done
+        python3 -I - "$scratch/fake.lock" "$helpers_dir" << 'PY'
+import hashlib, sys
+out, helpers = sys.argv[1], sys.argv[2]
+def sha(path):
+    return hashlib.sha256(open(path, "rb").read()).hexdigest()
+text = ""
+for kind, extra in (("cloudflared", None), ("tailscaled", "tailscale")):
+    main = f"{helpers}/{kind}/fake/{kind}"
+    try:
+        digest = sha(main)
+    except OSError:
+        continue
+    text += f'[[helpers]]\nkind = "{kind}"\nversion = "fake"\nlicence = "Apache-2.0"\npinned_at = "2000-01-01"\nbase_url = "https://example.invalid"\n'
+    for platform in ("linux-x86_64", "linux-aarch64", "macos-aarch64", "windows-x86_64"):
+        text += f'\n[helpers.assets.{platform}]\nfile = "fake"\nsha256 = "{digest}"\n'
+        if extra:
+            try:
+                text += f'extras = [{{ member = "{extra}", sha256 = "{sha(helpers + "/tailscaled/fake/" + extra)}" }}]\nmember = "{kind}"\nmember_sha256 = "{digest}"\n'
+            except OSError:
+                pass
+    text += "\n"
+open(out, "w").write(text)
+PY
+        export NOCTURNE_FAKE_HELPERS_LOCK=$scratch/fake.lock
+    elif [[ -d "$helpers_dir" ]] && [[ -n "$(find "$helpers_dir" -type f 2> /dev/null | head -1)" ]]; then
+        bad "files under remote/helpers although nothing was consented: $(find "$helpers_dir" -type f | head -3 | tr '\n' ' ')"
     fi
 
     find_app() {
@@ -76,7 +143,7 @@ if [[ "${1:-}" == --inner ]]; then
     }
 
     # Roots whose executables must be gone once the app has quit.
-    roots=("$procexe")
+    roots=("$procexe" "$helpers_dir")
     if [[ -n "$bundle" ]]; then roots+=("$bundle"); else roots+=("$(dirname "$(dirname "$procexe")")"); fi
     # strace waits for every traced child, so a lingering engine would block it for good. Give it
     # 15 seconds, then stop what is left by pid and fail.
@@ -118,7 +185,10 @@ if [[ "${1:-}" == --inner ]]; then
     else
         sleep "$seconds"
         if [[ -n "$(find_app)" ]]; then good "alive after ${seconds}s"; else bad "the app was not running after ${seconds}s"; fi
-        if [[ "$mode" == prepared ]]; then
+        if [[ "$mode" == remote && -n "${NET_CHECK_PHONE:-}" ]]; then
+            if timeout 120 "$NET_CHECK_PHONE" "$scratch/data" > "$scratch/stderr/phone.out" 2>&1; then good "the scripted phone finished"; else bad "the scripted phone failed: $(tail -n 3 "$scratch/stderr/phone.out")"; fi
+        fi
+        if [[ "$mode" == prepared || "$mode" == remote ]]; then
             printf 'A note kept during the network check.\n' > "$scratch/note.txt"
             python3 -I - "$scratch/image.png" << 'PY'
 import struct, sys, zlib
@@ -129,10 +199,10 @@ def chunk(kind, body):
 png = b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
 open(sys.argv[1], "wb").write(png)
 PY
-            timeout 60 "$(command -v strace)" -f -qq -e trace=%network,io_uring_setup -s 256 -o "$scratch/trace-2.log" "$launch" "$scratch/note.txt" "$scratch/image.png" > /dev/null 2>&1
+            timeout 60 "$(command -v strace)" -f -qq -e trace="$traced" -s 256 -o "$scratch/trace-2.log" "$launch" "$scratch/note.txt" "$scratch/image.png" > /dev/null 2>&1
         else
             printf 'A note kept during the network check.\n' > "$scratch/note.txt"
-            timeout 60 "$(command -v strace)" -f -qq -e trace=%network,io_uring_setup -s 256 -o "$scratch/trace-2.log" "$launch" "$scratch/note.txt" > /dev/null 2>&1
+            timeout 60 "$(command -v strace)" -f -qq -e trace="$traced" -s 256 -o "$scratch/trace-2.log" "$launch" "$scratch/note.txt" > /dev/null 2>&1
         fi
         sleep 3
         stop_app
@@ -167,17 +237,26 @@ PY
     fi
     if grep -q 'panicked' "$logs"/*.log "$scratch"/stderr/* 2> /dev/null; then bad "a panic was logged"; fi
 
+    if [[ "$mode" == remote ]]; then
+        for dir in $expected; do
+            if [[ -s "$dir/fake-record.jsonl" ]]; then good "the stand-in ran: $(basename "$(dirname "$dir")")"; else bad "the stand-in never ran in $dir"; fi
+        done
+    fi
+    judge=(python3 -I "$repo/scripts/netlog.py" --scratch "$scratch" --mode "$on_or_off"
+        --helpers-dir "$helpers_dir/" --app-exe "$procexe")
+    [[ -n "$bundle" ]] && judge+=(--lemond-dir "$bundle/")
+    [[ "$mode" == remote ]] && judge+=(--require-helper-traffic)
     {
         printf -- '--- outbound report (%s, %s)\n' "$label" "$mode"
-        python3 -I "$repo/scripts/netlog.py" --scratch "$scratch" "$scratch"/trace-*.log
+        "${judge[@]}" "$scratch"/trace-*.log
     } >> "$result"
-    python3 -I "$repo/scripts/netlog.py" --scratch "$scratch" "$scratch"/trace-*.log > /dev/null || fail=1
+    "${judge[@]}" "$scratch"/trace-*.log > /dev/null || fail=1
     exit "$fail"
 fi
 
 mode=${1:-launch}
 variant=${2:-binary}
-case "$mode" in launch | prepared | attach) ;; *) printf 'unknown mode: %s\n' "$mode" >&2; exit 2 ;; esac
+case "$mode" in launch | prepared | remote | attach) ;; *) printf 'unknown mode: %s\n' "$mode" >&2; exit 2 ;; esac
 for tool in unshare strace ip xvfb-run dbus-run-session; do
     command -v "$tool" > /dev/null || { printf 'missing tool: %s\n' "$tool" >&2; exit 2; }
 done

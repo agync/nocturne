@@ -1,5 +1,8 @@
 """Tests for scripts/netlog.py with recorded strace lines."""
 
+import contextlib
+import io
+import os
 import unittest
 
 import netlog
@@ -122,6 +125,137 @@ class Verdicts(unittest.TestCase):
     def test_unrelated_calls_are_not_counted(self):
         result = netlog.analyse(["54 recvfrom(5, \"x\", 1, 0, NULL, NULL) = 1\n", "garbage\n"])
         self.assertEqual(result["calls"], 0)
+
+
+APP = "/opt/nocturne/nocturne"
+HELPER = "/data/remote/helpers/cloudflared/2024.3.0/cloudflared"
+LEMOND = "/opt/nocturne/lemonade/lemond"
+
+
+def execve(pid, path):
+    return f'{pid} execve("{path}", ["x"], 0x7ffd /* 3 vars */) = 0\n'
+
+
+def clone(parent, child, flags="CLONE_VM|CLONE_FS|SIGCHLD"):
+    return f"{parent} clone(child_stack=NULL, flags={flags}) = {child}\n"
+
+
+def udp_bind(pid, addr, port=0, fd=7):
+    return [
+        f"{pid} socket(AF_INET, SOCK_DGRAM|SOCK_CLOEXEC, IPPROTO_IP) = {fd}\n",
+        f"{pid} bind({fd}, {V4 % (port, addr)}, 16) = 0\n",
+    ]
+
+
+def app_and_engine():
+    return [execve(100, APP), clone(100, 300), execve(300, LEMOND)]
+
+
+def processes():
+    """An app that started a helper and the engine; the helper's thread shares its program."""
+    return [
+        execve(100, APP),
+        clone(100, 200),
+        execve(200, HELPER),
+        clone(200, 201, "CLONE_VM|CLONE_THREAD|CLONE_SIGHAND"),
+        clone(100, 300),
+        execve(300, LEMOND),
+    ]
+
+
+class RemoteMode(unittest.TestCase):
+    def judge(self, lines, mode="remote"):
+        failures = netlog.analyse(processes() + lines, "/tmp/scratch", mode)["failures"]
+        return [f for f in failures if "executed the helper" not in f]
+
+    def test_app_pid_non_loopback_fails(self):
+        failures = self.judge([connect(100, V4 % (443, "93.184.216.34"))])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("pid 100 (app)", failures[0])
+
+    def test_helper_pid_non_loopback_passes_in_remote_mode(self):
+        lines = [connect(200, V4 % (7844, "198.51.100.1")), connect(201, V6 % (443, "2606:4700::1111"))]
+        result = netlog.analyse(processes() + lines, "/tmp/scratch", "remote")
+        self.assertEqual(result["failures"], [])
+        self.assertIn("198.51.100.1:7844", result["helper_traffic"])
+        self.assertIn("2606:4700::1111:443", result["helper_traffic"])
+
+    def test_helper_pid_non_loopback_fails_in_off_mode(self):
+        failures = self.judge([connect(200, V4 % (7844, "198.51.100.1"))], mode="off")
+        self.assertEqual(len(failures), 1)
+        self.assertIn("pid 200 (helper)", failures[0])
+
+    def test_helper_any_interface_udp_bind_passes_in_remote_mode(self):
+        self.assertEqual(self.judge(udp_bind(200, "0.0.0.0")), [])
+        self.assertEqual(self.judge(udp_bind(201, "0.0.0.0", fd=9)), [])
+
+    def test_helper_tcp_bind_on_every_interface_still_fails(self):
+        lines = [
+            "200 socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_IP) = 8\n",
+            "200 bind(8, " + V4 % (8080, "0.0.0.0") + ", 16) = 0\n",
+        ]
+        self.assertEqual(len(self.judge(lines)), 1)
+
+    def test_app_any_interface_bind_fails(self):
+        failures = self.judge(udp_bind(100, "0.0.0.0"))
+        self.assertEqual(len(failures), 1)
+        self.assertIn("pid 100 (app)", failures[0])
+
+    def test_lemond_pid_non_loopback_always_fails(self):
+        for mode in ("remote", "off"):
+            failures = self.judge([connect(300, V4 % (443, "93.184.216.34"))], mode)
+            self.assertEqual(len(failures), 1, mode)
+            self.assertIn("pid 300 (lemond)", failures[0])
+        failures = self.judge(udp_bind(300, "0.0.0.0"))
+        self.assertEqual(len(failures), 1)
+
+    def test_loopback_for_everyone_passes(self):
+        lines = [connect(p, V4 % (4100, "127.0.0.1")) for p in (100, 200, 300)]
+        self.assertEqual(self.judge(lines), [])
+
+    def test_a_remote_trace_without_helper_traffic_can_be_refused(self):
+        log = "/tmp/scratch-netlog-none.log"
+        with open(log, "w") as handle:
+            handle.writelines(processes() + [connect(100, V4 % (4100, "127.0.0.1"))])
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                code = netlog.main([log, "--mode", "remote", "--require-helper-traffic", "--scratch", "/tmp/scratch"])
+        finally:
+            os.remove(log)
+        self.assertEqual(code, 1)
+
+
+class OffMode(unittest.TestCase):
+    def test_off_mode_fails_on_app_listen(self):
+        lines = app_and_engine() + ["100 listen(5, 128) = 0\n", connect(100, V4 % (1, "127.0.0.1"))]
+        failures = netlog.analyse(lines, "/tmp/scratch")["failures"]
+        self.assertEqual(len(failures), 1)
+        self.assertIn("listen", failures[0])
+
+    def test_off_mode_lets_the_engine_listen_and_remote_mode_lets_the_app(self):
+        lines = app_and_engine() + ["300 listen(5, 128) = 0\n", "100 listen(6, 128) = 0\n", connect(100, V4 % (1, "127.0.0.1"))]
+        off = netlog.analyse(lines, "/tmp/scratch", "off")["failures"]
+        self.assertEqual(len(off), 1)
+        self.assertIn("pid 100", off[0])
+        self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "remote")["failures"], [])
+
+    def test_off_mode_fails_on_helper_exec(self):
+        lines = [execve(100, APP), clone(100, 200), execve(200, HELPER), connect(100, V4 % (1, "127.0.0.1"))]
+        failures = netlog.analyse(lines, "/tmp/scratch")["failures"]
+        self.assertEqual(len(failures), 1)
+        self.assertIn("helper", failures[0])
+        self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "remote")["failures"], [])
+
+    def test_a_program_the_app_started_is_not_the_app_when_it_is_named(self):
+        lines = [execve(100, APP), clone(100, 400), execve(400, "/usr/lib/webkit/WebKitNetworkProcess"), "400 listen(5, 1) = 0\n", connect(100, V4 % (1, "127.0.0.1"))]
+        self.assertEqual(len(netlog.analyse(lines, "/tmp/scratch")["failures"]), 1)
+        self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "off", app_exe=APP)["failures"], [])
+
+    def test_explicit_helper_folders(self):
+        lines = [execve(100, "/custom/h/cloudflared"), connect(100, V4 % (1, "127.0.0.1"))]
+        self.assertEqual(netlog.analyse(lines, "/tmp/scratch")["failures"], [])
+        failures = netlog.analyse(lines, "/tmp/scratch", helpers=["/custom/h/"])["failures"]
+        self.assertEqual(len(failures), 1)
 
 
 if __name__ == "__main__":

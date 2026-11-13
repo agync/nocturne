@@ -9,7 +9,11 @@
 # entry, icons, forbidden paths, host paths in text files and the builder's home folder in any
 # file (binaries too), the package version and, for deb and rpm, the declared libraries. For an
 # AppImage it also checks the bundled libraries against the copyleft policy and the SOURCES
-# manifest. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
+# manifest. For Away from home it checks that no connection helper (cloudflared, tailscaled,
+# tailscale) and no stand-in helper is inside, that the binary embeds the repository's
+# helpers.lock, and that every pinned version has its captured help text; with NOCTURNE_RELEASE=1
+# it also refuses a placeholder pin, a pin older than 183 days and help text that was not
+# captured from the pinned binary. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
 # .dmg, mounted read-only) is checked for its Info.plist (identifier, executable, icon, version,
 # minimum system, microphone sentence) and, on a Mac, its code signature.
 #   NOCTURNE_BUILDER_HOME   the home folder to look for (default $HOME)
@@ -114,6 +118,94 @@ args=("$root" --kind "$kind" --builder-home "${NOCTURNE_BUILDER_HOME:-$HOME}")
 [[ -n "$requires" ]] && args+=(--requires "$requires")
 printf 'checking %s (%s)\n' "$(basename "$input")" "$kind"
 python3 -I scripts/check_tree.py "${args[@]}"
+python3 -I - "$root" "${NOCTURNE_RELEASE:-0}" << 'PY'
+import datetime
+import os
+import sys
+import tomllib
+
+root, release = sys.argv[1], sys.argv[2] == "1"
+FORBIDDEN = {"cloudflared", "cloudflared.exe", "tailscaled", "tailscaled.exe", "tailscale", "tailscale.exe"}
+FAKE_MARKER = b"nocturne-fake-helpers-marker"
+SKIP_DIRS = {"lemonade", "engine", "models"}
+failed = False
+
+
+def good(message):
+    print(f"ok    {message}")
+
+
+def bad(message):
+    global failed
+    failed = True
+    print(f"FAIL  {message}")
+
+
+files = []
+for base, dirs, names in os.walk(root):
+    dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+    files += [os.path.join(base, n) for n in names]
+
+# No helper is ever inside the package: it is downloaded on consent and checked against the pin.
+found = [f for f in files if os.path.basename(f) in FORBIDDEN or os.path.basename(f).startswith("fake-")]
+if found:
+    bad("a connection helper or a stand-in is packaged: " + ", ".join(os.path.relpath(f, root) for f in found[:5]))
+else:
+    good("no connection helper and no stand-in helper in the package")
+
+with open("helpers.lock", "rb") as handle:
+    lock_bytes = handle.read()
+lock = tomllib.loads(lock_bytes.decode("utf-8"))
+binaries = [f for f in files if os.path.basename(f) in ("nocturne", "nocturne.exe") and os.path.getsize(f) > 1 << 20]
+marker_in = []
+embeds = []
+different = []
+for path in binaries:
+    data = open(path, "rb").read()
+    if FAKE_MARKER in data:
+        marker_in.append(path)
+    if lock_bytes in data:
+        embeds.append(path)
+    elif b'kind = "cloudflared"' in data:
+        different.append(path)
+if marker_in:
+    bad("a build with stand-in helpers was packaged: " + ", ".join(os.path.relpath(f, root) for f in marker_in))
+else:
+    good("no stand-in helper marker in the program")
+if binaries and different:
+    bad("the program embeds a helpers.lock that differs from the repository's")
+elif binaries and not embeds:
+    bad("the program does not embed helpers.lock")
+elif binaries:
+    good("the program embeds the repository's helpers.lock")
+else:
+    print("note: no nocturne program found, so the embedded helpers.lock was not compared")
+
+for helper in lock["helpers"]:
+    kind, version = helper["kind"], helper["version"]
+    folder = os.path.join("crates", "helpers", "fixtures", "help", kind, version)
+    texts = sorted(n for n in os.listdir(folder) if n.endswith(".txt")) if os.path.isdir(folder) else []
+    if texts:
+        good(f"help text captured for {kind} {version} ({len(texts)} commands)")
+    else:
+        bad(f"no captured help text for {kind} {version} in {folder}")
+    if release:
+        placeholder = helper.get("placeholder") or any(
+            set(a["sha256"]) == {"0"} for a in helper["assets"].values()
+        )
+        if placeholder:
+            bad(f"{kind} {version} is still a placeholder pin")
+        pinned = datetime.date.fromisoformat(helper["pinned_at"])
+        age = (datetime.date.today() - pinned).days
+        if age > 183:
+            bad(f"{kind} {version} was pinned {age} days ago; pins must be younger than 183 days")
+        else:
+            good(f"{kind} {version} pinned {age} days ago")
+        stale = [n for n in texts if "not yet the pinned binary" in open(os.path.join(folder, n), encoding="utf-8").read()]
+        if stale:
+            bad(f"help text for {kind} {version} was not captured from the pinned binary: {', '.join(stale)}")
+sys.exit(1 if failed else 0)
+PY
 if [[ "$kind" == app && "$(uname -s)" == Darwin ]]; then
     codesign --verify --deep --strict "$root"
     printf 'ok    code signature verifies (%s)\n' "$(codesign -dv "$root" 2>&1 | sed -n 's/^Signature=//p;s/^Authority=//p' | head -1)"
