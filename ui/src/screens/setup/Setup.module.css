@@ -2,7 +2,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-width: 720px;
+  min-width: min(720px, 100%);
   min-height: 100%;
   padding: var(--s-6);
   background: var(--bg);
@@ -349,4 +349,41 @@
   align-items: flex-start;
   gap: var(--s-3);
   color: var(--ink2);
+}
+
+/* At 200% zoom of the smallest window the steps stack, so nothing is squeezed or cut off. */
+@media (max-width: 640px) {
+  .window {
+    align-items: flex-start;
+    padding: var(--s-3);
+  }
+
+  .card {
+    min-height: 0;
+    padding: var(--s-5);
+  }
+
+  .wide {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 0;
+  }
+
+  .main {
+    padding: var(--s-5) var(--s-4);
+  }
+
+  .defaults {
+    padding: var(--s-5) var(--s-4);
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
+
+  .tiers {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .tier + .tier {
+    border-top: 1px solid var(--rule);
+    border-left: 0;
+  }
 }

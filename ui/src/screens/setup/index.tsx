@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { goTo, useQueryParam } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
@@ -18,6 +18,10 @@ export default function Setup() {
   const [begun, setBegun] = useState(false);
   const query = useQuery({ queryKey: ["setup"], queryFn: () => engine.getSetup() });
   const view = query.data;
+
+  useEffect(() => {
+    document.title = `${t("screen.setup.title")} · ${t("app.name")}`;
+  }, []);
 
   let body: React.ReactNode;
   if (query.isError) {

@@ -48,7 +48,9 @@ describe("the welcome", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "Checking this computer…" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/memory and free space/).closest("[role=status]")).not.toBeNull();
+    expect(
+      screen.getByText(/computer memory and free space/).closest("[role=status]"),
+    ).not.toBeNull();
     expect(document.documentElement.getAttribute("data-theme")).toBeNull();
   });
 
@@ -79,11 +81,40 @@ describe("what this computer can run", () => {
     ]);
     expect(within(group).getByRole("radio", { name: /Standard · this computer/ })).toBeChecked();
     expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
-    expect(within(group).getByText("Needs more memory than this computer has")).toBeInTheDocument();
+    expect(
+      within(group).getByText("Needs more computer memory than this one has"),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/Nocturne needs 8\.4 GB of space \(you have 220 GB free\)/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set up · 8.4 GB" })).toBeInTheDocument();
+  });
+
+  it("says what each size is for and what it costs in words that read on their own", async () => {
+    await open("choosing", "#/setup?step=choosing");
+    const group = await screen.findByRole("group", { name: "How much to set up" });
+    expect(
+      within(group).getByText("For computers with 28 GB memory or more · 8.4 GB download"),
+    ).toBeInTheDocument();
+    expect(within(group).getByText(/· 4\.8 GB download · slower$/)).toBeInTheDocument();
+  });
+
+  it("puts focus on the new step's heading after Get started and after Set up", async () => {
+    await open("choosing", "#/setup");
+    await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    const choosing = await screen.findByRole("heading", { level: 1, name: /lighter mind/ });
+    await waitFor(() => expect(choosing).toHaveFocus());
+    await userEvent.click(screen.getByRole("button", { name: /^Set up · / }));
+    const ready = await screen.findByRole("heading", {
+      level: 1,
+      name: "While Nocturne gets ready, keep your first thing.",
+    });
+    await waitFor(() => expect(ready).toHaveFocus());
+  });
+
+  it("titles the window", async () => {
+    await open("notStarted");
+    expect(document.title).toBe("Getting ready · Nocturne");
   });
 
   it("changes the headline and the button when another tier is chosen", async () => {
@@ -127,11 +158,13 @@ describe("what this computer can run", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "This computer doesn’t have enough memory for Nocturne yet.",
+        name: "There isn’t enough computer memory for Nocturne yet.",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("It has 8 GB. Nocturne needs 14 GB or more. Nothing has been downloaded."),
+      screen.getByText(
+        "This computer has 8 GB of computer memory. Nocturne needs 14 GB or more. Nothing has been downloaded.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
   });
@@ -224,7 +257,7 @@ describe("getting ready", () => {
   it("says the chosen size is too big for this computer and leads to choosing a smaller one", async () => {
     await open("tooBig");
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "This computer doesn’t have enough memory for the size you chose.",
+      "There isn’t enough computer memory for the size you chose.",
     );
     expect(screen.queryByText(/Nothing has been downloaded/)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Choose a smaller size" }));

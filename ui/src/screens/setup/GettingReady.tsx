@@ -11,6 +11,7 @@ import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { Defaults } from "./Defaults";
 import styles from "./Setup.module.css";
+import { useArrivalFocus } from "./useArrivalFocus";
 
 /** What is wrong, in one sentence and one button. A failed setup always has a way on. */
 function Problem({ view, onAgain }: { view: SetupView; onAgain: () => void }) {
@@ -56,6 +57,7 @@ export function GettingReady({ view }: { view: SetupView }) {
   const platform = usePlatform();
   const toast = useToast();
   const refresh = useRefresh();
+  const heading = useArrivalFocus();
   const recorder = useKeepRecording();
   const [typing, setTyping] = useState(false);
   const [note, setNote] = useState("");
@@ -125,7 +127,7 @@ export function GettingReady({ view }: { view: SetupView }) {
     <section className={`${styles.card} ${styles.wide}`} aria-labelledby="ready">
       <div className={styles.main}>
         <p className={`t-section ${styles.eyebrow}`}>{t("setup.step.two")}</p>
-        <h1 id="ready" className={`t-page-title ${styles.titleSmall}`}>
+        <h1 ref={heading} tabIndex={-1} id="ready" className={`t-page-title ${styles.titleSmall}`}>
           {t("setup.ready.title")}
         </h1>
 

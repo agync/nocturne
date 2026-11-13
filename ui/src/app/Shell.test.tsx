@@ -339,7 +339,7 @@ describe("notices that offer something", () => {
     expect(within(region).getByText(/needs 3\.7 GB to download/)).toBeInTheDocument();
     await userEvent.click(within(region).getByRole("button", { name: "Use the smaller one" }));
     await waitFor(() => expect(started).toEqual(["small"]));
-    await waitFor(() => expect(screen.queryByText(/running short of memory/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/running short of computer memory/)).toBeNull());
   });
 
   it("says not now, and the offer goes without anything being downloaded", async () => {
@@ -348,7 +348,7 @@ describe("notices that offer something", () => {
     renderApp({ engine });
     const region = await screen.findByRole("list", { name: "Things to know" });
     await userEvent.click(within(region).getByRole("button", { name: "Not now" }));
-    await waitFor(() => expect(screen.queryByText(/running short of memory/)).toBeNull());
+    await waitFor(() => expect(screen.queryByText(/running short of computer memory/)).toBeNull());
     expect(startSetup).not.toHaveBeenCalled();
     await expect(engine.getTierOffer()).resolves.toBeNull();
   });

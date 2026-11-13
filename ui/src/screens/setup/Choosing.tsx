@@ -6,6 +6,7 @@ import { type CopyId, t } from "../../copy/t";
 import type { SetupView, Tier } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import styles from "./Setup.module.css";
+import { useArrivalFocus } from "./useArrivalFocus";
 
 const NAME: Record<Exclude<Tier, "unsupported">, CopyId> = {
   large: "setup.tier.large",
@@ -38,6 +39,7 @@ interface Props {
 
 /** H2, second half: what this computer can run, the three tiers, and the one button. */
 export function Choosing({ view, onStarted }: Props) {
+  const heading = useArrivalFocus();
   const engine = useEngine();
   const toast = useToast();
   const refresh = useRefresh();
@@ -53,7 +55,7 @@ export function Choosing({ view, onStarted }: Props) {
     return (
       <section className={styles.card} aria-labelledby="result">
         <p className={`t-section ${styles.notYet}`}>{t("setup.step.one")}</p>
-        <h1 id="result" className={`t-page-title ${styles.title}`}>
+        <h1 ref={heading} tabIndex={-1} id="result" className={`t-page-title ${styles.title}`}>
           {t(
             lack.kind === "memory"
               ? "setup.result.unsupported.memory"
@@ -97,7 +99,13 @@ export function Choosing({ view, onStarted }: Props) {
   return (
     <section className={styles.card} aria-labelledby="result">
       <p className={`t-section ${styles.eyebrow}`}>{t("setup.step.one")}</p>
-      <h1 id="result" className={`t-page-title ${styles.title}`} aria-live="polite">
+      <h1
+        ref={heading}
+        tabIndex={-1}
+        id="result"
+        className={`t-page-title ${styles.title}`}
+        aria-live="polite"
+      >
         {t(headline)}
       </h1>
       <fieldset className={styles.tiers}>

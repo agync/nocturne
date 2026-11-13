@@ -79,7 +79,7 @@ describe("Notices", () => {
     const decline = vi.fn();
     const notice = make("tierDropped", { bytes: 3_660_000_000 });
     expect(noticeText(notice)).toBe(
-      "This computer is running short of memory. Nocturne can switch to a smaller mind, which needs 3.7 GB to download. Nothing you have kept is lost.",
+      "This computer is running short of computer memory. Nocturne can switch to a smaller mind, which needs 3.7 GB to download. Nothing you have kept is lost.",
     );
     expect(noticeText(make("tierDropped"))).not.toContain("{size}");
     render(

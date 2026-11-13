@@ -9,7 +9,7 @@ const SCREENS: Array<[string, string, string, string | RegExp]> = [
   ["setup-welcome", "notStarted", "#/setup", /Keep anything/],
   ["setup-checking", "checking", "#/setup?step=choosing", "Checking this computer…"],
   ["setup-tiers", "choosing", "#/setup?step=choosing", /lighter mind/],
-  ["setup-unsupported", "unsupported", "#/setup?step=choosing", /enough memory/],
+  ["setup-unsupported", "unsupported", "#/setup?step=choosing", /enough computer memory/],
   [
     "setup-downloading",
     "downloading",
@@ -59,6 +59,25 @@ test.describe("at the smallest window", () => {
     test(`${name} fits 720 px`, async ({ page }) => {
       await ready(page, scenario, hash, heading);
       expect(await overflow(page)).toBeLessThanOrEqual(0);
+    });
+  }
+});
+
+test.describe("at 200% zoom of the smallest window (WCAG 1.4.10)", () => {
+  test.use({ viewport: { width: 360, height: 640 } });
+  for (const [name, scenario, hash, heading] of SCREENS) {
+    test(`${name} does not scroll sideways`, async ({ page }) => {
+      await ready(page, scenario, hash, heading);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      // Nothing is squeezed past its own box and cut off by the card.
+      const cut = await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("main *")]
+          .filter((el) => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1)
+          .filter((el) => getComputedStyle(el).overflowX === "visible")
+          .map((el) => `${el.tagName}.${el.className}: ${el.textContent?.slice(0, 24)}`),
+      );
+      expect(cut).toEqual([]);
+      await page.screenshot({ path: `${SHOTS}/${name}-360.png`, fullPage: true });
     });
   }
 });
