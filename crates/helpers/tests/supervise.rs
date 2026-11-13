@@ -16,6 +16,7 @@ fn command(sb: &Sandbox) -> (HelperCommand, SuperviseOptions) {
     let installed = sb.install("c", FAKE, "cloudflared", HelperKind::Cloudflared);
     let cmd = HelperCommand {
         name: "cloudflared",
+        sha256: installed.sha256,
         program: installed.path,
         args: ["tunnel", "--no-autoupdate"].map(OsString::from).to_vec(),
         env: vec![
@@ -167,4 +168,34 @@ async fn fake_rejects_unknown_flags() {
     fine.kill().unwrap();
     let _ = fine.wait();
     assert!(argv(&sb.records("c")[0]).contains(&"--debug-me".to_string()));
+}
+
+#[tokio::test]
+async fn a_changed_binary_is_not_restarted() {
+    let sb = Sandbox::new("swap");
+    let (cmd, opts) = command(&sb);
+    sb.control("c", json!({"mode": "crash"}));
+    let sup = Supervisor::start(cmd.clone(), opts).await.unwrap();
+    until("the first run", 20, || !sb.records("c").is_empty()).await;
+    let mut bytes = std::fs::read(&cmd.program).unwrap();
+    bytes.push(0);
+    std::fs::write(&cmd.program, bytes).unwrap();
+    gave_up(&sup).await;
+    assert!(
+        sb.records("c").len() < 4,
+        "no run of a changed helper after the swap"
+    );
+    sup.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_changed_binary_is_not_started() {
+    let sb = Sandbox::new("swap2");
+    let (mut cmd, opts) = command(&sb);
+    cmd.sha256 = "0".repeat(64);
+    assert_eq!(
+        Supervisor::start(cmd, opts).await.err(),
+        Some(nocturne_helpers::HelperError::Mismatch)
+    );
+    assert!(sb.records("c").is_empty());
 }

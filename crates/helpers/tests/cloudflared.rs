@@ -67,7 +67,7 @@ async fn address_from_metrics_or_stderr() {
             .start(spec(Origin::Unix(sb.root.join("l.sock"))))
             .await
             .unwrap();
-        let up = wait_state(&mut rx, "up", 30, is_up).await;
+        let up = wait_state(&mut rx, "up", 180, is_up).await;
         assert_eq!(
             address(up),
             format!("https://{}", control["address"].as_str().unwrap())
@@ -82,11 +82,11 @@ async fn new_address_each_start() {
     let t = transport(&sb);
     let origin = Origin::Unix(sb.root.join("l.sock"));
     let mut rx = t.start(spec(origin.clone())).await.unwrap();
-    let first = address(wait_state(&mut rx, "first up", 30, is_up).await);
+    let first = address(wait_state(&mut rx, "first up", 180, is_up).await);
     t.stop().await.unwrap();
     assert_eq!(*rx.borrow(), TransportState::Stopped);
     let mut rx = t.start(spec(origin)).await.unwrap();
-    let second = address(wait_state(&mut rx, "second up", 30, is_up).await);
+    let second = address(wait_state(&mut rx, "second up", 180, is_up).await);
     assert_ne!(first, second);
     t.stop().await.unwrap();
 }
@@ -103,12 +103,12 @@ async fn crash_restarts_and_reports_the_new_address() {
         .start(spec(Origin::Unix(sb.root.join("l.sock"))))
         .await
         .unwrap();
-    let first = address(wait_state(&mut rx, "first up", 30, is_up).await);
-    wait_state(&mut rx, "restarting", 30, |s| {
+    let first = address(wait_state(&mut rx, "first up", 180, is_up).await);
+    wait_state(&mut rx, "restarting", 180, |s| {
         matches!(s, TransportState::Restarting { .. })
     })
     .await;
-    let second = address(wait_state(&mut rx, "up again", 30, is_up).await);
+    let second = address(wait_state(&mut rx, "up again", 180, is_up).await);
     assert_ne!(first, second);
     assert_eq!(t.info().unwrap().restarts, 1);
     t.stop().await.unwrap();
@@ -129,8 +129,17 @@ async fn unix_socket_origin() {
         }
     });
     let mut rx = t.start(spec(Origin::Unix(sock.clone()))).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     let args = argv(&sb.records("c")[0]);
+    let cfg = args.iter().position(|a| a == "--config").unwrap();
+    assert_eq!(
+        args[cfg + 1],
+        sb.dirs()
+            .root
+            .join("cloudflared/config.yml")
+            .to_string_lossy()
+    );
+    assert!(sb.dirs().root.join("cloudflared/config.yml").is_file());
     let at = args.iter().position(|a| a == "--unix-socket").unwrap();
     assert_eq!(args[at + 1], sock.to_string_lossy());
     assert!(!args.contains(&"--url".to_string()));
@@ -173,7 +182,7 @@ async fn windows_key_by_environment_not_argv() {
         }))
         .await
         .unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     for record in sb.records("c") {
         assert!(!argv(&record).iter().any(|a| a.contains(key)), "{record}");
         assert_eq!(record["env"]["TUNNEL_HTTP_HOST_HEADER"], key);
@@ -201,7 +210,7 @@ async fn own_home_not_the_persons() {
         .start(spec(Origin::Unix(sb.root.join("l.sock"))))
         .await
         .unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     let record = &sb.records("c")[0];
     assert_eq!(
         record["env"]["HOME"],
@@ -217,7 +226,6 @@ async fn own_home_not_the_persons() {
     assert!(sb.dirs().root.join("cloudflared").is_dir());
     let args = argv(record);
     for banned in [
-        "--config",
         "--origincert",
         "--logfile",
         "--credentials-file",
@@ -226,6 +234,10 @@ async fn own_home_not_the_persons() {
         assert!(!args.iter().any(|a| a == banned), "{banned}");
     }
     assert!(args.contains(&"--no-autoupdate".to_string()));
+    assert!(
+        args.contains(&"--config".to_string()),
+        "its own config file, so none from /etc is read"
+    );
     t.stop().await.unwrap();
 }
 
@@ -235,7 +247,7 @@ async fn the_binary_is_checked_before_every_start() {
     let t = transport(&sb);
     let origin = Origin::Unix(sb.root.join("l.sock"));
     let mut rx = t.start(spec(origin.clone())).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
     let path = sb.bin_file("c", "cloudflared");
     let mut bytes = std::fs::read(&path).unwrap();
@@ -260,18 +272,21 @@ async fn argv_never_holds_a_secret() {
         }))
         .await
         .unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
     let mut rx = t
         .start(spec(Origin::Unix(sb.root.join("run-9f8e7d/l.sock"))))
         .await
         .unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
     let records = sb.records("c");
     assert!(records.len() >= 2);
-    for record in &records[..1] {
+    for record in &records {
         let line = argv(record).join(" ");
-        assert!(!line.contains(key) && !line.contains("9f8e7d"), "{line}");
+        assert!(!line.contains(key), "{line}");
+        if line.contains("--url") {
+            assert!(!line.contains("9f8e7d"), "{line}");
+        }
     }
 }

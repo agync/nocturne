@@ -33,7 +33,9 @@ fn main() {
         let _ = std::fs::remove_file(&p);
         std::os::unix::net::UnixListener::bind(p).ok()
     });
-    let _udp = std::net::UdpSocket::bind("0.0.0.0:0");
+    // Like the real one, only when the control file asks: the network check does.
+    let _udp = (control.get("udp_any").and_then(|v| v.as_bool()) == Some(true))
+        .then(|| std::net::UdpSocket::bind("0.0.0.0:0"));
     eprintln!("fake-tailscaled: ready");
     fake::behave(&control, index);
     fake::sleep_forever();

@@ -68,6 +68,9 @@ impl Sandbox {
 
 impl Drop for Sandbox {
     fn drop(&mut self) {
+        if std::env::var_os("KEEP_SANDBOX").is_some() {
+            return;
+        }
         let _ = std::fs::remove_dir_all(&self.root);
     }
 }

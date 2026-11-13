@@ -13,6 +13,8 @@ kind = "cloudflared"
 version = "2024.3.0"
 licence = "Apache-2.0"
 pinned_at = "2026-11-13"
+# The upstream release date; a release build refuses a pin whose release is older than 183 days.
+released_at = "2024-03-20"
 base_url = "https://github.com/cloudflare/cloudflared/releases/download/2024.3.0"
 placeholder = true
 redirect_hosts = ["objects.githubusercontent.com", "release-assets.githubusercontent.com"]
@@ -27,6 +29,8 @@ file = "cloudflared-linux-arm64"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
 
+# Upstream publishes only an Intel build at this version, which runs under Rosetta on Apple
+# silicon. Switch to a native arm64 asset when the pinned version has one.
 [helpers.assets.macos-aarch64]
 file = "cloudflared-darwin-amd64.tgz"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
@@ -44,6 +48,11 @@ kind = "tailscaled"
 version = "1.104.6"
 licence = "BSD-3-Clause"
 pinned_at = "2026-11-13"
+# PLACEHOLDER dates and pins, set by scripts/helpers-pin.sh and the maintainer.
+released_at = "2000-01-01"
+go_version = "PLACEHOLDER"
+tag_commit = "PLACEHOLDER"
+go_licenses_version = "PLACEHOLDER"
 base_url = "https://pkgs.tailscale.com/stable"
 placeholder = true
 redirect_hosts = []

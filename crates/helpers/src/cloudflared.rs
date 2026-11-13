@@ -84,11 +84,26 @@ pub(crate) fn home(dirs: &HelperDirs) -> PathBuf {
     dirs.root.join("cloudflared")
 }
 
+/// The helper's own configuration file, which stops it reading `/etc/cloudflared` or
+/// `/usr/local/etc/cloudflared`. Written by Nocturne and empty of settings.
+pub(crate) fn config_path(dirs: &HelperDirs) -> PathBuf {
+    home(dirs).join("config.yml")
+}
+
+const CONFIG_TEXT: &str =
+    "# Written by Nocturne. It keeps the helper from reading any other configuration.\n";
+
 /// The exact command line, after `cloudflared`.
-pub(crate) fn tunnel_args(origin: &Origin, metrics_port: u16) -> Vec<String> {
+pub(crate) fn tunnel_args(
+    origin: &Origin,
+    metrics_port: u16,
+    config: &std::path::Path,
+) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "tunnel".into(),
         "--no-autoupdate".into(),
+        "--config".into(),
+        config.to_string_lossy().into_owned(),
         "--metrics".into(),
         format!("127.0.0.1:{metrics_port}"),
         "--loglevel".into(),
@@ -129,6 +144,21 @@ pub(crate) fn tunnel_env(dirs: &HelperDirs, origin: &Origin) -> Vec<(OsString, O
     env
 }
 
+fn write_config(path: &std::path::Path) -> Result<(), HelperError> {
+    use std::io::Write;
+    let mut options = std::fs::OpenOptions::new();
+    options.create(true).write(true).truncate(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    options
+        .open(path)
+        .and_then(|mut f| f.write_all(CONFIG_TEXT.as_bytes()))
+        .map_err(|e| HelperError::Spawn(format!("could not write the settings file: {e}")))
+}
+
 fn free_port() -> Result<u16, HelperError> {
     std::net::TcpListener::bind(("127.0.0.1", 0))
         .and_then(|l| l.local_addr())
@@ -160,11 +190,13 @@ impl Transport for CloudflaredTransport {
             make_private_dir(&home)?;
             make_private_dir(&home.join("tmp"))?;
             make_private_dir(&logs)?;
+            write_config(&config_path(&self.dirs))?;
             let metrics = free_port()?;
             let cmd = HelperCommand {
                 name: "cloudflared",
                 program: self.installed.path.clone(),
-                args: tunnel_args(&spec.origin, metrics)
+                sha256: self.installed.sha256.clone(),
+                args: tunnel_args(&spec.origin, metrics, &config_path(&self.dirs))
                     .into_iter()
                     .map(OsString::from)
                     .collect(),
@@ -342,10 +374,17 @@ mod tests {
 
     #[test]
     fn args_are_exact() {
-        let unix = tunnel_args(&Origin::Unix("/data/remote/run/listener.sock".into()), 4321);
+        let cfg = config_path(&dirs());
+        let unix = tunnel_args(
+            &Origin::Unix("/data/remote/run/listener.sock".into()),
+            4321,
+            &cfg,
+        );
         let mut expected: Vec<String> = [
             "tunnel",
             "--no-autoupdate",
+            "--config",
+            "/data/remote/cloudflared/config.yml",
             "--metrics",
             "127.0.0.1:4321",
             "--loglevel",
@@ -363,8 +402,9 @@ mod tests {
                 key: "k".into(),
             },
             4321,
+            &cfg,
         );
-        expected.truncate(7);
+        expected.truncate(9);
         expected.extend(["--url".into(), "http://127.0.0.1:5000".into()]);
         assert_eq!(tcp, expected);
     }
@@ -380,7 +420,7 @@ mod tests {
             },
         ];
         for origin in &origins {
-            for arg in tunnel_args(origin, 1) {
+            for arg in tunnel_args(origin, 1, std::path::Path::new("/c.yml")) {
                 if arg.starts_with("--") {
                     let name = arg.split('=').next().unwrap();
                     assert!(allowed.contains(&name), "{name} is not in the fixture");
@@ -396,7 +436,7 @@ mod tests {
             key: "s3cret-key-value".into(),
         };
         assert!(
-            !tunnel_args(&origin, 1)
+            !tunnel_args(&origin, 1, std::path::Path::new("/c.yml"))
                 .iter()
                 .any(|a| a.contains("s3cret-key-value"))
         );

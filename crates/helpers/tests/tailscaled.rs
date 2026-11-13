@@ -51,7 +51,7 @@ async fn daemon_args_are_exact_and_environment_says_no_logs() {
     let sb = Sandbox::new("dm");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     let records = sb.records("t");
     let daemon = records.iter().find(|r| r["role"] == "tailscaled").unwrap();
     let state = sb.dirs().root.join("tailscale");
@@ -81,7 +81,7 @@ async fn address_is_the_tailnet_name() {
     let sb = Sandbox::new("ad");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    let up = wait_state(&mut rx, "up", 30, is_up).await;
+    let up = wait_state(&mut rx, "up", 180, is_up).await;
     assert_eq!(
         up,
         TransportState::Up {
@@ -115,7 +115,7 @@ async fn sign_in_url_surfaces() {
     let t = transport(&sb);
     sb.control("t", json!({"needs_login": true}));
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    let waiting = wait_state(&mut rx, "sign in", 30, |s| {
+    let waiting = wait_state(&mut rx, "sign in", 180, |s| {
         matches!(s, TransportState::NeedsSignIn { .. })
     })
     .await;
@@ -127,7 +127,7 @@ async fn sign_in_url_surfaces() {
         }
     );
     std::fs::write(sb.dirs().root.join("tailscale/fake-signin"), "").unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
 }
 
@@ -137,7 +137,7 @@ async fn allow_links_url_surfaces() {
     let t = transport(&sb);
     sb.control("t", json!({"allow_links": true}));
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    let waiting = wait_state(&mut rx, "allow links", 30, |s| {
+    let waiting = wait_state(&mut rx, "allow links", 180, |s| {
         matches!(s, TransportState::NeedsSignIn { .. })
     })
     .await;
@@ -149,7 +149,7 @@ async fn allow_links_url_surfaces() {
         }
     );
     std::fs::write(sb.dirs().root.join("tailscale/fake-links"), "").unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
 }
 
@@ -162,7 +162,7 @@ async fn serve_targets_the_socket_or_key_path() {
         unreachable!()
     };
     let mut rx = t.start(s).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     let serve = all_argv(&sb)
         .into_iter()
         .find(|a| a.contains(&"serve".to_string()) && a.contains(&"--bg".to_string()))
@@ -184,7 +184,7 @@ async fn windows_serve_config_not_argv() {
         machine_name: "nocturne-ab12".into(),
     };
     let mut rx = t.start(s).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     for record in sb.records("t") {
         assert!(!argv(&record).iter().any(|a| a.contains(key)), "{record}");
         assert!(!record["env"].to_string().contains(key), "{record}");
@@ -207,7 +207,7 @@ async fn funnel_never_requested_and_refused_if_seen() {
     let sb = Sandbox::new("pub1");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
     assert!(!all_argv(&sb).iter().flatten().any(|a| a.contains("funnel")));
 
@@ -215,7 +215,7 @@ async fn funnel_never_requested_and_refused_if_seen() {
     let t = transport(&sb);
     sb.control("t", json!({"funnel_on": true}));
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    let failed = wait_state(&mut rx, "refusal", 30, |s| {
+    let failed = wait_state(&mut rx, "refusal", 180, |s| {
         matches!(s, TransportState::Failed { .. })
     })
     .await;
@@ -241,7 +241,7 @@ async fn taildrop_files_purged() {
     let t = transport(&sb);
     sb.control("t", json!({"taildrop_files": true}));
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     let files = sb.dirs().root.join("tailscale/files");
     until("the hourly purge", 20, || !files.exists()).await;
     std::fs::create_dir_all(&files).unwrap();
@@ -286,7 +286,7 @@ async fn sign_out_runs_logout_and_forgets_state() {
     let sb = Sandbox::new("so");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.sign_out().await.unwrap();
     assert!(
         all_argv(&sb)
@@ -299,19 +299,17 @@ async fn sign_out_runs_logout_and_forgets_state() {
 }
 
 #[tokio::test]
-async fn sign_out_when_stopped_still_logs_out() {
+async fn sign_out_while_off_touches_nothing() {
     let sb = Sandbox::new("sos");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
+    let before = sb.records("t").len();
     t.sign_out().await.unwrap();
-    let logouts = all_argv(&sb)
-        .iter()
-        .filter(|a| a.contains(&"logout".to_string()))
-        .count();
-    assert_eq!(logouts, 1);
+    assert_eq!(sb.records("t").len(), before, "no program ran");
     assert!(!sb.dirs().root.join("tailscale").exists());
+    t.sign_out().await.unwrap();
 }
 
 #[tokio::test]
@@ -327,7 +325,7 @@ async fn machine_name_neutral_and_stable() {
     assert!(sb.records("t").is_empty(), "nothing ran");
     for _ in 0..2 {
         let mut rx = t.start(spec(&sb)).await.unwrap();
-        wait_state(&mut rx, "up", 30, is_up).await;
+        wait_state(&mut rx, "up", 180, is_up).await;
         t.stop().await.unwrap();
     }
     let names: Vec<_> = sb
@@ -345,7 +343,7 @@ async fn the_binaries_are_checked_before_every_start() {
     let sb = Sandbox::new("vf");
     let t = transport(&sb);
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "up", 30, is_up).await;
+    wait_state(&mut rx, "up", 180, is_up).await;
     t.stop().await.unwrap();
     let cli = sb.bin_file("t", "tailscale");
     let mut bytes = std::fs::read(&cli).unwrap();

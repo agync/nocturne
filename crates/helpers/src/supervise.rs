@@ -22,6 +22,8 @@ use crate::HelperError;
 pub struct HelperCommand {
     pub name: &'static str,
     pub program: PathBuf,
+    /// Lowercase hex pin of `program`, checked before every start, restarts included.
+    pub sha256: String,
     pub args: Vec<OsString>,
     pub env: Vec<(OsString, OsString)>,
     pub cwd: Option<PathBuf>,
@@ -38,8 +40,10 @@ pub struct SuperviseOptions {
     pub window: Duration,
     /// Time to let a helper end after SIGTERM before it is killed.
     pub grace: Duration,
-    /// A log larger than this is moved to `.1` when the helper starts.
+    /// A log larger than this is rotated: when the helper starts and, while it runs, every
+    /// `rotate_every`.
     pub log_limit: u64,
+    pub rotate_every: Duration,
 }
 
 impl SuperviseOptions {
@@ -51,6 +55,7 @@ impl SuperviseOptions {
             window: Duration::from_secs(3600),
             grace: Duration::from_secs(3),
             log_limit: 1 << 20,
+            rotate_every: Duration::from_secs(30),
         }
     }
 }
@@ -181,6 +186,7 @@ fn spawn(
     opts: &SuperviseOptions,
     log: &Path,
 ) -> Result<(Running, u64), HelperError> {
+    crate::verify_file(&cmd.program, &cmd.sha256)?;
     let (file, offset) = open_log(log, opts.log_limit)?;
     let err = file
         .try_clone()
@@ -221,9 +227,14 @@ async fn run(
     let mut restarts: VecDeque<Instant> = VecDeque::new();
     let mut total = 0u32;
     let mut generation = 1u32;
+    let mut ticker = tokio::time::interval(opts.rotate_every);
     loop {
         let status = tokio::select! {
             s = running.child.wait() => s,
+            _ = ticker.tick() => {
+                rotate_running(&log, opts.log_limit);
+                continue;
+            }
             _ = &mut stop => {
                 let result = terminate(&mut running, opts.grace).await;
                 publish(&tx, |s| {
@@ -286,8 +297,28 @@ async fn run(
                     });
                     break;
                 }
+                Err(HelperError::Mismatch) => {
+                    let message = format!("{} is not the pinned one", cmd.name);
+                    publish(&tx, |s| s.phase = Phase::GaveUp(message.clone()));
+                    let _ = (&mut stop).await;
+                    return Ok(());
+                }
                 Err(_) => continue,
             }
+        }
+    }
+}
+
+/// Rotate a log that is open for appending in a running helper: copy it aside and cut it short.
+/// The helper keeps writing at the end of the same file.
+pub(crate) fn rotate_running(log: &Path, limit: u64) {
+    if std::fs::metadata(log).is_ok_and(|m| m.len() > limit) {
+        let old = log.with_extension("log.1");
+        if std::fs::copy(log, &old).is_ok() {
+            let _ = OpenOptions::new()
+                .write(true)
+                .open(log)
+                .and_then(|f| f.set_len(0));
         }
     }
 }
@@ -356,5 +387,28 @@ pub fn rss_bytes(pid: u32) -> Option<u64> {
     {
         let _ = pid;
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_running_log_is_rotated_by_size() {
+        let dir =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/helpers-test-tmp/rotate");
+        std::fs::create_dir_all(&dir).unwrap();
+        let log = dir.join("helper-x.log");
+        std::fs::write(&log, vec![b'a'; 100]).unwrap();
+        rotate_running(&log, 200);
+        assert_eq!(std::fs::metadata(&log).unwrap().len(), 100);
+        rotate_running(&log, 50);
+        assert_eq!(std::fs::metadata(&log).unwrap().len(), 0);
+        assert_eq!(
+            std::fs::metadata(dir.join("helper-x.log.1")).unwrap().len(),
+            100
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

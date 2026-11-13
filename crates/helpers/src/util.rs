@@ -11,7 +11,7 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
-use crate::HelperError;
+use crate::{HelperError, Installed, verify};
 
 /// `GET path` on `127.0.0.1:port`: the status and the body, or `None` when nothing answers.
 pub(crate) async fn local_get(port: u16, path: &str) -> Option<(u16, String)> {
@@ -48,33 +48,50 @@ fn command(
     c
 }
 
-/// Run to the end and return what it printed, or kill after `within`.
-pub(crate) async fn run_cli(
-    program: &Path,
+/// Run to the end and return the exit code and what it printed, or kill after `within`. The
+/// program is hashed against its pin first, on every call.
+pub(crate) async fn run_cli_code(
+    pin: &Installed,
     args: &[OsString],
     env: &[(OsString, OsString)],
     within: Duration,
-) -> Result<String, HelperError> {
-    let child = command(program, args, env)
+) -> Result<(Option<i32>, String), HelperError> {
+    verify(pin)?;
+    let child = command(&pin.path, args, env)
         .spawn()
         .map_err(|e| HelperError::Spawn(e.to_string()))?;
     match tokio::time::timeout(within, child.wait_with_output()).await {
-        Ok(Ok(out)) => Ok(String::from_utf8_lossy(&out.stdout).into_owned()),
+        Ok(Ok(out)) => Ok((
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).into_owned(),
+        )),
         Ok(Err(e)) => Err(HelperError::Spawn(e.to_string())),
         Err(_) => Err(HelperError::Exited("the command took too long".into())),
     }
 }
 
+pub(crate) async fn run_cli(
+    pin: &Installed,
+    args: &[OsString],
+    env: &[(OsString, OsString)],
+    within: Duration,
+) -> Result<String, HelperError> {
+    run_cli_code(pin, args, env, within)
+        .await
+        .map(|(_, out)| out)
+}
+
 /// Run to the end, handing every output line (both streams) to `on_line` as it arrives.
 /// Returns the exit code. Cancelling kills the command.
 pub(crate) async fn run_cli_watch(
-    program: &Path,
+    pin: &Installed,
     args: &[OsString],
     env: &[(OsString, OsString)],
     cancel: &CancellationToken,
     mut on_line: impl FnMut(&str),
 ) -> Result<Option<i32>, HelperError> {
-    let mut child = command(program, args, env)
+    verify(pin)?;
+    let mut child = command(&pin.path, args, env)
         .spawn()
         .map_err(|e| HelperError::Spawn(e.to_string()))?;
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();

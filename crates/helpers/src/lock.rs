@@ -44,6 +44,17 @@ pub struct LockedHelper {
     pub licence: String,
     pub pinned_at: String,
     pub base_url: String,
+    /// The date upstream published this version; release freshness counts from here.
+    #[serde(default)]
+    pub released_at: Option<String>,
+    /// For a helper built from source: the Go toolchain, the commit the tag must point at and the
+    /// go-licenses version, all pinned here.
+    #[serde(default)]
+    pub go_version: Option<String>,
+    #[serde(default)]
+    pub tag_commit: Option<String>,
+    #[serde(default)]
+    pub go_licenses_version: Option<String>,
     #[serde(default)]
     pub placeholder: bool,
     /// Hosts a download may be redirected to, besides the one in `base_url`.

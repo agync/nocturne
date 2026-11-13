@@ -13,10 +13,11 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(test)]
 use crate::fixtures::allowed_flags_for;
 use crate::install::make_private_dir;
 use crate::supervise::{HelperCommand, Phase, StopHandle, SupState, SuperviseOptions, Supervisor};
-use crate::util::{run_cli, run_cli_watch};
+use crate::util::{run_cli, run_cli_code, run_cli_watch};
 use crate::{
     BoxFuture, HelperDirs, HelperError, HelperInfo, HelperKind, Installed, KeyCarrier, LaunchSpec,
     Origin, Transport, TransportState, key_carrier, verify,
@@ -94,7 +95,7 @@ impl TailscaledTransport {
             .ok_or_else(|| HelperError::Spawn("the tailscale command is missing".into()))?;
         verify(cli)?;
         Ok(Arc::new(Ctx {
-            program: cli.path.clone(),
+            pin: cli.clone(),
             paths: Paths::new(&self.dirs),
             env: cli_env(&self.dirs),
             opts: self.opts.clone(),
@@ -118,6 +119,7 @@ impl TailscaledTransport {
         let cmd = HelperCommand {
             name: "tailscaled",
             program: self.installed.path.clone(),
+            sha256: self.installed.sha256.clone(),
             args: daemon_args(&paths)
                 .into_iter()
                 .map(OsString::from)
@@ -227,19 +229,14 @@ pub(crate) fn up_args(paths: &Paths, hostname: &str) -> Vec<String> {
     )
 }
 
-/// Switch off self-update and the web client where the pinned version has the flags.
-pub(crate) fn set_args(paths: &Paths) -> Option<Vec<String>> {
-    let known = allowed_flags_for(HelperKind::Tailscaled, "set");
-    let flags: Vec<&str> = ["--auto-update=false", "--webclient=false", SHIELDS_UP]
-        .into_iter()
-        .filter(|f| known.contains(&f.split('=').next().unwrap_or("")))
-        .collect();
-    if flags.is_empty() {
-        return None;
-    }
+/// The settings every start applies. Each flag must be in the pinned help (a test checks), so none
+/// is ever dropped quietly.
+pub(crate) const SET_FLAGS: [&str; 2] = ["--auto-update=false", SHIELDS_UP];
+
+pub(crate) fn set_args(paths: &Paths) -> Vec<String> {
     let mut rest = vec!["set"];
-    rest.extend(flags);
-    Some(with_socket(paths, &rest))
+    rest.extend(SET_FLAGS);
+    with_socket(paths, &rest)
 }
 
 /// How the listener is served on the tailnet: a Unix socket target in the arguments, or, for a
@@ -375,7 +372,7 @@ fn os(args: &[String]) -> Vec<OsString> {
 }
 
 struct Ctx {
-    program: PathBuf,
+    pin: Installed,
     paths: Paths,
     env: Vec<(OsString, OsString)>,
     opts: TailscaledOptions,
@@ -384,14 +381,9 @@ struct Ctx {
 impl Ctx {
     async fn status(&self) -> Option<Seen> {
         let args = with_socket(&self.paths, &["status", "--json"]);
-        let out = run_cli(
-            &self.program,
-            &os(&args),
-            &self.env,
-            Duration::from_secs(10),
-        )
-        .await
-        .ok()?;
+        let out = run_cli(&self.pin, &os(&args), &self.env, Duration::from_secs(10))
+            .await
+            .ok()?;
         read_status(&out)
     }
 
@@ -417,18 +409,21 @@ impl Ctx {
         cancel: &CancellationToken,
     ) -> Result<(String, Option<String>), HelperError> {
         self.wait_daemon().await?;
-        if let Some(args) = set_args(&self.paths) {
-            let _ = run_cli(
-                &self.program,
-                &os(&args),
-                &self.env,
-                Duration::from_secs(20),
-            )
-            .await;
+        let (code, _) = run_cli_code(
+            &self.pin,
+            &os(&set_args(&self.paths)),
+            &self.env,
+            Duration::from_secs(20),
+        )
+        .await?;
+        if code != Some(0) {
+            return Err(HelperError::Exited(
+                "the helper refused its settings".into(),
+            ));
         }
         let up = up_args(&self.paths, &spec.machine_name);
         let mut last = String::new();
-        let code = run_cli_watch(&self.program, &os(&up), &self.env, cancel, |line| {
+        let code = run_cli_watch(&self.pin, &os(&up), &self.env, cancel, |line| {
             last = line.to_string();
             if let Some(url) = parse_json(line)
                 .and_then(|d| d.get("AuthURL").and_then(Value::as_str).map(String::from))
@@ -451,7 +446,7 @@ impl Ctx {
             write_private(file, body)?;
         }
         let mut last = String::new();
-        let code = run_cli_watch(&self.program, &os(&plan.args), &self.env, cancel, |line| {
+        let code = run_cli_watch(&self.pin, &os(&plan.args), &self.env, cancel, |line| {
             last = line.to_string();
             let word = line
                 .split_whitespace()
@@ -470,22 +465,10 @@ impl Ctx {
         tx.send_replace(TransportState::Starting);
 
         let args = with_socket(&self.paths, &["serve", "status", "--json"]);
-        let out = run_cli(
-            &self.program,
-            &os(&args),
-            &self.env,
-            Duration::from_secs(20),
-        )
-        .await?;
+        let out = run_cli(&self.pin, &os(&args), &self.env, Duration::from_secs(20)).await?;
         if parse_json(&out).is_some_and(|d| funnel_enabled(&d)) {
             let reset = with_socket(&self.paths, &["serve", "reset"]);
-            let _ = run_cli(
-                &self.program,
-                &os(&reset),
-                &self.env,
-                Duration::from_secs(20),
-            )
-            .await;
+            let _ = run_cli(&self.pin, &os(&reset), &self.env, Duration::from_secs(20)).await;
             return Err(HelperError::Exited(
                 "the helper was set to share publicly, so it was stopped".into(),
             ));
@@ -558,37 +541,25 @@ impl Transport for TailscaledTransport {
         })
     }
 
+    /// While on: log out, stop and forget the state. While off nothing is started and nothing
+    /// connects: only the local state folder is deleted.
     fn sign_out(&self) -> BoxFuture<'_, Result<(), HelperError>> {
         Box::pin(async move {
             let paths = Paths::new(&self.dirs);
-            let running = self.take_run();
-            let temporary = if running.is_none() && paths.state.exists() {
-                self.run_daemon().await.ok()
-            } else {
-                None
+            let Some(run) = self.take_run() else {
+                let _ = std::fs::remove_dir_all(&paths.state);
+                return Ok(());
             };
-            let mut outcome = Ok(());
-            if running.is_some() || temporary.is_some() {
-                match self.cli() {
-                    Ok(ctx) => {
-                        outcome = match ctx.wait_daemon().await {
-                            Ok(()) => {
-                                let args = with_socket(&paths, &["logout"]);
-                                run_cli(&ctx.program, &os(&args), &ctx.env, Duration::from_secs(30))
-                                    .await
-                                    .map(|_| ())
-                            }
-                            Err(e) => Err(e),
-                        };
-                    }
-                    Err(e) => outcome = Err(e),
+            let outcome = match self.cli() {
+                Ok(ctx) => {
+                    let args = with_socket(&paths, &["logout"]);
+                    run_cli(&ctx.pin, &os(&args), &ctx.env, Duration::from_secs(30))
+                        .await
+                        .map(|_| ())
                 }
-            }
-            let stopped = match (running, temporary) {
-                (Some(run), _) => shut(run, &self.dirs).await,
-                (None, Some(sup)) => sup.stop().await,
-                (None, None) => Ok(()),
+                Err(e) => Err(e),
             };
+            let stopped = shut(run, &self.dirs).await;
             let _ = std::fs::remove_dir_all(&paths.state);
             outcome.and(stopped)
         })
@@ -615,7 +586,7 @@ async fn shut(run: Run, dirs: &HelperDirs) -> Result<(), HelperError> {
     let _ = run.monitor.await;
     let reset = with_socket(&run.ctx.paths, &["serve", "reset"]);
     let _ = run_cli(
-        &run.ctx.program,
+        &run.ctx.pin,
         &os(&reset),
         &run.ctx.env,
         Duration::from_secs(10),
@@ -662,8 +633,7 @@ async fn monitor(
                         // Nothing stays served and nothing keeps running behind a failure.
                         let reset = with_socket(&ctx.paths, &["serve", "reset"]);
                         let _ =
-                            run_cli(&ctx.program, &os(&reset), &ctx.env, Duration::from_secs(10))
-                                .await;
+                            run_cli(&ctx.pin, &os(&reset), &ctx.env, Duration::from_secs(10)).await;
                         halt.stop();
                         let _ = tokio::time::timeout(Duration::from_secs(15), async {
                             while !matches!(sup.borrow_and_update().phase, Phase::Stopped) {
@@ -763,9 +733,7 @@ mod tests {
                 serve_plan(&paths, &windows_origin()).args,
             ),
         ];
-        if let Some(set) = set_args(&paths) {
-            lines.push(("set".to_string(), set));
-        }
+        lines.push(("set".to_string(), set_args(&paths)));
         lines
     }
 
@@ -850,10 +818,18 @@ mod tests {
     }
 
     #[test]
+    fn every_required_setting_is_in_the_fixture() {
+        let known = allowed_flags_for(HelperKind::Tailscaled, "set");
+        for flag in SET_FLAGS {
+            assert!(known.contains(&flag.split('=').next().unwrap()), "{flag}");
+        }
+    }
+
+    #[test]
     fn shields_stay_up() {
         let paths = Paths::new(&dirs());
         assert!(up_args(&paths, "nocturne-ab12").contains(&SHIELDS_UP.to_string()));
-        assert!(set_args(&paths).unwrap().contains(&SHIELDS_UP.to_string()));
+        assert!(set_args(&paths).contains(&SHIELDS_UP.to_string()));
         let known = allowed_flags_for(HelperKind::Tailscaled, "set");
         assert!(known.contains(&"--shields-up"));
         assert!(allowed_flags_for(HelperKind::Tailscaled, "up").contains(&"--shields-up"));

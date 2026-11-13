@@ -108,7 +108,11 @@ pub fn installed(kind: HelperKind, dirs: &HelperDirs) -> Option<Installed> {
 
 /// Hash the helper again and compare it with its pin. Called before every start.
 pub fn verify(installed: &Installed) -> Result<(), HelperError> {
-    let mut file = std::fs::File::open(&installed.path).map_err(|_| HelperError::Mismatch)?;
+    verify_file(&installed.path, &installed.sha256)
+}
+
+pub(crate) fn verify_file(path: &std::path::Path, sha256: &str) -> Result<(), HelperError> {
+    let mut file = std::fs::File::open(path).map_err(|_| HelperError::Mismatch)?;
     let mut hasher = Sha256::new();
     let mut buf = vec![0u8; 1 << 16];
     loop {
@@ -123,7 +127,7 @@ pub fn verify(installed: &Installed) -> Result<(), HelperError> {
         .iter()
         .map(|b| format!("{b:02x}"))
         .collect();
-    if got == installed.sha256.to_ascii_lowercase() {
+    if got == sha256.to_ascii_lowercase() {
         Ok(())
     } else {
         Err(HelperError::Mismatch)
