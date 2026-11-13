@@ -1,5 +1,6 @@
 //! A stand-in for `cloudflared` used by tests: a quick tunnel that answers its metrics port, names
-//! an address and forwards a loopback "public" port to the origin it was given.
+//! an address and forwards a loopback "public" port to the origin it was given. With
+//! `spoof_metrics` another process answers the metrics port, naming another address.
 
 use std::net::TcpListener;
 
@@ -8,6 +9,7 @@ use nocturne_helpers::fake;
 
 fn main() {
     fake::sleeper_if_asked();
+    fake::spoofer_if_asked();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let index = fake::record("cloudflared", &args);
     if args.first().map(String::as_str) != Some("tunnel") {
@@ -26,10 +28,18 @@ fn main() {
         || format!("fake-{index}-{}.trycloudflare.com", std::process::id()),
         String::from,
     );
-    if control.get("no_metrics").and_then(|v| v.as_bool()) != Some(true)
-        && let Some(addr) = fake::flag_value(&args, "--metrics")
-    {
-        fake::serve_metrics(&addr, host.clone());
+    let metrics = fake::flag_value(&args, "--metrics");
+    let metrics_port = match (
+        control.get("spoof_metrics").and_then(|v| v.as_str()),
+        control.get("no_metrics").and_then(|v| v.as_bool()) == Some(true),
+        metrics,
+    ) {
+        (Some(other), _, Some(addr)) => fake::spawn_spoofer(&addr, other),
+        (None, false, Some(addr)) => fake::serve_metrics(&addr, host.clone()),
+        _ => None,
+    };
+    if let Some(port) = metrics_port {
+        eprintln!("INF Starting metrics server on 127.0.0.1:{port}/metrics");
     }
     let origin = match (
         fake::flag_value(&args, "--unix-socket"),

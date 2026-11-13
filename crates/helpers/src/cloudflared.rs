@@ -22,7 +22,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct CloudflaredOptions {
-    /// How often the metrics port and the log are checked while waiting for the address.
+    /// How often the helper's output is checked while waiting for the address.
     pub poll: Duration,
     /// How long a start may take before it is reported as failed.
     pub ready_within: Duration,
@@ -93,19 +93,16 @@ pub(crate) fn config_path(dirs: &HelperDirs) -> PathBuf {
 const CONFIG_TEXT: &str =
     "# Written by Nocturne. It keeps the helper from reading any other configuration.\n";
 
-/// The exact command line, after `cloudflared`.
-pub(crate) fn tunnel_args(
-    origin: &Origin,
-    metrics_port: u16,
-    config: &std::path::Path,
-) -> Vec<String> {
+/// The exact command line, after `cloudflared`. The helper picks its own metrics port and names
+/// it in its output, so no other program can be waiting on a port chosen for it.
+pub(crate) fn tunnel_args(origin: &Origin, config: &std::path::Path) -> Vec<String> {
     let mut args: Vec<String> = vec![
         "tunnel".into(),
         "--no-autoupdate".into(),
         "--config".into(),
         config.to_string_lossy().into_owned(),
         "--metrics".into(),
-        format!("127.0.0.1:{metrics_port}"),
+        "127.0.0.1:0".into(),
         "--loglevel".into(),
         "info".into(),
     ];
@@ -159,11 +156,24 @@ fn write_config(path: &std::path::Path) -> Result<(), HelperError> {
         .map_err(|e| HelperError::Spawn(format!("could not write the settings file: {e}")))
 }
 
-fn free_port() -> Result<u16, HelperError> {
-    std::net::TcpListener::bind(("127.0.0.1", 0))
-        .and_then(|l| l.local_addr())
-        .map(|a| a.port())
-        .map_err(|e| HelperError::Spawn(format!("no free port: {e}")))
+/// A quick tunnel's own name: `<letters, digits and hyphens>.trycloudflare.com`, nothing else.
+pub fn is_quick_tunnel_host(host: &str) -> bool {
+    host.strip_suffix(".trycloudflare.com")
+        .is_some_and(|label| {
+            !label.is_empty()
+                && label
+                    .bytes()
+                    .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-')
+        })
+}
+
+/// The loopback metrics port the helper says it listens on, from its own output.
+fn metrics_port(output: &str) -> Option<u16> {
+    const MARK: &str = "Starting metrics server on ";
+    let at = output.rfind(MARK)? + MARK.len();
+    let addr = output[at..].split(['/', ' ', '\n']).next()?;
+    let addr: std::net::SocketAddr = addr.trim().parse().ok()?;
+    (addr.ip().is_loopback() && addr.port() != 0).then_some(addr.port())
 }
 
 impl Transport for CloudflaredTransport {
@@ -191,12 +201,11 @@ impl Transport for CloudflaredTransport {
             make_private_dir(&home.join("tmp"))?;
             make_private_dir(&logs)?;
             write_config(&config_path(&self.dirs))?;
-            let metrics = free_port()?;
             let cmd = HelperCommand {
                 name: "cloudflared",
                 program: self.installed.path.clone(),
                 sha256: self.installed.sha256.clone(),
-                args: tunnel_args(&spec.origin, metrics, &config_path(&self.dirs))
+                args: tunnel_args(&spec.origin, &config_path(&self.dirs))
                     .into_iter()
                     .map(OsString::from)
                     .collect(),
@@ -216,7 +225,6 @@ impl Transport for CloudflaredTransport {
             let cancel = CancellationToken::new();
             let sup_state = sup.subscribe();
             let monitor = tokio::spawn(monitor(
-                metrics,
                 sup.log_path().to_path_buf(),
                 sup_state.clone(),
                 tx.clone(),
@@ -271,7 +279,6 @@ async fn shut(run: Run) -> Result<(), HelperError> {
 }
 
 async fn monitor(
-    metrics: u16,
     log: PathBuf,
     mut sup: watch::Receiver<SupState>,
     tx: Arc<watch::Sender<TransportState>>,
@@ -299,7 +306,7 @@ async fn monitor(
             }
             Phase::Running => {
                 tokio::select! {
-                    found = wait_ready(metrics, &log, now.log_offset, &opts) => match found {
+                    found = wait_ready(&log, now.log_offset, &opts) => match found {
                         Some(address) => {
                             tx.send_replace(TransportState::Up { address, route: None });
                         }
@@ -322,17 +329,15 @@ async fn monitor(
     }
 }
 
-/// The public address once the tunnel is ready: from the metrics port when it answers, else from
-/// the line the helper prints.
+/// The public address once the tunnel is ready, read again from each run's own output.
 async fn wait_ready(
-    metrics: u16,
     log: &std::path::Path,
     offset: u64,
     opts: &CloudflaredOptions,
 ) -> Option<String> {
     let deadline = Instant::now() + opts.ready_within;
     loop {
-        if let Some(address) = ready_once(metrics, log, offset).await {
+        if let Some(address) = ready_once(log, offset).await {
             return Some(address);
         }
         if Instant::now() >= deadline {
@@ -342,30 +347,35 @@ async fn wait_ready(
     }
 }
 
-async fn ready_once(metrics: u16, log: &std::path::Path, offset: u64) -> Option<String> {
+/// The address comes only from what this run of the helper printed to its owner-only log, and
+/// only as a quick tunnel's name. The metrics port it names there may confirm it is ready; when
+/// that port names another address, something else is answering on it and neither is used.
+async fn ready_once(log: &std::path::Path, offset: u64) -> Option<String> {
     let own_output = std::fs::read(log)
         .map(|b| String::from_utf8_lossy(b.get(offset as usize..).unwrap_or_default()).into_owned())
         .unwrap_or_default();
-    match local_get(metrics, "/quicktunnel").await {
-        Some((200, body)) => {
-            let host = serde_json::from_str::<serde_json::Value>(&body)
-                .ok()?
-                .get("hostname")?
-                .as_str()?
-                .trim()
-                .to_string();
-            if host.is_empty() {
-                return None;
-            }
-            let ready = local_get(metrics, "/ready").await;
-            matches!(ready, Some((200, _))).then(|| format!("https://{host}"))
-        }
-        Some(_) => None,
-        None => own_output
-            .contains("Registered tunnel connection")
-            .then(|| last_https_host(&own_output, ".trycloudflare.com"))
-            .flatten(),
+    let address = last_https_host(&own_output, ".trycloudflare.com")?;
+    let host = address.strip_prefix("https://")?;
+    if !is_quick_tunnel_host(host) {
+        return None;
     }
+    let metrics = metrics_port(&own_output);
+    if let Some(port) = metrics
+        && let Some((200, body)) = local_get(port, "/quicktunnel").await
+    {
+        let named = serde_json::from_str::<serde_json::Value>(&body)
+            .ok()
+            .and_then(|v| v.get("hostname")?.as_str().map(|h| h.trim().to_string()));
+        if named.as_deref() != Some(host) {
+            return None;
+        }
+    }
+    let ready = own_output.contains("Registered tunnel connection")
+        || match metrics {
+            Some(port) => matches!(local_get(port, "/ready").await, Some((200, _))),
+            None => false,
+        };
+    ready.then_some(address)
 }
 
 #[cfg(test)]
@@ -381,18 +391,14 @@ mod tests {
     #[test]
     fn args_are_exact() {
         let cfg = config_path(&dirs());
-        let unix = tunnel_args(
-            &Origin::Unix("/data/remote/run/listener.sock".into()),
-            4321,
-            &cfg,
-        );
+        let unix = tunnel_args(&Origin::Unix("/data/remote/run/listener.sock".into()), &cfg);
         let mut expected: Vec<String> = [
             "tunnel",
             "--no-autoupdate",
             "--config",
             "/data/remote/cloudflared/config.yml",
             "--metrics",
-            "127.0.0.1:4321",
+            "127.0.0.1:0",
             "--loglevel",
             "info",
             "--management-diagnostics=false",
@@ -407,7 +413,6 @@ mod tests {
                 port: 5000,
                 key: "k".into(),
             },
-            4321,
             &cfg,
         );
         expected.truncate(9);
@@ -426,7 +431,7 @@ mod tests {
             },
         ];
         for origin in &origins {
-            for arg in tunnel_args(origin, 1, std::path::Path::new("/c.yml")) {
+            for arg in tunnel_args(origin, std::path::Path::new("/c.yml")) {
                 if arg.starts_with("--") {
                     let name = arg.split('=').next().unwrap();
                     assert!(allowed.contains(&name), "{name} is not in the fixture");
@@ -442,7 +447,7 @@ mod tests {
             key: "s3cret-key-value".into(),
         };
         assert!(
-            !tunnel_args(&origin, 1, std::path::Path::new("/c.yml"))
+            !tunnel_args(&origin, std::path::Path::new("/c.yml"))
                 .iter()
                 .any(|a| a.contains("s3cret-key-value"))
         );
@@ -451,6 +456,34 @@ mod tests {
             OsString::from("TUNNEL_HTTP_HOST_HEADER"),
             OsString::from("s3cret-key-value")
         )));
+    }
+
+    #[test]
+    fn only_a_quick_tunnel_name_is_an_address() {
+        assert!(is_quick_tunnel_host("amber-otter-42.trycloudflare.com"));
+        for bad in [
+            "trycloudflare.com",
+            ".trycloudflare.com",
+            "a.b.trycloudflare.com",
+            "Amber.trycloudflare.com",
+            "amber_otter.trycloudflare.com",
+            "amber.trycloudflare.com.evil.example",
+            "amber.trycloudflare.com:443",
+            "evil.example/x.trycloudflare.com",
+        ] {
+            assert!(!is_quick_tunnel_host(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn metrics_port_from_own_output() {
+        let out = "INF Starting metrics server on 127.0.0.1:41234/metrics\nINF other";
+        assert_eq!(metrics_port(out), Some(41234));
+        assert_eq!(
+            metrics_port("INF Starting metrics server on 192.0.2.1:41234/metrics"),
+            None
+        );
+        assert_eq!(metrics_port("nothing here"), None);
     }
 
     #[test]

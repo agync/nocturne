@@ -76,6 +76,68 @@ async fn address_from_metrics_or_stderr() {
     }
 }
 
+fn up_or_failed(s: &TransportState) -> bool {
+    matches!(s, TransportState::Up { .. } | TransportState::Failed { .. })
+}
+
+fn impatient(sb: &Sandbox) -> CloudflaredTransport {
+    let installed = sb.install("c", FAKE, "cloudflared", HelperKind::Cloudflared);
+    let opts = CloudflaredOptions {
+        ready_within: Duration::from_secs(3),
+        ..options()
+    };
+    CloudflaredTransport::with_options(&sb.dirs(), &installed, opts)
+}
+
+#[tokio::test]
+async fn another_program_on_the_metrics_port_is_not_believed() {
+    let sb = Sandbox::new("spoof");
+    let t = impatient(&sb);
+    sb.control(
+        "c",
+        json!({
+            "address": "own-name.trycloudflare.com",
+            "spoof_metrics": "someone-else.trycloudflare.com",
+        }),
+    );
+    let mut rx = t
+        .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+        .await
+        .unwrap();
+    let end = wait_state(&mut rx, "up or failed", 180, up_or_failed).await;
+    assert!(
+        matches!(end, TransportState::Failed { .. }),
+        "the two disagree, so neither is used: {end:?}"
+    );
+    t.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_address_that_is_not_a_quick_tunnel_is_refused() {
+    for (i, host) in [
+        "attacker.example.com",
+        "x.evil.trycloudflare.com",
+        "Upper.trycloudflare.com",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let sb = Sandbox::new(&format!("bad-host-{i}"));
+        let t = impatient(&sb);
+        sb.control("c", json!({ "address": host }));
+        let mut rx = t
+            .start(spec(Origin::Unix(sb.root.join("l.sock"))))
+            .await
+            .unwrap();
+        let end = wait_state(&mut rx, "up or failed", 180, up_or_failed).await;
+        assert!(
+            matches!(end, TransportState::Failed { .. }),
+            "{host}: {end:?}"
+        );
+        t.stop().await.unwrap();
+    }
+}
+
 #[tokio::test]
 async fn new_address_each_start() {
     let sb = Sandbox::new("fresh");

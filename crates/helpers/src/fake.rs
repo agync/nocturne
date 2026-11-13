@@ -20,6 +20,7 @@ pub const CONTROL_FILE: &str = "fake-control.json";
 pub const RECORD_FILE: &str = "fake-record.jsonl";
 pub const PUBLIC_PORT_FILE: &str = "fake-public-port";
 pub const CHILD_PID_FILE: &str = "fake-child-pid";
+pub const SPOOF_PORT_FILE: &str = "fake-spoof-port";
 
 /// Folder of the running stand-in.
 pub fn exe_dir() -> PathBuf {
@@ -154,11 +155,10 @@ pub fn hangs(control: &Value) -> bool {
     control.get("mode").and_then(Value::as_str) == Some("hang")
 }
 
-/// Answer the metrics endpoints of a quick tunnel on `addr`.
-pub fn serve_metrics(addr: &str, hostname: String) {
-    let Ok(listener) = TcpListener::bind(addr) else {
-        return;
-    };
+/// Answer the metrics endpoints of a quick tunnel on `addr`. Returns the port it answers on.
+pub fn serve_metrics(addr: &str, hostname: String) -> Option<u16> {
+    let listener = TcpListener::bind(addr).ok()?;
+    let port = listener.local_addr().ok()?.port();
     std::thread::spawn(move || {
         for stream in listener.incoming().flatten() {
             let mut stream = stream;
@@ -181,6 +181,43 @@ pub fn serve_metrics(addr: &str, hostname: String) {
             );
         }
     });
+    Some(port)
+}
+
+/// Another local program answering on `addr` as if it were the helper's metrics port, naming
+/// `hostname`. Returns the port it answers on, once it does.
+pub fn spawn_spoofer(addr: &str, hostname: &str) -> Option<u16> {
+    let file = exe_dir().join(SPOOF_PORT_FILE);
+    let _ = std::fs::remove_file(&file);
+    std::process::Command::new(std::env::current_exe().ok()?)
+        .env("FAKE_ROLE", "spoofer")
+        .env("FAKE_SPOOF_ADDR", addr)
+        .env("FAKE_SPOOF_HOST", hostname)
+        .spawn()
+        .ok()?;
+    for _ in 0..400 {
+        if let Some(port) = std::fs::read_to_string(&file)
+            .ok()
+            .and_then(|t| t.trim().parse().ok())
+        {
+            return Some(port);
+        }
+        std::thread::sleep(Duration::from_millis(25));
+    }
+    None
+}
+
+/// Run as the spoofer [`spawn_spoofer`] started.
+pub fn spoofer_if_asked() {
+    if std::env::var("FAKE_ROLE").as_deref() != Ok("spoofer") {
+        return;
+    }
+    let addr = std::env::var("FAKE_SPOOF_ADDR").unwrap_or_default();
+    let host = std::env::var("FAKE_SPOOF_HOST").unwrap_or_default();
+    if let Some(port) = serve_metrics(&addr, host) {
+        let _ = std::fs::write(exe_dir().join(SPOOF_PORT_FILE), port.to_string());
+    }
+    sleep_forever();
 }
 
 /// Where the stand-in forwards what arrives on its "public" port.

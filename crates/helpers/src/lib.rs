@@ -26,7 +26,7 @@ mod supervise;
 mod tailnet;
 mod util;
 
-pub use cloudflared::{CloudflaredOptions, CloudflaredTransport};
+pub use cloudflared::{CloudflaredOptions, CloudflaredTransport, is_quick_tunnel_host};
 pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
 pub use install::remove_partial;
 pub use lock::{HelpersLock, LockedAsset, LockedHelper, PLATFORMS, platform};
