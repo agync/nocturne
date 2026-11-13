@@ -588,6 +588,9 @@ fn navigate<R: Runtime>(app: &AppHandle<R>, route: &str) {
     }
 }
 
+/// Rebuild the tray's Away from home lines from a view.
+pub fn refresh_away<R: Runtime>(_app: &AppHandle<R>, _view: &nocturne_contract::RemoteView) {}
+
 #[cfg(test)]
 mod tests {
     use super::*;

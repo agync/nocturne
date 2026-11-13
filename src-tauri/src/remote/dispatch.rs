@@ -1,0 +1,697 @@
+//! What a paired phone may do: a typed match over [`RemoteCall`], the ten allowed calls and
+//! the two phone verbs, each through the same engine and command cores the windows use. Never a
+//! generic forwarder: nothing here names a command, a folder or another phone's item.
+//!
+//! Private stays home: asks are `public_only`, pages are the phone edition, items and originals
+//! only when cited to this phone in the last hour and not private, and every answer passes an
+//! outbound filter that drops anything naming a private item or memory.
+
+use std::path::Path;
+use std::sync::Arc;
+use std::time::Duration;
+
+use jiff::Timestamp;
+use nocturne_contract::{
+    AskDelta, AskPhase, Edition, ItemView, Kept, PhoneError, PhoneItem, PhoneKept, PhoneReadiness,
+    PhoneStatus, RemoteAction, RemoteAnswer, RemoteCall, RemoteResult, Source,
+};
+use nocturne_engine::{DeviceRow, Engine};
+use tauri::{AppHandle, Manager, Runtime};
+use tokio::sync::mpsc;
+
+use super::crypto;
+use super::incoming::Uploaded;
+use super::limits::Bucket;
+use super::protocol::*;
+use super::session::{BoxFuture, CallCtx, Core, Dispatch, ReplySink};
+use crate::ask::{self, AskLane, AskOptions, AskSink};
+use crate::error::blocking;
+use crate::state::AppState;
+
+/// How long a keep of bytes waits for its last chunk.
+const UPLOAD_WAIT: Duration = Duration::from_secs(300);
+
+pub struct AppDispatch<R: Runtime> {
+    pub app: AppHandle<R>,
+}
+
+impl<R: Runtime> Dispatch for AppDispatch<R> {
+    fn call(&self, core: Arc<Core>, ctx: CallCtx) -> BoxFuture<'static, ()> {
+        let app = self.app.clone();
+        Box::pin(async move {
+            let CallCtx {
+                device,
+                req,
+                out,
+                upload,
+            } = ctx;
+            let had_upload = upload.is_some();
+            let call = Call {
+                app,
+                core: core.clone(),
+                device,
+                out,
+            };
+            let answer = call.run(req.call, upload).await;
+            if had_upload {
+                core.incoming.cancel_call(&call.device.id, call.out.id);
+            }
+            if let Some(answer) = answer {
+                call.send(answer).await;
+            }
+        })
+    }
+}
+
+struct Call<R: Runtime> {
+    app: AppHandle<R>,
+    core: Arc<Core>,
+    device: DeviceRow,
+    out: ReplySink,
+}
+
+fn err(code: PhoneError) -> Option<RemoteAnswer> {
+    Some(RemoteAnswer::Error { code })
+}
+
+fn is_date(s: &str) -> bool {
+    s.len() == 10 && s.parse::<jiff::civil::Date>().is_ok()
+}
+
+/// An item as a phone sees it: no path, text and summary cut to fit one frame.
+pub fn phone_item(v: &ItemView) -> PhoneItem {
+    let mut truncated = false;
+    let mut cut = |t: &Option<String>| {
+        t.as_deref().map(|t| {
+            let (c, was) = crypto::cut_text(t);
+            truncated |= was;
+            c.to_string()
+        })
+    };
+    let summary = cut(&v.summary);
+    let text = cut(&v.text);
+    PhoneItem {
+        id: v.id.clone(),
+        kind: v.kind,
+        title: v.title.clone(),
+        kept_at: v.kept_at.clone(),
+        duration_ms: v.duration_ms,
+        pages: v.pages,
+        has_original: v.has_original,
+        summary,
+        text,
+        truncated,
+    }
+}
+
+/// Every item and memory id an answer names.
+pub fn named_ids(answer: &RemoteAnswer) -> Vec<String> {
+    let text = serde_json::to_string(answer).unwrap_or_default();
+    let mut out = Vec::new();
+    for prefix in ["itm_", "mem_"] {
+        let mut rest = text.as_str();
+        while let Some(at) = rest.find(prefix) {
+            let id: String = rest[at..]
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+                .collect();
+            if id.len() > prefix.len() && !out.contains(&id) {
+                out.push(id.clone());
+            }
+            rest = &rest[at + prefix.len()..];
+        }
+    }
+    out
+}
+
+impl<R: Runtime> Call<R> {
+    fn engine(&self) -> Option<Engine> {
+        self.app.state::<AppState>().engine().ok()
+    }
+
+    fn audit(&self, action: RemoteAction, result: RemoteResult, bytes: f64) {
+        super::audit::log(&self.core, Some(&self.device.id), action, result, bytes);
+    }
+
+    /// The outbound filter: an answer naming anything private does not leave. Whatever it
+    /// names that is public, the phone may open for the next hour.
+    async fn send(&self, answer: RemoteAnswer) -> bool {
+        let ids = named_ids(&answer);
+        if !ids.is_empty() {
+            let Some(engine) = self.engine() else {
+                return false;
+            };
+            let check = ids.clone();
+            let private = blocking(move || engine.private_ids(&check))
+                .await
+                .unwrap_or_else(|_| ids.clone());
+            if !private.is_empty() {
+                tracing::warn!("an answer for a phone named something private; it was held back");
+                return match answer {
+                    RemoteAnswer::AskDelta { delta } if terminal(delta.phase) => {
+                        self.out.send(RemoteAnswer::AskDelta {
+                            delta: blank(&delta.ask_id, AskPhase::Unavailable),
+                        })
+                    }
+                    RemoteAnswer::AskDelta { .. } => true,
+                    _ => self.out.error(PhoneError::NotFound),
+                };
+            }
+            self.core.cite(&self.device.id, ids);
+        }
+        self.out.send(answer)
+    }
+
+    async fn run(
+        &self,
+        call: RemoteCall,
+        upload: Option<super::incoming::UploadDone>,
+    ) -> Option<RemoteAnswer> {
+        let me = &self.device.id;
+        match call {
+            RemoteCall::GetStatus => Some(self.status().await),
+            RemoteCall::KeepText { text, client_id } => {
+                if crypto::check_id(&client_id).is_err() || text.trim().is_empty() {
+                    return err(PhoneError::Invalid);
+                }
+                if text.len() > MAX_TEXT {
+                    return err(PhoneError::TooLarge);
+                }
+                if let Some(dup) = self.duplicate(&client_id).await {
+                    return Some(dup);
+                }
+                if !self.core.limits.take(Bucket::Keeps, me) {
+                    self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
+                    return err(PhoneError::TooMany);
+                }
+                let e = self.engine()?;
+                let kept = blocking(move || e.keep_text(&text, Source::Phone)).await;
+                self.kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0)
+                    .await
+            }
+            RemoteCall::KeepBytes {
+                mime,
+                client_id,
+                caption,
+                ..
+            } => {
+                self.keep_upload(upload, &mime, &client_id, caption, false)
+                    .await
+            }
+            RemoteCall::KeepRecording {
+                mime, client_id, ..
+            } => {
+                self.keep_upload(upload, &mime, &client_id, None, true)
+                    .await
+            }
+            RemoteCall::Unkeep { id } => self.unkeep(id).await,
+            RemoteCall::Ask { question } => self.ask(question).await,
+            RemoteCall::CancelAsk { ask_id } => {
+                if crypto::check_id(&ask_id).is_err() {
+                    return err(PhoneError::Invalid);
+                }
+                self.app
+                    .state::<AppState>()
+                    .asks
+                    .cancel_in(&AskLane::Phone(me.clone()), &ask_id);
+                Some(RemoteAnswer::Done)
+            }
+            RemoteCall::GetPage { date } => self.page(date).await,
+            RemoteCall::ListPages => {
+                let pages = crate::commands::page::pages_for(&self.app, Edition::Phone)
+                    .await
+                    .ok()?;
+                Some(RemoteAnswer::Pages {
+                    pages: pages.into_iter().take(PAGES_BACK as usize + 1).collect(),
+                })
+            }
+            RemoteCall::GetItem { id } => match self.cited_item(&id).await {
+                Ok(v) => Some(RemoteAnswer::Item {
+                    item: phone_item(&v),
+                }),
+                Err(code) => err(code),
+            },
+            RemoteCall::GetOriginal { id } => self.original(&id).await,
+            RemoteCall::Disconnect => {
+                self.audit(RemoteAction::Disconnected, RemoteResult::Ok, 0.0);
+                self.out.send(RemoteAnswer::Done);
+                self.out.end();
+                None
+            }
+        }
+    }
+
+    async fn status(&self) -> RemoteAnswer {
+        let state = self.app.state::<AppState>();
+        let readiness = if state.status.is_paused(state.now()) {
+            PhoneReadiness::Paused
+        } else if state.mind.get().is_some() && !state.mind.is_loading() {
+            PhoneReadiness::Ready
+        } else {
+            PhoneReadiness::GettingReady
+        };
+        let latest = crate::commands::page::pages_for(&self.app, Edition::Phone)
+            .await
+            .ok()
+            .and_then(|p| p.into_iter().next());
+        RemoteAnswer::Status {
+            status: PhoneStatus {
+                readiness,
+                page_date: latest.as_ref().map(|p| p.date.clone()),
+                needs_you: latest.map(|p| p.needs_you).unwrap_or(0),
+            },
+        }
+    }
+
+    /// A keep with this client id already made: the first item again.
+    async fn duplicate(&self, client_id: &str) -> Option<RemoteAnswer> {
+        let e = self.engine()?;
+        let (me, cid) = (self.device.id.clone(), client_id.to_string());
+        let item = blocking(move || {
+            let Some(id) = e.remote_keep(&me, &cid)? else {
+                return Ok(None);
+            };
+            e.get_item(&id).map(Some)
+        })
+        .await
+        .ok()
+        .flatten()?;
+        Some(self.kept_answer(&item, true))
+    }
+
+    fn kept_answer(&self, item: &ItemView, duplicate: bool) -> RemoteAnswer {
+        let until = item
+            .kept_at
+            .parse::<Timestamp>()
+            .ok()
+            .and_then(|t| {
+                t.checked_add(jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64))
+                    .ok()
+            })
+            .map(super::pairing::fmt_wall)
+            .unwrap_or_default();
+        RemoteAnswer::Kept {
+            kept: PhoneKept {
+                item: phone_item(item),
+                duplicate,
+                take_back_until: until,
+            },
+        }
+    }
+
+    async fn kept(
+        &self,
+        kept: Option<Kept>,
+        client_id: &str,
+        action: RemoteAction,
+        bytes: f64,
+    ) -> Option<RemoteAnswer> {
+        let Some(kept) = kept else {
+            self.audit(action, RemoteResult::Failed, bytes);
+            return err(PhoneError::Invalid);
+        };
+        let (item, duplicate) = match &kept {
+            Kept::New { item } => (item.clone(), false),
+            Kept::Duplicate { item } => (item.clone(), true),
+        };
+        if let Some(e) = self.engine() {
+            let (id, me, cid) = (
+                item.id.clone(),
+                self.device.id.clone(),
+                client_id.to_string(),
+            );
+            let _ = blocking(move || e.link_remote_keep(&id, &me, &cid)).await;
+        }
+        crate::commands::capture::announce(&self.app, std::slice::from_ref(&kept)).await;
+        self.audit(action, RemoteResult::Ok, bytes);
+        let item = match self.engine() {
+            Some(e) => {
+                let id = item.id.clone();
+                blocking(move || e.get_item(&id)).await.unwrap_or(item)
+            }
+            None => item,
+        };
+        Some(self.kept_answer(&item, duplicate))
+    }
+
+    async fn keep_upload(
+        &self,
+        upload: Option<super::incoming::UploadDone>,
+        mime: &str,
+        client_id: &str,
+        caption: Option<String>,
+        recording: bool,
+    ) -> Option<RemoteAnswer> {
+        let me = self.device.id.clone();
+        let Some(upload) = upload else {
+            return err(PhoneError::Invalid);
+        };
+        if crypto::check_id(client_id).is_err() {
+            return err(PhoneError::Invalid);
+        }
+        if caption
+            .as_deref()
+            .is_some_and(|c| c.chars().count() > MAX_CAPTION)
+        {
+            return err(PhoneError::TooLarge);
+        }
+        if let Some(dup) = self.duplicate(client_id).await {
+            return Some(dup);
+        }
+        if !self.core.limits.take(Bucket::Keeps, &me) {
+            self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
+            return err(PhoneError::TooMany);
+        }
+        let done = tokio::select! {
+            d = upload => d,
+            () = self.out.closed() => return None,
+            () = tokio::time::sleep(UPLOAD_WAIT) => return err(PhoneError::TooLate),
+        };
+        let Uploaded { path, bytes, .. } = match done {
+            Ok(Ok(u)) => u,
+            Ok(Err(code)) => return err(code),
+            Err(_) => return err(PhoneError::Invalid),
+        };
+        let ext = crate::commands::capture::extension_for(mime).unwrap_or("bin");
+        let (action, base) = match (recording, mime) {
+            (true, _) => (RemoteAction::KeptVoiceNote, "Voice note"),
+            (_, m) if m.starts_with("image/") => (RemoteAction::KeptPhoto, "Photo"),
+            (_, m) if m.starts_with("audio/") => (RemoteAction::KeptVoiceNote, "Voice note"),
+            _ => (RemoteAction::KeptDocument, "Document"),
+        };
+        let name = caption
+            .as_deref()
+            .map(sanitise)
+            .filter(|n| !n.is_empty())
+            .unwrap_or_else(|| base.to_string());
+        let named = match place(&path, &name, ext) {
+            Ok(p) => p,
+            Err(_) => {
+                let _ = std::fs::remove_file(&path);
+                return err(PhoneError::Busy);
+            }
+        };
+        let e = self.engine()?;
+        let file = named.clone();
+        let kept = blocking(move || e.keep_file(&file, Source::Phone)).await;
+        if let Some(dir) = named.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+        self.kept(kept.ok(), client_id, action, bytes as f64).await
+    }
+
+    async fn unkeep(&self, id: String) -> Option<RemoteAnswer> {
+        if crypto::check_id(&id).is_err() {
+            return err(PhoneError::Invalid);
+        }
+        let e = self.engine()?;
+        let check = id.clone();
+        let owner = blocking(move || e.remote_keep_owner(&check)).await.ok()?;
+        let Some((device, kept_at)) = owner else {
+            return err(PhoneError::NotYours);
+        };
+        if device != self.device.id {
+            return err(PhoneError::NotYours);
+        }
+        let now = self.app.state::<AppState>().now();
+        if now.duration_since(kept_at) >= jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64) {
+            return err(PhoneError::TooLate);
+        }
+        self.app.state::<AppState>().asks.cancel_all();
+        let e = self.engine()?;
+        match blocking(move || e.unkeep(&id)).await {
+            Ok(_) => {
+                self.audit(RemoteAction::TookBack, RemoteResult::Ok, 0.0);
+                Some(RemoteAnswer::Done)
+            }
+            Err(_) => err(PhoneError::TooLate),
+        }
+    }
+
+    async fn ask(&self, question: String) -> Option<RemoteAnswer> {
+        let question = question.trim().to_string();
+        if question.is_empty() {
+            return err(PhoneError::Invalid);
+        }
+        if question.len() > MAX_QUESTION {
+            return err(PhoneError::TooLarge);
+        }
+        if !self.core.limits.take(Bucket::Asks, &self.device.id) {
+            self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
+            return err(PhoneError::TooMany);
+        }
+        let (tx, mut rx) = mpsc::unbounded_channel::<AskDelta>();
+        let lane = AskLane::Phone(self.device.id.clone());
+        let ask_id = ask::start_with(
+            &self.app,
+            question,
+            AskOptions {
+                public_only: true,
+                lane: lane.clone(),
+                sink: AskSink::Channel(tx),
+            },
+        );
+        self.audit(RemoteAction::Asked, RemoteResult::Ok, 0.0);
+        if !self.out.send(RemoteAnswer::AskStarted {
+            ask_id: ask_id.clone(),
+        }) {
+            self.app.state::<AppState>().asks.cancel_in(&lane, &ask_id);
+            return None;
+        }
+        let flush = Duration::from_millis(DELTA_FLUSH_MS);
+        let mut held: Option<AskDelta> = None;
+        let mut last_sent = tokio::time::Instant::now() - flush;
+        loop {
+            let wait = (last_sent + flush).saturating_duration_since(tokio::time::Instant::now());
+            let next = tokio::select! {
+                d = rx.recv() => d,
+                () = self.out.closed() => {
+                    self.app.state::<AppState>().asks.cancel_in(&lane, &ask_id);
+                    return None;
+                }
+                () = tokio::time::sleep(wait), if held.is_some() => {
+                    let d = held.take().expect("held");
+                    if !self.send(RemoteAnswer::AskDelta { delta: d }).await {
+                        self.app.state::<AppState>().asks.cancel_in(&lane, &ask_id);
+                        return None;
+                    }
+                    last_sent = tokio::time::Instant::now();
+                    continue;
+                }
+            };
+            let Some(delta) = next else {
+                break;
+            };
+            let end = terminal(delta.phase);
+            held = Some(match held.take() {
+                Some(mut h)
+                    if h.phase == AskPhase::Streaming && delta.phase == AskPhase::Streaming =>
+                {
+                    let more = delta.text_delta.unwrap_or_default();
+                    h.text_delta = Some(h.text_delta.unwrap_or_default() + &more);
+                    h
+                }
+                Some(h) => {
+                    if !self.send(RemoteAnswer::AskDelta { delta: h }).await {
+                        self.app.state::<AppState>().asks.cancel_in(&lane, &ask_id);
+                        return None;
+                    }
+                    last_sent = tokio::time::Instant::now();
+                    delta
+                }
+                None => delta,
+            });
+            if end {
+                let wait =
+                    (last_sent + flush).saturating_duration_since(tokio::time::Instant::now());
+                tokio::time::sleep(wait).await;
+                if let Some(d) = held.take() {
+                    self.send(RemoteAnswer::AskDelta { delta: d }).await;
+                }
+                return None;
+            }
+        }
+        if let Some(d) = held.take() {
+            self.send(RemoteAnswer::AskDelta { delta: d }).await;
+        }
+        None
+    }
+
+    async fn page(&self, date: Option<String>) -> Option<RemoteAnswer> {
+        let day = match date.as_deref() {
+            None => None,
+            Some(d) if is_date(d) => {
+                let allowed = crate::commands::page::pages_for(&self.app, Edition::Phone)
+                    .await
+                    .ok()?
+                    .into_iter()
+                    .take(PAGES_BACK as usize + 1)
+                    .any(|p| p.date == d);
+                if !allowed {
+                    return err(PhoneError::NotFound);
+                }
+                d.parse().ok()
+            }
+            Some(_) => return err(PhoneError::Invalid),
+        };
+        match crate::commands::page::page_view(&self.app, day, Edition::Phone).await {
+            Ok(page) => {
+                self.audit(RemoteAction::ReadPage, RemoteResult::Ok, 0.0);
+                Some(RemoteAnswer::Page {
+                    page: Box::new(page),
+                })
+            }
+            Err(_) => err(PhoneError::NotFound),
+        }
+    }
+
+    /// An item this phone was sent in the last hour that is not private.
+    async fn cited_item(&self, id: &str) -> Result<ItemView, PhoneError> {
+        if crypto::check_id(id).is_err() {
+            return Err(PhoneError::Invalid);
+        }
+        if !self.core.was_cited(&self.device.id, id) {
+            return Err(PhoneError::NotFound);
+        }
+        let e = self.engine().ok_or(PhoneError::NotReady)?;
+        let id = id.to_string();
+        let item = blocking(move || {
+            let v = e.get_item(&id)?;
+            let private = !e.private_ids(std::slice::from_ref(&id))?.is_empty();
+            Ok((v, private))
+        })
+        .await
+        .map_err(|_| PhoneError::NotFound)?;
+        match item {
+            (v, false) => Ok(v),
+            _ => Err(PhoneError::NotFound),
+        }
+    }
+
+    async fn original(&self, id: &str) -> Option<RemoteAnswer> {
+        let item = match self.cited_item(id).await {
+            Ok(v) => v,
+            Err(code) => return err(code),
+        };
+        let Some(path) = item.original_path.as_deref().map(std::path::PathBuf::from) else {
+            return err(PhoneError::NotFound);
+        };
+        let ext = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        let mime = nocturne_engine::kind_for_ext(&ext)
+            .map(|(_, m)| m)
+            .unwrap_or("application/octet-stream");
+        let Ok(mut file) = tokio::fs::File::open(&path).await else {
+            return err(PhoneError::NotFound);
+        };
+        let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+        if !self.out.send(RemoteAnswer::OriginalStart {
+            mime: mime.to_string(),
+            size: size as f64,
+        }) {
+            return None;
+        }
+        self.audit(RemoteAction::OpenedOriginal, RemoteResult::Ok, size as f64);
+        use tokio::io::AsyncReadExt;
+        let mut seq = 0u32;
+        let mut sent = 0u64;
+        let mut buf = vec![0u8; CHUNK];
+        loop {
+            let mut n = 0;
+            while n < CHUNK {
+                match file.read(&mut buf[n..]).await {
+                    Ok(0) => break,
+                    Ok(k) => n += k,
+                    Err(_) => return None,
+                }
+            }
+            sent += n as u64;
+            let last = sent >= size || n < CHUNK;
+            if !self.out.chunk(seq, last, &buf[..n]) || last {
+                return None;
+            }
+            seq += 1;
+        }
+    }
+}
+
+fn terminal(p: AskPhase) -> bool {
+    matches!(
+        p,
+        AskPhase::Done | AskPhase::NotSure | AskPhase::Nothing | AskPhase::Unavailable
+    )
+}
+
+fn blank(ask_id: &str, phase: AskPhase) -> AskDelta {
+    AskDelta {
+        ask_id: ask_id.to_string(),
+        phase,
+        text_delta: None,
+        receipts: Vec::new(),
+        memory_ids: Vec::new(),
+        near: Vec::new(),
+        found: None,
+        eta_seconds: None,
+        plain: false,
+    }
+}
+
+/// A caption as a file name: letters, digits, spaces and a few marks, nothing that names a
+/// folder.
+pub fn sanitise(caption: &str) -> String {
+    let cleaned: String = caption
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || " -_,()'".contains(c) {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
+    cleaned
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .take(MAX_CAPTION)
+        .collect()
+}
+
+/// Move an upload into a folder of its own under its final name.
+fn place(path: &Path, name: &str, ext: &str) -> std::io::Result<std::path::PathBuf> {
+    let dir = path.with_extension("named");
+    crate::fsutil::create_private_dir(&dir)?;
+    let named = dir.join(format!("{name}.{ext}"));
+    std::fs::rename(path, &named)?;
+    Ok(named)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn captions_become_plain_names() {
+        assert_eq!(sanitise("Bin day / ../../etc"), "Bin day etc");
+        assert_eq!(sanitise("  receipt: café  "), "receipt café");
+        assert_eq!(sanitise("\u{202e}gpj.exe"), "gpj exe");
+    }
+
+    #[test]
+    fn ids_are_found_in_any_answer() {
+        let answer = RemoteAnswer::Error {
+            code: PhoneError::NotFound,
+        };
+        assert!(named_ids(&answer).is_empty());
+        let a = RemoteAnswer::AskStarted {
+            ask_id: "see itm_0123456789abcdef and mem_fedcba9876543210".into(),
+        };
+        assert_eq!(
+            named_ids(&a),
+            vec!["itm_0123456789abcdef", "mem_fedcba9876543210"]
+        );
+    }
+}

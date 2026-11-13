@@ -209,12 +209,16 @@ impl Incoming {
                 u.fail(PhoneError::Busy);
                 return Ok(());
             }
-            if let Some(tx) = u.done.take() {
-                let _ = tx.send(Ok(Uploaded {
+            let sent = u.done.take().map(|tx| {
+                tx.send(Ok(Uploaded {
                     path: u.path.clone(),
                     bytes: u.received,
                     mime: u.mime.clone(),
-                }));
+                }))
+            });
+            // Nobody waits for it any more (the call already answered): do not keep the file.
+            if !matches!(sent, Some(Ok(()))) {
+                let _ = std::fs::remove_file(&u.path);
             }
         }
         Ok(())
@@ -224,6 +228,17 @@ impl Incoming {
     pub fn cancel(&self, device: &str) {
         if let Some(u) = self.uploads().remove(device) {
             u.fail(PhoneError::Revoked);
+        }
+    }
+
+    /// Drop the upload of one call, if it is still coming (the call answered without it).
+    pub fn cancel_call(&self, device: &str, call_id: u32) {
+        let mut uploads = self.uploads();
+        if uploads.get(device).is_some_and(|u| u.call_id == call_id)
+            && let Some(u) = uploads.remove(device)
+        {
+            drop(uploads);
+            u.fail(PhoneError::Invalid);
         }
     }
 

@@ -1,19 +1,31 @@
 //! Away from home: the person's own paired phones reach Nocturne through a sealed channel.
 //!
 //! Off by default: until the person turns it on, nothing is downloaded, started, bound or
-//! connected. The hooks below are what the rest of the shell calls; they do nothing yet.
+//! connected. The hub ([`controller::RemoteHub`]) is made on first use and starts nothing by
+//! itself; at launch it starts only when the person left it on and auto-off is not due.
 
 use std::error::Error;
+use std::sync::{Arc, Mutex};
 
-use nocturne_contract::{PrivacyView, RemoteAdvanced};
-use std::sync::Mutex;
+use jiff::Timestamp;
+use nocturne_contract::{
+    EVENT_DEVICE, EVENT_PAIRING, EVENT_REMOTE, PairingRequest, PhoneHello, PrivacyView,
+    RemoteAdvanced, RemoteConnection,
+};
+use nocturne_engine::{DeviceRow, Engine};
+use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use tauri::{AppHandle, Manager, Runtime};
+use crate::ask::AskLane;
+use crate::state::AppState;
 
 pub mod audit;
+pub mod autooff;
+pub mod controller;
 pub mod crypto;
+pub mod dispatch;
 pub mod frame;
 pub mod incoming;
+pub mod keepawake;
 pub mod limits;
 pub mod listener;
 pub mod name;
@@ -26,8 +38,173 @@ pub mod static_files;
 #[doc(hidden)]
 pub mod testing;
 
-/// Called once the app is ready. Starts nothing unless the person turned Away from home on.
-pub fn install<R: Runtime>(_app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
+use controller::{Helpers, RealHelpers, RemoteHub};
+use static_files::PhoneFiles;
+
+/// The managed hub.
+pub struct Hub(pub Arc<RemoteHub>);
+
+/// The shell around the hub: the app's store, clock, events and asks.
+pub struct AppShell<R: Runtime> {
+    pub app: AppHandle<R>,
+}
+
+impl<R: Runtime> session::Shell for AppShell<R> {
+    fn engine(&self) -> Option<Engine> {
+        self.app.try_state::<AppState>()?.engine().ok()
+    }
+
+    fn wall_now(&self) -> Timestamp {
+        self.app
+            .try_state::<AppState>()
+            .map(|s| s.now())
+            .unwrap_or_else(Timestamp::now)
+    }
+
+    fn changed(&self) {
+        let app = self.app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Some(hub) = hub(&app) {
+                let view = hub.view().await;
+                if let Err(e) = app.emit(EVENT_REMOTE, &view) {
+                    tracing::warn!("could not emit Away from home's state: {e}");
+                }
+                crate::os::tray::refresh_away(&app, &view);
+            }
+        });
+    }
+
+    fn pairing_request(&self, request: &PairingRequest) {
+        if let Err(e) = self.app.emit(EVENT_PAIRING, request) {
+            tracing::warn!("could not emit a pairing request: {e}");
+        }
+        crate::window::show_main(&self.app);
+    }
+
+    fn device_active(&self, device: &DeviceRow) {
+        if let Some(hub) = hub(&self.app) {
+            let view = hub.device_view(device);
+            if let Err(e) = self.app.emit(EVENT_DEVICE, &view) {
+                tracing::warn!("could not emit a phone's use: {e}");
+            }
+        }
+        self.changed();
+    }
+
+    fn hello(&self, device: &DeviceRow, connection: RemoteConnection) -> PhoneHello {
+        PhoneHello {
+            computer_name: name::computer_name(),
+            device_name: device.name.clone(),
+            connection,
+            version: self.app.package_info().version.to_string(),
+        }
+    }
+
+    fn stop_phone(&self, device_id: &str) {
+        if let Some(state) = self.app.try_state::<AppState>() {
+            state
+                .asks
+                .cancel_lane(&AskLane::Phone(device_id.to_string()));
+        }
+    }
+}
+
+/// The phone app's files from the app's own assets.
+struct AppFiles<R: Runtime>(AppHandle<R>);
+
+impl<R: Runtime> PhoneFiles for AppFiles<R> {
+    fn get(&self, name: &str) -> Option<Vec<u8>> {
+        self.0
+            .asset_resolver()
+            .get(format!("phone/{name}"))
+            .map(|a| a.bytes)
+    }
+}
+
+fn phone_files<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn PhoneFiles> {
+    if cfg!(debug_assertions) {
+        let built = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ui/dist/phone");
+        Arc::new(static_files::DirFiles(built))
+    } else {
+        Arc::new(AppFiles(app.clone()))
+    }
+}
+
+/// Make and manage the hub from these parts (tests pass fakes before first use).
+pub fn manage_hub<R: Runtime>(
+    app: &AppHandle<R>,
+    helpers: Arc<dyn Helpers>,
+    host: Arc<dyn nocturne_intelligence::Host>,
+    files: Arc<dyn PhoneFiles>,
+    mono: Arc<dyn limits::Mono>,
+) -> Option<Arc<RemoteHub>> {
+    let dir = app.try_state::<AppState>()?.data_dir.join("remote");
+    let hub = RemoteHub::new(
+        Arc::new(AppShell { app: app.clone() }),
+        helpers,
+        host,
+        files,
+        mono,
+        dir,
+    );
+    hub.core
+        .set_dispatch(Arc::new(dispatch::AppDispatch { app: app.clone() }));
+    app.manage(Hub(hub));
+    app.try_state::<Hub>().map(|h| h.0.clone())
+}
+
+static MAKING: Mutex<()> = Mutex::new(());
+
+/// The hub, made on first use with the real helpers. Making it starts nothing.
+pub fn hub<R: Runtime>(app: &AppHandle<R>) -> Option<Arc<RemoteHub>> {
+    if let Some(h) = app.try_state::<Hub>() {
+        return Some(h.0.clone());
+    }
+    let _making = MAKING.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some(h) = app.try_state::<Hub>() {
+        return Some(h.0.clone());
+    }
+    let dir = app.try_state::<AppState>()?.data_dir.join("remote");
+    manage_hub(
+        app,
+        Arc::new(RealHelpers {
+            dirs: nocturne_helpers::HelperDirs { root: dir },
+        }),
+        Arc::new(nocturne_intelligence::SystemHost::new()),
+        phone_files(app),
+        Arc::new(limits::RealMono),
+    )
+}
+
+/// Called once the app is ready. Starts nothing unless the person left Away from home on and
+/// auto-off is not due.
+pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
+    let Some(hub) = hub(app) else {
+        return Ok(());
+    };
+    audit::prune(&hub.core);
+    let stopper = hub.clone();
+    if let Some(state) = app.try_state::<AppState>() {
+        state.on_exit(Box::new(move || {
+            let h = stopper.clone();
+            tauri::async_runtime::block_on(async move { h.shutdown().await });
+        }));
+    }
+    let Some(row) = hub.core.shell.engine().and_then(|e| e.remote_state().ok()) else {
+        return Ok(());
+    };
+    if !row.wanted_on {
+        return Ok(());
+    }
+    tauri::async_runtime::spawn(async move {
+        if hub.auto_off_due() {
+            let _ = hub.stop(false).await;
+            return;
+        }
+        if let Err(e) = hub.start(row.connection, false).await {
+            tracing::warn!("Away from home did not start again: {:?}", e.code);
+        }
+    });
     Ok(())
 }
 
@@ -35,11 +212,22 @@ pub fn install<R: Runtime>(_app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
 /// sign out where needed.
 pub async fn before_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     note(app, "before_delete_everything");
+    if let Some(h) = app.try_state::<Hub>() {
+        h.0.before_delete().await;
+    }
 }
 
 /// After the store is wiped: remove Away from home's own files.
 pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     note(app, "on_delete_everything");
+    match app.try_state::<Hub>() {
+        Some(h) => h.0.after_delete(),
+        None => {
+            if let Some(state) = app.try_state::<AppState>() {
+                let _ = std::fs::remove_dir_all(state.data_dir.join("remote"));
+            }
+        }
+    }
 }
 
 /// The delete-everything hooks that ran, in order, when the app manages one. Tests manage it
@@ -60,11 +248,15 @@ fn note<R: Runtime>(app: &AppHandle<R>, hook: &'static str) {
 }
 
 /// Away from home's part of the privacy view.
-pub fn privacy<R: Runtime>(_app: &AppHandle<R>, _view: &mut PrivacyView) {}
+pub fn privacy<R: Runtime>(app: &AppHandle<R>, view: &mut PrivacyView) {
+    if let Some(h) = hub(app) {
+        h.privacy(view);
+    }
+}
 
 /// Away from home's part of the advanced details, once it has been set up.
-pub fn advanced<R: Runtime>(_app: &AppHandle<R>) -> Option<RemoteAdvanced> {
-    None
+pub fn advanced<R: Runtime>(app: &AppHandle<R>) -> Option<RemoteAdvanced> {
+    hub(app)?.advanced()
 }
 
 /// Whether a phone may reach a command.

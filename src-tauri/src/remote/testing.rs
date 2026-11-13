@@ -343,3 +343,240 @@ pub fn paired_in(engine: &Engine, c: &SecretKey, name: &str) -> PhoneKeys {
         cpub: crypto::public_bytes(&c.public_key()).to_vec(),
     }
 }
+
+// Fake helpers -------------------------------------------------------------------------------
+
+use std::collections::HashSet;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+
+use nocturne_helpers::{
+    HelperError, HelperInfo, HelperKind, InstallProgress, Installed, KeyCarrier, LaunchSpec,
+    Transport, TransportState,
+};
+use tokio::sync::{Notify, watch};
+use tokio_util::sync::CancellationToken;
+
+use super::controller::{Helpers, RemoteHub};
+
+/// A helper that runs nothing: it reports what a test tells it to.
+pub struct FakeTransport {
+    pub kind: Mutex<HelperKind>,
+    pub carrier: Mutex<KeyCarrier>,
+    tx: Mutex<Option<watch::Sender<TransportState>>>,
+    pub starts: AtomicUsize,
+    pub stops: AtomicUsize,
+    pub sign_outs: AtomicUsize,
+    pub last_spec: Mutex<Option<LaunchSpec>>,
+    /// Addresses handed out on each start, in turn; the last repeats.
+    pub addresses: Mutex<Vec<String>>,
+    /// Report `Up` as soon as it starts.
+    pub auto_up: AtomicBool,
+    /// What it reports on start instead of `Up` (sign-in, a failure).
+    pub on_start: Mutex<Option<TransportState>>,
+}
+
+impl FakeTransport {
+    pub fn new() -> Arc<FakeTransport> {
+        Arc::new(FakeTransport {
+            kind: Mutex::new(HelperKind::Cloudflared),
+            carrier: Mutex::new(if cfg!(unix) {
+                KeyCarrier::UnixSocket
+            } else {
+                KeyCarrier::HostHeader
+            }),
+            tx: Mutex::new(None),
+            starts: AtomicUsize::new(0),
+            stops: AtomicUsize::new(0),
+            sign_outs: AtomicUsize::new(0),
+            last_spec: Mutex::new(None),
+            addresses: Mutex::new(vec![format!("https://{TEST_HOST}")]),
+            auto_up: AtomicBool::new(true),
+            on_start: Mutex::new(None),
+        })
+    }
+
+    /// Report a state, as the helper would.
+    pub fn set(&self, st: TransportState) {
+        if let Some(tx) = self.tx.lock().unwrap().as_ref() {
+            let _ = tx.send(st);
+        }
+    }
+
+    pub fn running(&self) -> bool {
+        self.starts.load(Ordering::SeqCst) > self.stops.load(Ordering::SeqCst)
+    }
+
+    fn next_address(&self) -> String {
+        let mut a = self.addresses.lock().unwrap();
+        if a.len() > 1 {
+            a.remove(0)
+        } else {
+            a[0].clone()
+        }
+    }
+}
+
+struct Shared(Arc<FakeTransport>);
+
+impl Transport for Shared {
+    fn kind(&self) -> HelperKind {
+        *self.0.kind.lock().unwrap()
+    }
+
+    fn key_carrier(&self) -> KeyCarrier {
+        *self.0.carrier.lock().unwrap()
+    }
+
+    fn start(
+        &self,
+        spec: LaunchSpec,
+    ) -> nocturne_helpers::BoxFuture<'_, Result<watch::Receiver<TransportState>, HelperError>> {
+        Box::pin(async move {
+            let t = &self.0;
+            t.starts.fetch_add(1, Ordering::SeqCst);
+            *t.last_spec.lock().unwrap() = Some(spec);
+            let first = match t.on_start.lock().unwrap().clone() {
+                Some(st) => st,
+                None if t.auto_up.load(Ordering::SeqCst) => TransportState::Up {
+                    address: t.next_address(),
+                    route: None,
+                },
+                None => TransportState::Starting,
+            };
+            let (tx, rx) = watch::channel(first);
+            *t.tx.lock().unwrap() = Some(tx);
+            Ok(rx)
+        })
+    }
+
+    fn stop(&self) -> nocturne_helpers::BoxFuture<'_, Result<(), HelperError>> {
+        Box::pin(async move {
+            self.0.stops.fetch_add(1, Ordering::SeqCst);
+            *self.0.tx.lock().unwrap() = None;
+            Ok(())
+        })
+    }
+
+    fn sign_out(&self) -> nocturne_helpers::BoxFuture<'_, Result<(), HelperError>> {
+        Box::pin(async move {
+            self.0.sign_outs.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+    }
+
+    fn info(&self) -> Option<HelperInfo> {
+        None
+    }
+}
+
+/// Helpers that download, check and run nothing real.
+pub struct FakeHelpers {
+    pub dir: std::path::PathBuf,
+    pub installed: Arc<Mutex<HashSet<HelperKind>>>,
+    /// The binary on disk no longer matches its pin.
+    pub changed: AtomicBool,
+    pub transport: Arc<FakeTransport>,
+    pub installs: AtomicUsize,
+    /// Lets a waiting download finish.
+    pub finish: Arc<Notify>,
+    pub progress: Mutex<Vec<InstallProgress>>,
+}
+
+impl FakeHelpers {
+    pub fn new(dir: &std::path::Path) -> Arc<FakeHelpers> {
+        Arc::new(FakeHelpers {
+            dir: dir.to_path_buf(),
+            installed: Arc::new(Mutex::new(HashSet::new())),
+            changed: AtomicBool::new(false),
+            transport: FakeTransport::new(),
+            installs: AtomicUsize::new(0),
+            finish: Arc::new(Notify::new()),
+            progress: Mutex::new(Vec::new()),
+        })
+    }
+
+    pub fn install_now(&self, kind: HelperKind) {
+        self.installed.lock().unwrap().insert(kind);
+    }
+
+    fn pinned(&self, kind: HelperKind) -> Installed {
+        Installed {
+            kind,
+            version: "2026.1.0".into(),
+            sha256: "0".repeat(64),
+            path: self.dir.join("fake-helper"),
+        }
+    }
+}
+
+impl Helpers for FakeHelpers {
+    fn installed(&self, kind: HelperKind) -> Option<Installed> {
+        self.installed
+            .lock()
+            .unwrap()
+            .contains(&kind)
+            .then(|| self.pinned(kind))
+    }
+
+    fn verify(&self, _installed: &Installed) -> Result<(), HelperError> {
+        if self.changed.load(Ordering::SeqCst) {
+            Err(HelperError::Mismatch)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn install(
+        &self,
+        kind: HelperKind,
+        progress: watch::Sender<InstallProgress>,
+        cancel: CancellationToken,
+    ) -> nocturne_helpers::BoxFuture<'static, Result<Installed, HelperError>> {
+        self.installs.fetch_add(1, Ordering::SeqCst);
+        let steps = self.progress.lock().unwrap().clone();
+        let (finish, installed, pinned) = (
+            self.finish.clone(),
+            self.installed.clone(),
+            self.pinned(kind),
+        );
+        Box::pin(async move {
+            for p in steps {
+                let _ = progress.send(p);
+                tokio::task::yield_now().await;
+            }
+            tokio::select! {
+                () = finish.notified() => {
+                    installed.lock().unwrap().insert(kind);
+                    Ok(pinned)
+                }
+                () = cancel.cancelled() => Err(HelperError::Stopped),
+            }
+        })
+    }
+
+    fn transport(&self, kind: HelperKind, _installed: &Installed) -> Box<dyn Transport> {
+        *self.transport.kind.lock().unwrap() = kind;
+        Box::new(Shared(self.transport.clone()))
+    }
+}
+
+/// Manage a hub on fakes for `app`; call before anything else touches Away from home.
+pub fn install_fakes<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    host: Arc<dyn nocturne_intelligence::Host>,
+    files: &std::path::Path,
+) -> (Arc<RemoteHub>, Arc<FakeHelpers>, Arc<ManualMono>) {
+    use tauri::Manager;
+    let dir = app.state::<crate::state::AppState>().data_dir.clone();
+    let helpers = FakeHelpers::new(&dir);
+    let mono = ManualMono::new();
+    let hub = super::manage_hub(
+        app,
+        helpers.clone(),
+        host,
+        Arc::new(super::static_files::DirFiles(files.to_path_buf())),
+        mono.clone(),
+    )
+    .expect("an app with a data folder");
+    (hub, helpers, mono)
+}

@@ -1,134 +1,124 @@
 //! Away from home: turning it on and off, adding and removing phones, and its activity. Main
-//! window only. Until the feature lands, `get_remote` reports it off and the rest are
-//! unavailable.
+//! window only (the capability file grants these to no other window). Every body reads the
+//! store and the hub; none takes an address, a path or a command from the interface.
 
 use nocturne_contract::{
-    AutoOff, DeviceView, PairingOffer, RemoteConnection, RemoteEvent, RemoteSettingsPatch,
-    RemoteState, RemoteView,
+    DeviceView, PairingOffer, RemoteConnection, RemoteEvent, RemoteSettingsPatch, RemoteView,
 };
 use tauri::{AppHandle, Runtime};
+use tauri_plugin_opener::OpenerExt;
 
 use crate::error::CommandError;
+use crate::remote::controller::RemoteHub;
 
-fn not_yet() -> CommandError {
-    CommandError::unavailable("Away from home is not available yet")
-}
-
-/// The view of a computer that has never turned Away from home on.
-fn off_view() -> RemoteView {
-    RemoteView {
-        state: RemoteState::Off,
-        connection: RemoteConnection::Simple,
-        auto_off: AutoOff::Unused30Days,
-        keep_awake: false,
-        devices: Vec::new(),
-        sent_to_phones_bytes: 0.0,
-        last_on_at: None,
-        on_since: None,
-        set_up_before: false,
-        installed: Vec::new(),
-        trial: true,
-        pairing: None,
-        computer_name: sysinfo::System::host_name().unwrap_or_default(),
-    }
+fn hub<R: Runtime>(app: &AppHandle<R>) -> Result<std::sync::Arc<RemoteHub>, CommandError> {
+    crate::remote::hub(app).ok_or_else(|| CommandError::unavailable("Nocturne's store is not open"))
 }
 
 #[tauri::command]
-pub async fn get_remote<R: Runtime>(_app: AppHandle<R>) -> Result<RemoteView, CommandError> {
-    Ok(off_view())
+pub async fn get_remote<R: Runtime>(app: AppHandle<R>) -> Result<RemoteView, CommandError> {
+    Ok(hub(&app)?.view().await)
 }
 
 /// Turn on with a connection; `allow_download` is the person's yes to fetching its helper.
 #[tauri::command]
 pub async fn start_remote<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     connection: RemoteConnection,
     allow_download: bool,
 ) -> Result<RemoteView, CommandError> {
-    let _ = (connection, allow_download);
-    Err(not_yet())
+    hub(&app)?.start(connection, allow_download).await
 }
 
 /// Turn off; `remove_all` also unpairs every phone and removes the helper's sign-in.
 #[tauri::command]
 pub async fn stop_remote<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     remove_all: bool,
 ) -> Result<RemoteView, CommandError> {
-    let _ = remove_all;
-    Err(not_yet())
+    hub(&app)?.stop(remove_all).await
 }
 
 #[tauri::command]
 pub async fn pause_remote_download<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
 ) -> Result<RemoteView, CommandError> {
-    Err(not_yet())
+    hub(&app)?.pause_download().await
 }
 
 #[tauri::command]
-pub async fn begin_pairing<R: Runtime>(_app: AppHandle<R>) -> Result<PairingOffer, CommandError> {
-    Err(not_yet())
+pub async fn begin_pairing<R: Runtime>(app: AppHandle<R>) -> Result<PairingOffer, CommandError> {
+    hub(&app)?.begin_pairing().await
 }
 
 #[tauri::command]
 pub async fn decide_pairing<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     pairing_id: String,
     allow: bool,
 ) -> Result<(), CommandError> {
-    let _ = (pairing_id, allow);
-    Err(not_yet())
+    hub(&app)?.decide(&pairing_id, allow).await
 }
 
 #[tauri::command]
-pub async fn cancel_pairing<R: Runtime>(_app: AppHandle<R>) -> Result<(), CommandError> {
-    Err(not_yet())
+pub async fn cancel_pairing<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    hub(&app)?.cancel_pairing();
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn rename_device<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     id: String,
     name: String,
 ) -> Result<DeviceView, CommandError> {
-    let _ = (id, name);
-    Err(not_yet())
+    hub(&app)?.rename_device(&id, &name).await
 }
 
 #[tauri::command]
-pub async fn remove_device<R: Runtime>(_app: AppHandle<R>, id: String) -> Result<(), CommandError> {
-    let _ = id;
-    Err(not_yet())
+pub async fn remove_device<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
+    hub(&app)?.remove_device(&id).await
 }
 
 #[tauri::command]
 pub async fn list_remote_events<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     limit: u32,
 ) -> Result<Vec<RemoteEvent>, CommandError> {
-    let _ = limit;
-    Err(not_yet())
+    let engine = hub(&app)?
+        .core
+        .shell
+        .engine()
+        .ok_or_else(|| CommandError::unavailable("Nocturne's store is not open"))?;
+    let limit = limit.clamp(1, 500);
+    crate::error::blocking(move || engine.remote_events(limit)).await
 }
 
 /// A new `connection` unpairs every phone: their addresses belong to the other one.
 #[tauri::command]
 pub async fn update_remote_settings<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
     patch: RemoteSettingsPatch,
 ) -> Result<RemoteView, CommandError> {
-    let _ = patch;
-    Err(not_yet())
+    hub(&app)?.update_settings(patch).await
 }
 
 /// Opens the sign-in address held in Away from home's state, never one from the interface.
 #[tauri::command]
-pub async fn open_remote_sign_in<R: Runtime>(_app: AppHandle<R>) -> Result<(), CommandError> {
-    Err(not_yet())
+pub async fn open_remote_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    let url = hub(&app)?
+        .sign_in_url()
+        .ok_or_else(|| CommandError::invalid("there is nothing to sign in to"))?;
+    if !url.starts_with("https://") {
+        return Err(CommandError::invalid("there is nothing to sign in to"));
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| CommandError::unavailable("the sign-in page could not be opened"))
 }
 
 /// A new key for this computer; every phone has to be added again.
 #[tauri::command]
-pub async fn new_computer_key<R: Runtime>(_app: AppHandle<R>) -> Result<RemoteView, CommandError> {
-    Err(not_yet())
+pub async fn new_computer_key<R: Runtime>(app: AppHandle<R>) -> Result<RemoteView, CommandError> {
+    hub(&app)?.new_computer_key().await
 }
