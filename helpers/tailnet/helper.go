@@ -200,6 +200,10 @@ func (h *helper) loop(ctx context.Context, lines <-chan inputLine) int {
 			case cmdStop:
 				return 0
 			case cmdLogout:
+				// A sign-out asked for before the backend is up waits for it, so it is not lost.
+				if h.lc == nil {
+					h.awaitStart(ctx, startCh)
+				}
 				h.logout(ctx)
 				return 0
 			default:
@@ -240,6 +244,19 @@ func (h *helper) loop(ctx context.Context, lines <-chan inputLine) int {
 		if h.waiting() {
 			recheck = time.After(recheckEvery)
 		}
+	}
+}
+
+// awaitStart takes the backend start, if it finishes within the sign-out time, so a sign-out
+// asked for early can still be delivered.
+func (h *helper) awaitStart(ctx context.Context, startCh <-chan started) {
+	select {
+	case st := <-startCh:
+		if st.err == nil {
+			h.lc = st.lc
+		}
+	case <-time.After(logoutTimeout):
+	case <-ctx.Done():
 	}
 }
 

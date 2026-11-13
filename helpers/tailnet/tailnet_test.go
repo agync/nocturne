@@ -1045,6 +1045,24 @@ func TestSignInThenSignOut(t *testing.T) {
 	}
 }
 
+// TestSignOutBeforeTheBackendIsReady: a sign-out sent at once waits for the backend instead of
+// failing, so the node is not left registered.
+func TestSignOutBeforeTheBackendIsReady(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*stepTimeout)
+	defer cancel()
+	_, controlURL := startControl(t, controlOpts{https: true})
+	_, tg := unixOrigin(t)
+	h := startHelper(t, ctx, helperConfig(t, controlURL, tg), "")
+	h.send(t, `{"cmd":"logout"}`)
+	h.waitFor(t, stateStopped)
+	if code := h.exitCode(t); code != 0 {
+		t.Fatalf("exit code %d", code)
+	}
+	if strings.Contains(h.output(), `"reason":"logout"`) {
+		t.Fatalf("the sign-out failed:\n%s", h.output())
+	}
+}
+
 func TestValidAuthURL(t *testing.T) {
 	for _, c := range []struct {
 		url, control string
