@@ -21,6 +21,8 @@ use crate::state::AppState;
 
 /// Memories handed to the mind.
 const RETRIEVE_K: usize = 12;
+/// At most this many memories on the other side of an open question are brought in.
+const MAX_SIDES: usize = 4;
 /// How many near matches an "I'm not sure" shows.
 const NEAR: usize = 2;
 /// Asks in flight at once; starting another cancels the oldest.
@@ -270,7 +272,7 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         return;
     }
     let e = engine.clone();
-    let (hits, facts) = match blocking(move || with_disputes(&e, hits)).await {
+    let (hits, found, facts) = match blocking(move || with_disputes(&e, hits)).await {
         Ok(v) => v,
         Err(err) => {
             tracing::error!("could not read the open questions: {:?}", err.code);
@@ -327,7 +329,8 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         .collect();
     // An answer with nothing to cite is not an answer: every claim carries a receipt.
     if meta.not_sure || cited.is_empty() {
-        let near = hits
+        // Near matches are what the search found, never a side brought in from a question.
+        let near = hits[..found]
             .iter()
             .filter_map(|h| {
                 h.memory.receipts.first().map(|r| NearMatch {
@@ -361,24 +364,47 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
 
 /// The facts for the mind: each hit with the memories it disagrees with in an open
 /// which-is-right question. A memory on the other side that the search did not find is brought
-/// in, so the answer can give both and cite both.
+/// in, so the answer can give both and cite both: at most `MAX_SIDES` of them, with the facts
+/// kept to `RETRIEVE_K` by leaving out the lowest hits. A side that can no longer be read (it is
+/// being forgotten) is left out. Returns the facts' hits, how many of them the search found
+/// (they come first), and the facts.
 fn with_disputes(
     engine: &Engine,
     mut hits: Vec<Hit>,
-) -> nocturne_engine::Result<(Vec<Hit>, Vec<Fact>)> {
+) -> nocturne_engine::Result<(Vec<Hit>, usize, Vec<Fact>)> {
     let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
     let disputes = engine.open_disputes(&ids)?;
-    for (a, b) in &disputes {
-        for id in [a, b] {
-            if !hits.iter().any(|h| &h.memory.id == id) {
-                hits.push(Hit {
-                    memory: engine.get_memory(id)?,
+    let mut sides: Vec<Hit> = Vec::new();
+    'hits: for (at, hit) in hits.iter().enumerate() {
+        let id = &hit.memory.id;
+        for (a, b) in &disputes {
+            let other = match (a == id, b == id) {
+                (true, _) => b,
+                (_, true) => a,
+                _ => continue,
+            };
+            if hits.iter().chain(&sides).any(|h| &h.memory.id == other) {
+                continue;
+            }
+            // The hit that asks for this side must stay among the facts once it is added.
+            let drops_hits = hits.len() + sides.len() + 1 > RETRIEVE_K;
+            if sides.len() == MAX_SIDES || (drops_hits && at + sides.len() + 1 >= RETRIEVE_K) {
+                break 'hits;
+            }
+            match engine.get_memory(other) {
+                Ok(memory) => sides.push(Hit {
+                    memory,
                     score: 0.0,
                     let_go: false,
-                });
+                }),
+                Err(nocturne_engine::Error::NotFound(_)) => {}
+                Err(e) => return Err(e),
             }
         }
     }
+    hits.truncate(RETRIEVE_K - sides.len());
+    let found = hits.len();
+    hits.extend(sides);
     let facts = hits
         .iter()
         .map(|h| {
@@ -392,11 +418,12 @@ fn with_disputes(
                         (_, true) => Some(a.clone()),
                         _ => None,
                     })
+                    .filter(|other| hits.iter().any(|h| &h.memory.id == other))
                     .collect(),
             }
         })
         .collect();
-    Ok((hits, facts))
+    Ok((hits, found, facts))
 }
 
 /// Whether the bold spans in `text` can stand one for one, in order, for the `cited` memories

@@ -389,22 +389,19 @@ fn deleting_everything_stops_the_answers_in_flight() {
     assert_eq!(h.state().asks.in_flight(), 0);
 }
 
-/// An open which-is-right question goes to the mind whole: the memory on the other side comes
-/// along even when the search did not find it, each marked as disagreeing with the other, and
-/// both can be cited with their receipts.
-#[test]
-fn both_sides_of_an_open_question_reach_the_mind() {
-    let mind = TestMind::new(AnswerMode::Normal);
-    let h = harness_with_mind(mind.clone());
-    let club = |object: &str, sentence: &str| {
-        nocturne_engine::Candidate::new(
-            "Book club",
-            nocturne_engine::Predicate::Scheduled,
-            object,
-            sentence,
-            0.9,
-        )
-    };
+fn club(object: &str, sentence: &str) -> nocturne_engine::Candidate {
+    nocturne_engine::Candidate::new(
+        "Book club",
+        nocturne_engine::Predicate::Scheduled,
+        object,
+        sentence,
+        0.9,
+    )
+}
+
+/// Book club on Tuesday at the library, and Sam's Wednesday, which a search for the library
+/// does not find. Returns the two memory ids.
+fn club_world(h: &Harness) -> (String, String) {
     let (_, a) = h.learn_candidate(
         "club note",
         club("Tuesday", "Book club meets at the library on Tuesday."),
@@ -414,11 +411,22 @@ fn both_sides_of_an_open_question_reach_the_mind() {
         club("Wednesday", "Sam says it is on Wednesday instead."),
     );
     let (a, b) = (a[0].clone(), b[0].clone());
-    let (found, unrelated) = (h.engine().retrieve("library", None, 12).unwrap(), &b);
+    let found = h.engine().retrieve("library", None, 12).unwrap();
     assert!(
-        found.iter().all(|hit| &hit.memory.id != unrelated),
+        found.iter().all(|hit| hit.memory.id != b),
         "the search alone does not find the other side"
     );
+    (a, b)
+}
+
+/// An open which-is-right question goes to the mind whole: the memory on the other side comes
+/// along even when the search did not find it, each marked as disagreeing with the other, and
+/// both can be cited with their receipts.
+#[test]
+fn both_sides_of_an_open_question_reach_the_mind() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    let (a, b) = club_world(&h);
 
     let (_, done) = done_delta(&h, "Is it at the library?");
     assert_eq!(done.phase, AskPhase::Done);
@@ -428,4 +436,102 @@ fn both_sides_of_an_open_question_reach_the_mind() {
     assert_eq!(side(&b).disputed_by, vec![a.clone()]);
     assert!(done.memory_ids.contains(&a) && done.memory_ids.contains(&b));
     assert_eq!(done.receipts.len(), 2);
+}
+
+/// A side that has been let go, or is being forgotten, does not come back as a live fact, and
+/// the question is still answered from what is left.
+#[test]
+fn a_side_let_go_or_being_forgotten_stays_out() {
+    for gone in ["let go", "forgetting"] {
+        let mind = TestMind::new(AnswerMode::Normal);
+        let h = harness_with_mind(mind.clone());
+        let (a, b) = club_world(&h);
+        let e = h.engine();
+        if gone == "let go" {
+            h.clock.advance_days(100);
+            e.mark_used(std::slice::from_ref(&a), nocturne_engine::UseKind::Answer)
+                .unwrap();
+            e.decay().unwrap();
+            assert_eq!(h.memory(&b).status, nocturne_contract::MemoryStatus::LetGo);
+        } else {
+            let preview = e.preview_forget(std::slice::from_ref(&b), false).unwrap();
+            e.forget_begin_only(&preview.token).unwrap();
+        }
+
+        let (_, done) = done_delta(&h, "Is it at the library?");
+        assert_eq!(done.phase, AskPhase::Done, "{gone}");
+        let given = mind.answered_from.lock().unwrap().last().cloned().unwrap();
+        assert_eq!(given.len(), 1, "{gone}");
+        assert_eq!(given[0].memory.id, a);
+        assert!(given[0].disputed_by.is_empty(), "{gone}");
+    }
+}
+
+/// "Not sure" offers near matches from what the search found, never a side brought in.
+#[test]
+fn near_matches_come_from_the_search_only() {
+    let h = harness_with_mind(TestMind::new(AnswerMode::NotSure));
+    let (a, _) = club_world(&h);
+    let seen = h.ask_deltas();
+    let id = ask(&h, "Is it at the library?");
+    wait_for("the answer", || finished(&seen, &id));
+    let last = deltas_for(&seen, &id).last().cloned().unwrap();
+    assert_eq!(last.phase, AskPhase::NotSure);
+    assert_eq!(last.near.len(), 1);
+    assert_eq!(last.near[0].text, h.memory(&a).sentence);
+}
+
+/// However many open questions the found memories are in, at most four other sides come in,
+/// and the mind never gets more than twelve facts.
+#[test]
+fn sides_brought_in_are_capped() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    for n in 0..14 {
+        let subject = format!("Club {n}");
+        let c = |object: &str, sentence: String| {
+            nocturne_engine::Candidate::new(
+                &subject,
+                nocturne_engine::Predicate::Scheduled,
+                object,
+                &sentence,
+                0.9,
+            )
+        };
+        h.learn_candidate(
+            &format!("note {n}"),
+            c(
+                "Tuesday",
+                format!("Club {n} meets at the library on Tuesday."),
+            ),
+        );
+        h.learn_candidate(
+            &format!("other note {n}"),
+            c(
+                "Wednesday",
+                format!("Someone says club {n} is on Wednesday."),
+            ),
+        );
+    }
+    let (_, done) = done_delta(&h, "At the library?");
+    assert_eq!(done.phase, AskPhase::Done);
+    let given = mind.answered_from.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(given.len(), 12);
+    let sides = given
+        .iter()
+        .filter(|f| f.memory.sentence.starts_with("Someone"))
+        .count();
+    assert_eq!(sides, 4);
+    let ids: Vec<&String> = given.iter().map(|f| &f.memory.id).collect();
+    for f in &given {
+        assert!(
+            f.disputed_by.iter().all(|other| ids.contains(&other)),
+            "every side named is among the facts"
+        );
+    }
+    assert_eq!(
+        given.iter().filter(|f| !f.disputed_by.is_empty()).count(),
+        8,
+        "four found memories and their four sides"
+    );
 }
