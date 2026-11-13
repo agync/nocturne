@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { Button } from "../../components/Button/Button";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { StatusLabel } from "../../components/StatusLabel/StatusLabel";
 import { addDays } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -118,11 +120,11 @@ export default function Recent() {
     rows.filter((i) => i.status === "kept" || i.status === "reading").length;
 
   return (
-    <div className={styles.screen}>
+    <ScreenSheet>
       <header className={styles.header}>
         <div className={styles.headerText}>
           <p className={styles.eyebrow}>{t("recent.eyebrow")}</p>
-          <h1 className={styles.title}>{t("recent.title")}</h1>
+          <h1 className="t-page-title">{t("recent.title")}</h1>
         </div>
         <p className={styles.waiting}>{t("recent.waiting", { count: waiting })}</p>
       </header>
@@ -158,9 +160,8 @@ export default function Recent() {
                 </span>
                 <span className={styles.act}>
                   {action ? (
-                    <button
-                      type="button"
-                      className={styles.action}
+                    <Button
+                      variant="quiet"
                       aria-label={t("recent.action.aria", {
                         action: t(ACTION_COPY[action.type]),
                         title: item.title,
@@ -168,7 +169,7 @@ export default function Recent() {
                       onClick={(event) => void run(item, action, event.currentTarget.closest("li"))}
                     >
                       {t(ACTION_COPY[action.type])}
-                    </button>
+                    </Button>
                   ) : locked ? (
                     <span className={styles.locked}>{t("recent.locked")}</span>
                   ) : null}
@@ -187,6 +188,6 @@ export default function Recent() {
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
       </div>
-    </div>
+    </ScreenSheet>
   );
 }
