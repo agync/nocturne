@@ -46,6 +46,7 @@ pub async fn get_privacy<R: Runtime>(app: AppHandle<R>) -> Result<PrivacyView, C
         view.sent_to_internet_bytes = sent;
         view.sent_measured = measured;
         view.mind_bytes = state.status.mind_bytes();
+        crate::remote::privacy(&app, &mut view);
         Ok(view)
     })
     .await
@@ -86,15 +87,23 @@ pub async fn delete_everything<R: Runtime>(
     app: AppHandle<R>,
     confirm_phrase: String,
 ) -> Result<(), CommandError> {
+    // A wrong phrase stops nothing: it is checked before any hook runs.
+    if confirm_phrase != nocturne_engine::DELETE_PHRASE {
+        return Err(CommandError::invalid(
+            "type the phrase exactly to delete everything",
+        ));
+    }
     // Nothing in flight may answer from what is about to go.
     app.state::<AppState>().asks.cancel_all();
     // Nothing may land in the store after the wipe: the watched folder stops first.
     crate::os::before_delete_everything(&app).await;
+    crate::remote::before_delete_everything(&app).await;
     if let Err(e) = change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await {
         crate::os::after_failed_delete(&app).await;
         return Err(e);
     }
     crate::os::on_delete_everything(&app);
+    crate::remote::on_delete_everything(&app);
     let state = app.state::<AppState>();
     let handle = app.clone();
     blocking_cmd(move || {
@@ -158,7 +167,7 @@ pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView,
             last_tidy: None,
             agents,
             log_dir: state.log_dir().to_string_lossy().into_owned(),
-            remote: None,
+            remote: crate::remote::advanced(&app),
         })
     })
     .await

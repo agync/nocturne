@@ -197,7 +197,7 @@ pub async fn take_quick_drop<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String
 }
 
 /// The file extension for a mime type (parameters such as `;codecs=opus` ignored).
-fn extension_for(mime: &str) -> Option<&'static str> {
+pub(crate) fn extension_for(mime: &str) -> Option<&'static str> {
     let essence = mime.split(';').next()?.trim().to_ascii_lowercase();
     Some(match essence.as_str() {
         "audio/webm" => "webm",

@@ -7,7 +7,21 @@ use std::collections::{BTreeMap, BTreeSet};
 use nocturne_app_lib::COMMAND_NAMES;
 
 /// Commands the interface does not call, by design.
-const SHELL_ONLY: &[&str] = &[];
+const SHELL_ONLY: &[&str] = &[
+    "get_remote",
+    "start_remote",
+    "stop_remote",
+    "pause_remote_download",
+    "begin_pairing",
+    "decide_pairing",
+    "cancel_pairing",
+    "rename_device",
+    "remove_device",
+    "list_remote_events",
+    "update_remote_settings",
+    "open_remote_sign_in",
+    "new_computer_key",
+];
 
 fn read(rel: &str) -> String {
     let path = format!("{}/{rel}", env!("CARGO_MANIFEST_DIR"));

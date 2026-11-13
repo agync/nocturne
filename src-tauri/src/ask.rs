@@ -6,6 +6,9 @@
 //! Phases: `searching`, then `waking` when the mind is starting, then `reading`, then
 //! `streaming` deltas, then a terminal one: `done`, `notSure` (with the two nearest memories),
 //! `nothing` (retrieval found nothing) or `unavailable` (no mind, or it failed).
+//!
+//! The windows ask through `start`. A paired phone asks through `start_with`: in its own lane,
+//! about public memories only, with the deltas going to its session instead of an event.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -25,13 +28,50 @@ const RETRIEVE_K: usize = 12;
 const MAX_SIDES: usize = 4;
 /// How many near matches an "I'm not sure" shows.
 const NEAR: usize = 2;
-/// Asks in flight at once; starting another cancels the oldest.
+/// Asks in flight at once from the windows; starting another cancels the oldest of them.
 const MAX_ASKS: usize = 2;
+/// Asks in flight at once from one phone.
+const MAX_PHONE_ASKS: usize = 1;
 /// How long a waking mind is waited for, and how often it is asked.
 const WAKE_LIMIT: Duration = Duration::from_secs(120);
 const WAKE_POLL: Duration = Duration::from_millis(500);
 /// Lets the invoke response carrying the id reach the page before the first delta does.
 const START_DELAY: Duration = Duration::from_millis(25);
+
+/// Who asked. Each lane has its own cap, and a new ask evicts only within its own lane.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AskLane {
+    Desktop,
+    /// A paired phone, by device id.
+    Phone(String),
+}
+
+impl AskLane {
+    fn cap(&self) -> usize {
+        match self {
+            AskLane::Desktop => MAX_ASKS,
+            AskLane::Phone(_) => MAX_PHONE_ASKS,
+        }
+    }
+}
+
+/// Where an ask's deltas go.
+#[derive(Debug, Clone)]
+pub enum AskSink {
+    /// `ask-delta` events, for the windows.
+    Emit,
+    /// One receiver only, such as a phone's session; never an event.
+    Channel(mpsc::UnboundedSender<AskDelta>),
+}
+
+#[derive(Debug, Clone)]
+pub struct AskOptions {
+    /// Private memories are dropped after retrieval, before the mind sees anything, and from
+    /// near matches.
+    pub public_only: bool,
+    pub lane: AskLane,
+    pub sink: AskSink,
+}
 
 /// The cancel switch of one ask. Emitting and cancelling take the same lock, so once
 /// `cancel` returns no delta can follow.
@@ -48,25 +88,27 @@ struct Live {
 /// The asks in flight, oldest first.
 #[derive(Default)]
 pub struct AskRegistry {
-    live: Mutex<Vec<(String, Live)>>,
+    live: Mutex<Vec<(String, AskLane, Live)>>,
 }
 
 impl AskRegistry {
-    fn live(&self) -> std::sync::MutexGuard<'_, Vec<(String, Live)>> {
+    fn live(&self) -> std::sync::MutexGuard<'_, Vec<(String, AskLane, Live)>> {
         self.live.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// Track a new ask, cancelling the oldest if there are already `MAX_ASKS`.
-    fn register(&self, id: &str) -> Arc<Gate> {
+    /// Track a new ask, cancelling the oldest in its lane if the lane is full.
+    fn register(&self, id: &str, lane: AskLane) -> Arc<Gate> {
         let gate = Arc::new(Gate::default());
         let evicted = {
             let mut live = self.live();
             let mut out = Vec::new();
-            while live.len() >= MAX_ASKS {
-                out.push(live.remove(0).1);
+            while live.iter().filter(|(_, l, _)| *l == lane).count() >= lane.cap() {
+                let oldest = live.iter().position(|(_, l, _)| *l == lane).unwrap_or(0);
+                out.push(live.remove(oldest).2);
             }
             live.push((
                 id.to_string(),
+                lane,
                 Live {
                     gate: gate.clone(),
                     task: None,
@@ -79,15 +121,15 @@ impl AskRegistry {
     }
 
     fn set_task(&self, id: &str, task: JoinHandle<()>) {
-        match self.live().iter_mut().find(|(i, _)| i == id) {
-            Some((_, l)) => l.task = Some(task),
+        match self.live().iter_mut().find(|(i, _, _)| i == id) {
+            Some((_, _, l)) => l.task = Some(task),
             // Already finished: nothing to track.
             None => drop(task),
         }
     }
 
     fn finish(&self, id: &str) {
-        self.live().retain(|(i, _)| i != id);
+        self.live().retain(|(i, _, _)| i != id);
     }
 
     /// Stop one ask. No delta for it is emitted after this returns. Unknown or finished
@@ -96,22 +138,54 @@ impl AskRegistry {
         let found = {
             let mut live = self.live();
             live.iter()
-                .position(|(i, _)| i == id)
-                .map(|at| live.remove(at).1)
+                .position(|(i, _, _)| i == id)
+                .map(|at| live.remove(at).2)
         };
         if let Some(l) = found {
             l.stop();
         }
     }
 
+    /// Stop one ask only if it belongs to `lane`: a phone stops its own asks and no other.
+    /// Returns whether it was there.
+    pub fn cancel_in(&self, lane: &AskLane, id: &str) -> bool {
+        let found = {
+            let mut live = self.live();
+            live.iter()
+                .position(|(i, l, _)| i == id && l == lane)
+                .map(|at| live.remove(at).2)
+        };
+        let was = found.is_some();
+        if let Some(l) = found {
+            l.stop();
+        }
+        was
+    }
+
+    /// Stop every ask in one lane (a phone that was removed). No delta of them follows.
+    pub fn cancel_lane(&self, lane: &AskLane) {
+        let gone: Vec<Live> = {
+            let mut live = self.live();
+            let (out, keep): (Vec<_>, Vec<_>) = live.drain(..).partition(|(_, l, _)| l == lane);
+            *live = keep;
+            out.into_iter().map(|(_, _, l)| l).collect()
+        };
+        gone.into_iter().for_each(Live::stop);
+    }
+
     /// Stop every ask (after a forget, an undo or deleting everything). No delta follows.
     pub fn cancel_all(&self) {
-        let all: Vec<Live> = self.live().drain(..).map(|(_, l)| l).collect();
+        let all: Vec<Live> = self.live().drain(..).map(|(_, _, l)| l).collect();
         all.into_iter().for_each(Live::stop);
     }
 
     pub fn in_flight(&self) -> usize {
         self.live().len()
+    }
+
+    /// Asks in flight in one lane.
+    pub fn in_flight_in(&self, lane: &AskLane) -> usize {
+        self.live().iter().filter(|(_, l, _)| l == lane).count()
     }
 }
 
@@ -141,6 +215,7 @@ struct Sink<R: Runtime> {
     app: AppHandle<R>,
     id: String,
     gate: Arc<Gate>,
+    out: AskSink,
     /// Set once a terminal phase has gone out (or the ask was cancelled).
     ended: std::sync::atomic::AtomicBool,
 }
@@ -170,8 +245,19 @@ impl<R: Runtime> Sink<R> {
         ) {
             self.ended.store(true, std::sync::atomic::Ordering::SeqCst);
         }
-        if !*cancelled && let Err(e) = self.app.emit(EVENT_ASK, &delta) {
-            tracing::warn!("could not emit an answer step: {e}");
+        if *cancelled {
+            return;
+        }
+        match &self.out {
+            AskSink::Emit => {
+                if let Err(e) = self.app.emit(EVENT_ASK, &delta) {
+                    tracing::warn!("could not emit an answer step: {e}");
+                }
+            }
+            // A receiver that has gone away (a closed session) just stops listening.
+            AskSink::Channel(tx) => {
+                let _ = tx.send(delta);
+            }
         }
     }
 
@@ -180,15 +266,30 @@ impl<R: Runtime> Sink<R> {
     }
 }
 
-/// Start answering `question`; returns the ask id at once.
+/// Start answering `question` for the windows; returns the ask id at once.
 pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
+    start_with(
+        app,
+        question,
+        AskOptions {
+            public_only: false,
+            lane: AskLane::Desktop,
+            sink: AskSink::Emit,
+        },
+    )
+}
+
+/// Start answering `question` with the given options; returns the ask id at once.
+pub fn start_with<R: Runtime>(app: &AppHandle<R>, question: String, opts: AskOptions) -> String {
     let state = app.state::<AppState>();
     let id = format!("ask_{}", random_hex(8));
-    let gate = state.asks.register(&id);
+    let gate = state.asks.register(&id, opts.lane);
+    let public_only = opts.public_only;
     let sink = Arc::new(Sink {
         app: app.clone(),
         id: id.clone(),
         gate,
+        out: opts.sink,
         ended: std::sync::atomic::AtomicBool::new(false),
     });
     let finished = app.clone();
@@ -198,7 +299,8 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
         // The work runs on its own task so that a panic in it (a mind that misbehaves) still
         // ends the ask with a terminal phase instead of leaving the page waiting.
         let worker = sink.clone();
-        let outcome = tokio::spawn(async move { answer(&worker, question).await }).await;
+        let outcome =
+            tokio::spawn(async move { answer(&worker, question, public_only).await }).await;
         if outcome.is_err() {
             tracing::error!("an answer failed unexpectedly");
         }
@@ -217,7 +319,7 @@ fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
+async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool) {
     let state = sink.app.state::<AppState>();
     let (Some(mind), Ok(engine)) = (state.mind.get(), state.engine()) else {
         sink.phase(AskPhase::Unavailable);
@@ -266,13 +368,16 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
             }
         };
     // A let-go memory is one the person no longer sees; it does not answer questions.
-    let hits: Vec<Hit> = hits.into_iter().filter(|h| !h.let_go).collect();
+    let hits: Vec<Hit> = hits
+        .into_iter()
+        .filter(|h| !h.let_go && !(public_only && h.memory.private))
+        .collect();
     if hits.is_empty() {
         sink.phase(AskPhase::Nothing);
         return;
     }
     let e = engine.clone();
-    let (hits, found, facts) = match blocking(move || with_disputes(&e, hits)).await {
+    let (hits, found, facts) = match blocking(move || with_disputes(&e, hits, public_only)).await {
         Ok(v) => v,
         Err(err) => {
             tracing::error!("could not read the open questions: {:?}", err.code);
@@ -366,11 +471,12 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
 /// which-is-right question. A memory on the other side that the search did not find is brought
 /// in, so the answer can give both and cite both: at most `MAX_SIDES` of them, with the facts
 /// kept to `RETRIEVE_K` by leaving out the lowest hits. A side that can no longer be read (it is
-/// being forgotten) is left out. Returns the facts' hits, how many of them the search found
+/// being forgotten), or a private one when `public_only`, is left out. Returns the facts' hits, how many of them the search found
 /// (they come first), and the facts.
 fn with_disputes(
     engine: &Engine,
     mut hits: Vec<Hit>,
+    public_only: bool,
 ) -> nocturne_engine::Result<(Vec<Hit>, usize, Vec<Fact>)> {
     let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
     let disputes = engine.open_disputes(&ids)?;
@@ -392,6 +498,7 @@ fn with_disputes(
                 break 'hits;
             }
             match engine.get_memory(other) {
+                Ok(memory) if public_only && memory.private => {}
                 Ok(memory) => sides.push(Hit {
                     memory,
                     score: 0.0,

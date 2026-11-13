@@ -197,6 +197,32 @@ async fn failures_carry_a_code_and_the_desktop_commands_are_unavailable() {
     assert_eq!(body["code"], "unavailable");
 }
 
+/// The preview never drives Away from home, even the read that works in the window.
+#[tokio::test(flavor = "multi_thread")]
+async fn preview_refuses_remote_commands() {
+    let r = rig();
+    assert!(r.h.call("get_remote", json!({})).is_ok());
+    for command in [
+        "get_remote",
+        "start_remote",
+        "stop_remote",
+        "pause_remote_download",
+        "begin_pairing",
+        "decide_pairing",
+        "cancel_pairing",
+        "rename_device",
+        "remove_device",
+        "list_remote_events",
+        "update_remote_settings",
+        "open_remote_sign_in",
+        "new_computer_key",
+    ] {
+        let (status, body) = invoke(&r, command, json!({})).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");
+        assert_eq!(body["code"], "unavailable", "{command}");
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_recording_is_kept_from_the_raw_body() {
     let r = rig();

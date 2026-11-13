@@ -535,3 +535,190 @@ fn sides_brought_in_are_capped() {
         "four found memories and their four sides"
     );
 }
+
+/// Start an ask the way a phone does: its own lane, its own channel, public memories only.
+fn phone_ask(
+    h: &Harness,
+    device: &str,
+    question: &str,
+) -> (
+    String,
+    tokio::sync::mpsc::UnboundedReceiver<nocturne_contract::AskDelta>,
+) {
+    use nocturne_app_lib::ask::{AskLane, AskOptions, AskSink, start_with};
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = h.app.handle().clone();
+    let opts = AskOptions {
+        public_only: true,
+        lane: AskLane::Phone(device.into()),
+        sink: AskSink::Channel(tx),
+    };
+    let question = question.to_string();
+    let id = tauri::async_runtime::block_on(async move { start_with(&handle, question, opts) });
+    (id, rx)
+}
+
+/// Drain a phone ask's channel until its terminal phase.
+fn phone_deltas(
+    rx: &mut tokio::sync::mpsc::UnboundedReceiver<nocturne_contract::AskDelta>,
+) -> Vec<nocturne_contract::AskDelta> {
+    let mut got: Vec<nocturne_contract::AskDelta> = Vec::new();
+    wait_for("the phone's answer", || {
+        while let Ok(d) = rx.try_recv() {
+            got.push(d);
+        }
+        got.last().is_some_and(|d| is_terminal(d.phase))
+    });
+    got
+}
+
+/// A phone's ask never reaches a private memory: not in what the mind is given (found or
+/// brought in as the other side of a question), not in the answer, not in near matches. Its
+/// deltas go to its own channel, never out as events.
+#[test]
+fn public_only_ask_never_sees_private() {
+    for mode in [AnswerMode::Normal, AnswerMode::NotSure] {
+        let mind = TestMind::new(mode);
+        let h = harness_with_mind(mind.clone());
+        let (a, b) = club_world(&h);
+        let (_, secret) = h.learn(
+            "secret note",
+            "Book club at the library is really about Zebrafish47.",
+            "Book club",
+            "Zebrafish47",
+        );
+        let e = h.engine();
+        e.set_private(&secret, true).unwrap();
+        e.set_private(&b, true).unwrap();
+        let events = h.ask_deltas();
+
+        let (id, mut rx) = phone_ask(&h, "dev1", "Is book club at the library?");
+        let got = phone_deltas(&mut rx);
+        assert!(got.iter().all(|d| d.ask_id == id));
+        let given = mind.answered_from.lock().unwrap().last().cloned().unwrap();
+        assert!(
+            given.iter().all(|f| f.memory.id == a),
+            "only the public memory reaches the mind"
+        );
+        let text = serde_json::to_string(&got).unwrap();
+        assert!(!text.contains("Zebrafish47"), "{text}");
+        assert!(!text.contains(&secret) && !text.contains(&b), "{text}");
+        let last = got.last().unwrap();
+        match mode {
+            AnswerMode::NotSure => assert_eq!(last.near.len(), 1),
+            _ => assert_eq!(last.memory_ids, vec![a.clone()]),
+        }
+        assert!(deltas_for(&events, &id).is_empty(), "never an event");
+
+        // The same question from the window still sees everything.
+        let (_, done) = done_delta(&h, "Is book club at the library?");
+        if matches!(mode, AnswerMode::Normal) {
+            assert!(done.memory_ids.contains(&secret), "{:?}", done.memory_ids);
+        }
+    }
+}
+
+/// Each lane has its own room: a phone's asks evict only that phone's older ask, and the
+/// windows' asks evict only the windows' oldest.
+#[test]
+fn phone_lane_never_evicts_desktop() {
+    use nocturne_app_lib::ask::AskLane;
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(400))));
+    let seen = h.ask_deltas();
+    let asks = &h.state().asks;
+    let a = ask(&h, "dentist");
+    let b = ask(&h, "dentist");
+    let (_, mut first) = phone_ask(&h, "dev1", "dentist");
+    let (_, mut second) = phone_ask(&h, "dev1", "dentist");
+    let (_, mut other) = phone_ask(&h, "dev2", "dentist");
+    assert_eq!(
+        asks.in_flight_in(&AskLane::Desktop),
+        2,
+        "the windows keep both"
+    );
+    assert_eq!(asks.in_flight_in(&AskLane::Phone("dev1".into())), 1);
+    assert_eq!(asks.in_flight_in(&AskLane::Phone("dev2".into())), 1);
+
+    let c = ask(&h, "dentist");
+    assert_eq!(asks.in_flight_in(&AskLane::Desktop), 2);
+    assert_eq!(asks.in_flight(), 4, "a window's ask left the phones alone");
+
+    wait_for("the windows' newest", || {
+        finished(&seen, &b) && finished(&seen, &c)
+    });
+    assert_eq!(
+        phone_deltas(&mut second).last().unwrap().phase,
+        AskPhase::Done
+    );
+    assert_eq!(
+        phone_deltas(&mut other).last().unwrap().phase,
+        AskPhase::Done
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(!finished(&seen, &a), "the windows' oldest was cancelled");
+    let mut evicted = Vec::new();
+    while let Ok(d) = first.try_recv() {
+        evicted.push(d.phase);
+    }
+    assert!(
+        !evicted.iter().any(|p| is_terminal(*p)),
+        "the phone's older ask was cancelled: {evicted:?}"
+    );
+}
+
+/// A phone stops only its own asks: another phone's and the windows' go on.
+#[test]
+fn a_phone_cancels_only_its_own_asks() {
+    use nocturne_app_lib::ask::AskLane;
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(300))));
+    let seen = h.ask_deltas();
+    let asks = &h.state().asks;
+    let desktop = ask(&h, "dentist");
+    let (mine, mut mine_rx) = phone_ask(&h, "dev1", "dentist");
+    let (theirs, mut theirs_rx) = phone_ask(&h, "dev2", "dentist");
+    let lane = AskLane::Phone("dev1".into());
+    assert!(!asks.cancel_in(&lane, &desktop), "not the windows' ask");
+    assert!(!asks.cancel_in(&lane, &theirs), "not another phone's ask");
+    assert!(asks.cancel_in(&lane, &mine));
+    assert!(!asks.cancel_in(&lane, &mine), "cancelling twice is fine");
+
+    wait_for("the windows' answer", || finished(&seen, &desktop));
+    assert_eq!(
+        phone_deltas(&mut theirs_rx).last().unwrap().phase,
+        AskPhase::Done
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    let mut stopped = Vec::new();
+    while let Ok(d) = mine_rx.try_recv() {
+        stopped.push(d.phase);
+    }
+    assert!(!stopped.iter().any(|p| is_terminal(*p)), "{stopped:?}");
+}
+
+/// Removing a phone stops its answers and leaves everyone else's.
+#[test]
+fn removing_a_phone_stops_its_answers() {
+    use nocturne_app_lib::ask::AskLane;
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(300))));
+    let seen = h.ask_deltas();
+    let asks = &h.state().asks;
+    let desktop = ask(&h, "dentist");
+    let (_, mut removed_rx) = phone_ask(&h, "dev1", "dentist");
+    let (_, mut other_rx) = phone_ask(&h, "dev2", "dentist");
+    let lane = AskLane::Phone("dev1".into());
+    asks.cancel_lane(&lane);
+    assert_eq!(asks.in_flight_in(&lane), 0);
+    assert_eq!(asks.in_flight(), 2);
+
+    wait_for("the windows' answer", || finished(&seen, &desktop));
+    assert_eq!(
+        phone_deltas(&mut other_rx).last().unwrap().phase,
+        AskPhase::Done
+    );
+    std::thread::sleep(Duration::from_millis(200));
+    let mut stopped = Vec::new();
+    while let Ok(d) = removed_rx.try_recv() {
+        stopped.push(d.phase);
+    }
+    assert!(!stopped.iter().any(|p| is_terminal(*p)), "{stopped:?}");
+}

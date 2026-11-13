@@ -959,6 +959,74 @@ fn quick_capture_window_cannot_delete() {
     assert!(kept["item"]["id"].is_string());
 }
 
+/// Away from home's commands belong to the main window only.
+#[test]
+fn remote_commands_refused_from_quick_capture() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    for cmd in [
+        "get_remote",
+        "start_remote",
+        "stop_remote",
+        "pause_remote_download",
+        "begin_pairing",
+        "decide_pairing",
+        "cancel_pairing",
+        "rename_device",
+        "remove_device",
+        "list_remote_events",
+        "update_remote_settings",
+        "open_remote_sign_in",
+        "new_computer_key",
+    ] {
+        assert_eq!(h.code_from(&quick, cmd, json!({})), "invalid", "{cmd}");
+    }
+}
+
+/// A mistyped phrase deletes nothing and runs no Away from home hook (once it does real work,
+/// a hook would stop the listener and sign out); the right phrase runs both, in order.
+#[test]
+fn a_wrong_phrase_runs_no_remote_hook() {
+    use nocturne_app_lib::remote::HookLog;
+    let h = build(None, |b| b.manage(HookLog::default()));
+    assert_eq!(
+        h.code(
+            "delete_everything",
+            json!({"confirmPhrase": "delete it all"})
+        ),
+        "invalid"
+    );
+    assert!(h.app.state::<HookLog>().calls().is_empty());
+    h.ok(
+        "delete_everything",
+        json!({"confirmPhrase": nocturne_engine::DELETE_PHRASE}),
+    );
+    assert_eq!(
+        h.app.state::<HookLog>().calls(),
+        ["before_delete_everything", "on_delete_everything"]
+    );
+}
+
+/// A fresh store has Away from home off: the default connection, nothing paired, nothing sent,
+/// and no folder of its own.
+#[test]
+fn get_remote_is_off_on_a_fresh_store() {
+    let h = harness();
+    let v = h.ok("get_remote", json!({}));
+    assert_eq!(v["state"], json!({"type": "off"}));
+    assert_eq!(v["connection"], "simple");
+    assert_eq!(v["autoOff"], "unused30Days");
+    assert_eq!(v["keepAwake"], false);
+    assert_eq!(v["devices"], json!([]));
+    assert_eq!(v["sentToPhonesBytes"], 0.0);
+    assert_eq!(v["pairing"], Value::Null);
+    assert_eq!(v["setUpBefore"], false);
+    assert!(!h.dir.path().join("remote").exists());
+    let privacy = h.ok("get_privacy", json!({}));
+    assert_eq!(privacy["remoteOn"], false);
+    assert_eq!(h.ok("get_advanced", json!({}))["remote"], Value::Null);
+}
+
 #[test]
 fn unknown_label_refused() {
     let h = harness();

@@ -251,6 +251,9 @@ pub fn run() {
             if let Err(e) = os::install(app) {
                 tracing::warn!("the desktop integrations did not start: {e}");
             }
+            if let Err(e) = remote::install(app) {
+                tracing::warn!("Away from home did not start: {e}");
+            }
         }
         handle_run_event(app, &event);
     });

@@ -10,7 +10,8 @@ use tauri::webview::InvokeRequest;
 pub const RAW: &[&str] = &["keep_recording", "keep_bytes"];
 
 /// Commands that reach for the desktop (dialogs, the file manager, the printer, the shell) or
-/// for a folder named by the caller. A browser has none of that.
+/// for a folder named by the caller. A browser has none of that. Away from home is never
+/// driven from the preview either.
 pub const UNAVAILABLE: &[&str] = &[
     "pick_folder",
     "pick_files",
@@ -22,6 +23,19 @@ pub const UNAVAILABLE: &[&str] = &[
     "quick_keep_command",
     "take_quick_drop",
     "export_to",
+    "get_remote",
+    "start_remote",
+    "stop_remote",
+    "pause_remote_download",
+    "begin_pairing",
+    "decide_pairing",
+    "cancel_pairing",
+    "rename_device",
+    "remove_device",
+    "list_remote_events",
+    "update_remote_settings",
+    "open_remote_sign_in",
+    "new_computer_key",
 ];
 
 pub fn unavailable() -> Value {

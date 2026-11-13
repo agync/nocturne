@@ -1,5 +1,6 @@
 //! The morning page, the day's question, which-is-right and ticking things off.
 
+use jiff::civil::Date;
 use nocturne_contract::{
     Edition, NeedsYouEntry, PageSummary, PageVariant, PageView, QuestionChoice, WhichResolved,
 };
@@ -19,17 +20,31 @@ pub async fn get_page<R: Runtime>(
     date: Option<String>,
 ) -> Result<PageView, CommandError> {
     let day = date.as_deref().map(parse_date).transpose()?;
+    page_view(&app, day, Edition::Screen).await
+}
+
+/// The body of `get_page` for any edition. Every edition but the screen leaves out the lines
+/// about private memories.
+pub(crate) async fn page_view<R: Runtime>(
+    app: &AppHandle<R>,
+    day: Option<Date>,
+    edition: Edition,
+) -> Result<PageView, CommandError> {
     let services = app.state::<AppState>().services();
-    run(app, move |app| async move {
+    run(app.clone(), move |app| async move {
         let engine = engine(&app)?;
         let (mut page, composed) = blocking(move || {
-            if let Some(p) = engine.page(day)? {
+            let saved = match edition {
+                Edition::Screen => engine.page(day)?,
+                _ => engine.page_for(day, edition)?,
+            };
+            if let Some(p) = saved {
                 return Ok((p, false));
             }
             let next = engine.next_page_date()?;
             match day {
                 Some(d) if d != next => Err(nocturne_engine::Error::NotFound(format!("page {d}"))),
-                _ => Ok((engine.compose_page(next, Edition::Screen)?, true)),
+                _ => Ok((engine.compose_page(next, edition)?, true)),
             }
         })
         .await?;
@@ -50,7 +65,18 @@ pub async fn get_page<R: Runtime>(
 
 #[tauri::command]
 pub async fn list_pages<R: Runtime>(app: AppHandle<R>) -> Result<Vec<PageSummary>, CommandError> {
-    read(app, |e| e.pages()).await
+    pages_for(&app, Edition::Screen).await
+}
+
+/// The body of `list_pages` for any edition. Every edition but the screen gives the template
+/// headline when a line is private now and counts public needs-you lines only, the count
+/// `nocturne_engine::needs_you_count` gives for that edition of the page (and the one a phone's
+/// status carries).
+pub(crate) async fn pages_for<R: Runtime>(
+    app: &AppHandle<R>,
+    edition: Edition,
+) -> Result<Vec<PageSummary>, CommandError> {
+    read(app.clone(), move |e| e.pages_for(edition)).await
 }
 
 #[tauri::command]

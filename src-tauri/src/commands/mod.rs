@@ -11,7 +11,7 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::error::{CommandError, blocking, guard};
 use crate::state::{AppState, refresh_status};
 
-mod capture;
+pub(crate) mod capture;
 mod editions;
 mod files;
 pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_each, keep_paths};
@@ -19,7 +19,8 @@ mod forget;
 mod memories;
 mod needs;
 mod os;
-mod page;
+pub(crate) mod page;
+mod remote;
 mod settings;
 mod system;
 
@@ -88,6 +89,19 @@ pub const COMMAND_NAMES: &[&str] = &[
     "open_original",
     "open_export",
     "open_logs",
+    "get_remote",
+    "start_remote",
+    "stop_remote",
+    "pause_remote_download",
+    "begin_pairing",
+    "decide_pairing",
+    "cancel_pairing",
+    "rename_device",
+    "remove_device",
+    "list_remote_events",
+    "update_remote_settings",
+    "open_remote_sign_in",
+    "new_computer_key",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -159,6 +173,19 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         files::open_original,
         files::open_export,
         files::open_logs,
+        remote::get_remote,
+        remote::start_remote,
+        remote::stop_remote,
+        remote::pause_remote_download,
+        remote::begin_pairing,
+        remote::decide_pairing,
+        remote::cancel_pairing,
+        remote::rename_device,
+        remote::remove_device,
+        remote::list_remote_events,
+        remote::update_remote_settings,
+        remote::open_remote_sign_in,
+        remote::new_computer_key,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();
