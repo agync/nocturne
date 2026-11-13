@@ -57,15 +57,15 @@
   color: var(--ink2);
 }
 
-.section[aria-current="true"] {
+.jump[aria-current="true"] {
   color: var(--ink);
 }
 
-.section[aria-current="true"] .time:first-child {
+.jump[aria-current="true"] .time:first-child {
   color: var(--accent);
 }
 
-.section[aria-current="true"] .name {
+.jump[aria-current="true"] .name {
   font-weight: 500;
 }
 

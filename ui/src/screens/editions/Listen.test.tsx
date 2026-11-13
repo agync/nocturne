@@ -59,6 +59,9 @@ const at = (audio: HTMLAudioElement, seconds: number) => {
   });
 };
 
+/** The speed as shown: the last text in the readout, after its hidden label. */
+const speed = () => screen.getByTestId("speed").lastChild?.textContent;
+
 const status = () =>
   screen.getAllByRole("status").find((s) => s.classList.contains("sr-only")) as HTMLElement;
 
@@ -68,9 +71,18 @@ describe("Listen", () => {
     expect(screen.getByText(/^Listen · Friday 13 November · Voice: Emma$/)).toBeInTheDocument();
     const items = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem");
     expect(items[0]).toHaveTextContent("The night in one line");
-    expect(items[0]).toHaveAttribute("aria-current", "true");
+    expect(within(items[0] as HTMLElement).getByRole("button")).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Play" })).not.toHaveAttribute("aria-pressed");
     expect(screen.getByRole("slider", { name: "Position" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Read the page" })).toHaveAttribute(
+      "href",
+      "#/pages/2026-11-13",
+    );
+    expect(screen.getByTestId("speed").tagName).not.toBe("OUTPUT");
     expect(audio.getAttribute("src")).toMatch(/^(blob:|mock-audio)/);
   });
 
@@ -105,7 +117,7 @@ describe("Listen", () => {
     await userEvent.keyboard("{ArrowLeft}{ArrowLeft}");
     expect(audio.currentTime).toBe(0);
 
-    const second = screen.getAllByRole("listitem")[1] as HTMLElement;
+    const second = within(screen.getAllByRole("listitem")[1] as HTMLElement).getByRole("button");
     await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
     expect(second).toHaveAttribute("aria-current", "true");
     expect(audio.currentTime).toBe(4);
@@ -149,18 +161,18 @@ describe("Listen", () => {
   it("speed_saves_voice_speed", async () => {
     const { engine } = await open();
     const save = vi.spyOn(engine, "updateSettings");
-    expect(screen.getByLabelText("Speed")).toHaveTextContent("1×");
+    expect(speed()).toBe("1×");
     await userEvent.keyboard("]");
-    expect(screen.getByLabelText("Speed")).toHaveTextContent("1.1×");
+    expect(speed()).toBe("1.1×");
     await waitFor(() => expect(save).toHaveBeenCalledOnce());
     expect(save.mock.calls[0]?.[0]).toMatchObject({ voiceSpeed: 1.1, voice: null });
     expect((await engine.getSettings()).voiceSpeed).toBe(1.1);
     await userEvent.keyboard("[[[[[[");
-    expect(screen.getByLabelText("Speed")).toHaveTextContent("0.8×");
+    expect(speed()).toBe("0.8×");
     await userEvent.keyboard("[[");
     expect(save).toHaveBeenCalledTimes(4);
     await userEvent.click(screen.getByRole("button", { name: "Faster" }));
-    expect(screen.getByLabelText("Speed")).toHaveTextContent("0.9×");
+    expect(speed()).toBe("0.9×");
   });
 
   it("starts at the saved speed", async () => {
@@ -171,7 +183,7 @@ describe("Listen", () => {
       pageTime: null,
     } as never);
     const { audio } = await open(engine);
-    expect(screen.getByLabelText("Speed")).toHaveTextContent("1.25×");
+    expect(speed()).toBe("1.25×");
     expect(audio.playbackRate).toBe(1.25);
   });
 
@@ -217,6 +229,25 @@ describe("Listen", () => {
     speak.mockRestore();
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     await screen.findByRole("list", { name: "Sections" });
+  });
+
+  it("tells a voice that failed from one that is not ready", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "speakPage").mockRejectedValueOnce(new EngineError("internal", "failed"));
+    renderApp({ hash: "#/listen/2026-11-13", engine });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("I couldn’t read it aloud just now.");
+    expect(alert).not.toHaveTextContent("still getting ready");
+    expect(screen.getByRole("link", { name: "Read the page" })).toBeInTheDocument();
+  });
+
+  it("says the private-safe headline when a line was left out", async () => {
+    const engine = createMockEngine();
+    const page = await engine.getPage("2026-11-13");
+    const line = page.needsYou.find((l) => l.memoryIds.length > 0);
+    await engine.setPrivate(line?.memoryIds[0] as string, true);
+    await open(engine);
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Friday 13 November");
   });
 
   it("says a missing page and a changing page in words", async () => {

@@ -24,7 +24,7 @@
   "listen.unavailable": "Nocturne is still getting ready, so it can’t read aloud yet.",
   "listen.missing": "There is no page for that day.",
   "listen.busy": "The page changed while it was being read out. Try again.",
-  "listen.failed": "I couldn’t get the voice ready. Nothing was lost.",
+  "listen.failed": "I couldn’t read it aloud just now. Nothing was lost.",
   "listen.skipped": "Private items are never read aloud. {count, plural, one {One was} =2 {Two were} =3 {Three were} other {# were}} skipped.",
   "listen.keys": "Space plays or pauses. Left and right arrows move ten seconds. Shift with an arrow changes section. Square brackets change the speed.",
   "listen.read": "Read the page",

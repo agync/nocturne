@@ -22,7 +22,6 @@ const clock = (seconds: number): string => {
 function counts(page: PageView): Partial<Record<SpokenKind, number>> {
   const live = (n: PageView["needsYou"]) => n.filter((l) => !l.forgotten).length;
   return {
-    needsYou: live(page.needsYou),
     changed: Math.min(6, live(page.changed)),
     comingUp: Math.min(6, live(page.upcoming)),
     letGo: live(page.letGo),
@@ -112,9 +111,7 @@ function PlayerView({
   }, [onKey]);
 
   const src = path.startsWith("blob:") ? path : platform.originalSrc(path);
-  const ends = sections.map(
-    (s, i) => (sections[i + 1]?.startMs ?? durationMs) / 1000 - 0 * s.startMs,
-  );
+  const ends = sections.map((_, i) => (sections[i + 1]?.startMs ?? durationMs) / 1000);
 
   return (
     <div ref={body} className={styles.body} tabIndex={-1}>
@@ -124,16 +121,17 @@ function PlayerView({
         </p>
         <h1 className={styles.headline}>{page.headline}</h1>
       </header>
-      {/* biome-ignore lint/a11y/useMediaCaption: the transcript is the page itself, shown below */}
+      {/* biome-ignore lint/a11y/useMediaCaption: what it says is the page itself, linked below */}
       <audio ref={audio} src={src} preload="auto" />
       <ol className={styles.sections} aria-label={t("listen.sections")}>
         {sections.map((s, i) => (
-          <li
-            key={`${s.kind}-${s.startMs}`}
-            className={styles.section}
-            aria-current={i === player.index ? "true" : undefined}
-          >
-            <button type="button" className={styles.jump} onClick={() => player.jump(i)}>
+          <li key={`${s.kind}-${s.startMs}`} className={styles.section}>
+            <button
+              type="button"
+              className={styles.jump}
+              aria-current={i === player.index ? "true" : undefined}
+              onClick={() => player.jump(i)}
+            >
               <span className={styles.time}>{clock(s.startMs / 1000)}</span>
               <span className={styles.name}>{sectionLabel(s.kind, page)}</span>
               <span className={styles.time}>{clock(ends[i] ?? 0)}</span>
@@ -182,7 +180,7 @@ function PlayerView({
           <Button variant="quiet" onClick={player.previous}>
             {t("listen.previous")}
           </Button>
-          <Button variant="primary" onClick={player.toggle} aria-pressed={player.playing}>
+          <Button variant="primary" onClick={player.toggle}>
             {player.playing ? t("listen.pause") : t("listen.play")}
           </Button>
           <Button variant="quiet" onClick={player.next}>
@@ -192,15 +190,19 @@ function PlayerView({
             <Button variant="quiet" onClick={player.slower} aria-label={t("listen.slower")}>
               −
             </Button>
-            <output className={styles.rate} aria-label={t("listen.speed.label")}>
+            <span className={styles.rate} data-testid="speed">
+              <span className="sr-only">{t("listen.speed.label")} </span>
               {t("listen.speed.value", { speed: player.rate })}
-            </output>
+            </span>
             <Button variant="quiet" onClick={player.faster} aria-label={t("listen.faster")}>
               +
             </Button>
           </span>
         </div>
         <p className={styles.keys}>{t("listen.keys")}</p>
+        <a className={styles.back} href={`#/pages/${page.date}`}>
+          {t("listen.read")}
+        </a>
       </section>
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
