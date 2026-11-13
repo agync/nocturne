@@ -42,7 +42,8 @@ pub async fn list_entities<R: Runtime>(
     read(app, move |e| e.entities_matching(kind, query.as_deref())).await
 }
 
-/// Correct a memory: the old one closes into history, the new one is returned.
+/// Correct a memory: the old one closes into history, the new one is returned. `text` is the
+/// whole corrected sentence.
 #[tauri::command]
 pub async fn correct_memory<R: Runtime>(
     app: AppHandle<R>,
@@ -50,7 +51,7 @@ pub async fn correct_memory<R: Runtime>(
     text: String,
 ) -> Result<MemoryView, CommandError> {
     change(app, move |e| {
-        let new_id = e.correct(&id, CorrectPatch::object(&text))?;
+        let new_id = e.correct(&id, CorrectPatch::text(&text))?;
         e.get_memory(&new_id)
     })
     .await

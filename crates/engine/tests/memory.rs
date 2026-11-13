@@ -1199,6 +1199,65 @@ fn correct_closes_the_old_row_into_history_and_cites_the_same_sources() {
 }
 
 #[test]
+fn correcting_by_text_replaces_the_sentence_and_keeps_one_history_line() {
+    let f = fixture();
+    let mut c = cand(
+        "Trinks",
+        Predicate::Scheduled,
+        "6.30",
+        "Trinks with friends at 6.30 today.",
+    );
+    c.subject_kind = Some(nocturne_contract::EntityKind::Thing);
+    let (_, first) = learn(&f.engine, "Trinks with friends at 6.30 today.", c);
+    let fixed = "Drinks with friends at 6.30 today.";
+    let second = f
+        .engine
+        .correct(&first, nocturne_engine::CorrectPatch::text(fixed))
+        .unwrap();
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, second);
+    assert_eq!(rows[0].sentence, fixed);
+    assert_eq!(
+        rows[0].was.as_deref(),
+        Some("Trinks with friends at 6.30 today.")
+    );
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM memories WHERE superseded_at IS NOT NULL"
+        ),
+        1
+    );
+
+    let again = "Drinks with friends at 7 today.";
+    let third = f
+        .engine
+        .correct(&second, nocturne_engine::CorrectPatch::text(again))
+        .unwrap();
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].id, third);
+    assert_eq!(rows[0].sentence, again);
+    assert_eq!(rows[0].was.as_deref(), Some(fixed));
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM memories WHERE superseded_at IS NOT NULL"
+        ),
+        2
+    );
+    assert_eq!(f.engine.history(&third).unwrap().len(), 3);
+    let entities = f.engine.entities_matching(None, None).unwrap();
+    assert_eq!(entities.len(), 1);
+    assert_eq!(
+        entities[0].name, "Trinks",
+        "a correction leaves the entity alone"
+    );
+    assert_eq!(entities[0].memory_count, 1);
+}
+
+#[test]
 fn certainty_mapping() {
     let f = fixture();
     let mut low = cand("Pat", Predicate::Knows, "a rumour", "Pat knows a rumour.");

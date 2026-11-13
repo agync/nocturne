@@ -715,7 +715,14 @@ fn memory_commands_browse_and_change() {
 
     let fixed = h.ok("correct_memory", json!({"id": mem, "text": "oat cortado"}));
     assert_ne!(fixed["id"], json!(mem));
-    assert!(fixed["sentence"].as_str().unwrap().contains("oat cortado"));
+    assert_eq!(fixed["sentence"], json!("oat cortado"));
+    let again = h.ok(
+        "correct_memory",
+        json!({"id": fixed["id"], "text": "oat flat white"}),
+    );
+    assert_eq!(again["sentence"], json!("oat flat white"));
+    assert_eq!(again["was"], json!("oat cortado"));
+    let fixed = again;
     assert_eq!(
         h.code("correct_memory", json!({"id": fixed["id"], "text": "  "})),
         "invalid"

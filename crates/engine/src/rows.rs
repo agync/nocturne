@@ -122,7 +122,8 @@ pub(crate) const MEM_COLS: &str = "m.id, m.subject, m.subject_key, m.entity_id, 
     m.object, m.object_key, m.sentence, m.valid_from, m.valid_to, m.due, m.recorded_at, \
     m.superseded_at, m.superseded_by, m.confidence, m.status, m.confirmed, m.last_used, \
     m.let_go_at, m.done, m.keep_forever, m.private, m.suggest_private, m.tags, \
-    (SELECT o.object FROM memories o WHERE o.superseded_by = m.id \
+    (SELECT CASE WHEN m.sentence = m.object THEN o.sentence ELSE o.object END \
+       FROM memories o WHERE o.superseded_by = m.id \
        AND o.forgetting = 0 ORDER BY o.recorded_at DESC, o.id LIMIT 1), \
     (SELECT COUNT(*) FROM memory_sources s WHERE s.memory_id = m.id), \
     (SELECT COUNT(*) FROM memory_sources s JOIN items i ON i.id = s.item_id \

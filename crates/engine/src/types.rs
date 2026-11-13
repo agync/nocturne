@@ -226,6 +226,16 @@ impl CorrectPatch {
             ..Default::default()
         }
     }
+
+    /// A correction by the person's own words: the sentence becomes exactly `text`, and the
+    /// object becomes it too, so the previous text is what the change line shows.
+    pub fn text(text: &str) -> Self {
+        CorrectPatch {
+            object: text.to_string(),
+            sentence: Some(text.to_string()),
+            ..Default::default()
+        }
+    }
 }
 
 /// The result of a completed forget. `fully_scrubbed` is false when the write-ahead log could
