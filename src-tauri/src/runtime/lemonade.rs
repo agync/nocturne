@@ -324,8 +324,8 @@ fn retry_later<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     });
 }
 
-/// Replace the engine with a fresh one. Does nothing while another replacement is under way, so
-/// the timed retry and "Try again" cannot start two engines.
+/// Replace an engine that has given up (or is missing) with a fresh one. Does nothing while
+/// another replacement is under way, so the timed retry and "Try again" cannot start two engines.
 pub(super) async fn relaunch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     if services
         .relaunching
@@ -333,11 +333,15 @@ pub(super) async fn relaunch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Serv
     {
         return;
     }
-    let old = services.lemonade.lock().await.take();
-    if let Some(old) = old {
-        old.stop(services.opts.quit_budget).await;
+    // A healthy engine is left alone: both the timed retry and "Try again" can arrive after
+    // another attempt has already put one back.
+    if services.engine_needs_replacing().await {
+        let old = services.lemonade.lock().await.take();
+        if let Some(old) = old {
+            old.stop(services.opts.quit_budget).await;
+        }
+        launch(app, services).await;
     }
-    launch(app, services).await;
     services
         .relaunching
         .store(false, std::sync::atomic::Ordering::SeqCst);
@@ -355,6 +359,17 @@ pub async fn retry_engine<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandE
 }
 
 impl Services {
+    /// True when there is no engine, or the one there has given up.
+    async fn engine_needs_replacing(&self) -> bool {
+        match &*self.lemonade.lock().await {
+            None => true,
+            Some(engine) => matches!(
+                *engine.supervisor.state().borrow(),
+                RuntimeState::Failed { .. }
+            ),
+        }
+    }
+
     /// Take the engine out to stop it (quitting).
     pub(super) async fn take_engine(&self) -> Option<Lemonade> {
         self.lemonade.lock().await.take()

@@ -193,6 +193,15 @@ impl Lab {
         })
     }
 
+    /// How many times the fake engine has been started in this lab.
+    fn launches(&self) -> u64 {
+        let dirs = Dirs::new(self._bundle.path(), self.h.dir.path().join("engine"));
+        std::fs::read_to_string(dirs.cache().join("fake-launches"))
+            .ok()
+            .and_then(|t| t.trim().parse().ok())
+            .unwrap_or(0)
+    }
+
     fn has_mind(&self) -> bool {
         self.h.state().mind.get().is_some()
     }
@@ -402,6 +411,37 @@ fn try_again_starts_the_engine_now_instead_of_waiting_for_the_timer() {
     wait_for("the mind to come back", || lab.has_mind());
     wait_for("the notice to go", || !lab.has_notice("restarts"));
     wait_for("setup to read done again", || lab.setup_phase() == "done");
+}
+
+#[test]
+fn try_again_while_the_engine_is_healthy_leaves_it_alone() {
+    let lab = lab(Plan::new("downloaded=all").installed(Tier::Small));
+    wait_for("the mind to arrive", || lab.has_mind());
+    let pid = block_on(lab.services.engine_pid());
+    let launches = lab.launches();
+    lab.h.ok("retry_engine", json!({}));
+    assert_eq!(block_on(lab.services.engine_pid()), pid, "the same engine");
+    assert_eq!(lab.launches(), launches, "nothing was started");
+    assert!(lab.has_mind() && lab.engine_answers());
+}
+
+#[test]
+fn two_presses_of_try_again_start_one_engine() {
+    let lab = lab(Plan {
+        restart_limit: 1,
+        ..Plan::new("downloaded=all").installed(Tier::Small)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    crash_until_it_gives_up(&lab);
+    wait_for("the notice", || lab.has_notice("restarts"));
+    let launches = lab.launches();
+    let app = lab.h.app.handle().clone();
+    let (first, second) =
+        block_on(async { tokio::join!(runtime::retry_engine(&app), runtime::retry_engine(&app)) });
+    assert!(first.is_ok() && second.is_ok());
+    wait_for("the mind to come back", || lab.has_mind());
+    assert!(lab.engine_answers());
+    assert_eq!(lab.launches(), launches + 1, "one engine, not two");
 }
 
 #[test]
