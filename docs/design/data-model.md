@@ -82,6 +82,43 @@ landfill.
 
 Forgetting is not a status: the row is removed. See [forgetting](#forgetting).
 
+## Filing: names, merges and moves
+
+A memory is filed under one person, place or thing (an entity). Its `subject` and `subject_key` are
+that entity's name and key, kept on the row so search and matching need no join. The person can
+change how things are filed. Each change is explicit, logged and reversible, and none of them
+deletes anything.
+
+| Change | Rule |
+|---|---|
+| Rename | The entity takes the new name. Every memory filed under it, including earlier versions, takes it as `subject`. The old name is kept as a former name. Current memories whose sentence says the old name, as a whole word and in the same case, say the new one. Saved pages keep what they said that day. |
+| Merge | Offered when a new name is one another entity already has. Everything filed under the first moves to the second, which keeps its name; the first stays hidden, so the merge can be taken back. A claim both already held the same way is kept once, with both receipts. |
+| Re-file | One memory, with its earlier versions, moves to another entity or to a new one. Its words are not touched. It remembers what it was first filed under (`moved_from`). |
+| Undo | Each change returns an id. Taking it back restores names, filing and wording exactly, as long as nothing since has made that impossible. Changes undo newest first: a rename waits for any later rename or merge of that entity, and a merge for any later change that touches either entity. An undo that cannot finish whole fails and changes nothing. |
+
+A claim read again must not undo these choices. The overnight tidy and any other re-read run the
+same path as the first read, so it asks, before matching, what the person has decided:
+
+1. A subject that is a former name of an entity, and that no live entity carries, is read as that
+   entity's current name, and its sentence follows. The same holds for the names of an entity that
+   was merged in. What the read writes is noted against the change, so taking the change back
+   takes that back too.
+2. A memory the person moved is found again by the name it was first filed under, but only by
+   the item that first said it. Any other item that says something about that name is about
+   that name, so it neither reinforces, closes nor conflicts with the moved memory.
+3. A claim forgotten under any of these names stays forgotten under all of them.
+
+A name is matched by its key whatever the kind of thing, so two things never share one. Where
+older data has two, a subject files under the one of the kind asked for, then a person, a place,
+a thing, then by id.
+
+Forgetting removes an entity once nothing is filed under it. A thing merged into another stays,
+hidden, for as long as the one it was merged into does, so a forget that has nothing to do with
+a merge does not take its undo away. A move whose source has been forgotten cannot be taken back.
+An export lists former names and where a moved memory was first filed, and leaves out things
+merged into another, which the one that remains is also known by. Delete everything removes every
+one of these rows.
+
 ## Search
 
 SQLite FTS5 indexes `subject`, `predicate`, and `obj`. The query is tokenised and matched with BM25.
