@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use super::SleepGuard;
 
 const CALL_LIMIT: Duration = Duration::from_secs(1);
+const START_CHECK: Duration = Duration::from_millis(50);
 const PMSET: &str = "/usr/bin/pmset";
 const IOREG: &str = "/usr/sbin/ioreg";
 const CAFFEINATE: &str = "/usr/bin/caffeinate";
@@ -92,12 +93,15 @@ impl Caffeinate {
     pub(super) fn start(watch_pid: u32) -> Option<Caffeinate> {
         let mut child = Command::new(CAFFEINATE)
             .args(["-i", "-w", &watch_pid.to_string()])
+            .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .ok()?;
-        // A bad argument or a missing tool ends it at once: then nothing is held.
+        // A bad argument ends it within a moment, which a look right after the spawn can miss:
+        // wait a little, so a guard is only handed out for something still running.
+        std::thread::sleep(START_CHECK);
         match child.try_wait() {
             Ok(None) => Some(Caffeinate { child }),
             _ => None,
@@ -247,6 +251,13 @@ mod tests {
         assert!(alive(pid), "caffeinate runs while the guard lives");
         drop(held);
         assert!(!alive(pid), "caffeinate is gone once the guard is dropped");
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn a_caffeinate_that_ends_at_once_hands_out_no_guard() {
+        // Watching a process that does not exist makes caffeinate exit straight away.
+        assert!(Caffeinate::start(u32::MAX - 1).is_none());
     }
 
     #[cfg(target_os = "macos")]
