@@ -200,7 +200,7 @@ describe("acting on what is waiting", () => {
     engine.extra = [unconfirmed()];
     await open(engine);
     await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
-    expect(await screen.findByRole("dialog", { name: "Forget 1 thing?" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Forget 1 memory?" })).toBeVisible();
   });
 
   it("an action that fails says so and keeps the entry", async () => {

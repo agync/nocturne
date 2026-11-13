@@ -39,7 +39,7 @@ describe("Not true, forget it, with the real forget dialog", () => {
     const listed = vi.spyOn(engine, "listNeedsYou");
     renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
+    const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
 
     // The dialog says so while the screen behind it has already moved on.

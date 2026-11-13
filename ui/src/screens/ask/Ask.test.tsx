@@ -421,7 +421,7 @@ describe("what to do about an answer", () => {
   it("Forget this… opens the shared forget dialog for that memory", async () => {
     await open({ question: "What is Gran’s new number?" });
     await userEvent.click(await screen.findByRole("button", { name: "Forget this…" }));
-    expect(await screen.findByRole("dialog", { name: "Forget 1 thing?" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Forget 1 memory?" })).toBeVisible();
   });
 });
 
