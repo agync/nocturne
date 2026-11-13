@@ -154,6 +154,8 @@ impl LemonadeMind {
             Message::user(&prompts::extraction_user(text, cx, &nonce)),
         ];
         let mut last_error = String::new();
+        // What a reply got right is kept; a retry asks again only for what was wrong.
+        let mut kept: Vec<Candidate> = Vec::new();
         for attempt in 0..EXTRACT_ATTEMPTS {
             let mut req = ChatRequest::new(&model, messages.clone());
             req.temperature = Some(0.0);
@@ -164,12 +166,15 @@ impl LemonadeMind {
             ));
             let reply = self.chat_text(&req).await?;
             match parse_candidates(&reply, &source) {
-                Ok((items, invalid)) if invalid.is_empty() => return Ok(items),
+                Ok((items, invalid)) if invalid.is_empty() => return Ok(merged(kept, items)),
                 Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
                     tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
-                    return Ok(items);
+                    return Ok(merged(kept, items));
                 }
-                Ok((_, invalid)) => last_error = invalid.join("; "),
+                Ok((items, invalid)) => {
+                    kept = merged(kept, items);
+                    last_error = invalid.join("; ");
+                }
                 Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
                     return Err(MindError::Failed(format!("unusable extraction: {e}")));
                 }
@@ -180,7 +185,8 @@ impl LemonadeMind {
                 content: Value::String(reply),
             });
             messages.push(Message::user(&format!(
-                "That was not valid: {last_error}. Reply again with JSON only, matching the schema."
+                "That was not valid: {last_error}. Reply again with JSON only, matching the schema, \
+                 with just those memories corrected; the others are kept."
             )));
         }
         Err(MindError::Failed(format!(
@@ -472,6 +478,23 @@ struct Extraction {
     memories: Vec<Value>,
 }
 
+/// `more` added to `kept`, leaving out what `kept` already says.
+fn merged(mut kept: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
+    let key = |c: &Candidate| {
+        (
+            normalise(&c.subject),
+            c.predicate.as_str().to_string(),
+            normalise(&c.object),
+        )
+    };
+    for c in more {
+        if !kept.iter().any(|k| key(k) == key(&c)) {
+            kept.push(c);
+        }
+    }
+    kept
+}
+
 /// Lower case, with every run of non-alphanumeric characters made one space.
 fn normalise(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -533,21 +556,17 @@ fn date_field(raw: &Value, key: &str) -> Result<Option<Date>, String> {
     }
 }
 
-/// Words that stand for someone or something named elsewhere: a memory about one of them, or
-/// about "her birthday", cannot say whose it is.
+/// Words that stand for someone or something named elsewhere: a memory about one of them cannot
+/// say who or what it is about.
 const PRONOUNS: [&str; 16] = [
     "he", "she", "it", "they", "him", "her", "them", "his", "hers", "its", "their", "theirs",
     "this", "that", "these", "those",
 ];
-const POSSESSIVES: [&str; 4] = ["his", "her", "its", "their"];
 
+/// The reason names no words of the model's own: the retry goes back as the person's turn.
 fn named_subject(subject: &str) -> Result<(), String> {
-    let lower = subject.to_lowercase();
-    let first = lower.split_whitespace().next().unwrap_or("");
-    if PRONOUNS.contains(&lower.as_str()) || POSSESSIVES.contains(&first) {
-        return Err(format!(
-            "subject \"{subject}\" is a pronoun; name who or what it stands for"
-        ));
+    if PRONOUNS.contains(&subject.trim().to_lowercase().as_str()) {
+        return Err("the subject is a pronoun; name who or what it stands for".into());
     }
     Ok(())
 }
@@ -701,8 +720,8 @@ mod tests {
     }
 
     #[test]
-    fn pronouns_and_their_possessions_are_not_subjects() {
-        for bad in ["He", " they", "It", "her birthday", "Their car", "this"] {
+    fn a_pronoun_is_not_a_subject_but_a_name_that_starts_like_one_is() {
+        for bad in ["He", " they", "It", "this"] {
             assert!(named_subject(bad.trim()).is_err(), "{bad}");
         }
         for good in [
@@ -711,6 +730,8 @@ mod tests {
             "Theatre trip",
             "Hermione",
             "Itinerary",
+            "Her Majesty's Passport Office",
+            "His Majesty's Theatre",
         ] {
             assert!(named_subject(good).is_ok(), "{good}");
         }

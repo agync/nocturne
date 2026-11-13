@@ -282,8 +282,10 @@ async fn a_pronoun_is_not_a_subject() {
     let r = rig().await;
     let mut he = good_memory();
     he["subject"] = json!("He");
+    he["object"] = json!("coffee");
     let mut named = good_memory();
     named["subject"] = json!("Sam");
+    named["object"] = json!("coffee");
     r.script(json!([reply(vec![he.clone()]), reply(vec![named])]))
         .await;
     let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
@@ -292,12 +294,37 @@ async fn a_pronoun_is_not_a_subject() {
     let calls = r.seen("/v1/chat/completions").await;
     let retry = calls[1]["body"]["messages"][3]["content"].as_str().unwrap();
     assert!(retry.contains("pronoun"), "{retry}");
+    // What the model wrote is never echoed back as if the person had said it.
+    assert!(!retry.contains("He"), "{retry}");
 
     let mut they = good_memory();
     they["subject"] = json!(" they ");
     r.script(json!([reply(vec![he]), reply(vec![they])])).await;
     let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
     assert!(got.is_empty(), "{got:?}");
+}
+
+/// A retry asks again only for what was wrong: the memories that were already right are kept,
+/// whatever the second answer says.
+#[tokio::test]
+async fn a_retry_keeps_what_the_first_answer_got_right() {
+    let r = rig().await;
+    let mut he = good_memory();
+    he["subject"] = json!("He");
+    he["object"] = json!("coffee");
+    let mut named = he.clone();
+    named["subject"] = json!("Sam");
+    r.script(json!([
+        reply(vec![good_memory(), he]),
+        reply(vec![named, good_memory()]),
+    ]))
+    .await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(objects, ["tea", "coffee"], "{got:?}");
+    let calls = r.seen("/v1/chat/completions").await;
+    let retry = calls[1]["body"]["messages"][3]["content"].as_str().unwrap();
+    assert!(retry.contains("memory 2"), "{retry}");
 }
 
 #[tokio::test]
