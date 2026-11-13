@@ -276,9 +276,17 @@ impl<R: Runtime> Call<R> {
             },
             RemoteCall::GetOriginal { id } => self.original(&id).await,
             RemoteCall::Disconnect => {
+                // The phone forgot this computer: it is removed here too, as from the desktop.
+                let e = self.engine()?;
+                let id = me.clone();
+                let removed = blocking(move || e.revoke_device(&id)).await;
                 self.audit(RemoteAction::Disconnected, RemoteResult::Ok, 0.0);
                 self.out.send(RemoteAnswer::Done);
                 self.out.end();
+                if removed.is_ok() {
+                    self.core.drop_device(me);
+                    self.core.shell.changed();
+                }
                 None
             }
         }

@@ -1559,6 +1559,27 @@ fn disconnect_ends_the_session() {
 }
 
 #[test]
+fn disconnect_from_the_phone_removes_it_here() {
+    let p = on();
+    let (keys, mut c) = p.session("Pixel");
+    assert!(matches!(
+        call(&mut c, RemoteCall::Disconnect),
+        RemoteAnswer::Done
+    ));
+    wait_for("removed", || {
+        p.h.engine()
+            .device(&keys.id())
+            .unwrap()
+            .is_some_and(|d| d.revoked_at.is_some())
+    });
+    assert!(p.h.engine().devices(false).unwrap().is_empty());
+    assert!(matches!(
+        block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)),
+        Opened::Revoked
+    ));
+}
+
+#[test]
 fn pairing_over_long_poll() {
     let p = on();
     for typed in [false, true] {
