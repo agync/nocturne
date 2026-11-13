@@ -73,6 +73,64 @@ pub(crate) fn opt_enum<T: DeserializeOwned>(s: Option<String>) -> Result<Option<
     s.map(|s| parse_enum(&s)).transpose()
 }
 
+/// Words worth searching for: lowercase alphanumeric runs of two or more characters.
+fn fts_words(q: &str) -> Vec<String> {
+    q.to_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| w.chars().count() >= 2)
+        .map(str::to_string)
+        .collect()
+}
+
+/// An FTS5 query where every word must match, the last as a prefix (search as you type).
+pub(crate) fn fts_and(q: &str) -> Option<String> {
+    let words = fts_words(q);
+    if words.is_empty() {
+        return None;
+    }
+    let last = words.len() - 1;
+    Some(
+        words
+            .iter()
+            .enumerate()
+            .map(|(i, w)| {
+                if i == last {
+                    format!("\"{w}\"*")
+                } else {
+                    format!("\"{w}\"")
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    )
+}
+
+const STOPWORDS: &[&str] = &[
+    "the", "is", "are", "was", "were", "my", "of", "to", "in", "on", "at", "and", "or", "a", "an",
+    "when", "what", "who", "where", "which", "do", "does", "did", "for", "with", "it", "this",
+    "that", "me", "i", "about", "how",
+];
+
+/// An FTS5 query where any word may match (ranking sorts out relevance), stop words dropped.
+pub(crate) fn fts_or(q: &str) -> Option<String> {
+    let mut words = fts_words(q);
+    let all = words.clone();
+    words.retain(|w| !STOPWORDS.contains(&w.as_str()));
+    if words.is_empty() {
+        words = all;
+    }
+    if words.is_empty() {
+        return None;
+    }
+    Some(
+        words
+            .iter()
+            .map(|w| format!("\"{w}\""))
+            .collect::<Vec<_>>()
+            .join(" OR "),
+    )
+}
+
 /// Half-open validity intervals `[from, to)` over ISO dates; `None` is unbounded.
 pub(crate) fn overlaps(
     a_from: Option<&str>,

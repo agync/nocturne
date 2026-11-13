@@ -13,7 +13,9 @@ mod capture;
 mod clock;
 mod error;
 mod fsutil;
+mod memory;
 mod mind;
+mod retrieve;
 mod rows;
 mod types;
 mod util;
@@ -30,7 +32,7 @@ pub use types::*;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
@@ -49,6 +51,7 @@ pub(crate) struct Inner {
     writer: Mutex<Connection>,
     readers: Vec<Mutex<Connection>>,
     next_reader: AtomicUsize,
+    pub(crate) vectors: RwLock<Option<Arc<retrieve::VecIndex>>>,
 }
 
 impl Engine {
@@ -69,6 +72,7 @@ impl Engine {
                 writer: Mutex::new(writer),
                 readers,
                 next_reader: AtomicUsize::new(0),
+                vectors: RwLock::new(None),
             }),
         };
         // Items a worker was reading when the app last stopped go back in the queue.
@@ -92,6 +96,15 @@ impl Engine {
 
     pub(crate) fn db_path(&self) -> PathBuf {
         self.inner.dir.join(DB_FILE)
+    }
+
+    /// Drop the in-memory vector index; the next search rebuilds it.
+    pub(crate) fn invalidate_vectors(&self) {
+        *self
+            .inner
+            .vectors
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = None;
     }
 
     /// Run `f` in one write transaction on the single writer connection.
