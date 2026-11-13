@@ -27,10 +27,6 @@ describe("Settings", () => {
     expect(
       screen.getByRole("combobox", { name: "Morning page, how it arrives" }),
     ).toHaveDisplayValue("Tell me when it’s ready");
-    expect(screen.getByRole("switch", { name: "Print the page" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
     expect(screen.getByRole("combobox", { name: "Voice, name" })).toHaveDisplayValue(
       "Emma (British)",
     );
@@ -50,25 +46,30 @@ describe("Settings", () => {
     expect(screen.getByText("English (UK)")).toBeInTheDocument();
   });
 
-  it("has update checks off by default, and reminders opt-in", async () => {
+  it("has update checks off by default", async () => {
     await open();
     expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
     expect(screen.getByText("Off. Nocturne only checks when you ask.")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Reminders" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    );
+  });
+
+  it("settings.no_auto_print_or_reminders", async () => {
+    await open();
+    expect(screen.queryByRole("switch", { name: "Print the page" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "Reminders" })).toBeNull();
+    expect(screen.queryByText(/remind/i)).toBeNull();
   });
 
   it("saves a change at once and says Saved.", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "updateSettings");
-    await userEvent.click(screen.getByRole("switch", { name: "Print the page" }));
-    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ autoPrint: true, pageTime: null }));
-    expect(screen.getByRole("switch", { name: "Print the page" })).toHaveAttribute(
+    await userEvent.click(screen.getByRole("switch", { name: "Checking for updates" }));
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ checkUpdates: true, pageTime: null }),
+    );
+    expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -108,9 +109,9 @@ describe("Settings", () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "updateSettings").mockRejectedValue(new Error("no"));
     await open(engine);
-    await userEvent.click(screen.getByRole("switch", { name: "Reminders" }));
+    await userEvent.click(screen.getByRole("switch", { name: "Checking for updates" }));
     expect(await screen.findByText("That didn’t save. Nothing was changed.")).toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "Reminders" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Checking for updates" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -152,12 +153,43 @@ describe("Settings", () => {
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ shortcut: "Ctrl+Alt+K" }));
   });
 
-  it("says when the shortcut is taken by something else", async () => {
+  it("says when the shortcut is not working, and offers the command for a desktop shortcut", async () => {
     const engine = createMockEngine();
     const base = await engine.getSettings();
     vi.spyOn(engine, "getSettings").mockResolvedValue({ ...base, shortcutAvailable: false });
     await open(engine);
-    expect(screen.getByText(/already uses this shortcut/)).toBeInTheDocument();
+    expect(screen.getByText(/This shortcut isn’t working here/)).toBeInTheDocument();
+    expect(await screen.findByText("nocturne --quick-capture")).toBeInTheDocument();
+  });
+
+  it("asks nothing about a desktop shortcut while the shortcut works", async () => {
+    const engine = createMockEngine();
+    const spy = vi.spyOn(engine, "quickKeepCommand");
+    await open(engine);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("settings.stop_watching_sends_empty", async () => {
+    const engine = createMockEngine();
+    await engine.updateSettings({
+      ...(await engine.getSettings()),
+      inboxFolder: "/data/Nocturne inbox",
+      pageTime: null,
+    } as never);
+    await open(engine);
+    const spy = vi.spyOn(engine, "updateSettings");
+    expect(await screen.findByText("/data/Nocturne inbox")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Stop watching the inbox folder" }));
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith(expect.objectContaining({ inboxFolder: "" })),
+    );
+    expect(await screen.findByText("Not set")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop watching the inbox folder" })).toBeNull();
+  });
+
+  it("offers no stop button when nothing is watched", async () => {
+    await open();
+    expect(screen.queryByRole("button", { name: /Stop watching/ })).toBeNull();
   });
 
   it("links to advanced details", async () => {

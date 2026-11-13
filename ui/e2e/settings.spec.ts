@@ -73,7 +73,7 @@ for (const scheme of ["light", "dark"] as const) {
 test.describe("using it", () => {
   test("a switch saves from the keyboard and says Saved.", async ({ page }) => {
     await ready(page, "#/settings", "Settings");
-    const print = page.getByRole("switch", { name: "Print the page" });
+    const print = page.getByRole("switch", { name: "Checking for updates" });
     await print.focus();
     await page.keyboard.press("Space");
     await expect(print).toHaveAttribute("aria-checked", "true");

@@ -308,6 +308,17 @@ describe("recording", () => {
   });
 });
 
+describe("the turned-off microphone notice", () => {
+  it("notice.mic_opens_sound_settings", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "openSoundSettings");
+    getUserMedia.mockRejectedValue(new DOMException("no", "NotAllowedError"));
+    await userEvent.click(screen.getByRole("button", { name: "Record a voice note" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open sound settings" }));
+    expect(spy).toHaveBeenCalledOnce();
+  });
+});
+
 describe("a slow microphone", () => {
   const start = 1_700_000_000_000;
   let now: ReturnType<typeof vi.spyOn>;

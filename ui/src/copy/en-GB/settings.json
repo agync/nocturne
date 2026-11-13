@@ -24,7 +24,7 @@
   "settings.shortcut.placeholder": "Press the keys…",
   "settings.shortcut.cancel": "Tab or Esc to cancel",
   "settings.shortcut.needsModifier": "Include Ctrl, Alt or Super with another key.",
-  "settings.shortcut.taken": "Something else on this computer already uses this shortcut. Choose another.",
+  "settings.shortcut.taken": "This shortcut isn’t working here. Another app may be using it, or this desktop doesn’t share keys with other apps. Choose another, or add a desktop shortcut.",
   "settings.inbox.label": "Nocturne inbox folder",
   "settings.inbox.hint": "Anything saved here is kept",
   "settings.inbox.none": "Not set",
@@ -48,5 +48,8 @@
   "settings.reminders.hint": "Off until you turn it on. Nocturne can remind you when something you kept is due.",
   "settings.advanced.show": "Show advanced details",
   "theme.light": "Light",
-  "theme.dark": "Dark"
+  "theme.dark": "Dark",
+  "settings.shortcut.command": "Set it to run:",
+  "settings.inbox.stop": "Stop watching",
+  "settings.inbox.stop.named": "Stop watching the inbox folder"
 }

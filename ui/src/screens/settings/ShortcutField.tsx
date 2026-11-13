@@ -1,6 +1,8 @@
+import { useQuery } from "@tanstack/react-query";
 import { type KeyboardEvent, useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
+import { useEngine } from "../../engine/context";
 import styles from "./Settings.module.css";
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph"]);
@@ -49,6 +51,14 @@ interface Props {
 
 /** Shows the shortcut and lets the person press a new one. Tab and Esc always get out. */
 export function ShortcutField({ value, available, onChange }: Props) {
+  const engine = useEngine();
+  // Where keys cannot be shared with every app, a desktop shortcut that runs this does the job.
+  const command = useQuery({
+    queryKey: ["quickKeepCommand"],
+    queryFn: () => engine.quickKeepCommand(),
+    enabled: !available,
+    staleTime: Number.POSITIVE_INFINITY,
+  });
   const [capturing, setCapturing] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const change = useRef<HTMLDivElement>(null);
@@ -115,7 +125,16 @@ export function ShortcutField({ value, available, onChange }: Props) {
         </span>
       ) : null}
       {!available && !capturing ? (
-        <span className={styles.problem}>{t("settings.shortcut.taken")}</span>
+        <span className={styles.problem}>
+          {t("settings.shortcut.taken")}
+          {command.data ? (
+            <>
+              {" "}
+              {t("settings.shortcut.command")}{" "}
+              <code className={styles.command}>{command.data}</code>
+            </>
+          ) : null}
+        </span>
       ) : null}
     </div>
   );

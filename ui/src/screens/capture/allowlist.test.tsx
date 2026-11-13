@@ -116,7 +116,22 @@ describe("what the quick capture window asks of the engine", () => {
     fireEvent.keyUp(box, { key: " " });
     await waitFor(() => expect(calls.has("keepRecording")).toBe(true));
 
-    for (const method of ["keepText", "unkeep", "keepFiles", "keepBytes", "keepRecording"]) {
+    // A microphone that is turned off, and the notice's button.
+    box = await fresh();
+    const media = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+    media.mockRejectedValue(new DOMException("no", "NotAllowedError"));
+    await userEvent.click(screen.getByRole("button", { name: "Record a voice note" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Open sound settings" }));
+    await waitFor(() => expect(calls.has("openSoundSettings")).toBe(true));
+
+    for (const method of [
+      "keepText",
+      "unkeep",
+      "keepFiles",
+      "keepBytes",
+      "keepRecording",
+      "openSoundSettings",
+    ]) {
       expect(calls.has(method), `the session did not exercise ${method}`).toBe(true);
     }
     for (const method of calls) {

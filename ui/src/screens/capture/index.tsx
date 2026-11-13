@@ -541,7 +541,16 @@ export default function Capture() {
             </div>
           </div>
         )}
-        {micNotices.length > 0 ? <Notices notices={micNotices} /> : null}
+        {micNotices.length > 0 ? (
+          <Notices
+            notices={micNotices}
+            handlers={{
+              micDenied: () => {
+                engine.openSoundSettings().catch(() => undefined);
+              },
+            }}
+          />
+        ) : null}
       </div>
     </main>
   );

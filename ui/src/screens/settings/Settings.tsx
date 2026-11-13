@@ -183,15 +183,6 @@ export function Settings() {
             />
           </Row>
 
-          <li className={styles.toggleRow}>
-            <Toggle
-              label={t("settings.print.label")}
-              hint={t("settings.print.hint")}
-              checked={view.autoPrint}
-              onChange={(autoPrint) => void save({ autoPrint })}
-            />
-          </li>
-
           <Row label={t("settings.voice.label")} hint={t("settings.voice.hint")}>
             <Select
               label={t("settings.voice.name")}
@@ -229,6 +220,15 @@ export function Settings() {
             >
               {t("settings.inbox.choose")}
             </Button>
+            {view.inboxFolder ? (
+              <Button
+                variant="quiet"
+                aria-label={t("settings.inbox.stop.named")}
+                onClick={() => void save({ inboxFolder: "" })}
+              >
+                {t("settings.inbox.stop")}
+              </Button>
+            ) : null}
           </Row>
 
           <li className={styles.toggleRow}>
@@ -265,15 +265,6 @@ export function Settings() {
               hint={t(view.checkUpdates ? "settings.updates.on" : "settings.updates.off")}
               checked={view.checkUpdates}
               onChange={(checkUpdates) => void save({ checkUpdates })}
-            />
-          </li>
-
-          <li className={styles.toggleRow}>
-            <Toggle
-              label={t("settings.reminders.label")}
-              hint={t("settings.reminders.hint")}
-              checked={view.reminders}
-              onChange={(reminders) => void save({ reminders })}
             />
           </li>
         </ul>
