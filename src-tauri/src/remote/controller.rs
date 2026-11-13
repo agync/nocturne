@@ -634,6 +634,16 @@ impl RemoteHub {
             }
             TransportState::Up { address, route } => {
                 let host = host_of(&address);
+                // Phones would be paired to this name: Simple takes nothing but a quick tunnel's.
+                if self.core.connection() == Some(RemoteConnection::Simple)
+                    && !nocturne_helpers::is_quick_tunnel_host(&host)
+                {
+                    tracing::warn!("the helper named an address that is not a quick tunnel");
+                    self.core.set_host(None);
+                    self.rt().up = None;
+                    self.problem(RemoteProblem::HelperFailed);
+                    return;
+                }
                 let machine = (self.core.connection() == Some(RemoteConnection::MostPrivate))
                     .then(|| name::machine_name(&self.dir));
                 self.core.set_host(Some(host.clone()));

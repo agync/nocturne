@@ -286,6 +286,22 @@ fn leaving_setup_before_pairing_turns_off() {
     assert!(a.hub.listener_origin().is_none());
 }
 
+#[test]
+fn simple_refuses_an_address_that_is_not_a_quick_tunnel() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Cloudflared);
+    *a.helpers.transport.addresses.lock().unwrap() = vec!["https://attacker.example.com".into()];
+    a.start("simple", false).unwrap();
+    a.settle();
+    assert!(
+        matches!(a.hub.state(), RemoteState::Problem { .. }),
+        "{:?}",
+        a.hub.state()
+    );
+    assert_eq!(a.hub.core.host(), None);
+    assert!(a.h.engine().remote_state().unwrap().address.is_none());
+}
+
 const NEW_HOST: &str = "river-maple-stone-quiet.trycloudflare.com";
 
 fn restarted_with_new_address(a: &Away) -> testing::PhoneKeys {
