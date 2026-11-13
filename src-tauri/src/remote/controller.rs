@@ -532,6 +532,7 @@ impl RemoteHub {
             ListenerConfig {
                 bind,
                 files: self.files.clone(),
+                keepalive: listener::WS_KEEPALIVE,
             },
             self.core.clone(),
         )

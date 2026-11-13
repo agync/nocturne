@@ -119,6 +119,8 @@ pub enum WsMsg {
 pub struct Ws {
     s: Box<dyn Io>,
     buf: Vec<u8>,
+    /// Pings received.
+    pub pings: usize,
 }
 
 impl Ws {
@@ -171,6 +173,7 @@ impl Ws {
         Ok(Ws {
             s,
             buf: raw[at..].to_vec(),
+            pings: 0,
         })
     }
 
@@ -250,6 +253,7 @@ impl Ws {
                         .unwrap_or(1005);
                     return WsMsg::Close(code);
                 }
+                9 => self.pings += 1,
                 _ => continue,
             }
         }
@@ -286,6 +290,11 @@ pub enum End {
 }
 
 impl Wire {
+    /// Pings the listener sent on this wire's WebSocket.
+    pub fn pings(&self) -> usize {
+        self.ws.as_ref().map_or(0, |w| w.pings)
+    }
+
     pub async fn open(addr: &Addr, mode: Mode) -> Wire {
         Wire::open_with(addr, mode, &[]).await
     }

@@ -47,6 +47,10 @@ fn phone_files(dir: &std::path::Path) -> std::path::PathBuf {
 }
 
 async fn start(bind: impl FnOnce(&std::path::Path) -> Bind) -> Running {
+    start_with(bind, listener::WS_KEEPALIVE).await
+}
+
+async fn start_with(bind: impl FnOnce(&std::path::Path) -> Bind, keepalive: Duration) -> Running {
     let dir = tempfile::tempdir().unwrap();
     let bench = testing::bench(dir.path());
     let files = phone_files(dir.path());
@@ -54,6 +58,7 @@ async fn start(bind: impl FnOnce(&std::path::Path) -> Bind) -> Running {
         ListenerConfig {
             bind: bind(dir.path()),
             files: Arc::new(DirFiles(files)),
+            keepalive,
         },
         bench.core.clone(),
     )
@@ -878,4 +883,35 @@ async fn off_answers_503() {
         let res = http(&r.addr, method, path, &keyed(&r), &[]).await.unwrap();
         assert_eq!(res.status, 503, "{method} {path}");
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_quiet_session_socket_is_kept_open_and_strangers_are_not_pinged() {
+    let bind = |d: &std::path::Path| {
+        if cfg!(unix) {
+            unix(d)
+        } else {
+            Bind::Tcp {
+                key: KEY.into(),
+                carrier: KeyCarrier::HostHeader,
+            }
+        }
+    };
+    let r = start_with(bind, Duration::from_millis(200)).await;
+    let keys = r.bench.paired("Pixel");
+    let mut phone = session(&r, &keys).await;
+    let mut stranger = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(&r)).await;
+    let _ = phone.wire.recv_within(Duration::from_millis(900)).await;
+    let _ = stranger.recv_within(Duration::from_millis(100)).await;
+    assert!(
+        phone.wire.pings() >= 2,
+        "pinged {} times",
+        phone.wire.pings()
+    );
+    assert_eq!(stranger.pings(), 0, "a stranger is not kept alive");
+    let answer = phone.call(RemoteCall::GetStatus).await.unwrap();
+    assert!(
+        matches!(answer, RemoteAnswer::Status { .. }),
+        "the session still works"
+    );
 }

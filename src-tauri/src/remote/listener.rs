@@ -52,6 +52,10 @@ const BODY_IDLE_SECS: u64 = 5;
 /// Long-poll bodies read at once. A body is read before its sender is known, so these are
 /// separate from the connection permits: a stalled POST cannot take a paired phone's place.
 const POST_SLOTS: usize = MAX_CONNECTIONS / 2;
+/// How often a quiet WebSocket that carries a session is pinged. Cloudflare ends a socket that
+/// carries nothing for about two minutes, and the phone then takes seconds to open a new one at
+/// its next request; a ping keeps it open. Strangers are never pinged.
+pub const WS_KEEPALIVE: Duration = Duration::from_secs(30);
 
 pub enum Bind {
     /// An owner-only socket at this path; its folder is made owner-only.
@@ -63,6 +67,8 @@ pub enum Bind {
 pub struct ListenerConfig {
     pub bind: Bind,
     pub files: Arc<dyn PhoneFiles>,
+    /// [`WS_KEEPALIVE`], shorter in tests.
+    pub keepalive: Duration,
 }
 
 /// A running listener. Stop it with [`ListenerHandle::stop`].
@@ -103,6 +109,7 @@ struct Ctx {
     key: Option<(String, KeyCarrier)>,
     permits: Arc<Semaphore>,
     posts: Arc<Semaphore>,
+    keepalive: Duration,
 }
 
 /// Start listening and serving `core`.
@@ -118,6 +125,7 @@ pub async fn serve(cfg: ListenerConfig, core: Arc<Core>) -> std::io::Result<List
         key,
         permits: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
         posts: Arc::new(Semaphore::new(POST_SLOTS)),
+        keepalive: cfg.keepalive,
     });
     let app = axum::Router::new().fallback(move |req: Request<Body>| {
         let ctx = ctx.clone();
@@ -323,11 +331,11 @@ async fn session(
             let Ok(upgrade) = WebSocketUpgrade::from_request_parts(&mut parts, &()).await else {
                 return bare(code(HTTP_NOT_FOUND));
             };
-            let (core, permits) = (ctx.core.clone(), ctx.permits.clone());
+            let (core, permits, keepalive) = (ctx.core.clone(), ctx.permits.clone(), ctx.keepalive);
             let res = upgrade
                 .max_message_size(MAX_FRAME)
                 .max_frame_size(MAX_FRAME)
-                .on_upgrade(move |socket| websocket(socket, core, permits));
+                .on_upgrade(move |socket| websocket(socket, core, permits, keepalive));
             drop(permit);
             with_cors(res, &origin)
         }
@@ -338,12 +346,19 @@ async fn session(
 
 /// A socket holds a connection permit only once it carries a session: until then it is one of
 /// the few strangers `Core` keeps, and the permits stay for paired phones.
-async fn websocket(mut socket: WebSocket, core: Arc<Core>, permits: Arc<Semaphore>) {
+async fn websocket(
+    mut socket: WebSocket,
+    core: Arc<Core>,
+    permits: Arc<Semaphore>,
+    keepalive: Duration,
+) {
     let conv = core.new_conv(Carrier::WebSocket);
     let mut permit: Option<OwnedSemaphorePermit> = None;
     let mut rx = conv.rx.lock().await;
     let handshake = tokio::time::sleep(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS));
     tokio::pin!(handshake);
+    let mut ping = tokio::time::interval_at(tokio::time::Instant::now() + keepalive, keepalive);
+    ping.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     let mut refused = false;
     loop {
         tokio::select! {
@@ -360,6 +375,11 @@ async fn websocket(mut socket: WebSocket, core: Arc<Core>, permits: Arc<Semaphor
             },
             () = conv.closed.cancelled() => break,
             () = &mut handshake, if conv.is_fresh() => break,
+            _ = ping.tick(), if permit.is_some() => {
+                if socket.send(Message::Ping(Default::default())).await.is_err() {
+                    break;
+                }
+            }
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Binary(frame))) => match core.inbound(&conv, &frame) {
                     Inbound::Continue => {

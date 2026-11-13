@@ -105,6 +105,7 @@ async fn the_key_header_reaches_the_listener_only_through_the_helper() {
                 carrier: KeyCarrier::Header,
             },
             files: Arc::new(DirFiles(phone_files(dir.path()))),
+            keepalive: listener::WS_KEEPALIVE,
         },
         bench.core.clone(),
     )
