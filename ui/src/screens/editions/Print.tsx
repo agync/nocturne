@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
 import { receiptText } from "../../components/ReceiptChip/ReceiptChip";
@@ -9,7 +10,7 @@ import { formatLongDay, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PageLine, PageView, Question } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
-import { useEngine } from "../../engine/context";
+import { useEngine, usePage } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { type Fitted, fit, letGoName, type PaperSize } from "./fit";
 import styles from "./Print.module.css";
@@ -230,6 +231,11 @@ export function Sheet({ page, size, fitted, printedAt, sentNothing, sheetRef }: 
 export function Print() {
   const [, params] = useRoute("/print/:date");
   const date = params?.date ?? "";
+  const today = usePage();
+  const back =
+    today.data?.date === date
+      ? { to: "/today", label: t("screen.today.title") }
+      : { to: `/pages/${date}`, label: t("screen.page.title") };
   const engine = useEngine();
   const platform = usePlatform();
   const toast = useToast();
@@ -308,9 +314,7 @@ export function Print() {
             {t("button.tryAgain")}
           </Button>
         )}
-        <a className={styles.back} href={`#/pages/${date}`}>
-          {t("print.back")}
-        </a>
+        <BackLink to={back.to} label={back.label} />
       </main>
     );
   }
@@ -334,9 +338,7 @@ export function Print() {
       <h1 className="sr-only">{t("screen.print.title")}</h1>
       <style>{pageRule(size, receiptMm)}</style>
       <div className={styles.toolbar} role="toolbar" aria-label={t("print.toolbar")}>
-        <a className={styles.back} href={`#/pages/${date}`}>
-          {t("print.back")}
-        </a>
+        <BackLink to={back.to} label={back.label} />
         <fieldset className={styles.sizes}>
           <legend className={styles.sizesLabel}>{t("print.size.label")}</legend>
           {SIZES.map((s) => (

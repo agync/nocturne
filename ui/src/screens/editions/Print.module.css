@@ -17,8 +17,8 @@
   color: var(--ink);
 }
 
-.back {
-  color: var(--accent);
+.toolbar > a {
+  margin-bottom: 0;
 }
 
 .sizes {

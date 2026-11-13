@@ -1,18 +1,4 @@
-.frame {
-  padding: 24px 28px 0;
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  min-height: 36rem;
-  padding: 0;
-  border-radius: 10px 10px 0 0;
-  background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--rule);
-}
-
-.card > h1 {
+.sheet > h1 {
   padding: var(--s-6) var(--s-6) 0;
 }
 
@@ -186,4 +172,41 @@
 
 .back {
   color: var(--accent);
+}
+
+@media (max-width: 44.99em) {
+  .sheet > h1 {
+    padding: 0 var(--s-4);
+    padding-top: var(--s-5);
+  }
+
+  .head {
+    padding: var(--s-5) var(--s-4) var(--s-4);
+  }
+
+  .sections,
+  .skipped,
+  .actions {
+    padding-right: var(--s-4);
+    padding-left: var(--s-4);
+  }
+
+  .message {
+    margin: var(--s-4);
+  }
+
+  .player {
+    padding: var(--s-4) var(--s-4) var(--s-5);
+    border-top: 0;
+    background: none;
+  }
+
+  .controls {
+    flex-wrap: nowrap;
+    gap: var(--s-1);
+  }
+
+  .speed {
+    margin-left: auto;
+  }
 }

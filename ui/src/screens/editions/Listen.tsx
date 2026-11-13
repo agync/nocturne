@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { Button } from "../../components/Button/Button";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { formatLongDay } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
 import type { PageView, SpokenKind, SpokenSection } from "../../engine/bindings";
@@ -213,9 +214,9 @@ function PlayerView({
 
 function Frame({ children }: { children: ReactNode }) {
   return (
-    <div className={styles.frame}>
-      <div className={styles.card}>{children}</div>
-    </div>
+    <ScreenSheet flush className={styles.sheet}>
+      {children}
+    </ScreenSheet>
   );
 }
 
