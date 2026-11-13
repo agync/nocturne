@@ -2,7 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { goTo } from "../../app/query";
 import { recordingState } from "../../app/useRecorder";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { formatBytes } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
 import type { AdvancedView, ComponentRole } from "../../engine/bindings";
@@ -152,35 +154,31 @@ export function Advanced() {
   const view = query.data;
 
   return (
-    <div className={styles.frame}>
-      <div className={styles.card}>
-        <a className={styles.back} href="#/settings">
-          {t("advanced.back")}
-        </a>
-        <h1 className="t-page-title">{t("advanced.title")}</h1>
-        <p className={styles.dek}>{t("advanced.dek")}</p>
-        <dl className={styles.details}>
-          {details(view, settings?.voice ?? "").map(([label, value]) => (
-            <div key={label} className={styles.detail}>
-              <dt>{label}</dt>
-              <dd>{value}</dd>
-            </div>
-          ))}
-        </dl>
-        <div className={styles.buttons}>
-          <Button variant="secondary" onClick={() => void platform.openPath(view.logDir)}>
-            {t("advanced.logs")}
-          </Button>
-          <Button variant="secondary" onClick={() => goTo("/setup", { step: "choosing" })}>
-            {t("advanced.mind")}
-          </Button>
-          <Button variant="secondary" onClick={() => goTo("/setup", { step: "welcome" })}>
-            {t("advanced.setup")}
-          </Button>
-          <Button variant="forget" onClick={() => setResetting(true)}>
-            {t("advanced.reset")}
-          </Button>
-        </div>
+    <ScreenSheet>
+      <BackLink to="/settings" label={t("screen.settings.title")} />
+      <h1 className="t-page-title">{t("advanced.title")}</h1>
+      <p className={styles.dek}>{t("advanced.dek")}</p>
+      <dl className={styles.details}>
+        {details(view, settings?.voice ?? "").map(([label, value]) => (
+          <div key={label} className={styles.detail}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className={styles.buttons}>
+        <Button variant="secondary" onClick={() => void platform.openPath(view.logDir)}>
+          {t("advanced.logs")}
+        </Button>
+        <Button variant="secondary" onClick={() => goTo("/setup", { step: "choosing" })}>
+          {t("advanced.mind")}
+        </Button>
+        <Button variant="secondary" onClick={() => goTo("/setup", { step: "welcome" })}>
+          {t("advanced.setup")}
+        </Button>
+        <Button variant="forget" onClick={() => setResetting(true)}>
+          {t("advanced.reset")}
+        </Button>
       </div>
       {resetting ? (
         <DeleteEverythingDialog
@@ -207,6 +205,6 @@ export function Advanced() {
           }}
         />
       ) : null}
-    </div>
+    </ScreenSheet>
   );
 }

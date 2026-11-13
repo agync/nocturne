@@ -107,7 +107,7 @@ test.describe("using it", () => {
     await page.getByRole("link", { name: "Show advanced details" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Advanced details" })).toBeVisible();
     await expect(page.getByText("Lemonade 8.2.2", { exact: false })).toBeVisible();
-    await page.getByRole("link", { name: "Back to settings" }).click();
+    await page.getByRole("main").getByRole("link", { name: "Settings" }).click();
     await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   });
 
