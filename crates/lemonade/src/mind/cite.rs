@@ -11,6 +11,10 @@ pub struct CiteFilter {
     bold_open: bool,
     /// The last character shown was a lone `*`.
     star: bool,
+    /// A letter or digit was shown since the last marker.
+    words_since: bool,
+    /// The last marker cited a claim, so a marker right after it joins it.
+    last_counted: bool,
 }
 
 impl CiteFilter {
@@ -22,10 +26,13 @@ impl CiteFilter {
             spans: Vec::new(),
             bold_open: false,
             star: false,
+            words_since: false,
+            last_counted: false,
         }
     }
 
-    /// Fact numbers (from 1) in the order first cited.
+    /// Fact numbers (from 1) in the order first cited. A marker with no words before it (after
+    /// the start or the last marker) cites nothing: a row of bare markers is not a claim.
     pub fn cited(&self) -> &[usize] {
         &self.cited
     }
@@ -42,6 +49,7 @@ impl CiteFilter {
     /// Text on its way out: `**` opens or closes a span, even split across deltas.
     fn see_text(&mut self, text: &str) {
         for c in text.chars() {
+            self.words_since |= c.is_alphanumeric();
             if c != '*' {
                 self.star = false;
                 continue;
@@ -96,10 +104,15 @@ impl CiteFilter {
             let tail = &rest[open..];
             match parse_marker(tail) {
                 Marker::Full(len, numbers) => {
-                    self.see_marker(&numbers);
-                    for n in numbers {
-                        if (1..=self.facts).contains(&n) && !self.cited.contains(&n) {
-                            self.cited.push(n);
+                    let counts = self.words_since || self.last_counted;
+                    self.words_since = false;
+                    self.last_counted = counts;
+                    if counts {
+                        self.see_marker(&numbers);
+                        for n in numbers {
+                            if (1..=self.facts).contains(&n) && !self.cited.contains(&n) {
+                                self.cited.push(n);
+                            }
                         }
                     }
                     if out.ends_with(' ') {
@@ -242,6 +255,18 @@ mod tests {
     fn a_span_with_no_marker_after_it_or_left_open_pairs_nothing() {
         assert_eq!(pairs(&["**a** [m1] and **b**."]), None);
         assert_eq!(pairs(&["**a [m1]."]), None);
+    }
+
+    #[test]
+    fn a_marker_with_no_words_before_it_cites_nothing() {
+        let (text, cited) = run(&[",,,,,[m1],[m2] ,[m3]"]);
+        assert_eq!(text.replace(' ', ""), ",,,,,,,");
+        assert!(cited.is_empty());
+        // Markers that follow a claim directly still join it.
+        let (_, cited) = run(&["On Tuesday [m2][m3], and [m1]."]);
+        assert_eq!(cited, vec![2, 3, 1]);
+        let (_, cited) = run(&["Monday [m1], [m2]."]);
+        assert_eq!(cited, vec![1, 2]);
     }
 
     #[test]

@@ -3,6 +3,7 @@
 mod audio;
 mod cite;
 mod documents;
+mod guard;
 mod prompts;
 
 use std::collections::HashSet;
@@ -213,13 +214,89 @@ impl LemonadeMind {
         }
         let model = self.warm_mind().await?;
         let nonce = prompts::nonce();
-        let mut req = ChatRequest::new(
-            &model,
-            vec![
-                Message::system(&prompts::answer_system(&nonce)),
-                Message::user(&prompts::answer_user(question, facts, &nonce)),
-            ],
-        );
+        let shown = prompts::facts_for(self.tier, facts);
+        let facts = shown.as_slice();
+        let system = prompts::answer_system(self.tier, &nonce);
+        let mut messages = vec![
+            Message::system(&system),
+            Message::user(&prompts::answer_user(self.tier, question, facts, &nonce)),
+        ];
+        let mut reply = self.reply_to(&model, &messages).await?;
+        let mut judged = judge(&reply, facts, &system);
+        // A small mind often drops the date or number of the fact it cites, or gives one side of a
+        // disagreement. It is asked once more, naming what was wrong; the better of the two
+        // answers is kept.
+        if self.tier == Tier::Tiny && !judged.not_sure {
+            let wrong = complaints(&judged, facts);
+            if !wrong.is_empty() {
+                messages.push(Message {
+                    role: "assistant".into(),
+                    content: Value::String(std::mem::take(&mut reply)),
+                });
+                messages.push(Message::user(&format!(
+                    "{} Answer again in one or two short sentences, with the number of the fact after each sentence, like [m1].",
+                    wrong.join(" ")
+                )));
+                if let Ok(second) = self.reply_to(&model, &messages).await {
+                    let again = judge(&second, facts, &system);
+                    if !again.not_sure
+                        && !again.cited.is_empty()
+                        && (again.text.len() >= judged.text.len() || judged.cited.is_empty())
+                        && complaints(&again, facts).len() < wrong.len()
+                    {
+                        judged = again;
+                    }
+                }
+            }
+        }
+        // Still no citation, but the answer is one fact's own words: that fact is its receipt.
+        if self.tier == Tier::Tiny && !judged.not_sure && judged.cited.is_empty() {
+            let sentences: Vec<&str> = facts.iter().map(|f| f.memory.sentence.as_str()).collect();
+            if let Some(n) = guard::source_of(&judged.text, &sentences) {
+                judged.cited = vec![n];
+            }
+        }
+        if self.tier == Tier::Tiny
+            && !judged.not_sure
+            && let Some(&(n, m)) = one_sided(&judged, facts).first()
+        {
+            judged = judge(&both_sides(n, m, facts), facts, &system);
+        }
+        let mut sent_any = false;
+        if !judged.not_sure && !judged.text.is_empty() {
+            sent_any = true;
+            if out.send(judged.text.clone()).await.is_err() {
+                return Err(MindError::Failed("the reader went away".into()));
+            }
+        }
+        let ids = |numbers: &[usize]| -> Vec<String> {
+            numbers
+                .iter()
+                .filter_map(|n| facts.get(n - 1))
+                .map(|f| f.memory.id.clone())
+                .collect()
+        };
+        let (cited, spans) = if judged.not_sure {
+            (Vec::new(), Vec::new())
+        } else {
+            (
+                ids(&judged.cited),
+                judged.spans.as_deref().map(ids).unwrap_or_default(),
+            )
+        };
+        let cited_none = cited.is_empty();
+        Ok(AnswerMeta {
+            cited,
+            not_sure: judged.not_sure || !sent_any || cited_none,
+            spans,
+        })
+    }
+
+    /// The whole reply to `messages`, read before any of it is shown: a reply that ends in the
+    /// not-sure marker is an answer the mind did not stand behind, and none of it may reach the
+    /// person. Answers are a sentence or two, so this costs little time.
+    async fn reply_to(&self, model: &str, messages: &[Message]) -> Result<String, MindError> {
+        let mut req = ChatRequest::new(model, messages.to_vec());
         req.temperature = Some(0.2);
         req.max_tokens = Some(1024);
         let mut stream = match self.client.chat(&req).await {
@@ -229,9 +306,6 @@ impl LemonadeMind {
                 return Err(e.into());
             }
         };
-        // The whole reply is read before any of it is shown: a reply that ends in the not-sure
-        // marker is an answer the mind did not stand behind, and none of it may reach the
-        // person. Answers are a sentence or two, so this costs little time.
         let mut reply = String::new();
         while let Some(item) = stream.next().await {
             match item {
@@ -242,43 +316,7 @@ impl LemonadeMind {
                 }
             }
         }
-        let mut filter = CiteFilter::new(facts.len());
-        let not_sure = reply.contains(prompts::NOT_SURE);
-        let mut sent_any = false;
-        if !not_sure {
-            let mut text = filter.push(&reply);
-            text.push_str(&filter.finish());
-            if !text.is_empty() {
-                sent_any = true;
-                if out.send(text).await.is_err() {
-                    return Err(MindError::Failed("the reader went away".into()));
-                }
-            }
-        }
-        let cited = if not_sure {
-            Vec::new()
-        } else {
-            filter
-                .cited()
-                .iter()
-                .filter_map(|n| facts.get(n - 1))
-                .map(|f| f.memory.id.clone())
-                .collect()
-        };
-        let spans = match filter.bold_facts() {
-            Some(facts_of_spans) if !not_sure => facts_of_spans
-                .iter()
-                .filter_map(|n| facts.get(n - 1))
-                .map(|f| f.memory.id.clone())
-                .collect(),
-            _ => Vec::new(),
-        };
-        let cited_none = cited.is_empty();
-        Ok(AnswerMeta {
-            cited,
-            not_sure: not_sure || !sent_any || cited_none,
-            spans,
-        })
+        Ok(reply)
     }
 
     async fn read_image_impl(&self, image: &Path) -> Result<Understanding, MindError> {
@@ -607,6 +645,97 @@ fn predicate(raw: &str) -> Predicate {
     match norm.strip_prefix("other:") {
         Some(word) => Predicate::Other(word.trim().to_string()),
         None => Predicate::parse(&norm),
+    }
+}
+
+/// What a reply comes to once its markers are taken out and the guards have looked at it.
+struct Judged {
+    /// What the person would read.
+    text: String,
+    not_sure: bool,
+    /// The facts cited, from 1, in the order first cited.
+    cited: Vec<usize>,
+    /// The fact each bold span stands for, when they can all be paired.
+    spans: Option<Vec<usize>>,
+}
+
+impl Judged {
+    fn cited_sentences<'a>(&self, facts: &'a [Fact]) -> Vec<&'a str> {
+        self.cited
+            .iter()
+            .filter_map(|n| facts.get(n - 1))
+            .map(|f| f.memory.sentence.as_str())
+            .collect()
+    }
+}
+
+/// The cited facts that disagree with a fact the answer does not cite: (cited, other side),
+/// both from 1.
+fn one_sided(judged: &Judged, facts: &[Fact]) -> Vec<(usize, usize)> {
+    let mut out = Vec::new();
+    for n in &judged.cited {
+        let Some(fact) = facts.get(n - 1) else {
+            continue;
+        };
+        for id in &fact.disputed_by {
+            let other = facts.iter().position(|f| &f.memory.id == id).map(|i| i + 1);
+            if let Some(m) = other.filter(|m| !judged.cited.contains(m)) {
+                out.push((*n, m));
+            }
+        }
+    }
+    out
+}
+
+/// What is wrong with an answer a Tiny mind gave, in the words it is told: it cites nothing, it
+/// leaves out a number, date or time of a cited fact, or it cites a fact that disagrees with
+/// another and not the other.
+fn complaints(judged: &Judged, facts: &[Fact]) -> Vec<String> {
+    let mut out = Vec::new();
+    if judged.cited.is_empty() {
+        out.push(
+            "Write a whole sentence and end it with the number of the fact it comes from, like [m1]."
+                .to_string(),
+        );
+    }
+    let left_out = guard::left_out(&judged.text, &judged.cited_sentences(facts));
+    if !left_out.is_empty() {
+        out.push(format!(
+            "You left out {}. Write {} exactly as the fact does.",
+            left_out.join(", "),
+            if left_out.len() == 1 { "it" } else { "them" }
+        ));
+    }
+    for (n, m) in one_sided(judged, facts) {
+        out.push(format!(
+            "[m{n}] does not agree with [m{m}]. Give both, and say it is not settled which is right."
+        ));
+    }
+    out
+}
+
+/// Both sides of a disagreement in the facts' own words, for when the mind gave one twice.
+fn both_sides(n: usize, m: usize, facts: &[Fact]) -> String {
+    let sentence = |i: usize| facts[i - 1].memory.sentence.trim().to_string();
+    format!(
+        "{} [m{n}] {} [m{m}] It is not settled which is right.",
+        sentence(n),
+        sentence(m)
+    )
+}
+
+fn judge(reply: &str, facts: &[Fact], system: &str) -> Judged {
+    let reply = guard::strip_control(reply);
+    let mut filter = CiteFilter::new(facts.len());
+    let mut text = filter.push(&reply);
+    text.push_str(&filter.finish());
+    // Nothing but punctuation, or the instructions read back, is not an answer.
+    let not_sure = guard::not_sure(&reply) || guard::degenerate(&text, system);
+    Judged {
+        text,
+        not_sure,
+        cited: filter.cited().to_vec(),
+        spans: filter.bold_facts(),
     }
 }
 

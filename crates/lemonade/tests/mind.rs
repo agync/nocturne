@@ -603,6 +603,268 @@ async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
     }
 }
 
+/// An answer that is only punctuation with a row of citations, a refusal with a citation, and
+/// the instructions read back are not answers on any tier: each ends as not sure, with nothing
+/// shown and no receipts.
+#[tokio::test]
+async fn degenerate_answers_become_not_sure_with_no_receipts() {
+    for (tier, echo) in [
+        (Tier::Tiny, "Use only the facts about what was asked [m1]."),
+        (Tier::Small, "Never add anything the facts do not say [m1]."),
+    ] {
+        let r = rig_with("downloaded=all", tier).await;
+        let facts: Vec<MemoryView> = (1..=12)
+            .map(|i| memory(&format!("f{i}"), &format!("Fact number {i}.")))
+            .collect();
+        let row: String = (1..=12).map(|i| format!(",[m{i}]")).collect();
+        r.script(json!([
+            {"deltas": [row]},
+            {"deltas": ["I do not know [m1]."]},
+            {"deltas": ["Not_Sure"]},
+            {"deltas": ["<think>hm</think>NOT SURE"]},
+            {"deltas": [echo]},
+        ]))
+        .await;
+        for _ in 0..5 {
+            let (meta, text) = answer(&r, &facts).await;
+            let meta = meta.unwrap();
+            assert!(meta.not_sure, "{tier:?} {meta:?}");
+            assert!(meta.cited.is_empty() && meta.spans.is_empty(), "{meta:?}");
+            assert_eq!(text, "", "nothing of it reaches the person");
+        }
+    }
+}
+
+/// Only the facts an answer cites are receipts, and only when something is said before the
+/// marker.
+#[tokio::test]
+async fn only_cited_facts_become_receipts() {
+    let r = rig().await;
+    let facts: Vec<MemoryView> = (1..=6)
+        .map(|i| memory(&format!("f{i}"), &format!("Fact number {i}.")))
+        .collect();
+    r.script(json!([{"deltas": ["[m5] It is **Monday** [m2]."]}]))
+        .await;
+    let (meta, text) = answer(&r, &facts).await;
+    let meta = meta.unwrap();
+    assert_eq!(text.trim(), "It is **Monday**.");
+    assert_eq!(meta.cited, ["f2"]);
+}
+
+/// Tiny is shown a few facts, plain details and shorter instructions; every other tier is
+/// shown all of them, with the dates, and the instructions it has always had.
+#[tokio::test]
+async fn tiny_is_shown_fewer_facts_and_plainer_details_than_the_rest() {
+    let mut facts: Vec<Fact> = (1..=9)
+        .map(|i| Fact::from(memory(&format!("f{i}"), &format!("Fact number {i}."))))
+        .collect();
+    facts[7].disputed_by = vec!["f2".into()];
+    facts[1].disputed_by = vec!["f8".into()];
+    for (tier, shown, learned) in [(Tier::Tiny, 5, 2), (Tier::Small, 9, 9)] {
+        let r = rig_with("downloaded=all", tier).await;
+        r.script(json!([{"deltas": ["Fact **2** [m2]."]}])).await;
+        answer_facts(&r, &facts).await.0.unwrap();
+        let req = &r.seen("/v1/chat/completions").await[0]["body"];
+        let user = req["messages"][1]["content"].as_str().unwrap();
+        assert_eq!(user.matches("\n[m").count(), shown, "{tier:?}\n{user}");
+        assert_eq!(user.matches("learned").count(), learned, "{tier:?}\n{user}");
+        let system = req["messages"][0]["content"].as_str().unwrap();
+        assert_eq!(
+            system.contains("Never write a sentence and then"),
+            tier != Tier::Tiny
+        );
+    }
+}
+
+/// Tiny, whose mind drops the date or number of the fact it cites, is asked once more naming
+/// what it left out; the other tiers are not asked again.
+#[tokio::test]
+async fn tiny_is_asked_again_once_for_a_number_it_left_out() {
+    let facts = [memory("a", "My blood test showed high cholesterol, 5.9.")];
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["My blood test showed high **cholesterol** [m1]."]},
+        {"deltas": ["My blood test showed high **cholesterol, 5.9** [m1]."]},
+    ]))
+    .await;
+    let (meta, text) = answer(&r, &facts).await;
+    assert_eq!(text, "My blood test showed high **cholesterol, 5.9**.");
+    assert_eq!(meta.unwrap().cited, ["a"]);
+    let asked = r.seen("/v1/chat/completions").await;
+    assert_eq!(asked.len(), 2);
+    let again = asked[1]["body"]["messages"].as_array().unwrap();
+    assert_eq!(again.len(), 4);
+    assert!(
+        again[3]["content"]
+            .as_str()
+            .unwrap()
+            .contains("You left out 5.9")
+    );
+
+    // A second answer that is no better is not used, and nothing more is asked.
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["It showed **cholesterol** [m1]."]},
+        {"deltas": ["It showed **cholesterol** again [m1]."]},
+    ]))
+    .await;
+    let (_, text) = answer(&r, &facts).await;
+    assert_eq!(text, "It showed **cholesterol**.");
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 2);
+
+    let r = rig_with("downloaded=all", Tier::Small).await;
+    r.script(json!([{"deltas": ["It showed **cholesterol** [m1]."]}]))
+        .await;
+    answer(&r, &facts).await.0.unwrap();
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+}
+
+/// A Tiny answer that gives one side of a disagreement is asked again, and a second answer
+/// that cites nothing is not taken for a better one.
+#[tokio::test]
+async fn tiny_is_asked_again_for_one_sided_answers_and_keeps_only_a_cited_better_one() {
+    let facts = [
+        Fact {
+            memory: memory("tue", "Book club meets on Tuesdays."),
+            disputed_by: vec!["wed".into()],
+        },
+        Fact {
+            memory: memory("wed", "Book club meets on Wednesdays."),
+            disputed_by: vec!["tue".into()],
+        },
+    ];
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["Book club meets on **Tuesdays** [m1]."]},
+        {"deltas": ["It meets on **Tuesdays** [m1] or **Wednesdays** [m2]. It is not settled which is right."]},
+    ]))
+    .await;
+    let (meta, text) = answer_facts(&r, &facts).await;
+    assert_eq!(
+        text,
+        "It meets on **Tuesdays** or **Wednesdays**. It is not settled which is right."
+    );
+    assert_eq!(meta.unwrap().cited, ["tue", "wed"]);
+    let asked = r.seen("/v1/chat/completions").await;
+    let again = asked[1]["body"]["messages"].as_array().unwrap();
+    assert!(
+        again[3]["content"]
+            .as_str()
+            .unwrap()
+            .contains("[m1] does not agree with [m2]")
+    );
+
+    // Given one side twice, it is given both, in the facts' own words.
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["Book club meets on **Tuesdays** [m1]."]},
+        {"deltas": ["Book club meets on **Tuesdays** [m1]."]},
+    ]))
+    .await;
+    let (meta, text) = answer_facts(&r, &facts).await;
+    assert_eq!(
+        text,
+        "Book club meets on Tuesdays. Book club meets on Wednesdays. It is not settled which is right."
+    );
+    let meta = meta.unwrap();
+    assert_eq!(
+        (meta.cited, meta.not_sure),
+        (vec!["tue".into(), "wed".into()], false)
+    );
+
+    // An answer that cites nothing is asked for again, with the fact number.
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    let one = [memory("a", "My blood test showed high cholesterol, 5.9.")];
+    r.script(
+        json!([{"deltas": ["5.9"]}, {"deltas": ["It showed high **cholesterol, 5.9** [m1]."]}]),
+    )
+    .await;
+    let (meta, text) = answer(&r, &one).await;
+    assert_eq!(text, "It showed high **cholesterol, 5.9**.");
+    assert_eq!(meta.unwrap().cited, ["a"]);
+
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["It showed **cholesterol** [m1]."]},
+        {"deltas": ["cholesterol, 5.9"]},
+    ]))
+    .await;
+    let (_, text) = answer(&r, &one).await;
+    assert_eq!(text, "It showed **cholesterol**.");
+}
+
+/// An answer that is one fact's own words, given without a citation twice, is that fact's.
+#[tokio::test]
+async fn tiny_answer_in_a_facts_own_words_with_no_marker_cites_that_fact() {
+    let facts = [
+        memory("seat", "You have seat 31 on the Bristol train."),
+        memory("time", "The Bristol train leaves at 9:10."),
+    ];
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["seat 31 on the Bristol train."]},
+        {"deltas": ["seat 31 on the Bristol train."]},
+    ]))
+    .await;
+    let (meta, text) = answer(&r, &facts).await;
+    assert_eq!(text, "seat 31 on the Bristol train.");
+    let meta = meta.unwrap();
+    assert_eq!((meta.cited, meta.not_sure), (vec!["seat".into()], false));
+
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([{"deltas": ["2958"]}, {"deltas": ["2958"]}]))
+        .await;
+    let (meta, _) = answer(&r, &facts).await;
+    assert!(
+        meta.unwrap().not_sure,
+        "words that are no fact's stay uncited"
+    );
+}
+
+/// Tiny is not shown where someone lived once beside where they live now.
+#[tokio::test]
+async fn tiny_is_not_shown_a_home_that_a_later_fact_replaced() {
+    let home = |id: &str, place: &str, learned: &str| {
+        Fact::from(detailed(
+            id,
+            &format!("Gran lives in {place}."),
+            json!({"subject": "Gran", "predicate": "lives_in", "learnedAt": learned}),
+        ))
+    };
+    let facts = [
+        home("leeds", "Leeds", "2026-11-09T08:00:00+00:00"),
+        home("york", "York", "2026-11-10T08:00:00+00:00"),
+    ];
+    // Learned in one sitting, the one in force from the later day is the one that holds.
+    let together = [
+        Fact::from(detailed(
+            "leeds",
+            "Gran lives in Leeds.",
+            json!({"subject": "Gran", "predicate": "lives_in"}),
+        )),
+        Fact::from(detailed(
+            "york",
+            "Gran has moved to York and now lives there.",
+            json!({"subject": "Gran", "predicate": "lives_in", "validFrom": "2026-11-01"}),
+        )),
+    ];
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([{"deltas": ["**York** [m1]."]}])).await;
+    answer_facts(&r, &together).await.0.unwrap();
+    let req = &r.seen("/v1/chat/completions").await[0]["body"];
+    let user = req["messages"][1]["content"].as_str().unwrap();
+    assert!(user.contains("York") && !user.contains("Leeds"), "{user}");
+    for (tier, wanted) in [(Tier::Tiny, 1), (Tier::Small, 2)] {
+        let r = rig_with("downloaded=all", tier).await;
+        r.script(json!([{"deltas": ["**York** [m1]."]}])).await;
+        answer_facts(&r, &facts).await.0.unwrap();
+        let req = &r.seen("/v1/chat/completions").await[0]["body"];
+        let user = req["messages"][1]["content"].as_str().unwrap();
+        assert_eq!(user.matches("\n[m").count(), wanted, "{tier:?}\n{user}");
+        assert_eq!(user.contains("Leeds"), tier != Tier::Tiny, "{user}");
+    }
+}
+
 #[tokio::test]
 async fn a_cut_answer_is_unavailable_never_a_finished_answer() {
     let r = rig().await;

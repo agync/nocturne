@@ -72,6 +72,17 @@ little under 8 GiB (an 8 GB Mac reports exactly 8 GiB). Its answers are simpler 
 details, and the setup screen says so. Below the Tiny tier, or without the free disk, setup stops
 before downloading anything and says why.
 
+Tiny's mind is told less than the others. Small, Standard and Large share one set of answer
+instructions, kept byte for byte (a test pins them). Tiny gets a shorter set with no worked
+example, because a two-billion-parameter mind copies an example or an instruction into its
+answer. It is shown at most four facts (and any fact on the other side of a disagreement with
+one of them) instead of twelve, not a home that a later fact replaces, and dates only on facts
+in dispute. When its answer leaves out a number, date or time of a fact it cites, or gives one
+side of a disagreement, it is asked once more and the better answer is kept. Every tier has the
+same guards: a reply that is only punctuation, the instructions read back, a refusal worded as an
+answer, or the not-sure word in any spelling is not shown and ends as not sure; a citation with
+no words before it is not a receipt.
+
 The backend follows the hardware: Metal on a Mac (the engine offers nothing else there), Vulkan on
 an integrated GPU, ROCm on a discrete AMD GPU, otherwise the CPU. When the machine runs short of
 memory later, the app offers the next smaller tier rather than failing (Large to Standard,
