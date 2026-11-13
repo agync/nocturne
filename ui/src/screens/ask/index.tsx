@@ -3,9 +3,11 @@ import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useLocation } from "wouter";
 import { askRequests, useAskRequest } from "../../app/ask-request";
 import { hashHref } from "../../app/query";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { AskPhase, MemoryView, Receipt } from "../../engine/bindings";
@@ -349,22 +351,14 @@ export default function Ask() {
   };
 
   return (
-    <div className={styles.screen}>
-      <div className={styles.bar}>
-        <a className={styles.back} href="#/today" aria-label={t("ask.back.label")}>
-          <span className={styles.arrow} aria-hidden="true">
-            ←
-          </span>
-          {t("ask.back")}
-        </a>
-        {finished && items > 0 ? (
-          <span className={styles.provenance}>
-            {t(internet ? "ask.provenance" : "ask.provenance.plain", { count: items })}
-          </span>
-        ) : null}
-      </div>
-
+    <ScreenSheet>
+      <BackLink to="/today" label={t("screen.today.title")} />
       <div className={styles.column}>
+        {finished && items > 0 ? (
+          <p className={styles.provenance}>
+            {t(internet ? "ask.provenance" : "ask.provenance.plain", { count: items })}
+          </p>
+        ) : null}
         {earlier.length > 0 ? (
           <section className={styles.earlier} aria-labelledby="ask-earlier">
             <p id="ask-earlier" className={styles.eyebrow}>
@@ -399,7 +393,7 @@ export default function Ask() {
         {current ? (
           <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && !shown.failed}>
             <p className={styles.eyebrow}>{t("ask.eyebrow")}</p>
-            <h1 ref={heading} tabIndex={-1} className={styles.question}>
+            <h1 ref={heading} tabIndex={-1} className={`t-page-title ${styles.question}`}>
               {t("ask.question", { question: current })}
             </h1>
 
@@ -597,7 +591,7 @@ export default function Ask() {
           </Button>
         </div>
       </form>
-    </div>
+    </ScreenSheet>
   );
 }
 
@@ -605,7 +599,7 @@ function EmptyAsk({ onAsk }: { onAsk: (question: string) => void }) {
   const EXAMPLES = [t("ask.example.1"), t("ask.example.2"), t("ask.example.3")];
   return (
     <section className={styles.empty}>
-      <h1 className={styles.question}>{t("ask.empty.title")}</h1>
+      <h1 className={`t-page-title ${styles.question}`}>{t("ask.empty.title")}</h1>
       <p className={styles.note}>{t("ask.empty.body")}</p>
       <p className={styles.eyebrow}>{t("ask.empty.examples")}</p>
       <ul className={styles.examples}>

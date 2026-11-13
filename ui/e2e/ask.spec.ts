@@ -138,7 +138,7 @@ test.describe("the Ask page", () => {
     await expect(page.getByText("Corrected. The old answer is kept as history.")).toBeFocused();
   });
 
-  test("Keep forever says so and Forget this opens the dialog and returns focus", async ({
+  test("Keep forever says so and Delete this opens the dialog and returns focus", async ({
     page,
   }) => {
     await ready(page, "#/today");
@@ -146,7 +146,7 @@ test.describe("the Ask page", () => {
     await settled(page);
     await page.getByRole("button", { name: "Keep forever" }).click();
     await expect(page.getByText("Kept forever. It will not fade.")).toBeVisible();
-    const forget = page.getByRole("button", { name: "Forget this…" });
+    const forget = page.getByRole("button", { name: "Delete this…" });
     await forget.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByRole("dialog")).toBeVisible();

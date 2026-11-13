@@ -136,14 +136,13 @@ export function Actions({
           >
             {allKeptForever ? t("memory.flag.keepForever") : t("ask.keepForever")}
           </Button>
-          <button
-            type="button"
-            className={styles.quiet}
+          <Button
+            variant="forget"
             disabled={disabled}
             onClick={(e) => begin("forget", e.currentTarget)}
           >
             {t("ask.forget")}
-          </button>
+          </Button>
         </fieldset>
       ) : null}
 

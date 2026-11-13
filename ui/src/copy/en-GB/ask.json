@@ -1,6 +1,4 @@
 {
-  "ask.back": "Today",
-  "ask.back.label": "Back to Today",
   "ask.provenance": "Answered from {count, plural, one {# thing} other {# things}} you kept · nothing sent to the internet",
   "ask.provenance.plain": "Answered from {count, plural, one {# thing} other {# things}} you kept",
   "ask.eyebrow": "You asked",
@@ -25,7 +23,7 @@
   "ask.actions": "What to do with this answer",
   "ask.wrong": "That’s wrong",
   "ask.keepForever": "Keep forever",
-  "ask.forget": "Forget this…",
+  "ask.forget": "Delete this…",
   "ask.chooser.title": "Which one?",
   "ask.chooser.all": "All of them",
   "ask.wrong.label": "What is right? Write it as one sentence.",
@@ -33,7 +31,7 @@
   "ask.wrong.cancel": "Cancel",
   "ask.wrong.done": "Corrected. The old answer is kept as history.",
   "ask.keepForever.done": "Kept forever. It will not fade.",
-  "ask.forget.done": "Forgotten. It is no longer kept.",
+  "ask.forget.done": "Deleted. It is no longer kept.",
   "ask.action.failed": "That didn’t work. Nothing was changed; try again in a moment.",
   "ask.span": "{text}. Show where this came from.",
   "ask.receipt.groupFor": "Where “{sentence}” came from",
@@ -47,6 +45,6 @@
   "ask.example.1": "When is the dentist?",
   "ask.example.2": "What did we decide about half term?",
   "ask.example.3": "What is Gran’s new number?",
-  "ask.forget.some": "Forgotten {gone} of {total} things. The answer that used {gone, plural, one {it} other {them}} is hidden. Ask again for a fresh one.",
+  "ask.forget.some": "Deleted {gone} of {total} things. The answer that used {gone, plural, one {it} other {them}} is hidden. Ask again for a fresh one.",
   "ask.corrected": "Corrected: {sentence}"
 }

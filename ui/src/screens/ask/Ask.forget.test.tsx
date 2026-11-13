@@ -69,7 +69,7 @@ const openWithEarlier = async () => {
   await waitFor(() => expect(announcer()).toHaveTextContent("Answer ready."));
   await act(async () => askRequests.request("And who is the coach?"));
   await screen.findByRole("heading", { level: 1, name: "“And who is the coach?”" });
-  await screen.findByRole("button", { name: "Forget this…" });
+  await screen.findByRole("button", { name: "Delete this…" });
   await waitFor(() => expect(announcer()).toHaveTextContent("Answer ready."));
 };
 
@@ -78,7 +78,7 @@ describe("forgetting what an answer used", () => {
     await openWithEarlier();
     const earlier = screen.getByRole("region", { name: "Earlier" });
     expect(earlier).toHaveTextContent(/Leo swims on Mondays/);
-    await userEvent.click(screen.getByRole("button", { name: "Forget this…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete this…" }));
     const chooser = await screen.findByRole("group", { name: "Which one?" });
     await userEvent.click(within(chooser).getByRole("button", { name: "All of them" }));
     const dialog = await screen.findByRole("dialog");
@@ -90,13 +90,13 @@ describe("forgetting what an answer used", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/);
-    expect(within(earlier).getByText("Forgotten. It is no longer kept.")).toBeInTheDocument();
+    expect(within(earlier).getByText("Deleted. It is no longer kept.")).toBeInTheDocument();
     expect(
       within(earlier).queryByRole("button", {
         name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
       }),
     ).toBeNull();
-    const result = await screen.findByText("Forgotten. It is no longer kept.", {
+    const result = await screen.findByText("Deleted. It is no longer kept.", {
       selector: "p[role=status]",
     });
     await waitFor(() => expect(result).toHaveFocus());
@@ -105,14 +105,14 @@ describe("forgetting what an answer used", () => {
 
   it("forgetting one of several says which, hides the answer and keeps nothing that used it", async () => {
     await openWithEarlier();
-    await userEvent.click(screen.getByRole("button", { name: "Forget this…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete this…" }));
     const chooser = await screen.findByRole("group", { name: "Which one?" });
     await userEvent.click(within(chooser).getAllByRole("button")[0] as HTMLElement);
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 1 memory$/ }));
     await within(dialog).findByText("Gone.");
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
-    const said = await screen.findByText(/^Forgotten 1 of 2 things\./, {
+    const said = await screen.findByText(/^Deleted 1 of 2 things\./, {
       selector: "p[role=status]",
     });
     expect(said).toHaveTextContent("The answer that used it is hidden. Ask again for a fresh one.");
@@ -121,7 +121,7 @@ describe("forgetting what an answer used", () => {
     expect(JSON.stringify(askSession.get())).not.toMatch(/Leo’s swimming is on Mondays/);
     expect(JSON.stringify(askSession.get())).not.toMatch(/Leo swims/);
     const earlier = screen.getByRole("region", { name: "Earlier" });
-    expect(within(earlier).getByText(/^Forgotten 1 of 2 things\./)).toBeInTheDocument();
+    expect(within(earlier).getByText(/^Deleted 1 of 2 things\./)).toBeInTheDocument();
   });
 
   it("a restored conversation drops turns whose memories were forgotten elsewhere", async () => {
@@ -159,7 +159,7 @@ describe("forgetting what an answer used", () => {
     renderApp({ hash: "#/ask", engine });
     const earlier = await screen.findByRole("region", { name: "Earlier" });
     await waitFor(() => expect(earlier).not.toHaveTextContent(/Coach Sam coaches/));
-    expect(earlier).toHaveTextContent(/Forgotten 1 of 2 things/);
+    expect(earlier).toHaveTextContent(/Deleted 1 of 2 things/);
     await waitFor(() => expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/));
     expect(JSON.stringify(askSession.get())).not.toMatch(/Leo swims|Coach Sam coaches/);
   });
@@ -199,7 +199,7 @@ describe("forgetting what an answer used", () => {
     expect(document.body).not.toHaveTextContent(/Leo swims/);
     expect(screen.queryByRole("heading", { level: 1, name: /When is Leo/ })).toBeNull();
     await act(async () => answer(await real(filter)));
-    await screen.findByText("Forgotten. It is no longer kept.", { selector: "p[role=status]" });
+    await screen.findByText("Deleted. It is no longer kept.", { selector: "p[role=status]" });
     expect(document.body).not.toHaveTextContent(/Leo swims/);
   });
 
