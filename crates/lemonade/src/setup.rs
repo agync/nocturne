@@ -484,7 +484,7 @@ impl Inner {
             }
         }
         let error = if detected == Tier::Unsupported && next == SetupPhase::Choosing {
-            if ram < u64::from(tier::min_ram_gib(Tier::Small)) * GIB {
+            if ram < u64::from(tier::min_ram_gib(tier::SMALLEST)) * GIB {
                 Some(SetupError::NotEnoughMemory)
             } else {
                 Some(SetupError::DiskFull)
@@ -493,7 +493,7 @@ impl Inner {
             None
         };
         let needed = (error == Some(SetupError::DiskFull)).then(|| {
-            (tier::download_bytes(Tier::Small) + DISK_HEADROOM).saturating_sub(free) as f64
+            (tier::download_bytes(tier::SMALLEST) + DISK_HEADROOM).saturating_sub(free) as f64
         });
         self.update(|v| {
             v.phase = next;

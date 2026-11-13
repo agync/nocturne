@@ -55,6 +55,12 @@ pub fn components(tier: Tier) -> Vec<Component> {
             VOICE,
             RECALL,
         ],
+        Tier::Tiny => vec![
+            c(ComponentRole::Mind, "Qwen3.5-2B-GGUF", 2_010_000_000),
+            c(ComponentRole::Speech, "Whisper-Base", 148_000_000),
+            VOICE,
+            RECALL,
+        ],
         Tier::Unsupported => Vec::new(),
     }
 }
@@ -87,11 +93,16 @@ pub fn min_ram_gib(tier: Tier) -> u32 {
         Tier::Large => 60,
         Tier::Standard => 28,
         Tier::Small => 14,
+        // An 8 GB computer reports a little under 8 GiB once the system has taken its share.
+        Tier::Tiny => 7,
         Tier::Unsupported => 0,
     }
 }
 
-const ORDER: [Tier; 3] = [Tier::Large, Tier::Standard, Tier::Small];
+const ORDER: [Tier; 4] = [Tier::Large, Tier::Standard, Tier::Small, Tier::Tiny];
+
+/// The tier with the least to ask of a machine: below it, nothing fits.
+pub const SMALLEST: Tier = Tier::Tiny;
 
 fn ram_ok(tier: Tier, ram_bytes: u64) -> bool {
     ram_bytes >= u64::from(min_ram_gib(tier)) * GIB
@@ -172,6 +183,10 @@ mod tests {
             missing_bytes(Tier::Small, Tier::Standard),
             3_660_000_000 + 148_000_000
         );
+        assert_eq!(
+            missing_bytes(Tier::Tiny, Tier::Standard),
+            2_010_000_000 + 148_000_000
+        );
         assert_eq!(missing_bytes(Tier::Small, Tier::Small), 0);
         assert_eq!(
             missing_bytes(Tier::Standard, Tier::Small),
@@ -185,7 +200,10 @@ mod tests {
 
     #[test]
     fn detects_by_memory() {
-        assert_eq!(detect(gib(8), PLENTY), Tier::Unsupported);
+        assert_eq!(detect(gib(4), PLENTY), Tier::Unsupported);
+        // An 8 GB Mac reports 8 GiB; an 8 GB Linux computer a little under.
+        assert_eq!(detect(gib(8), PLENTY), Tier::Tiny);
+        assert_eq!(detect(gib(15) / 2, PLENTY), Tier::Tiny);
         assert_eq!(detect(gib(16), PLENTY), Tier::Small);
         assert_eq!(detect(gib(32), PLENTY), Tier::Standard);
         assert_eq!(detect(gib(64), PLENTY), Tier::Large);
@@ -195,7 +213,9 @@ mod tests {
     #[test]
     fn the_thresholds_are_inclusive() {
         assert_eq!(detect(gib(14), PLENTY), Tier::Small);
-        assert_eq!(detect(gib(14) - 1, PLENTY), Tier::Unsupported);
+        assert_eq!(detect(gib(14) - 1, PLENTY), Tier::Tiny);
+        assert_eq!(detect(gib(7), PLENTY), Tier::Tiny);
+        assert_eq!(detect(gib(7) - 1, PLENTY), Tier::Unsupported);
         assert_eq!(detect(gib(28), PLENTY), Tier::Standard);
         assert_eq!(detect(gib(60), PLENTY), Tier::Large);
     }
@@ -213,6 +233,10 @@ mod tests {
         );
         assert_eq!(
             detect(ram, download_bytes(Tier::Small) + DISK_HEADROOM - 1),
+            Tier::Tiny
+        );
+        assert_eq!(
+            detect(ram, download_bytes(Tier::Tiny) + DISK_HEADROOM - 1),
             Tier::Unsupported
         );
     }
@@ -226,7 +250,8 @@ mod tests {
             [
                 (Tier::Large, false),
                 (Tier::Standard, true),
-                (Tier::Small, true)
+                (Tier::Small, true),
+                (Tier::Tiny, true)
             ]
         );
         let short_disk = tier_options(gib(124), gib(3));
@@ -263,6 +288,24 @@ mod tests {
         assert!((gb(Tier::Large) - 26.4).abs() < 0.1);
         assert!((gb(Tier::Standard) - 8.4).abs() < 0.1);
         assert!((gb(Tier::Small) - 4.8).abs() < 0.1);
+        assert!((gb(Tier::Tiny) - 3.2).abs() < 0.1);
+        assert_eq!(
+            model_for(Tier::Tiny, ComponentRole::Mind),
+            Some("Qwen3.5-2B-GGUF")
+        );
+        assert_eq!(min_ram_gib(SMALLEST), 7);
+    }
+
+    #[test]
+    fn every_tier_can_choose_tiny_and_tiny_needs_only_its_mind_after_small() {
+        for ram in [gib(8), gib(16), gib(32), gib(64)] {
+            let tiny = tier_options(ram, PLENTY)
+                .into_iter()
+                .find(|o| o.tier == Tier::Tiny)
+                .unwrap();
+            assert!(tiny.fits, "{ram}");
+        }
+        assert_eq!(missing_bytes(Tier::Tiny, Tier::Small), 2_010_000_000);
     }
 
     fn info(json: &str) -> SystemInfo {

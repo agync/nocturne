@@ -83,6 +83,7 @@ pub enum Tier {
     Large,
     Standard,
     Small,
+    Tiny,
     Unsupported,
 }
 

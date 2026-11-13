@@ -460,7 +460,8 @@ fn smaller(tier: Tier) -> Option<Tier> {
     match tier {
         Tier::Large => Some(Tier::Standard),
         Tier::Standard => Some(Tier::Small),
-        Tier::Small | Tier::Unsupported => None,
+        Tier::Small => Some(Tier::Tiny),
+        Tier::Tiny | Tier::Unsupported => None,
     }
 }
 
@@ -534,9 +535,10 @@ async fn requeue<R: Runtime>(app: &AppHandle<R>, upgrade: bool) {
 
 fn rank(tier: Tier) -> u8 {
     match tier {
-        Tier::Large => 3,
-        Tier::Standard => 2,
-        Tier::Small => 1,
+        Tier::Large => 4,
+        Tier::Standard => 3,
+        Tier::Small => 2,
+        Tier::Tiny => 1,
         Tier::Unsupported => 0,
     }
 }
@@ -592,5 +594,24 @@ impl<R: Runtime> Events for AppEvents<R> {
             tracing::warn!("could not emit the page: {e}");
         }
         self.refresh();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_tier_drops_to_the_next_smaller_and_tiny_is_the_last() {
+        let mut chain = vec![Tier::Large];
+        while let Some(next) = smaller(*chain.last().unwrap()) {
+            chain.push(next);
+        }
+        assert_eq!(
+            chain,
+            [Tier::Large, Tier::Standard, Tier::Small, Tier::Tiny]
+        );
+        assert_eq!(smaller(Tier::Unsupported), None);
+        assert!(chain.windows(2).all(|w| rank(w[0]) > rank(w[1])));
     }
 }

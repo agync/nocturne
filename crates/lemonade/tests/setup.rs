@@ -161,7 +161,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
     assert_eq!(checked.phase, SetupPhase::Choosing);
     assert_eq!(checked.detected, Some(Tier::Standard));
     assert_eq!(checked.ram_gib, 32);
-    assert_eq!(checked.options.len(), 3);
+    assert_eq!(checked.options.len(), 4);
     assert!(
         checked
             .options
@@ -370,14 +370,30 @@ async fn not_enough_free_space_is_reported_before_anything_downloads() {
 
 #[tokio::test]
 async fn too_little_memory_is_reported() {
-    let rig = rig("", 8).await;
+    let rig = rig("", 6).await;
     let checked = rig.setup.check().await.unwrap();
     assert_eq!(checked.detected, Some(Tier::Unsupported));
     assert_eq!(checked.error, Some(SetupError::NotEnoughMemory));
-    rig.setup.start(Tier::Standard).await.unwrap();
+    rig.setup.start(Tier::Tiny).await.unwrap();
     let view = rig.setup.view().borrow().clone();
     assert_eq!(view.phase, SetupPhase::Failed);
     assert_eq!(view.error, Some(SetupError::NotEnoughMemory));
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_8_gb_computer_is_offered_the_tiny_tier() {
+    let rig = rig("", 8).await;
+    let checked = rig.setup.check().await.unwrap();
+    assert_eq!(checked.detected, Some(Tier::Tiny));
+    assert_eq!(checked.error, None);
+    let fitting: Vec<Tier> = checked
+        .options
+        .iter()
+        .filter(|o| o.fits)
+        .map(|o| o.tier)
+        .collect();
+    assert_eq!(fitting, [Tier::Tiny]);
     rig.sup.shutdown().await.unwrap();
 }
 

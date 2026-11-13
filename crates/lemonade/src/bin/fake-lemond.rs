@@ -40,6 +40,7 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
     ("Qwen3.5-9B-GGUF", 6.88, "llamacpp", "chat,vision"),
     ("Whisper-Small", 0.488, "whispercpp", "transcription"),
     ("Qwen3.5-4B-MTP-GGUF", 3.66, "llamacpp", "chat,vision"),
+    ("Qwen3.5-2B-GGUF", 2.01, "llamacpp", "chat,vision"),
     ("Whisper-Base", 0.148, "whispercpp", "transcription"),
     ("kokoro-v1", 0.354, "kokoro", "tts"),
     ("Whisper-Tiny", 0.075, "whispercpp", "transcription"),

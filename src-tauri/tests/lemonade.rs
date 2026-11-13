@@ -655,6 +655,45 @@ fn two_failed_loads_with_little_memory_offer_the_smaller_mind() {
 }
 
 #[test]
+fn the_small_mind_short_of_memory_is_offered_the_tiny_one_and_tiny_offers_nothing() {
+    let small = lab(Plan {
+        free_memory: GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Small)
+    });
+    wait_for("the mind to arrive", || small.has_mind());
+    let app = small.h.app.handle();
+    runtime::out_of_memory(app);
+    runtime::out_of_memory(app);
+    wait_for("the offer", || small.has_notice("tierDropped"));
+    assert_eq!(small.services.tier_offer(), Some(Tier::Tiny));
+    let notice = small.h.ok("get_status", json!({}))["notices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|n| n["code"] == "tierDropped")
+        .cloned()
+        .unwrap();
+    assert_eq!(
+        notice["bytes"].as_f64().unwrap() as u64,
+        nocturne_lemonade::tier::missing_bytes(Tier::Tiny, Tier::Small),
+        "only the tiny mind is new"
+    );
+    drop(small);
+
+    let tiny = lab(Plan {
+        free_memory: GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Tiny)
+    });
+    wait_for("the mind to arrive", || tiny.has_mind());
+    let app = tiny.h.app.handle();
+    runtime::out_of_memory(app);
+    runtime::out_of_memory(app);
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!tiny.has_notice("tierDropped"), "there is nothing smaller");
+    assert_eq!(tiny.services.tier_offer(), None);
+}
+
+#[test]
 fn the_offer_is_withdrawn_once_memory_has_stayed_back_for_ten_minutes() {
     let lab = lab(Plan {
         free_memory: 2 * GIB,
