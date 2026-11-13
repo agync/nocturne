@@ -45,6 +45,7 @@ fn devices_round_trip() {
     assert_eq!(f.engine.device(&d.id).unwrap(), Some(d.clone()));
     assert_eq!(f.engine.device("missing").unwrap(), None);
 
+    f.clock.set_str("2026-11-13T07:30:00Z");
     let other = pair(&f.engine, "Phone B", "https://home.example");
     assert_ne!(other, d.id);
 
