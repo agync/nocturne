@@ -13,7 +13,8 @@
 //!
 //! Environment: `NOCTURNE_E2E_DIR` (scratch folder, default `target/e2e-real`),
 //! `NOCTURNE_E2E_FRESH=1` (forget what was downloaded before), `NOCTURNE_E2E_TAG` (suffix for the
-//! result files), `NOCTURNE_E2E_READ_SECS` and `NOCTURNE_E2E_SETUP_SECS` (time limits).
+//! result files), `NOCTURNE_E2E_READ_SECS` and `NOCTURNE_E2E_SETUP_SECS` (time limits),
+//! `NOCTURNE_E2E_TIER` (`small`, the default, or `standard`: the tier set up and checked).
 
 mod common;
 
@@ -1204,6 +1205,11 @@ fn has_word(text: &str, word: &str) -> bool {
     })
 }
 
+/// The tier this run sets up and checks, as the interface names it.
+fn tier_name() -> String {
+    std::env::var("NOCTURNE_E2E_TIER").unwrap_or_else(|_| "small".to_string())
+}
+
 fn answer_json(q: &Question, a: &Answer, extra: Value) -> Value {
     json!({
         "id": q.id, "kind": q.kind, "question": q.text, "phase": a.phase,
@@ -1279,18 +1285,19 @@ fn the_whole_product_works_with_real_models() {
     let mut setup_ms = 0;
     let mut setup_bytes = 0.0;
     let mut offline_during_download: Vec<bool> = Vec::new();
+    let tier = tier_name();
     if !was_done {
-        let small = first["options"]
+        let offered = first["options"]
             .as_array()
-            .and_then(|o| o.iter().find(|o| o["tier"] == "small").cloned());
+            .and_then(|o| o.iter().find(|o| o["tier"] == tier.as_str()).cloned());
         run.check(
             "setup.choice",
-            "the small tier is offered and fits this machine",
-            small.as_ref().is_some_and(|s| s["fits"] == true),
-            small.map(|s| s.to_string()).unwrap_or_default(),
+            &format!("the {tier} tier is offered and fits this machine"),
+            offered.as_ref().is_some_and(|s| s["fits"] == true),
+            offered.map(|s| s.to_string()).unwrap_or_default(),
         );
         let t0 = Instant::now();
-        h.ok("start_setup", json!({"tier": "small"}));
+        h.ok("start_setup", json!({ "tier": tier }));
         let limit = env_secs("NOCTURNE_E2E_SETUP_SECS", 4 * 3600);
         let mut last_print = Instant::now();
         let done = wait_until(limit, || {
@@ -1325,7 +1332,7 @@ fn the_whole_product_works_with_real_models() {
         let last = h.ok("get_setup", json!({}));
         run.check(
             "setup.done",
-            "setup downloads the small tier and reaches done",
+            &format!("setup downloads the {tier} tier and reaches done"),
             done.is_some() && last["phase"] == "done",
             format!(
                 "{:?} in {}s, error {}",
@@ -1345,12 +1352,14 @@ fn the_whole_product_works_with_real_models() {
             "",
         );
     }
-    let small_bytes = nocturne_lemonade::tier::download_bytes(nocturne_contract::Tier::Small);
+    let tier_bytes = nocturne_lemonade::tier::download_bytes(
+        serde_json::from_value(json!(tier)).expect("a tier the app knows"),
+    );
     run.put(
         "setup",
         json!({
             "downloaded_this_run": !was_done, "phases": phases_seen, "wall_ms": setup_ms,
-            "downloaded_bytes": setup_bytes, "tier_download_bytes": small_bytes,
+            "downloaded_bytes": setup_bytes, "tier_download_bytes": tier_bytes,
             "engine_offline_samples_while_downloading": offline_during_download,
         }),
     );
@@ -1395,7 +1404,7 @@ fn the_whole_product_works_with_real_models() {
     run.check(
         "setup.advanced",
         "the advanced details name the tier, the components and the engine version",
-        advanced["tier"] == "small"
+        advanced["tier"] == tier.as_str()
             && advanced["components"]
                 .as_array()
                 .is_some_and(|c| !c.is_empty())
@@ -2305,7 +2314,8 @@ fn summary(run: &Run) -> String {
     let mut s = String::new();
     s.push_str("# Real end-to-end run\n\n");
     s.push_str(&format!(
-        "One seeded day, the small tier, real models. {} checks, {} failed. Wall time {} s.\n\n",
+        "One seeded day, the {} tier, real models. {} checks, {} failed. Wall time {} s.\n\n",
+        tier_name(),
         run.checks.len(),
         run.checks.iter().filter(|c| !c.pass).count(),
         run.started.elapsed().as_secs()
