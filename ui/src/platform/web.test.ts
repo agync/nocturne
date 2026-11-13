@@ -114,3 +114,16 @@ describe("WebPlatform printing", () => {
     print.mockRestore();
   });
 });
+
+describe("WebPlatform picking files", () => {
+  it("filters for photos, PDFs, recordings and text, and cleans up after itself", async () => {
+    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => undefined);
+    const picking = new WebPlatform().pickFiles();
+    const input = document.body.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input?.accept).toBe("image/*,application/pdf,audio/*,text/*");
+    input?.dispatchEvent(new Event("change"));
+    await expect(picking).resolves.toEqual([]);
+    expect(document.body.querySelector('input[type="file"]')).toBeNull();
+    click.mockRestore();
+  });
+});

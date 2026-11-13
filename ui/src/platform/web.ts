@@ -134,8 +134,15 @@ export class WebPlatform implements Platform {
       const input = document.createElement("input");
       input.type = "file";
       input.multiple = true;
-      input.addEventListener("change", () => resolve([...(input.files ?? [])].map((f) => f.name)));
-      input.addEventListener("cancel", () => resolve([]));
+      input.accept = "image/*,application/pdf,audio/*,text/*";
+      input.hidden = true;
+      const finish = (paths: string[]) => {
+        input.remove();
+        resolve(paths);
+      };
+      input.addEventListener("change", () => finish([...(input.files ?? [])].map((f) => f.name)));
+      input.addEventListener("cancel", () => finish([]));
+      document.body.append(input);
       input.click();
     });
   }

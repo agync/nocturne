@@ -204,3 +204,26 @@ for (const scheme of ["light", "dark"] as const) {
     await context.close();
   });
 }
+
+test.describe("add a photo or file from the keep bar", () => {
+  // The shell passes `onFiles` to the bar in the shell task; until then the button is not there.
+  test.fixme(true, "needs the shell to pass onFiles to the keep bar");
+
+  test("a chosen JPEG is kept and the toast says so", async ({ page }) => {
+    await page.goto("/#/today");
+    const add = page.getByRole("button", { name: "Add a photo or file" });
+    await expect(add).toBeVisible();
+    const size = await add.boundingBox();
+    expect(Math.round(size?.width ?? 0)).toBe(44);
+    expect(Math.round(size?.height ?? 0)).toBe(44);
+    const chooser = page.waitForEvent("filechooser");
+    await add.click();
+    await (await chooser).setFiles({
+      name: "lunch.jpg",
+      mimeType: "image/jpeg",
+      buffer: Buffer.from([0xff, 0xd8, 0xff, 0xd9]),
+    });
+    await expect(page.getByText(/Kept 1 file\./)).toBeVisible();
+    expect(await axe(page)).toEqual([]);
+  });
+});

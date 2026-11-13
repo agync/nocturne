@@ -31,4 +31,19 @@ describe("HttpPlatform", () => {
     expect(info).toHaveBeenCalledTimes(3);
     info.mockRestore();
   });
+
+  it("picks with a phone-friendly filter and keeps the input attached only while picking", async () => {
+    const platform = new HttpPlatform();
+    const click = vi.spyOn(HTMLInputElement.prototype, "click").mockImplementation(() => undefined);
+    const picking = platform.pickFiles();
+    const input = document.body.querySelector<HTMLInputElement>('input[type="file"]');
+    expect(input).not.toBeNull();
+    expect(input?.accept).toBe("image/*,application/pdf,audio/*,text/*");
+    expect(input?.multiple).toBe(true);
+    expect(input?.hidden).toBe(true);
+    input?.dispatchEvent(new Event("cancel"));
+    await expect(picking).resolves.toEqual([]);
+    expect(document.body.querySelector('input[type="file"]')).toBeNull();
+    click.mockRestore();
+  });
 });

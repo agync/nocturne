@@ -1,6 +1,9 @@
 import { type KeyboardEvent, type Ref, useId, useState } from "react";
 import { t } from "../../copy/t";
+import { EngineError } from "../../engine/client";
+import { usePlatform } from "../../platform/context";
 import { Icon } from "../Icon/Icon";
+import { useToast } from "../Toast/Toast";
 import styles from "./KeepAskBar.module.css";
 
 export type Verb = "keep" | "ask";
@@ -25,6 +28,12 @@ interface KeepAskBarProps {
   onAsk: (text: string) => void | Promise<void>;
   /** The global quick-keep shortcut, shown as a hint while the bar is empty. */
   shortcut?: string;
+  /**
+   * Picked photos and files. Shows the add button when set. Rejecting with an `EngineError` that
+   * says the kind cannot be kept makes the bar explain it; any other rejection is the caller's to
+   * report.
+   */
+  onFiles?: (paths: string[]) => void | Promise<void>;
   /** Hold-to-talk. Press starts, release stops. */
   onTalk?: { start: () => void; stop: () => void };
   /** Why talking is not possible here. The microphone button is marked unavailable and says why. */
@@ -42,6 +51,7 @@ export function KeepAskBar({
   onKeep,
   onAsk,
   shortcut,
+  onFiles,
   onTalk,
   recordingSeconds = null,
   talkUnavailable,
@@ -165,6 +175,7 @@ export function KeepAskBar({
             {shortcutLabel(shortcut)}
           </kbd>
         ) : null}
+        {onFiles ? <AddFileButton onFiles={onFiles} /> : null}
         {onTalk ? (
           <button
             type="button"
@@ -187,6 +198,40 @@ export function KeepAskBar({
         ) : null}
       </div>
     </search>
+  );
+}
+
+/** The engine refuses kinds it cannot read with this wording; see `extension_for`. */
+function isUnsupported(error: unknown): boolean {
+  return (
+    error instanceof EngineError &&
+    error.code === "invalid" &&
+    error.detail.includes("cannot be kept")
+  );
+}
+
+function AddFileButton({ onFiles }: { onFiles: (paths: string[]) => void | Promise<void> }) {
+  const platform = usePlatform();
+  const toast = useToast();
+  const pick = async () => {
+    const paths = await platform.pickFiles();
+    if (paths.length === 0) return;
+    try {
+      await onFiles(paths);
+    } catch (error) {
+      if (isUnsupported(error)) toast.show({ message: t("capture.addFile.unsupported") });
+    }
+  };
+  return (
+    <button
+      type="button"
+      className={styles.attach}
+      aria-label={t("capture.addFile")}
+      title={t("capture.addFile")}
+      onClick={() => void pick()}
+    >
+      <Icon name="paperclip" size={18} />
+    </button>
   );
 }
 

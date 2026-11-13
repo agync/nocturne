@@ -105,18 +105,22 @@
   background: var(--ember);
 }
 
-.mic {
+.mic,
+.attach {
   display: inline-flex;
   flex: none;
   align-items: center;
   justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
+  width: var(--size-touch);
+  height: var(--size-touch);
   padding: 0;
   border: 1px solid var(--ink3);
   border-radius: 50%;
   background: transparent;
   color: var(--ink);
+}
+
+.mic {
   touch-action: none;
 }
 

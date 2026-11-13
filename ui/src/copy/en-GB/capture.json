@@ -30,5 +30,7 @@
   "capture.kept.voice": "Voice note, {duration}. Reading it now.",
   "capture.kept.photo": "Photo. Nocturne will read it tonight.",
   "capture.kept.web": "Kept as unconfirmed. Nocturne will read it tonight.",
-  "capture.duplicate.open": "Open it"
+  "capture.duplicate.open": "Open it",
+  "capture.addFile": "Add a photo or file",
+  "capture.addFile.unsupported": "Nocturne can’t keep that kind of file yet. Photos, PDFs, recordings and plain text work."
 }

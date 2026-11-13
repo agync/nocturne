@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { EngineError } from "../../engine/client";
+import { PlatformProvider } from "../../platform/context";
+import type { Platform } from "../../platform/types";
+import { ToastProvider } from "../Toast/Toast";
 import { defaultVerb, KeepAskBar } from "./KeepAskBar";
 
 function setup(props: Partial<Parameters<typeof KeepAskBar>[0]> = {}) {
@@ -182,5 +187,67 @@ describe("KeepAskBar", () => {
     expect(screen.getByRole("button", { name: "Hold to talk" })).not.toHaveAttribute(
       "aria-disabled",
     );
+  });
+});
+
+describe("KeepAskBar add a photo or file", () => {
+  function withPicker(picked: string[], props: Partial<Parameters<typeof KeepAskBar>[0]> = {}) {
+    const pickFiles = vi.fn(async () => picked);
+    render(
+      <PlatformProvider platform={{ pickFiles } as unknown as Platform}>
+        <ToastProvider>
+          <KeepAskBar placement="top" onKeep={vi.fn()} onAsk={vi.fn()} {...props} />
+        </ToastProvider>
+      </PlatformProvider>,
+    );
+    return pickFiles;
+  }
+
+  it("renders only when onFiles is set, named for what it does", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: "Add a photo or file" })).toBeNull();
+    withPicker([], { onFiles: vi.fn() });
+    const button = screen.getByRole("button", { name: "Add a photo or file" });
+    expect(button).toHaveAttribute("title", "Add a photo or file");
+  });
+
+  it("sits immediately before the microphone", () => {
+    withPicker([], { onFiles: vi.fn(), onTalk: { start: vi.fn(), stop: vi.fn() } });
+    const add = screen.getByRole("button", { name: "Add a photo or file" });
+    expect(add.nextElementSibling).toBe(screen.getByRole("button", { name: "Hold to talk" }));
+  });
+
+  it("is a 44 px square, like the microphone", () => {
+    const css = readFileSync("src/components/KeepAskBar/KeepAskBar.module.css", "utf8");
+    expect(css).toMatch(
+      /\.mic,\s*\.attach \{[^}]*width: var\(--size-touch\);[^}]*height: var\(--size-touch\);/,
+    );
+  });
+
+  it("hands picked keys to onFiles and ignores an empty pick", async () => {
+    const onFiles = vi.fn();
+    const pick = withPicker(["k1", "k2"], { onFiles });
+    await userEvent.click(screen.getByRole("button", { name: "Add a photo or file" }));
+    expect(onFiles).toHaveBeenCalledWith(["k1", "k2"]);
+    pick.mockResolvedValueOnce([]);
+    onFiles.mockClear();
+    await userEvent.click(screen.getByRole("button", { name: "Add a photo or file" }));
+    expect(onFiles).not.toHaveBeenCalled();
+  });
+
+  it("says plainly when the engine cannot keep that kind of file", async () => {
+    const onFiles = vi
+      .fn()
+      .mockRejectedValue(new EngineError("invalid", "this kind of content cannot be kept"));
+    withPicker(["k1"], { onFiles });
+    await userEvent.click(screen.getByRole("button", { name: "Add a photo or file" }));
+    expect(await screen.findByText(/can’t keep that kind of file yet/)).toBeInTheDocument();
+  });
+
+  it("stays quiet about other failures, which the caller reports", async () => {
+    const onFiles = vi.fn().mockRejectedValue(new EngineError("io", "disk full"));
+    withPicker(["k1"], { onFiles });
+    await userEvent.click(screen.getByRole("button", { name: "Add a photo or file" }));
+    expect(screen.queryByText(/can’t keep that kind of file yet/)).toBeNull();
   });
 });
