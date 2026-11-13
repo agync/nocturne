@@ -19,6 +19,15 @@ make check          # lint, drift checks and every test: the gate for every chan
 make help           # every target
 ```
 
+`make check` also vets and tests the Most private helper in `helpers/tailnet` (`make tailnet/test`),
+once as a plain build and once with the release build tags. It needs the Go version pinned in
+`helpers/tailnet/go.mod` and never downloads another; point `GO` at that toolchain's `go` when the
+one on `PATH` differs (`make check GO=<path>/go`). Without that version (no Go, or another one) the
+helper's tests are skipped with a one-line warning, and the rest of the check runs. With `CI` set,
+or `NOCTURNE_REQUIRE_TAILNET_TESTS=1`, a missing toolchain fails the check instead. The first run
+fetches the helper's Go modules, checked against `go.sum`; the tests themselves run offline against
+Tailscale's in-process control server.
+
 `make check` does not need the embedded Lemonade and does not build a package. The package
 configuration is opt-in: a plain `cargo build`, `make dev` and `make check` work on a checkout that
 has never fetched `vendor/`.

@@ -1,9 +1,10 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote e2e-real preview-real helpers-pin phone
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote e2e-real preview-real helpers-pin phone tailnet/test
 
 UI_PRESENT := $(wildcard ui/package.json)
+GO ?= go
 
 ##@ Bootstrap
 
@@ -29,7 +30,7 @@ preview-real: ui/node_modules ## Use the real engine and models from a browser (
 
 build: rust/build $(if $(UI_PRESENT),ui/build) ## Build everything
 
-test: rust/test scripts/test $(if $(UI_PRESENT),ui/test) ## Run unit and integration tests
+test: rust/test scripts/test tailnet/test $(if $(UI_PRESENT),ui/test) ## Run unit and integration tests
 
 lint: rust/lint $(if $(UI_PRESENT),ui/lint) contract/check docs/check ## Run every linter and drift check
 	pre-commit run --all-files
@@ -100,6 +101,9 @@ e2e-real: ## Run the whole product against the real small mind (downloads about 
 
 helpers-pin: ## Pin the connection helpers: versions, checksums and captured help (Away from home)
 	scripts/helpers-pin.sh
+
+tailnet/test: ## Vet and test the Most private helper, plain and with the release tags (GO=<go>)
+	GO="$(GO)" scripts/test-tailnet.sh
 
 ##@ Lemonade
 
