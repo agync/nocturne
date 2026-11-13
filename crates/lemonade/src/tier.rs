@@ -121,9 +121,10 @@ pub fn tier_options(ram_bytes: u64, free_disk_bytes: u64) -> Vec<TierOption> {
         .collect()
 }
 
-/// The backend to run `recipe` on: Vulkan on an integrated GPU (the dependable path there),
-/// ROCm on a discrete AMD GPU, otherwise the CPU. Falls back to the CPU when the preferred
-/// backend is not available on this machine.
+/// The backend to run `recipe` on: Metal on a Mac, Vulkan on an integrated GPU (the dependable
+/// path there), ROCm on a discrete AMD GPU, otherwise the CPU. Falls back to the CPU when the
+/// preferred backend is not available on this machine, and to Metal where the CPU is not
+/// offered either (the engine runs everything through Metal on a Mac).
 pub fn choose_backend(info: &SystemInfo, recipe: &str) -> &'static str {
     let usable = |backend: &str| {
         matches!(
@@ -137,13 +138,21 @@ pub fn choose_backend(info: &SystemInfo, recipe: &str) -> &'static str {
         .iter()
         .filter(|g| g.available)
         .collect();
-    let preferred = if gpus.iter().any(|g| !g.integrated) {
+    let metal = info.devices.metal.as_ref().is_some_and(|m| m.available);
+    let preferred = if metal {
+        "metal"
+    } else if gpus.iter().any(|g| !g.integrated) {
         "rocm"
     } else if !gpus.is_empty() {
         "vulkan"
     } else {
         "cpu"
     };
+    // On a Mac the engine offers nothing but Metal: an unknown state is no reason to fall back
+    // to a CPU backend that cannot run there.
+    if metal && info.backend_state(recipe, "metal") != BackendState::Unsupported {
+        return "metal";
+    }
     if usable(preferred) { preferred } else { "cpu" }
 }
 
@@ -285,6 +294,36 @@ mod tests {
             r#""rocm": {"state": "unsupported"}"#,
             1,
         );
+        assert_eq!(choose_backend(&info(&unsupported), "llamacpp"), "cpu");
+    }
+
+    #[test]
+    fn a_mac_runs_everything_on_metal() {
+        let json = r#"{"devices": {"amd_gpu": [], "metal": {"available": true, "name": "Apple M4"}},
+          "recipes": {
+            "llamacpp": {"backends": {"cpu": {"state": "unsupported"}, "metal": {"state": "installable"}, "vulkan": {"state": "unsupported"}}},
+            "whispercpp": {"backends": {"cpu": {"state": "unsupported"}, "metal": {"state": "installed"}}},
+            "kokoro": {"backends": {"cpu": {"state": "unsupported"}, "metal": {"state": "installable"}}}}}"#;
+        let info = info(json);
+        for recipe in ["llamacpp", "whispercpp", "kokoro"] {
+            assert_eq!(choose_backend(&info, recipe), "metal", "{recipe}");
+        }
+    }
+
+    #[test]
+    fn a_mac_stays_on_metal_when_it_needs_an_update_or_says_nothing() {
+        let json = r#"{"devices": {"amd_gpu": [], "metal": {"available": true}},
+          "recipes": {
+            "llamacpp": {"backends": {"cpu": {"state": "unsupported"}, "metal": {"state": "update_required"}}},
+            "whispercpp": {"backends": {"cpu": {"state": "unsupported"}}}}}"#;
+        let mac = info(json);
+        assert_eq!(
+            mac.backend_state("llamacpp", "metal"),
+            BackendState::Installable
+        );
+        assert_eq!(choose_backend(&mac, "llamacpp"), "metal");
+        assert_eq!(choose_backend(&mac, "whispercpp"), "metal");
+        let unsupported = json.replace(r#""update_required""#, r#""unsupported""#);
         assert_eq!(choose_backend(&info(&unsupported), "llamacpp"), "cpu");
     }
 

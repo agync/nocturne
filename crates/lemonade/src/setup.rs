@@ -662,6 +662,7 @@ impl Inner {
         let info = self.client.system_info().await.map_err(engine)?;
         let llama = tier::choose_backend(&info, "llamacpp");
         let whisper = tier::choose_backend(&info, "whispercpp");
+        let voice = tier::choose_backend(&info, "kokoro");
         let _ = self
             .client
             .set(&serde_json::json!({
@@ -679,7 +680,7 @@ impl Inner {
         for (recipe, backend) in [
             ("llamacpp", llama),
             ("whispercpp", whisper),
-            ("kokoro", "cpu"),
+            ("kokoro", voice),
         ] {
             rec.backends.insert(recipe.to_string(), backend.to_string());
         }

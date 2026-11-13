@@ -342,6 +342,9 @@ pub struct Devices {
     pub amd_gpu: Vec<Gpu>,
     #[serde(default)]
     pub amd_npu: Option<Npu>,
+    /// Apple's graphics, on a Mac.
+    #[serde(default)]
+    pub metal: Option<Gpu>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
@@ -381,7 +384,8 @@ impl SystemInfo {
             .and_then(|r| r.backends.get(backend))
             .map(|b| b.state.as_str())
         {
-            Some("installable") => BackendState::Installable,
+            // A backend that needs an update installs again like a new one.
+            Some("installable" | "update_required") => BackendState::Installable,
             Some("installed") => BackendState::Installed,
             Some("unsupported") => BackendState::Unsupported,
             _ => BackendState::Unknown,
