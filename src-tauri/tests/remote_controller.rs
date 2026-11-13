@@ -222,7 +222,9 @@ fn download_progress_pause_resume_and_ledger() {
     );
     assert_eq!(a.helpers.transport.starts.load(Ordering::SeqCst), 0);
     a.start("simple", true).unwrap();
-    assert_eq!(a.helpers.installs.load(Ordering::SeqCst), 2);
+    wait_for("the download resumed", || {
+        a.helpers.installs.load(Ordering::SeqCst) == 2
+    });
     a.helpers.finish.notify_one();
     wait_for("on", || matches!(a.hub.state(), RemoteState::On { .. }));
     assert!(
