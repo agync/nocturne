@@ -34,6 +34,8 @@ describe("Privacy", () => {
   });
 
   it("gives the time of the check when it was long ago, and keeps it out of a live region", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-13T12:00:00Z"));
     await open();
     const line = screen.getByText(/^Watching live · checked/);
     expect(line).toHaveTextContent("Watching live · checked at 07:01");
