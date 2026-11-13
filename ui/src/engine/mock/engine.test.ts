@@ -173,7 +173,12 @@ describe("MockEngine page", () => {
     const counts: number[] = [];
     engine.on("needs-you-changed", (n) => counts.push(n));
     expect((await engine.getStatus()).needsYou).toBe(2);
-    await engine.resolveWhich("conflict-dentist", "mem-dentist-thu");
+    const resolved = await engine.resolveWhich("conflict-dentist", "mem-dentist-thu");
+    expect(resolved).toEqual({
+      subject: "Dentist",
+      chosen: expect.stringMatching(/^Thursday \d+ Nov, 10:00$/),
+      memoryId: "mem-dentist-thu",
+    });
     const page = await engine.getPage();
     expect(page.needsYou.find((l) => l.kind === "which")?.done).toBe(true);
     expect(counts.at(-1)).toBe(1);

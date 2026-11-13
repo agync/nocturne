@@ -410,6 +410,7 @@ export function buildSeed(now: Date): SeedData {
     receipts,
     choices: [],
     conflictId: null,
+    subject: null,
     done: false,
     forgotten: false,
     on: null,
@@ -449,6 +450,7 @@ export function buildSeed(now: Date): SeedData {
         [],
         {
           conflictId: "conflict-dentist",
+          subject: "Dentist appointment",
           choices: [
             { memoryId: "mem-dentist-tue", text: tuesdayText, receipt: receipt("item-card") },
             {

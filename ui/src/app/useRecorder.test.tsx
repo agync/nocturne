@@ -38,14 +38,14 @@ afterEach(() => {
 describe("useRecorder", () => {
   it("records while held and hands over the bytes when released", async () => {
     const onFinished = vi.fn();
-    const { result } = renderHook(() => useRecorder({ onFinished, onDenied: vi.fn() }));
+    const { result } = renderHook(() => useRecorder({ onFinished, onFailed: vi.fn() }));
     expect(result.current.seconds).toBeNull();
     act(() => result.current.start());
     await waitFor(() => expect(result.current.seconds).toBe(0));
     act(() => result.current.stop());
     await waitFor(() => expect(onFinished).toHaveBeenCalled());
-    const [bytes, mime] = onFinished.mock.calls[0] as [number[], string, number];
-    expect(bytes).toEqual([1, 2, 3, 4]);
+    const [bytes, mime] = onFinished.mock.calls[0] as [Uint8Array, string, number];
+    expect(Array.from(bytes)).toEqual([1, 2, 3, 4]);
     expect(mime).toBe("audio/webm");
     expect(result.current.seconds).toBeNull();
     expect(track.stop).toHaveBeenCalled();
@@ -55,18 +55,36 @@ describe("useRecorder", () => {
     (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockRejectedValue(
       new DOMException("denied", "NotAllowedError"),
     );
-    const onDenied = vi.fn();
+    const onFailed = vi.fn();
     const onFinished = vi.fn();
-    const { result } = renderHook(() => useRecorder({ onFinished, onDenied }));
+    const { result } = renderHook(() => useRecorder({ onFinished, onFailed }));
     act(() => result.current.start());
-    await waitFor(() => expect(onDenied).toHaveBeenCalledOnce());
+    await waitFor(() => expect(onFailed).toHaveBeenCalledWith("denied"));
     expect(onFinished).not.toHaveBeenCalled();
     expect(result.current.seconds).toBeNull();
   });
 
+  it("tells another failure apart from a denied microphone", async () => {
+    (navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new DOMException("busy", "NotReadableError"),
+    );
+    const onFailed = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
+    act(() => result.current.start());
+    await waitFor(() => expect(onFailed).toHaveBeenCalledWith("other"));
+  });
+
+  it("says unsupported when this browser cannot record at all", async () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    const onFailed = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
+    act(() => result.current.start());
+    expect(onFailed).toHaveBeenCalledWith("unsupported");
+  });
+
   it("stops at once if the button was released before the microphone opened", async () => {
     const onFinished = vi.fn();
-    const { result } = renderHook(() => useRecorder({ onFinished, onDenied: vi.fn() }));
+    const { result } = renderHook(() => useRecorder({ onFinished, onFailed: vi.fn() }));
     act(() => {
       result.current.start();
       result.current.stop();

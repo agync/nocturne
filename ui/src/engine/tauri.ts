@@ -5,6 +5,7 @@ import {
   type EngineClient,
   type EngineEventName,
   type EngineEvents,
+  toEngineError,
   type Unsubscribe,
 } from "./client";
 
@@ -22,12 +23,23 @@ export class TauriEngine implements EngineClient {
   constructor() {
     for (const name of ENGINE_EVENT_NAMES) {
       this.listeners.set(name, new Set());
-      this.unlisten.push(
-        listen<EngineEvents[typeof name]>(name, (event) => {
-          for (const cb of this.listeners.get(name) ?? []) cb(event.payload as never);
-        }),
-      );
+      this.unlisten.push(this.subscribe(name));
     }
+  }
+
+  /** One attempt, then one retry; a failure is logged, never thrown into the page. */
+  private subscribe(name: EngineEventName, retry = true): Promise<UnlistenFn> {
+    const attach = () =>
+      listen<EngineEvents[typeof name]>(name, (event) => {
+        for (const cb of this.listeners.get(name) ?? []) cb(event.payload as never);
+      });
+    return attach().catch((error) => {
+      console.error(`Could not listen for ${name}`, error);
+      if (!retry) return () => undefined;
+      return new Promise<UnlistenFn>((resolve) => {
+        setTimeout(() => resolve(this.subscribe(name, false)), 500);
+      });
+    });
   }
 
   dispose(): void {
@@ -43,8 +55,12 @@ export class TauriEngine implements EngineClient {
     };
   }
 
-  private call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
-    return invoke<T>(command, args);
+  private async call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
+    try {
+      return await invoke<T>(command, args);
+    } catch (error) {
+      throw toEngineError(error);
+    }
   }
 
   getStatus = () => this.call<Awaited<ReturnType<EngineClient["getStatus"]>>>("get_status");
@@ -56,8 +72,14 @@ export class TauriEngine implements EngineClient {
   keepText: EngineClient["keepText"] = (text, source) => this.call("keep_text", { text, source });
   keepFiles: EngineClient["keepFiles"] = (paths, source) =>
     this.call("keep_files", { paths, source });
-  keepRecording: EngineClient["keepRecording"] = (bytes, mime) =>
-    this.call("keep_recording", { bytes, mime });
+  /** The audio travels as the raw request body; the mime type rides in a header. */
+  keepRecording: EngineClient["keepRecording"] = async (bytes, mime) => {
+    try {
+      return await invoke("keep_recording", bytes, { headers: { "x-nocturne-mime": mime } });
+    } catch (error) {
+      throw toEngineError(error);
+    }
+  };
   listItems: EngineClient["listItems"] = (filter) => this.call("list_items", { filter });
   getItem: EngineClient["getItem"] = (id) => this.call("get_item", { id });
   retryItem: EngineClient["retryItem"] = (id) => this.call("retry_item", { id });

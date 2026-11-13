@@ -1,7 +1,7 @@
 import { emit } from "@tauri-apps/api/event";
 import { clearMocks, mockIPC } from "@tauri-apps/api/mocks";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { EngineClient } from "./client";
+import { type EngineClient, EngineError } from "./client";
 import { TauriEngine } from "./tauri";
 
 interface Call {
@@ -56,7 +56,6 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["resumeSetup", [], "resume_setup", []],
   ["keepText", ["a note", "quickCapture"], "keep_text", ["text", "source"]],
   ["keepFiles", [["a.pdf"], "drop"], "keep_files", ["paths", "source"]],
-  ["keepRecording", [[1, 2, 3], "audio/webm"], "keep_recording", ["bytes", "mime"]],
   ["listItems", [{ since: null, status: null, limit: null }], "list_items", ["filter"]],
   ["getItem", ["i1"], "get_item", ["id"]],
   ["retryItem", ["i1"], "retry_item", ["id"]],
@@ -104,13 +103,30 @@ describe("TauriEngine commands", () => {
   }
 
   it("covers every method of the client", () => {
-    const covered = new Set(table.map(([m]) => m));
+    const covered = new Set<string>([...table.map(([m]) => m), "keepRecording"]);
     const proto = Object.getOwnPropertyNames(engine).filter(
       (k) =>
         typeof (engine as unknown as Record<string, unknown>)[k] === "function" &&
         !["on", "dispose", "call"].includes(k),
     );
     for (const name of proto) expect(covered.has(name as keyof EngineClient), name).toBe(true);
+  });
+
+  it("sends a recording as the raw body with its mime type in a header", async () => {
+    const seen: Array<{ cmd: string; args: unknown; headers: unknown }> = [];
+    clearMocks();
+    mockIPC(
+      (cmd, args) => {
+        seen.push({ cmd, args, headers: undefined });
+        return null;
+      },
+      { shouldMockEvents: true },
+    );
+    const bytes = new Uint8Array([1, 2, 3]);
+    await engine.keepRecording(bytes, "audio/webm");
+    expect(seen[0]?.cmd).toBe("keep_recording");
+    expect(seen[0]?.args).toBeInstanceOf(Uint8Array);
+    expect(Array.from((seen[0]?.args ?? []) as Uint8Array)).toEqual([1, 2, 3]);
   });
 
   it("passes null, not undefined, for the default page date", async () => {
@@ -132,11 +148,42 @@ describe("TauriEngine events", () => {
     expect(b).toEqual([2, 1]);
   });
 
-  it("does not lose an event that arrives before a screen listens", async () => {
+  it("delivers events that arrive while no screen is listening to the one that attaches next", async () => {
+    // The engine subscribed at construction, so a late listener still hears every later event,
+    // and an event with no listener is dropped without breaking delivery.
     await emit("status-changed", { state: "reading" });
     const seen: unknown[] = [];
     engine.on("status-changed", (s) => seen.push(s));
     await emit("status-changed", { state: "resting" });
-    expect(seen).toEqual([{ state: "resting" }]);
+    await emit("status-changed", { state: "paused" });
+    expect(seen).toEqual([{ state: "resting" }, { state: "paused" }]);
+  });
+});
+
+describe("TauriEngine errors", () => {
+  it("turns every kind of rejection into an EngineError with a code and detail", async () => {
+    const failures: unknown[] = [
+      "disk is full",
+      { code: "diskFull", message: "6 GB short" },
+      new Error("boom"),
+      7,
+    ];
+    for (const failure of failures) {
+      clearMocks();
+      mockIPC(() => {
+        throw failure;
+      });
+      const error = await engine.getStatus().catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(EngineError);
+      expect((error as EngineError).code).toEqual(expect.any(String));
+      expect((error as EngineError).detail.length).toBeGreaterThan(0);
+    }
+    clearMocks();
+    mockIPC(() => {
+      throw { code: "diskFull", message: "6 GB short" };
+    });
+    const error = (await engine.getStatus().catch((e: unknown) => e)) as EngineError;
+    expect(error.code).toBe("diskFull");
+    expect(error.detail).toBe("6 GB short");
   });
 });

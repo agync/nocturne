@@ -20,9 +20,34 @@ import type {
   SetupView,
   Source,
   Tier,
+  WhichResolved,
 } from "./bindings";
 
 export type Unsubscribe = () => void;
+
+/** Every failed command reaches the interface as one of these, whatever the transport said. */
+export class EngineError extends Error {
+  constructor(
+    readonly code: string,
+    readonly detail: string,
+  ) {
+    super(`${code}: ${detail}`);
+    this.name = "EngineError";
+  }
+}
+
+/** Tauri rejects with a string or an object; this makes both an `EngineError`. */
+export function toEngineError(raw: unknown): EngineError {
+  if (raw instanceof EngineError) return raw;
+  if (typeof raw === "string") return new EngineError("unknown", raw);
+  if (raw && typeof raw === "object") {
+    const o = raw as Record<string, unknown>;
+    const code = typeof o.code === "string" ? o.code : "unknown";
+    const detail = [o.detail, o.message, o.error].find((v) => typeof v === "string");
+    return new EngineError(code, (detail as string | undefined) ?? JSON.stringify(raw));
+  }
+  return new EngineError("unknown", String(raw));
+}
 
 /** Event names and payloads, as the app shell emits them (crates/contract/src/events.rs). */
 export interface EngineEvents {
@@ -32,7 +57,6 @@ export interface EngineEvents {
   "ask-delta": AskDelta;
   "page-ready": PageSummary;
   "needs-you-changed": number;
-  "files-dropped": string[];
 }
 
 export type EngineEventName = keyof EngineEvents;
@@ -44,7 +68,6 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "ask-delta",
   "page-ready",
   "needs-you-changed",
-  "files-dropped",
 ];
 
 /**
@@ -60,7 +83,7 @@ export interface EngineClient {
 
   keepText(text: string, source: Source): Promise<Kept>;
   keepFiles(paths: string[], source: Source): Promise<Kept[]>;
-  keepRecording(bytes: number[], mime: string): Promise<Kept>;
+  keepRecording(bytes: Uint8Array, mime: string): Promise<Kept>;
   listItems(filter: ItemFilter): Promise<ItemView[]>;
   getItem(id: string): Promise<ItemView>;
   retryItem(id: string): Promise<ItemView>;
@@ -71,7 +94,7 @@ export interface EngineClient {
   getPage(date?: string): Promise<PageView>;
   listPages(): Promise<PageSummary[]>;
   answerQuestion(pageDate: string, choice: QuestionChoice): Promise<void>;
-  resolveWhich(conflictId: string, memoryId: string): Promise<void>;
+  resolveWhich(conflictId: string, memoryId: string): Promise<WhichResolved>;
   confirmMemory(id: string, confirmed: boolean): Promise<void>;
   markDone(memoryId: string): Promise<void>;
 

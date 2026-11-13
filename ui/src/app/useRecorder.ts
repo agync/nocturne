@@ -1,12 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
+export type RecorderFailure = "denied" | "unsupported" | "other";
+
 interface RecorderOptions {
-  onFinished: (bytes: number[], mime: string, durationMs: number) => void;
-  onDenied: () => void;
+  onFinished: (bytes: Uint8Array, mime: string, durationMs: number) => void;
+  onFailed: (reason: RecorderFailure) => void;
+}
+
+const DENIED = new Set([
+  "NotAllowedError",
+  "SecurityError",
+  "PermissionDeniedError",
+  "NotFoundError",
+]);
+
+export function canRecord(): boolean {
+  return typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
 }
 
 /** Records the microphone while a button is held. Nothing leaves the computer. */
-export function useRecorder({ onFinished, onDenied }: RecorderOptions) {
+export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
   const [seconds, setSeconds] = useState<number | null>(null);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
@@ -15,8 +28,8 @@ export function useRecorder({ onFinished, onDenied }: RecorderOptions) {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const starting = useRef(false);
   const stopWanted = useRef(false);
-  const latest = useRef({ onFinished, onDenied });
-  latest.current = { onFinished, onDenied };
+  const latest = useRef({ onFinished, onFailed });
+  latest.current = { onFinished, onFailed };
 
   const release = useCallback(() => {
     if (timer.current) clearInterval(timer.current);
@@ -29,6 +42,10 @@ export function useRecorder({ onFinished, onDenied }: RecorderOptions) {
 
   const start = useCallback(async () => {
     if (recorder.current || starting.current) return;
+    if (!canRecord()) {
+      latest.current.onFailed("unsupported");
+      return;
+    }
     starting.current = true;
     stopWanted.current = false;
     try {
@@ -42,7 +59,7 @@ export function useRecorder({ onFinished, onDenied }: RecorderOptions) {
       rec.onstop = async () => {
         const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
         const durationMs = Date.now() - startedAt.current;
-        const bytes = [...new Uint8Array(await blob.arrayBuffer())];
+        const bytes = new Uint8Array(await blob.arrayBuffer());
         release();
         if (bytes.length > 0) latest.current.onFinished(bytes, blob.type, durationMs);
       };
@@ -55,9 +72,10 @@ export function useRecorder({ onFinished, onDenied }: RecorderOptions) {
         500,
       );
       if (stopWanted.current) rec.stop();
-    } catch {
+    } catch (error) {
       release();
-      latest.current.onDenied();
+      const name = error instanceof DOMException || error instanceof Error ? error.name : "";
+      latest.current.onFailed(DENIED.has(name) ? "denied" : "other");
     } finally {
       starting.current = false;
     }

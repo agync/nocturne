@@ -8,13 +8,13 @@ import { Mark } from "../components/Mark/Mark";
 import { type NoticeHandlers, Notices } from "../components/Notices/Notices";
 import { Rail } from "../components/Rail/Rail";
 import { useToast } from "../components/Toast/Toast";
-import { addDays, formatDay, formatDuration } from "../copy/format";
+import { addDays, formatDay } from "../copy/format";
 import { t } from "../copy/t";
 import { useEngine, usePage, useRefresh, useSettings, useStatus } from "../engine/context";
 import { askRequests } from "./ask-request";
 import { findRoute, routes } from "./routes";
 import styles from "./Shell.module.css";
-import { useRecorder } from "./useRecorder";
+import { useKeepRecording } from "./useKeepRecording";
 import { useRegionCycling } from "./useRegions";
 import { useShellSize } from "./useShellSize";
 
@@ -101,31 +101,22 @@ export function Shell({ children }: ShellProps) {
     [engine, toast, refresh],
   );
 
-  const recorder = useRecorder({
-    onFinished: (bytes, mime, durationMs) => {
-      engine
-        .keepRecording(bytes, mime)
-        .then(() => {
-          toast.show({
-            message: t("capture.kept.toast", {
-              kind: t("kind.audio"),
-              duration: formatDuration(durationMs),
-            }),
-          });
-          refresh("items", "status", "page");
-        })
-        .catch(() => toast.show({ message: t("bar.kept.error") }));
-    },
-    onDenied: () => toast.show({ message: t("notice.micDenied.text"), duration: 9000 }),
-  });
+  const recorder = useKeepRecording();
 
   const today = page?.date;
   const handlers: NoticeHandlers = useMemo(
     () => ({
       couldntRead: (n) => {
-        if (n.itemId) void engine.retryItem(n.itemId).then(() => refresh("items", "status"));
+        if (n.itemId) {
+          engine
+            .retryItem(n.itemId)
+            .then(() => refresh("items", "status"))
+            .catch(() => toast.show({ message: t("notice.action.failed") }));
+        }
       },
-      downloadStalled: () => void engine.resumeSetup(),
+      downloadStalled: () => {
+        engine.resumeSetup().catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
       diskFull: () => navigate("/setup"),
       restarts: () => navigate("/settings/advanced"),
       catchingUp: () => {
@@ -135,7 +126,7 @@ export function Shell({ children }: ShellProps) {
         if (today) navigate(`/print/${today}`);
       },
     }),
-    [engine, navigate, refresh, today],
+    [engine, navigate, refresh, today, toast],
   );
 
   const bar = (

@@ -74,6 +74,11 @@
   "capture.undone": "Taken back. Nothing was kept.",
   "capture.files": "{count, plural, one {Kept # file.} other {Kept # files.}} I’ll read {count, plural, one {it} other {them}} tonight.",
 
+  "capture.recording.failed": "I couldn’t keep that voice note just now. It is still here.",
+  "capture.mic.unsupported": "This computer can’t record sound inside Nocturne. You can still type, or drop a voice note on the window.",
+  "capture.mic.failed": "I couldn’t start the microphone. Check that nothing else is using it, then try again.",
+  "notice.action.failed": "That didn’t work. Nothing was lost; try again in a moment.",
+
   "toast.region": "Notifications",
   "toast.dismiss": "Dismiss",
 

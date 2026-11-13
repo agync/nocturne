@@ -24,6 +24,7 @@ import type {
   SetupView,
   Source,
   Tier,
+  WhichResolved,
 } from "../bindings";
 import type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "../client";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
@@ -110,6 +111,7 @@ const kindFromName = (name: string): ItemKind => {
 };
 
 const TITLES: Record<string, string> = { "conflict-dentist": "Your dentist appointment" };
+const SUBJECTS: Record<string, string> = { "conflict-dentist": "Dentist" };
 
 export class MockEngine implements EngineClient {
   private readonly clock: Date;
@@ -338,7 +340,7 @@ export class MockEngine implements EngineClient {
     });
   }
 
-  async keepRecording(bytes: number[], _mime: string): Promise<Kept> {
+  async keepRecording(bytes: Uint8Array, _mime: string): Promise<Kept> {
     const item = this.newItem("audio", "Voice note", "recording", {
       durationMs: Math.max(1000, Math.round(bytes.length / 16)),
     });
@@ -514,11 +516,13 @@ export class MockEngine implements EngineClient {
     }
   }
 
-  async resolveWhich(conflictId: string, memoryId: string): Promise<void> {
+  async resolveWhich(conflictId: string, memoryId: string): Promise<WhichResolved> {
+    let resolved: WhichResolved | null = null;
     for (const line of this.lines().filter((l) => l.conflictId === conflictId)) {
       const chosen = line.choices.find((c) => c.memoryId === memoryId);
       if (!chosen) continue;
       line.done = true;
+      resolved = { subject: SUBJECTS[conflictId] ?? "This", chosen: chosen.text, memoryId };
       line.text = `${TITLES[conflictId] ?? "This"}: ${chosen.text}.`;
       line.memoryIds = [memoryId];
       line.receipts = [chosen.receipt];
@@ -534,6 +538,8 @@ export class MockEngine implements EngineClient {
       }
     }
     this.needsChanged();
+    if (!resolved) throw new Error(`No choice ${memoryId} in ${conflictId}`);
+    return resolved;
   }
 
   async confirmMemory(id: string, confirmed: boolean): Promise<void> {
