@@ -19,6 +19,8 @@ dist/
 build/
 target/
 src-tauri/gen/
+ui/test-results/
+ui/playwright-report/
 
 # Rendered docs
 _site/

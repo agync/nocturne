@@ -1,4 +1,6 @@
 default_stages: [pre-commit]
+# Generated files are checked for drift by make contract/check, not reformatted.
+exclude: ^ui/src/engine/bindings/
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -35,6 +37,13 @@ repos:
         entry: "/(home|Users)/[a-z]"
         types: [text]
         exclude: ^\.pre-commit-config\.yaml$
+
+      - id: cargo-fmt
+        name: cargo fmt
+        entry: cargo fmt --all --check
+        language: system
+        types: [rust]
+        pass_filenames: false
 
       - id: okf-validate
         name: Validate the OKF docs bundle

@@ -1,0 +1,36 @@
+---
+type: Reference
+title: Repository layout
+description: Where each part of Nocturne lives and which direction dependencies run.
+status: draft
+tags: [architecture, layout, contract]
+---
+
+# Repository layout
+
+| Path | Crate or package | Responsibility |
+|---|---|---|
+| `crates/contract/` | `nocturne-contract` | Types that cross the boundary between engine, app shell and interface; exported to TypeScript |
+| `crates/engine/` | `nocturne-engine` | Store, capture, memories, forgetting policy, the page, retrieval, export; the `Mind` trait |
+| `crates/lemonade/` | `nocturne-lemonade` | The private `lemond`: supervision, setup downloads, and the `Mind` implementation |
+| `src-tauri/` | `nocturne-app` | Commands, events, windows, tray, shortcut, notifications |
+| `ui/` | `nocturne-ui` | The interface; talks only to an `EngineClient` |
+| `ui/src/engine/bindings/` | generated | TypeScript types from `crates/contract`; regenerate with `make contract/ts` |
+
+```mermaid
+flowchart LR
+    UI[ui] --> B[bindings]
+    APP[src-tauri] --> ENG[engine]
+    APP --> LEM[lemonade]
+    LEM --> ENG
+    ENG --> C[contract]
+    APP --> C
+    B -. generated from .-> C
+```
+
+## Contract rules
+
+- The engine returns data, never interface copy. Every user-facing word lives in the interface
+  copy deck, except content that came from what the person kept.
+- JSON is camelCase; tagged enums carry a `type` field; sizes are bytes as numbers.
+- `make contract/check` fails when the committed bindings are stale.
