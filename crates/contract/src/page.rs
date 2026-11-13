@@ -152,3 +152,37 @@ pub struct PageSummary {
     pub headline: String,
     pub needs_you: u32,
 }
+
+/// A part of the spoken page, in the order it is read.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum SpokenKind {
+    Opening,
+    NeedsYou,
+    Changed,
+    ComingUp,
+    LetGo,
+    Question,
+}
+
+/// Where one part of the spoken page starts in the audio.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SpokenSection {
+    pub kind: SpokenKind,
+    pub start_ms: u32,
+}
+
+/// The spoken page: the audio file, its parts and how long it runs. `private_skipped` counts
+/// the lines left out because they are private.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SpokenPage {
+    pub path: String,
+    pub sections: Vec<SpokenSection>,
+    pub duration_ms: u32,
+    pub private_skipped: u32,
+}
