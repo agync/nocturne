@@ -5,9 +5,9 @@ import { recordingState } from "../../app/useRecorder";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
-import { formatBytes } from "../../copy/format";
+import { formatBytes, formatTime } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
-import type { AdvancedView, ComponentRole } from "../../engine/bindings";
+import type { AdvancedView, ComponentRole, OnlineAdvanced } from "../../engine/bindings";
 import type { RecordingState } from "../../engine/client";
 import { useEngine, useRefresh, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
@@ -126,6 +126,58 @@ export function details(
   ];
 }
 
+/** Online answers as the engine holds it. Never the key, only where it is kept. */
+function onlineDetails(o: OnlineAdvanced): Array<[string, string]> {
+  const last =
+    o.lastAt !== null &&
+    o.lastStatus !== null &&
+    o.lastSeconds !== null &&
+    o.lastBytesUp !== null &&
+    o.lastBytesDown !== null
+      ? t("advanced.online.last", {
+          time: formatTime(o.lastAt),
+          status: o.lastStatus,
+          seconds: o.lastSeconds.toFixed(1),
+          up: formatBytes(o.lastBytesUp),
+          down: formatBytes(o.lastBytesDown),
+        })
+      : t("advanced.online.last.none");
+  const key =
+    o.keyStorage === "keychain"
+      ? "advanced.online.key.keychain"
+      : o.keyStorage === "file"
+        ? "advanced.online.key.file"
+        : "advanced.online.key.none";
+  return [
+    [
+      t("advanced.online.row.state"),
+      t("advanced.online.state", { state: o.state, count: o.questionsThisMonth }),
+    ],
+    [
+      t("advanced.online.row.sentBy"),
+      t("advanced.online.sentBy", { route: o.route, url: o.baseUrl ?? "" }),
+    ],
+    [
+      t("advanced.online.row.providers"),
+      o.host
+        ? t("advanced.online.providers", { count: 1, host: o.host })
+        : t("advanced.online.providers.none"),
+    ],
+    [
+      t("advanced.online.row.model"),
+      t("advanced.online.model", { name: o.model ?? "", max: o.maxTokens }),
+    ],
+    [t("advanced.online.row.key"), t(key)],
+    [t("advanced.online.row.retention"), t("advanced.online.retention")],
+    [t("advanced.online.row.last"), last],
+    [
+      t("advanced.online.row.cost"),
+      t(o.costReported ? "advanced.online.cost.reported" : "advanced.online.cost.unreported"),
+    ],
+    [t("advanced.online.row.log"), t("advanced.online.log", { count: o.sendsKept })],
+  ];
+}
+
 /** #/settings/advanced */
 export function Advanced() {
   const engine = useEngine();
@@ -168,6 +220,21 @@ export function Advanced() {
           </div>
         ))}
       </dl>
+      {view.online ? (
+        <section aria-labelledby="advanced-online">
+          <h2 id="advanced-online" className="t-section">
+            {t("advanced.online.heading")}
+          </h2>
+          <dl className={styles.details}>
+            {onlineDetails(view.online).map(([label, value]) => (
+              <div key={label} className={styles.detail}>
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ) : null}
       {models ? (
         <a className={`${styles.advanced} hit`} href="#/settings/models">
           {t("advanced.models.link")}
@@ -192,6 +259,7 @@ export function Advanced() {
           title={t("advanced.reset.title")}
           body={t("advanced.reset.body")}
           confirmLabel={t("advanced.reset.confirm")}
+          online={view.online?.host ?? null}
           onClose={() => setResetting(false)}
           onDeleted={() => {
             refresh(

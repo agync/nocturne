@@ -11,6 +11,7 @@ import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { AwaySection } from "./AwaySection";
 import { DeleteEverythingDialog } from "./DeleteEverythingDialog";
+import { OnlineSection, onlineKnown } from "./OnlineSection";
 import styles from "./Privacy.module.css";
 
 /** Seconds are counted up to a minute; after an hour the clock time is clearer than a count. */
@@ -117,7 +118,8 @@ export default function Privacy() {
   }
 
   // While Away from home is on the computer also talks to the phones, which nothing here measures live.
-  const measured = view.sentMeasured && !view.remoteOn;
+  const measured = view.sentMeasured && !view.remoteOn && !view.onlineOn;
+  const online = onlineKnown(view);
   const total = view.keptBytes + view.mindBytes;
 
   return (
@@ -129,13 +131,17 @@ export default function Privacy() {
             {measured ? t("privacy.sent.label") : t("privacy.sent.label.unmeasured")}
           </p>
           <h1 className={`t-display ${styles.nothing}`}>
-            {view.remoteOn
-              ? t("privacy.headline.awayOn")
-              : !measured
-                ? t("privacy.sent.unmeasured")
-                : view.sentToInternetBytes > 0
-                  ? t("privacy.sent.amount", { size: formatBytes(view.sentToInternetBytes) })
-                  : t("privacy.sent.nothing")}
+            {view.remoteOn && view.onlineOn
+              ? t("privacy.headline.awayAndOnline")
+              : view.remoteOn
+                ? t("privacy.headline.awayOn")
+                : view.onlineOn
+                  ? t("privacy.headline.onlineOn")
+                  : !measured
+                    ? t("privacy.sent.unmeasured")
+                    : view.sentToInternetBytes > 0
+                      ? t("privacy.sent.amount", { size: formatBytes(view.sentToInternetBytes) })
+                      : t("privacy.sent.nothing")}
           </h1>
           {measured ? (
             <p className={styles.watching}>
@@ -157,9 +163,34 @@ export default function Privacy() {
                       ),
                     },
                   )
-                : t("privacy.sent.unmeasured.detail")}
+                : t(
+                    view.onlineOn
+                      ? "privacy.sent.unmeasured.detail.online"
+                      : "privacy.sent.unmeasured.detail",
+                  )}
             </p>
           )}
+
+          {online ? (
+            <div className={styles.phones}>
+              <span className={styles.sentLabel}>{t("privacy.online.label")}</span>
+              <span className={styles.phonesAmount}>
+                {view.onlineOn
+                  ? t("privacy.online.amount.on", {
+                      size: formatBytes(view.sentOnlineBytes),
+                      count: view.onlineQuestions,
+                    })
+                  : t("privacy.online.amount.off", {
+                      size: formatBytes(view.sentOnlineBytes),
+                      day: view.onlineLastOnAt ? formatDayMonth(view.onlineLastOnAt) : "",
+                    })}
+              </span>
+              <span className={styles.detail}>
+                {t("privacy.online.counted")}{" "}
+                <a href="#/settings/online/sent">{t("privacy.online.seeSent")}</a>
+              </span>
+            </div>
+          ) : null}
 
           {view.remoteOn || view.sentToPhonesBytes > 0 ? (
             <div className={styles.phones}>
@@ -183,7 +214,9 @@ export default function Privacy() {
                   <li key={`${entry.kind}-${entry.label}-${entry.at}`}>
                     <span>{ledgerLabel(entry)}</span>
                     <span className={styles.mono}>
-                      {entry.kind === "remoteOnOff"
+                      {entry.kind === "remoteOnOff" ||
+                      entry.kind === "onlineOnOff" ||
+                      entry.kind === "onlineConnected"
                         ? t("privacy.ledger.entryDay", { day: formatDayMonth(entry.at) })
                         : t("privacy.ledger.entry", {
                             size: formatBytes(entry.bytes),
@@ -196,11 +229,14 @@ export default function Privacy() {
             )}
           </section>
 
-          <p className={styles.promise}>{t("privacy.promise")}</p>
+          <p className={styles.promise}>
+            {t(online ? "privacy.promise.online" : "privacy.promise")}
+          </p>
         </div>
 
         <div className={styles.controls}>
           <AwaySection view={view} />
+          <OnlineSection view={view} />
           <section aria-labelledby="here">
             <h2 id="here" className="t-section">
               {t("privacy.here.heading")}
@@ -225,7 +261,7 @@ export default function Privacy() {
             <h2 id="export" className={styles.blockTitle}>
               {t("privacy.export.title")}
             </h2>
-            <p>{t("privacy.export.body")}</p>
+            <p>{t(online ? "privacy.export.body.online" : "privacy.export.body")}</p>
             <div ref={exportBox}>
               <Button
                 variant="secondary"
@@ -300,6 +336,7 @@ export default function Privacy() {
         <DeleteEverythingDialog
           title={t("privacy.delete.dialog.title")}
           body={t("privacy.delete.dialog.body")}
+          online={view.onlineHost}
           confirmLabel={t("privacy.delete.confirm")}
           onClose={() => setDeleting(false)}
           onDeleted={() => {

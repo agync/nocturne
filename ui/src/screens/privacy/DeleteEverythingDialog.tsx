@@ -13,13 +13,22 @@ interface Props {
   title: string;
   body: string;
   confirmLabel: string;
+  /** The host of the provider Online answers was set up with, when it was. */
+  online?: string | null;
   onClose: () => void;
   /** The engine has removed everything. */
   onDeleted: () => void;
 }
 
 /** Deleting everything, said in words and confirmed by typing them. Enter does nothing by itself. */
-export function DeleteEverythingDialog({ title, body, confirmLabel, onClose, onDeleted }: Props) {
+export function DeleteEverythingDialog({
+  title,
+  body,
+  confirmLabel,
+  online,
+  onClose,
+  onDeleted,
+}: Props) {
   const engine = useEngine();
   const field = useRef<HTMLInputElement>(null);
   const [typed, setTyped] = useState("");
@@ -43,6 +52,9 @@ export function DeleteEverythingDialog({ title, body, confirmLabel, onClose, onD
   return (
     <Dialog title={title} initialFocus={field} locked={working} onClose={onClose}>
       <p className={styles.dialogBody}>{body}</p>
+      {online ? (
+        <p className={styles.dialogBody}>{t("privacy.delete.dialog.online", { host: online })}</p>
+      ) : null}
       <TextInput
         label={t("privacy.delete.field", { phrase: DELETE_PHRASE })}
         value={typed}
