@@ -1,5 +1,7 @@
 //! The forgetting policy: use, decay, safety exemptions, keep forever and restore.
 
+use std::path::PathBuf;
+
 use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
@@ -153,40 +155,100 @@ impl Engine {
     }
 
     pub fn set_keep_forever(&self, id: &str, on: bool) -> Result<()> {
-        self.write(|tx| {
-            let n = tx.execute(
-                "UPDATE memories SET keep_forever = ?2 WHERE id = ?1",
-                params![id, on],
-            )?;
-            if n == 0 {
-                return Err(Error::not_found(format!("memory {id}")));
-            }
-            Ok(())
-        })
+        self.write(|tx| set_keep_forever_tx(tx, id, on))
     }
 
     /// Mark a memory private (or not). Cached audio of pages citing it is removed, so a newly
     /// private memory cannot be played back.
     pub fn set_private(&self, id: &str, on: bool) -> Result<()> {
+        let files = self.write(|tx| set_private_tx(tx, id, on))?;
+        self.bump_audio();
+        shred_all(files);
+        Ok(())
+    }
+
+    /// Mark an item private (or not), and every current memory that came from it with it, in
+    /// one step. Cached audio of pages citing those memories is removed.
+    pub fn set_item_private(&self, item_id: &str, on: bool) -> Result<()> {
         let files = self.write(|tx| {
-            // The whole version chain, so an earlier version cited on an old page is covered.
-            let versions = chain(tx, id)?;
-            if versions.is_empty() {
-                return Err(Error::not_found(format!("memory {id}")));
+            item_exists(tx, item_id)?;
+            tx.execute(
+                "UPDATE items SET private = ?2 WHERE id = ?1",
+                params![item_id, on],
+            )?;
+            let mut files = Vec::new();
+            for m in current_memories_of(tx, item_id)? {
+                files.extend(set_private_tx(tx, &m, on)?);
             }
-            for v in &versions {
-                tx.execute(
-                    "UPDATE memories SET private = ?2 WHERE id = ?1",
-                    params![v, on],
-                )?;
-            }
-            let pages = pages_citing(tx, &versions)?;
-            drop_audio_rows(tx, &pages)
+            Ok(files)
         })?;
         self.bump_audio();
         shred_all(files);
         Ok(())
     }
+
+    /// Keep (or stop keeping) every current memory that came from an item forever.
+    pub fn set_item_keep_forever(&self, item_id: &str, on: bool) -> Result<()> {
+        self.write(|tx| {
+            item_exists(tx, item_id)?;
+            for m in current_memories_of(tx, item_id)? {
+                set_keep_forever_tx(tx, &m, on)?;
+            }
+            Ok(())
+        })
+    }
+}
+
+fn item_exists(tx: &rusqlite::Transaction<'_>, item_id: &str) -> Result<()> {
+    let exists: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
+        [item_id],
+        |r| r.get(0),
+    )?;
+    if exists {
+        Ok(())
+    } else {
+        Err(Error::not_found(format!("item {item_id}")))
+    }
+}
+
+/// The memories that are current and cite this item.
+fn current_memories_of(tx: &rusqlite::Transaction<'_>, item_id: &str) -> Result<Vec<String>> {
+    let mut stmt = tx.prepare(
+        "SELECT m.id FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
+         WHERE s.item_id = ?1 AND m.superseded_at IS NULL AND m.forgetting = 0 ORDER BY m.id",
+    )?;
+    Ok(stmt
+        .query_map([item_id], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+fn set_keep_forever_tx(tx: &rusqlite::Transaction<'_>, id: &str, on: bool) -> Result<()> {
+    let n = tx.execute(
+        "UPDATE memories SET keep_forever = ?2 WHERE id = ?1",
+        params![id, on],
+    )?;
+    if n == 0 {
+        return Err(Error::not_found(format!("memory {id}")));
+    }
+    Ok(())
+}
+
+/// Set the flag on the whole version chain, so an earlier version cited on an old page is
+/// covered; returns the cached audio files to shred once the transaction has committed.
+fn set_private_tx(tx: &rusqlite::Transaction<'_>, id: &str, on: bool) -> Result<Vec<PathBuf>> {
+    let versions = chain(tx, id)?;
+    if versions.is_empty() {
+        return Err(Error::not_found(format!("memory {id}")));
+    }
+    for v in &versions {
+        tx.execute(
+            "UPDATE memories SET private = ?2 WHERE id = ?1",
+            params![v, on],
+        )?;
+    }
+    let pages = pages_citing(tx, &versions)?;
+    drop_audio_rows(tx, &pages)
 }
 
 pub(crate) fn mark_used_tx(tx: &rusqlite::Transaction<'_>, id: &str, now: &str) -> Result<()> {

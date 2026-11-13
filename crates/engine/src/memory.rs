@@ -121,6 +121,26 @@ fn delete_memory(tx: &Transaction<'_>, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// A memory that changed (confirmed, corrected, newly in conflict) is no longer snoozed.
+fn clear_snooze(tx: &Transaction<'_>, ids: &[&str]) -> Result<()> {
+    for id in ids {
+        tx.execute(
+            "UPDATE memories SET snoozed_until = NULL WHERE id = ?1 AND snoozed_until IS NOT NULL",
+            [id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Whether the memory is snoozed past `today`.
+fn is_snoozed(conn: &rusqlite::Connection, id: &str, today: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT COALESCE(snoozed_until > ?2, 0) FROM memories WHERE id = ?1",
+        params![id, today],
+        |r| r.get(0),
+    )?)
+}
+
 /// Conflicts for a memory that has just become active (corroborated or confirmed): it competes
 /// with other active memories in the same slot whose validity overlaps. Returns new conflict ids.
 fn create_conflicts(tx: &Transaction<'_>, id: &str, now: &str, today: &str) -> Result<Vec<String>> {
@@ -161,6 +181,7 @@ fn create_conflicts(tx: &Transaction<'_>, id: &str, now: &str, today: &str) -> R
                 "INSERT INTO conflicts(id, a, b, created_at) VALUES (?1, ?2, ?3, ?4)",
                 params![cid, e.id, row.id, now],
             )?;
+            clear_snooze(tx, &[&e.id, &row.id])?;
             made.push(cid);
         }
     }
@@ -550,6 +571,7 @@ fn apply_one(
                 "INSERT INTO conflicts(id, a, b, created_at) VALUES (?1, ?2, ?3, ?4)",
                 params![cid, old, id, now],
             )?;
+            clear_snooze(tx, &[old, &id])?;
             report.conflicts.push(cid);
         }
     }
@@ -570,6 +592,7 @@ pub(crate) fn needs_you_on(
         .checked_add(jiff::Span::new().days(14))
         .map_err(Error::from)?
         .to_string();
+    let today_s = today.to_string();
     let mut out: Vec<NeedsYouEntry> = Vec::new();
 
     // Due items, soonest first; an undated one waits at the end like an undated promise.
@@ -577,10 +600,11 @@ pub(crate) fn needs_you_on(
         conn,
         "m.predicate = 'due' AND m.superseded_at IS NULL AND m.done = 0 \
          AND m.status IN ('active', 'fading') \
+         AND (m.snoozed_until IS NULL OR m.snoozed_until <= ?2) \
          AND (COALESCE(m.due, m.valid_from) IS NULL OR COALESCE(m.due, m.valid_from) <= ?1) \
          ORDER BY COALESCE(m.due, m.valid_from) IS NULL, COALESCE(m.due, m.valid_from), \
          m.recorded_at, m.id",
-        [&horizon],
+        [&horizon, &today_s],
     )?;
     for m in dated {
         let due = m
@@ -599,10 +623,11 @@ pub(crate) fn needs_you_on(
         conn,
         "m.predicate = 'promised' AND m.superseded_at IS NULL AND m.done = 0 \
          AND m.status IN ('active', 'fading') \
+         AND (m.snoozed_until IS NULL OR m.snoozed_until <= ?2) \
          AND (COALESCE(m.due, m.valid_from) IS NULL OR COALESCE(m.due, m.valid_from) <= ?1) \
          ORDER BY COALESCE(m.due, m.valid_from) IS NULL, COALESCE(m.due, m.valid_from), \
          m.recorded_at, m.id",
-        [&horizon],
+        [&horizon, &today_s],
     )?;
     for m in promises {
         out.push(NeedsYouEntry::Promise {
@@ -622,6 +647,9 @@ pub(crate) fn needs_you_on(
             continue;
         };
         if ma.superseded_at.is_some() || mb.superseded_at.is_some() {
+            continue;
+        }
+        if is_snoozed(conn, &a, &today_s)? || is_snoozed(conn, &b, &today_s)? {
             continue;
         }
         let mut options = Vec::new();
@@ -647,8 +675,9 @@ pub(crate) fn needs_you_on(
     let unconfirmed = query_mems(
         conn,
         "m.status = 'unconfirmed' AND m.superseded_at IS NULL \
+         AND (m.snoozed_until IS NULL OR m.snoozed_until <= ?1) \
          ORDER BY m.recorded_at DESC, m.id",
-        [],
+        [&today_s],
     )?;
     for m in unconfirmed {
         out.push(NeedsYouEntry::Unconfirmed {
@@ -668,6 +697,7 @@ pub(crate) fn confirm_tx(
     today: &str,
 ) -> Result<()> {
     let m = load_mem(tx, id)?.ok_or_else(|| Error::not_found(format!("memory {id}")))?;
+    clear_snooze(tx, &[id])?;
     if is_true {
         tx.execute(
             "UPDATE memories SET confirmed = 1, status = 'active', last_used = ?2, \
@@ -807,6 +837,30 @@ impl Engine {
         self.read(|conn| needs_you_on(conn, today))
     }
 
+    /// Hide a memory from `needs_you` and the morning page for `days` days, counted from the
+    /// local date today (0 brings it back at once). Confirming, correcting or a new conflict
+    /// about it clears the snooze.
+    pub fn snooze(&self, memory_id: &str, days: u32) -> Result<()> {
+        let until = self
+            .clock()
+            .now()
+            .to_zoned(self.clock().tz())
+            .date()
+            .checked_add(jiff::Span::new().days(i64::from(days)))
+            .map_err(Error::from)?
+            .to_string();
+        self.write(|tx| {
+            load_mem(tx, memory_id)?
+                .filter(|m| m.superseded_at.is_none())
+                .ok_or_else(|| Error::not_found(format!("memory {memory_id}")))?;
+            tx.execute(
+                "UPDATE memories SET snoozed_until = ?2 WHERE id = ?1",
+                params![memory_id, until],
+            )?;
+            Ok(())
+        })
+    }
+
     /// The person says it is true (or not). True confirms and counts as use; false makes it
     /// unconfirmed again and asks again.
     pub fn confirm(&self, id: &str, is_true: bool) -> Result<()> {
@@ -883,6 +937,7 @@ impl Engine {
                 }
                 _ => new_object.clone(),
             };
+            clear_snooze(tx, &[id])?;
             let new_id = new_memory_id();
             tx.execute(
                 "INSERT INTO memories(id, subject, subject_key, entity_id, predicate, object, \

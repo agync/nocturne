@@ -441,3 +441,276 @@ fn a_store_at_version_two_upgrades_in_place() {
         assert_eq!(n, 1, "{table}.{column}");
     }
 }
+
+// ---- snooze ----
+
+fn unconfirmed(f: &Fixture, text: &str, subject: &str) -> String {
+    let item = keep_as(&f.engine, text, Source::PastedWeb);
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![cand(
+                subject,
+                Predicate::Knows,
+                "x",
+                &format!("{subject} knows x."),
+            )],
+        )
+        .unwrap();
+    assert_eq!(r.unconfirmed.len(), 1);
+    r.created[0].clone()
+}
+
+fn snoozed_count(f: &Fixture) -> i64 {
+    sql_count(
+        f.dir.path(),
+        "SELECT COUNT(*) FROM memories WHERE snoozed_until IS NOT NULL",
+    )
+}
+
+#[test]
+fn a_snoozed_memory_leaves_needs_you_until_its_date() {
+    let f = fixture();
+    let m = unconfirmed(&f, "web one", "Alpha");
+    unconfirmed(&f, "web two", "Beta");
+    assert_eq!(f.engine.needs_you().unwrap().len(), 2);
+    assert_eq!(f.engine.needs_you_public().unwrap().len(), 2);
+
+    f.engine.snooze(&m, 3).unwrap();
+    assert_eq!(f.engine.needs_you().unwrap().len(), 1);
+    assert_eq!(f.engine.needs_you_public().unwrap().len(), 1);
+
+    // Still hidden on the last snoozed day, back on the date itself.
+    f.clock.advance_days(2);
+    assert_eq!(f.engine.needs_you().unwrap().len(), 1);
+    f.clock.advance_days(1);
+    assert_eq!(f.engine.needs_you().unwrap().len(), 2);
+    assert_eq!(f.engine.needs_you_public().unwrap().len(), 2);
+
+    // Zero days is no snooze. An unknown memory is refused.
+    f.engine.snooze(&m, 0).unwrap();
+    assert_eq!(f.engine.needs_you().unwrap().len(), 2);
+    assert!(matches!(
+        f.engine.snooze("mem_nope", 1),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn snooze_counts_local_days() {
+    // 23:30 in London is already tomorrow in Auckland: the date is the local one.
+    let f = fixture_at("2026-11-13T23:30:00Z", "Pacific/Auckland");
+    let m = unconfirmed(&f, "web one", "Alpha");
+    f.engine.snooze(&m, 1).unwrap();
+    let until: String = {
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.query_row("SELECT snoozed_until FROM memories", [], |r| r.get(0))
+            .unwrap()
+    };
+    assert_eq!(until, "2026-11-15");
+}
+
+#[test]
+fn confirming_or_correcting_clears_a_snooze() {
+    let f = fixture();
+    let m = unconfirmed(&f, "web one", "Alpha");
+    f.engine.snooze(&m, 30).unwrap();
+    assert_eq!(snoozed_count(&f), 1);
+    f.engine.confirm(&m, false).unwrap();
+    assert_eq!(snoozed_count(&f), 0);
+    assert_eq!(f.engine.needs_you().unwrap().len(), 1);
+
+    f.engine.snooze(&m, 30).unwrap();
+    assert!(f.engine.needs_you().unwrap().is_empty());
+    let new = f
+        .engine
+        .correct(&m, nocturne_engine::CorrectPatch::object("y"))
+        .unwrap();
+    assert_eq!(snoozed_count(&f), 0);
+    // The corrected memory is confirmed, so it no longer waits; the old one is history.
+    assert!(f.engine.needs_you().unwrap().is_empty());
+    assert!(f.engine.snooze(&m, 1).is_err(), "history cannot be snoozed");
+    let _ = new;
+}
+
+#[test]
+fn a_new_conflict_clears_the_snooze_on_both_sides() {
+    let f = fixture();
+    let (_, a) = learn(
+        &f.engine,
+        "Dentist Tuesday",
+        cand(
+            "The dentist appointment",
+            Predicate::Scheduled,
+            "Tuesday 14:00",
+            "The dentist appointment is Tuesday at 14:00.",
+        ),
+    );
+    f.engine.snooze(&a, 30).unwrap();
+    assert_eq!(snoozed_count(&f), 1);
+    let item_b = keep(&f.engine, "Dentist moved");
+    let r = f
+        .engine
+        .apply(
+            &item_b,
+            vec![cand(
+                "dentist appointment",
+                Predicate::Scheduled,
+                "Thursday 10:00",
+                "The dentist appointment is Thursday at 10:00.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(r.conflicts.len(), 1);
+    assert_eq!(snoozed_count(&f), 0);
+    assert_eq!(f.engine.needs_you().unwrap().len(), 1);
+
+    // A snoozed side hides the choice until its date.
+    f.engine.snooze(&a, 2).unwrap();
+    assert!(f.engine.needs_you().unwrap().is_empty());
+    assert!(f.engine.needs_you_public().unwrap().is_empty());
+    f.clock.advance_days(2);
+    assert_eq!(f.engine.needs_you().unwrap().len(), 1);
+}
+
+#[test]
+fn a_snoozed_memory_stays_off_the_morning_page_until_its_date() {
+    let f = fixture();
+    let m = unconfirmed(&f, "web one", "Alpha");
+    f.engine.snooze(&m, 2).unwrap();
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    assert!(page.needs_you.is_empty());
+    let page = f
+        .engine
+        .compose_page(date("2026-11-15"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    assert_eq!(page.needs_you.len(), 1);
+}
+
+// ---- item private and keep forever ----
+
+fn two_memories_from_one_item(f: &Fixture) -> (String, String, String) {
+    let item = keep(&f.engine, "Leo swims and Mia plays chess");
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![
+                cand("Leo", Predicate::Prefers, "swimming", "Leo likes swimming."),
+                cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+            ],
+        )
+        .unwrap();
+    (item, r.created[0].clone(), r.created[1].clone())
+}
+
+#[test]
+fn an_items_private_flag_reaches_every_memory_from_it_and_their_history() {
+    let f = fixture();
+    let (item, m1, m2) = two_memories_from_one_item(&f);
+    let (_, other) = learn(
+        &f.engine,
+        "unrelated",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    // An earlier version of m1 is covered through the chain.
+    let m1b = f
+        .engine
+        .correct(&m1, nocturne_engine::CorrectPatch::object("rowing"))
+        .unwrap();
+
+    f.engine.set_item_private(&item, true).unwrap();
+    assert!(f.engine.get_item(&item).unwrap().private);
+    assert!(f.engine.get_memory(&m1b).unwrap().private);
+    assert!(f.engine.get_memory(&m2).unwrap().private);
+    assert!(!f.engine.get_memory(&other).unwrap().private);
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM memories WHERE private = 0 AND subject IN ('Leo', 'Mia')"
+        ),
+        0
+    );
+
+    f.engine.set_item_private(&item, false).unwrap();
+    assert!(!f.engine.get_item(&item).unwrap().private);
+    assert!(!f.engine.get_memory(&m2).unwrap().private);
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM memories WHERE private = 1"
+        ),
+        0
+    );
+
+    assert!(matches!(
+        f.engine.set_item_private("itm_nope", true),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn making_an_item_private_removes_cached_audio_of_pages_citing_it() {
+    let f = fixture();
+    let (item, m1, _) = two_memories_from_one_item(&f);
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    f.engine
+        .cache("2026-11-14", "af_heart", b"spoken Leo")
+        .unwrap();
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_some()
+    );
+
+    f.engine.set_item_private(&item, true).unwrap();
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+    let audio = f
+        .engine
+        .page_for(Some(date("2026-11-14")), nocturne_contract::Edition::Audio)
+        .unwrap()
+        .unwrap();
+    assert!(
+        !audio
+            .learned
+            .iter()
+            .chain(&audio.changed)
+            .any(|l| l.memory_ids.contains(&m1))
+    );
+}
+
+#[test]
+fn an_items_keep_forever_flag_reaches_every_current_memory_from_it() {
+    let f = fixture();
+    let (item, m1, m2) = two_memories_from_one_item(&f);
+    let (_, other) = learn(
+        &f.engine,
+        "unrelated",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    f.engine.set_item_keep_forever(&item, true).unwrap();
+    assert!(f.engine.get_memory(&m1).unwrap().keep_forever);
+    assert!(f.engine.get_memory(&m2).unwrap().keep_forever);
+    assert!(!f.engine.get_memory(&other).unwrap().keep_forever);
+    f.engine.set_item_keep_forever(&item, false).unwrap();
+    assert!(!f.engine.get_memory(&m1).unwrap().keep_forever);
+    assert!(matches!(
+        f.engine.set_item_keep_forever("itm_nope", true),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
