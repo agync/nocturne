@@ -109,6 +109,7 @@ impl<R: Runtime> session::Shell for AppShell<R> {
 }
 
 /// The phone app's files from the app's own assets.
+#[cfg_attr(debug_assertions, allow(dead_code))]
 struct AppFiles<R: Runtime>(AppHandle<R>);
 
 impl<R: Runtime> PhoneFiles for AppFiles<R> {
@@ -120,13 +121,17 @@ impl<R: Runtime> PhoneFiles for AppFiles<R> {
     }
 }
 
+/// Development builds serve the phone app from its build folder; a release serves the copy
+/// embedded with the app.
+#[cfg(debug_assertions)]
+fn phone_files<R: Runtime>(_app: &AppHandle<R>) -> Arc<dyn PhoneFiles> {
+    let built = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ui/dist/phone");
+    Arc::new(static_files::DirFiles(built))
+}
+
+#[cfg(not(debug_assertions))]
 fn phone_files<R: Runtime>(app: &AppHandle<R>) -> Arc<dyn PhoneFiles> {
-    if cfg!(debug_assertions) {
-        let built = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../ui/dist/phone");
-        Arc::new(static_files::DirFiles(built))
-    } else {
-        Arc::new(AppFiles(app.clone()))
-    }
+    Arc::new(AppFiles(app.clone()))
 }
 
 /// Make and manage the hub from these parts (tests pass fakes before first use).
