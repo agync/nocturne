@@ -798,7 +798,12 @@ export class MockEngine implements EngineClient {
       m.status = "active";
       m.certainty = "sure";
     } else {
-      this.removeMemories([id], false);
+      // As the real engine does: saying it is not true leaves it unconfirmed, never deleted.
+      const m = this.memory(id);
+      m.status = "unconfirmed";
+      m.certainty = "notSure";
+      m.letGoAt = null;
+      this.snoozed.delete(id);
     }
     this.needsChanged();
   }

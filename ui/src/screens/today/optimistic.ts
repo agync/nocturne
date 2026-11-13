@@ -6,12 +6,23 @@ export interface Overrides {
   /** line id -> the memory chosen. */
   chosen: Record<string, string>;
   restored: string[];
+  /** Lines whose memory has just been forgotten for good. */
+  forgotten: string[];
   answer: QuestionChoice | null;
 }
 
-export const NO_OVERRIDES: Overrides = { done: [], chosen: {}, restored: [], answer: null };
+export const NO_OVERRIDES: Overrides = {
+  done: [],
+  chosen: {},
+  restored: [],
+  forgotten: [],
+  answer: null,
+};
 
 function patchLine(line: PageLine, o: Overrides): PageLine {
+  if (o.forgotten.includes(line.id)) {
+    return { ...line, forgotten: true, text: "", receipts: [], choices: [] };
+  }
   if (o.done.includes(line.id) || o.restored.includes(line.id)) return { ...line, done: true };
   const chosen = o.chosen[line.id];
   if (chosen) return { ...line, done: true, memoryIds: [chosen] };

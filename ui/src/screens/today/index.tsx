@@ -1,11 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
+import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
 import { PageSheet, type SheetAction } from "../../components/PageSheet/PageSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, isDay } from "../../copy/format";
+import { paceDays } from "../../copy/pace";
 import { t } from "../../copy/t";
-import type { WhichResolved } from "../../engine/bindings";
+import type { PageLine, WhichResolved } from "../../engine/bindings";
 import {
   useEngine,
   usePage,
@@ -40,7 +42,9 @@ function TodayPage({ date }: { date: string | undefined }) {
   const client = useQueryClient();
   const [overrides, setOverrides] = useState<Overrides>(NO_OVERRIDES);
   const [resolved, setResolved] = useState<Record<string, WhichResolved>>({});
+  const [forgetting, setForgetting] = useState<PageLine | null>(null);
   const inflight = useRef(0);
+  const forgottenLine = useRef<string | null>(null);
 
   const page = useMemo(
     () => (pageQuery.data ? applyOverrides(pageQuery.data, overrides) : undefined),
@@ -129,11 +133,14 @@ function TodayPage({ date }: { date: string | undefined }) {
             () => set((o) => ({ ...o, done: o.done.filter((x) => x !== id) })),
             async () => {
               if (!memoryId) throw new Error("This line has nothing to confirm");
-              await engine.confirmMemory(memoryId, action.confirmed);
+              await engine.confirmMemory(memoryId, true);
             },
           );
           break;
         }
+        case "forget":
+          setForgetting(action.line);
+          break;
         case "bringBack": {
           const id = action.line.id;
           void run(
@@ -164,6 +171,31 @@ function TodayPage({ date }: { date: string | undefined }) {
     },
     [page, engine, navigate, refresh, run],
   );
+
+  const forgetDialog = forgetting ? (
+    <ForgetDialog
+      memoryIds={forgetting.memoryIds.slice(0, 1)}
+      onClose={() => {
+        const id = forgottenLine.current;
+        forgottenLine.current = null;
+        setForgetting(null);
+        if (id) {
+          // The button that opened the dialog is gone, so the line's own result takes focus.
+          setTimeout(
+            () => document.querySelector<HTMLElement>(`[data-forgotten-line="${id}"]`)?.focus(),
+            0,
+          );
+        }
+      }}
+      onDone={() => {
+        const { id } = forgetting;
+        forgottenLine.current = id;
+        setOverrides((o) => ({ ...o, forgotten: [...o.forgotten, id] }));
+        void settle();
+        refresh("items", "memories");
+      }}
+    />
+  ) : null;
 
   if (pageQuery.isError) {
     return (
@@ -203,8 +235,10 @@ function TodayPage({ date }: { date: string | undefined }) {
           progress={status?.tidy ?? null}
           live={!date || date === todayQuery.data?.date}
           resolved={resolved}
+          fadeDays={paceDays(settings?.lettingGo).fade}
         />
       </div>
+      {forgetDialog}
     </div>
   );
 }

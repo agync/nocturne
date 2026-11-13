@@ -42,13 +42,26 @@ export function pagesSeed(ctx: SeedContext, memories: MemoryView[]): PageView[] 
       ),
     ],
     letGo: [
-      line("line-gym", "letGo", "The old gym door code", ["mem-gym"], [], {
+      line("line-gym", "letGo", "The old gym door code", ["mem-gym"], [receipt("item-gym")], {
         lastUsed: addDays(today, -90),
       }),
-      line("line-pizza", "letGo", "The pizza place on Elm Street", ["mem-pizza"], [], {
-        lastUsed: addDays(today, -120),
-      }),
-      line("line-bin", "merged", "Two notes about bin day were merged into one", [], []),
+      line(
+        "line-pizza",
+        "letGo",
+        "The pizza place on Elm Street",
+        ["mem-pizza"],
+        [receipt("item-pizza")],
+        {
+          lastUsed: addDays(today, -120),
+        },
+      ),
+      line(
+        "line-bin",
+        "merged",
+        "Two notes about bin day were merged into one",
+        [],
+        [receipt("item-bin")],
+      ),
     ],
     upcoming: [],
     learned: [],

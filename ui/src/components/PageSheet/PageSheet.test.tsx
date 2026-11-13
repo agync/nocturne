@@ -126,8 +126,12 @@ describe("PageSheet, a normal day", () => {
   it("brings back a let-go line, but never a merged one", async () => {
     const onAction = vi.fn();
     const { rerender } = render(<PageSheet page={today} onAction={onAction} />);
-    const buttons = screen.getAllByRole("button", { name: "Bring back" });
+    const buttons = screen.getAllByRole("button", { name: /^Bring back/ });
     expect(buttons).toHaveLength(2);
+    expect(buttons.map((b) => b.getAttribute("aria-label"))).toEqual([
+      "Bring back: The old gym door code",
+      "Bring back: The pizza place on Elm Street",
+    ]);
     expect(screen.getByText("Two notes about bin day were merged into one")).toBeInTheDocument();
     expect(screen.getByText("Same thing, kept twice")).toBeInTheDocument();
     expect(screen.getByText("Not used since August")).toBeInTheDocument();
@@ -139,14 +143,47 @@ describe("PageSheet, a normal day", () => {
     };
     rerender(<PageSheet page={restored} onAction={onAction} />);
     expect(screen.getByText("Brought back. It will not fade for 30 days.")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Bring back" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Bring back/ })).toHaveLength(1);
+  });
+
+  it("gives every let-go and merged line a receipt that opens its original", async () => {
+    const onAction = vi.fn();
+    render(<PageSheet page={today} onAction={onAction} />);
+    const letGo = within(screen.getByRole("region", { name: "Let go · 3" }));
+    const chips = letGo.getAllByRole("button", { name: /^Source:/ });
+    expect(chips).toHaveLength(3);
+    await userEvent.click(chips[2] as HTMLElement);
+    expect(onAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "open",
+        receipt: expect.objectContaining({ itemId: "item-bin" }),
+      }),
+    );
+  });
+
+  it("lets a which-is-right choice open the original it came from", async () => {
+    const onAction = vi.fn();
+    render(<PageSheet page={today} onAction={onAction} />);
+    const group = screen.getByRole("group", { name: /Dentist|appointment/i });
+    const chips = within(group).getAllByRole("button", { name: /^Source:/ });
+    expect(chips).toHaveLength(2);
+    await userEvent.click(chips[0] as HTMLElement);
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: "open" }));
+  });
+
+  it("names the which-is-right group once, by its own question", () => {
+    render(<PageSheet page={today} onAction={vi.fn()} />);
+    const which = today.needsYou.find((l) => l.kind === "which") as Line;
+    const group = screen.getByRole("group", { name: which.text.replaceAll("**", "") });
+    expect(group.querySelectorAll("legend")).toHaveLength(1);
+    expect(screen.getAllByText(which.text.replaceAll("**", ""))).toHaveLength(1);
   });
 
   it("asks one question, says thanks, and lets the answer change", async () => {
     const onAction = vi.fn();
     const { rerender } = render(<PageSheet page={today} onAction={onAction} />);
     expect(screen.getByText("Is Leo still doing swimming with Coach Sam?")).toBeInTheDocument();
-    expect(screen.getByText(/last asked never/)).toBeInTheDocument();
+    expect(screen.getByText("Not asked before")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Yes" }));
     expect(onAction).toHaveBeenCalledWith({ type: "answer", choice: "yes" });
     const answered = {
@@ -178,9 +215,10 @@ describe("PageSheet, a normal day", () => {
   it("links to the day before and shows the page number and the footer", () => {
     render(<PageSheet page={today} onAction={vi.fn()} previousDate="2026-11-12" />);
     expect(screen.getByText(/Page 23/)).toBeInTheDocument();
-    expect(
-      screen.getByRole("link", { name: "Previous page, Thursday 12 November" }),
-    ).toHaveAttribute("href", "#/pages/2026-11-12");
+    const back = screen.getByRole("link", { name: "Previous page, ← Thu" });
+    expect(back).toHaveAttribute("href", "#/pages/2026-11-12");
+    expect(back).toHaveTextContent("Previous page, ← Thu");
+    expect(back.querySelector(".sr-only")).toHaveTextContent("Previous page,");
     expect(screen.getByText("Tidied 02:10–02:16")).toBeInTheDocument();
     expect(screen.queryByText(/Sent to the internet/)).toBeNull();
   });
@@ -195,7 +233,7 @@ describe("PageSheet, a normal day", () => {
     rerender(<PageSheet page={today} onAction={vi.fn()} />);
     expect(screen.queryByText(/Sent to the internet/)).toBeNull();
     const footer = screen
-      .getByText(/Nocturne only goes online to download, and asks first\./)
+      .getByText(/Nocturne goes online only for downloads you agree to\./)
       .closest("footer") as HTMLElement;
     expect(within(footer).getByRole("link", { name: "Privacy" })).toHaveAttribute(
       "href",
@@ -299,7 +337,7 @@ describe("PageSheet, other days", () => {
     );
     expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toHaveFocus();
 
-    await userEvent.click(screen.getAllByRole("button", { name: "Bring back" })[0] as HTMLElement);
+    await userEvent.click(screen.getAllByRole("button", { name: /^Bring back/ })[0] as HTMLElement);
     rerender(
       <PageSheet
         page={{
@@ -336,7 +374,7 @@ describe("PageSheet, other days", () => {
     expect(screen.getByRole("button", { name: "Change answer" })).toHaveFocus();
   });
 
-  it("keeps focus inside the line when an unconfirmed claim is settled, and says which way", async () => {
+  it("keeps focus inside the line when an unconfirmed claim is confirmed, and says so", async () => {
     const line: Line = {
       ...(today.needsYou[0] as Line),
       id: "line-nut",
@@ -346,19 +384,34 @@ describe("PageSheet, other days", () => {
     const page = { ...today, needsYou: [line] };
     const onAction = vi.fn();
     const { rerender } = render(<PageSheet page={page} onAction={onAction} />);
-    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it" }));
+    await userEvent.click(screen.getByRole("button", { name: "It’s true" }));
+    expect(onAction).toHaveBeenCalledWith({ type: "confirm", line });
     rerender(
       <PageSheet page={{ ...page, needsYou: [{ ...line, done: true }] }} onAction={onAction} />,
     );
-    const status = screen.getByText(/^Forgotten\. The original is still kept/);
+    const status = screen.getByText(/^Confirmed\./);
     expect(status).toHaveFocus();
     expect(status).toHaveAttribute("role", "status");
+  });
+
+  it("asks to forget an unconfirmed claim instead of saying it is forgotten", async () => {
+    const line: Line = {
+      ...(today.needsYou[0] as Line),
+      id: "line-nut",
+      kind: "unconfirmed",
+      memoryIds: ["mem-nut"],
+    };
+    const onAction = vi.fn();
+    render(<PageSheet page={{ ...today, needsYou: [line] }} onAction={onAction} />);
+    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+    expect(onAction).toHaveBeenCalledWith({ type: "forget", line });
+    expect(screen.queryByText(/Forgotten/)).toBeNull();
   });
 
   it("keeps its live regions mounted so the first change is announced", () => {
     render(<PageSheet page={today} onAction={vi.fn()} />);
     const regions = screen.getAllByRole("status");
-    expect(regions.length).toBeGreaterThanOrEqual(4);
+    expect(regions.length).toBeGreaterThanOrEqual(3);
     for (const region of regions) expect(region).toHaveAttribute("aria-live", "polite");
   });
 
@@ -370,7 +423,7 @@ describe("PageSheet, other days", () => {
     };
     render(<PageSheet page={page} onAction={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeDisabled();
-    expect(screen.getAllByRole("button", { name: "Bring back" })[0]).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: /^Bring back/ })[0]).toBeDisabled();
   });
 
   it("shows the answer bars filling for yes, and opens the question's own receipt", async () => {

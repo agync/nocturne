@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
+import { patch } from "../settings/patch";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
@@ -72,10 +73,24 @@ describe("the morning page on Today", () => {
   it("brings back a let-go line by asking the engine to restore it", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "restore");
-    await userEvent.click(screen.getAllByRole("button", { name: "Bring back" })[0] as HTMLElement);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Bring back: The old gym door code" }),
+    );
     expect(spy).toHaveBeenCalledWith(["mem-gym"]);
     expect(
       await screen.findByText("Brought back. It will not fade for 30 days."),
+    ).toBeInTheDocument();
+  });
+
+  it("says a brought-back line will not fade for as long as the letting-go pace says", async () => {
+    const engine = createMockEngine();
+    await engine.updateSettings(patch({ lettingGo: "gentle" }));
+    await open(engine);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Bring back: The old gym door code" }),
+    );
+    expect(
+      await screen.findByText("Brought back. It will not fade for 45 days."),
     ).toBeInTheDocument();
   });
 
@@ -111,7 +126,7 @@ describe("the morning page on Today", () => {
     unmeasured.getStatus = async () => ({ ...(await real2()), sentMeasured: false });
     await open(unmeasured);
     expect(
-      await screen.findByText(/Nocturne only goes online to download, and asks first\./),
+      await screen.findByText(/Nocturne goes online only for downloads you agree to\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Sent to the internet: nothing/)).toBeNull();
   });
@@ -172,6 +187,53 @@ describe("the morning page on Today", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "I couldn’t get this page. What you kept is safe.",
     );
+  });
+
+  describe("Not true, forget it", () => {
+    /** The gran line waits to be confirmed, so the page offers the choice. */
+    const unconfirmedGran = () => {
+      const engine = createMockEngine();
+      const real = engine.getPage.bind(engine);
+      vi.spyOn(engine, "getPage").mockImplementation(async (date) => {
+        const page = await real(date);
+        return {
+          ...page,
+          changed: page.changed.map((l) =>
+            l.id === "line-gran" && !l.forgotten ? { ...l, kind: "unconfirmed" as const } : l,
+          ),
+        };
+      });
+      return engine;
+    };
+
+    it("opens the forget dialog and only says Forgotten once the engine has forgotten", async () => {
+      const engine = unconfirmedGran();
+      const confirm = vi.spyOn(engine, "confirmMemory");
+      const forget = vi.spyOn(engine, "forget");
+      await open(engine);
+      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
+      expect(screen.queryByText(/^Forgotten\./)).toBeNull();
+      expect(confirm).not.toHaveBeenCalled();
+      await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
+      expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+      expect(forget).toHaveBeenCalledOnce();
+      await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+      const gone = await screen.findByText("Forgotten. This line is gone from the page.");
+      await waitFor(() => expect(gone).toHaveFocus());
+      expect(document.body.textContent).not.toContain("4471");
+    });
+
+    it("leaves the line alone when the person keeps it", async () => {
+      const engine = unconfirmedGran();
+      const forget = vi.spyOn(engine, "forget");
+      await open(engine);
+      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+      expect(forget).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("button", { name: "Not true, forget it…" })).toBeInTheDocument();
+    });
   });
 
   it("shows a forgotten line as redacted", async () => {

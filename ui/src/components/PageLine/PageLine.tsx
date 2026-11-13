@@ -3,15 +3,15 @@ import { formatMonth, formatWeekday } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { Choice, PageLine as Line, Receipt, WhichResolved } from "../../engine/bindings";
 import { Button } from "../Button/Button";
-import { ReceiptChip, receiptText } from "../ReceiptChip/ReceiptChip";
-import { Thumb } from "../Thumb/Thumb";
+import { ReceiptChip } from "../ReceiptChip/ReceiptChip";
 import styles from "./PageLine.module.css";
 import { plainText, richText } from "./richText";
 
 export type LineAction =
   | { type: "done"; line: Line }
   | { type: "which"; line: Line; choice: Choice }
-  | { type: "confirm"; line: Line; confirmed: boolean }
+  | { type: "confirm"; line: Line }
+  | { type: "forget"; line: Line }
   | { type: "bringBack"; line: Line }
   | { type: "open"; receipt: Receipt };
 
@@ -20,6 +20,8 @@ interface PageLineProps {
   onAction: (action: LineAction) => void;
   /** What the engine said it settled, for the spoken confirmation of a which-is-right choice. */
   resolved?: WhichResolved;
+  /** Days a brought-back line stays clear of fading. */
+  fadeDays?: number;
 }
 
 function Chips({
@@ -64,10 +66,10 @@ function useFocusResult(done: boolean) {
   };
 }
 
-type Outcome = "confirmed" | "denied" | null;
+type Outcome = "confirmed" | null;
 
 /** The unit of the morning page: the claim, where it came from, and what to do about it. */
-export function PageLine({ line, onAction, resolved }: PageLineProps) {
+export function PageLine({ line, onAction, resolved, fadeDays = 30 }: PageLineProps) {
   const { result, act } = useFocusResult(line.done);
   const [outcome, setOutcome] = useState<Outcome>(null);
   // A line with nothing behind it cannot be acted on, so it offers nothing to pretend with.
@@ -76,7 +78,9 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
   if (line.forgotten) {
     return (
       <div className={styles.line} data-kind={line.kind} data-forgotten="true">
-        <p className={styles.forgotten}>{t("page.line.forgotten")}</p>
+        <p className={styles.forgotten} data-forgotten-line={line.id} tabIndex={-1}>
+          {t("page.line.forgotten")}
+        </p>
       </div>
     );
   }
@@ -84,7 +88,7 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
   if (line.kind === "letGo" || line.kind === "merged") {
     const restorable = line.kind === "letGo";
     const why = line.done
-      ? t("page.letGo.restored")
+      ? t("page.letGo.restored", { days: fadeDays })
       : line.kind === "merged"
         ? t("page.merged.why")
         : line.lastUsed
@@ -94,13 +98,21 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
       <div className={styles.letGo} data-kind={line.kind} data-restored={line.done}>
         <div className={styles.letGoText}>
           <span className={styles.letGoTitle}>{richText(line.text)}</span>
-          <span ref={result} className={styles.why} role="status" aria-live="polite" tabIndex={-1}>
+          <span
+            ref={result}
+            className={styles.why}
+            role={line.done ? "status" : undefined}
+            aria-live={line.done ? "polite" : undefined}
+            tabIndex={-1}
+          >
             {why}
           </span>
+          <Chips receipts={line.receipts} onAction={onAction} />
         </div>
         {restorable && !line.done ? (
           <Button
             variant="secondary"
+            aria-label={t("fading.bringBack.named", { sentence: plainText(line.text) })}
             disabled={!canAct}
             onClick={() => {
               act();
@@ -135,33 +147,32 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
       : "";
     return (
       <div className={styles.line} data-kind="which" data-done={line.done}>
-        <p className={styles.text}>{richText(line.text)}</p>
         {!line.done ? (
           <fieldset className={styles.choices}>
-            <legend className="sr-only">{plainText(line.text)}</legend>
+            <legend className={styles.text}>{richText(line.text)}</legend>
             {line.choices.map((choice) => (
-              <button
-                key={choice.memoryId}
-                type="button"
-                className={styles.choice}
-                disabled={!line.conflictId}
-                onClick={() => {
-                  act();
-                  onAction({ type: "which", line, choice });
-                }}
-              >
-                <span className={styles.choiceText}>{choice.text}</span>
-                <span className={styles.choiceSource}>
-                  <Thumb
-                    kind={choice.receipt.kind}
-                    size={choice.receipt.kind === "image" ? 16 : 12}
-                  />
-                  {receiptText(choice.receipt)}
-                </span>
-              </button>
+              <div key={choice.memoryId} className={styles.choiceCard}>
+                <button
+                  type="button"
+                  className={styles.choice}
+                  disabled={!line.conflictId}
+                  onClick={() => {
+                    act();
+                    onAction({ type: "which", line, choice });
+                  }}
+                >
+                  {choice.text}
+                </button>
+                <ReceiptChip
+                  receipt={choice.receipt}
+                  onOpen={(r) => onAction({ type: "open", receipt: r })}
+                />
+              </div>
             ))}
           </fieldset>
-        ) : null}
+        ) : (
+          <p className={styles.text}>{richText(line.text)}</p>
+        )}
         <p
           ref={result as React.RefObject<HTMLParagraphElement>}
           className={styles.result}
@@ -180,11 +191,9 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
   const unconfirmed = line.kind === "unconfirmed";
   const message = line.done
     ? unconfirmed
-      ? outcome === "denied"
-        ? t("page.unconfirmed.denied")
-        : outcome === "confirmed"
-          ? t("page.unconfirmed.confirmed")
-          : t("page.unconfirmed.settled")
+      ? outcome === "confirmed"
+        ? t("page.unconfirmed.confirmed")
+        : t("page.unconfirmed.settled")
       : t("page.line.done")
     : "";
   return (
@@ -214,7 +223,7 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
               onClick={() => {
                 act();
                 setOutcome("confirmed");
-                onAction({ type: "confirm", line, confirmed: true });
+                onAction({ type: "confirm", line });
               }}
             >
               {t("page.unconfirmed.confirm")}
@@ -223,9 +232,7 @@ export function PageLine({ line, onAction, resolved }: PageLineProps) {
               variant="quiet"
               disabled={!canAct}
               onClick={() => {
-                act();
-                setOutcome("denied");
-                onAction({ type: "confirm", line, confirmed: false });
+                onAction({ type: "forget", line });
               }}
             >
               {t("page.unconfirmed.deny")}

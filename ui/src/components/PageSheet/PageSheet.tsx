@@ -43,6 +43,8 @@ interface PageSheetProps {
   live?: boolean;
   /** What the engine said it settled for each which-is-right line, by line id. */
   resolved?: Record<string, WhichResolved>;
+  /** Days a brought-back line stays clear of fading, from the letting-go pace. */
+  fadeDays?: number;
 }
 
 function openCount(lines: Line[]): number {
@@ -102,6 +104,7 @@ export function PageSheet({
   progress = null,
   live = true,
   resolved = {},
+  fadeDays = 30,
 }: PageSheetProps) {
   const base = useId();
   const [changing, setChanging] = useState(false);
@@ -154,11 +157,8 @@ export function PageSheet({
             {previousDate ? (
               <>
                 {" · "}
-                <a
-                  className={styles.previous}
-                  href={`#/pages/${previousDate}`}
-                  aria-label={t("page.previous.label", { date: formatLongDay(previousDate) })}
-                >
+                <a className={styles.previous} href={`#/pages/${previousDate}`}>
+                  <span className="sr-only">{t("page.previous.hidden")}</span>{" "}
                   {t("page.previous", { day: formatWeekday(previousDate) })}
                 </a>
               </>
@@ -219,7 +219,7 @@ export function PageSheet({
               title={t("page.section.learned", { count: page.learned.length })}
             >
               {page.learned.map((line) => (
-                <PageLine key={line.id} line={line} onAction={onAction} />
+                <PageLine key={line.id} line={line} onAction={onAction} fadeDays={fadeDays} />
               ))}
             </Section>
           ) : null}
@@ -272,7 +272,7 @@ export function PageSheet({
               }
             >
               {page.changed.map((line) => (
-                <PageLine key={line.id} line={line} onAction={onAction} />
+                <PageLine key={line.id} line={line} onAction={onAction} fadeDays={fadeDays} />
               ))}
               {page.moreChanged > 0 ? (
                 <a className={styles.more} href="#/memories">
@@ -285,7 +285,7 @@ export function PageSheet({
           {page.upcoming.length > 0 ? (
             <Section id={`${base}-upcoming`} title={t("page.section.upcoming")}>
               {page.upcoming.map((line) => (
-                <PageLine key={line.id} line={line} onAction={onAction} />
+                <PageLine key={line.id} line={line} onAction={onAction} fadeDays={fadeDays} />
               ))}
             </Section>
           ) : null}
@@ -296,7 +296,7 @@ export function PageSheet({
               title={t("page.section.letGo", { count: page.letGo.length })}
             >
               {page.letGo.map((line) => (
-                <PageLine key={line.id} line={line} onAction={onAction} />
+                <PageLine key={line.id} line={line} onAction={onAction} fadeDays={fadeDays} />
               ))}
             </Section>
           ) : null}
