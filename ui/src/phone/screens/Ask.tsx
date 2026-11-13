@@ -144,7 +144,15 @@ export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProp
   const [draft, setDraft] = useState("");
   const working =
     model.phase === "starting" ||
-    ["waking", "searching", "reading", "streaming"].includes(model.phase);
+    [
+      "waking",
+      "searching",
+      "reading",
+      "streaming",
+      "askingOnline",
+      "waitingOnline",
+      "switchingToComputer",
+    ].includes(model.phase);
   const answerRef = useRef<HTMLHeadingElement>(null);
   const receipts = UNIQUE(model.receipts);
 

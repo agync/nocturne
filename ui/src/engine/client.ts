@@ -1,6 +1,9 @@
 import type {
   AdvancedView,
   AskDelta,
+  AskPlace,
+  ChangePreview,
+  CheckOutcome,
   DeviceView,
   Edition,
   EngineStatus,
@@ -12,11 +15,19 @@ import type {
   ForgetReport,
   ItemFilter,
   ItemView,
+  Job,
   Kept,
   MemoryFilter,
   MemoryView,
   MergeOutcome,
+  ModelChoice,
+  ModelsView,
   NeedsYouEntry,
+  OnlineForm,
+  OnlineSend,
+  OnlineSettings,
+  OnlineSettingsPatch,
+  OnlineView,
   PageSummary,
   PageView,
   PairingOffer,
@@ -77,6 +88,8 @@ export interface EngineEvents {
   "remote-changed": RemoteView;
   "pairing-request": PairingRequest;
   "device-active": DeviceView;
+  "online-changed": OnlineView;
+  "models-changed": ModelsView;
 }
 
 export type EngineEventName = keyof EngineEvents;
@@ -92,6 +105,8 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "remote-changed",
   "pairing-request",
   "device-active",
+  "online-changed",
+  "models-changed",
 ];
 
 /** What a window can do about recording: `available`, or why it cannot. */
@@ -139,8 +154,11 @@ export interface EngineClient {
   getItem(id: string): Promise<ItemView>;
   retryItem(id: string): Promise<ItemView>;
 
-  /** Resolves with the ask id as soon as the question is accepted; the answer streams as `ask-delta`. */
-  ask(question: string): Promise<string>;
+  /**
+   * Resolves with the ask id as soon as the question is accepted; the answer streams as
+   * `ask-delta`. `place` is the person's choice for this one question (`auto` when left out).
+   */
+  ask(question: string, place?: AskPlace): Promise<string>;
   /** Stops an answer in progress; no more of it arrives. Stopping a finished one is fine. */
   cancelAsk(askId: string): Promise<void>;
 
@@ -214,6 +232,34 @@ export interface EngineClient {
   openRemoteSignIn(): Promise<void>;
   /** A new key for this computer; every phone has to be added again. */
   newComputerKey(): Promise<RemoteView>;
+
+  /** Online answers. Main window only; the key goes out in `checkOnline` and never comes back. */
+  getOnline(): Promise<OnlineView>;
+  /** One short question to the address the person entered, through the engine. */
+  checkOnline(form: OnlineForm): Promise<CheckOutcome>;
+  cancelOnlineCheck(): Promise<void>;
+  turnOnOnline(settings: OnlineSettings): Promise<OnlineView>;
+  /** Turns it off; `forget` also removes the key. */
+  turnOffOnline(forget: boolean): Promise<OnlineView>;
+  /** Leaving setup before saying yes: the key and the route are dropped. */
+  abandonOnlineSetup(): Promise<void>;
+  updateOnlineSettings(patch: OnlineSettingsPatch): Promise<OnlineView>;
+  /** What was sent, newest first; `before` is the id of the oldest already shown. */
+  listOnlineSends(limit: number, before: number | null): Promise<OnlineSend[]>;
+
+  /** Choosing the model for each job. Main window only. */
+  getModels(): Promise<ModelsView>;
+  listModelChoices(job: Job): Promise<ModelChoice[]>;
+  previewModelChange(job: Job, model: string): Promise<ChangePreview>;
+  /** `allowDownload` is the person's yes to fetching the model. */
+  changeModel(job: Job, model: string, allowDownload: boolean): Promise<ModelsView>;
+  pauseModelDownload(): Promise<ModelsView>;
+  resumeModelDownload(): Promise<ModelsView>;
+  cancelModelChange(): Promise<ModelsView>;
+  cancelReindex(): Promise<ModelsView>;
+  keepOldModel(): Promise<ModelsView>;
+  removeOldModel(): Promise<ModelsView>;
+  resetModelsToTier(): Promise<ModelsView>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

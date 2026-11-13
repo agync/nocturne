@@ -1,0 +1,15 @@
+{
+  "screen.models.title": "Choose for each job",
+  "screen.models.answering.title": "Answering questions",
+  "screen.models.recordings.title": "Reading recordings",
+  "screen.models.aloud.title": "Reading aloud",
+  "screen.models.finding.title": "Finding memories",
+  "models.row.label": "Choose what runs each job",
+  "models.row.hint": "What answers your questions, reads recordings, reads aloud and finds memories",
+  "models.row.attention": "A download stopped. What you use now keeps working.",
+  "models.row.preset": "{tier}, for this computer",
+  "models.row.custom": "Custom",
+  "models.row.needsYou": "Needs you",
+  "models.row.open": "Choose what runs each job, {value}. Open",
+  "advanced.models.link": "Choose for each job…"
+}

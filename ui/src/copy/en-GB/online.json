@@ -1,0 +1,10 @@
+{
+  "screen.online.title": "Online answers",
+  "screen.online.setup.title": "Set up Online answers",
+  "online.row.label": "Online answers",
+  "online.row.hint": "Answers written by an online service you choose",
+  "online.row.off": "Off",
+  "online.row.on": "On",
+  "online.row.paused": "Paused",
+  "online.row.open": "Online answers, {value}. Open"
+}

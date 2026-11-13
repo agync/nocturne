@@ -431,7 +431,11 @@ export default function Ask() {
                 </div>
               ) : null}
 
-              {phase === "asking" || phase === "searching" ? (
+              {phase === "asking" ||
+              phase === "searching" ||
+              phase === "askingOnline" ||
+              phase === "waitingOnline" ||
+              phase === "switchingToComputer" ? (
                 <p className={styles.searching}>
                   <span className={styles.dot} aria-hidden="true" />
                   {t("ask.searching")}

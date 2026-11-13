@@ -11,6 +11,7 @@ import type { AdvancedView, ComponentRole } from "../../engine/bindings";
 import type { RecordingState } from "../../engine/client";
 import { useEngine, useRefresh, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { useModels } from "../models/useModels";
 import { DeleteEverythingDialog } from "../privacy/DeleteEverythingDialog";
 import styles from "./Settings.module.css";
 
@@ -133,6 +134,7 @@ export function Advanced() {
   const { data: settings } = useSettings();
   const query = useQuery({ queryKey: ["advanced"], queryFn: () => engine.getAdvanced() });
   const [resetting, setResetting] = useState(false);
+  const models = useModels().data;
 
   if (query.isError) {
     return (
@@ -166,6 +168,11 @@ export function Advanced() {
           </div>
         ))}
       </dl>
+      {models ? (
+        <a className={`${styles.advanced} hit`} href="#/settings/models">
+          {t("advanced.models.link")}
+        </a>
+      ) : null}
       <div className={styles.buttons}>
         <Button variant="secondary" onClick={() => void platform.openPath(view.logDir)}>
           {t("advanced.logs")}

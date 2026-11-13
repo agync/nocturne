@@ -110,7 +110,8 @@ export class TauriEngine implements EngineClient {
   getItem: EngineClient["getItem"] = (id) => this.call("get_item", { id });
   retryItem: EngineClient["retryItem"] = (id) => this.call("retry_item", { id });
 
-  ask: EngineClient["ask"] = (question) => this.call("ask", { question });
+  ask: EngineClient["ask"] = (question, place) =>
+    this.call("ask", { question, place: place ?? null });
   cancelAsk: EngineClient["cancelAsk"] = (askId) => this.call("cancel_ask", { askId });
   appReady: EngineClient["appReady"] = () => this.call("app_ready");
   reportRecording: EngineClient["reportRecording"] = (state) =>
@@ -186,4 +187,33 @@ export class TauriEngine implements EngineClient {
     this.call("update_remote_settings", { patch });
   openRemoteSignIn: EngineClient["openRemoteSignIn"] = () => this.call("open_remote_sign_in");
   newComputerKey: EngineClient["newComputerKey"] = () => this.call("new_computer_key");
+
+  getOnline: EngineClient["getOnline"] = () => this.call("get_online");
+  checkOnline: EngineClient["checkOnline"] = (form) => this.call("check_online", { form });
+  cancelOnlineCheck: EngineClient["cancelOnlineCheck"] = () => this.call("cancel_online_check");
+  turnOnOnline: EngineClient["turnOnOnline"] = (settings) =>
+    this.call("turn_on_online", { settings });
+  turnOffOnline: EngineClient["turnOffOnline"] = (forget) =>
+    this.call("turn_off_online", { forget });
+  abandonOnlineSetup: EngineClient["abandonOnlineSetup"] = () => this.call("abandon_online_setup");
+  updateOnlineSettings: EngineClient["updateOnlineSettings"] = (patch) =>
+    this.call("update_online_settings", { patch });
+  listOnlineSends: EngineClient["listOnlineSends"] = (limit, before) =>
+    this.call("list_online_sends", { limit, before });
+
+  getModels: EngineClient["getModels"] = () => this.call("get_models");
+  listModelChoices: EngineClient["listModelChoices"] = (job) =>
+    this.call("list_model_choices", { job });
+  previewModelChange: EngineClient["previewModelChange"] = (job, model) =>
+    this.call("preview_model_change", { job, model });
+  changeModel: EngineClient["changeModel"] = (job, model, allowDownload) =>
+    this.call("change_model", { job, model, allowDownload });
+  pauseModelDownload: EngineClient["pauseModelDownload"] = () => this.call("pause_model_download");
+  resumeModelDownload: EngineClient["resumeModelDownload"] = () =>
+    this.call("resume_model_download");
+  cancelModelChange: EngineClient["cancelModelChange"] = () => this.call("cancel_model_change");
+  cancelReindex: EngineClient["cancelReindex"] = () => this.call("cancel_reindex");
+  keepOldModel: EngineClient["keepOldModel"] = () => this.call("keep_old_model");
+  removeOldModel: EngineClient["removeOldModel"] = () => this.call("remove_old_model");
+  resetModelsToTier: EngineClient["resetModelsToTier"] = () => this.call("reset_models_to_tier");
 }

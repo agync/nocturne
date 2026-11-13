@@ -40,7 +40,7 @@
   "notice.onlineNoCredit.text": "Online answers is paused: the account has no credit left. Answers are written on this computer meanwhile.",
   "notice.onlineNoCredit.action": "Check again",
   "notice.onlineLimit.text": "This month’s online questions are used up. Answers are written on this computer until the 1st.",
-  "notice.onlineLimit.action": "OK",
+  "notice.onlineLimit.action": "See the limit",
   "notice.modelDownloadStopped.text": "A download for a job you changed stopped. What you use now keeps working.",
   "notice.modelDownloadStopped.action": "Try again"
 }

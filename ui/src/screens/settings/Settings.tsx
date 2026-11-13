@@ -9,6 +9,8 @@ import { t } from "../../copy/t";
 import type {
   Delivery,
   LettingGo,
+  ModelsView,
+  OnlineView,
   RemoteView,
   SettingsPatch,
   SettingsView,
@@ -18,6 +20,8 @@ import { EngineError } from "../../engine/client";
 import { useEngine, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { useRemote } from "../away/useRemote";
+import { useModels } from "../models/useModels";
+import { useOnline } from "../online/useOnline";
 import { patch } from "./patch";
 import styles from "./Settings.module.css";
 import { ShortcutField } from "./ShortcutField";
@@ -82,6 +86,34 @@ function Select<V extends string | number>({
   );
 }
 
+/** The words on the Online answers row: Off, On or Paused. */
+export function onlineValue(view: OnlineView): string {
+  switch (view.state.type) {
+    case "off":
+      return t("online.row.off");
+    case "on":
+    case "checking":
+      return t("online.row.on");
+    case "paused":
+    case "problem":
+      return t("online.row.paused");
+  }
+}
+
+const TIER_NAMES = {
+  large: "setup.tier.large",
+  standard: "setup.tier.standard",
+  small: "setup.tier.small",
+  tiny: "setup.tier.tiny",
+} as const;
+
+/** The words on the row for choosing what runs each job: the tier, Custom, or Needs you. */
+export function modelsValue(view: ModelsView): string {
+  if (view.attention) return t("models.row.needsYou");
+  if (view.custom || view.preset === "unsupported") return t("models.row.custom");
+  return t("models.row.preset", { tier: t(TIER_NAMES[view.preset]) });
+}
+
 /** The words on the Away from home row: Off, or how it is on and with how many phones. */
 export function awayValue(view: RemoteView): string {
   const connection = t(
@@ -111,6 +143,8 @@ export function Settings() {
   const client = useQueryClient();
   const query = useSettings();
   const away = useRemote().data;
+  const online = useOnline().data;
+  const models = useModels().data;
   const [saved, setSaved] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -347,6 +381,39 @@ export function Settings() {
                 aria-label={t("away.row.open", { value: awayValue(away) })}
               >
                 {awayValue(away)} ›
+              </a>
+            )}
+          </Row>
+        ) : null}
+
+        {online ? (
+          <Row label={t("online.row.label")} hint={t("online.row.hint")}>
+            {(hint) => (
+              <a
+                className={`${styles.value} hit`}
+                href="#/settings/online"
+                aria-describedby={hint}
+                aria-label={t("online.row.open", { value: onlineValue(online) })}
+              >
+                {onlineValue(online)} ›
+              </a>
+            )}
+          </Row>
+        ) : null}
+
+        {models ? (
+          <Row
+            label={t("models.row.label")}
+            hint={models.attention ? t("models.row.attention") : t("models.row.hint")}
+          >
+            {(hint) => (
+              <a
+                className={`${styles.value} hit`}
+                href="#/settings/models"
+                aria-describedby={hint}
+                aria-label={t("models.row.open", { value: modelsValue(models) })}
+              >
+                {modelsValue(models)} ›
               </a>
             )}
           </Row>

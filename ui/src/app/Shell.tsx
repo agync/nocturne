@@ -198,6 +198,10 @@ export function Shell({ children }: ShellProps) {
       micDenied: () => {
         engine.openSoundSettings().catch(() => toast.show({ message: t("notice.action.failed") }));
       },
+      onlineKeyRefused: () => navigate("/settings/online"),
+      onlineNoCredit: () => navigate("/settings/online"),
+      onlineLimit: () => navigate("/settings/online"),
+      modelDownloadStopped: () => navigate("/settings/models"),
     }),
     [engine, navigate, refresh, today, toast],
   );

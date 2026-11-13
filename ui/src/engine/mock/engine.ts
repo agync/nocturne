@@ -2,6 +2,9 @@ import { formatLongDay, localDay } from "../../copy/format";
 import type {
   AdvancedView,
   AskDelta,
+  AskPlace,
+  ChangePreview,
+  CheckOutcome,
   DeviceView,
   Edition,
   EngineStatus,
@@ -13,13 +16,21 @@ import type {
   ItemFilter,
   ItemKind,
   ItemView,
+  Job,
   Kept,
   MemoryFilter,
   MemoryView,
   MergeOutcome,
+  ModelChoice,
+  ModelsView,
   NeedsYouEntry,
   Notice,
   NoticeCode,
+  OnlineForm,
+  OnlineSend,
+  OnlineSettings,
+  OnlineSettingsPatch,
+  OnlineView,
   PageLine,
   PageSummary,
   PageView,
@@ -52,6 +63,8 @@ import type {
 } from "../client";
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
+import { ModelsSim } from "./models";
+import { OnlineSim } from "./online";
 import { type RemoteOptions, RemoteSim } from "./remote";
 import { audioScript } from "./script";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
@@ -309,6 +322,10 @@ export class MockEngine implements EngineClient {
   tidyAnywayCount = 0;
   /** Away from home. Tests drive its scripted parts through this. */
   readonly remote: RemoteSim;
+  /** Online answers. */
+  readonly online = new OnlineSim();
+  /** Choosing the model for each job. */
+  readonly models = new ModelsSim();
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
@@ -741,7 +758,7 @@ export class MockEngine implements EngineClient {
 
   async reportRecording(_state: RecordingState): Promise<void> {}
 
-  async ask(question: string): Promise<string> {
+  async ask(question: string, _place?: AskPlace): Promise<string> {
     this.counter += 1;
     const askId = `ask-${this.counter}`;
     this.runAsk(askId, question);
@@ -1362,11 +1379,7 @@ export class MockEngine implements EngineClient {
       lock: this.settings.lock,
       checkUpdates: this.settings.checkUpdates,
       ...remote,
-      sentOnlineBytes: 0,
-      onlineQuestions: 0,
-      onlineOn: false,
-      onlineHost: null,
-      onlineLastOnAt: null,
+      ...this.online.privacy(),
     };
   }
 
@@ -1427,6 +1440,7 @@ export class MockEngine implements EngineClient {
     return {
       ...advancedSeed({ memories: this.memories.length, items: this.items.length }),
       remote: this.remote.advanced(),
+      online: this.online.advanced(),
     };
   }
 
@@ -1521,6 +1535,35 @@ export class MockEngine implements EngineClient {
     this.remote.update(patch);
   openRemoteSignIn = (): Promise<void> => this.remote.openSignIn();
   newComputerKey = (): Promise<RemoteView> => this.remote.newKey();
+
+  // Online answers
+
+  getOnline = async (): Promise<OnlineView> => this.online.view();
+  checkOnline = (form: OnlineForm): Promise<CheckOutcome> => this.online.check(form);
+  cancelOnlineCheck = (): Promise<void> => this.online.cancelCheck();
+  turnOnOnline = (settings: OnlineSettings): Promise<OnlineView> => this.online.turnOn(settings);
+  turnOffOnline = (forget: boolean): Promise<OnlineView> => this.online.turnOff(forget);
+  abandonOnlineSetup = (): Promise<void> => this.online.abandonSetup();
+  updateOnlineSettings = (patch: OnlineSettingsPatch): Promise<OnlineView> =>
+    this.online.update(patch);
+  listOnlineSends = (limit: number, before: number | null): Promise<OnlineSend[]> =>
+    this.online.sends(limit, before);
+
+  // Choosing the model for each job
+
+  getModels = async (): Promise<ModelsView> => this.models.view();
+  listModelChoices = (job: Job): Promise<ModelChoice[]> => this.models.choices(job);
+  previewModelChange = (job: Job, model: string): Promise<ChangePreview> =>
+    this.models.preview(job, model);
+  changeModel = (job: Job, model: string, allowDownload: boolean): Promise<ModelsView> =>
+    this.models.change(job, model, allowDownload);
+  pauseModelDownload = (): Promise<ModelsView> => this.models.step();
+  resumeModelDownload = (): Promise<ModelsView> => this.models.step();
+  cancelModelChange = (): Promise<ModelsView> => this.models.step();
+  cancelReindex = (): Promise<ModelsView> => this.models.step();
+  keepOldModel = (): Promise<ModelsView> => this.models.step();
+  removeOldModel = (): Promise<ModelsView> => this.models.step();
+  resetModelsToTier = (): Promise<ModelsView> => this.models.step();
 }
 
 export function createMockEngine(options: MockOptions = {}): MockEngine {

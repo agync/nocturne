@@ -25,6 +25,8 @@ const privacy = lazy(() => import("../screens/privacy"));
 const settings = lazy(() => import("../screens/settings"));
 const editions = lazy(() => import("../screens/editions"));
 const away = lazy(() => import("../screens/away"));
+const online = lazy(() => import("../screens/online"));
+const models = lazy(() => import("../screens/models"));
 
 /** The route table is fixed: later lanes replace screen folders, never this list. */
 export const routes: readonly AppRoute[] = [
@@ -149,6 +151,62 @@ export const routes: readonly AppRoute[] = [
     title: "screen.away.activity.title",
     shell: true,
     Component: away,
+  },
+  {
+    path: "/settings/online",
+    folder: "online",
+    title: "screen.online.title",
+    shell: true,
+    Component: online,
+  },
+  {
+    path: "/settings/online/setup",
+    folder: "online",
+    title: "screen.online.setup.title",
+    shell: true,
+    Component: online,
+  },
+  {
+    path: "/settings/online/sent",
+    folder: "online",
+    title: "screen.online.sent.title",
+    shell: true,
+    Component: online,
+  },
+  {
+    path: "/settings/models",
+    folder: "models",
+    title: "screen.models.title",
+    shell: true,
+    Component: models,
+  },
+  {
+    path: "/settings/models/answering",
+    folder: "models",
+    title: "screen.models.answering.title",
+    shell: true,
+    Component: models,
+  },
+  {
+    path: "/settings/models/recordings",
+    folder: "models",
+    title: "screen.models.recordings.title",
+    shell: true,
+    Component: models,
+  },
+  {
+    path: "/settings/models/aloud",
+    folder: "models",
+    title: "screen.models.aloud.title",
+    shell: true,
+    Component: models,
+  },
+  {
+    path: "/settings/models/finding",
+    folder: "models",
+    title: "screen.models.finding.title",
+    shell: true,
+    Component: models,
   },
   {
     path: "/listen/:date",
