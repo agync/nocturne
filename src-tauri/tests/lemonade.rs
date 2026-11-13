@@ -5,6 +5,7 @@
 mod common;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
@@ -53,6 +54,8 @@ fn build_fake_engine() -> PathBuf {
 }
 
 struct Lab {
+    /// Memory the machine reports as free, which a test may change.
+    free: Arc<AtomicU64>,
     h: Harness,
     services: Arc<Services>,
     _bundle: tempfile::TempDir,
@@ -142,10 +145,13 @@ fn lab(plan: Plan) -> Lab {
         ..SetupOptions::default()
     };
     opts.retry_after = plan.retry_after;
-    let free = plan.free_memory;
-    opts.available_memory = Some(Arc::new(move || free));
+    let free = Arc::new(AtomicU64::new(plan.free_memory));
+    let probe = free.clone();
+    opts.available_memory = Some(Arc::new(move || probe.load(Ordering::SeqCst)));
+    opts.memory_poll = Duration::from_millis(20);
     let services = start(&h, opts);
     Lab {
+        free,
         h,
         services,
         _bundle: bundle,
@@ -514,10 +520,47 @@ fn two_failed_loads_with_little_memory_offer_the_smaller_mind() {
         .find(|n| n["code"] == "tierDropped")
         .cloned()
         .unwrap();
-    assert!(
-        notice["bytes"].as_f64().unwrap() > 0.0,
-        "it says what the download is"
+    assert_eq!(
+        notice["bytes"].as_f64().unwrap() as u64,
+        3_808_000_000,
+        "it counts only what is not already on disk"
     );
+}
+
+#[test]
+fn the_offer_is_withdrawn_once_memory_has_stayed_back_for_ten_minutes() {
+    let lab = lab(Plan {
+        free_memory: 2 * GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    let app = lab.h.app.handle();
+    runtime::out_of_memory(app);
+    runtime::out_of_memory(app);
+    wait_for("the offer", || lab.has_notice("tierDropped"));
+
+    lab.free.store(64 * GIB, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(200));
+    lab.h.clock.set_str("2026-11-13T07:05:00Z");
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(lab.has_notice("tierDropped"), "five minutes is not enough");
+
+    lab.free.store(2 * GIB, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(200));
+    lab.free.store(64 * GIB, Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(200));
+    lab.h.clock.set_str("2026-11-13T07:12:00Z");
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        lab.has_notice("tierDropped"),
+        "a dip starts the ten minutes again"
+    );
+
+    lab.h.clock.set_str("2026-11-13T07:20:00Z");
+    wait_for("the offer to be withdrawn", || {
+        !lab.has_notice("tierDropped")
+    });
+    assert_eq!(lab.services.tier_offer(), None);
 }
 
 #[test]

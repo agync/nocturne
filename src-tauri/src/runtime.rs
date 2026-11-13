@@ -8,7 +8,7 @@
 //! through [`AppEvents`]: item changes, tidy progress, notices and the page being ready.
 
 use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -40,6 +40,8 @@ const OOM_WINDOW: jiff::SignedDuration = jiff::SignedDuration::from_secs(10 * 60
 const GIB: u64 = 1 << 30;
 /// The id of the notice that offers the smaller mind.
 pub const TIER_DROPPED_NOTICE: &str = "tierDropped";
+/// How often memory is looked at while an offer of the smaller mind stands.
+const MEMORY_POLL: Duration = Duration::from_secs(30);
 /// Items kept this recently are read again after an upgrade.
 const REREAD_DAYS: i64 = 30;
 
@@ -71,6 +73,8 @@ pub struct StartOptions {
     pub quit_budget: Duration,
     /// Memory free for use right now, in bytes. `None` asks the machine.
     pub available_memory: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
+    /// How often memory is looked at while an offer of the smaller mind stands.
+    pub memory_poll: Duration,
 }
 
 impl Default for StartOptions {
@@ -83,6 +87,7 @@ impl Default for StartOptions {
             retry_after: RETRY_AFTER,
             quit_budget: QUIT_BUDGET,
             available_memory: None,
+            memory_poll: MEMORY_POLL,
         }
     }
 }
@@ -124,6 +129,8 @@ pub struct Services {
     offer: Mutex<Option<Tier>>,
     /// When loads last failed for want of memory (the last ten minutes).
     out_of_memory: Mutex<Vec<Timestamp>>,
+    /// True while a task is waiting for memory to recover.
+    memory_watch: AtomicBool,
 }
 
 impl Services {
@@ -139,6 +146,14 @@ impl Services {
     /// The smaller tier on offer, while the notice about memory stands.
     pub fn tier_offer(&self) -> Option<Tier> {
         *self.offer.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Memory free for use right now, in bytes.
+    fn free_memory(&self) -> u64 {
+        match &self.opts.available_memory {
+            Some(probe) => probe(),
+            None => available_memory(),
+        }
     }
 
     /// Remember the tier of the mind now in the slot; returns the one before it.
@@ -226,6 +241,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         retry_pending: AtomicBool::new(false),
         offer: Mutex::new(None),
         out_of_memory: Mutex::new(Vec::new()),
+        memory_watch: AtomicBool::new(false),
     });
     if !state.install_services(services.clone()) {
         services.token.cancel();
@@ -287,11 +303,7 @@ pub fn out_of_memory<R: Runtime>(app: &AppHandle<R>) {
         seen.push(now);
         seen.len() >= 2
     };
-    let free = match &services.opts.available_memory {
-        Some(probe) => probe(),
-        None => available_memory(),
-    };
-    if short && free < u64::from(nocturne_lemonade::tier::min_ram_gib(current)) * GIB {
+    if short && services.free_memory() < memory_needed(current) {
         tracing::warn!("memory is short; offering the smaller mind ({smaller:?})");
         *services.offer.lock().unwrap_or_else(|e| e.into_inner()) = Some(smaller);
         state.status.add_notice(Notice {
@@ -299,9 +311,55 @@ pub fn out_of_memory<R: Runtime>(app: &AppHandle<R>) {
             code: NoticeCode::TierDropped,
             item_id: None,
             eta_seconds: None,
-            bytes: Some(nocturne_lemonade::tier::download_bytes(smaller) as f64),
+            bytes: Some(nocturne_lemonade::tier::missing_bytes(smaller, current) as f64),
         });
+        watch_memory(app, &services);
     }
+}
+
+fn memory_needed(tier: Tier) -> u64 {
+    u64::from(nocturne_lemonade::tier::min_ram_gib(tier)) * GIB
+}
+
+/// Withdraw the offer once memory has been back above what the mind in the slot is meant for,
+/// without a dip, for as long as it takes two failed loads to count as a pair.
+fn watch_memory<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
+    if services.memory_watch.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let (app, services) = (app.clone(), services.clone());
+    tauri::async_runtime::spawn(async move {
+        let mut roomy_since: Option<Timestamp> = None;
+        loop {
+            tokio::select! {
+                _ = services.token().cancelled() => return,
+                _ = tokio::time::sleep(services.opts.memory_poll) => {}
+            }
+            if services.tier_offer().is_none() {
+                break;
+            }
+            let Some(current) = services.tier() else {
+                continue;
+            };
+            let state = app.state::<AppState>();
+            let now = state.now();
+            if services.free_memory() < memory_needed(current) {
+                roomy_since = None;
+                continue;
+            }
+            let since = *roomy_since.get_or_insert(now);
+            if now.duration_since(since) >= OOM_WINDOW {
+                tracing::info!("memory is back; withdrawing the offer of the smaller mind");
+                memory_settled(&state, &services);
+                refresh_status(&app).await;
+                break;
+            }
+        }
+        services.memory_watch.store(false, Ordering::SeqCst);
+        if services.tier_offer().is_some() {
+            watch_memory(&app, &services);
+        }
+    });
 }
 
 /// Forget the failed loads and the offer: the mind is for a different tier, or the person said

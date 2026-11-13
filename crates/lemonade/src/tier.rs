@@ -71,6 +71,17 @@ pub fn download_bytes(tier: Tier) -> u64 {
     components(tier).iter().map(|c| c.bytes).sum()
 }
 
+/// What `tier` still needs fetched when everything `held` needs is already on disk: models the
+/// two share (the voice and the recall model) are not counted again.
+pub fn missing_bytes(tier: Tier, held: Tier) -> u64 {
+    let have = components(held);
+    components(tier)
+        .iter()
+        .filter(|c| !have.iter().any(|h| h.model == c.model))
+        .map(|c| c.bytes)
+        .sum()
+}
+
 pub fn min_ram_gib(tier: Tier) -> u32 {
     match tier {
         Tier::Large => 60,
@@ -145,6 +156,23 @@ mod tests {
     }
 
     const PLENTY: u64 = 10_000 * GIB;
+
+    #[test]
+    fn a_smaller_tier_needs_only_what_the_bigger_one_lacks() {
+        assert_eq!(
+            missing_bytes(Tier::Small, Tier::Standard),
+            3_660_000_000 + 148_000_000
+        );
+        assert_eq!(missing_bytes(Tier::Small, Tier::Small), 0);
+        assert_eq!(
+            missing_bytes(Tier::Standard, Tier::Small),
+            6_880_000_000 + 488_000_000
+        );
+        assert_eq!(
+            missing_bytes(Tier::Small, Tier::Unsupported),
+            download_bytes(Tier::Small)
+        );
+    }
 
     #[test]
     fn detects_by_memory() {
