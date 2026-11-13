@@ -21,9 +21,9 @@ const FIT_WORD = {
 } as const satisfies Record<Fit, string>;
 
 /** A mark that never relies on colour: an icon and a word. */
-function FitMark({ fit }: { fit: Fit }) {
+function FitMark({ id, fit }: { id: string; fit: Fit }) {
   return (
-    <span className={styles.fit} data-fit={fit}>
+    <span id={id} className={styles.fit} data-fit={fit}>
       <svg
         width="15"
         height="15"
@@ -68,19 +68,22 @@ function Option({
   view,
   checked,
   onPick,
-  informational,
+  locked,
 }: {
   choice: ModelChoice;
   view: ModelsView;
   checked: boolean;
   onPick: () => void;
-  informational: boolean;
+  locked: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const whyId = useId();
   const grey = choice.fit === "wontFit" || choice.fit === "cantUse";
   const line = reasonLine(choice);
   const longer = grey && choice.reason !== null;
+  const described = [`${whyId}-meta`, `${whyId}-fit`, line ? `${whyId}-line` : null]
+    .filter(Boolean)
+    .join(" ");
   return (
     <div className={styles.option} data-on={checked} data-grey={grey}>
       <input
@@ -88,10 +91,9 @@ function Option({
         name="pick"
         id={`${whyId}-radio`}
         checked={checked}
-        disabled={grey}
-        readOnly={informational}
+        disabled={(grey && !choice.current) || locked}
         onChange={onPick}
-        aria-describedby={`${whyId}-meta`}
+        aria-describedby={described}
       />
       <span className={styles.optionText}>
         <label htmlFor={`${whyId}-radio`} className={styles.nameRow}>
@@ -107,7 +109,9 @@ function Option({
         </span>
         {line ? (
           <span className={styles.hint}>
-            <span className={styles.strong}>{line}</span>
+            <span id={`${whyId}-line`} className={styles.strong}>
+              {line}
+            </span>
             {longer ? (
               <>
                 {" "}
@@ -125,7 +129,7 @@ function Option({
           </span>
         ) : null}
       </span>
-      <FitMark fit={choice.fit} />
+      <FitMark id={`${whyId}-fit`} fit={choice.fit} />
       {open ? <Why id={whyId} choice={choice} budgetBytes={view.budgetBytes} /> : null}
     </div>
   );
@@ -144,10 +148,12 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 function OnlineOption({
   checked,
   onPick,
+  locked,
   answeringName,
 }: {
   checked: boolean;
   onPick: () => void;
+  locked: boolean;
   answeringName: string;
 }) {
   const online = useOnline().data;
@@ -160,6 +166,7 @@ function OnlineOption({
         name="pick"
         id={`${id}-radio`}
         checked={checked}
+        disabled={locked}
         onChange={onPick}
         aria-describedby={`${id}-meta`}
       />
@@ -192,23 +199,36 @@ function OnlineOption({
 /** #/settings/models/<job> (M3, M4, M5, M9): every choice for one job, with what fits. */
 export function Picker({ job }: { job: Job }) {
   const engine = useEngine();
-  const { data: view } = useModels({ screen: true });
-  const { data: choices, error } = useChoices(job);
+  const models = useModels({ screen: true });
+  const view = models.data;
+  const found = useChoices(job);
+  const choices = found.data;
+  const error = found.error || models.error;
+  const retry = () => {
+    models.refetch();
+    found.refetch();
+  };
   const { change } = useModelsCommands();
   const online = useOnline().data;
   const [picked, setPicked] = useState<string | null>(null);
   const [preview, setPreview] = useState<ChangePreview | null>(null);
   const [problem, setProblem] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
 
   const current = choices?.find((c) => c.current);
   const onlineOn = online?.state.type === "on";
   const selected = picked ?? (job === "answering" && onlineOn ? ONLINE : (current?.id ?? null));
   const informational = job === "aloud";
   const chosen = choices?.find((c) => c.id === selected);
-  const canUse = chosen !== undefined && !chosen.current && !informational;
+  const running =
+    view !== undefined &&
+    ((view.change !== null && view.change.phase.type !== "ready") ||
+      view.reindex?.phase === "running");
+  const canUse =
+    chosen !== undefined && !chosen.current && !informational && !running && !previewing;
 
   const here =
-    choices?.filter((c) => (c.current || c.onDisk) && c.fit !== "wontFit" && c.fit !== "cantUse") ??
+    choices?.filter((c) => c.current || (c.onDisk && c.fit !== "wontFit" && c.fit !== "cantUse")) ??
     [];
   const get =
     choices?.filter((c) => !c.current && !c.onDisk && c.fit !== "wontFit" && c.fit !== "cantUse") ??
@@ -219,10 +239,13 @@ export function Picker({ job }: { job: Job }) {
   const ask = async () => {
     if (!chosen) return;
     setProblem(false);
+    setPreviewing(true);
     try {
       setPreview(await engine.previewModelChange(job, chosen.id));
     } catch {
       setProblem(true);
+    } finally {
+      setPreviewing(false);
     }
   };
 
@@ -249,9 +272,12 @@ export function Picker({ job }: { job: Job }) {
       </p>
 
       {error ? (
-        <p className={styles.body} role="alert">
-          {t("models.pick.error")}
-        </p>
+        <div className={styles.card} role="alert">
+          <p className={styles.body}>{t("models.pick.error")}</p>
+          <div className={styles.actions}>
+            <Button onClick={retry}>{t("models.read.retry")}</Button>
+          </div>
+        </div>
       ) : !choices || !view ? (
         <div className={styles.skeleton} role="status">
           <span className={styles.nameRow}>{t("models.pick.loading")}</span>
@@ -277,7 +303,7 @@ export function Picker({ job }: { job: Job }) {
                       choice={c}
                       view={view}
                       checked={selected === c.id}
-                      informational={informational}
+                      locked={informational || previewing}
                       onPick={() => setPicked(c.id)}
                     />
                   ))}
@@ -287,6 +313,7 @@ export function Picker({ job }: { job: Job }) {
               <Group title={t("models.group.online")}>
                 <OnlineOption
                   checked={selected === ONLINE}
+                  locked={previewing}
                   onPick={() => setPicked(ONLINE)}
                   answeringName={current?.name ?? ""}
                 />
@@ -301,6 +328,14 @@ export function Picker({ job }: { job: Job }) {
               {t("models.confirm.failed")}
             </p>
           ) : null}
+          {running ? (
+            <p className={styles.hint}>
+              {t("models.pick.running")}{" "}
+              <a className={`${styles.linkButton} hit`} href="#/settings/models">
+                {t("models.pick.runningLink")}
+              </a>
+            </p>
+          ) : null}
           <div className={styles.actions}>
             <Button variant="primary" disabled={!canUse} onClick={() => void ask()}>
               {t("models.pick.use")}
@@ -313,14 +348,14 @@ export function Picker({ job }: { job: Job }) {
         </>
       )}
 
-      {preview && chosen ? (
+      {preview ? (
         <Confirm
           preview={preview}
-          name={chosen.name}
+          name={choices?.find((c) => c.id === preview.model)?.name ?? preview.model}
           fromName={current?.name ?? preview.from}
           onClose={() => setPreview(null)}
           onConfirm={async (allowDownload) => {
-            await change(job, chosen.id, allowDownload);
+            await change(job, preview.model, allowDownload);
             setPreview(null);
             window.location.hash = "#/settings/models";
           }}

@@ -19,6 +19,7 @@ const busy = (view: ModelsView | undefined) =>
  */
 export function useModels(options: { screen?: boolean } = {}): {
   data?: ModelsView;
+  error: boolean;
   refetch(): void;
 } {
   const engine = useEngine();
@@ -32,11 +33,15 @@ export function useModels(options: { screen?: boolean } = {}): {
   useEngineEvent("models-changed", (view) => {
     client.setQueryData(MODELS_KEY, view);
   });
-  return { data: query.data, refetch: () => void query.refetch() };
+  return { data: query.data, error: query.isError, refetch: () => void query.refetch() };
 }
 
 /** Every choice for a job, with its fit. Asked again whenever the view changes. */
-export function useChoices(job: Job): { data?: ModelChoice[]; error: boolean } {
+export function useChoices(job: Job): {
+  data?: ModelChoice[];
+  error: boolean;
+  refetch(): void;
+} {
   const engine = useEngine();
   const view = useModels({ screen: true }).data;
   const query = useQuery({
@@ -44,7 +49,7 @@ export function useChoices(job: Job): { data?: ModelChoice[]; error: boolean } {
     queryFn: () => engine.listModelChoices(job),
     staleTime: 0,
   });
-  return { data: query.data, error: query.isError };
+  return { data: query.data, error: query.isError, refetch: () => void query.refetch() };
 }
 
 type Command = "pause" | "resume" | "cancel" | "cancelReindex" | "keepOld" | "removeOld" | "reset";

@@ -169,5 +169,9 @@
   "models.confirm.get": "Download {size}",
   "models.confirm.getReread": "Download and re-read",
   "models.confirm.rereadOnly": "Re-read",
-  "models.confirm.failed": "Nocturne couldn’t start that. Nothing has changed."
+  "models.confirm.failed": "Nocturne couldn’t start that. Nothing has changed.",
+  "models.online.state.problem": "need checking",
+  "models.pick.running": "Another change is under way.",
+  "models.pick.runningLink": "See where it is",
+  "models.read.retry": "Try again"
 }
