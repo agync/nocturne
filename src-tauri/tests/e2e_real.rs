@@ -14,9 +14,12 @@
 //! Environment: `NOCTURNE_E2E_DIR` (scratch folder, default `target/e2e-real`),
 //! `NOCTURNE_E2E_FRESH=1` (forget what was downloaded before), `NOCTURNE_E2E_TAG` (suffix for the
 //! result files), `NOCTURNE_E2E_READ_SECS` and `NOCTURNE_E2E_SETUP_SECS` (time limits),
-//! `NOCTURNE_E2E_TIER` (`small`, the default, or `standard`: the tier set up and checked).
+//! `NOCTURNE_E2E_TIER` (`tiny`, `small`, the default, `standard` or `large`: the tier set up and
+//! checked) and `NOCTURNE_E2E_IDLE_SECS` (how long to sit idle after setup and again before
+//! forgetting, while memory and processor use are sampled; default 30).
 
 mod common;
+mod memwatch;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -24,6 +27,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::*;
+use memwatch::MemWatch;
 use nocturne_app_lib::os::notify;
 use nocturne_app_lib::runtime::{self, StartOptions};
 use nocturne_app_lib::{AppState, configure};
@@ -1249,6 +1253,8 @@ fn the_whole_product_works_with_real_models() {
             .try_init();
     }
 
+    let idle = env_secs("NOCTURNE_E2E_IDLE_SECS", 30);
+    let mem = MemWatch::start("setup");
     let h = build_app(&data_dir);
     let asks = Asker::new(&h);
     let host = FakeHost::new();
@@ -1425,7 +1431,11 @@ fn the_whole_product_works_with_real_models() {
         }),
     );
 
+    mem.phase("idle_after_setup");
+    std::thread::sleep(idle);
+
     // 2. Keep ------------------------------------------------------------------------------
+    mem.phase("keep");
     let mut ids: HashMap<&'static str, String> = HashMap::new();
     let keep_started = Instant::now();
     for note in NOTES.iter().chain(HELD_OUT_NOTES).chain(HELD_OUT_2_NOTES) {
@@ -1517,6 +1527,7 @@ fn the_whole_product_works_with_real_models() {
     );
 
     // 3. Reading ---------------------------------------------------------------------------
+    mem.phase("read");
     at(&h, DAY, "22:00");
     let reading_started = Instant::now();
     let mut settled: BTreeMap<String, u64> = BTreeMap::new();
@@ -1637,6 +1648,7 @@ fn the_whole_product_works_with_real_models() {
     );
 
     // 4. Ask -------------------------------------------------------------------------------
+    mem.phase("answer_cold");
     at(&h, DAY, "22:30");
     // The twelve, then the held-out six, then the second held-out four, each counted on its own.
     let mut rows: [Vec<Value>; 3] = Default::default();
@@ -1669,6 +1681,7 @@ fn the_whole_product_works_with_real_models() {
             t.recall_hits += usize::from(rank.is_some());
         }
         let a = asks.ask(&h, q.text);
+        mem.phase("answer");
         every_terminal &= a.phase != "timeout";
         let lower = plain(&a.text).to_lowercase();
         let ok = if q.unknown {
@@ -1837,6 +1850,7 @@ fn the_whole_product_works_with_real_models() {
     run.put("held_out_2_metrics", held_metrics_2);
 
     // 5. Tidy and the morning page --------------------------------------------------------
+    mem.phase("tidy");
     at(&h, PAGE_DAY, "03:00");
     host.set_ac(Some(true));
     host.set_idle(None);
@@ -2059,7 +2073,11 @@ fn the_whole_product_works_with_real_models() {
         }),
     );
 
+    mem.phase("idle_before_forgetting");
+    std::thread::sleep(idle);
+
     // 6. Forget one memory, then everything ------------------------------------------------
+    mem.phase("forget");
     let target = FORGET_TARGETS.iter().find_map(|t| {
         let found = h.ok(
             "list_memories",
@@ -2213,6 +2231,7 @@ fn the_whole_product_works_with_real_models() {
     );
 
     // 7. Quit ------------------------------------------------------------------------------
+    mem.phase("quit");
     let pgid = engine_pid.unwrap_or(0);
     let before_quit = group_members(pgid).len();
     let quit_started = Instant::now();
@@ -2238,6 +2257,8 @@ fn the_whole_product_works_with_real_models() {
         json!({"engine_group_size_before": before_quit, "exit_hooks_ms": quit_ms,
                "gone_after_ms": gone_ms}),
     );
+
+    run.put("memory", mem.report());
 
     // The table -----------------------------------------------------------------------------
     let summary = summary(&run);
@@ -2429,6 +2450,34 @@ fn summary(run: &Run) -> String {
             i["status"].as_str().unwrap_or(""),
             i["memories"],
             i["since_previous_ms"]
+        ));
+    }
+    s.push_str("\n## Memory and processor, this process and everything under it\n\n");
+    s.push_str("| Phase | Peak | of which graphics | Mean | Processor (one core) | Largest at peak |\n|---|---|---|---|---|---|\n");
+    for p in o["memory"].as_array().into_iter().flatten() {
+        let largest = p["at_peak_by_process_mib"]
+            .as_object()
+            .map(|m| {
+                let mut v: Vec<(&String, u64)> = m
+                    .iter()
+                    .map(|(k, v)| (k, v.as_u64().unwrap_or(0)))
+                    .collect();
+                v.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+                v.iter()
+                    .take(4)
+                    .map(|(k, n)| format!("{k} {n}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            })
+            .unwrap_or_default();
+        s.push_str(&format!(
+            "| {} | {} MiB | {} MiB | {} MiB | {}% | {} |\n",
+            p["phase"].as_str().unwrap_or(""),
+            p["peak_mib"],
+            p["peak_gpu_mib"],
+            p["mean_mib"],
+            p["cpu_percent_of_one_core"],
+            largest
         ));
     }
     s
