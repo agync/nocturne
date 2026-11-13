@@ -93,6 +93,15 @@ describe("HttpEngine commands", () => {
     e.dispose();
   });
 
+  it("reports whether this window can record", async () => {
+    const { e, calls } = engine(() => ({ body: null }));
+    await flush();
+    await e.reportRecording("available");
+    const call = calls.find((c) => c.url === "/api/invoke/report_recording");
+    expect(call?.init.body).toBe(JSON.stringify({ state: "available" }));
+    e.dispose();
+  });
+
   it("turns a failure with a code into an EngineError", async () => {
     const { e } = engine(() => ({ status: 404, body: { code: "notFound", detail: "that item" } }));
     await flush();
