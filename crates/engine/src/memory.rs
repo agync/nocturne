@@ -311,17 +311,6 @@ fn apply(
         )?;
     }
 
-    // What a private item says is private, whether it made the memory or only agreed with it.
-    let mut files = Vec::new();
-    if item.private {
-        let mut seen: HashSet<&String> = HashSet::new();
-        for id in report.created.iter().chain(&report.reinforced) {
-            if seen.insert(id) {
-                files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
-            }
-        }
-    }
-
     for (mid, span) in &prev {
         if touched.contains(mid) {
             continue;
@@ -361,6 +350,24 @@ fn apply(
                     [mid],
                 )?;
             }
+        }
+    }
+
+    // What a private item says is private: every memory now linked to it, whether it made the
+    // memory, agreed with it, or kept a tombstone link. (Early returns in `apply_one` skip the
+    // report lists, so the links are the truth.)
+    let mut files = Vec::new();
+    if item.private {
+        let linked: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+                 WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
+            )?;
+            stmt.query_map([item_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        for id in &linked {
+            files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
         }
     }
 

@@ -131,3 +131,10 @@ ALTER TABLE memories ADD COLUMN snoozed_until TEXT;
 -- migration 4
 -- What started a job: a forget, or an undone keep (which also takes the item's own row).
 ALTER TABLE forget_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'forget';
+
+-- migration 5
+-- Jobs an undone keep started before jobs carried a kind. Nothing else marked them; a pending
+-- job that deletes originals and names a single item is taken to be one. A regular forget of
+-- that shape is treated the same, which only makes pages stricter about citing that item.
+UPDATE forget_jobs SET kind = 'unkeep'
+ WHERE kind = 'forget' AND include_originals = 1 AND json_array_length(items) = 1;

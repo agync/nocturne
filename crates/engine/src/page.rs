@@ -788,8 +788,8 @@ fn strip_stale(
             |r| r.get(0),
         )?)
     };
-    // An item that was undone (or is being) is cited by nothing. A forget of memories leaves
-    // items alone unless nothing cites them, so only an undone keep makes an item "gone" here.
+    // An item that is gone, being undone, or listed in a forget that will delete its original
+    // is cited by nothing. A forget that keeps originals leaves its items alone.
     let item_live = |id: &str| -> Result<bool> {
         let exists: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
@@ -797,7 +797,7 @@ fn strip_stale(
             |r| r.get(0),
         )?;
         let undoing: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM forget_jobs WHERE kind = 'unkeep' \
+            "SELECT EXISTS(SELECT 1 FROM forget_jobs WHERE (kind = 'unkeep' OR include_originals = 1) \
              AND instr(items, '\"' || ?1 || '\"') > 0)",
             [id],
             |r| r.get(0),

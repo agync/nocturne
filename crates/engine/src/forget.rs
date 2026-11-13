@@ -235,6 +235,7 @@ impl Engine {
             )?;
             let job = tx.last_insert_rowid();
             self.bump_audio();
+            self.bump_forget();
             for id in &all {
                 tx.execute(
                     "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \
@@ -249,6 +250,7 @@ impl Engine {
             append_job_files(tx, job, &files)?;
             Ok((job, pages.len() as u32, files))
         })?;
+        self.bump_forget();
         self.invalidate_vectors();
         shred_all(files);
         Ok((job, pages_redacted))
@@ -362,6 +364,7 @@ impl Engine {
             )?;
             let job = tx.last_insert_rowid();
             self.bump_audio();
+            self.bump_forget();
             for id in &sole {
                 tx.execute(
                     "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \
@@ -383,6 +386,7 @@ impl Engine {
             append_job_files(tx, job, &files)?;
             Ok((job, pages.len() as u32, had_original, files))
         })?;
+        self.bump_forget();
         self.invalidate_vectors();
         shred_all(files);
         Ok((job, pages_redacted, had_original))

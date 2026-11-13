@@ -68,6 +68,8 @@ pub(crate) struct Inner {
     pub(crate) vec_gen: AtomicU64,
     /// Bumped by anything that can change what a spoken edition should say.
     pub(crate) audio_gen: AtomicU64,
+    /// Bumped when a forget or an undone keep begins: an export that ran across one is void.
+    pub(crate) forget_gen: AtomicU64,
 }
 
 impl Engine {
@@ -91,6 +93,7 @@ impl Engine {
                 vectors: RwLock::new(None),
                 vec_gen: AtomicU64::new(0),
                 audio_gen: AtomicU64::new(0),
+                forget_gen: AtomicU64::new(0),
             }),
         };
         // Items a worker was reading when the app last stopped go back in the queue.
@@ -160,6 +163,11 @@ impl Engine {
     pub(crate) fn write_raw<T>(&self, f: impl FnOnce(&Connection) -> Result<T>) -> Result<T> {
         let guard = lock(&self.inner.writer);
         f(&guard)
+    }
+
+    /// Note that a forget or an undone keep has begun (see `forget_gen`).
+    pub(crate) fn bump_forget(&self) {
+        self.inner.forget_gen.fetch_add(1, Ordering::SeqCst);
     }
 
     /// Mark spoken editions as possibly stale (see `audio_stamp`).

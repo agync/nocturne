@@ -1566,7 +1566,7 @@ fn undoing_the_keep_that_promoted_a_memory_removes_the_choice_the_promotion_made
 }
 
 #[test]
-fn an_export_is_one_snapshot_even_if_an_item_is_undone_while_it_runs() {
+fn an_export_that_ran_across_an_unkeep_is_discarded() {
     let f = fixture();
     let ids: Vec<String> = ["alpha.txt", "bravo.txt", "charlie.txt"]
         .iter()
@@ -1580,7 +1580,7 @@ fn an_export_is_one_snapshot_even_if_an_item_is_undone_while_it_runs() {
     f.clock.set_str("2026-11-13T07:05:00Z");
     let out = tempfile::tempdir().unwrap();
     let fired = std::cell::Cell::new(false);
-    let r = f
+    let err = f
         .engine
         .export_to_with(out.path(), &|done, _| {
             if done == 1 && !fired.get() {
@@ -1588,28 +1588,179 @@ fn an_export_is_one_snapshot_even_if_an_item_is_undone_while_it_runs() {
                 f.engine.unkeep(&ids[1]).unwrap();
             }
         })
-        .unwrap();
+        .unwrap_err();
     assert!(fired.get());
+    assert!(matches!(err, nocturne_engine::Error::Busy), "{err:?}");
+    assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
+    // Left alone, the export is whole: each copy is named for and holds its own item.
+    let r = f.engine.export_to(out.path()).unwrap();
     let root = std::path::PathBuf::from(&r.path);
     let data: serde_json::Value =
         serde_json::from_str(&std::fs::read_to_string(root.join("nocturne.json")).unwrap())
             .unwrap();
-    let mut exported = 0;
+    assert_eq!(data["items"].as_array().unwrap().len(), 2);
     for item in data["items"].as_array().unwrap() {
-        let id = item["id"].as_str().unwrap();
-        let name = item["fileName"].as_str().unwrap();
-        // Whatever is in the export is whole: the copy named for an id holds that item's bytes.
-        let copy = root.join(item["export"].as_str().expect("a copy"));
-        assert_eq!(std::fs::read(&copy).unwrap(), name.as_bytes(), "{id}");
-        assert!(copy.file_name().unwrap().to_str().unwrap().starts_with(id));
-        exported += 1;
+        let copy = root.join(item["export"].as_str().unwrap());
+        assert_eq!(
+            std::fs::read(&copy).unwrap(),
+            item["fileName"].as_str().unwrap().as_bytes()
+        );
     }
-    let copies = std::fs::read_dir(root.join("originals")).unwrap().count();
-    assert_eq!(
-        copies, exported,
-        "no copy without its item, no item without its copy"
+}
+
+// ---- privacy gaps ----
+
+#[test]
+fn a_reread_of_a_private_item_makes_its_memories_private_even_when_nothing_is_reported() {
+    let f = fixture();
+    let y = keep(&f.engine, "private diary");
+    let c = || cand("Leo", Predicate::Knows, "x", "Leo knows x.");
+    let r = f.engine.apply(&y, vec![c()]).unwrap();
+    let m = r.created[0].clone();
+    f.engine.set_item_private(&y, true).unwrap();
+    assert!(f.engine.get_memory(&m).unwrap().private);
+    // The memory is made public by hand, then the same item is read again: the re-read refreshes
+    // the same memory and reports neither a creation nor a reinforcement.
+    f.engine.set_private(&m, false).unwrap();
+    let again = f.engine.apply(&y, vec![c()]).unwrap();
+    assert!(again.created.is_empty() && again.reinforced.is_empty());
+    assert!(f.engine.get_memory(&m).unwrap().private);
+}
+
+#[test]
+fn an_export_that_ran_across_a_forget_is_discarded() {
+    let f = fixture();
+    let (_, m) = learn(
+        &f.engine,
+        "Zed note",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
     );
-    assert!(exported >= 2);
-    assert_eq!(r.originals as usize, copies);
-    assert!(f.engine.get_item(&ids[1]).is_err());
+    f.engine.keep_bytes(b"photo", "jpg", Source::Paste).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let fired = std::cell::Cell::new(false);
+    let err = f
+        .engine
+        .export_to_with(out.path(), &|done, _| {
+            if done == 1 && !fired.get() {
+                fired.set(true);
+                let p = f
+                    .engine
+                    .preview_forget(std::slice::from_ref(&m), false)
+                    .unwrap();
+                f.engine.forget(&p.token).unwrap();
+            }
+        })
+        .unwrap_err();
+    assert!(matches!(err, nocturne_engine::Error::Busy), "{err:?}");
+    assert_eq!(
+        std::fs::read_dir(out.path()).unwrap().count(),
+        0,
+        "nothing is left behind"
+    );
+    // Nothing changing, the same export succeeds.
+    assert!(f.engine.export_to(out.path()).is_ok());
+}
+
+fn stale_page_after_forget(include_originals: bool) -> String {
+    let f = fixture();
+    let (x, shared) = learn(
+        &f.engine,
+        "Mia from x",
+        cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+    );
+    let _ = x;
+    let y = keep(&f.engine, "Mia and Leo from y");
+    f.engine
+        .apply(
+            &y,
+            vec![
+                cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+                cand("Leo", Predicate::Knows, "x", "Leo knows x."),
+            ],
+        )
+        .unwrap();
+    let leo = f
+        .engine
+        .memories(MemoryFilter {
+            query: Some("Leo".into()),
+            ..Default::default()
+        })
+        .unwrap()[0]
+        .id
+        .clone();
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let stale = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    let p = f
+        .engine
+        .preview_forget(std::slice::from_ref(&leo), include_originals)
+        .unwrap();
+    assert!(p.originals.iter().any(|o| o.item_id == y));
+    f.engine.forget_begin_only(&p.token).unwrap();
+    f.engine.save_page(&stale).unwrap();
+    let saved = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    let line_id = stale
+        .learned
+        .iter()
+        .chain(&stale.changed)
+        .find(|l| l.memory_ids.contains(&shared))
+        .expect("a line for the shared memory")
+        .id
+        .clone();
+    let line = saved
+        .learned
+        .iter()
+        .chain(&saved.changed)
+        .find(|l| l.id == line_id)
+        .expect("the line is still on the page");
+    serde_json::to_string(&(line.forgotten, line.receipts.len())).unwrap()
+}
+
+#[test]
+fn a_stale_page_cannot_cite_an_item_a_forget_will_delete_but_may_cite_a_kept_one() {
+    // The forget deletes originals: the line naming the item is redacted.
+    assert_eq!(stale_page_after_forget(true), "[true,0]");
+    // The forget keeps originals: the item stays and so does the line.
+    assert_eq!(stale_page_after_forget(false), "[false,2]");
+}
+
+#[test]
+fn a_store_at_version_three_with_a_pending_unkeep_job_is_marked_on_upgrade() {
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("nocturne.db");
+    {
+        let conn = rusqlite::Connection::open(&db).unwrap();
+        for (version, sql) in nocturne_engine::store::migrations() {
+            if version <= 3 {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", version).unwrap();
+            }
+        }
+        conn.execute_batch(
+            "INSERT INTO forget_jobs(id, ids, items, include_originals) VALUES \
+               (1, '[]', '[\"itm_one\"]', 1), \
+               (2, '[\"mem_a\"]', '[\"itm_a\", \"itm_b\"]', 1), \
+               (3, '[\"mem_b\"]', '[\"itm_c\"]', 0);",
+        )
+        .unwrap();
+    }
+    drop(nocturne_engine::store::open(&db).unwrap());
+    let conn = rusqlite::Connection::open(&db).unwrap();
+    let kinds: Vec<(i64, String)> = conn
+        .prepare("SELECT id, kind FROM forget_jobs ORDER BY id")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        kinds,
+        [
+            (1, "unkeep".to_string()),
+            (2, "forget".to_string()),
+            (3, "forget".to_string())
+        ]
+    );
 }

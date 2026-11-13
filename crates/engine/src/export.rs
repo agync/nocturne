@@ -63,6 +63,21 @@ fn copy_new_hashed(src: &Path, dest: &Path) -> std::io::Result<String> {
     Ok(crate::util::hex(&hasher.finalize()))
 }
 
+/// Overwrite and remove every file under a folder, then the folder.
+fn shred_tree(path: &Path) {
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if e.file_type().is_ok_and(|t| t.is_dir()) {
+                shred_tree(&p);
+            } else {
+                fsutil::shred(&p);
+            }
+        }
+    }
+    let _ = std::fs::remove_dir(path);
+}
+
 fn marks(m: &MemRow) -> String {
     let mut out = String::new();
     if m.private {
@@ -166,6 +181,10 @@ impl Engine {
     /// `(0, total)`, then after each file, last with `(total, total)`. `total` is every file the
     /// export will write (the three top-level files, one per page, one per original).
     pub fn export_to_with(&self, dir: &Path, progress: &dyn Fn(u32, u32)) -> Result<ExportReport> {
+        let generation = self
+            .inner
+            .forget_gen
+            .load(std::sync::atomic::Ordering::SeqCst);
         let now = fmt_ts(self.clock().now());
         let originals_src = self.originals_dir();
         // A fresh, owner-only folder named for the day; never an existing one.
@@ -275,11 +294,12 @@ impl Engine {
                 if live.is_none() {
                     live = store::open_reader(&self.db_path()).ok();
                 }
-                live.as_ref().is_none_or(|c| {
+                // Fails closed: if it cannot be checked, the item is treated as not kept.
+                live.as_ref().is_some_and(|c| {
                     c.query_row("SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)", [id], |r| {
                         r.get::<_, bool>(0)
                     })
-                    .unwrap_or(true)
+                    .unwrap_or(false)
                 })
             };
             for item in rows {
@@ -371,6 +391,17 @@ impl Engine {
                 path: String::new(),
             })
         })?;
+        // A forget or an undone keep began while files were being copied: what was written may
+        // hold what the person just removed, so none of it is kept.
+        if self
+            .inner
+            .forget_gen
+            .load(std::sync::atomic::Ordering::SeqCst)
+            != generation
+        {
+            shred_tree(&root);
+            return Err(Error::Busy);
+        }
         report.path = root.to_string_lossy().into_owned();
         Ok(report)
     }
