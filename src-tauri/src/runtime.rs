@@ -29,10 +29,10 @@ pub mod lemonade;
 pub use lemonade::{pause_setup, resume_setup, start_setup};
 
 /// How long quitting waits for the reader to give back the item it is reading.
-const STOP_TASKS: Duration = Duration::from_secs(2);
-/// How long quitting waits for the private engine to stop. It also ends by itself within about
-/// six seconds of the app going, so the wait is short.
-const QUIT_BUDGET: Duration = Duration::from_secs(5);
+const STOP_TASKS: Duration = Duration::from_secs(1);
+/// How long quitting waits for the private engine to stop. Past this the app goes anyway: the
+/// engine ends by itself within about six seconds, when its watchdog sees the app gone.
+const QUIT_BUDGET: Duration = Duration::from_secs(1);
 /// How long after the engine gives up another start is tried.
 const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
 /// Two failed loads for want of memory inside this long mean the machine is short of it.
@@ -120,6 +120,8 @@ pub struct Services {
     /// The tier of the mind in the slot, once there is one.
     tier: Mutex<Option<Tier>>,
     retry_pending: AtomicBool,
+    /// The smaller tier offered in the notice about memory, while the offer stands.
+    offer: Mutex<Option<Tier>>,
     /// When loads last failed for want of memory (the last ten minutes).
     out_of_memory: Mutex<Vec<Timestamp>>,
 }
@@ -132,6 +134,11 @@ impl Services {
     /// The tier of the mind in the slot.
     pub fn tier(&self) -> Option<Tier> {
         *self.tier.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The smaller tier on offer, while the notice about memory stands.
+    pub fn tier_offer(&self) -> Option<Tier> {
+        *self.offer.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Remember the tier of the mind now in the slot; returns the one before it.
@@ -217,6 +224,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         lemonade: tokio::sync::Mutex::new(None),
         tier: Mutex::new(None),
         retry_pending: AtomicBool::new(false),
+        offer: Mutex::new(None),
         out_of_memory: Mutex::new(Vec::new()),
     });
     if !state.install_services(services.clone()) {
@@ -285,6 +293,7 @@ pub fn out_of_memory<R: Runtime>(app: &AppHandle<R>) {
     };
     if short && free < u64::from(nocturne_lemonade::tier::min_ram_gib(current)) * GIB {
         tracing::warn!("memory is short; offering the smaller mind ({smaller:?})");
+        *services.offer.lock().unwrap_or_else(|e| e.into_inner()) = Some(smaller);
         state.status.add_notice(Notice {
             id: TIER_DROPPED_NOTICE.to_string(),
             code: NoticeCode::TierDropped,
@@ -295,14 +304,25 @@ pub fn out_of_memory<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Forget the failed loads and the offer once the mind is for a different tier.
+/// Forget the failed loads and the offer: the mind is for a different tier, or the person said
+/// not now. The offer comes back only after a new pair of failed loads.
 fn memory_settled(state: &AppState, services: &Services) {
     services
         .out_of_memory
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .clear();
+    *services.offer.lock().unwrap_or_else(|e| e.into_inner()) = None;
     state.status.clear_notices_of(NoticeCode::TierDropped);
+}
+
+/// "Not now" to the offer of the smaller mind.
+pub async fn decline_tier_offer<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    if let Some(services) = state.services() {
+        memory_settled(&state, &services);
+    }
+    refresh_status(app).await;
 }
 
 fn available_memory() -> u64 {
@@ -323,10 +343,19 @@ fn smaller(tier: Tier) -> Option<Tier> {
 /// kept in the last thirty days is read again by the better mind, in the background; after a
 /// drop to a smaller tier, what could not be read for want of a mind is tried again.
 pub async fn tier_changed<R: Runtime>(app: &AppHandle<R>, from: Tier, to: Tier) {
+    requeue(app, rank(to) > rank(from)).await;
+}
+
+/// The mind is back after the engine was away, at the same tier: what could not be read for
+/// want of one is tried again.
+pub async fn mind_recovered<R: Runtime>(app: &AppHandle<R>) {
+    requeue(app, false).await;
+}
+
+async fn requeue<R: Runtime>(app: &AppHandle<R>, upgrade: bool) {
     let state = app.state::<AppState>();
     let Ok(engine) = state.engine() else { return };
     let now = state.now();
-    let upgrade = rank(to) > rank(from);
     let queued = crate::error::blocking(move || {
         if upgrade {
             let since = now

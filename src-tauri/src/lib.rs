@@ -7,9 +7,9 @@
 //! The reader, the tidy and the scheduler live in [`runtime`]; they share the mind slot with
 //! `AppState`. Whatever fills the slot is published with [`set_mind`], setup progress with
 //! [`publish_setup`], and the engine is stopped in an [`AppState::on_exit`] hook. The OS
-//! integration lane sets `tray_available`,
-//! `set_start_hidden` and its own exit hooks, and gives the quick-capture window its own
-//! capability file (`capabilities/` only grants the `main` window).
+//! integration lane sets `tray_available` and `set_start_hidden`, adds its own exit hooks, and
+//! gives the quick-capture window its own capability file (`capabilities/` only grants the
+//! `main` window).
 
 pub mod ask;
 pub mod commands;
@@ -248,7 +248,7 @@ pub fn run() {
 
 /// A termination signal (a logout, `kill`, Ctrl-C in a development run) quits the way closing
 /// the last window does, so the private engine is stopped properly instead of left to its
-/// watchdog.
+/// watchdog. A second signal, from someone who will not wait, ends the app at once.
 #[cfg(unix)]
 fn quit_on_signals(app: &AppHandle) {
     use tokio::signal::unix::{SignalKind, signal};
@@ -260,13 +260,44 @@ fn quit_on_signals(app: &AppHandle) {
         ) else {
             return;
         };
-        tokio::select! {
-            _ = term.recv() => {}
-            _ = int.recv() => {}
-        }
-        tracing::info!("asked to quit by a signal");
-        handle.exit(0);
+        let (tx, rx) = tokio::sync::mpsc::channel::<()>(4);
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = term.recv() => {}
+                    _ = int.recv() => {}
+                }
+                if tx.send(()).await.is_err() {
+                    return;
+                }
+            }
+        });
+        let quit = move || {
+            tracing::info!("asked to quit by a signal");
+            handle.exit(0);
+        };
+        let force = || {
+            tracing::warn!("asked to quit again; leaving at once");
+            std::process::exit(130);
+        };
+        serve_signals(rx, quit, force).await;
     });
+}
+
+/// The first signal quits, the second forces.
+#[cfg(unix)]
+async fn serve_signals(
+    mut signals: tokio::sync::mpsc::Receiver<()>,
+    quit: impl FnOnce(),
+    force: impl FnOnce(),
+) {
+    if signals.recv().await.is_none() {
+        return;
+    }
+    quit();
+    if signals.recv().await.is_some() {
+        force();
+    }
 }
 
 fn install_opener(app: &AppHandle) {
@@ -286,6 +317,31 @@ fn install_opener(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn the_first_signal_quits_and_the_second_forces() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        let (quits, forces) = (AtomicU32::new(0), AtomicU32::new(0));
+        let (tx, rx) = tokio::sync::mpsc::channel::<()>(4);
+        tx.send(()).await.unwrap();
+        tx.send(()).await.unwrap();
+        drop(tx);
+        serve_signals(
+            rx,
+            || {
+                quits.fetch_add(1, Ordering::SeqCst);
+            },
+            || {
+                forces.fetch_add(1, Ordering::SeqCst);
+            },
+        )
+        .await;
+        assert_eq!(
+            (quits.load(Ordering::SeqCst), forces.load(Ordering::SeqCst)),
+            (1, 1)
+        );
+    }
 
     #[test]
     fn percent_escapes_decode_and_bad_ones_are_left_alone() {

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupPhase, Tier};
+use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
 use nocturne_engine::Mind;
 use nocturne_lemonade::{
     Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle, tier,
@@ -97,9 +97,19 @@ pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Servic
         return;
     };
     let dirs = Dirs::new(bundle, state.data_dir.join("engine"));
+    let mut start = tokio::spawn(Supervisor::start(dirs, services.opts.supervisor.clone()));
     let started = tokio::select! {
-        _ = services.token().cancelled() => return,
-        started = Supervisor::start(dirs, services.opts.supervisor.clone()) => started,
+        _ = services.token().cancelled() => {
+            // Quitting while the engine is still starting: it is stopped as soon as it is up,
+            // and if the app is gone first its watchdog ends it.
+            tauri::async_runtime::spawn(async move {
+                if let Ok(Ok(supervisor)) = start.await {
+                    let _ = supervisor.shutdown().await;
+                }
+            });
+            return;
+        }
+        started = &mut start => started.unwrap_or_else(|e| Err(RuntimeError::Start(e.to_string()))),
     };
     match started {
         Ok(supervisor) => adopt(app, services, supervisor).await,
@@ -244,7 +254,8 @@ async fn fill<R: Runtime>(
         return;
     }
     tracing::info!("the mind is ready ({tier:?})");
-    if previous.is_some() {
+    let changed = previous.is_some_and(|from| from != tier);
+    if changed {
         super::memory_settled(&state, services);
     }
     let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, tier));
@@ -253,8 +264,11 @@ async fn fill<R: Runtime>(
         .set_mind_bytes(tier::components(tier).iter().map(|c| c.bytes as f64).sum());
     set_mind(app, Some(mind)).await;
     services.reader.retry_now();
-    if let Some(from) = previous {
-        super::tier_changed(app, from, tier).await;
+    match previous {
+        Some(from) if from != tier => super::tier_changed(app, from, tier).await,
+        // The same mind is back after the engine was away: a memory problem has not gone away
+        // with it, but what could not be read in the meantime is tried again.
+        _ => super::mind_recovered(app).await,
     }
 }
 
@@ -264,6 +278,11 @@ async fn gave_up<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     let state = app.state::<AppState>();
     state.mind.set_loading(false);
     set_mind(app, None).await;
+    // Setup is not "done" while there is nothing to read with.
+    let mut view = state.get_setup();
+    view.phase = SetupPhase::Failed;
+    view.error = Some(SetupError::EngineFailed);
+    publish_setup(app, view);
     state.status.add_notice(Notice {
         id: RESTARTS_NOTICE.to_string(),
         code: NoticeCode::Restarts,
@@ -368,6 +387,7 @@ async fn setup_of<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<Setup>, CommandE
 
 fn runtime_error(e: RuntimeError) -> CommandError {
     match e {
+        RuntimeError::Busy => CommandError::new(crate::error::ErrorCode::Busy, e),
         RuntimeError::Unavailable => CommandError::unavailable("the private engine is not running"),
         other => CommandError::internal(other),
     }

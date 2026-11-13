@@ -59,6 +59,8 @@ struct Plan {
     mode: &'static str,
     /// A finished setup for this tier is already on disk.
     installed: Option<Tier>,
+    /// A change to this tier was started and never finished.
+    unfinished: Option<Tier>,
     restart_limit: u32,
     retry_after: Duration,
     /// Memory the machine reports as free.
@@ -70,6 +72,7 @@ impl Plan {
         Plan {
             mode,
             installed: None,
+            unfinished: None,
             restart_limit: 3,
             retry_after: Duration::from_secs(3600),
             free_memory: 64 * GIB,
@@ -114,8 +117,9 @@ fn lab(plan: Plan) -> Lab {
             &dirs.config(),
             &SetupRecord {
                 version: 1,
-                tier: Some(tier),
-                done: true,
+                tier: Some(plan.unfinished.unwrap_or(tier)),
+                done: plan.unfinished.is_none(),
+                completed: Some(tier),
                 backends: Default::default(),
             },
         )
@@ -134,7 +138,6 @@ fn lab(plan: Plan) -> Lab {
         ..SetupOptions::default()
     };
     opts.retry_after = plan.retry_after;
-    opts.quit_budget = Duration::from_secs(5);
     let free = plan.free_memory;
     opts.available_memory = Some(Arc::new(move || free));
     let services = start(&h, opts);
@@ -145,7 +148,41 @@ fn lab(plan: Plan) -> Lab {
     }
 }
 
+impl Drop for Lab {
+    /// Stops the engine even when a test fails half way.
+    fn drop(&mut self) {
+        self.h.state().run_exit_hooks();
+    }
+}
+
 impl Lab {
+    /// Kill the running fake engine now, as a crash would.
+    fn crash(&self) {
+        block_on(async {
+            let client = self.services.client().await.expect("an engine");
+            let endpoint = client.endpoint().expect("an address");
+            let _ = reqwest::Client::new()
+                .post(format!("http://127.0.0.1:{}/fake/crash", endpoint.port))
+                .bearer_auth(&endpoint.key)
+                .send()
+                .await;
+        });
+    }
+
+    /// The engine's address changes at every launch and stop; true once a new one answers.
+    fn engine_generation(&self) -> u64 {
+        block_on(async { self.services.client().await.map_or(0, |c| c.generation()) })
+    }
+
+    fn engine_answers(&self) -> bool {
+        block_on(async {
+            match self.services.client().await {
+                Some(client) => client.live().await.is_ok(),
+                None => false,
+            }
+        })
+    }
+
     fn has_mind(&self) -> bool {
         self.h.state().mind.get().is_some()
     }
@@ -163,6 +200,14 @@ impl Lab {
             .unwrap()
             .iter()
             .any(|n| n["code"] == code)
+    }
+
+    /// Whether the running engine is set to stay off the internet.
+    fn engine_offline(&self) -> Option<bool> {
+        block_on(async {
+            let client = self.services.client().await?;
+            client.config().await.ok()?["offline"].as_bool()
+        })
     }
 
     /// Change how the running fake engine behaves.
@@ -245,22 +290,53 @@ fn setup_can_be_paused_and_resumed() {
     });
     lab.h.ok("pause_setup", json!({}));
     wait_for("paused", || lab.setup_phase() == "paused");
+    wait_for("the engine to go offline", || {
+        lab.engine_offline() == Some(true)
+    });
+    // Pausing takes the engine offline by restarting it, which reads its mode from disk; a
+    // resumed download starts over in the fake, so let it be quick.
+    set_mode(&lab.h.dir.path().join("engine"), "download-ms=150");
     lab.h.ok("resume_setup", json!({}));
-    // A resumed download starts over in the fake; let it be quick.
-    lab.fake_mode("download-ms=150");
     wait_for("setup to finish after resuming", || {
         lab.setup_phase() == "done"
     });
     wait_for("the mind to arrive", || lab.has_mind());
 }
 
+/// Crash the engine until the supervisor gives up (it allows `restart_limit` restarts).
+fn crash_until_it_gives_up(lab: &Lab) {
+    for _ in 0..4 {
+        let before = lab.engine_generation();
+        lab.crash();
+        wait_for("the crash to be noticed", || {
+            lab.engine_generation() != before || !lab.has_mind()
+        });
+        if !lab.has_mind() {
+            return;
+        }
+        wait_for("the engine to answer again", || {
+            lab.engine_answers() || !lab.has_mind()
+        });
+    }
+    wait_for("the engine to give up", || !lab.has_mind());
+}
+
 #[test]
 fn an_engine_that_gives_up_empties_the_slot_and_questions_say_unavailable() {
-    let lab = lab(Plan::new("downloaded=all,crash-after-ms=900").installed(Tier::Small));
+    let lab = lab(Plan {
+        restart_limit: 1,
+        ..Plan::new("downloaded=all").installed(Tier::Small)
+    });
     wait_for("the mind to arrive", || lab.has_mind());
-    wait_for("the engine to give up", || !lab.has_mind());
+    wait_for("setup to read done", || lab.setup_phase() == "done");
+    crash_until_it_gives_up(&lab);
     wait_for("the notice", || lab.has_notice("restarts"));
     assert_eq!(lab.h.ok("get_status", json!({}))["state"], "gettingReady");
+    assert_eq!(
+        lab.setup_phase(),
+        "failed",
+        "setup is not done while there is nothing to read with"
+    );
 
     let seen = lab.h.ask_deltas();
     let id = lab
@@ -283,13 +359,37 @@ fn a_failed_engine_is_started_again_later() {
     let lab = lab(Plan {
         retry_after: Duration::from_millis(1_500),
         restart_limit: 1,
-        ..Plan::new("downloaded=all,crash-after-ms=700").installed(Tier::Small)
+        ..Plan::new("downloaded=all").installed(Tier::Small)
     });
     wait_for("the mind to arrive", || lab.has_mind());
-    wait_for("the engine to give up", || !lab.has_mind());
-    set_mode(&lab.h.dir.path().join("engine"), "downloaded=all");
+    crash_until_it_gives_up(&lab);
     wait_for("the mind to come back", || lab.has_mind());
     wait_for("the notice to go", || !lab.has_notice("restarts"));
+    wait_for("setup to read done again", || lab.setup_phase() == "done");
+}
+
+/// The engine coming back at the same tier is not a change of mind: a standing offer of a
+/// smaller one, made because memory is short, is still true.
+#[test]
+fn the_same_mind_coming_back_keeps_a_standing_offer() {
+    let lab = lab(Plan {
+        retry_after: Duration::from_millis(1_000),
+        restart_limit: 1,
+        free_memory: 2 * GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    runtime::out_of_memory(lab.h.app.handle());
+    runtime::out_of_memory(lab.h.app.handle());
+    wait_for("the offer", || lab.has_notice("tierDropped"));
+
+    crash_until_it_gives_up(&lab);
+    wait_for("the mind to come back", || lab.has_mind());
+    assert!(
+        lab.has_notice("tierDropped"),
+        "memory is as short as it was"
+    );
+    assert_eq!(lab.services.tier_offer(), Some(Tier::Small));
 }
 
 #[test]
@@ -426,6 +526,32 @@ fn plenty_of_memory_means_no_offer() {
     assert!(!lab.has_notice("tierDropped"));
 }
 
+#[test]
+fn not_now_withdraws_the_offer_until_memory_runs_short_twice_more() {
+    let lab = lab(Plan {
+        free_memory: 2 * GIB,
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    let app = lab.h.app.handle();
+    runtime::out_of_memory(app);
+    runtime::out_of_memory(app);
+    wait_for("the offer", || lab.has_notice("tierDropped"));
+    assert_eq!(lab.h.ok("get_tier_offer", json!({})), "small");
+
+    lab.h.ok("decline_tier_offer", json!({}));
+    assert!(!lab.has_notice("tierDropped"));
+    assert_eq!(lab.h.ok("get_tier_offer", json!({})), Value::Null);
+
+    runtime::out_of_memory(app);
+    assert!(
+        !lab.has_notice("tierDropped"),
+        "one failure after saying not now is not a pair"
+    );
+    runtime::out_of_memory(app);
+    wait_for("the offer again", || lab.has_notice("tierDropped"));
+}
+
 /// The whole path: the engine cannot load the model, the reader says so, the person agrees to
 /// the smaller mind, it is swapped in and the waiting note is read with it.
 #[test]
@@ -459,6 +585,126 @@ fn agreeing_to_the_smaller_mind_swaps_it_in_and_the_note_is_read() {
     wait_for("the offer to go", || !lab.has_notice("tierDropped"));
     wait_for("the note to be read", || {
         lab.services.reader.retry_now();
-        lab.h.engine().get_item(&note).unwrap().status != ItemStatus::Kept
+        lab.h.engine().get_item(&note).unwrap().status == ItemStatus::Understood
     });
+}
+
+/// A change of tier that never finished leaves the tier that works in charge.
+#[test]
+fn an_unfinished_change_of_tier_does_not_leave_the_next_launch_without_a_mind() {
+    let lab = lab(Plan {
+        unfinished: Some(Tier::Small),
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    assert_eq!(lab.services.tier(), Some(Tier::Standard));
+    wait_for("setup to read done", || lab.setup_phase() == "done");
+    assert_ne!(lab.h.ok("get_status", json!({}))["state"], "gettingReady");
+}
+
+/// Nothing leaves the machine unless the person started it: an unfinished setup is not resumed
+/// by launching, and a finished one leaves the engine offline.
+#[test]
+fn launching_with_an_unfinished_setup_downloads_nothing_and_a_finished_one_goes_offline() {
+    let lab = lab(Plan {
+        unfinished: Some(Tier::Small),
+        ..Plan::new("").installed(Tier::Standard)
+    });
+    wait_for("the setup to be looked at", || {
+        lab.setup_phase() != "notStarted"
+    });
+    std::thread::sleep(Duration::from_millis(400));
+    let touched: Vec<String> = lab
+        .requests()
+        .iter()
+        .filter_map(|r| r["path"].as_str().map(str::to_string))
+        .filter(|p| {
+            ["/pull", "/install", "/load"]
+                .iter()
+                .any(|bad| p.ends_with(bad))
+        })
+        .collect();
+    assert!(
+        touched.is_empty(),
+        "launching fetched or loaded: {touched:?}"
+    );
+    assert_eq!(lab.engine_offline(), Some(true));
+}
+
+#[test]
+fn a_finished_setup_leaves_the_engine_offline() {
+    let lab = lab(Plan::new(""));
+    wait_for("the choice", || lab.setup_phase() == "choosing");
+    lab.h.ok("start_setup", json!({"tier": "small"}));
+    wait_for("setup to finish", || lab.setup_phase() == "done");
+    wait_for("the engine to go offline", || {
+        lab.engine_offline() == Some(true)
+    });
+}
+
+/// Quitting does not wait on an engine that will not stop: it ends by itself soon after.
+#[cfg(target_os = "linux")]
+#[test]
+fn quitting_does_not_wait_for_an_engine_that_hangs_on_shutdown() {
+    let lab = lab(Plan::new("downloaded=all,hang-shutdown").installed(Tier::Small));
+    wait_for("the mind to arrive", || lab.has_mind());
+    let started = std::time::Instant::now();
+    lab.h.state().run_exit_hooks();
+    assert!(
+        started.elapsed() < Duration::from_millis(3_500),
+        "quitting took {:?}",
+        started.elapsed()
+    );
+}
+
+/// Quitting while the engine is still starting must not leave it running.
+#[cfg(target_os = "linux")]
+#[test]
+fn quitting_while_the_engine_starts_leaves_none_behind() {
+    let lab = lab(Plan::new("slow-start-ms=2500").installed(Tier::Small));
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!lab.has_mind(), "still starting");
+    let engine_dir = lab.h.dir.path().join("engine");
+    let running = || engines_using(&engine_dir);
+    wait_for("the engine to be spawned", || !running().is_empty());
+    let started = std::time::Instant::now();
+    lab.h.state().run_exit_hooks();
+    assert!(started.elapsed() < Duration::from_secs(3));
+    wait_for("the engine to be stopped", || running().is_empty());
+}
+
+/// Process ids whose command line names this engine folder.
+#[cfg(target_os = "linux")]
+fn engines_using(dir: &Path) -> Vec<u32> {
+    let needle = dir.to_string_lossy().into_owned();
+    std::fs::read_dir("/proc")
+        .unwrap()
+        .filter_map(|e| e.ok())
+        .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
+        .filter(|pid| {
+            std::fs::read(format!("/proc/{pid}/cmdline"))
+                .map(|c| String::from_utf8_lossy(&c).contains(&needle))
+                .unwrap_or(false)
+                && std::fs::read_to_string(format!("/proc/{pid}/stat"))
+                    .ok()
+                    .and_then(|s| {
+                        s.rsplit_once(')')
+                            .and_then(|(_, r)| r.split_whitespace().next().map(|c| c != "Z"))
+                    })
+                    .unwrap_or(false)
+        })
+        .collect()
+}
+
+#[test]
+fn choosing_another_tier_while_setup_runs_is_refused_not_ignored() {
+    let lab = lab(Plan::new("download-ms=3000"));
+    wait_for("the choice", || lab.setup_phase() == "choosing");
+    lab.h.ok("start_setup", json!({"tier": "small"}));
+    wait_for("downloading", || lab.setup_phase() == "downloading");
+    assert_eq!(
+        lab.h.code("start_setup", json!({"tier": "standard"})),
+        "busy"
+    );
+    lab.h.ok("start_setup", json!({"tier": "small"}));
 }

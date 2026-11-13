@@ -42,6 +42,29 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
     run(app, |app| async move { runtime::resume_setup(&app).await }).await
 }
 
+/// The smaller mind on offer in the notice about memory, if the offer stands. The interface
+/// starts setup for it when the person agrees.
+#[tauri::command]
+pub async fn get_tier_offer<R: Runtime>(app: AppHandle<R>) -> Result<Option<Tier>, CommandError> {
+    run(app, |app| async move {
+        Ok(app
+            .state::<AppState>()
+            .services()
+            .and_then(|s| s.tier_offer()))
+    })
+    .await
+}
+
+/// "Not now": the offer goes, and comes back only after memory runs short twice more.
+#[tauri::command]
+pub async fn decline_tier_offer<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    run(app, |app| async move {
+        runtime::decline_tier_offer(&app).await;
+        Ok(())
+    })
+    .await
+}
+
 /// "Tidy anyway": the battery rule is set aside until this tidy is done. The scheduler starts the
 /// tidy on its next look, which is at most half a minute away.
 #[tauri::command]

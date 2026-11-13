@@ -298,3 +298,25 @@ fn has_notice(status: &Value, code: NoticeCode) -> bool {
         .iter()
         .any(|n| n["code"] == want)
 }
+
+/// Quitting with a note half read gives it back, and the reading is not counted against it.
+#[test]
+fn quitting_in_the_middle_of_a_note_gives_it_back_uncounted() {
+    let m = mind();
+    let gate = m.gate("extract");
+    let h = world(&m, "2026-11-13T12:00:00Z");
+    let services = start_runtime(&h, FakeHost::new());
+    let id = keep(&h);
+    block_on(async { tokio::time::timeout(Duration::from_secs(10), gate.entered()).await })
+        .expect("the note is being read");
+    assert_eq!(status_of(&h, &id), ItemStatus::Reading);
+
+    h.state().run_exit_hooks();
+    assert!(services.token().is_cancelled());
+    assert_eq!(status_of(&h, &id), ItemStatus::Kept);
+    let leased = h
+        .engine()
+        .lease_item(&id, Duration::from_secs(60))
+        .expect("the lease was let go");
+    assert_eq!(leased.attempts, 1, "the half read was not counted");
+}
