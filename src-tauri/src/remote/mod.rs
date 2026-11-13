@@ -95,6 +95,7 @@ impl<R: Runtime> session::Shell for AppShell<R> {
             computer_name: name::computer_name(),
             device_name: device.name.clone(),
             connection,
+            min_phone_build: protocol::MIN_PHONE_BUILD,
             version: self.app.package_info().version.to_string(),
         }
     }

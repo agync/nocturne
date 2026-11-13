@@ -155,6 +155,10 @@ pub async fn serve(cfg: ListenerConfig, core: Arc<Core>) -> std::io::Result<List
     }
 }
 
+fn code(n: u16) -> StatusCode {
+    StatusCode::from_u16(n).expect("a valid status")
+}
+
 fn bare(status: StatusCode) -> Response<Body> {
     Response::builder()
         .status(status)
@@ -197,29 +201,29 @@ async fn handle(ctx: Arc<Ctx>, req: Request<Body>) -> Response<Body> {
     let Some(path) = keyed_path(&ctx, &req) else {
         ctx.core.limits.take(Bucket::NoKey, "");
         tracing::debug!("no key");
-        return bare(StatusCode::NOT_FOUND);
+        return bare(code(HTTP_NOT_FOUND));
     };
     if !ctx.core.is_on() {
-        return bare(StatusCode::SERVICE_UNAVAILABLE);
+        return bare(code(HTTP_OFF));
     }
     // Full is not off: 503 means only "turned off" to the phone.
     let Ok(permit) = ctx.permits.clone().try_acquire_owned() else {
-        return bare(StatusCode::CONFLICT);
+        return bare(code(HTTP_POLL_BUSY));
     };
     if path == PATH_SESSION {
         return session(ctx, req, permit).await;
     }
     if !matches!(*req.method(), Method::GET | Method::HEAD) {
-        return bare(StatusCode::NOT_FOUND);
+        return bare(code(HTTP_NOT_FOUND));
     }
     let Some(name) = static_files::file_for(&path) else {
-        return bare(StatusCode::NOT_FOUND);
+        return bare(code(HTTP_NOT_FOUND));
     };
     if !ctx.core.limits.take(Bucket::Static, "") {
         return bare(StatusCode::TOO_MANY_REQUESTS);
     }
     let Some(bytes) = ctx.files.get(&name) else {
-        return bare(StatusCode::NOT_FOUND);
+        return bare(code(HTTP_NOT_FOUND));
     };
     let connection = ctx
         .core
@@ -279,7 +283,7 @@ async fn session(
     permit: OwnedSemaphorePermit,
 ) -> Response<Body> {
     let Ok(origin) = allowed_origin(&ctx.core, req.headers()) else {
-        return bare(StatusCode::FORBIDDEN);
+        return bare(code(HTTP_REFUSED));
     };
     match *req.method() {
         Method::OPTIONS => {
@@ -305,7 +309,7 @@ async fn session(
         Method::GET => {
             let (mut parts, _) = req.into_parts();
             let Ok(upgrade) = WebSocketUpgrade::from_request_parts(&mut parts, &()).await else {
-                return bare(StatusCode::NOT_FOUND);
+                return bare(code(HTTP_NOT_FOUND));
             };
             let core = ctx.core.clone();
             let res = upgrade
@@ -315,7 +319,7 @@ async fn session(
             with_cors(res, &origin)
         }
         Method::POST => with_cors(poll_up(&ctx, req).await, &origin),
-        _ => bare(StatusCode::NOT_FOUND),
+        _ => bare(code(HTTP_NOT_FOUND)),
     }
 }
 
@@ -430,21 +434,21 @@ async fn poll_up(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
     let mut handshakes: Vec<std::sync::Arc<Conv>> = Vec::new();
     for frame in frames {
         let Ok(h) = crypto::parse_header(frame) else {
-            return bare(StatusCode::NOT_FOUND);
+            return bare(code(HTTP_NOT_FOUND));
         };
         let conv = match core.conv_for_sid(&h.sid) {
             Some(c) => c,
             None if h.sid == [0u8; SID_LEN] || is_pairing_kind(h.kind) => {
                 core.new_conv(Carrier::LongPoll)
             }
-            None => return bare(StatusCode::GONE),
+            None => return bare(code(HTTP_ENDED)),
         };
         let handshake = conv.in_handshake();
         match core.inbound(&conv, frame) {
             Inbound::Continue => {}
             Inbound::Refuse => {
                 core.end_conv(&conv);
-                return bare(StatusCode::FORBIDDEN);
+                return bare(code(HTTP_REFUSED));
             }
             Inbound::Close => conv.close(),
         }
@@ -485,13 +489,13 @@ async fn poll_down(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
         .find_map(|p| p.strip_prefix("sid="))
         .and_then(parse_sid);
     let Some(sid) = sid else {
-        return bare(StatusCode::NOT_FOUND);
+        return bare(code(HTTP_NOT_FOUND));
     };
     let Some(conv) = core.conv_for_sid(&sid) else {
-        return bare(StatusCode::GONE);
+        return bare(code(HTTP_ENDED));
     };
     if conv.down_busy.swap(true, Ordering::SeqCst) {
-        return bare(StatusCode::CONFLICT);
+        return bare(code(HTTP_POLL_BUSY));
     }
     let _busy = Busy(&conv.down_busy);
     *conv.last_seen.lock().unwrap_or_else(|e| e.into_inner()) = core.now();
@@ -499,7 +503,7 @@ async fn poll_down(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
     if frames.is_empty() {
         if conv.closed.is_cancelled() {
             core.end_conv(&conv);
-            return bare(StatusCode::GONE);
+            return bare(code(HTTP_ENDED));
         }
         return bare(StatusCode::NO_CONTENT);
     }

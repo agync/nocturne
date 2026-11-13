@@ -258,6 +258,7 @@ impl Shell for TestShell {
             computer_name: "Test computer".into(),
             device_name: device.name.clone(),
             connection,
+            min_phone_build: super::protocol::MIN_PHONE_BUILD,
             version: "0.0.0".into(),
         }
     }
