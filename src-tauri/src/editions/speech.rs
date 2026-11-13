@@ -206,7 +206,7 @@ pub async fn prepare_if_due<R: Runtime>(app: &AppHandle<R>) -> bool {
         return false;
     }
     let pruner = engine.clone();
-    let _ = blocking(move || Ok(pruner.prune_audio(KEEP_DAYS)?)).await;
+    let _ = blocking(move || pruner.prune_audio(KEEP_DAYS)).await;
     let now = shell.now();
     let tz = shell.clock.tz();
     let today = now.to_zoned(tz.clone()).date();
