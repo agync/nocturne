@@ -38,12 +38,66 @@ describe("Settings", () => {
       "true",
     );
     expect(screen.getByRole("combobox", { name: "Letting go" })).toHaveDisplayValue(
-      "Normal (default)",
+      "Normal, the default (fades after 30 days)",
     );
-    expect(screen.getByRole("combobox", { name: "Theme · language, theme" })).toHaveDisplayValue(
-      "System",
+    expect(screen.getByRole("combobox", { name: "Theme" })).toHaveDisplayValue("System");
+    expect(screen.getByText("Language: English (UK)")).toBeInTheDocument();
+  });
+
+  it("reads each control with the hint of its row", async () => {
+    await open();
+    expect(
+      screen.getByRole("combobox", { name: "Morning page, time" }),
+    ).toHaveAccessibleDescription("When it is ready and how it arrives");
+    expect(screen.getByRole("combobox", { name: "Voice, speed" })).toHaveAccessibleDescription(
+      "For reading aloud",
     );
-    expect(screen.getByText("English (UK)")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Letting go" })).toHaveAccessibleDescription(
+      "How soon unused things fade",
+    );
+    expect(screen.getByRole("combobox", { name: "Theme" })).toHaveAccessibleDescription(
+      "Follows this computer",
+    );
+    expect(
+      screen.getByRole("button", { name: "Change quick keep shortcut" }),
+    ).toHaveAccessibleDescription("Works from any app");
+    expect(
+      screen.getByRole("button", { name: "Choose inbox folder…" }),
+    ).toHaveAccessibleDescription("Anything saved here is kept");
+  });
+
+  it("says how many days each letting-go pace waits", async () => {
+    await open();
+    const pace = screen.getByRole("combobox", { name: "Letting go" });
+    expect(
+      within(pace)
+        .getAllByRole("option")
+        .map((o) => o.textContent),
+    ).toEqual([
+      "Gentle (fades after 45 days)",
+      "Normal, the default (fades after 30 days)",
+      "Brisk (fades after 14 days)",
+    ]);
+  });
+
+  it("links the shortcut's instruction and its error to the box that takes the keys", async () => {
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Change quick keep shortcut" }));
+    const box = screen.getByRole("textbox", { name: "Quick keep shortcut, press the new keys" });
+    expect(box).toHaveAccessibleDescription(/Works from any app.*Tab or Esc to cancel/);
+    await userEvent.keyboard("k");
+    expect(box).toHaveAttribute("aria-invalid", "true");
+    expect(box).toHaveAccessibleDescription(/Include Ctrl, Alt or Super with another key\./);
+  });
+
+  it("links the explanation of a shortcut that is not working to its button", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({ ...base, shortcutAvailable: false });
+    await open(engine);
+    expect(
+      screen.getByRole("button", { name: "Change quick keep shortcut" }),
+    ).toHaveAccessibleDescription(/This shortcut isn’t working here/);
   });
 
   it("offers no update checks, because nothing in this version can update itself", async () => {
@@ -97,10 +151,7 @@ describe("Settings", () => {
     expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ voiceSpeed: 1.25 }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Letting go" }), "brisk");
     expect(spy).toHaveBeenLastCalledWith(expect.objectContaining({ lettingGo: "brisk" }));
-    await userEvent.selectOptions(
-      screen.getByRole("combobox", { name: "Theme · language, theme" }),
-      "dark",
-    );
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Theme" }), "dark");
     await waitFor(() => expect(document.documentElement.getAttribute("data-theme")).toBe("dark"));
   });
 
@@ -123,7 +174,7 @@ describe("Settings", () => {
     vi.spyOn(platform, "pickFolder").mockResolvedValue("/data/Nocturne inbox");
     const { engine } = await open(createMockEngine(), platform);
     const spy = vi.spyOn(engine, "updateSettings");
-    await userEvent.click(screen.getByRole("button", { name: "Choose…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choose inbox folder…" }));
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith(
         expect.objectContaining({ inboxFolder: "/data/Nocturne inbox" }),

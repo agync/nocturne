@@ -83,7 +83,7 @@ test.describe("using it", () => {
 
   test("the theme setting changes the colours at once", async ({ page }) => {
     await ready(page, "#/settings", "Settings");
-    await page.getByRole("combobox", { name: "Theme · language, theme" }).selectOption("dark");
+    await page.getByRole("combobox", { name: "Theme" }).selectOption("dark");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   });
 

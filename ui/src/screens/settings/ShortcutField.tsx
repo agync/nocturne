@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
 import { useEngine } from "../../engine/context";
@@ -47,11 +47,16 @@ interface Props {
   value: string;
   available: boolean;
   onChange: (combo: string) => void;
+  /** The id of whatever explains this row, so the control is read with it. */
+  describedBy?: string;
 }
 
 /** Shows the shortcut and lets the person press a new one. Tab and Esc always get out. */
-export function ShortcutField({ value, available, onChange }: Props) {
+export function ShortcutField({ value, available, onChange, describedBy }: Props) {
   const engine = useEngine();
+  const cancelId = useId();
+  const noteId = useId();
+  const problemId = useId();
   // Where keys cannot be shared with every app, a desktop shortcut that runs this does the job.
   const command = useQuery({
     queryKey: ["quickKeepCommand"],
@@ -101,6 +106,10 @@ export function ShortcutField({ value, available, onChange }: Props) {
             autoFocus
             className={styles.capture}
             aria-label={t("settings.shortcut.capture")}
+            aria-describedby={[describedBy, cancelId, note ? noteId : null]
+              .filter(Boolean)
+              .join(" ")}
+            aria-invalid={note ? true : undefined}
             placeholder={t("settings.shortcut.placeholder")}
             onKeyDown={onKeyDown}
             onBlur={() => leave(false)}
@@ -111,6 +120,9 @@ export function ShortcutField({ value, available, onChange }: Props) {
             <Button
               variant="quiet"
               aria-label={t("settings.shortcut.change.named")}
+              aria-describedby={
+                [describedBy, !available ? problemId : null].filter(Boolean).join(" ") || undefined
+              }
               onClick={() => setCapturing(true)}
             >
               {t("settings.shortcut.change")}
@@ -118,14 +130,18 @@ export function ShortcutField({ value, available, onChange }: Props) {
           </>
         )}
       </div>
-      {capturing ? <span className={styles.note}>{t("settings.shortcut.cancel")}</span> : null}
+      {capturing ? (
+        <span id={cancelId} className={styles.note}>
+          {t("settings.shortcut.cancel")}
+        </span>
+      ) : null}
       {note ? (
-        <span className={styles.problem} role="alert">
+        <span id={noteId} className={styles.problem} role="alert">
           {note}
         </span>
       ) : null}
       {!available && !capturing ? (
-        <span className={styles.problem}>
+        <span id={problemId} className={styles.problem}>
           {t("settings.shortcut.taken")}
           {command.data ? (
             <>

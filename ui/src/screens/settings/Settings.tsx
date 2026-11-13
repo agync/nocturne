@@ -3,6 +3,7 @@ import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
 import { Toggle } from "../../components/Toggle/Toggle";
+import { paceDays } from "../../copy/pace";
 import { t } from "../../copy/t";
 import type {
   Delivery,
@@ -18,14 +19,26 @@ import styles from "./Settings.module.css";
 import { ShortcutField } from "./ShortcutField";
 import { SPEEDS, VOICES, voiceName } from "./voices";
 
-function Row({ label, hint, children }: { label: string; hint: string; children: ReactNode }) {
+/** Each control is read with the row's hint, so the hint is not only for people who can see it. */
+function Row({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint: string;
+  children: (hintId: string) => ReactNode;
+}) {
+  const hintId = useId();
   return (
     <li className={styles.row}>
       <div className={styles.text}>
         <span className={styles.label}>{label}</span>
-        <span className={styles.hint}>{hint}</span>
+        <span id={hintId} className={styles.hint}>
+          {hint}
+        </span>
       </div>
-      <div className={styles.control}>{children}</div>
+      <div className={styles.control}>{children(hintId)}</div>
     </li>
   );
 }
@@ -35,11 +48,13 @@ function Select<V extends string | number>({
   value,
   options,
   onChange,
+  describedBy,
 }: {
   label: string;
   value: V;
   options: ReadonlyArray<{ value: V; label: string }>;
   onChange: (value: V) => void;
+  describedBy?: string;
 }) {
   const id = useId();
   return (
@@ -47,6 +62,7 @@ function Select<V extends string | number>({
       id={id}
       className={styles.select}
       aria-label={label}
+      aria-describedby={describedBy}
       value={String(value)}
       onChange={(event) => {
         const picked = options.find((o) => String(o.value) === event.target.value);
@@ -148,9 +164,9 @@ export function Settings() {
     SPEEDS.includes(view.voiceSpeed) ? SPEEDS : [...SPEEDS, view.voiceSpeed].sort()
   ).map((s) => ({ value: s, label: `${s}×` }));
   const pacing: Array<{ value: LettingGo; label: string }> = [
-    { value: "gentle", label: t("settings.letting.gentle") },
-    { value: "normal", label: t("settings.letting.normal") },
-    { value: "brisk", label: t("settings.letting.brisk") },
+    { value: "gentle", label: t("settings.letting.gentle", { days: paceDays("gentle").fade }) },
+    { value: "normal", label: t("settings.letting.normal", { days: paceDays("normal").fade }) },
+    { value: "brisk", label: t("settings.letting.brisk", { days: paceDays("brisk").fade }) },
   ];
   const themes: Array<{ value: Theme; label: string }> = [
     { value: "system", label: t("settings.theme.system") },
@@ -169,66 +185,88 @@ export function Settings() {
         </div>
         <ul className={styles.rows}>
           <Row label={t("settings.page.label")} hint={t("settings.page.hint")}>
-            <Select
-              label={t("settings.page.time")}
-              value={view.pageTime}
-              options={times}
-              onChange={(pageTime) => void save({ pageTime })}
-            />
-            <Select
-              label={t("settings.page.delivery")}
-              value={view.delivery}
-              options={deliveries}
-              onChange={(delivery) => void save({ delivery })}
-            />
+            {(hint) => (
+              <>
+                <Select
+                  describedBy={hint}
+                  label={t("settings.page.time")}
+                  value={view.pageTime}
+                  options={times}
+                  onChange={(pageTime) => void save({ pageTime })}
+                />
+                <Select
+                  describedBy={hint}
+                  label={t("settings.page.delivery")}
+                  value={view.delivery}
+                  options={deliveries}
+                  onChange={(delivery) => void save({ delivery })}
+                />
+              </>
+            )}
           </Row>
 
           <Row label={t("settings.voice.label")} hint={t("settings.voice.hint")}>
-            <Select
-              label={t("settings.voice.name")}
-              value={view.voice}
-              options={voices}
-              onChange={(voice) => void save({ voice })}
-            />
-            <Select
-              label={t("settings.voice.speed")}
-              value={view.voiceSpeed}
-              options={speeds}
-              onChange={(voiceSpeed) => void save({ voiceSpeed })}
-            />
+            {(hint) => (
+              <>
+                <Select
+                  describedBy={hint}
+                  label={t("settings.voice.name")}
+                  value={view.voice}
+                  options={voices}
+                  onChange={(voice) => void save({ voice })}
+                />
+                <Select
+                  describedBy={hint}
+                  label={t("settings.voice.speed")}
+                  value={view.voiceSpeed}
+                  options={speeds}
+                  onChange={(voiceSpeed) => void save({ voiceSpeed })}
+                />
+              </>
+            )}
           </Row>
 
           <Row label={t("settings.shortcut.label")} hint={t("settings.shortcut.hint")}>
-            <ShortcutField
-              value={view.shortcut}
-              available={view.shortcutAvailable}
-              onChange={(shortcut) => void save({ shortcut })}
-            />
+            {(hint) => (
+              <>
+                <ShortcutField
+                  describedBy={hint}
+                  value={view.shortcut}
+                  available={view.shortcutAvailable}
+                  onChange={(shortcut) => void save({ shortcut })}
+                />
+              </>
+            )}
           </Row>
 
           <Row label={t("settings.inbox.label")} hint={t("settings.inbox.hint")}>
-            <span className={view.inboxFolder ? styles.path : styles.none}>
-              {view.inboxFolder ?? t("settings.inbox.none")}
-            </span>
-            <Button
-              variant="quiet"
-              onClick={() => {
-                void platform.pickFolder().then((dir) => {
-                  if (dir) void save({ inboxFolder: dir });
-                });
-              }}
-            >
-              {t("settings.inbox.choose")}
-            </Button>
-            {view.inboxFolder ? (
-              <Button
-                variant="quiet"
-                aria-label={t("settings.inbox.stop.named")}
-                onClick={() => void save({ inboxFolder: "" })}
-              >
-                {t("settings.inbox.stop")}
-              </Button>
-            ) : null}
+            {(hint) => (
+              <>
+                <span className={view.inboxFolder ? styles.path : styles.none}>
+                  {view.inboxFolder ?? t("settings.inbox.none")}
+                </span>
+                <Button
+                  variant="quiet"
+                  aria-describedby={hint}
+                  onClick={() => {
+                    void platform.pickFolder().then((dir) => {
+                      if (dir) void save({ inboxFolder: dir });
+                    });
+                  }}
+                >
+                  {t("settings.inbox.choose")}
+                </Button>
+                {view.inboxFolder ? (
+                  <Button
+                    variant="quiet"
+                    aria-label={t("settings.inbox.stop.named")}
+                    onClick={() => void save({ inboxFolder: "" })}
+                  >
+                    {t("settings.inbox.stop")}
+                  </Button>
+                ) : null}
+              </>
+            )}
           </Row>
 
           <li className={styles.toggleRow}>
@@ -241,22 +279,32 @@ export function Settings() {
           </li>
 
           <Row label={t("settings.letting.label")} hint={t("settings.letting.hint")}>
-            <Select
-              label={t("settings.letting.label")}
-              value={view.lettingGo}
-              options={pacing}
-              onChange={(lettingGo) => void save({ lettingGo })}
-            />
+            {(hint) => (
+              <>
+                <Select
+                  describedBy={hint}
+                  label={t("settings.letting.label")}
+                  value={view.lettingGo}
+                  options={pacing}
+                  onChange={(lettingGo) => void save({ lettingGo })}
+                />
+              </>
+            )}
           </Row>
 
           <Row label={t("settings.theme.label")} hint={t("settings.theme.hint")}>
-            <Select
-              label={t("settings.theme.name")}
-              value={view.theme}
-              options={themes}
-              onChange={(theme) => void save({ theme })}
-            />
-            <span className={styles.value}>{t("settings.language.value")}</span>
+            {(hint) => (
+              <>
+                <Select
+                  describedBy={hint}
+                  label={t("settings.theme.name")}
+                  value={view.theme}
+                  options={themes}
+                  onChange={(theme) => void save({ theme })}
+                />
+                <span className={styles.value}>{t("settings.language.value")}</span>
+              </>
+            )}
           </Row>
         </ul>
         <a className={styles.advanced} href="#/settings/advanced">
