@@ -2,12 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PhoneKept } from "../engine/bindings";
+import { FakeAudioContext, installFakeAudio, speak } from "../test/fakeAudio";
 import { App } from "./App";
 import { type PhoneEngine, PhoneRequestError } from "./engine";
 import { createMockPhoneEngine, type MockScript } from "./mock";
 import { memoryQueue } from "./queue";
 import { Ask, capQuestion, useAskSession } from "./screens/Ask";
-import { Keep } from "./screens/Keep";
+import { browserRecorder, Keep } from "./screens/Keep";
 import { Original } from "./screens/Original";
 import { PageScreen } from "./screens/PageScreen";
 import type { Services } from "./services";
@@ -465,6 +466,41 @@ describe("keep", () => {
     await waitFor(() => expect(keepRecording).toHaveBeenCalledOnce());
     expect(stopped).toBe(1);
     expect(await screen.findByRole("heading", { name: "Kept." })).toBeInTheDocument();
+  });
+
+  it("record.is_wav: the phone's own recorder makes a 16 kHz mono 16-bit WAV, whatever the microphone", async () => {
+    installFakeAudio(48000);
+    const track = { stop: vi.fn() };
+    vi.stubGlobal("navigator", {
+      mediaDevices: { getUserMedia: async () => ({ getTracks: () => [track] }) },
+    });
+    try {
+      const recording = await browserRecorder(() => undefined);
+      speak(1000, 0.5);
+      const blob = await recording.stop();
+      expect(blob?.type).toBe("audio/wav");
+      const bytes = new Uint8Array(await (blob as Blob).arrayBuffer());
+      const view = new DataView(bytes.buffer);
+      const ascii = (at: number, n: number) => String.fromCharCode(...bytes.subarray(at, at + n));
+      expect(ascii(0, 4)).toBe("RIFF");
+      expect(ascii(8, 4)).toBe("WAVE");
+      expect(ascii(12, 4)).toBe("fmt ");
+      expect(view.getUint16(20, true)).toBe(1);
+      expect(view.getUint16(22, true)).toBe(1);
+      expect(view.getUint32(24, true)).toBe(16000);
+      expect(view.getUint16(34, true)).toBe(16);
+      expect(ascii(36, 4)).toBe("data");
+      expect(view.getUint32(40, true)).toBe(bytes.length - 44);
+      expect(view.getUint32(4, true)).toBe(bytes.length - 8);
+      expect(Math.abs((bytes.length - 44) / 2 - 16000)).toBeLessThanOrEqual(1);
+      expect(track.stop).toHaveBeenCalled();
+      expect(FakeAudioContext.last?.closed).toBe(true);
+      // No sound heard: nothing to keep.
+      const quiet = await browserRecorder(() => undefined);
+      expect(await quiet.stop()).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("recording with no microphone says so", async () => {

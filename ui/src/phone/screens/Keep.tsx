@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { canCaptureSound, startWavCapture } from "../../app/wavCapture";
 import { formatBytes, formatDuration, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PhoneError, PhoneKept } from "../../engine/bindings";
+import { copy } from "../bytes";
 import { sniffMime } from "../crypto";
 import {
   type Connection,
@@ -61,13 +63,6 @@ const WAIT_CODES: ReadonlySet<PhoneError> = new Set([
   "sessionExpired",
 ]);
 
-const RECORDER_TYPES = [
-  "audio/webm;codecs=opus",
-  "audio/webm",
-  "audio/mp4",
-  "audio/ogg;codecs=opus",
-];
-
 interface KeepProps {
   engine: PhoneEngine;
   queue: Queue;
@@ -81,39 +76,44 @@ interface KeepProps {
 }
 
 export interface Recording {
-  stop(): Promise<Blob>;
+  /** Ends the recording: the sound as a WAV file, or null when none was heard. */
+  stop(): Promise<Blob | null>;
   cancel(): void;
 }
-export type RecorderFactory = () => Promise<Recording>;
+/** `onLimit` is called once if the longest recording a phone can keep has been reached. */
+export type RecorderFactory = (onLimit: () => void) => Promise<Recording>;
 
-/** The phone's own recorder: the microphone into a MediaRecorder, held in memory until it ends. */
-export const browserRecorder: RecorderFactory = async () => {
+/** 16 kHz mono 16-bit sound is 32 KB a second; this many seconds always fit the 50 MB limit. */
+const MAX_RECORDING_SECONDS = Math.floor((MAX_ITEM - 44) / 32000);
+
+/**
+ * The phone's own recorder: the microphone through Web Audio into a 16 kHz mono 16-bit WAV, the
+ * same as the computer's, because that is the one form the speech reader takes. The sound is held
+ * in memory as 16-bit numbers until the recording ends.
+ */
+export const browserRecorder: RecorderFactory = async (onLimit) => {
   const media = globalThis.navigator?.mediaDevices;
-  if (!media?.getUserMedia || typeof MediaRecorder === "undefined") throw new Error("none");
+  if (!media?.getUserMedia || !canCaptureSound()) throw new Error("none");
   const stream = await media.getUserMedia({ audio: true });
-  const mimeType = RECORDER_TYPES.find((m) => MediaRecorder.isTypeSupported(m));
-  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
-  const parts: Blob[] = [];
-  recorder.ondataavailable = (e) => {
-    if (e.data.size > 0) parts.push(e.data);
-  };
   const release = () => {
     for (const track of stream.getTracks()) track.stop();
   };
-  recorder.start(5000);
+  let capture: ReturnType<typeof startWavCapture>;
+  try {
+    capture = startWavCapture(stream, onLimit, MAX_RECORDING_SECONDS);
+  } catch {
+    release();
+    throw new Error("none");
+  }
   return {
-    stop: () =>
-      new Promise<Blob>((resolve) => {
-        recorder.onstop = () => {
-          release();
-          resolve(new Blob(parts, { type: recorder.mimeType }));
-        };
-        recorder.stop();
-      }),
+    async stop() {
+      const file = capture.finish();
+      release();
+      return file ? new Blob([copy(file)], { type: "audio/wav" }) : null;
+    },
     cancel() {
-      recorder.onstop = release;
-      if (recorder.state !== "inactive") recorder.stop();
-      else release();
+      capture.discard();
+      release();
     },
   };
 };
@@ -254,7 +254,11 @@ export function Keep({
       <Recorder
         factory={recorder}
         onCancel={() => setState({ name: "compose" })}
-        onDone={(blob) => void submit("recording", { blob })}
+        onDone={(blob) => {
+          // No sound was heard: nothing to keep.
+          if (!blob) return setState({ name: "compose" });
+          void submit("recording", { blob });
+        }}
         onError={(e) => {
           setMicError(e);
           setState({ name: "compose" });
@@ -605,7 +609,7 @@ function Recorder({
 }: {
   factory: RecorderFactory;
   onCancel(): void;
-  onDone(blob: Blob): void;
+  onDone(blob: Blob | null): void;
   onError(kind: "denied" | "none"): void;
 }) {
   const [seconds, setSeconds] = useState(0);
@@ -613,11 +617,18 @@ function Recorder({
   const recording = useRef<Recording | null>(null);
   const errorRef = useRef(onError);
   errorRef.current = onError;
+  const finishRef = useRef<() => Promise<void>>(async () => undefined);
+  finishRef.current = async () => {
+    const r = recording.current;
+    if (!r) return;
+    recording.current = null;
+    onDone(await r.stop());
+  };
   const bars = useMemo(() => Array.from({ length: 36 }, (_, i) => 8 + ((i * 37) % 56)), []);
 
   useEffect(() => {
     let gone = false;
-    factory().then(
+    factory(() => void finishRef.current()).then(
       (r) => {
         if (gone) return r.cancel();
         recording.current = r;
@@ -664,12 +675,7 @@ function Recorder({
             className="ph-stop"
             aria-label={t("phone.record.stop")}
             disabled={!live}
-            onClick={async () => {
-              const r = recording.current;
-              if (!r) return;
-              recording.current = null;
-              onDone(await r.stop());
-            }}
+            onClick={() => void finishRef.current()}
           >
             <span />
           </button>

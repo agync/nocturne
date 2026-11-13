@@ -655,6 +655,25 @@ describe("the engine's calls", () => {
     engine.close();
   });
 
+  it("a voice note goes up as audio/wav, kept by the type and the RIFF/WAVE bytes", async () => {
+    const { computer, device } = await paired();
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+    });
+    const wav = new Uint8Array(44 + 64);
+    wav.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
+    await engine.keepRecording(new Blob([wav], { type: "audio/wav" }), "c-rec");
+    const up = [...computer.uploads.values()].find((u) => u.clientId === "c-rec");
+    expect(up?.mime).toBe("audio/wav");
+    await expect(
+      engine.keepRecording(
+        new Blob([Uint8Array.of(0x1a, 0x45, 0xdf, 0xa3, 0, 0)], { type: "audio/wav" }),
+        "c-bad",
+      ),
+    ).rejects.toMatchObject({ code: "invalid" });
+    engine.close();
+  });
+
   it("reads an original from chunks and refuses one whose bytes are not its type", async () => {
     const { computer, device } = await paired();
     const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
