@@ -1,15 +1,11 @@
-.frame {
-  padding: 24px 28px 0;
+.sheet {
+  overflow: hidden;
 }
 
-.card {
+.columns {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  min-height: 36rem;
-  overflow: hidden;
-  border-radius: 10px 10px 0 0;
-  background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--rule);
+  flex: 1;
 }
 
 .proof {
@@ -191,14 +187,8 @@
   gap: var(--s-2);
 }
 
-:global([data-size="narrow"]) .frame {
-  padding: 0;
-}
-
-:global([data-size="narrow"]) .card {
+:global([data-size="narrow"]) .columns {
   grid-template-columns: minmax(0, 1fr);
-  border-radius: 0;
-  box-shadow: none;
 }
 
 :global([data-size="narrow"]) .proof,

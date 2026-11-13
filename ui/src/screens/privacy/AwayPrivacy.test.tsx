@@ -11,9 +11,7 @@ afterEach(() => {
 const open = async (scenario?: string, sentMeasured = true) => {
   const engine = createMockEngine({ sentMeasured, remote: { auto: false, scenario } });
   renderApp({ hash: "#/privacy", engine });
-  await screen.findByRole("heading", { level: 1, name: "Privacy" });
-  await screen.findByText("Sent to the internet since setup");
-  return engine;
+  await screen.findByRole("heading", { level: 1 });
 };
 
 describe("privacy", () => {
@@ -52,14 +50,17 @@ describe("privacy", () => {
   it("shows nothing about Away from home when it was never on", async () => {
     await open("off");
     expect(screen.queryByRole("region", { name: "Away from home" })).toBeNull();
-    expect(screen.getByText("Nothing.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nothing." })).toBeInTheDocument();
   });
 
   it("no_live_measure_claim: never claims nothing was sent, or live watching, while phones are reached", async () => {
     await open("on", true);
     expect(screen.queryByText("Nothing.")).toBeNull();
     expect(screen.queryByText(/Watching live/)).toBeNull();
-    expect(screen.getByText("Not measured.")).toBeInTheDocument();
+    expect(screen.queryByText("Not measured.")).toBeNull();
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Only downloads you agreed to." }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(/can’t count what the connection part itself sends to Cloudflare/),
     ).toBeInTheDocument();

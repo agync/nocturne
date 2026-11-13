@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Progress } from "../../components/Progress/Progress";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { formatBytes, formatDayMonth, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ExportProgress, ExportReport, LedgerEntry } from "../../engine/bindings";
@@ -117,18 +118,20 @@ export default function Privacy() {
   const total = view.keptBytes + view.mindBytes;
 
   return (
-    <div className={styles.frame}>
-      <div className={styles.card}>
+    <ScreenSheet flush className={styles.sheet}>
+      <div className={styles.columns}>
         <div className={styles.proof}>
-          <h1 className={`t-section ${styles.eyebrow}`}>{t("privacy.title")}</h1>
-          <p className={styles.sentLabel}>{t("privacy.sent.label")}</p>
-          <p className={`t-display ${styles.nothing}`}>
+          <p className={`t-section ${styles.eyebrow}`}>{t("privacy.title")}</p>
+          <p className={styles.sentLabel}>
+            {measured ? t("privacy.sent.label") : t("privacy.sent.label.unmeasured")}
+          </p>
+          <h1 className={`t-display ${styles.nothing}`}>
             {!measured
               ? t("privacy.sent.unmeasured")
               : view.sentToInternetBytes > 0
                 ? t("privacy.sent.amount", { size: formatBytes(view.sentToInternetBytes) })
                 : t("privacy.sent.nothing")}
-          </p>
+          </h1>
           {measured ? (
             <p className={styles.watching}>
               <span className={styles.dot} aria-hidden="true" />
@@ -312,6 +315,6 @@ export default function Privacy() {
           }}
         />
       ) : null}
-    </div>
+    </ScreenSheet>
   );
 }

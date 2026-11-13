@@ -15,10 +15,10 @@ afterEach(() => {
 const open = async (
   engine = createMockEngine({ sentMeasured: true }),
   platform = fakePlatform(),
+  headline = "Nothing.",
 ) => {
   const view = renderApp({ hash: "#/privacy", engine, platform });
-  await screen.findByRole("heading", { level: 1, name: "Privacy" });
-  await screen.findByText("Sent to the internet since setup");
+  await screen.findByRole("heading", { level: 1, name: headline });
   return { ...view, engine, platform };
 };
 
@@ -32,7 +32,8 @@ describe("Privacy", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-11-13T07:02:02Z"));
     await open();
-    expect(screen.getByText("Nothing.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Nothing." })).toBeInTheDocument();
+    expect(screen.getByText("Sent to the internet since setup")).toBeInTheDocument();
     expect(screen.getByText("Watching live · checked 4 seconds ago")).toBeInTheDocument();
   });
 
@@ -48,18 +49,22 @@ describe("Privacy", () => {
   it("shows an amount, not Nothing., when something was sent", async () => {
     const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { sentToInternetBytes: 84e6 });
-    await open(engine);
+    await open(engine, undefined, "84 MB.");
     expect(screen.getByText("84 MB.")).toBeInTheDocument();
     expect(screen.queryByText("Nothing.")).toBeNull();
   });
 
-  it("says plainly when sending cannot be measured, and leans on the ledger", async () => {
+  it("says plainly what it is sure of when sending cannot be measured, and leans on the ledger", async () => {
     const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { sentMeasured: false });
-    await open(engine);
-    expect(screen.getByText("Not measured.")).toBeInTheDocument();
+    await open(engine, undefined, "Only downloads you agreed to.");
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Only downloads you agreed to." }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("What Nocturne uses the internet for")).toBeInTheDocument();
+    expect(screen.queryByText("Not measured.")).toBeNull();
+    expect(screen.getByText(/can’t count what leaves it/)).toBeInTheDocument();
     expect(screen.queryByText(/Watching live/)).toBeNull();
-    expect(screen.getByText(/can’t tell Nocturne what it sends/)).toBeInTheDocument();
     expect(
       screen.getByRole("heading", { name: "Downloaded, with your say-so" }),
     ).toBeInTheDocument();
