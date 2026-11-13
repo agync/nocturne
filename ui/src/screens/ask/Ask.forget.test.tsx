@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import type { AskDelta } from "../../engine/bindings";
 import { MockEngine } from "../../engine/mock/engine";
@@ -157,5 +157,105 @@ describe("forgetting what an answer used", () => {
     expect(earlier).toHaveTextContent(/Forgotten 1 of 2 things/);
     await waitFor(() => expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/));
     expect(JSON.stringify(askSession.get())).not.toMatch(/Leo swims|Coach Sam coaches/);
+  });
+
+  it("never renders a restored answer while the check is still out", async () => {
+    const engine = new TwoMemories();
+    const swim = (await engine.listMemories(filter)).find((m) => m.id === "mem-swim");
+    if (!swim) throw new Error("seed");
+    askSession.set({
+      current: {
+        question: "When is Leo’s swimming?",
+        snapshot: {
+          phase: "done",
+          text: "Leo swims **on Mondays**.",
+          receipts: swim.receipts,
+          near: [],
+          found: 1,
+          memoryIds: ["mem-gone"],
+          eta: null,
+          failed: false,
+        },
+        extras: { forgotten: null, corrected: [] },
+      },
+      earlier: [],
+      turns: 0,
+    });
+    let answer: (v: Awaited<ReturnType<typeof engine.listMemories>>) => void = () => undefined;
+    const real = engine.listMemories.bind(engine);
+    vi.spyOn(engine, "listMemories").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    renderApp({ hash: "#/ask", engine });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(document.body).not.toHaveTextContent(/Leo swims/);
+    expect(screen.queryByRole("heading", { level: 1, name: /When is Leo/ })).toBeNull();
+    await act(async () => answer(await real(filter)));
+    await screen.findByText("Forgotten. It is no longer kept.", { selector: "p[role=status]" });
+    expect(document.body).not.toHaveTextContent(/Leo swims/);
+  });
+
+  it("drops a restored answer and shows the empty page when the check fails", async () => {
+    const engine = new TwoMemories();
+    askSession.set({
+      current: {
+        question: "When is Leo’s swimming?",
+        snapshot: {
+          phase: "done",
+          text: "Leo swims **on Mondays**.",
+          receipts: [],
+          near: [],
+          found: 1,
+          memoryIds: ["mem-swim"],
+          eta: null,
+          failed: false,
+        },
+        extras: { forgotten: null, corrected: [] },
+      },
+      earlier: [],
+      turns: 0,
+    });
+    vi.spyOn(engine, "listMemories").mockRejectedValueOnce(new Error("no"));
+    renderApp({ hash: "#/ask", engine });
+    expect(
+      await screen.findByRole("heading", { name: "Ask about anything you’ve kept." }),
+    ).toBeVisible();
+    expect(document.body).not.toHaveTextContent(/Leo swims/);
+  });
+
+  it("a check that comes back after a new question cannot overwrite it", async () => {
+    const engine = new TwoMemories();
+    askSession.set({
+      current: null,
+      earlier: [
+        {
+          key: 1,
+          question: "Old question",
+          text: "Old answer.",
+          summary: "Old answer.",
+          receipts: [],
+          memoryIds: ["mem-swim"],
+        },
+      ],
+      turns: 1,
+    });
+    let answer: (v: Awaited<ReturnType<typeof engine.listMemories>>) => void = () => undefined;
+    vi.spyOn(engine, "listMemories").mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    );
+    askRequests.request("When is Leo’s swimming?");
+    renderApp({ hash: "#/ask", engine });
+    await screen.findByRole("heading", { level: 1, name: "“When is Leo’s swimming?”" });
+    await screen.findByRole("button", { name: "That’s wrong" });
+    await act(async () => answer([]));
+    expect(screen.queryByText(/Old answer/)).toBeNull();
+    expect(screen.getByText("“Old question”")).toBeVisible();
+    expect(screen.getByRole("button", { name: "That’s wrong" })).toBeVisible();
   });
 });

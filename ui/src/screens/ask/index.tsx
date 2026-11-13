@@ -55,11 +55,22 @@ export default function Ask() {
   const asking = useAsk();
   const { data: status } = useStatus();
   const stored = useRef(askSession.get()).current;
-  const [current, setCurrent] = useState<string | null>(stored.current?.question ?? null);
-  const [restored, setRestored] = useState<Snapshot | null>(stored.current?.snapshot ?? null);
-  const [earlier, setEarlier] = useState<Turn[]>(stored.earlier);
+  const toCheck = useRef(
+    new Set([
+      ...stored.earlier.flatMap((turn) => turn.memoryIds),
+      ...(stored.current && stored.current.extras.forgotten === null
+        ? stored.current.snapshot.memoryIds
+        : []),
+    ]),
+  ).current;
+  // A stored conversation that cites memories is held back until they are confirmed to exist.
+  const fresh = useRef(false);
+  const seed = toCheck.size > 0 ? null : stored;
+  const [current, setCurrent] = useState<string | null>(seed?.current?.question ?? null);
+  const [restored, setRestored] = useState<Snapshot | null>(seed?.current?.snapshot ?? null);
+  const [earlier, setEarlier] = useState<Turn[]>(seed?.earlier ?? []);
   const [extras, setExtras] = useState<Extras>(
-    stored.current?.extras ?? { forgotten: null, corrected: [] },
+    seed?.current?.extras ?? { forgotten: null, corrected: [] },
   );
   const [announcement, setAnnouncement] = useState("");
   const [active, setActive] = useState<string | null>(null);
@@ -159,6 +170,7 @@ export default function Ask() {
         };
         setEarlier((all) => [...all, turn]);
       }
+      fresh.current = true;
       focusHeading.current = moveFocus;
       setCurrent(question);
       setRestored(null);
@@ -183,30 +195,41 @@ export default function Ask() {
 
   // Something forgotten on another screen must not come back with a restored conversation.
   useEffect(() => {
-    const ids = new Set([
-      ...stored.earlier.flatMap((turn) => turn.memoryIds),
-      ...(stored.current && stored.current.extras.forgotten === null
-        ? stored.current.snapshot.memoryIds
-        : []),
-    ]);
-    if (ids.size === 0) return;
+    if (toCheck.size === 0) return;
     let cancelled = false;
     engine
       .listMemories({ entityId: null, itemId: null, status: null, query: null, limit: null })
       .then((all) => {
+        if (cancelled) return;
         const present = new Set(all.map((m) => m.id));
-        const gone = new Set([...ids].filter((id) => !present.has(id)));
-        if (cancelled || gone.size === 0) return;
-        setEarlier((turns) => turns.map((turn) => scrubbed(turn, gone)));
-        const own = stored.current?.snapshot.memoryIds ?? [];
-        const hit = own.filter((id) => gone.has(id)).length;
-        if (hit > 0) setExtras((e) => ({ ...e, forgotten: forgetNote(hit, own.length) }));
+        const gone = new Set([...toCheck].filter((id) => !present.has(id)));
+        const before = stored.earlier.map((turn) => scrubbed(turn, gone));
+        // A question asked meanwhile keeps the page; the checked turns go above it.
+        if (fresh.current) setEarlier((now) => [...before, ...now]);
+        else {
+          setEarlier(before);
+          if (stored.current) {
+            const own = stored.current.snapshot.memoryIds;
+            const hit = own.filter((id) => gone.has(id)).length;
+            setCurrent(stored.current.question);
+            setRestored(stored.current.snapshot);
+            if (hit > 0) setResult(forgetNote(hit, own.length));
+            setExtras(
+              hit > 0
+                ? { ...stored.current.extras, forgotten: forgetNote(hit, own.length) }
+                : stored.current.extras,
+            );
+          }
+        }
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (cancelled) return;
+        if (!fresh.current) askSession.reset();
+      });
     return () => {
       cancelled = true;
     };
-  }, [engine, stored]);
+  }, [engine, stored, toCheck]);
 
   // What is on screen is what comes back after a receipt is opened.
   useEffect(() => {
