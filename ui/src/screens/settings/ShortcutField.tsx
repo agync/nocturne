@@ -98,7 +98,11 @@ export function ShortcutField({ value, available, onChange }: Props) {
         ) : (
           <>
             <kbd className={styles.kbd}>{value}</kbd>
-            <Button variant="quiet" onClick={() => setCapturing(true)}>
+            <Button
+              variant="quiet"
+              aria-label={t("settings.shortcut.change.named")}
+              onClick={() => setCapturing(true)}
+            >
               {t("settings.shortcut.change")}
             </Button>
           </>

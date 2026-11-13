@@ -19,6 +19,7 @@
   "settings.shortcut.label": "Quick keep shortcut",
   "settings.shortcut.hint": "Works from any app",
   "settings.shortcut.change": "Change",
+  "settings.shortcut.change.named": "Change quick keep shortcut",
   "settings.shortcut.capture": "Quick keep shortcut, press the new keys",
   "settings.shortcut.placeholder": "Press the keys…",
   "settings.shortcut.cancel": "Tab or Esc to cancel",

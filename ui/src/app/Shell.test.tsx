@@ -26,7 +26,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/items/item-letter", "Letter"],
   ["#/fading", "Fading & let go"],
   ["#/pages", "Past pages"],
-  ["#/setup", "Getting ready"],
+  ["#/setup", "Nocturne is ready."],
   ["#/privacy", "Privacy"],
   ["#/settings", "Settings"],
   ["#/settings/advanced", "Advanced details"],

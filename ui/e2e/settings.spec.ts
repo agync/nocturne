@@ -63,7 +63,7 @@ for (const scheme of ["light", "dark"] as const) {
       expect(results.violations.map((v) => `${hash} ${v.id}`)).toEqual([]);
     }
     await ready(page, "#/settings", "Settings");
-    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByRole("button", { name: "Change quick keep shortcut" }).click();
     const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
     expect(results.violations.map((v) => v.id)).toEqual([]);
     await context.close();
@@ -88,15 +88,15 @@ test.describe("using it", () => {
 
   test("the shortcut field lets Tab and Esc out and takes a new combination", async ({ page }) => {
     await ready(page, "#/settings", "Settings");
-    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByRole("button", { name: "Change quick keep shortcut" }).click();
     const field = page.getByRole("textbox", { name: /press the new keys/ });
     await expect(field).toBeFocused();
     await page.keyboard.press("Escape");
-    await expect(page.getByRole("button", { name: "Change" })).toBeFocused();
-    await page.getByRole("button", { name: "Change" }).click();
+    await expect(page.getByRole("button", { name: "Change quick keep shortcut" })).toBeFocused();
+    await page.getByRole("button", { name: "Change quick keep shortcut" }).click();
     await page.keyboard.press("Tab");
     await expect(field).toHaveCount(0);
-    await page.getByRole("button", { name: "Change" }).click();
+    await page.getByRole("button", { name: "Change quick keep shortcut" }).click();
     await page.keyboard.press("Control+Alt+K");
     await expect(page.getByText("Ctrl+Alt+K")).toBeVisible();
   });

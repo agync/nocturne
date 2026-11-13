@@ -133,17 +133,19 @@ describe("Settings", () => {
   it("captures a new shortcut, and Esc and Tab get out without changing it", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "updateSettings");
-    await userEvent.click(screen.getByRole("button", { name: "Change" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change quick keep shortcut" }));
     const field = screen.getByRole("textbox", { name: /press the new keys/ });
     expect(field).toHaveFocus();
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("textbox", { name: /press the new keys/ })).toBeNull();
-    await waitFor(() => expect(screen.getByRole("button", { name: "Change" })).toHaveFocus());
-    await userEvent.click(screen.getByRole("button", { name: "Change" }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Change quick keep shortcut" })).toHaveFocus(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Change quick keep shortcut" }));
     await userEvent.tab();
     expect(screen.queryByRole("textbox", { name: /press the new keys/ })).toBeNull();
     expect(spy).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "Change" }));
+    await userEvent.click(screen.getByRole("button", { name: "Change quick keep shortcut" }));
     await userEvent.keyboard("a");
     expect(await screen.findByRole("alert")).toHaveTextContent("Include Ctrl, Alt or Super");
     await userEvent.keyboard("{Control>}{Alt>}k{/Alt}{/Control}");
