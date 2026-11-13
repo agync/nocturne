@@ -148,7 +148,13 @@ test.describe("text at 200%", () => {
       for (const el of document.querySelectorAll<HTMLElement>("button, a, textarea, [role=tab]")) {
         const box = el.getBoundingClientRect();
         if (box.width === 0 || box.height === 0) continue;
-        if (el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY !== "auto") {
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const text = range.getBoundingClientRect();
+        const spills = text.height > 0 && text.bottom > box.bottom + 1;
+        const cut =
+          el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY === "hidden";
+        if ((spills || cut) && getComputedStyle(el).overflowY !== "auto") {
           bad.push(`${el.tagName} ${el.textContent?.trim().slice(0, 20)}`);
         }
         if (el.tagName === "BUTTON" && box.height < 44 - 1)
