@@ -11,7 +11,8 @@
 //! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
 //! (the first request with a wrong key gets a 503 instead of a 401),
 //! `load-oom`, `load-error`, `ignore-term` (SIGTERM does nothing; only SIGKILL ends it).
-//! `POST /fake/crash` kills it on demand.
+//! `POST /fake/crash` kills it on demand. `POST /v1/delete` removes a model's files, as the real
+//! engine does.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -44,6 +45,15 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
     ("Whisper-Base", 0.148, "whispercpp", "transcription"),
     ("kokoro-v1", 0.354, "kokoro", "tts"),
     ("Whisper-Tiny", 0.075, "whispercpp", "transcription"),
+    ("Whisper-Large-v3", 3.1, "whispercpp", "transcription"),
+    ("Qwen3-Embedding-4B-GGUF", 4.28, "llamacpp", "embeddings"),
+    ("nomic-embed-text-v1-GGUF", 0.0781, "llamacpp", "embeddings"),
+    (
+        "MiniCPM-V-4.6-Thinking-GGUF",
+        1.64,
+        "llamacpp",
+        "chat,reasoning,vision",
+    ),
 ];
 
 const SCALE: f64 = 5000.0;
@@ -53,6 +63,7 @@ const BACKEND_BYTES: u64 = 100_000;
 enum Status {
     Downloading,
     Paused,
+    Cancelled,
     Error(String),
 }
 
@@ -259,6 +270,7 @@ impl App {
         let status = match &job.status {
             Status::Downloading => "downloading",
             Status::Paused => "paused",
+            Status::Cancelled => "cancelled",
             Status::Error(_) => "error",
         };
         let mut v = json!({
@@ -484,6 +496,7 @@ async fn main() {
         .route("/install", post(install))
         .route("/downloads", get(downloads))
         .route("/downloads/control", post(control))
+        .route("/delete", post(delete))
         .route("/load", post(load))
         .route("/unload", post(unload))
         .route("/chat/completions", post(chat))
@@ -771,7 +784,11 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
         "pause" | "cancel" => {
             let job = &mut inner.jobs[pos];
             job.base = bytes;
-            job.status = Status::Paused;
+            job.status = if action == "cancel" {
+                Status::Cancelled
+            } else {
+                Status::Paused
+            };
             job.stopped_at = Some(Instant::now());
             let snap = app.snapshot(job);
             app.persist_locked(&mut inner);
@@ -791,6 +808,27 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
         }
         _ => err(400, "invalid_argument", "unknown action"),
     }
+}
+
+/// Removes a model's files, finished or partial, unloading it first.
+async fn delete(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    let name = body["model_name"].as_str().unwrap_or("").to_string();
+    if app.model_total(&name).is_none() {
+        return err(
+            422,
+            "",
+            "The model is not in the registry, or this system does not support it",
+        );
+    }
+    let mut inner = app.inner();
+    app.tick(&mut inner);
+    inner.downloaded.retain(|d| d != &name);
+    inner.partial.remove(&name);
+    if inner.loaded.as_deref() == Some(name.as_str()) {
+        inner.loaded = None;
+    }
+    app.persist_locked(&mut inner);
+    Json(json!({"status": "success", "message": format!("Deleted model: {name}")})).into_response()
 }
 
 async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
