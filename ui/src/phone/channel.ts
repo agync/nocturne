@@ -35,7 +35,8 @@ import {
 import type { PairedDevice } from "./engine";
 import { PhoneRequestError } from "./engine";
 import * as P from "./protocol";
-import { HTTP_ENDED, HTTP_OFF, HTTP_POLL_BUSY, HTTP_REFUSED, WS_REFUSED } from "./status";
+import { HTTP_ENDED, HTTP_OFF, HTTP_POLL_BUSY, HTTP_REFUSED } from "./protocol";
+import { WS_REFUSED } from "./status";
 
 // Environment -------------------------------------------------------------------------------------
 

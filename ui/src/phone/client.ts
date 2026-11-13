@@ -33,7 +33,6 @@ import {
   PhoneRequestError,
 } from "./engine";
 import * as P from "./protocol";
-import { minPhoneBuild, PHONE_BUILD } from "./status";
 import { sendBlob } from "./upload";
 
 export interface EngineOptions {
@@ -134,8 +133,8 @@ export function createPhoneEngine(
         if (e instanceof OpenError && e.failure === "ended") return SessionClass.open(init);
         throw e;
       });
-      const needed = minPhoneBuild(opened.hello);
-      if (needed > PHONE_BUILD) {
+      const needed = opened.hello.minPhoneBuild;
+      if (needed > P.PHONE_BUILD) {
         // This phone's app is older than the computer wants: keys stay, nothing is saved.
         opened.close("outdated");
         set({ kind: "outdated", minBuild: needed });

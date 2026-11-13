@@ -386,6 +386,7 @@ function helloOf(script: MockScript): PhoneHello {
     deviceName: "Pixel",
     connection: "simple",
     version: "0.1.0",
+    minPhoneBuild: 1,
     ...script.hello,
   };
 }

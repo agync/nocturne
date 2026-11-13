@@ -442,6 +442,7 @@ describe("keep", () => {
             deviceName: "Pixel",
             connection: "simple",
             version: "0.1.0",
+            minPhoneBuild: 1,
           },
         }}
         deviceName="Pixel"
@@ -515,6 +516,7 @@ describe("keep", () => {
             deviceName: "Pixel",
             connection: "simple",
             version: "0.1.0",
+            minPhoneBuild: 1,
           },
         }}
         deviceName="Pixel"

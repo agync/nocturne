@@ -623,8 +623,8 @@ export class FakeComputer {
           deviceName: device.name,
           connection: this.connection,
           version: this.version,
-          ...(this.minPhoneBuild === undefined ? {} : { minPhoneBuild: this.minPhoneBuild }),
-        } as never,
+          minPhoneBuild: this.minPhoneBuild ?? P.MIN_PHONE_BUILD,
+        },
       }),
     );
     return "ok";

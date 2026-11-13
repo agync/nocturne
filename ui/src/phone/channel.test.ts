@@ -8,7 +8,7 @@ import type { PairedDevice } from "./engine";
 import { ConnectionError, PhoneRequestError } from "./engine";
 import { offerFromFragment, Pairing } from "./pairing";
 import * as P from "./protocol";
-import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, PHONE_BUILD } from "./status";
+import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, PHONE_BUILD } from "./protocol";
 import { delta, FakeComputer } from "./testing/fakeComputer";
 import { memoryKeyStore } from "./testing/memoryStore";
 
