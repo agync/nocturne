@@ -57,50 +57,85 @@ fn last_kept(tx: &Transaction<'_>, memory: &str) -> Result<Option<String>> {
     )?)
 }
 
-/// Words that say a value replaces an earlier one ("it has moved", "now on Thursday").
-const MOVE_WORDS: [&str; 6] = [
-    "moved",
-    "changed",
-    "now",
-    "instead",
-    "rescheduled",
-    "postponed",
+/// Words that say a value replaces an earlier one ("it has moved to Thursday"). Not "now":
+/// "I now also have" adds an appointment.
+const MOVE_WORDS: [&str; 5] = ["moved", "changed", "instead", "rescheduled", "postponed"];
+
+const MONTHS: [&str; 12] = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
 ];
+
+fn words_of(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|ch: char| !ch.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect()
+}
 
 /// Whether the item says this candidate replaces an earlier value: the mind marked it so, or the
 /// words it quotes say so.
 fn says_moved(c: &Candidate) -> bool {
-    c.moved || c.span.as_ref().is_some_and(quote_says_moved)
+    let date = date_str(c.due.or(c.valid_from));
+    c.moved
+        || c.span
+            .as_ref()
+            .is_some_and(|s| quote_says_moved(s, &c.object, date.as_deref()))
 }
 
-fn quote_says_moved(span: &Span) -> bool {
+/// A move word counts only in the sentence of the quote that gives the new value (its words, or
+/// the day and month of its date): "The dentist moved to the High Street. Hygienist 3 December"
+/// does not move the dentist.
+fn quote_says_moved(span: &Span, object: &str, date: Option<&str>) -> bool {
     let Span::Quote { text } = span else {
         return false;
     };
-    let words: Vec<String> = text
-        .to_lowercase()
-        .split(|ch: char| !ch.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-        .map(str::to_string)
-        .collect();
-    words.iter().any(|w| MOVE_WORDS.contains(&w.as_str()))
-        || words
-            .windows(2)
-            .any(|p| p[0] == "brought" && p[1] == "forward")
+    let value = words_of(object);
+    let day_month: Option<(String, &str)> = date.and_then(|d| {
+        let d: jiff::civil::Date = d.parse().ok()?;
+        Some((
+            d.day().to_string(),
+            MONTHS[usize::try_from(d.month()).ok()? - 1],
+        ))
+    });
+    text.split(['.', '!', '?', ';', '\n']).any(|sentence| {
+        let words = words_of(sentence);
+        let has_value = (!value.is_empty() && words.windows(value.len()).any(|w| w == value))
+            || day_month.as_ref().is_some_and(|(day, month)| {
+                words.contains(day) && words.iter().any(|w| w == month)
+            });
+        let moved = words.iter().any(|w| MOVE_WORDS.contains(&w.as_str()))
+            || words
+                .windows(2)
+                .any(|p| p[0] == "brought" && p[1] == "forward");
+        has_value && moved
+    })
 }
 
-/// Whether a trusted item behind a memory quotes words that say it moved.
-fn quotes_a_move(tx: &Transaction<'_>, memory: &str) -> Result<bool> {
+/// Whether a trusted item behind a memory quotes words that say it moved to its value.
+fn quotes_a_move(tx: &Transaction<'_>, m: &MemRow) -> Result<bool> {
     let mut stmt = tx.prepare(
         "SELECT s.span FROM memory_sources s JOIN items i ON i.id = s.item_id \
          WHERE s.memory_id = ?1 AND i.trust = 'trusted' AND s.span IS NOT NULL",
     )?;
     let spans: Vec<String> = stmt
-        .query_map([memory], |r| r.get(0))?
+        .query_map([&m.id], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
-    Ok(spans
-        .iter()
-        .any(|json| serde_json::from_str::<Span>(json).is_ok_and(|s| quote_says_moved(&s))))
+    let date = m.due.as_deref().or(m.valid_from.as_deref());
+    Ok(spans.iter().any(|json| {
+        serde_json::from_str::<Span>(json).is_ok_and(|s| quote_says_moved(&s, &m.object, date))
+    }))
 }
 
 /// What a new appointment does to an existing one in its slot.
@@ -131,7 +166,7 @@ fn appointment_meets(
     if !says_moved(c) {
         // Read out of order, the newer note may be the one that said it moved: then this may be
         // the same appointment, and only the person can say.
-        let same = new_date == old_date || quotes_a_move(tx, &e.id)?;
+        let same = new_date == old_date || quotes_a_move(tx, e)?;
         return Ok(Some(if same { Meets::Asks } else { Meets::Separate }));
     }
     let newer = last_kept(tx, &e.id)?.and_then(|old| kept_order(&item.kept_at, &old))
@@ -147,12 +182,19 @@ fn appointment_meets(
 
 /// The current memory this reading made or kept in the same slot as `row`, to take over the
 /// history `row` held: only a settled one (active, or confirmed by the person) that a trusted
-/// item stands behind.
+/// item stands behind, and that is itself a move of every value `row` replaced (its quote says
+/// it moved, and the dates allow it). Never an unrelated appointment.
 fn successor_in_slot(
     tx: &Transaction<'_>,
     row: &MemRow,
     touched: &HashSet<String>,
+    item: &ItemInfo,
 ) -> Result<Option<String>> {
+    let replaced = query_mems(
+        tx,
+        "m.superseded_by = ?1 AND m.superseded_at IS NOT NULL",
+        params![row.id],
+    )?;
     let candidates = query_mems(
         tx,
         "m.subject_key = ?1 AND m.predicate = ?2 AND m.superseded_at IS NULL AND m.id != ?3 \
@@ -161,7 +203,19 @@ fn successor_in_slot(
     )?;
     for m in candidates {
         let settled = m.status == MemoryStatus::Active || m.confirmed;
-        if settled && touched.contains(&m.id) && m.trusted_sources > 0 {
+        if !(settled && touched.contains(&m.id) && m.trusted_sources > 0) {
+            continue;
+        }
+        let Some(new_date) = m.due.as_ref().or(m.valid_from.as_ref()) else {
+            continue;
+        };
+        let moves_them = replaced.iter().all(|o| {
+            o.due
+                .as_ref()
+                .or(o.valid_from.as_ref())
+                .is_some_and(|old| old.as_str() >= item.kept_on.as_str())
+        });
+        if moves_them && new_date.as_str() >= item.kept_on.as_str() && quotes_a_move(tx, &m)? {
             return Ok(Some(m.id));
         }
     }
@@ -206,7 +260,9 @@ struct ItemInfo {
     private: bool,
     origin: Option<String>,
     kept_at: String,
-    /// The local day it was kept, YYYY-MM-DD.
+    /// The local day it was kept, YYYY-MM-DD, in the time zone the reading happens in: the
+    /// store keeps only the UTC instant, so a keep made just before midnight in another zone
+    /// may count as the next or previous day.
     kept_on: String,
 }
 
@@ -253,8 +309,26 @@ fn upsert_entity(
     }
 }
 
-/// Rows this memory closed or superseded come back: the change that ended them is gone.
+/// Rows this memory closed or superseded come back: the change that ended them is gone. Rows it
+/// superseded while it was itself superseded go to its replacement instead.
 pub(crate) fn restore_replaced(tx: &Transaction<'_>, id: &str) -> Result<()> {
+    // A memory that was itself replaced hands what it replaced on to its own replacement: in
+    // A, B, C (each moving the last), removing B leaves A as C's history, not current again.
+    let replacement: Option<String> = tx
+        .query_row(
+            "SELECT superseded_by FROM memories WHERE id = ?1 AND superseded_at IS NOT NULL",
+            [id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    if let Some(next) = replacement {
+        tx.execute(
+            "UPDATE memories SET superseded_by = ?2 \
+             WHERE superseded_by = ?1 AND superseded_at IS NOT NULL",
+            params![id, next],
+        )?;
+    }
     tx.execute(
         "UPDATE memories SET valid_to = NULL, superseded_by = NULL \
          WHERE superseded_by = ?1 AND superseded_at IS NULL \
@@ -527,7 +601,7 @@ fn apply(
         // history) keeps its links.
         let may_go = row.superseded_at.is_none() && !protected;
         let successor = if may_go && replaced_others {
-            successor_in_slot(tx, &row, &touched)?
+            successor_in_slot(tx, &row, &touched, &item)?
         } else {
             None
         };
@@ -993,6 +1067,9 @@ pub(crate) fn confirm_tx(
 ) -> Result<()> {
     let m = load_mem(tx, id)?.ok_or_else(|| Error::not_found(format!("memory {id}")))?;
     clear_snooze(tx, &[id])?;
+    if is_true && m.superseded_at.is_some() {
+        return confirm_replaced(tx, &m, now);
+    }
     if is_true {
         tx.execute(
             "UPDATE memories SET confirmed = 1, status = 'active', last_used = ?2, \
@@ -1009,6 +1086,52 @@ pub(crate) fn confirm_tx(
              WHERE id = ?1",
             [&m.id],
         )?;
+    }
+    Ok(())
+}
+
+/// The person says a value that was replaced is right. It comes back as current and confirmed.
+/// If what replaced it rests only on unconfirmed words, it simply wins; otherwise the person is
+/// asked which of the two is right.
+fn confirm_replaced(tx: &Transaction<'_>, m: &MemRow, now: &str) -> Result<()> {
+    let mut head = m.superseded_by.clone();
+    let mut current: Option<MemRow> = None;
+    for _ in 0..64 {
+        let Some(id) = head.take() else { break };
+        let Some(row) = load_mem(tx, &id)? else { break };
+        if row.superseded_at.is_none() {
+            current = Some(row);
+            break;
+        }
+        head = row.superseded_by.clone();
+    }
+    tx.execute(
+        "UPDATE memories SET superseded_at = NULL, superseded_by = NULL, confirmed = 1, \
+         status = 'active', last_used = ?2, let_go_at = NULL WHERE id = ?1",
+        params![m.id, now],
+    )?;
+    let Some(current) = current else {
+        return Ok(());
+    };
+    if current.status == MemoryStatus::Unconfirmed && !current.confirmed {
+        tx.execute(
+            "UPDATE memories SET superseded_at = ?2, superseded_by = ?3 WHERE id = ?1",
+            params![current.id, now, m.id],
+        )?;
+        return Ok(());
+    }
+    let exists: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM conflicts WHERE resolved_at IS NULL \
+         AND ((a = ?1 AND b = ?2) OR (a = ?2 AND b = ?1)))",
+        params![current.id, m.id],
+        |r| r.get(0),
+    )?;
+    if !exists {
+        tx.execute(
+            "INSERT INTO conflicts(id, a, b, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![new_id("cfl"), current.id, m.id, now],
+        )?;
+        clear_snooze(tx, &[&current.id, &m.id])?;
     }
     Ok(())
 }

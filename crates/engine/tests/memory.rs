@@ -477,8 +477,9 @@ fn an_older_appointment_read_late_is_asked_about() {
     assert_eq!(r.conflicts.len(), 1);
 }
 
-/// Reading both notes again, the second time without its date, keeps one current value with
-/// its history: no duplicate of the old time, nothing brought back, nothing asked.
+/// Reading both notes again, the second time with new words for the same move, keeps one
+/// current value with its history: no duplicate of the old time, nothing brought back, nothing
+/// asked.
 #[test]
 fn reading_a_move_again_keeps_one_current_value() {
     let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
@@ -507,9 +508,9 @@ fn reading_a_move_again_keeps_one_current_value() {
             vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
         )
         .unwrap();
-    let mut thu = moved_to("Thu 19 Nov, 2:30pm", "2026-11-19");
-    thu.valid_from = None;
-    f.engine.apply(&b, vec![thu]).unwrap();
+    f.engine
+        .apply(&b, vec![moved_to("Thu 19 Nov, 2:30pm", "2026-11-19")])
+        .unwrap();
     let rows = all(&f);
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert_eq!(rows[0].object, "Thu 19 Nov, 2:30pm");
@@ -518,6 +519,32 @@ fn reading_a_move_again_keeps_one_current_value() {
         Some("Wednesday 18 November at 10:00")
     );
     assert!(f.engine.needs_you().unwrap().is_empty());
+}
+
+/// Read again without its date, the new value cannot be shown to be the same move, so it does
+/// not take the history: the old time still never comes back, nothing is made twice, and the
+/// person is asked.
+#[test]
+fn reading_a_move_again_without_its_date_asks() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (a, b, wed, thu) = moved_world(&f);
+    f.engine
+        .apply(
+            &a,
+            vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
+        )
+        .unwrap();
+    let mut undated = moved_to("Thu 19 Nov, 2:30pm", "2026-11-19");
+    undated.valid_from = None;
+    f.engine.apply(&b, vec![undated]).unwrap();
+    assert!(!all(&f).iter().any(|m| m.id == wed));
+    assert!(superseded_by(&f, &wed, &thu));
+    let weds = sql_count(
+        f.dir.path(),
+        "SELECT COUNT(*) FROM memories WHERE object = 'Wednesday 18 November at 10:00'",
+    );
+    assert_eq!(weds, 1);
+    assert!(!f.engine.needs_you().unwrap().is_empty());
 }
 
 /// The dentist moved: A says Wednesday, B moves it to Thursday. Returns (A, B, Wed, Thu).
@@ -650,6 +677,193 @@ fn history_is_never_handed_to_an_unconfirmed_memory() {
     assert!(
         superseded_by(&f, &wed, &thu),
         "the history stays where it was"
+    );
+}
+
+fn quoted(object: &str, on: &str, quote: &str) -> nocturne_engine::Candidate {
+    let mut c = appointment(object, on);
+    c.span = Some(nocturne_contract::Span::Quote {
+        text: quote.to_string(),
+    });
+    c
+}
+
+/// A move word about something else, in another sentence than the new date, is no move.
+#[test]
+fn a_move_word_about_something_else_is_no_move() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Dentist Wed 18 Nov 10:00",
+        appointment("Wednesday 18 November at 10:00", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let text = "The dentist moved to the High Street. Hygienist Thursday 3 December";
+    let item = keep(&f.engine, text);
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![quoted("Thursday 3 December", "2026-12-03", text)],
+        )
+        .unwrap();
+    assert!(r.replaced.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// "Now" is not a move: "I now also have" adds an appointment.
+#[test]
+fn now_is_not_a_move_word() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Hygienist Thursday 3 December",
+        appointment("Thursday 3 December", "2026-12-03"),
+    );
+    f.clock.set_str("2026-11-12T13:00:00Z");
+    let text = "I now also have the hygienist on Friday 11 December";
+    let item = keep(&f.engine, text);
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![quoted("Friday 11 December", "2026-12-11", text)],
+        )
+        .unwrap();
+    assert!(r.replaced.is_empty() && r.conflicts.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// Next week's bins are not this week's moved: both stay, and the past one can still be found.
+#[test]
+fn the_next_bin_day_is_not_a_move() {
+    let f = fixture_at("2026-11-10T08:05:00Z", "Europe/London");
+    let mut a = cand(
+        "Bins",
+        Predicate::Scheduled,
+        "Tuesday 17 November",
+        "Bins go out Tuesday 17 November.",
+    );
+    a.due = Some(date("2026-11-17"));
+    learn(&f.engine, "Bins Tue 17 Nov", a);
+    f.clock.set_str("2026-11-18T08:00:00Z");
+    let mut b = cand(
+        "Bins",
+        Predicate::Scheduled,
+        "Tuesday 24 November",
+        "Bins go out Tuesday 24 November.",
+    );
+    b.due = Some(date("2026-11-24"));
+    b.span = Some(nocturne_contract::Span::Quote {
+        text: "Bins are now Tuesday 24 November".into(),
+    });
+    let item = keep(&f.engine, "Bins are now Tuesday 24 November");
+    let r = f.engine.apply(&item, vec![b]).unwrap();
+    assert!(r.replaced.is_empty() && r.conflicts.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// A, then B moves it, then C moves it again. Undoing B leaves C current with A as its
+/// history: A's date never comes back as current.
+#[test]
+fn undoing_the_middle_move_keeps_the_last_one() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, wed) = learn(
+        &f.engine,
+        "Dentist Wed 18 Nov",
+        appointment("Wednesday 18 November", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let b = keep(&f.engine, "The dentist moved to Thursday 19 November");
+    f.engine
+        .apply(&b, vec![moved_to("Thursday 19 November", "2026-11-19")])
+        .unwrap();
+    f.clock.set_str("2026-11-12T12:06:00Z");
+    let c = keep(&f.engine, "The dentist moved to Friday 20 November");
+    let fri = f
+        .engine
+        .apply(&c, vec![moved_to("Friday 20 November", "2026-11-20")])
+        .unwrap()
+        .created[0]
+        .clone();
+    f.clock.set_str("2026-11-12T12:09:00Z");
+    f.engine.unkeep(&b).unwrap();
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].id, fri);
+    assert_eq!(rows[0].was.as_deref(), Some("Wednesday 18 November"));
+    assert!(superseded_by(&f, &wed, &fri));
+    assert!(f.engine.needs_you().unwrap().is_empty());
+}
+
+/// A re-read that finds only another appointment (no move) never gives it the moved
+/// appointment's history, and forgetting that other appointment takes nothing else.
+#[test]
+fn history_never_goes_to_an_unrelated_appointment() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, wed) = learn(
+        &f.engine,
+        "Dentist Wed 18 Nov",
+        appointment("Wednesday 18 November", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let b = keep(
+        &f.engine,
+        "The dentist moved to Thursday 19 November. Hygienist 3 December.",
+    );
+    f.engine
+        .apply(&b, vec![moved_to("Thursday 19 November", "2026-11-19")])
+        .unwrap();
+    f.clock.set_str("2026-11-13T12:00:00Z");
+    f.engine
+        .apply(
+            &b,
+            vec![quoted(
+                "Thursday 3 December",
+                "2026-12-03",
+                "Hygienist 3 December",
+            )],
+        )
+        .unwrap();
+    let hygienist = all(&f)
+        .into_iter()
+        .find(|m| m.object == "Thursday 3 December")
+        .unwrap();
+    assert_eq!(hygienist.was, None);
+    assert!(!superseded_by(&f, &wed, &hygienist.id));
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&hygienist.id), false)
+        .unwrap();
+    assert_eq!(preview.memories.len(), 1);
+}
+
+/// Confirming a value that was replaced is never a silent no-op: it comes back, and the person
+/// is asked which of the two is right.
+#[test]
+fn confirming_a_replaced_value_asks_which_is_right() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, wed) = learn(
+        &f.engine,
+        "Dentist Wed 18 Nov",
+        appointment("Wednesday 18 November", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let b = keep(&f.engine, "The dentist moved to Thursday 19 November");
+    f.engine
+        .apply(&b, vec![moved_to("Thursday 19 November", "2026-11-19")])
+        .unwrap();
+    f.engine.confirm(&wed, true).unwrap();
+    assert!(
+        all(&f).iter().any(|m| m.id == wed),
+        "the confirmed value is current"
+    );
+    let needs = f.engine.needs_you().unwrap();
+    assert!(
+        needs
+            .iter()
+            .any(|e| matches!(e, NeedsYouEntry::Which { .. })),
+        "{needs:?}"
     );
 }
 
