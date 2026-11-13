@@ -26,7 +26,9 @@ import type {
   PrivacyView,
   QuestionChoice,
   Receipt,
+  RemoteConnection,
   RemoteEvent,
+  RemoteSettingsPatch,
   RemoteView,
   SettingsPatch,
   SettingsView,
@@ -37,16 +39,16 @@ import type {
   Tier,
   WhichResolved,
 } from "../bindings";
-import {
-  type EngineClient,
-  EngineError,
-  type EngineEventName,
-  type EngineEvents,
-  type RecordingState,
-  type Unsubscribe,
+import type {
+  EngineClient,
+  EngineEventName,
+  EngineEvents,
+  RecordingState,
+  Unsubscribe,
 } from "../client";
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
+import { type RemoteOptions, RemoteSim } from "./remote";
 import { audioScript } from "./script";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
 import { PRINT_STRESS_DATE } from "./seed/print";
@@ -68,6 +70,20 @@ export interface MockOptions {
   cold?: boolean;
   /** Answers mark one key phrase per cited memory in bold, as the real app does. On unless false. */
   emphasis?: boolean;
+  /** Away from home: where it starts, and whether its scripted steps move by themselves. */
+  remote?: RemoteOptions;
+}
+
+/** `?mockAway=<state>`, `?mockStep=<ms>` and `?mockPhone=typed` start Away from home elsewhere than off. */
+function remoteFromAddress(): RemoteOptions {
+  if (typeof location === "undefined") return {};
+  const params = new URLSearchParams(location.search);
+  const step = Number(params.get("mockStep"));
+  return {
+    scenario: params.get("mockAway") ?? undefined,
+    stepMs: step > 0 ? step : undefined,
+    phone: params.get("mockPhone") === "typed" ? "typed" : undefined,
+  };
 }
 
 /** How long after keeping something it can still be taken back. */
@@ -283,6 +299,8 @@ export class MockEngine implements EngineClient {
   private unfinishedTier: Tier | null;
   /** How many times "Tidy anyway" was pressed. */
   tidyAnywayCount = 0;
+  /** Away from home. Tests drive its scripted parts through this. */
+  readonly remote: RemoteSim;
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
@@ -310,6 +328,10 @@ export class MockEngine implements EngineClient {
     this.tierOffer = options.tierOffer ?? null;
     this.unfinishedTier = options.unfinishedTier ?? null;
     this.setup = seed.setup;
+    this.remote = new RemoteSim((name, payload) => this.emit(name, payload), Date.now, {
+      ...remoteFromAddress(),
+      ...options.remote,
+    });
     this.refreshStatus();
   }
 
@@ -1161,16 +1183,16 @@ export class MockEngine implements EngineClient {
   // System
 
   async getPrivacy(): Promise<PrivacyView> {
+    const seed = privacySeed(this.clock);
+    const { ledger, ...remote } = this.remote.privacy();
     return {
-      ...privacySeed(this.clock),
+      ...seed,
+      ledger: [...seed.ledger, ...ledger],
       sentToInternetBytes: this.status.sentToInternetBytes,
       sentMeasured: this.status.sentMeasured,
       lock: this.settings.lock,
       checkUpdates: this.settings.checkUpdates,
-      sentToPhonesBytes: 0,
-      remoteOn: false,
-      remoteConnection: null,
-      remoteLastOnAt: null,
+      ...remote,
     };
   }
 
@@ -1228,7 +1250,10 @@ export class MockEngine implements EngineClient {
   }
 
   async getAdvanced(): Promise<AdvancedView> {
-    return advancedSeed({ memories: this.memories.length, items: this.items.length });
+    return {
+      ...advancedSeed({ memories: this.memories.length, items: this.items.length }),
+      remote: this.remote.advanced(),
+    };
   }
 
   async getEdition(date: string, edition: Edition): Promise<PageView> {
@@ -1304,42 +1329,24 @@ export class MockEngine implements EngineClient {
     return "nocturne --quick-capture";
   }
 
-  // Away from home: off, and nothing else yet.
+  // Away from home
 
-  async getRemote(): Promise<RemoteView> {
-    return {
-      state: { type: "off" },
-      connection: "simple",
-      autoOff: "unused30Days",
-      keepAwake: false,
-      devices: [],
-      sentToPhonesBytes: 0,
-      lastOnAt: null,
-      onSince: null,
-      setUpBefore: false,
-      installed: [],
-      trial: true,
-      pairing: null,
-      computerName: "Kitchen laptop",
-    };
-  }
-
-  private async remoteNotYet(): Promise<never> {
-    throw new EngineError("unavailable", "Away from home is not in the mock yet");
-  }
-
-  startRemote = (): Promise<RemoteView> => this.remoteNotYet();
-  stopRemote = (): Promise<RemoteView> => this.remoteNotYet();
-  pauseRemoteDownload = (): Promise<RemoteView> => this.remoteNotYet();
-  beginPairing = (): Promise<PairingOffer> => this.remoteNotYet();
-  decidePairing = (): Promise<void> => this.remoteNotYet();
-  cancelPairing = (): Promise<void> => this.remoteNotYet();
-  renameDevice = (): Promise<DeviceView> => this.remoteNotYet();
-  removeDevice = (): Promise<void> => this.remoteNotYet();
-  listRemoteEvents = (): Promise<RemoteEvent[]> => this.remoteNotYet();
-  updateRemoteSettings = (): Promise<RemoteView> => this.remoteNotYet();
-  openRemoteSignIn = (): Promise<void> => this.remoteNotYet();
-  newComputerKey = (): Promise<RemoteView> => this.remoteNotYet();
+  getRemote = async (): Promise<RemoteView> => this.remote.view();
+  startRemote = (connection: RemoteConnection, allowDownload: boolean): Promise<RemoteView> =>
+    this.remote.start(connection, allowDownload);
+  stopRemote = (removeAll: boolean): Promise<RemoteView> => this.remote.stop(removeAll);
+  pauseRemoteDownload = (): Promise<RemoteView> => this.remote.pauseDownload();
+  beginPairing = (): Promise<PairingOffer> => this.remote.beginPairing();
+  decidePairing = (pairingId: string, allow: boolean): Promise<void> =>
+    this.remote.decide(pairingId, allow);
+  cancelPairing = (): Promise<void> => this.remote.cancelPairing();
+  renameDevice = (id: string, name: string): Promise<DeviceView> => this.remote.rename(id, name);
+  removeDevice = (id: string): Promise<void> => this.remote.remove(id);
+  listRemoteEvents = async (limit: number): Promise<RemoteEvent[]> => this.remote.events(limit);
+  updateRemoteSettings = (patch: RemoteSettingsPatch): Promise<RemoteView> =>
+    this.remote.update(patch);
+  openRemoteSignIn = (): Promise<void> => this.remote.openSignIn();
+  newComputerKey = (): Promise<RemoteView> => this.remote.newKey();
 }
 
 export function createMockEngine(options: MockOptions = {}): MockEngine {

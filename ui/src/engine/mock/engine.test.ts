@@ -769,14 +769,16 @@ describe("MockEngine spoken page", () => {
 });
 
 describe("MockEngine Away from home", () => {
-  it("is off, and the rest is not available yet", async () => {
-    const engine = createMockEngine({ now: NOW });
+  it("is off on a fresh start, and turning it on needs the download first", async () => {
+    const engine = createMockEngine({ now: NOW, remote: { auto: false } });
     const view = await engine.getRemote();
     expect(view.state).toEqual({ type: "off" });
     expect(view.connection).toBe("simple");
     expect(view.autoOff).toBe("unused30Days");
     expect(view.devices).toEqual([]);
-    await expect(engine.startRemote()).rejects.toMatchObject({ code: "unavailable" });
+    await expect(engine.startRemote("simple", false)).rejects.toMatchObject({
+      code: "needsDownload",
+    });
     await expect(engine.beginPairing()).rejects.toMatchObject({ code: "unavailable" });
   });
 });
