@@ -2,7 +2,8 @@
 //!
 //! Every question has an honest "I do not know" (`None`): the policy above treats an unknown
 //! power state as mains, and unknown idle as idle only in the small hours. Real values are read
-//! on a blocking thread, with a one second limit on each D-Bus call, and cached for 30 seconds.
+//! on a blocking thread, with a one second limit on each D-Bus call (or system tool on macOS),
+//! and cached for 30 seconds.
 
 use std::any::Any;
 use std::sync::Arc;
@@ -13,6 +14,9 @@ pub use system::SystemHost;
 
 #[cfg(target_os = "linux")]
 mod linux;
+// Its parsers are plain functions over text, so they are tested on every platform.
+#[cfg(any(target_os = "macos", test))]
+mod macos;
 #[cfg(windows)]
 mod windows;
 
@@ -59,7 +63,8 @@ pub trait Host: Send + Sync {
     /// counts logind's `PrepareForSleep(false)`. Windows has no listener yet and returns 0
     /// always: there a wake is noticed by the wall clock running ahead of the monotonic one
     /// (if the monotonic clock stops during sleep) and otherwise by the five-minute check for
-    /// a missed page. Not verified on a real machine.
+    /// a missed page. Not verified on a real machine. macOS has no listener either and relies on
+    /// the same wall-versus-monotonic check (see `host/macos.rs`).
     fn resume_count(&self) -> u64 {
         0
     }
@@ -92,6 +97,7 @@ where
 }
 
 /// The idle time from a logind `IdleSinceHint` (microseconds since the epoch) at `now_us`.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub(crate) fn idle_from_hint(idle_hint: bool, since_us: u64, now_us: u64) -> Duration {
     if !idle_hint || since_us == 0 {
         return Duration::ZERO;

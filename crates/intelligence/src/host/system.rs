@@ -105,11 +105,13 @@ impl Host for SystemHost {
 
 #[cfg(target_os = "linux")]
 use super::linux as platform;
+#[cfg(target_os = "macos")]
+use super::macos as platform;
 #[cfg(windows)]
 use super::windows as platform;
 
 /// Platforms with no support report nothing.
-#[cfg(not(any(target_os = "linux", windows)))]
+#[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
 mod platform {
     use std::time::Duration;
 

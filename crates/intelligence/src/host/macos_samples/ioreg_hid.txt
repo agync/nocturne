@@ -1,0 +1,8 @@
++-o IOHIDSystem  <class IOHIDSystem, id 0x100000615, registered, matched, active, busy 0 (256 ms), retain 12>
+    {
+      "IOClass" = "IOHIDSystem"
+      "IOProviderClass" = "IOResources"
+      "HIDIdleTime" = 401144686273083
+      "IOMatchCategory" = "IOHID"
+      "PrimaryUsagePage" = 65280
+    }
