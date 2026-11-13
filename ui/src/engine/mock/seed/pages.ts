@@ -133,7 +133,7 @@ export function pagesSeed(ctx: SeedContext, memories: MemoryView[]): PageView[] 
     ],
     question: {
       kind: "pageTime",
-      text: "Is this page arriving at a good time?",
+      text: "07:00",
       memoryId: null,
       receipt: null,
       lastAsked: null,

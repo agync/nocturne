@@ -131,7 +131,11 @@ function QuestionPart({ question }: { question: Question }) {
       : [t("page.question.yes"), t("page.question.no"), t("page.question.notSure")];
   return (
     <Part title={t("print.question")}>
-      <p className={styles.lineText}>{question.text}</p>
+      <p className={styles.lineText}>
+        {question.kind === "pageTime"
+          ? t("page.question.pageTime", { time: question.text })
+          : question.text}
+      </p>
       <ul className={styles.answers}>
         {answers.map((a) => (
           <li key={a} className={styles.choice}>

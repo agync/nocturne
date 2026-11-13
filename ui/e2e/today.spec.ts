@@ -137,6 +137,13 @@ const VARIANTS: Array<[string, string, string]> = [
 ];
 
 test.describe("other days", () => {
+  test("the first page says what the time question asks", async ({ page }) => {
+    await ready(page, "#/pages/2026-10-31");
+    await expect(
+      page.getByText("Nocturne writes your page for 07:00 each morning. Is that a good time?"),
+    ).toBeVisible();
+  });
+
   for (const [name, hash, headline] of VARIANTS) {
     test(`${name} page renders`, async ({ page }) => {
       await ready(page, hash);

@@ -36,6 +36,7 @@
   "page.question.yes": "Yes",
   "page.question.no": "No",
   "page.question.notSure": "Not sure",
+  "page.question.pageTime": "Nocturne writes your page for {time} each morning. Is that a good time?",
   "page.question.right": "{time} is right",
   "page.question.earlier": "Earlier",
   "page.question.later": "Later",

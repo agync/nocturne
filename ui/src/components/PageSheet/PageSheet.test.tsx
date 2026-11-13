@@ -271,7 +271,9 @@ describe("PageSheet, other days", () => {
     expect(screen.getByText("Saturday 31 October · Page 1")).toBeInTheDocument();
     expect(heading("What Nocturne now knows · 3")).toBeInTheDocument();
     expect(heading("Tomorrow’s page gets better with")).toBeInTheDocument();
-    expect(screen.getByText("Is this page arriving at a good time?")).toBeInTheDocument();
+    expect(
+      screen.getByText("Nocturne writes your page for 07:00 each morning. Is that a good time?"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "07:00 is right" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Earlier" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Later" })).toBeInTheDocument();

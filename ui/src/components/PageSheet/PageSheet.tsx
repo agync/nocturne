@@ -306,7 +306,11 @@ export function PageSheet({
               <h2 id={`${base}-q`} className={`t-section ${styles.sectionTitle}`}>
                 {t("page.section.question")}
               </h2>
-              <p className={styles.questionText}>{question.text}</p>
+              <p className={styles.questionText}>
+                {question.kind === "pageTime"
+                  ? t("page.question.pageTime", { time: question.text })
+                  : question.text}
+              </p>
               {question.receipt ? (
                 <span className={styles.questionSource}>
                   <ReceiptChip
