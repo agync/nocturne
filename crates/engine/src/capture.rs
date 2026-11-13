@@ -58,7 +58,8 @@ pub fn kind_for_ext(ext: &str) -> Option<(ItemKind, &'static str)> {
     })
 }
 
-fn title_of(text: &str) -> String {
+/// The title a kept note gets: its first non-empty line, cut at 80 characters.
+pub fn text_title(text: &str) -> String {
     let first = text
         .lines()
         .map(str::trim)
@@ -152,7 +153,7 @@ impl Engine {
             if let Some(item) = find_by_sha(tx, &originals, &sha)? {
                 return Ok(Kept::Duplicate { item });
             }
-            let title = title_of(text);
+            let title = text_title(text);
             let id = insert_item(
                 tx,
                 &now,

@@ -31,7 +31,7 @@ mod util;
 pub mod day;
 pub mod store;
 
-pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, trust_for};
+pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_title, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;

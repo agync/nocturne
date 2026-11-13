@@ -51,6 +51,7 @@ impl<R: Runtime> Dispatch for AppDispatch<R> {
                 core: core.clone(),
                 device,
                 out,
+                made_up: std::sync::Mutex::new(None),
             };
             let answer = call.run(req.call, upload).await;
             if had_upload {
@@ -68,6 +69,9 @@ struct Call<R: Runtime> {
     core: Arc<Core>,
     device: DeviceRow,
     out: ReplySink,
+    /// The new id of a keep answered from what the phone sent (see `sent_answer`): it names
+    /// nothing in the store, so the outbound filter has nothing to check and nothing to cite.
+    made_up: std::sync::Mutex<Option<String>>,
 }
 
 fn err(code: PhoneError) -> Option<RemoteAnswer> {
@@ -174,6 +178,16 @@ impl<R: Runtime> Call<R> {
     /// The outbound filter: an answer naming anything private does not leave. Whatever it
     /// names that is public, the phone may open for the next hour.
     async fn send(&self, answer: RemoteAnswer) -> bool {
+        if let RemoteAnswer::Kept { kept } = &answer
+            && self
+                .made_up
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .as_deref()
+                == Some(kept.item.id.as_str())
+        {
+            return self.out.send(answer);
+        }
         let ids = cited_ids(&answer);
         if !ids.is_empty() {
             let Some(engine) = self.engine() else {
@@ -223,8 +237,9 @@ impl<R: Runtime> Call<R> {
                     return err(PhoneError::TooMany);
                 }
                 let e = self.engine()?;
+                let sent = Sent::Text(text.clone());
                 let kept = blocking(move || e.keep_text(&text, Source::Phone)).await;
-                self.kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0)
+                self.kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0, sent)
                     .await
             }
             RemoteCall::KeepBytes {
@@ -356,6 +371,7 @@ impl<R: Runtime> Call<R> {
         client_id: &str,
         action: RemoteAction,
         bytes: f64,
+        sent: Sent,
     ) -> Option<RemoteAnswer> {
         let Some(kept) = kept else {
             self.audit(action, RemoteResult::Failed, bytes);
@@ -365,6 +381,14 @@ impl<R: Runtime> Call<R> {
             Kept::New { item } => (item.clone(), false),
             Kept::Duplicate { item } => (item.clone(), true),
         };
+        if duplicate && !self.own_public(&item.id).await {
+            // Already kept, but not by this phone, or private now: the answer a new keep gets,
+            // from what the phone sent. It names no item, so it opens nothing, and a private
+            // match answers exactly as a public one does.
+            crate::commands::capture::announce(&self.app, std::slice::from_ref(&kept)).await;
+            self.audit(action, RemoteResult::Ok, bytes);
+            return Some(self.sent_answer(&item, sent));
+        }
         // Only a new item is this phone's: a duplicate may be someone else's keep.
         if !duplicate && let Some(e) = self.engine() {
             let (id, me, cid) = (
@@ -384,6 +408,65 @@ impl<R: Runtime> Call<R> {
             None => item,
         };
         Some(self.kept_answer(&item, duplicate))
+    }
+
+    /// Whether this phone kept `item` itself and it may still go out.
+    async fn own_public(&self, item: &str) -> bool {
+        let Some(e) = self.engine() else {
+            return false;
+        };
+        let (id, me) = (item.to_string(), self.device.id.clone());
+        blocking(move || {
+            let mine = e.remote_keep_owner(&id)?.is_some_and(|(d, _)| d == me);
+            Ok(mine && e.private_ids(std::slice::from_ref(&id))?.is_empty())
+        })
+        .await
+        .unwrap_or(false)
+    }
+
+    /// A keep's answer built only from what the phone sent and a new id of its own.
+    fn sent_answer(&self, item: &ItemView, sent: Sent) -> RemoteAnswer {
+        let now = self.app.state::<AppState>().now();
+        let (title, text) = match sent {
+            Sent::Text(t) => (nocturne_engine::text_title(&t), Some(t)),
+            Sent::File(name) => (name, None),
+        };
+        let fresh = format!(
+            "itm_{}",
+            crypto::random::<8>()
+                .iter()
+                .map(|b| format!("{b:02x}"))
+                .collect::<String>()
+        );
+        let mut truncated = false;
+        let text = text.map(|t| {
+            let (cut, was) = crypto::cut_text(&t);
+            truncated = was;
+            cut.to_string()
+        });
+        let until = now
+            .checked_add(jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64))
+            .map(super::pairing::fmt_wall)
+            .unwrap_or_default();
+        *self.made_up.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
+        RemoteAnswer::Kept {
+            kept: PhoneKept {
+                item: PhoneItem {
+                    id: fresh,
+                    kind: item.kind,
+                    title,
+                    kept_at: format!("{now:.3}"),
+                    duration_ms: None,
+                    pages: None,
+                    has_original: item.has_original,
+                    summary: None,
+                    text,
+                    truncated,
+                },
+                duplicate: false,
+                take_back_until: until,
+            },
+        }
     }
 
     async fn keep_upload(
@@ -472,7 +555,9 @@ impl<R: Runtime> Call<R> {
         if let Some(dir) = named.parent() {
             let _ = std::fs::remove_dir_all(dir);
         }
-        self.kept(kept.ok(), client_id, action, bytes as f64).await
+        let sent = Sent::File(format!("{name}.{ext}"));
+        self.kept(kept.ok(), client_id, action, bytes as f64, sent)
+            .await
     }
 
     async fn unkeep(&self, id: String) -> Option<RemoteAnswer> {
@@ -706,6 +791,12 @@ impl<R: Runtime> Call<R> {
             seq += 1;
         }
     }
+}
+
+/// What a phone sent with a keep: the text, or the name its file was kept under.
+enum Sent {
+    Text(String),
+    File(String),
 }
 
 fn terminal(p: AskPhase) -> bool {

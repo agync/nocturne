@@ -1726,22 +1726,100 @@ fn quiet_websocket_session_and_pairing_survive() {
     );
 }
 
+fn desk_keep(p: &Phone, text: &str) -> String {
+    match p.h.engine().keep_text(text, Source::QuickCapture).unwrap() {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    }
+}
+
 #[test]
 fn duplicate_of_a_desktop_item_is_not_the_phones() {
     let p = on();
     let (_, mut c) = p.session("Pixel");
-    p.h.engine()
-        .keep_text("Bin day moved to Thursday", Source::QuickCapture)
-        .unwrap();
+    let desk = desk_keep(&p, "Bin day moved to Thursday");
     let a = keep_text(&mut c, "Bin day moved to Thursday", "c-1");
-    assert!(matches!(&a, RemoteAnswer::Kept { kept } if kept.duplicate));
     let id = kept_id(&a);
+    assert_ne!(id, desk, "the desktop's item is not named");
     assert_eq!(
         error_of(&call(&mut c, RemoteCall::Unkeep { id: id.clone() })),
         Some(PhoneError::NotYours)
     );
-    assert!(p.h.engine().get_item(&id).is_ok());
-    assert_eq!(p.h.engine().get_item(&id).unwrap().from_device, None);
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::GetItem { id: desk.clone() })),
+        Some(PhoneError::NotFound)
+    );
+    assert_eq!(p.h.engine().get_item(&desk).unwrap().from_device, None);
+}
+
+#[test]
+fn a_duplicate_answers_like_a_new_keep_whatever_it_matches() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let secret = desk_keep(&p, "Clinic result: bad news");
+    p.h.engine().set_item_private(&secret, true).unwrap();
+    let public = desk_keep(&p, "Bin day moved to Thursday");
+    let fresh = keep_text(&mut c, "Something nobody kept before", "c-0");
+    let shape = |a: &RemoteAnswer| match a {
+        RemoteAnswer::Kept { kept } => (
+            kept.duplicate,
+            kept.item.kind,
+            kept.item.summary.clone(),
+            kept.item.has_original,
+            kept.item.duration_ms,
+            kept.item.pages,
+        ),
+        other => panic!("not kept: {other:?}"),
+    };
+    for (text, desk) in [
+        ("Clinic result: bad news", &secret),
+        ("Bin day moved to Thursday", &public),
+    ] {
+        let a = keep_text(&mut c, text, &format!("c-{}", text.len()));
+        assert_eq!(shape(&a), shape(&fresh), "{text}");
+        let RemoteAnswer::Kept { kept } = &a else {
+            unreachable!()
+        };
+        assert_ne!(&kept.item.id, desk);
+        assert_eq!(kept.item.text.as_deref(), Some(text));
+        assert_eq!(kept.item.title, text);
+        assert!(!serde_json::to_string(&a).unwrap().contains(desk.as_str()));
+    }
+}
+
+#[test]
+fn a_duplicate_upload_counts_toward_the_day() {
+    let p = on();
+    let (keys, mut c) = p.session("Pixel");
+    let photo = jpeg(100);
+    p.h.engine()
+        .keep_bytes(&photo, "jpg", Source::QuickCapture)
+        .unwrap();
+    p.hub
+        .core
+        .incoming
+        .charge_day(&p.hub.core, &keys.id(), MAX_DAY - 150)
+        .unwrap();
+    let a = keep_bytes(&mut c, &photo, "image/jpeg", "c-dup", None, 100);
+    assert!(
+        matches!(&a, RemoteAnswer::Kept { kept } if !kept.duplicate),
+        "{a:?}"
+    );
+    let mut other = jpeg(100);
+    other[99] ^= 1;
+    assert_eq!(
+        error_of(&keep_bytes(
+            &mut c,
+            &other,
+            "image/jpeg",
+            "c-new",
+            None,
+            100
+        )),
+        Some(PhoneError::TooLarge),
+        "the duplicate took its 100 bytes, as a new keep would"
+    );
 }
 
 #[test]
