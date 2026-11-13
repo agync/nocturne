@@ -17,7 +17,8 @@ use crate::bundle::{self, Dirs};
 use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
 use crate::error::RuntimeError;
-use crate::residency;
+use crate::online::CloudRoute;
+use crate::{residency, selection};
 
 const PORT_TRIES: u32 = 5;
 const RESTART_WINDOW: Duration = Duration::from_secs(3600);
@@ -99,6 +100,10 @@ struct Shared {
     pid: AtomicU32,
     online: AtomicBool,
     ready_since: Mutex<Option<Instant>>,
+    /// The route for Online answers the next launch is to use. Not applied yet.
+    cloud: Mutex<Option<CloudRoute>>,
+    /// Holders of the download window, and the lock that keeps opening and closing it in order.
+    holds: tokio::sync::Mutex<u32>,
 }
 
 /// A cheap, cloneable handle on a running supervisor's settings.
@@ -139,6 +144,70 @@ impl Control {
             .map_err(|_| RuntimeError::Unavailable)?;
         rx.await.map_err(|_| RuntimeError::Unavailable)?
     }
+
+    /// Sets the route for Online answers (`None` for off) and relaunches the engine, which reads
+    /// providers only when it starts. Returns once the new one answers. A relaunch is not a
+    /// restart: it never counts toward the restart limit.
+    pub async fn set_cloud(&self, route: Option<CloudRoute>) -> Result<(), RuntimeError> {
+        *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = route;
+        let (tx, rx) = oneshot::channel();
+        self.cmd
+            .send(Cmd::Relaunch(tx))
+            .await
+            .map_err(|_| RuntimeError::Unavailable)?;
+        rx.await.map_err(|_| RuntimeError::Unavailable)?
+    }
+
+    /// Opens the download window for as long as the returned hold lives. Holds are counted: the
+    /// first opens the window (a relaunch), the last one dropped or released closes it.
+    pub async fn hold_online(&self) -> Result<OnlineHold, RuntimeError> {
+        let mut holds = self.shared.holds.lock().await;
+        if *holds == 0 {
+            self.set_online(true).await?;
+        }
+        *holds += 1;
+        Ok(OnlineHold {
+            control: Some(self.clone()),
+        })
+    }
+
+    async fn release_online(&self) {
+        let mut holds = self.shared.holds.lock().await;
+        *holds = holds.saturating_sub(1);
+        if *holds == 0
+            && let Err(e) = self.set_online(false).await
+        {
+            tracing::warn!("could not close the download window: {e}");
+        }
+    }
+}
+
+/// A share of the download window. See [`Control::hold_online`].
+pub struct OnlineHold {
+    control: Option<Control>,
+}
+
+impl OnlineHold {
+    /// Gives the hold back and waits until the window is closed, if this was the last.
+    pub async fn release(mut self) {
+        if let Some(c) = self.control.take() {
+            c.release_online().await;
+        }
+    }
+}
+
+impl Drop for OnlineHold {
+    fn drop(&mut self) {
+        let Some(c) = self.control.take() else {
+            return;
+        };
+        match tokio::runtime::Handle::try_current() {
+            Ok(rt) => {
+                rt.spawn(async move { c.release_online().await });
+            }
+            Err(_) => tracing::warn!("a download window hold was dropped outside the runtime"),
+        }
+    }
 }
 
 pub struct Supervisor {
@@ -170,6 +239,15 @@ struct Actor {
 impl Supervisor {
     /// Starts the engine and returns once it answers. Fails when it cannot be started.
     pub async fn start(dirs: Dirs, opts: SupervisorOptions) -> Result<Supervisor, RuntimeError> {
+        Self::start_with(dirs, opts, None).await
+    }
+
+    /// Like [`Supervisor::start`], with the route for Online answers the first launch uses.
+    pub async fn start_with(
+        dirs: Dirs,
+        opts: SupervisorOptions,
+        cloud: Option<CloudRoute>,
+    ) -> Result<Supervisor, RuntimeError> {
         let exe = bundle::locate(&dirs.bundle)?;
         dirs.ensure()?;
         let client = Client::detached(Timeouts::default());
@@ -180,6 +258,8 @@ impl Supervisor {
             pid: AtomicU32::new(0),
             online: AtomicBool::new(false),
             ready_since: Mutex::new(None),
+            cloud: Mutex::new(cloud),
+            holds: tokio::sync::Mutex::new(0),
         });
         let (cmd_tx, cmd_rx) = mpsc::channel(4);
         let (first_tx, first_rx) = oneshot::channel();
@@ -323,6 +403,28 @@ fn free_port(avoid: Option<u16>) -> Result<u16, RuntimeError> {
         }
     }
     Err(RuntimeError::NoPort(50))
+}
+
+/// Turns core dumps off for this process, and so for the engine and its children, which inherit
+/// the limit: a dump could hold the Online answers key. On Linux the app is also made
+/// undumpable, so other processes of the same user cannot read its memory or environment through
+/// `/proc`. Called once at app start, before anything reads the key. It is set on the whole app
+/// because the workspace forbids the `unsafe` a per-spawn `pre_exec` hook needs.
+#[cfg(unix)]
+pub fn harden_process() -> Result<(), RuntimeError> {
+    use nix::sys::resource::{Resource, setrlimit};
+    setrlimit(Resource::RLIMIT_CORE, 0, 0)
+        .map_err(|e| RuntimeError::Start(format!("could not turn core dumps off: {e}")))?;
+    #[cfg(target_os = "linux")]
+    nix::sys::prctl::set_dumpable(false)
+        .map_err(|e| RuntimeError::Start(format!("could not make the app undumpable: {e}")))?;
+    Ok(())
+}
+
+/// Windows writes no core files by default; nothing to do there.
+#[cfg(not(unix))]
+pub fn harden_process() -> Result<(), RuntimeError> {
+    Ok(())
 }
 
 fn read_backends(config_dir: &Path) -> (Option<String>, Option<String>) {
@@ -476,6 +578,9 @@ impl Actor {
             let ws_port = free_port(Some(port))?;
             let keys = Keys::new(new_key()?, new_key()?)?;
             let online = self.shared.online.load(Ordering::SeqCst);
+            // A download-window launch never carries the route. Until the route lands, no launch
+            // does: the stored route is not applied yet.
+            let cloud: Option<config::CloudEntry<'_>> = None;
             let (llama, whisper) = read_backends(&self.dirs.config());
             let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
             config::write(
@@ -488,9 +593,13 @@ impl Actor {
                     llamacpp_backend: llama.as_deref(),
                     whispercpp_backend: whisper.as_deref(),
                     llamacpp_args: installed.map(config::llamacpp_args).unwrap_or(""),
+                    cloud,
                 },
             )?;
-            let saved = residency::saved_options();
+            crate::online::write_row(&self.dirs.config(), None)?;
+            let saved = residency::saved_options_for(&selection::read(&self.dirs.config()));
+            let saved: Vec<(&str, _)> =
+                saved.iter().map(|(m, o)| (m.as_str(), o.clone())).collect();
             // Without them the engine still runs, only with its own sizes and timeouts.
             if let Err(e) = config::write_model_options(&self.dirs.config(), &saved) {
                 tracing::warn!("could not save the models' load options: {e}");

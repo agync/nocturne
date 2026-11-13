@@ -580,3 +580,147 @@ async fn each_launch_gets_new_keys() {
     assert_ne!(second.0, second.1);
     sup.shutdown().await.unwrap();
 }
+
+async fn engine_env(sup: &Supervisor) -> Value {
+    let endpoint = sup.client().endpoint().unwrap();
+    reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
+        .bearer_auth(&endpoint.key)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap()
+}
+
+#[tokio::test]
+async fn set_cloud_none_is_a_no_op_launch() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    // A provider and a row left by an earlier run are gone from the first launch on.
+    std::fs::create_dir_all(dirs.config()).unwrap();
+    std::fs::write(
+        dirs.config().join("user_models.json"),
+        r#"{"nocturne-online": {"recipe": "cloud", "cloud_provider": "nocturne_online"}}"#,
+    )
+    .unwrap();
+    let sup = start(&dirs, None).await;
+    let rows: Value =
+        serde_json::from_slice(&std::fs::read(dirs.config().join("user_models.json")).unwrap())
+            .unwrap();
+    assert!(rows.get(nocturne_lemonade::online::ROW).is_none());
+
+    let before = sup.admin().config().await.unwrap();
+    sup.control().set_cloud(None).await.unwrap();
+    assert_eq!(common::launch_count(&dirs), 2, "the engine was relaunched");
+    assert_eq!(sup.restarts(), 0, "a relaunch is not a crash");
+    let after = sup.admin().config().await.unwrap();
+    assert_eq!(after["cloud_providers"], serde_json::json!([]));
+    assert_eq!(after["offline"], before["offline"]);
+    assert_eq!(after["offline"], true);
+    let env = engine_env(&sup).await;
+    let keys: Vec<&String> = env
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter(|k| k.starts_with("LEMONADE_") && k.ends_with("_API_KEY"))
+        .collect();
+    assert_eq!(keys, ["LEMONADE_ADMIN_API_KEY", "LEMONADE_API_KEY"]);
+    sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn hold_online_refcounts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let control = sup.control();
+    let offline = || async { sup.admin().config().await.unwrap()["offline"].as_bool() };
+
+    let first = control.hold_online().await.unwrap();
+    assert_eq!(offline().await, Some(false));
+    assert_eq!(common::launch_count(&dirs), 2);
+    let second = control.hold_online().await.unwrap();
+    assert_eq!(common::launch_count(&dirs), 2, "already open, no relaunch");
+
+    first.release().await;
+    assert_eq!(offline().await, Some(false), "one hold left");
+    assert_eq!(common::launch_count(&dirs), 2);
+
+    second.release().await;
+    assert_eq!(offline().await, Some(true));
+    assert_eq!(common::launch_count(&dirs), 3);
+
+    // A dropped hold closes the window too.
+    drop(control.hold_online().await.unwrap());
+    let deadline = Instant::now() + Duration::from_secs(10);
+    loop {
+        let closed = sup
+            .admin()
+            .config()
+            .await
+            .ok()
+            .map(|c| c["offline"] == true);
+        if common::launch_count(&dirs) == 5 && closed == Some(true) {
+            break;
+        }
+        assert!(Instant::now() < deadline, "the window did not close");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(sup.restarts(), 0);
+    sup.shutdown().await.unwrap();
+}
+
+fn stand_in_route() -> nocturne_lemonade::online::CloudRoute {
+    nocturne_lemonade::online::CloudRoute::new(
+        "https://api.example.com/v1",
+        "stand-in-model".into(),
+        nocturne_lemonade::online::OnlineKey::new("sk-stand-in-0123456789".into()),
+    )
+    .unwrap()
+}
+
+#[tokio::test]
+async fn download_window_launch_has_no_provider() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    sup.control()
+        .set_cloud(Some(stand_in_route()))
+        .await
+        .unwrap();
+    let hold = sup.control().hold_online().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
+    assert_eq!(cfg["offline"], false);
+    assert_eq!(cfg["cloud_providers"], serde_json::json!([]));
+    let rows = std::fs::read(dirs.config().join("user_models.json")).unwrap_or_default();
+    assert!(!String::from_utf8_lossy(&rows).contains(nocturne_lemonade::online::ROW));
+    let env = engine_env(&sup).await;
+    assert!(env.get(nocturne_lemonade::online::KEY_ENV).is_none());
+    assert!(!env.to_string().contains("sk-stand-in-0123456789"));
+    hold.release().await;
+    sup.shutdown().await.unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn core_limit_is_zero_for_lemond() {
+    nocturne_lemonade::supervisor::harden_process().unwrap();
+    assert!(
+        !nix::sys::prctl::get_dumpable().unwrap(),
+        "the app is undumpable"
+    );
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let pid = sup.pid().unwrap();
+    let limits = std::fs::read_to_string(format!("/proc/{pid}/limits")).unwrap();
+    let core = limits
+        .lines()
+        .find(|l| l.starts_with("Max core file size"))
+        .unwrap();
+    let fields: Vec<&str> = core.split_whitespace().collect();
+    assert_eq!(&fields[4..6], ["0", "0"], "{core}");
+    sup.shutdown().await.unwrap();
+}

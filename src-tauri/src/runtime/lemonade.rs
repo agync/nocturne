@@ -14,7 +14,7 @@ use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, 
 use nocturne_engine::Mind;
 use nocturne_lemonade::{
     Admin, Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle,
-    residency, tier,
+    residency, selection, tier,
 };
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -292,7 +292,13 @@ async fn fill<R: Runtime>(
         super::memory_settled(&state, services);
     }
     client.set_alone(residency::alone(tier));
-    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, tier));
+    let engine_root = Dirs::new(PathBuf::new(), state.data_dir.join("engine"));
+    let chosen = selection::Selection {
+        tier,
+        ..selection::read(&engine_root.config())
+    };
+    let picks = selection::picks(&chosen);
+    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, picks, tier));
     state
         .status
         .set_mind_bytes(tier::components(tier).iter().map(|c| c.bytes as f64).sum());

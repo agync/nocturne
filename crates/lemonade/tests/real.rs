@@ -181,7 +181,11 @@ async fn the_mind_never_triggers_a_download_for_a_missing_model() {
         .await
         .unwrap();
     let client = sup.client();
-    let mind = nocturne_lemonade::LemonadeMind::new(client.clone(), nocturne_contract::Tier::Small)
+    let small = nocturne_contract::Tier::Small;
+    let picks = nocturne_lemonade::selection::picks(
+        &nocturne_lemonade::selection::Selection::preset(small),
+    );
+    let mind = nocturne_lemonade::LemonadeMind::new(client.clone(), picks, small)
         .with_model(nocturne_contract::ComponentRole::Speech, "Whisper-Tiny");
     let wav = tmp.path().join("one-second.wav");
     let mut bytes = b"RIFF".to_vec();

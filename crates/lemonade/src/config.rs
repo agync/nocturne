@@ -31,6 +31,16 @@ pub fn llamacpp_args(tier: Tier) -> &'static str {
 /// stops those. Never `null` (it admits sandboxed frames) and never `*`.
 pub const ALLOWED_ORIGINS: &str = "https://none.invalid";
 
+/// The one provider entry for Online answers. The key is never part of it: the engine reads the
+/// key from its environment.
+#[derive(Debug, Clone, Copy)]
+pub struct CloudEntry<'a> {
+    pub base_url: &'a str,
+    /// Plain HTTP; only ever for the stand-in provider on loopback, and written only in builds
+    /// with the stand-in feature.
+    pub allow_insecure_http: bool,
+}
+
 /// What Nocturne decides at each launch.
 #[derive(Debug, Clone)]
 pub struct Settings<'a> {
@@ -44,6 +54,8 @@ pub struct Settings<'a> {
     pub whispercpp_backend: Option<&'a str>,
     /// Flags for every llama.cpp server; empty for none (see [`llamacpp_args`]).
     pub llamacpp_args: &'a str,
+    /// The provider for Online answers; `None` (off) writes an empty list.
+    pub cloud: Option<CloudEntry<'a>>,
 }
 
 /// Merges `settings` into `<config_dir>/config.json`, creating it when absent.
@@ -79,6 +91,17 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
     for (key, value) in fixed {
         root.insert(key.to_string(), value);
     }
+    // Always written, so a provider left by an earlier run never outlives a launch.
+    let providers = match settings.cloud {
+        Some(c) => json!([{
+            "name": crate::online::PROVIDER,
+            "base_url": c.base_url,
+            "allow_insecure_http": c.allow_insecure_http && cfg!(feature = "online-stand-in"),
+            "wire_format": "openai",
+        }]),
+        None => json!([]),
+    };
+    root.insert("cloud_providers".to_string(), providers);
     set_nested(&mut root, "telemetry", "enabled", json!(false));
     set_nested(&mut root, "llamacpp", "args", json!(settings.llamacpp_args));
     if let Some(b) = settings.llamacpp_backend {
@@ -153,6 +176,7 @@ mod tests {
             llamacpp_backend: None,
             whispercpp_backend: None,
             llamacpp_args: "",
+            cloud: None,
         }
     }
 
@@ -240,6 +264,80 @@ mod tests {
         assert_eq!(llamacpp_args(Tier::Small), LLAMACPP_ARGS);
         assert_eq!(llamacpp_args(Tier::Standard), "");
         assert_eq!(llamacpp_args(Tier::Large), "");
+    }
+
+    #[test]
+    fn cloud_providers_empty_when_off() {
+        let tmp = tempfile::tempdir().unwrap();
+        write(tmp.path(), &settings(&tmp.path().join("m"))).unwrap();
+        assert_eq!(read(tmp.path())["cloud_providers"], json!([]));
+    }
+
+    #[test]
+    fn a_stale_provider_is_removed_at_launch() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("config.json"),
+            r#"{"cloud_providers": [
+                {"name": "nocturne_online", "base_url": "https://a.example/v1", "api_key": "sk-stale-1"},
+                {"name": "other", "base_url": "http://10.0.0.2/v1", "allow_insecure_http": true}
+            ], "offline": false}"#,
+        )
+        .unwrap();
+        write(tmp.path(), &settings(&tmp.path().join("m"))).unwrap();
+        assert_eq!(read(tmp.path())["cloud_providers"], json!([]));
+        let text = std::fs::read_to_string(tmp.path().join("config.json")).unwrap();
+        assert!(!text.contains("api_key") && !text.contains("sk-stale-1"));
+    }
+
+    #[test]
+    fn one_entry_when_on_and_never_a_key() {
+        let tmp = tempfile::tempdir().unwrap();
+        let models = tmp.path().join("m");
+        let mut s = settings(&models);
+        s.cloud = Some(CloudEntry {
+            base_url: "https://api.example.com/v1",
+            allow_insecure_http: false,
+        });
+        write(tmp.path(), &s).unwrap();
+        let v = read(tmp.path());
+        assert_eq!(
+            v["cloud_providers"],
+            json!([{
+                "name": "nocturne_online",
+                "base_url": "https://api.example.com/v1",
+                "allow_insecure_http": false,
+                "wire_format": "openai",
+            }])
+        );
+        assert_eq!(v["offline"], true, "offline stays on with a provider");
+        let text = std::fs::read_to_string(tmp.path().join("config.json")).unwrap();
+        assert!(!text.contains("api_key") && !text.contains("auth_header"));
+    }
+
+    #[cfg(not(feature = "online-stand-in"))]
+    #[test]
+    fn a_build_without_the_stand_in_never_allows_plain_http() {
+        let tmp = tempfile::tempdir().unwrap();
+        let models = tmp.path().join("m");
+        let mut s = settings(&models);
+        s.cloud = Some(CloudEntry {
+            base_url: "http://127.0.0.1:8080/v1",
+            allow_insecure_http: true,
+        });
+        write(tmp.path(), &s).unwrap();
+        assert_eq!(
+            read(tmp.path())["cloud_providers"][0]["allow_insecure_http"],
+            false
+        );
+    }
+
+    #[test]
+    fn log_level_is_info() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("config.json"), r#"{"log_level": "debug"}"#).unwrap();
+        write(tmp.path(), &settings(&tmp.path().join("m"))).unwrap();
+        assert_eq!(read(tmp.path())["log_level"], "info");
     }
 
     #[test]

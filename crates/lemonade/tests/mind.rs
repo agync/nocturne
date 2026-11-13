@@ -34,7 +34,7 @@ async fn rig_with(mode: &str, tier: Tier) -> Rig {
     )
     .await
     .unwrap();
-    let mind = LemonadeMind::new(sup.client(), tier);
+    let mind = LemonadeMind::new(sup.client(), preset(tier), tier);
     Rig {
         sup,
         mind,
@@ -1310,6 +1310,7 @@ async fn an_unsupported_tier_is_unavailable_everywhere() {
 async fn no_engine_is_unavailable() {
     let mind = LemonadeMind::new(
         nocturne_lemonade::Client::new(common::CLOSED_PORT, "k"),
+        preset(Tier::Small),
         Tier::Small,
     );
     assert_eq!(
@@ -1325,7 +1326,11 @@ async fn no_engine_is_unavailable() {
 #[tokio::test]
 async fn the_mind_fits_behind_a_dyn_pointer() {
     let r = rig().await;
-    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(r.sup.client(), Tier::Standard));
+    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(
+        r.sup.client(),
+        preset(Tier::Standard),
+        Tier::Standard,
+    ));
     let spawned = tokio::spawn({
         let mind = mind.clone();
         async move { mind.embed(&["hello".to_string()]).await }
@@ -1716,4 +1721,9 @@ async fn long_audio_in_any_container_is_refused_before_upload() {
     let short = put(dir, "short.mp3", &vec![0u8; 32_000]);
     assert!(r.mind.transcribe(&short).await.is_ok());
     assert_eq!(r.seen("/v1/audio/transcriptions").await.len(), 1);
+}
+
+fn preset(tier: Tier) -> nocturne_lemonade::selection::Picks {
+    use nocturne_lemonade::selection;
+    selection::picks(&selection::Selection::preset(tier))
 }

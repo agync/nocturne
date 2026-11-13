@@ -4,6 +4,7 @@ mod audio;
 mod cite;
 mod documents;
 mod guard;
+pub mod online;
 mod prompts;
 
 use std::collections::HashSet;
@@ -23,7 +24,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::client::{ChatRequest, Client, LoadOptions, Message};
 use crate::error::RuntimeError;
-use crate::tier;
+use crate::selection::Picks;
 
 use cite::CiteFilter;
 
@@ -41,15 +42,18 @@ struct Seen {
 
 pub struct LemonadeMind {
     client: Client,
+    picks: Picks,
     tier: Tier,
     overrides: Vec<(ComponentRole, String)>,
     seen: Mutex<Seen>,
 }
 
 impl LemonadeMind {
-    pub fn new(client: Client, tier: Tier) -> Self {
+    /// A mind using `picks` for each job; `tier` sets how the answering model is run.
+    pub fn new(client: Client, picks: Picks, tier: Tier) -> Self {
         LemonadeMind {
             client,
+            picks,
             tier,
             overrides: Vec::new(),
             seen: Mutex::new(Seen::default()),
@@ -67,15 +71,20 @@ impl LemonadeMind {
         if let Some((_, m)) = self.overrides.iter().find(|(r, _)| *r == role) {
             return Ok(m.clone());
         }
-        tier::model_for(self.tier, role)
-            .map(str::to_string)
-            .ok_or(MindError::Unavailable)
+        match self.picks.get(role) {
+            "" => Err(MindError::Unavailable),
+            m => Ok(m.to_string()),
+        }
     }
 
     /// The model, once it is certain to be fully on disk. The engine downloads a missing model
     /// on first use even when told to stay offline, so nothing may reach it before this passes.
     async fn installed(&self, role: ComponentRole) -> Result<String, MindError> {
         let model = self.model(role)?;
+        self.installed_model(model).await
+    }
+
+    async fn installed_model(&self, model: String) -> Result<String, MindError> {
         let mut seen = self.seen.lock().await;
         let generation = self.client.generation();
         if seen.generation != generation {
@@ -779,6 +788,20 @@ impl Mind for LemonadeMind {
                 return Ok(Vec::new());
             }
             let model = self.installed(ComponentRole::Recall).await?;
+            Ok(self.client.embeddings(&model, texts).await?)
+        })
+    }
+
+    fn embed_with<'a>(
+        &'a self,
+        model: &'a str,
+        texts: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
+        Box::pin(async move {
+            if texts.is_empty() {
+                return Ok(Vec::new());
+            }
+            let model = self.installed_model(model.to_string()).await?;
             Ok(self.client.embeddings(&model, texts).await?)
         })
     }

@@ -501,6 +501,15 @@ pub struct ModelInfo {
     pub labels: Vec<String>,
     #[serde(default)]
     pub checkpoint_status: Vec<CheckpointStatus>,
+    /// Recommended by the engine's catalogue.
+    #[serde(default)]
+    pub suggested: bool,
+    /// Set on a model served by a provider rather than this computer.
+    #[serde(default)]
+    pub cloud_provider: Option<String>,
+    /// The largest context the model takes, when the engine knows it.
+    #[serde(default)]
+    pub max_context_window: Option<u32>,
 }
 
 impl ModelInfo {
@@ -671,6 +680,14 @@ impl Client {
         } else {
             Ok(None)
         }
+    }
+
+    /// Deletes a model's files (`POST /v1/delete`), unloading it first.
+    pub async fn delete(&self, model: &str) -> Result<(), RuntimeError> {
+        let _: Value = self
+            .post_json("/v1/delete", &json!({"model_name": model}))
+            .await?;
+        Ok(())
     }
 
     pub async fn load(&self, model: &str, options: &LoadOptions) -> Result<(), RuntimeError> {

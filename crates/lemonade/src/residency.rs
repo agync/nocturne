@@ -16,6 +16,8 @@
 use nocturne_contract::{ComponentRole, Tier};
 use serde_json::{Map, Value, json};
 
+use crate::fit::Budget;
+use crate::selection::Selection;
 use crate::tier;
 
 /// Seconds a model in `role` on `tier` may sit idle before the engine unloads it, where the
@@ -77,6 +79,26 @@ pub fn alone(tier: Tier) -> Vec<String> {
     }
 }
 
+/// The options to save for the models of `s`. For now the same as [`saved_options`].
+pub fn saved_options_for(s: &Selection) -> Vec<(String, Map<String, Value>)> {
+    let _ = s;
+    saved_options()
+        .into_iter()
+        .map(|(m, o)| (m.to_string(), o))
+        .collect()
+}
+
+/// Models that run with nothing else loaded for `s`. For now the same as [`alone`].
+pub fn alone_for(s: &Selection, b: &Budget) -> Vec<String> {
+    let _ = b;
+    alone(s.tier)
+}
+
+/// The context the mind of `s` is loaded with. For now the same as [`mind_context`].
+pub fn mind_context_for(s: &Selection) -> u32 {
+    mind_context(s.tier)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,6 +145,27 @@ mod tests {
         assert_eq!(recall.len(), 1);
         assert_eq!(recall[0].1["ctx_size"], tier::RECALL_CONTEXT);
         assert!(!recall[0].1.contains_key("evict_idle_timeout"));
+    }
+
+    #[test]
+    fn existing_tier_behaviour_unchanged() {
+        let b = crate::fit::budget(16 << 30, 0, 100 << 30);
+        let today: Vec<(String, Map<String, Value>)> = saved_options()
+            .into_iter()
+            .map(|(m, o)| (m.to_string(), o))
+            .collect();
+        for t in [
+            Tier::Large,
+            Tier::Standard,
+            Tier::Small,
+            Tier::Tiny,
+            Tier::Unsupported,
+        ] {
+            let s = Selection::preset(t);
+            assert_eq!(saved_options_for(&s), today, "{t:?}");
+            assert_eq!(alone_for(&s, &b), alone(t), "{t:?}");
+            assert_eq!(mind_context_for(&s), mind_context(t), "{t:?}");
+        }
     }
 
     #[test]
