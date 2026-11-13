@@ -31,6 +31,7 @@ describe("event to query invalidation", () => {
       "page-ready": [["page"], ["pages"]],
       "needs-you-changed": [["needsYou"], ["status"]],
       "setup-progress": [["setup"]],
+      "export-progress": [],
     });
   });
 

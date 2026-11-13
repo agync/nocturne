@@ -80,6 +80,21 @@ export class TauriEngine implements EngineClient {
       throw toEngineError(error);
     }
   };
+  keepBytes: EngineClient["keepBytes"] = async (bytes, mime, source) => {
+    try {
+      return await invoke("keep_bytes", bytes, {
+        headers: { "x-nocturne-mime": mime, "x-nocturne-source": source },
+      });
+    } catch (error) {
+      throw toEngineError(error);
+    }
+  };
+  unkeep: EngineClient["unkeep"] = (id) => this.call("unkeep", { id });
+  readNow: EngineClient["readNow"] = (id) => this.call("read_now", { id });
+  setItemPrivate: EngineClient["setItemPrivate"] = (id, isPrivate) =>
+    this.call("set_item_private", { id, private: isPrivate });
+  setItemKeepForever: EngineClient["setItemKeepForever"] = (id, keepForever) =>
+    this.call("set_item_keep_forever", { id, keepForever });
   listItems: EngineClient["listItems"] = (filter) => this.call("list_items", { filter });
   getItem: EngineClient["getItem"] = (id) => this.call("get_item", { id });
   retryItem: EngineClient["retryItem"] = (id) => this.call("retry_item", { id });
@@ -98,6 +113,9 @@ export class TauriEngine implements EngineClient {
 
   listMemories: EngineClient["listMemories"] = (filter) => this.call("list_memories", { filter });
   getEntity: EngineClient["getEntity"] = (id) => this.call("get_entity", { id });
+  listEntities: EngineClient["listEntities"] = (kind, query) =>
+    this.call("list_entities", { kind, query });
+  snooze: EngineClient["snooze"] = (memoryId, days) => this.call("snooze", { memoryId, days });
   correctMemory: EngineClient["correctMemory"] = (id, text) =>
     this.call("correct_memory", { id, text });
   setKeepForever: EngineClient["setKeepForever"] = (id, keepForever) =>

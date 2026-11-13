@@ -2,7 +2,10 @@ import type {
   AdvancedView,
   AskDelta,
   EngineStatus,
+  EntityKind,
   EntityView,
+  ExportProgress,
+  ExportReport,
   ForgetPreview,
   ForgetReport,
   ItemFilter,
@@ -54,6 +57,7 @@ export interface EngineEvents {
   "status-changed": EngineStatus;
   "item-changed": ItemView;
   "setup-progress": SetupView;
+  "export-progress": ExportProgress;
   "ask-delta": AskDelta;
   "page-ready": PageSummary;
   "needs-you-changed": number;
@@ -65,6 +69,7 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "status-changed",
   "item-changed",
   "setup-progress",
+  "export-progress",
   "ask-delta",
   "page-ready",
   "needs-you-changed",
@@ -84,6 +89,14 @@ export interface EngineClient {
   keepText(text: string, source: Source): Promise<Kept>;
   keepFiles(paths: string[], source: Source): Promise<Kept[]>;
   keepRecording(bytes: Uint8Array, mime: string): Promise<Kept>;
+  /** Keeps a pasted or dragged image, audio or document. The bytes are the raw body. */
+  keepBytes(bytes: Uint8Array, mime: string, source: Source): Promise<Kept>;
+  /** Takes back something just kept, as if it had not been. */
+  unkeep(id: string): Promise<void>;
+  /** Skips the queue: reads this item now instead of tonight. */
+  readNow(id: string): Promise<ItemView>;
+  setItemPrivate(id: string, isPrivate: boolean): Promise<void>;
+  setItemKeepForever(id: string, keepForever: boolean): Promise<void>;
   listItems(filter: ItemFilter): Promise<ItemView[]>;
   getItem(id: string): Promise<ItemView>;
   retryItem(id: string): Promise<ItemView>;
@@ -100,6 +113,9 @@ export interface EngineClient {
 
   listMemories(filter: MemoryFilter): Promise<MemoryView[]>;
   getEntity(id: string): Promise<EntityView>;
+  listEntities(kind: EntityKind | null, query: string | null): Promise<EntityView[]>;
+  /** Stops a fading memory from fading for this many days. */
+  snooze(memoryId: string, days: number): Promise<void>;
   correctMemory(id: string, text: string): Promise<MemoryView>;
   setKeepForever(id: string, keepForever: boolean): Promise<void>;
   setPrivate(id: string, isPrivate: boolean): Promise<void>;
@@ -110,7 +126,8 @@ export interface EngineClient {
   listFading(): Promise<MemoryView[]>;
 
   getPrivacy(): Promise<PrivacyView>;
-  exportTo(dir: string): Promise<void>;
+  /** Progress arrives as `export-progress` events while it runs. */
+  exportTo(dir: string): Promise<ExportReport>;
   deleteEverything(confirmPhrase: string): Promise<void>;
   getSettings(): Promise<SettingsView>;
   updateSettings(patch: SettingsPatch): Promise<SettingsView>;

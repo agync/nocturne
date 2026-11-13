@@ -25,6 +25,8 @@ export const EVENT_INVALIDATIONS: Readonly<Partial<Record<EngineEventName, Query
   "page-ready": [["page"], ["pages"]],
   "needs-you-changed": [["needsYou"], ["status"]],
   "setup-progress": [["setup"]],
+  /** Progress only: the screen that started the export listens for it directly. */
+  "export-progress": [],
 };
 
 const EngineContext = createContext<EngineClient | null>(null);

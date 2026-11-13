@@ -268,3 +268,88 @@ describe("MockEngine settings and events", () => {
     expect(page.date).toBe("2026-06-01");
   });
 });
+
+describe("MockEngine, shared by the screen lanes", () => {
+  it("takes back something just kept", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const kept = await engine.keepText("Take this back", "quickCapture");
+    await engine.unkeep(kept.item.id);
+    await expect(engine.getItem(kept.item.id)).rejects.toThrow();
+  });
+
+  it("keeps pasted bytes by what they are", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const photo = await engine.keepBytes(new Uint8Array([1]), "image/png", "paste");
+    const note = await engine.keepBytes(new Uint8Array(32_000), "audio/webm", "recording");
+    expect(photo.item.kind).toBe("image");
+    expect(note.item.kind).toBe("audio");
+    expect(note.item.durationMs).toBeGreaterThan(1000);
+  });
+
+  it("reads an item now and says it is reading", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const kept = await engine.keepText("Read me now", "quickCapture");
+    await expect(engine.readNow(kept.item.id)).resolves.toMatchObject({ status: "reading" });
+  });
+
+  it("lists people, places and things, filtered", async () => {
+    const engine = createMockEngine({ now: NOW });
+    expect((await engine.listEntities(null, null)).length).toBeGreaterThan(3);
+    expect((await engine.listEntities("person", "okafor")).map((e) => e.id)).toEqual([
+      "ent-okafor",
+    ]);
+    expect(await engine.listEntities("place", null)).toEqual([]);
+  });
+
+  it("snoozes a fading memory back to active, and flags items", async () => {
+    const engine = createMockEngine({ now: NOW });
+    await engine.snooze("mem-jo", 30);
+    const jo = (
+      await engine.listMemories({
+        itemId: null,
+        entityId: null,
+        status: null,
+        query: "Jo",
+        limit: null,
+      })
+    )[0];
+    expect(jo?.status).toBe("active");
+    await engine.setItemPrivate("item-gran", true);
+    expect((await engine.getItem("item-gran")).private).toBe(true);
+    await engine.setItemKeepForever("item-gran", true);
+    const gran = await engine.listMemories({
+      itemId: "item-gran",
+      entityId: null,
+      status: null,
+      query: null,
+      limit: null,
+    });
+    expect(gran.every((m) => m.keepForever)).toBe(true);
+  });
+
+  it("filters memories by the item they came from", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const out = await engine.listMemories({
+      itemId: "item-letter",
+      entityId: null,
+      status: null,
+      query: null,
+      limit: null,
+    });
+    expect(out.map((m) => m.id)).toContain("mem-trip");
+    expect(out.every((m) => m.receipts.some((r) => r.itemId === "item-letter"))).toBe(true);
+  });
+
+  it("exports with progress and reports where it wrote", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const engine = createMockEngine({ now: NOW });
+    const seen: number[] = [];
+    engine.on("export-progress", (p) => seen.push(p.done / p.total));
+    const report = await engine.exportTo("/out");
+    expect(report.path).toBe("/out/Nocturne export");
+    expect(report.memories).toBeGreaterThan(0);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(seen.at(-1)).toBe(1);
+    vi.useRealTimers();
+  });
+});

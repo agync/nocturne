@@ -3,7 +3,9 @@ import type {
   AdvancedView,
   AskDelta,
   EngineStatus,
+  EntityKind,
   EntityView,
+  ExportReport,
   ForgetPreview,
   ForgetReport,
   ItemFilter,
@@ -326,6 +328,58 @@ export class MockEngine implements EngineClient {
     });
   }
 
+  async keepBytes(bytes: Uint8Array, mime: string, source: Source): Promise<Kept> {
+    const kind: ItemKind = mime.startsWith("image/")
+      ? "image"
+      : mime.startsWith("audio/")
+        ? "audio"
+        : mime.startsWith("text/")
+          ? "text"
+          : "document";
+    const title = {
+      image: "Photo",
+      audio: "Voice note",
+      text: "Note",
+      document: "Document",
+      web: "Web page",
+    }[kind];
+    const item = this.newItem(kind, title, source, {
+      durationMs: kind === "audio" ? Math.max(1000, Math.round(bytes.length / 16)) : null,
+    });
+    return { type: "new", item: clone(item) };
+  }
+
+  async unkeep(id: string): Promise<void> {
+    const found = this.items.find((i) => i.id === id);
+    if (!found) throw new Error(`No item ${id}`);
+    this.items = this.items.filter((i) => i.id !== id);
+    this.memories = this.memories.filter(
+      (m) => !(m.receipts.length > 0 && m.receipts.every((r) => r.itemId === id)),
+    );
+    this.refreshStatus(true);
+  }
+
+  async readNow(id: string): Promise<ItemView> {
+    const found = this.items.find((i) => i.id === id);
+    if (!found) throw new Error(`No item ${id}`);
+    found.status = "reading";
+    this.scheduleReading(id, found.kind === "web");
+    this.emit("item-changed", found);
+    return clone(found);
+  }
+
+  async setItemPrivate(id: string, isPrivate: boolean): Promise<void> {
+    const found = this.items.find((i) => i.id === id);
+    if (!found) throw new Error(`No item ${id}`);
+    found.private = isPrivate;
+  }
+
+  async setItemKeepForever(id: string, keepForever: boolean): Promise<void> {
+    for (const m of this.memories.filter((x) => x.receipts.some((r) => r.itemId === id))) {
+      m.keepForever = keepForever;
+    }
+  }
+
   async keepRecording(bytes: Uint8Array, _mime: string): Promise<Kept> {
     const item = this.newItem("audio", "Voice note", "recording", {
       durationMs: Math.max(1000, Math.round(bytes.length / 16)),
@@ -567,6 +621,21 @@ export class MockEngine implements EngineClient {
     return clone(found);
   }
 
+  async listEntities(kind: EntityKind | null, query: string | null): Promise<EntityView[]> {
+    const q = query?.trim().toLowerCase() ?? "";
+    return clone(
+      this.entities
+        .filter((e) => kind === null || e.kind === kind)
+        .filter((e) => q === "" || `${e.name} ${e.role ?? ""}`.toLowerCase().includes(q)),
+    );
+  }
+
+  async snooze(memoryId: string, _days: number): Promise<void> {
+    const m = this.memory(memoryId);
+    if (m.status === "fading") m.status = "active";
+    m.lastUsed = this.clock.toISOString();
+  }
+
   async correctMemory(id: string, text: string): Promise<MemoryView> {
     const m = this.memory(id);
     m.sentence = text;
@@ -732,7 +801,19 @@ export class MockEngine implements EngineClient {
     };
   }
 
-  async exportTo(_dir: string): Promise<void> {}
+  async exportTo(dir: string): Promise<ExportReport> {
+    const report: ExportReport = {
+      path: `${dir}/Nocturne export`,
+      memories: this.memories.length,
+      pages: this.pages.length,
+      originals: this.items.filter((i) => i.hasOriginal).length,
+    };
+    const total = report.memories + report.pages + report.originals;
+    for (const done of [Math.round(total / 3), Math.round((2 * total) / 3), total]) {
+      setTimeout(() => this.emit("export-progress", { done, total }), done);
+    }
+    return report;
+  }
 
   async deleteEverything(confirmPhrase: string): Promise<void> {
     if (confirmPhrase !== "delete everything") throw new Error("The confirmation did not match");

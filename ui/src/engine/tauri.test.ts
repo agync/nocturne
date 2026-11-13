@@ -58,6 +58,12 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["keepFiles", [["a.pdf"], "drop"], "keep_files", ["paths", "source"]],
   ["listItems", [{ since: null, status: null, limit: null }], "list_items", ["filter"]],
   ["getItem", ["i1"], "get_item", ["id"]],
+  ["unkeep", ["i1"], "unkeep", ["id"]],
+  ["readNow", ["i1"], "read_now", ["id"]],
+  ["setItemPrivate", ["i1", true], "set_item_private", ["id", "private"]],
+  ["setItemKeepForever", ["i1", true], "set_item_keep_forever", ["id", "keepForever"]],
+  ["listEntities", ["person", "le"], "list_entities", ["kind", "query"]],
+  ["snooze", ["m1", 30], "snooze", ["memoryId", "days"]],
   ["retryItem", ["i1"], "retry_item", ["id"]],
   ["ask", ["When?"], "ask", ["question"]],
   ["getPage", ["2026-11-13"], "get_page", ["date"]],
@@ -103,7 +109,7 @@ describe("TauriEngine commands", () => {
   }
 
   it("covers every method of the client", () => {
-    const covered = new Set<string>([...table.map(([m]) => m), "keepRecording"]);
+    const covered = new Set<string>([...table.map(([m]) => m), "keepRecording", "keepBytes"]);
     const proto = Object.getOwnPropertyNames(engine).filter(
       (k) =>
         typeof (engine as unknown as Record<string, unknown>)[k] === "function" &&
@@ -127,6 +133,19 @@ describe("TauriEngine commands", () => {
     expect(seen[0]?.cmd).toBe("keep_recording");
     expect(seen[0]?.args).toBeInstanceOf(Uint8Array);
     expect(Array.from((seen[0]?.args ?? []) as Uint8Array)).toEqual([1, 2, 3]);
+  });
+
+  it("sends pasted bytes as the raw body, naming the kind and where they came from", async () => {
+    const seen: unknown[] = [];
+    clearMocks();
+    mockIPC((cmd, args) => {
+      seen.push([cmd, args]);
+      return null;
+    });
+    await engine.keepBytes(new Uint8Array([5, 6]), "image/png", "paste");
+    const [cmd, args] = seen[0] as [string, Uint8Array];
+    expect(cmd).toBe("keep_bytes");
+    expect(Array.from(args)).toEqual([5, 6]);
   });
 
   it("passes null, not undefined, for the default page date", async () => {

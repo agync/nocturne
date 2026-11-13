@@ -26,8 +26,8 @@ describe("TauriEngine subscribing", () => {
       expect.stringContaining("status-changed"),
       expect.any(Error),
     );
-    // 6 events, plus one retry for the one that failed.
-    expect(listen).toHaveBeenCalledTimes(7);
+    // 7 events, plus one retry for the one that failed.
+    expect(listen).toHaveBeenCalledTimes(8);
     expect(unhandled).not.toHaveBeenCalled();
     engine.dispose();
     process.off("unhandledRejection", unhandled);
@@ -39,7 +39,7 @@ describe("TauriEngine subscribing", () => {
     listen.mockRejectedValue(new Error("down"));
     const engine = new TauriEngine();
     await vi.advanceTimersByTimeAsync(2000);
-    expect(listen).toHaveBeenCalledTimes(12);
+    expect(listen).toHaveBeenCalledTimes(14);
     engine.dispose();
     error.mockRestore();
   });
