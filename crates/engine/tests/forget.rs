@@ -148,7 +148,10 @@ fn forget_leaves_no_trace() {
             .any(|l| l.memory_ids.contains(&w.m1))
     );
 
-    let preview = f.engine.preview_forget(&[w.m1.clone()], true).unwrap();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&w.m1), true)
+        .unwrap();
     assert_eq!(
         preview.memories.len(),
         2,
@@ -280,7 +283,10 @@ fn forget_leaves_no_trace() {
 #[test]
 fn forgetting_without_originals_keeps_the_items() {
     let w = world();
-    let preview = w.f.engine.preview_forget(&[w.m1.clone()], false).unwrap();
+    let preview =
+        w.f.engine
+            .preview_forget(std::slice::from_ref(&w.m1), false)
+            .unwrap();
     let r = w.f.engine.forget(&preview.token).unwrap();
     assert_eq!(r.originals_removed, 0);
     assert!(w.f.engine.get_item(&w.note).is_ok());
@@ -294,15 +300,22 @@ fn tokens_are_single_use_and_go_stale() {
     assert!(matches!(e.forget("nope"), Err(Error::StaleToken)));
 
     // Reused.
-    let p = e.preview_forget(&[w.m2.clone()], false).unwrap();
+    let p = e
+        .preview_forget(std::slice::from_ref(&w.m2), false)
+        .unwrap();
     e.forget(&p.token).unwrap();
     assert!(matches!(e.forget(&p.token), Err(Error::StaleToken)));
 
     // Changed since the preview: the memory was used.
-    let p = e.preview_forget(&[w.m1.clone()], false).unwrap();
-    w.f.clock.set_str("2026-11-14T06:01:00Z");
-    e.mark_used(&[w.m1.clone()], nocturne_engine::UseKind::Answer)
+    let p = e
+        .preview_forget(std::slice::from_ref(&w.m1), false)
         .unwrap();
+    w.f.clock.set_str("2026-11-14T06:01:00Z");
+    e.mark_used(
+        std::slice::from_ref(&w.m1),
+        nocturne_engine::UseKind::Answer,
+    )
+    .unwrap();
     assert!(matches!(e.forget(&p.token), Err(Error::StaleToken)));
     assert!(
         e.get_memory(&w.m1).is_ok(),
@@ -310,13 +323,17 @@ fn tokens_are_single_use_and_go_stale() {
     );
 
     // Expired after ten minutes.
-    let p = e.preview_forget(&[w.m1.clone()], false).unwrap();
+    let p = e
+        .preview_forget(std::slice::from_ref(&w.m1), false)
+        .unwrap();
     w.f.clock.set_str("2026-11-14T06:12:00Z");
     assert!(matches!(e.forget(&p.token), Err(Error::StaleToken)));
     assert!(e.get_memory(&w.m1).is_ok());
 
     // A fresh one works.
-    let p = e.preview_forget(&[w.m1.clone()], false).unwrap();
+    let p = e
+        .preview_forget(std::slice::from_ref(&w.m1), false)
+        .unwrap();
     e.forget(&p.token).unwrap();
     assert!(e.get_memory(&w.m1).is_err());
     assert!(e.preview_forget(&["mem_missing".into()], false).is_err());
@@ -425,7 +442,10 @@ fn a_page_that_cites_a_memory_only_through_the_daily_question_is_redacted() {
         )
         .unwrap();
 
-    let preview = f.engine.preview_forget(&[m.clone()], true).unwrap();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&m), true)
+        .unwrap();
     assert_eq!(preview.pages_affected, 2, "the question page counts too");
     f.engine.forget(&preview.token).unwrap();
 
@@ -495,7 +515,7 @@ fn a_forget_hides_everything_at_once_and_a_crash_between_phases_is_finished_on_o
     let stale = e.compose_page(day, Edition::Screen).unwrap();
     assert!(lines(&stale).iter().any(|l| l.memory_ids.contains(&w.m1)));
 
-    let preview = e.preview_forget(&[w.m1.clone()], true).unwrap();
+    let preview = e.preview_forget(std::slice::from_ref(&w.m1), true).unwrap();
     e.forget_begin_only(&preview.token).unwrap();
 
     // From this moment nothing shows the memories, though the app has "stopped" before purging.

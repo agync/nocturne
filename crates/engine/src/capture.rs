@@ -284,8 +284,8 @@ impl Engine {
     pub fn lease_pending(&self, limit: usize, lease: Duration) -> Result<Vec<PendingItem>> {
         let now = self.clock().now();
         let until = now
-            .checked_add(SignedDuration::try_from(lease).map_err(|e| Error::invalid(e))?)
-            .map_err(|e| Error::invalid(e))?;
+            .checked_add(SignedDuration::try_from(lease).map_err(Error::invalid)?)
+            .map_err(Error::invalid)?;
         let dir = self.originals_dir();
         self.write(|tx| {
             reset_expired_leases(tx, &fmt_ts(now))?;

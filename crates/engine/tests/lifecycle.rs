@@ -70,8 +70,12 @@ fn answer_page_and_confirm_count_as_use_but_browsing_does_not() {
     for id in [&a, &b, &c, &d] {
         assert_eq!(status(&f, id), MemoryStatus::Fading);
     }
-    f.engine.mark_used(&[a.clone()], UseKind::Answer).unwrap();
-    f.engine.mark_used(&[b.clone()], UseKind::Page).unwrap();
+    f.engine
+        .mark_used(std::slice::from_ref(&a), UseKind::Answer)
+        .unwrap();
+    f.engine
+        .mark_used(std::slice::from_ref(&b), UseKind::Page)
+        .unwrap();
     f.engine.confirm(&c, true).unwrap();
     for id in [&a, &b, &c] {
         assert_eq!(
@@ -100,7 +104,9 @@ fn use_brings_a_let_go_memory_back() {
     f.clock.advance_days(100);
     f.engine.decay().unwrap();
     assert_eq!(status(&f, &id), MemoryStatus::LetGo);
-    f.engine.mark_used(&[id.clone()], UseKind::Answer).unwrap();
+    f.engine
+        .mark_used(std::slice::from_ref(&id), UseKind::Answer)
+        .unwrap();
     let m = f.engine.get_memory(&id).unwrap();
     assert_eq!(m.status, MemoryStatus::Active);
     assert_eq!(m.let_go_at, None);
@@ -198,7 +204,7 @@ fn restore_returns_let_go_to_active_with_last_used_now() {
     f.clock.advance_days(100);
     f.engine.decay().unwrap();
     f.clock.set_str("2027-03-01T08:00:00Z");
-    f.engine.restore(&[id.clone()]).unwrap();
+    f.engine.restore(std::slice::from_ref(&id)).unwrap();
     let m = f.engine.get_memory(&id).unwrap();
     assert_eq!(m.status, MemoryStatus::Active);
     assert_eq!(m.last_used.as_deref(), Some("2027-03-01T08:00:00.000Z"));

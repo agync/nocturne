@@ -677,7 +677,10 @@ fn saving_marks_cited_memories_used_once_but_not_let_go_lines() {
         MemoryStatus::LetGo
     );
     f.engine
-        .mark_used(&[kept.clone()], nocturne_engine::UseKind::Answer)
+        .mark_used(
+            std::slice::from_ref(&kept),
+            nocturne_engine::UseKind::Answer,
+        )
         .unwrap();
     learn(
         &f.engine,

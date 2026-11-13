@@ -29,6 +29,16 @@ nocturne.json      all of it as data, including earlier versions of memories\n\
 Memories you marked private are included here, because this is your own copy. They are marked.\n\
 Anything you asked Nocturne to forget completely is not here.\n";
 
+/// `id, sha256, ext, file_name, origin, metadata` of an item.
+type ItemRow = (
+    String,
+    String,
+    Option<String>,
+    Option<String>,
+    Option<String>,
+    String,
+);
+
 fn marks(m: &MemRow) -> String {
     let mut out = String::new();
     if m.private {
@@ -172,7 +182,7 @@ impl Engine {
             let mut stmt = conn.prepare(
                 "SELECT id, sha256, ext, file_name, origin, metadata FROM items ORDER BY kept_at, id",
             )?;
-            let rows: Vec<(String, String, Option<String>, Option<String>, Option<String>, String)> = stmt
+            let rows: Vec<ItemRow> = stmt
                 .query_map([], |r| {
                     Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
                 })?
@@ -194,7 +204,7 @@ impl Engine {
                         .chars()
                         .map(|c| if c == '/' || c == '\\' { '_' } else { c })
                         .collect();
-                    let target = format!("{}-{safe}", &id);
+                    let target = format!("{id}-{safe}");
                     if src.exists() {
                         std::fs::copy(&src, dir.join("originals").join(&target))?;
                         copied += 1;

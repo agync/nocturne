@@ -98,6 +98,11 @@ impl Engine {
         &self.inner.dir
     }
 
+    /// The engine's current instant, from its clock.
+    pub fn clock_now(&self) -> jiff::Timestamp {
+        self.inner.clock.now()
+    }
+
     pub(crate) fn clock(&self) -> &dyn Clock {
         self.inner.clock.as_ref()
     }

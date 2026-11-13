@@ -163,7 +163,7 @@ fn a_forgotten_memory_is_not_in_a_later_export() {
     let w = world();
     let p =
         w.f.engine
-            .preview_forget(&[w.private.clone()], true)
+            .preview_forget(std::slice::from_ref(&w.private), true)
             .unwrap();
     w.f.engine.forget(&p.token).unwrap();
     let out = tempfile::tempdir().unwrap();
