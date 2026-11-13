@@ -9,6 +9,8 @@ use tauri::{AppHandle, Runtime};
 
 use crate::error::CommandError;
 
+pub mod quick_capture;
+
 /// The commands the quick capture window may call. Everything else is refused for it.
 const QUICK_CAPTURE_COMMANDS: &[&str] = &[
     "get_status",
@@ -30,7 +32,11 @@ pub fn install<R: Runtime>(_app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
 
 /// Handle a second launch that is for the OS lane (`--quick-capture`). `true` means it was
 /// handled and the main window should stay as it is.
-pub fn on_second_launch<R: Runtime>(_app: &AppHandle<R>, _args: &[String]) -> bool {
+pub fn on_second_launch<R: Runtime>(app: &AppHandle<R>, args: &[String]) -> bool {
+    if quick_capture::wants_quick_capture(args) {
+        quick_capture::open(app);
+        return true;
+    }
     false
 }
 
@@ -38,7 +44,7 @@ pub fn on_second_launch<R: Runtime>(_app: &AppHandle<R>, _args: &[String]) -> bo
 pub fn window_may_call(label: &str, command: &str) -> bool {
     match label {
         crate::window::MAIN => true,
-        "quick-capture" => QUICK_CAPTURE_COMMANDS.contains(&command),
+        quick_capture::LABEL => QUICK_CAPTURE_COMMANDS.contains(&command),
         _ => false,
     }
 }
