@@ -1,0 +1,5 @@
+# captured from tailscale 1.104.6 on a developer machine; not yet the pinned binary, run scripts/helpers-pin.sh
+Reset current serve config
+
+USAGE
+  tailscale serve reset

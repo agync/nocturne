@@ -15,10 +15,32 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+mod fixtures;
+mod install;
+mod lock;
+
+pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
+pub use install::remove_partial;
+pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
+
+/// Present only in builds with the `fake` feature, so the package check can refuse them.
+#[cfg(feature = "fake")]
+pub const FAKE_MARKER: &str = "nocturne-fake-helpers-marker";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HelperKind {
     Cloudflared,
     Tailscaled,
+}
+
+impl HelperKind {
+    /// The helper's own name, also its folder name and its key in `helpers.lock`.
+    pub fn name(self) -> &'static str {
+        match self {
+            HelperKind::Cloudflared => "cloudflared",
+            HelperKind::Tailscaled => "tailscaled",
+        }
+    }
 }
 
 /// Where the helpers live: `<data>/remote`, owner-only.
@@ -67,8 +89,7 @@ pub enum HelperError {
 
 /// The helper of this kind already installed under `dirs`, if any.
 pub fn installed(kind: HelperKind, dirs: &HelperDirs) -> Option<Installed> {
-    let _ = (kind, dirs);
-    None
+    install::installed_with(&HelpersLock::current(), kind, dirs)
 }
 
 /// Hash the helper again and compare it with its pin. Called before every start.
@@ -103,8 +124,7 @@ pub async fn install(
     progress: watch::Sender<InstallProgress>,
     cancel: CancellationToken,
 ) -> Result<Installed, HelperError> {
-    let _ = (kind, dirs, progress, cancel);
-    Err(HelperError::Unsupported)
+    install::install_embedded(kind, dirs, progress, cancel).await
 }
 
 /// How the helper reaches Nocturne's listener.
