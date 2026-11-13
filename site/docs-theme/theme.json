@@ -1,0 +1,13 @@
+{
+  "name": "nocturne",
+  "version": "1.0.0",
+  "description": "Nocturne's colours and faces over the default okf-wiki theme, with a link back to the landing page.",
+  "template": "template.html",
+  "assets": {
+    "tokens.css": { "mode": "replace" },
+    "fonts.css": { "mode": "replace" },
+    "fonts/": { "mode": "replace" },
+    "brand-mark.svg": { "mode": "replace" },
+    "favicon.svg": { "mode": "replace" }
+  }
+}

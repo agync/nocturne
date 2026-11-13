@@ -1,0 +1,315 @@
+/* Nocturne theme for the okf-wiki docs: the app's colours and faces (ui/src/design/tokens.json)
+   mapped onto the renderer's token names. The reading ground is the page sheet in both themes. */
+:root {
+  color-scheme: light;
+
+  --color-bg: #FBFAF6;
+  --color-surface: #FBFAF6;
+  --color-surface-sunken: #F4F1EA;
+  --color-surface-sunken-deep: #EEEBE4;
+  --color-bg-elevated: #FFFFFF;
+
+  --color-text: #17181C;
+  --color-heading: #17181C;
+  --color-text-muted: #4A4B50;
+  --color-text-faint: #66645E;
+
+  --color-line: #DAD5CA;
+  --color-line-strong: #CFC9BC;
+  --color-line-control: #8A877F;
+
+  --color-accent: #17181C;
+  --color-on-accent: #FBFAF6;
+  --color-accent-text: #2C4BCF;
+  --color-accent-soft: #EEEBE4;
+  --color-accent-ring: #C9D1F2;
+
+  --color-current-tint: #E3E7F8;
+
+  --focus-ring: #2C4BCF;
+  --focus-ring-offset: 2px;
+  --focus-ring-width: 2px;
+
+  --status-success-tint: #F0F8F2;
+  --status-success-line: #CFE7D8;
+  --status-success-text: #166534;
+  --status-info-tint: #EFF4FF;
+  --status-info-line: #D3E0FB;
+  --status-info-text: #1E40AF;
+  --status-warn-tint: #FFF8E6;
+  --status-warn-line: #F5E3B8;
+  --status-warn-text: #7A4E00;
+  --status-danger-tint: #F5E6DF;
+  --status-danger-line: #E8C9BC;
+  --status-danger-text: #A8402A;
+  --status-neutral-tint: #F1F1F3;
+  --status-neutral-line: #DCDCE0;
+  --status-neutral-text: #3D3D3D;
+
+  --font-display: "Newsreader", Georgia, serif;
+  --font-ui: "IBM Plex Sans", system-ui, sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, monospace;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 500;
+  --fw-bold: 600;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-body: 1rem;
+  --text-lg: 1.125rem;
+  --text-h3: 1.25rem;
+  --text-h2: 1.5rem;
+  --text-h1: clamp(2.25rem, 1.5rem + 2.4vw, 3rem);
+
+  --lh-tight: 1.12;
+  --lh-snug: 1.25;
+  --lh-normal: 1.5;
+  --lh-relaxed: 1.6;
+
+  --ls-display: -0.03em;
+  --ls-tight: -0.02em;
+  --ls-snug: -0.01em;
+
+  --measure: 68ch;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --radius-pill: 999px;
+
+  --shadow-sm: 0 1px 2px rgba(10, 10, 10, 0.05), 0 0 1px rgba(10, 10, 10, 0.27);
+  --shadow-md: 0 4px 8px -2px rgba(10, 10, 10, 0.08), 0 2px 4px -2px rgba(10, 10, 10, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(10, 10, 10, 0.1), 0 4px 6px -4px rgba(10, 10, 10, 0.1);
+
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 280ms;
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-strong: cubic-bezier(0.23, 1, 0.32, 1);
+
+  --color-scrim: rgba(10, 10, 10, 0.44);
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-header: 30;
+  --z-overlay: 40;
+  --z-skip-link: 50;
+  --z-lightbox: 60;
+
+  --color-code-bg: #17181C;
+  --color-code-fg: #ECE8DF;
+  --color-code-line: #2A2E37;
+  --color-inline-code-bg: #EEEBE4;
+  --color-inline-code-fg: #17181C;
+  --color-selection-bg: #F2D488;
+  --color-selection-fg: #17181C;
+  --color-mark: #F2D488;
+  --color-mark-ink: #17181C;
+
+  --diagram-font: "IBM Plex Sans", system-ui, sans-serif;
+  --diagram-ground: #FBFAF6;
+  --diagram-surface: #F4F1EA;
+  --diagram-surface-alt: #EEEBE4;
+  --diagram-ink: #17181C;
+  --diagram-muted: #4A4B50;
+  --diagram-line: #CFC9BC;
+  --diagram-accent: #2C4BCF;
+  --diagram-accent-soft: #E3E7F8;
+  --diagram-accent-ink: #2C4BCF;
+  --diagram-accent-2: #86EFAC;
+  --diagram-accent-3: #A7F3C4;
+  --diagram-yellow: #F3C83D;
+  --diagram-cyan: #67E8F9;
+  --diagram-red: #A8402A;
+  --diagram-amber: #7A4E00;
+  --diagram-green: #86EFAC;
+  --diagram-blue: #93C5FD;
+  --diagram-violet: #C4B5FD;
+  --diagram-pink: #F9A8D4;
+
+  --lb-bg: #0E1014;
+  --lb-bar: #16191F;
+  --lb-line: #2A2E37;
+  --lb-line-strong: #353A45;
+  --lb-text: #ECE8DF;
+  --lb-muted: #ABA79E;
+  --lb-faint: #8A877F;
+  --lb-accent: #9DB0FF;
+  --lb-accent-line: #2D3A66;
+  --lb-hint: #8A877F;
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --color-bg: #16191F;
+    --color-surface: #16191F;
+    --color-surface-sunken: #121419;
+    --color-surface-sunken-deep: #0E1014;
+    --color-bg-elevated: #1E222A;
+
+    --color-text: #ECE8DF;
+    --color-heading: #ECE8DF;
+    --color-text-muted: #ABA79E;
+    --color-text-faint: #8A877F;
+
+    --color-line: #2A2E37;
+    --color-line-strong: #353A45;
+    --color-line-control: #6E6B64;
+
+    --color-accent: #ECE8DF;
+    --color-on-accent: #0E1014;
+    --color-accent-text: #9DB0FF;
+    --color-accent-soft: #1E222A;
+    --color-accent-ring: #2D3A66;
+    --color-current-tint: #1E2640;
+
+    --focus-ring: #9DB0FF;
+
+    --status-success-tint: #10231A;
+    --status-success-line: #1E3A2A;
+    --status-success-text: #6EE7A8;
+    --status-info-tint: #101A2E;
+    --status-info-line: #1E2E4A;
+    --status-info-text: #93C5FD;
+    --status-warn-tint: #241C0C;
+    --status-warn-line: #3D3016;
+    --status-warn-text: #FCD34D;
+    --status-danger-tint: #3A2420;
+    --status-danger-line: #5A3329;
+    --status-danger-text: #EE8C6F;
+    --status-neutral-tint: #1B1B1E;
+    --status-neutral-line: #2A2A2E;
+    --status-neutral-text: #A1A1AA;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+
+    --color-scrim: rgba(0, 0, 0, 0.62);
+    --color-inline-code-bg: #1E222A;
+    --color-inline-code-fg: #ECE8DF;
+    --color-selection-bg: #5C4A18;
+    --color-selection-fg: #ECE8DF;
+    --color-mark: #5C4A18;
+    --color-mark-ink: #ECE8DF;
+
+    --diagram-ground: #16191F;
+    --diagram-surface: #1E222A;
+    --diagram-surface-alt: #121419;
+    --diagram-ink: #ECE8DF;
+    --diagram-muted: #8A877F;
+    --diagram-line: #353A45;
+    --diagram-accent: #9DB0FF;
+    --diagram-accent-soft: #1E2640;
+    --diagram-accent-ink: #9DB0FF;
+    --diagram-accent-2: #86EFAC;
+    --diagram-accent-3: #A7F3C4;
+    --diagram-yellow: #F3C83D;
+    --diagram-cyan: #67E8F9;
+    --diagram-red: #EE8C6F;
+    --diagram-amber: #FCD34D;
+    --diagram-green: #86EFAC;
+    --diagram-blue: #93C5FD;
+    --diagram-violet: #C4B5FD;
+    --diagram-pink: #F9A8D4;
+  }
+}
+
+@media screen {
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+
+    --color-bg: #16191F;
+    --color-surface: #16191F;
+    --color-surface-sunken: #121419;
+    --color-surface-sunken-deep: #0E1014;
+    --color-bg-elevated: #1E222A;
+
+    --color-text: #ECE8DF;
+    --color-heading: #ECE8DF;
+    --color-text-muted: #ABA79E;
+    --color-text-faint: #8A877F;
+
+    --color-line: #2A2E37;
+    --color-line-strong: #353A45;
+    --color-line-control: #6E6B64;
+
+    --color-accent: #ECE8DF;
+    --color-on-accent: #0E1014;
+    --color-accent-text: #9DB0FF;
+    --color-accent-soft: #1E222A;
+    --color-accent-ring: #2D3A66;
+    --color-current-tint: #1E2640;
+
+    --focus-ring: #9DB0FF;
+
+    --status-success-tint: #10231A;
+    --status-success-line: #1E3A2A;
+    --status-success-text: #6EE7A8;
+    --status-info-tint: #101A2E;
+    --status-info-line: #1E2E4A;
+    --status-info-text: #93C5FD;
+    --status-warn-tint: #241C0C;
+    --status-warn-line: #3D3016;
+    --status-warn-text: #FCD34D;
+    --status-danger-tint: #3A2420;
+    --status-danger-line: #5A3329;
+    --status-danger-text: #EE8C6F;
+    --status-neutral-tint: #1B1B1E;
+    --status-neutral-line: #2A2A2E;
+    --status-neutral-text: #A1A1AA;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.5);
+    --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.6), 0 4px 6px -4px rgba(0, 0, 0, 0.5);
+
+    --color-scrim: rgba(0, 0, 0, 0.62);
+    --color-inline-code-bg: #1E222A;
+    --color-inline-code-fg: #ECE8DF;
+    --color-selection-bg: #5C4A18;
+    --color-selection-fg: #ECE8DF;
+    --color-mark: #5C4A18;
+    --color-mark-ink: #ECE8DF;
+
+    --diagram-ground: #16191F;
+    --diagram-surface: #1E222A;
+    --diagram-surface-alt: #121419;
+    --diagram-ink: #ECE8DF;
+    --diagram-muted: #8A877F;
+    --diagram-line: #353A45;
+    --diagram-accent: #9DB0FF;
+    --diagram-accent-soft: #1E2640;
+    --diagram-accent-ink: #9DB0FF;
+    --diagram-accent-2: #86EFAC;
+    --diagram-accent-3: #A7F3C4;
+    --diagram-yellow: #F3C83D;
+    --diagram-cyan: #67E8F9;
+    --diagram-red: #EE8C6F;
+    --diagram-amber: #FCD34D;
+    --diagram-green: #86EFAC;
+    --diagram-blue: #93C5FD;
+    --diagram-violet: #C4B5FD;
+    --diagram-pink: #F9A8D4;
+  }
+}
+
+/* The wordmark and headings use the serif at the weights the app uses. */
+html .wordmark { font-weight: 500; letter-spacing: -0.02em; }
+
+/* Section links in the sidebar are at least 24 px tall, so each is an easy target (WCAG 2.5.8). */
+html .side-title-link { display: inline-flex; align-items: center; min-height: 24px; }
