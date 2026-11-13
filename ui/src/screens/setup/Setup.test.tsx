@@ -123,7 +123,7 @@ describe("what this computer can run", () => {
     ).toBeInTheDocument();
     expect(
       within(group).getByText(
-        "For computers with 7 GB memory or more · 3.2 GB download · uses the least memory, space and battery · answers are simpler and may miss details",
+        "For computers with 6 GB memory or more · 3.2 GB download · uses the least memory, space and battery · answers are simpler and may miss details",
       ),
     ).toBeInTheDocument();
   });
@@ -209,7 +209,7 @@ describe("what this computer can run", () => {
     expect(why).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByText(
-        /32 GB here. Large needs 60 GB or more, Standard 28 GB, Small 14 GB and Tiny 7 GB/,
+        /32 GB here. Large needs 60 GB or more, Standard 28 GB, Small 14 GB and Tiny 6 GB/,
       ),
     ).toBeInTheDocument();
   });
@@ -237,7 +237,7 @@ describe("what this computer can run", () => {
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "This computer has 6 GB of computer memory. Nocturne needs 7 GB or more. Nothing has been downloaded.",
+        "This computer has 5 GB of computer memory. Nocturne needs 6 GB or more. Nothing has been downloaded.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();

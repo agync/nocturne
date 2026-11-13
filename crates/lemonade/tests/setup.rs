@@ -370,7 +370,7 @@ async fn not_enough_free_space_is_reported_before_anything_downloads() {
 
 #[tokio::test]
 async fn too_little_memory_is_reported() {
-    let rig = rig("", 6).await;
+    let rig = rig("", 5).await;
     let checked = rig.setup.check().await.unwrap();
     assert_eq!(checked.detected, Some(Tier::Unsupported));
     assert_eq!(checked.error, Some(SetupError::NotEnoughMemory));

@@ -19,11 +19,11 @@ slower answers and a slower overnight tidy; everything still works.
 | Large | 60 GB or more | about 28 GB | about 26 GB |
 | Standard | 28 GB or more | about 11 GB | about 8.5 GB |
 | Small | 14 GB or more | about 7 GB | about 5 GB |
-| Tiny | 7 GB or more | about 5.2 GB | about 3.2 GB |
+| Tiny | 6 GB or more | about 5.2 GB | about 3.2 GB |
 
 The free space figure includes 2 GB of room to spare. You can always choose a smaller setup than
 the one offered: it uses less memory, space and battery. Tiny is made for 8 GB computers, which
-report a little under 8 GB; everything works, but its answers are simpler and it may miss details.
+report a little under 8 GB, and it runs on anything that reports 6 GB or more; everything works, but its answers are simpler and it may miss details.
 If the computer has less memory than the Tiny setup needs, Nocturne says so plainly and downloads
 nothing.
 

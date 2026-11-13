@@ -100,7 +100,7 @@ pub fn min_ram_gib(tier: Tier) -> u32 {
         Tier::Standard => 28,
         Tier::Small => 14,
         // An 8 GB computer reports a little under 8 GiB once the system has taken its share.
-        Tier::Tiny => 7,
+        Tier::Tiny => 6,
         Tier::Unsupported => 0,
     }
 }
@@ -220,8 +220,8 @@ mod tests {
     fn the_thresholds_are_inclusive() {
         assert_eq!(detect(gib(14), PLENTY), Tier::Small);
         assert_eq!(detect(gib(14) - 1, PLENTY), Tier::Tiny);
-        assert_eq!(detect(gib(7), PLENTY), Tier::Tiny);
-        assert_eq!(detect(gib(7) - 1, PLENTY), Tier::Unsupported);
+        assert_eq!(detect(gib(6), PLENTY), Tier::Tiny);
+        assert_eq!(detect(gib(6) - 1, PLENTY), Tier::Unsupported);
         assert_eq!(detect(gib(28), PLENTY), Tier::Standard);
         assert_eq!(detect(gib(60), PLENTY), Tier::Large);
     }
@@ -299,7 +299,7 @@ mod tests {
             model_for(Tier::Tiny, ComponentRole::Mind),
             Some("Qwen3.5-2B-GGUF")
         );
-        assert_eq!(min_ram_gib(SMALLEST), 7);
+        assert_eq!(min_ram_gib(SMALLEST), 6);
     }
 
     #[test]

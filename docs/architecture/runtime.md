@@ -64,11 +64,12 @@ download plus 2 GiB). The source of truth is `crates/lemonade/src/tier.rs`.
 | Large | 60 GiB | `Qwen3.6-35B-A3B-MTP-GGUF` | `Whisper-Large-v3-Turbo` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 26.4 GB |
 | Standard | 28 GiB | `Qwen3.5-9B-GGUF` | `Whisper-Small` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 8.4 GB |
 | Small | 14 GiB | `Qwen3.5-4B-MTP-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 4.8 GB |
-| Tiny | 7 GiB | `Qwen3.5-2B-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 3.2 GB |
+| Tiny | 6 GiB | `Qwen3.5-2B-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 3.2 GB |
 
 The detected tier is the one offered first; the person may choose any smaller one that fits, and
 Tiny fits every computer that can run Nocturne at all. Tiny is for 8 GB computers, which report a
-little under 8 GiB (an 8 GB Mac reports exactly 8 GiB). Its answers are simpler and it may miss
+little under 8 GiB (an 8 GB Mac reports exactly 8 GiB); it starts at 6 GiB so an 8 GB computer
+that reports well under 8 GiB still gets it. Its answers are simpler and it may miss
 details, and the setup screen says so. Below the Tiny tier, or without the free disk, setup stops
 before downloading anything and says why.
 
@@ -95,7 +96,8 @@ details view.
 An 8 GB computer, an 8 GB MacBook in particular, must keep about 3.5 GB for the system and the
 person's other apps. Nocturne's share, everything included (the app, its web view, the engine and
 the models it has loaded), is therefore at most 4.5 GB at its busiest and close to nothing when it
-has nothing to do.
+has nothing to do. Tiny's floor is 6 GiB of reported memory; a computer between 6 and 8 GiB gets
+the same budget and the same measures below.
 
 | Moment | Budget | What is loaded |
 |---|---|---|
