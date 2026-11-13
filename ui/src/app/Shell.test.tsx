@@ -17,7 +17,7 @@ afterEach(() => {
 const SCREENS: Array<[string, string]> = [
   ["#/today", "Two things need you today."],
   ["#/pages/2026-11-12", "One thing needs you today."],
-  ["#/needs-you", "Needs you"],
+  ["#/needs-you", "2 things are waiting"],
   ["#/ask", "Ask about anything you’ve kept."],
   ["#/recent", "Recently kept"],
   ["#/quick-capture", "Keep something"],
