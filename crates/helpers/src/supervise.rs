@@ -1,0 +1,344 @@
+//! Run one helper process: its own process group (a job object on Windows), a scrubbed
+//! environment, output kept in an owner-only log, restarts with backoff, and a stop that proves
+//! nothing is left running.
+
+use std::collections::VecDeque;
+use std::ffi::OsString;
+use std::fs::OpenOptions;
+use std::path::{Path, PathBuf};
+use std::process::Stdio;
+use std::time::Duration;
+
+use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use tokio::sync::{oneshot, watch};
+use tokio::task::JoinHandle;
+use tokio::time::Instant;
+
+use crate::HelperError;
+
+/// What to run. The environment is exactly `env`: nothing is inherited.
+#[derive(Debug, Clone)]
+pub struct HelperCommand {
+    pub name: &'static str,
+    pub program: PathBuf,
+    pub args: Vec<OsString>,
+    pub env: Vec<(OsString, OsString)>,
+    pub cwd: Option<PathBuf>,
+}
+
+#[derive(Debug, Clone)]
+pub struct SuperviseOptions {
+    /// Folder for `helper-<name>.log`.
+    pub logs: PathBuf,
+    /// Waits before the 1st, 2nd, ... restart; the last repeats.
+    pub backoff: Vec<Duration>,
+    /// Restarts allowed within `window` before giving up.
+    pub max_restarts: u32,
+    pub window: Duration,
+    /// Time to let a helper end after SIGTERM before it is killed.
+    pub grace: Duration,
+    /// A log larger than this is moved to `.1` when the helper starts.
+    pub log_limit: u64,
+}
+
+impl SuperviseOptions {
+    pub fn new(logs: PathBuf) -> Self {
+        Self {
+            logs,
+            backoff: [1, 2, 4, 8, 16].map(Duration::from_secs).to_vec(),
+            max_restarts: 5,
+            window: Duration::from_secs(3600),
+            grace: Duration::from_secs(3),
+            log_limit: 1 << 20,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Phase {
+    Running,
+    Backoff { attempt: u32 },
+    GaveUp(String),
+    Stopped,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SupState {
+    pub phase: Phase,
+    pub pid: Option<u32>,
+    /// Counts every start, the first included.
+    pub generation: u32,
+    pub restarts: u32,
+    pub started: Option<Instant>,
+    /// Size of the log when the current process started: its own output begins there.
+    pub log_offset: u64,
+}
+
+struct Running {
+    child: Box<dyn ChildWrapper>,
+    pgid: u32,
+}
+
+pub struct Supervisor {
+    state: watch::Receiver<SupState>,
+    log: PathBuf,
+    stop: Option<oneshot::Sender<()>>,
+    task: Option<JoinHandle<Result<(), HelperError>>>,
+}
+
+impl Supervisor {
+    /// Start the helper and keep it running. Fails when the first start fails.
+    pub async fn start(cmd: HelperCommand, opts: SuperviseOptions) -> Result<Self, HelperError> {
+        std::fs::create_dir_all(&opts.logs).map_err(|e| HelperError::Spawn(e.to_string()))?;
+        let log = opts.logs.join(format!("helper-{}.log", cmd.name));
+        let (running, offset) = spawn(&cmd, &opts, &log)?;
+        let (tx, rx) = watch::channel(SupState {
+            phase: Phase::Running,
+            pid: running.child.id(),
+            generation: 1,
+            restarts: 0,
+            started: Some(Instant::now()),
+            log_offset: offset,
+        });
+        let (stop_tx, stop_rx) = oneshot::channel();
+        let task = tokio::spawn(run(cmd, opts, log.clone(), running, tx, stop_rx));
+        Ok(Self {
+            state: rx,
+            log,
+            stop: Some(stop_tx),
+            task: Some(task),
+        })
+    }
+
+    pub fn subscribe(&self) -> watch::Receiver<SupState> {
+        self.state.clone()
+    }
+
+    pub fn state(&self) -> SupState {
+        self.state.borrow().clone()
+    }
+
+    pub fn log_path(&self) -> &Path {
+        &self.log
+    }
+
+    /// Stop the helper and return once no process of its group remains.
+    pub async fn stop(mut self) -> Result<(), HelperError> {
+        if let Some(stop) = self.stop.take() {
+            let _ = stop.send(());
+        }
+        match self.task.take() {
+            Some(task) => task.await.map_err(|e| HelperError::Exited(e.to_string()))?,
+            None => Ok(()),
+        }
+    }
+}
+
+impl Drop for Supervisor {
+    fn drop(&mut self) {
+        if let Some(task) = self.task.take() {
+            task.abort();
+        }
+    }
+}
+
+fn open_log(path: &Path, limit: u64) -> Result<(std::fs::File, u64), HelperError> {
+    if std::fs::metadata(path).is_ok_and(|m| m.len() > limit) {
+        let _ = std::fs::rename(path, path.with_extension("log.1"));
+    }
+    let mut options = OpenOptions::new();
+    options.create(true).append(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let file = options
+        .open(path)
+        .map_err(|e| HelperError::Spawn(format!("could not open the log: {e}")))?;
+    let offset = file.metadata().map_or(0, |m| m.len());
+    Ok((file, offset))
+}
+
+fn spawn(
+    cmd: &HelperCommand,
+    opts: &SuperviseOptions,
+    log: &Path,
+) -> Result<(Running, u64), HelperError> {
+    let (file, offset) = open_log(log, opts.log_limit)?;
+    let err = file
+        .try_clone()
+        .map_err(|e| HelperError::Spawn(e.to_string()))?;
+    let mut command = tokio::process::Command::new(&cmd.program);
+    command
+        .args(&cmd.args)
+        .env_clear()
+        .envs(cmd.env.iter().map(|(k, v)| (k, v)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(file))
+        .stderr(Stdio::from(err));
+    if let Some(cwd) = &cmd.cwd {
+        command.current_dir(cwd);
+    }
+    let mut wrap = CommandWrap::from(command);
+    #[cfg(unix)]
+    wrap.wrap(process_wrap::tokio::ProcessGroup::leader());
+    #[cfg(windows)]
+    wrap.wrap(process_wrap::tokio::JobObject);
+    wrap.wrap(KillOnDrop);
+    let child = wrap
+        .spawn()
+        .map_err(|e| HelperError::Spawn(format!("could not run {}: {e}", cmd.name)))?;
+    let pgid = child.id().unwrap_or(0);
+    Ok((Running { child, pgid }, offset))
+}
+
+async fn run(
+    cmd: HelperCommand,
+    opts: SuperviseOptions,
+    log: PathBuf,
+    first: Running,
+    tx: watch::Sender<SupState>,
+    mut stop: oneshot::Receiver<()>,
+) -> Result<(), HelperError> {
+    let mut running = first;
+    let mut restarts: VecDeque<Instant> = VecDeque::new();
+    let mut total = 0u32;
+    let mut generation = 1u32;
+    loop {
+        let status = tokio::select! {
+            s = running.child.wait() => s,
+            _ = &mut stop => {
+                let result = terminate(&mut running, opts.grace).await;
+                publish(&tx, |s| {
+                    s.phase = Phase::Stopped;
+                    s.pid = None;
+                });
+                return result;
+            }
+        };
+        let why = match status {
+            Ok(s) => s.to_string(),
+            Err(e) => e.to_string(),
+        };
+        reap_group(&mut running).await;
+        publish(&tx, |s| s.pid = None);
+        // A new start is tried until one starts or the limit is reached.
+        loop {
+            let now = Instant::now();
+            while restarts
+                .front()
+                .is_some_and(|t| now.duration_since(*t) > opts.window)
+            {
+                restarts.pop_front();
+            }
+            if restarts.len() as u32 >= opts.max_restarts {
+                let message = format!("{} stopped too often: {why}", cmd.name);
+                publish(&tx, |s| s.phase = Phase::GaveUp(message.clone()));
+                let _ = (&mut stop).await;
+                return Ok(());
+            }
+            let attempt = restarts.len() as u32 + 1;
+            let wait = opts
+                .backoff
+                .get(restarts.len())
+                .or(opts.backoff.last())
+                .copied()
+                .unwrap_or_default();
+            publish(&tx, |s| s.phase = Phase::Backoff { attempt });
+            tokio::select! {
+                () = tokio::time::sleep(wait) => {}
+                _ = &mut stop => {
+                    publish(&tx, |s| s.phase = Phase::Stopped);
+                    return Ok(());
+                }
+            }
+            restarts.push_back(Instant::now());
+            total += 1;
+            match spawn(&cmd, &opts, &log) {
+                Ok((next, offset)) => {
+                    running = next;
+                    generation += 1;
+                    let pid = running.child.id();
+                    publish(&tx, |s| {
+                        s.phase = Phase::Running;
+                        s.pid = pid;
+                        s.generation = generation;
+                        s.restarts = total;
+                        s.started = Some(Instant::now());
+                        s.log_offset = offset;
+                    });
+                    break;
+                }
+                Err(_) => continue,
+            }
+        }
+    }
+}
+
+fn publish(tx: &watch::Sender<SupState>, f: impl FnOnce(&mut SupState)) {
+    tx.send_modify(f);
+}
+
+/// SIGTERM to the group, then a kill, then proof that nothing is left.
+async fn terminate(running: &mut Running, grace: Duration) -> Result<(), HelperError> {
+    #[cfg(unix)]
+    let _ = running.child.signal(15);
+    if tokio::time::timeout(grace, running.child.wait())
+        .await
+        .is_err()
+    {
+        let _ = running.child.start_kill();
+        let _ = tokio::time::timeout(Duration::from_secs(5), running.child.wait()).await;
+    }
+    reap_group(running).await;
+    let left = members(running.pgid);
+    if left.is_empty() {
+        Ok(())
+    } else {
+        Err(HelperError::Exited(format!(
+            "processes outlived the helper: {left:?}"
+        )))
+    }
+}
+
+/// After the leader is gone, anything it started in the group is ended too.
+async fn reap_group(running: &mut Running) {
+    for _ in 0..60 {
+        if members(running.pgid).is_empty() {
+            return;
+        }
+        #[cfg(unix)]
+        {
+            let _ = running.child.signal(9);
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Live processes of the group, where the platform can say; a Windows job object ends all of
+/// its members when the leader is killed.
+pub fn members(pgid: u32) -> Vec<u32> {
+    nocturne_lemonade::supervisor::group_members(pgid)
+}
+
+/// Resident memory of a process, where the platform exposes it cheaply.
+pub fn rss_bytes(pid: u32) -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        let status = std::fs::read_to_string(format!("/proc/{pid}/status")).ok()?;
+        let kb: u64 = status
+            .lines()
+            .find_map(|l| l.strip_prefix("VmRSS:"))?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()?;
+        Some(kb * 1024)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = pid;
+        None
+    }
+}

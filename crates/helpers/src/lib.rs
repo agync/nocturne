@@ -15,13 +15,19 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "fake")]
+pub mod fake;
 mod fixtures;
 mod install;
 mod lock;
+mod supervise;
 
 pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
 pub use install::remove_partial;
 pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
+pub use supervise::{
+    HelperCommand, Phase, SupState, SuperviseOptions, Supervisor, members as group_members,
+};
 
 /// Present only in builds with the `fake` feature, so the package check can refuse them.
 #[cfg(feature = "fake")]
