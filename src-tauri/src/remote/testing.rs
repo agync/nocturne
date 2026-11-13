@@ -551,12 +551,14 @@ impl Helpers for FakeHelpers {
                 let _ = progress.send(p);
                 tokio::task::yield_now().await;
             }
+            // A paused or stopped download must never take the finish meant for the next one.
             tokio::select! {
+                biased;
+                () = cancel.cancelled() => Err(HelperError::Stopped),
                 () = finish.notified() => {
                     installed.lock().unwrap().insert(kind);
                     Ok(pinned)
                 }
-                () = cancel.cancelled() => Err(HelperError::Stopped),
             }
         })
     }

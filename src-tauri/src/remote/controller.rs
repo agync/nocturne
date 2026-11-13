@@ -308,11 +308,12 @@ impl RemoteHub {
     }
 
     /// Recompute what follows from time and the store: a helper down long enough is a
-    /// problem; an address every phone has is no longer a re-link.
+    /// problem; an address every phone has is no longer a re-link. The new state is written
+    /// under the same lock it was decided under, so a state the helper reports meanwhile (a
+    /// failure) is never overwritten by one decided from the state before it.
     pub fn refresh(&self) {
         let now = self.mono.now();
-        let mut next = None;
-        {
+        let changed = {
             let mut rt = self.rt();
             while rt
                 .restarts
@@ -321,6 +322,7 @@ impl RemoteHub {
             {
                 rt.restarts.pop_front();
             }
+            let mut next = None;
             let down_long = rt.down_since.is_some_and(|t| now.duration_since(t) >= BLIP);
             let many = rt.restarts.len() >= RESTARTS_AN_HOUR;
             if (down_long || many)
@@ -340,9 +342,16 @@ impl RemoteHub {
             {
                 next = Some(self.up_state(&address, machine));
             }
-        }
-        if let Some(s) = next {
-            self.set_state(s);
+            match next {
+                Some(s) if s != rt.state => {
+                    rt.state = s;
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.shell.changed();
         }
     }
 
