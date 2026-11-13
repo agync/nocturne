@@ -15,6 +15,7 @@ import type {
   Kept,
   MemoryFilter,
   MemoryView,
+  MergeOutcome,
   NeedsYouEntry,
   PageSummary,
   PageView,
@@ -22,10 +23,13 @@ import type {
   PairingRequest,
   PrivacyView,
   QuestionChoice,
+  Refiled,
+  RefileTarget,
   RemoteConnection,
   RemoteEvent,
   RemoteSettingsPatch,
   RemoteView,
+  RenameOutcome,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -153,6 +157,17 @@ export interface EngineClient {
   /** Stops a fading memory from fading for this many days. */
   snooze(memoryId: string, days: number): Promise<void>;
   correctMemory(id: string, text: string): Promise<MemoryView>;
+  /**
+   * Gives a person, place or thing a new name, everywhere. A name another already has changes
+   * nothing and comes back as `exists`, so the person can be offered a merge.
+   */
+  renameEntity(id: string, name: string): Promise<RenameOutcome>;
+  /** Makes two of them one, named as `intoId` is. Taken back with `undoChange`. */
+  mergeEntities(fromId: string, intoId: string): Promise<MergeOutcome>;
+  /** Moves one memory to another person, place or thing, or to a new one. */
+  refileMemory(id: string, target: RefileTarget): Promise<Refiled>;
+  /** Takes back a rename, a merge or a move, by the change id it returned. */
+  undoChange(changeId: string): Promise<void>;
   setKeepForever(id: string, keepForever: boolean): Promise<void>;
   setPrivate(id: string, isPrivate: boolean): Promise<void>;
   restore(ids: string[]): Promise<void>;

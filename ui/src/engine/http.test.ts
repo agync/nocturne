@@ -93,6 +93,23 @@ describe("HttpEngine commands", () => {
     e.dispose();
   });
 
+  it("sends renames, merges, moves and undos as their commands", async () => {
+    const { e, calls } = engine(() => ({ body: null }));
+    await flush();
+    await e.renameEntity("e1", "Drinks");
+    await e.mergeEntities("e1", "e2");
+    await e.refileMemory("m1", { type: "new", name: "Cellar", kind: "place" });
+    await e.undoChange("chg_1");
+    const bodies = (name: string) => calls.find((c) => c.url === `/api/invoke/${name}`)?.init.body;
+    expect(bodies("rename_entity")).toBe(JSON.stringify({ id: "e1", name: "Drinks" }));
+    expect(bodies("merge_entities")).toBe(JSON.stringify({ fromId: "e1", intoId: "e2" }));
+    expect(bodies("refile_memory")).toBe(
+      JSON.stringify({ id: "m1", target: { type: "new", name: "Cellar", kind: "place" } }),
+    );
+    expect(bodies("undo_change")).toBe(JSON.stringify({ changeId: "chg_1" }));
+    e.dispose();
+  });
+
   it("reports whether this window can record", async () => {
     const { e, calls } = engine(() => ({ body: null }));
     await flush();

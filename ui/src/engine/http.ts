@@ -242,6 +242,13 @@ export class HttpEngine implements EngineClient {
   snooze: EngineClient["snooze"] = (memoryId, days) => this.call("snooze", { memoryId, days });
   correctMemory: EngineClient["correctMemory"] = (id, text) =>
     this.call("correct_memory", { id, text });
+  renameEntity: EngineClient["renameEntity"] = (id, name) =>
+    this.call("rename_entity", { id, name });
+  mergeEntities: EngineClient["mergeEntities"] = (fromId, intoId) =>
+    this.call("merge_entities", { fromId, intoId });
+  refileMemory: EngineClient["refileMemory"] = (id, target) =>
+    this.call("refile_memory", { id, target });
+  undoChange: EngineClient["undoChange"] = (changeId) => this.call("undo_change", { changeId });
   setKeepForever: EngineClient["setKeepForever"] = (id, keepForever) =>
     this.call("set_keep_forever", { id, keepForever });
   setPrivate: EngineClient["setPrivate"] = (id, isPrivate) =>

@@ -16,6 +16,14 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const filterFor = (entityId: string) => ({
+  entityId,
+  itemId: null,
+  status: null,
+  query: null,
+  limit: null,
+});
+
 function collectAsk(engine: ReturnType<typeof createMockEngine>) {
   const deltas: AskDelta[] = [];
   const off = engine.on("ask-delta", (d) => deltas.push(d));
@@ -546,6 +554,93 @@ describe("MockEngine, shared by the screen lanes", () => {
       "ent-ridgeway",
       "ent-rowan",
     ]);
+  });
+
+  it("renames, finds by the old name, and takes the rename back", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const out = await engine.renameEntity("ent-leo", "  Leopold ");
+    if (out.type !== "renamed" || out.changeId === null) throw new Error("not renamed");
+    expect(out.entity).toMatchObject({ name: "Leopold", formerNames: ["Leo"] });
+    expect(out.entity.lastChange).toMatchObject({ kind: "rename", from: "Leo" });
+    const swim = (await engine.listMemories(filterFor("ent-leo"))).find((m) => m.id === "mem-swim");
+    expect(swim).toMatchObject({
+      subject: "Leopold",
+      sentence: "Leopold’s swimming is on Mondays at 17:30.",
+    });
+    expect((await engine.listEntities(null, "leo ")).map((e) => e.name)).toContain("Leopold");
+    expect(await engine.renameEntity("ent-leo", "Leopold")).toMatchObject({ changeId: null });
+
+    await engine.undoChange(out.changeId);
+    const back = await engine.getEntity("ent-leo");
+    expect(back).toMatchObject({ name: "Leo", formerNames: [], lastChange: null });
+    expect((await engine.listMemories(filterFor("ent-leo")))[0]?.subject).toBe("Leo");
+    await expect(engine.undoChange(out.changeId)).rejects.toThrow();
+  });
+
+  it("offers a merge for a name it knows, and merges and unmerges", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const clash = await engine.renameEntity("ent-leo", "ava");
+    expect(clash).toMatchObject({ type: "exists", entity: { id: "ent-ava" } });
+    expect((await engine.getEntity("ent-leo")).name).toBe("Leo");
+    await expect(engine.renameEntity("ent-leo", "  ")).rejects.toThrow();
+
+    const leo = await engine.getEntity("ent-leo");
+    const ava = await engine.getEntity("ent-ava");
+    const merged = await engine.mergeEntities("ent-leo", "ent-ava");
+    expect(merged.moved).toBe(leo.memoryCount);
+    expect(merged.entity.memoryCount).toBe(leo.memoryCount + ava.memoryCount);
+    expect(merged.entity.formerNames).toContain("Leo");
+    await expect(engine.getEntity("ent-leo")).rejects.toThrow();
+    expect((await engine.listEntities(null, null)).map((e) => e.id)).not.toContain("ent-leo");
+    await expect(engine.mergeEntities("ent-ava", "ent-ava")).rejects.toThrow();
+
+    await engine.undoChange(merged.changeId);
+    expect(await engine.getEntity("ent-leo")).toMatchObject({ memoryCount: leo.memoryCount });
+    expect(await engine.getEntity("ent-ava")).toMatchObject({
+      memoryCount: ava.memoryCount,
+      formerNames: [],
+      lastChange: null,
+    });
+  });
+
+  it("moves one memory to an existing or a new thing, and moves it back", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const toAva = await engine.refileMemory("mem-nut", { type: "existing", entityId: "ent-ava" });
+    expect(toAva.memory).toMatchObject({
+      entityId: "ent-ava",
+      subject: "Ava",
+      movedFrom: "Leo",
+      sentence: "Leo is allergic to nuts.",
+    });
+    await expect(
+      engine.refileMemory("mem-nut", { type: "existing", entityId: "ent-ava" }),
+    ).rejects.toThrow();
+    const fresh = await engine.refileMemory("mem-nut", {
+      type: "new",
+      name: " School  trip ",
+      kind: "place",
+    });
+    expect(fresh.entity).toMatchObject({ name: "School trip", kind: "place", memoryCount: 1 });
+    expect(
+      (
+        await engine.refileMemory("mem-trip-lunch", {
+          type: "new",
+          name: "school trip",
+          kind: "thing",
+        })
+      ).entity.id,
+    ).toBe(fresh.entity.id);
+    await engine.undoChange(fresh.changeId);
+    expect((await engine.listEntities(null, "school")).length).toBe(1);
+    expect((await engine.listMemories(filterFor("ent-ava"))).map((m) => m.id)).toContain("mem-nut");
+    await engine.undoChange(toAva.changeId);
+    expect((await engine.listMemories(filterFor("ent-leo"))).map((m) => m.id)).toContain("mem-nut");
+    expect(
+      (await engine.listMemories(filterFor("ent-leo"))).find((m) => m.id === "mem-nut")?.movedFrom,
+    ).toBeNull();
+    await expect(
+      engine.refileMemory("mem-nut", { type: "new", name: " ", kind: "thing" }),
+    ).rejects.toThrow();
   });
 
   it("snoozes a fading memory back to active, and flags items", async () => {

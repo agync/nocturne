@@ -16,6 +16,7 @@ import type {
   Kept,
   MemoryFilter,
   MemoryView,
+  MergeOutcome,
   NeedsYouEntry,
   Notice,
   NoticeCode,
@@ -26,10 +27,13 @@ import type {
   PrivacyView,
   QuestionChoice,
   Receipt,
+  Refiled,
+  RefileTarget,
   RemoteConnection,
   RemoteEvent,
   RemoteSettingsPatch,
   RemoteView,
+  RenameOutcome,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -283,7 +287,11 @@ export class MockEngine implements EngineClient {
   private readonly clock: Date;
   private items: ItemView[];
   private memories: MemoryView[];
-  private readonly entities: EntityView[];
+  private entities: EntityView[];
+  /** What each rename, merge or move would need to be taken back. */
+  private readonly changes = new Map<string, () => void>();
+  /** Entities merged into another: kept so a merge can be taken back, never listed. */
+  private readonly mergedAway = new Set<string>();
   private pages: PageView[];
   private readonly printStress: PageView;
   private settings: SettingsView;
@@ -569,6 +577,7 @@ export class MockEngine implements EngineClient {
       private: false,
       suggestPrivate: false,
       was: null,
+      movedFrom: null,
       receipts: [
         {
           itemId,
@@ -990,19 +999,179 @@ export class MockEngine implements EngineClient {
     return clone(out);
   }
 
-  async getEntity(id: string): Promise<EntityView> {
-    const found = this.entities.find((e) => e.id === id);
+  private liveEntities(): EntityView[] {
+    return this.entities.filter((e) => !this.mergedAway.has(e.id));
+  }
+
+  /** The entity as a screen sees it: counts from the memories filed under it now. */
+  private entityView(e: EntityView): EntityView {
+    const mine = this.memories.filter((m) => m.entityId === e.id && m.status !== "letGo");
+    const items = new Set(mine.flatMap((m) => m.receipts.map((r) => r.itemId)));
+    return clone({ ...e, memoryCount: mine.length, itemCount: items.size });
+  }
+
+  private entityFor(id: string): EntityView {
+    const found = this.liveEntities().find((e) => e.id === id);
     if (!found) throw new Error(`No entity ${id}`);
-    return clone(found);
+    return found;
+  }
+
+  private nextChange(undo: () => void): string {
+    this.counter += 1;
+    const id = `chg-${this.counter}`;
+    this.changes.set(id, undo);
+    return id;
+  }
+
+  /** Words of a memory that carry a name follow it, as the real engine does. */
+  private reword(entityId: string, from: string, to: string): string[] {
+    const changed: string[] = [];
+    const pattern = new RegExp(
+      `(?<![\\p{L}\\p{N}_])${escapeRegExp(from)}(?![\\p{L}\\p{N}_])`,
+      "gu",
+    );
+    for (const m of this.memories.filter((x) => x.entityId === entityId)) {
+      const next = m.sentence.replace(pattern, () => to);
+      if (next !== m.sentence) {
+        m.sentence = next;
+        changed.push(m.id);
+      }
+    }
+    return changed;
+  }
+
+  async getEntity(id: string): Promise<EntityView> {
+    return this.entityView(this.entityFor(id));
   }
 
   async listEntities(kind: EntityKind | null, query: string | null): Promise<EntityView[]> {
     const q = query?.trim().toLowerCase() ?? "";
-    return clone(
-      this.entities
-        .filter((e) => kind === null || e.kind === kind)
-        .filter((e) => q === "" || `${e.name} ${e.role ?? ""}`.toLowerCase().includes(q)),
+    return this.liveEntities()
+      .map((e) => this.entityView(e))
+      .filter((e) => e.memoryCount > 0)
+      .filter((e) => kind === null || e.kind === kind)
+      .filter(
+        (e) =>
+          q === "" ||
+          `${e.name} ${e.role ?? ""} ${e.formerNames.join(" ")}`.toLowerCase().includes(q),
+      );
+  }
+
+  async renameEntity(id: string, name: string): Promise<RenameOutcome> {
+    const e = this.entityFor(id);
+    const clean = name.trim().split(/\s+/).join(" ");
+    if (clean === "" || clean.length > 120) throw new Error("A name needs some letters.");
+    const other = this.liveEntities().find(
+      (o) => o.id !== id && o.name.toLowerCase() === clean.toLowerCase(),
     );
+    if (other) return { type: "exists", entity: this.entityView(other) };
+    if (clean === e.name) return { type: "renamed", entity: this.entityView(e), changeId: null };
+    const before = e.name;
+    e.name = clean;
+    e.formerNames = [before, ...e.formerNames.filter((n) => n !== before && n !== clean)];
+    for (const m of this.memories.filter((x) => x.entityId === id)) m.subject = clean;
+    const reworded = this.reword(id, before, clean);
+    const changeId = this.nextChange(() => {
+      for (const m of this.memories.filter((x) => reworded.includes(x.id))) {
+        m.sentence = m.sentence.split(clean).join(before);
+      }
+      for (const m of this.memories.filter((x) => x.entityId === id)) m.subject = before;
+      e.name = before;
+      e.formerNames = e.formerNames.filter((n) => n !== before && n !== clean);
+    });
+    e.lastChange = { id: changeId, kind: "rename", from: before, at: this.clock.toISOString() };
+    return { type: "renamed", entity: this.entityView(e), changeId };
+  }
+
+  async mergeEntities(fromId: string, intoId: string): Promise<MergeOutcome> {
+    if (fromId === intoId) throw new Error("A thing cannot be merged with itself.");
+    const gone = this.entityFor(fromId);
+    const kept = this.entityFor(intoId);
+    const moved = this.memories.filter((m) => m.entityId === fromId);
+    const before = new Map(moved.map((m) => [m.id, { subject: m.subject, sentence: m.sentence }]));
+    for (const m of moved) {
+      m.entityId = intoId;
+      m.subject = kept.name;
+    }
+    const reworded = this.reword(intoId, gone.name, kept.name).filter((id) => before.has(id));
+    this.mergedAway.add(fromId);
+    const previousNames = kept.formerNames;
+    kept.formerNames = [gone.name, ...gone.formerNames, ...kept.formerNames];
+    const previousChange = kept.lastChange;
+    const changeId = this.nextChange(() => {
+      for (const m of moved) {
+        const was = before.get(m.id);
+        if (!was) continue;
+        m.entityId = fromId;
+        m.subject = was.subject;
+        if (reworded.includes(m.id)) m.sentence = was.sentence;
+      }
+      this.mergedAway.delete(fromId);
+      kept.formerNames = previousNames;
+      kept.lastChange = previousChange;
+    });
+    kept.lastChange = {
+      id: changeId,
+      kind: "merge",
+      from: gone.name,
+      at: this.clock.toISOString(),
+    };
+    return { entity: this.entityView(kept), changeId, moved: moved.length };
+  }
+
+  async refileMemory(id: string, target: RefileTarget): Promise<Refiled> {
+    const m = this.memory(id);
+    const fromId = m.entityId;
+    let created = false;
+    let dest: EntityView;
+    if (target.type === "existing") {
+      dest = this.entityFor(target.entityId);
+    } else {
+      const name = target.name.trim().split(/\s+/).join(" ");
+      if (name === "") throw new Error("A name needs some letters.");
+      const found = this.liveEntities().find((o) => o.name.toLowerCase() === name.toLowerCase());
+      if (found) {
+        dest = found;
+      } else {
+        this.counter += 1;
+        dest = {
+          id: `ent-new-${this.counter}`,
+          kind: target.kind,
+          name,
+          role: null,
+          memoryCount: 0,
+          itemCount: 0,
+          formerNames: [],
+          lastChange: null,
+        };
+        this.entities.push(dest);
+        created = true;
+      }
+    }
+    if (dest.id === fromId) throw new Error("It is already filed there.");
+    const before = { subject: m.subject, movedFrom: m.movedFrom };
+    m.entityId = dest.id;
+    m.subject = dest.name;
+    m.movedFrom = m.movedFrom ?? before.subject;
+    const changeId = this.nextChange(() => {
+      m.entityId = fromId;
+      m.subject = before.subject;
+      m.movedFrom = before.movedFrom;
+      if (created && !this.memories.some((x) => x.entityId === dest.id)) {
+        this.entities = this.entities.filter((e) => e.id !== dest.id);
+      }
+    });
+    return { memory: clone(m), entity: this.entityView(dest), changeId };
+  }
+
+  async undoChange(changeId: string): Promise<void> {
+    const undo = this.changes.get(changeId);
+    if (!undo) throw new Error(`That change cannot be taken back.`);
+    this.changes.delete(changeId);
+    undo();
+    for (const e of this.entities) {
+      if (e.lastChange?.id === changeId) e.lastChange = null;
+    }
   }
 
   async snooze(memoryId: string, _days: number): Promise<void> {

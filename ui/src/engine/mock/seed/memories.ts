@@ -32,6 +32,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
     private: false,
     suggestPrivate: false,
     was: null,
+    movedFrom: null,
     receipts,
     ...extra,
   });
@@ -233,7 +234,16 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
     // Counts are what the screens will find, so a person never sees a number that is not there.
     const mine = memories.filter((m) => m.entityId === id && m.status !== "letGo");
     const items = new Set(mine.flatMap((m) => m.receipts.map((r) => r.itemId)));
-    return { id, kind, name, role, memoryCount: mine.length, itemCount: items.size };
+    return {
+      id,
+      kind,
+      name,
+      role,
+      memoryCount: mine.length,
+      itemCount: items.size,
+      formerNames: [],
+      lastChange: null,
+    };
   };
 
   const entities: EntityView[] = [
