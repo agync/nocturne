@@ -1693,3 +1693,50 @@ fn recording_must_be_wav() {
         RemoteAnswer::Kept { .. }
     ));
 }
+
+#[test]
+fn failed_opens_naming_one_phone_do_not_stop_another() {
+    let p = on();
+    let a = p.pair("Phone A");
+    let b = p.pair("Phone B");
+    let forged = PhoneKeys {
+        device_id: a.device_id,
+        d: crypto::new_secret(),
+        cpub: a.cpub.clone(),
+    };
+    for _ in 0..LIMIT_FAILED_SESSION_OPEN + 2 {
+        assert!(matches!(
+            block(PhoneClient::open(&p.addr(), &forged, Mode::WebSocket)),
+            Opened::Refused
+        ));
+    }
+    let mut c = p.open(&b, Mode::WebSocket);
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetStatus),
+        RemoteAnswer::Status { .. }
+    ));
+    use nocturne_app_lib::remote::limits::Bucket;
+    assert!(
+        p.hub.core.limits.has(Bucket::FailedOpen, ""),
+        "the shared bucket is untouched"
+    );
+}
+
+#[test]
+fn session_opens_limited_per_phone() {
+    let p = on();
+    let keys = p.pair("Pixel");
+    for _ in 0..LIMIT_SESSION_OPENS_PER_DEVICE {
+        let mut c = p.open(&keys, Mode::WebSocket);
+        assert!(matches!(
+            call(&mut c, RemoteCall::GetStatus),
+            RemoteAnswer::Status { .. }
+        ));
+    }
+    assert!(matches!(
+        block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)),
+        Opened::Refused
+    ));
+    p.mono.advance(Duration::from_secs(60));
+    p.open(&keys, Mode::WebSocket);
+}

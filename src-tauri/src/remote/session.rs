@@ -522,21 +522,22 @@ impl Core {
         let (Some(computer), Some(engine)) = (self.computer(), self.shell.engine()) else {
             return Inbound::Close;
         };
-        // A paired phone is limited by its own bucket and never by the shared one, so failing
-        // opens from outside cannot lock it out. Only an open naming no paired phone meets the
-        // shared gate, before any work is done on it.
-        let named = frame
+        // Failed opens are counted by whom they claim to be: per paired phone, or in one shared
+        // bucket when they name no paired phone. Failures naming one phone never stop another,
+        // and a verified open never touches either.
+        let claimed = frame
             .get(HEADER_LEN..HEADER_LEN + DEVICE_ID_LEN)
             .map(crypto::b64)
-            .and_then(|id| engine.device(&id).ok().flatten())
-            .filter(|d| d.revoked_at.is_none() && !self.removed(&d.id));
-        match &named {
-            Some(d) if !self.limits.take(Bucket::SessionOpens, &d.id) => {
-                return self.refuse(conv);
-            }
-            Some(_) => {}
-            None if !self.limits.has(Bucket::FailedOpen, "") => return self.refuse(conv),
-            None => {}
+            .filter(|id| {
+                engine
+                    .device(id)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|d| d.revoked_at.is_none() && !self.removed(&d.id))
+            })
+            .unwrap_or_default();
+        if !self.limits.has(Bucket::FailedOpen, &claimed) {
+            return self.refuse(conv);
         }
         let lookup = |id: &crypto::DeviceId| {
             let row = engine.device(&crypto::b64(id)).ok().flatten()?;
@@ -545,7 +546,7 @@ impl Core {
         let open = match crypto::verify_open(frame, lookup, &computer) {
             Ok(o) => o,
             Err(_) => {
-                self.limits.take(Bucket::FailedOpen, "");
+                self.limits.take(Bucket::FailedOpen, &claimed);
                 return self.refuse(conv);
             }
         };
@@ -554,6 +555,9 @@ impl Core {
             conv.push(crypto::revoked(&open.kd, &open.device_id, &open.on));
             *conv.role() = Role::Closed;
             return Inbound::Close;
+        }
+        if !self.limits.take(Bucket::SessionOpens, &device.id) {
+            return self.refuse(conv);
         }
         let connection = self.connection().unwrap_or(RemoteConnection::Simple);
         let f = crypto::new_secret();
