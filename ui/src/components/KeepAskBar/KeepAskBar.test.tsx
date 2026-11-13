@@ -96,6 +96,11 @@ describe("KeepAskBar", () => {
     expect(input).toHaveValue("A note I must not lose");
   });
 
+  it("is a named search landmark", () => {
+    setup();
+    expect(document.querySelector("search")).toHaveAttribute("aria-label", "Keep or ask");
+  });
+
   it("does nothing for an empty bar and Shift+Enter makes a new line", async () => {
     const { onKeep, onAsk, input } = setup();
     await userEvent.type(input, "{Enter}");

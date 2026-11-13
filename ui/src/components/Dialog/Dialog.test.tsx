@@ -78,4 +78,46 @@ describe("Dialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("handles a dialog opened from a dialog: only the inner one hears Escape, and inert is restored", async () => {
+    const root = document.createElement("div");
+    root.id = "root";
+    document.body.appendChild(root);
+    function Nested() {
+      const [outer, setOuter] = useState(true);
+      const [inner, setInner] = useState(false);
+      return (
+        <>
+          {outer ? (
+            <Dialog title="Outer" onClose={() => setOuter(false)}>
+              <button type="button" onClick={() => setInner(true)}>
+                Open inner
+              </button>
+              {inner ? (
+                <Dialog title="Inner" onClose={() => setInner(false)}>
+                  <p>Inside</p>
+                </Dialog>
+              ) : null}
+            </Dialog>
+          ) : null}
+        </>
+      );
+    }
+    render(<Nested />, { container: root.appendChild(document.createElement("div")) });
+    expect(root).toHaveAttribute("inert");
+    await userEvent.click(screen.getByRole("button", { name: "Open inner" }));
+    const outerPanel = screen.getByRole("dialog", { name: "Outer", hidden: true });
+    expect(outerPanel.closest('[role="presentation"]')).toHaveAttribute("inert");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Inner" })).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Outer" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("dialog", { name: "Outer" }).closest('[role="presentation"]'),
+    ).not.toHaveAttribute("inert");
+    expect(root).toHaveAttribute("inert");
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(root).not.toHaveAttribute("inert");
+    root.remove();
+  });
 });

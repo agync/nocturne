@@ -81,4 +81,45 @@ describe("Toast", () => {
     });
     expect(screen.getByText("Kept.")).toBeInTheDocument();
   });
+
+  it("keeps a toast with an action for ten seconds, and longer while it has focus", async () => {
+    const onAction = vi.fn();
+    render(
+      <ToastProvider>
+        <Opener onAction={onAction} />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Keep" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9000);
+    });
+    expect(screen.getByText("Kept.")).toBeInTheDocument();
+    screen.getByRole("button", { name: "Undo" }).focus();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    expect(screen.getByText("Kept.")).toBeInTheDocument();
+    screen.getByRole("button", { name: "Keep" }).focus();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_100);
+    });
+    expect(screen.queryByText("Kept.")).toBeNull();
+  });
+
+  it("can be reached with F6-style focus, closed with Escape, and gives focus back", async () => {
+    render(
+      <ToastProvider>
+        <Opener onAction={vi.fn()} />
+      </ToastProvider>,
+    );
+    const opener = screen.getByRole("button", { name: "Keep" });
+    await userEvent.click(opener);
+    const toast = document.querySelector('[data-region="toast"]');
+    expect(toast).not.toBeNull();
+    opener.focus();
+    screen.getByRole("button", { name: "Undo" }).focus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByText("Kept.")).toBeNull();
+    expect(opener).toHaveFocus();
+  });
 });

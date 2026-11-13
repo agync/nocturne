@@ -1,6 +1,6 @@
 import { type RefObject, useEffect } from "react";
 
-const ORDER = ["keep", "main", "rail"] as const;
+const ORDER = ["keep", "main", "rail", "toast"] as const;
 
 function focusRegion(region: HTMLElement): void {
   // The page region takes focus itself (it is tabindex -1); the others hand it to their first control.
@@ -18,8 +18,11 @@ export function useRegionCycling(root: RefObject<HTMLElement | null>): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "F6" || !root.current) return;
+      // Toasts live outside the shell, so the whole document is searched for them.
       const regions = ORDER.map((name) =>
-        root.current?.querySelector<HTMLElement>(`[data-region="${name}"]`),
+        (name === "toast" ? document : root.current)?.querySelector<HTMLElement>(
+          `[data-region="${name}"]`,
+        ),
       ).filter((el): el is HTMLElement => Boolean(el));
       if (regions.length === 0) return;
       event.preventDefault();

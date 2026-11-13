@@ -16,6 +16,10 @@ interface DialogProps {
   edge?: "start";
 }
 
+/** Open dialogs, innermost last. Only the innermost answers the keyboard; the rest are inert. */
+const open: HTMLElement[] = [];
+let savedOverflow = "";
+
 const FOCUSABLE = [
   "a[href]",
   "button:not([disabled])",
@@ -38,31 +42,43 @@ export function Dialog({
   edge,
 }: DialogProps) {
   const panel = useRef<HTMLDivElement>(null);
+  const backdrop = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
+    const mine = backdrop.current as HTMLElement;
     const root = document.getElementById("root");
+    open.at(-1)?.setAttribute("inert", "");
+    if (open.length === 0) {
+      savedOverflow = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+    }
+    open.push(mine);
     root?.setAttribute("inert", "");
-    const overflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     const first = initialFocus?.current ?? panel.current?.querySelector<HTMLElement>(FOCUSABLE);
     (first ?? panel.current)?.focus();
 
     return () => {
-      root?.removeAttribute("inert");
-      document.body.style.overflow = overflow;
+      open.splice(open.indexOf(mine), 1);
+      open.at(-1)?.removeAttribute("inert");
+      if (open.length === 0) {
+        root?.removeAttribute("inert");
+        document.body.style.overflow = savedOverflow;
+      }
       opener?.focus?.();
     };
   }, [initialFocus]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (open.at(-1) !== backdrop.current) return;
       if (event.key === "Escape") {
-        event.stopPropagation();
+        event.stopImmediatePropagation();
+        event.preventDefault();
         onCloseRef.current();
         return;
       }
@@ -94,6 +110,7 @@ export function Dialog({
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut; Escape and Close serve the keyboard
     <div
+      ref={backdrop}
       role="presentation"
       className={styles.backdrop}
       data-edge={edge}

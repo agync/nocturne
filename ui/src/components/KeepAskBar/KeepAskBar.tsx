@@ -96,7 +96,12 @@ export function KeepAskBar({
     : undefined;
 
   return (
-    <search className={styles.bar} data-placement={placement} data-verb={verb}>
+    <search
+      className={styles.bar}
+      aria-label={t("shell.region.keep")}
+      data-placement={placement}
+      data-verb={verb}
+    >
       <div className={styles.field}>
         <textarea
           ref={inputRef}

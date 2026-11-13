@@ -38,10 +38,19 @@ export function useToast(): ToastApi {
 }
 
 const DEFAULT_DURATION = 6000;
+/** A toast with something to press stays longer, and while the pointer or focus is on it. */
+const ACTION_DURATION = 10_000;
 
 function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: number) => void }) {
   const [paused, setPaused] = useState(false);
-  const duration = toast.duration ?? DEFAULT_DURATION;
+  const duration = toast.duration ?? (toast.action ? ACTION_DURATION : DEFAULT_DURATION);
+  const returnTo = useRef<HTMLElement | null>(null);
+
+  const finish = () => {
+    const back = returnTo.current;
+    onDismiss(toast.id);
+    if (back?.isConnected) back.focus();
+  };
   useEffect(() => {
     if (paused) return;
     const timer = setTimeout(() => onDismiss(toast.id), duration);
@@ -55,8 +64,17 @@ function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
       className={styles.toast}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
-      onFocus={() => setPaused(true)}
+      data-region={toast.action ? "toast" : undefined}
+      onFocus={(event) => {
+        setPaused(true);
+        const from = event.relatedTarget;
+        if (from instanceof HTMLElement && !event.currentTarget.contains(from))
+          returnTo.current = from;
+      }}
       onBlur={() => setPaused(false)}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") finish();
+      }}
     >
       {toast.lead ? <strong className={styles.lead}>{toast.lead}</strong> : null}
       <span className={styles.message}>{toast.message}</span>
@@ -66,7 +84,7 @@ function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
           className={styles.action}
           onClick={() => {
             toast.action?.onAction();
-            onDismiss(toast.id);
+            finish();
           }}
         >
           {toast.action.label}
