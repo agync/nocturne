@@ -55,6 +55,8 @@ struct Phase {
     last_ticks: Option<(Instant, u64)>,
     first_by_name: BTreeMap<String, u64>,
     last_by_name: BTreeMap<String, u64>,
+    /// Each process's own highest reading in the phase, whenever it came.
+    highest_by_name: BTreeMap<String, u64>,
 }
 
 #[derive(Default)]
@@ -93,6 +95,10 @@ impl MemWatch {
                     }
                     p.last_ticks = Some((now, r.ticks));
                     p.last_by_name = r.ticks_by_name.clone();
+                    for (k, v) in &r.by_name {
+                        let top = p.highest_by_name.entry(k.clone()).or_default();
+                        *top = (*top).max(*v);
+                    }
                     if r.total_kib() > p.peak.total_kib() {
                         p.peak = r;
                     }
@@ -164,6 +170,8 @@ impl MemWatch {
                 "mean_mib": mib(p.sum_total_kib / p.samples),
                 "cpu_percent_of_one_core": cpu,
                 "cpu_by_process": cpu_by_process,
+                "highest_by_process_mib": p.highest_by_name.iter()
+                    .map(|(k, v)| (k.clone(), json!(mib(*v)))).collect::<serde_json::Map<_, _>>(),
                 "at_peak_by_process_mib": p.peak.by_name.iter()
                     .map(|(k, v)| (k.clone(), json!(mib(*v)))).collect::<serde_json::Map<_, _>>(),
             }));

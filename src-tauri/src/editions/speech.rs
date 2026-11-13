@@ -26,6 +26,8 @@ use crate::state::{AppState, refresh_status};
 
 /// Silence between sections.
 pub const GAP_MS: u32 = 600;
+/// Silence between the lines of one section.
+const LINE_GAP_MS: u32 = 250;
 /// The spoken page is prepared ahead only if it was used this recently.
 const USED_WITHIN_DAYS: i64 = 14;
 /// How many times a day the background make is tried.
@@ -123,12 +125,12 @@ async fn make<R: Runtime>(
             .get()
             .ok_or_else(|| CommandError::unavailable("the voice is not ready"))?;
         mind.ready_to_speak().await;
-        let mut parts = Vec::with_capacity(script.len());
+        // One request per line, and each answer goes into the file at once: the voice never
+        // holds more than a line, and nothing is kept between requests but the samples.
+        let mut joiner = wav::Joiner::new();
         for section in &script {
-            let bytes = mind
-                .speak(&section.text, voice)
-                .await
-                .map_err(|e| match e {
+            for (i, piece) in section.parts.iter().enumerate() {
+                let bytes = mind.speak(piece, voice).await.map_err(|e| match e {
                     MindError::Busy => CommandError::new(ErrorCode::Busy, e),
                     // Not there at all: the interface says Nocturne is still getting ready.
                     MindError::Unavailable => CommandError::unavailable(e),
@@ -138,9 +140,13 @@ async fn make<R: Runtime>(
                         CommandError::internal(other)
                     }
                 })?;
-            parts.push((section.kind, bytes));
+                let gap = if i == 0 { GAP_MS } else { LINE_GAP_MS };
+                joiner
+                    .push(section.kind, i == 0, &bytes, gap)
+                    .map_err(unusable)?;
+            }
         }
-        let (audio, sections) = wav::join(&parts, GAP_MS).map_err(unusable)?;
+        let (audio, sections) = joiner.finish().map_err(unusable)?;
         let duration_ms = wav::duration_ms(&audio).map_err(unusable)?;
         let e = engine.clone();
         let (d, v) = (date.clone(), voice.to_string());

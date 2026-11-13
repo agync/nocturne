@@ -1967,11 +1967,14 @@ fn the_whole_product_works_with_real_models() {
     let notification = notify::body(public_needs.len() as u32);
     let public_json = serde_json::to_value(&public_needs).unwrap_or_default();
     let status = h.ok("get_status", json!({}));
+    // Its own phase: the voice's peak is the figure for reading the page aloud.
+    mem.phase("speak_page");
     let spoken = {
         let t = Instant::now();
         let r = h.call("speak_page", json!({"date": date}));
         (ms(t.elapsed()), r)
     };
+    mem.phase("page");
     let spoken_leaks = match &spoken.1 {
         Ok(v) => leaks_in(v),
         Err(_) => Vec::new(),

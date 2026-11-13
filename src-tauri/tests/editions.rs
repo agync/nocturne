@@ -181,7 +181,15 @@ fn private_line_never_spoken() {
     assert_eq!(sections[0]["startMs"], 0);
     assert!(page["durationMs"].as_u64().unwrap() > 100);
     let spoken_calls = voice.calls.load(Ordering::SeqCst);
-    assert_eq!(spoken_calls, sections.len(), "one speak per section");
+    // One request per line, never one per section: the voice holds no more than a line.
+    let said = voice.said();
+    assert_eq!(spoken_calls, said.len());
+    assert!(spoken_calls > sections.len(), "{said:?}");
+    assert!(
+        said.iter()
+            .all(|piece| piece.split_whitespace().count() <= 30),
+        "{said:?}"
+    );
 
     let again = speak(&h);
     assert_eq!(again["path"], page["path"], "kept, not made again");
@@ -234,11 +242,14 @@ fn two_calls_one_synthesis() {
     let (a, b) = (a.unwrap(), b.unwrap());
     assert_eq!(a.path, b.path);
     assert_eq!(a.sections, b.sections);
+    let said = voice.said();
+    let once: std::collections::HashSet<&String> = said.iter().collect();
     assert_eq!(
-        voice.calls.load(Ordering::SeqCst),
-        a.sections.len(),
-        "each section was spoken once"
+        once.len(),
+        said.len(),
+        "each line was spoken once: {said:?}"
     );
+    assert!(said.len() >= a.sections.len(), "{said:?}");
 }
 
 #[test]

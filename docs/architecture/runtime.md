@@ -116,6 +116,7 @@ How Nocturne keeps to it:
 | Every model's context is saved | `residency::saved_options`, and `ctx_size` 8192 in `config.json` as the default | A model loaded with nothing saved would be sized to fill the free memory |
 | One model of each kind at a time | `max_loaded_models` 1 in `config.json` | A second mind never loads beside the first |
 | The voice runs alone on Tiny and Small | `residency::alone`, `Client::set_alone`, and `Mind::ready_to_speak`, called once per page | Before the page is read aloud, every other model that is not busy is unloaded once, so the voice (2 to 3 GB while it speaks) never shares memory with the mind; the engine has no setting for this |
+| The page is read aloud one line at a time | `editions::speech::make` asks the voice for one line per request and `wav::Joiner` takes each answer into the file at once | The voice's memory grows with the length of what it is asked to say, so no request is longer than a line, and nothing is held between requests but the samples. Section starts are still written into the file, so skipping between sections works as before |
 | No overnight tidy on battery | the scheduler | The night tidy waits for mains power; a catch-up tidy runs on battery only above 40 per cent or when the person asks |
 
 The real end-to-end test (`make e2e-real`, with `NOCTURNE_E2E_TIER=tiny`) samples the memory and
@@ -141,6 +142,12 @@ while reading a recording, when the speech model is loaded beside the mind and t
 (1.7 GB with its cache), and about 0.3 GB over while reading a long page aloud, when the voice
 alone grows to 3.7 GB. On Linux with an integrated GPU the model servers hold more graphics
 memory, about 0.7 GB more in all; the voice there stays near 2.5 GB.
+
+The same test samples reading the page aloud as a phase of its own (`speak_page`, with each
+process's own highest reading). On Linux with an integrated GPU the voice process peaked at 3.46
+GB when a section was one request and at 2.9 to 3.3 GB (five runs, 3.07 GB on average) when each
+line was; run-to-run spread is about 0.2 GB, so the saving is real but not exact, and the voice
+on a Mac was not measured again.
 
 ## Packaged layout
 

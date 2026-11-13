@@ -177,84 +177,117 @@ fn chunk(out: &mut Vec<u8>, id: &[u8; 4], body: &[u8]) {
     }
 }
 
+/// Builds the joined WAV one piece at a time, so the voice's answer to a request can be dropped
+/// as soon as its samples are in, and only the samples are kept in between.
+#[derive(Default)]
+pub struct Joiner {
+    format: Option<Format>,
+    data: Vec<u8>,
+    starts: Vec<(SpokenKind, u64)>,
+    at_frame: u64,
+}
+
+impl Joiner {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds `wav` after `gap_ms` of silence (none before the first piece). `starts_section`
+    /// marks where it begins a section of `kind`; a piece that does not continues the section
+    /// before it.
+    pub fn push(
+        &mut self,
+        kind: SpokenKind,
+        starts_section: bool,
+        wav: &[u8],
+        gap_ms: u32,
+    ) -> Result<(), WavError> {
+        let p = parse(wav)?;
+        if gap_ms > MAX_GAP_MS {
+            return Err(WavError::TooLong);
+        }
+        let format = *self.format.get_or_insert(p.format);
+        if p.format != format {
+            return Err(WavError::Mismatch);
+        }
+        if !self.starts.is_empty() {
+            let gap_frames = u64::from(format.rate) * u64::from(gap_ms) / 1000;
+            let silent = self.data.len() + gap_frames as usize * format.block_align();
+            self.data.resize(silent, 0);
+            self.at_frame += gap_frames;
+        }
+        if starts_section || self.starts.is_empty() {
+            self.starts.push((kind, self.at_frame));
+        }
+        self.data.extend_from_slice(p.data);
+        self.at_frame += frames(&p);
+        Ok(())
+    }
+
+    /// The file and where each section starts.
+    pub fn finish(self) -> Result<(Vec<u8>, Vec<SpokenSection>), WavError> {
+        let first = self.format.ok_or(WavError::NoParts)?;
+        let (data, starts) = (self.data, self.starts);
+        let block = first.block_align();
+        if data.len() > (u32::MAX / 2) as usize {
+            return Err(WavError::TooLong);
+        }
+
+        let mut fmt = Vec::with_capacity(16);
+        fmt.extend_from_slice(&first.tag.to_le_bytes());
+        fmt.extend_from_slice(&first.channels.to_le_bytes());
+        fmt.extend_from_slice(&first.rate.to_le_bytes());
+        fmt.extend_from_slice(&(first.rate * block as u32).to_le_bytes());
+        fmt.extend_from_slice(&(block as u16).to_le_bytes());
+        fmt.extend_from_slice(&first.bits.to_le_bytes());
+
+        let mut cue = (starts.len() as u32).to_le_bytes().to_vec();
+        let mut adtl = b"adtl".to_vec();
+        for (i, (kind, frame)) in starts.iter().enumerate() {
+            let id = (i + 1) as u32;
+            cue.extend_from_slice(&id.to_le_bytes());
+            cue.extend_from_slice(&(*frame as u32).to_le_bytes());
+            cue.extend_from_slice(b"data");
+            cue.extend_from_slice(&0u32.to_le_bytes());
+            cue.extend_from_slice(&0u32.to_le_bytes());
+            cue.extend_from_slice(&(*frame as u32).to_le_bytes());
+            let mut text = id.to_le_bytes().to_vec();
+            text.extend_from_slice(label(*kind).as_bytes());
+            text.push(0);
+            chunk(&mut adtl, b"labl", &text);
+        }
+
+        let mut body = b"WAVE".to_vec();
+        chunk(&mut body, b"fmt ", &fmt);
+        chunk(&mut body, b"data", &data);
+        chunk(&mut body, b"cue ", &cue);
+        chunk(&mut body, b"LIST", &adtl);
+        let mut wav = b"RIFF".to_vec();
+        wav.extend_from_slice(&(body.len() as u32).to_le_bytes());
+        wav.extend_from_slice(&body);
+
+        let sections = starts
+            .iter()
+            .map(|(kind, frame)| SpokenSection {
+                kind: *kind,
+                start_ms: ms(*frame, first.rate),
+            })
+            .collect();
+        Ok((wav, sections))
+    }
+}
+
 /// Join the parts in order into one WAV with `gap_ms` of silence between them. Returns the file
 /// and where each section starts.
 pub fn join(
     parts: &[(SpokenKind, Vec<u8>)],
     gap_ms: u32,
 ) -> Result<(Vec<u8>, Vec<SpokenSection>), WavError> {
-    let parsed: Vec<(SpokenKind, Parsed<'_>)> = parts
-        .iter()
-        .map(|(k, b)| parse(b).map(|p| (*k, p)))
-        .collect::<Result<_, _>>()?;
-    if gap_ms > MAX_GAP_MS {
-        return Err(WavError::TooLong);
+    let mut joiner = Joiner::new();
+    for (kind, bytes) in parts {
+        joiner.push(*kind, true, bytes, gap_ms)?;
     }
-    let first = parsed.first().ok_or(WavError::NoParts)?.1.format;
-    if parsed.iter().any(|(_, p)| p.format != first) {
-        return Err(WavError::Mismatch);
-    }
-    let block = first.block_align();
-    let gap_frames = u64::from(first.rate) * u64::from(gap_ms) / 1000;
-    let silence = vec![0u8; gap_frames as usize * block];
-
-    let mut data = Vec::new();
-    let mut starts = Vec::new();
-    let mut at_frame = 0u64;
-    for (i, (kind, p)) in parsed.iter().enumerate() {
-        if i > 0 {
-            data.extend_from_slice(&silence);
-            at_frame += gap_frames;
-        }
-        starts.push((*kind, at_frame));
-        data.extend_from_slice(p.data);
-        at_frame += frames(p);
-    }
-    if data.len() > (u32::MAX / 2) as usize {
-        return Err(WavError::TooLong);
-    }
-
-    let mut fmt = Vec::with_capacity(16);
-    fmt.extend_from_slice(&first.tag.to_le_bytes());
-    fmt.extend_from_slice(&first.channels.to_le_bytes());
-    fmt.extend_from_slice(&first.rate.to_le_bytes());
-    fmt.extend_from_slice(&(first.rate * block as u32).to_le_bytes());
-    fmt.extend_from_slice(&(block as u16).to_le_bytes());
-    fmt.extend_from_slice(&first.bits.to_le_bytes());
-
-    let mut cue = (starts.len() as u32).to_le_bytes().to_vec();
-    let mut adtl = b"adtl".to_vec();
-    for (i, (kind, frame)) in starts.iter().enumerate() {
-        let id = (i + 1) as u32;
-        cue.extend_from_slice(&id.to_le_bytes());
-        cue.extend_from_slice(&(*frame as u32).to_le_bytes());
-        cue.extend_from_slice(b"data");
-        cue.extend_from_slice(&0u32.to_le_bytes());
-        cue.extend_from_slice(&0u32.to_le_bytes());
-        cue.extend_from_slice(&(*frame as u32).to_le_bytes());
-        let mut text = id.to_le_bytes().to_vec();
-        text.extend_from_slice(label(*kind).as_bytes());
-        text.push(0);
-        chunk(&mut adtl, b"labl", &text);
-    }
-
-    let mut body = b"WAVE".to_vec();
-    chunk(&mut body, b"fmt ", &fmt);
-    chunk(&mut body, b"data", &data);
-    chunk(&mut body, b"cue ", &cue);
-    chunk(&mut body, b"LIST", &adtl);
-    let mut wav = b"RIFF".to_vec();
-    wav.extend_from_slice(&(body.len() as u32).to_le_bytes());
-    wav.extend_from_slice(&body);
-
-    let sections = starts
-        .iter()
-        .map(|(kind, frame)| SpokenSection {
-            kind: *kind,
-            start_ms: ms(*frame, first.rate),
-        })
-        .collect();
-    Ok((wav, sections))
+    joiner.finish()
 }
 
 /// The section starts written by [`join`], read back from the file. A file with no cue chunk

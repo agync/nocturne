@@ -14,7 +14,11 @@ const NAMED_LET_GO: usize = 2;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Section {
     pub kind: SpokenKind,
+    /// Everything the section says.
     pub text: String,
+    /// The same words in the pieces the voice is asked for one at a time, a line each, so no
+    /// request is longer than a line.
+    pub parts: Vec<String>,
 }
 
 fn plain(text: &str) -> String {
@@ -60,12 +64,9 @@ fn spoken_line(line: &PageLine) -> String {
 }
 
 fn section(kind: SpokenKind, lines: impl IntoIterator<Item = String>) -> Option<Section> {
-    let text = lines
-        .into_iter()
-        .filter(|l| !l.trim().is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    (!text.is_empty()).then_some(Section { kind, text })
+    let parts: Vec<String> = lines.into_iter().filter(|l| !l.trim().is_empty()).collect();
+    let text = parts.join(" ");
+    (!text.is_empty()).then_some(Section { kind, text, parts })
 }
 
 /// The script for a page: the opening, what needs the person, what changed (the top few),
@@ -217,6 +218,11 @@ mod tests {
         assert_eq!(
             script[5].text,
             "Do you still go to the gym? You can answer it on today\u{2019}s page."
+        );
+        assert_eq!(script[0].parts, ["Good morning.", "One thing today."]);
+        assert!(
+            script.iter().all(|s| s.parts.join(" ") == s.text),
+            "the pieces say what the section says, in order"
         );
         let all: String = script.iter().map(|s| s.text.as_str()).collect();
         assert!(!all.contains("Gone."));
