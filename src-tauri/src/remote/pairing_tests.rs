@@ -415,3 +415,24 @@ fn qr_decodes_to_the_link() {
     assert_eq!(offer.qr.modules, dark);
     assert_eq!(offer.qr.modules.len(), want.width() * want.width());
 }
+
+#[test]
+fn offer_waiting_for_you_survives_foreign_frames() {
+    let mut b = bench();
+    let offer = b.begin();
+    let mut phone = PhonePair::scanned(&offer.link, "Pixel");
+    let req = b.pair(&mut phone).unwrap();
+    let mut junk = phone.reveal();
+    let last = junk.len() - 1;
+    junk[last] ^= 1;
+    for _ in 0..WRONG_CODES * 3 {
+        let other = PhonePair::typed(&crypto::code_encode(&crypto::random()), HOST, "X");
+        for frame in [other.hello(), other.commit(), junk.clone(), phone.commit()] {
+            let step = b.send(&frame);
+            assert!(!step.wrong && step.reply.is_empty() && step.request.is_none());
+        }
+    }
+    assert!(matches!(b.phase(), PairingPhase::WaitingForYou { .. }));
+    b.p.waiting(&req.pairing_id, b.now).unwrap();
+    assert!(b.p.decide(Some("AAAAAAAAAAAAAAAAAAAAAA")).is_some());
+}

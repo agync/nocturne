@@ -261,9 +261,18 @@ impl Pairings {
         let Ok(h) = crypto::parse_header(frame) else {
             return step;
         };
+        // Once a phone has committed, a frame that does not open is dropped: anyone at the
+        // relay can see the pairing id, and junk must not end a pairing the person is deciding.
+        let committed = o.commit.is_some();
         if !crypto::eq_ct(&h.sid, &o.pid) {
             // Another pairing id: a wrongly typed code, or a stale offer.
-            self.wrong_frame(now, now_wall, &mut step);
+            if !committed {
+                self.wrong_frame(now, now_wall, &mut step);
+            }
+            return step;
+        }
+        if o.revealed.is_some() {
+            // The person is deciding: a replayed commit or reveal changes nothing.
             return step;
         }
         match h.kind {
@@ -276,7 +285,9 @@ impl Pairings {
                 let Ok(Envelope::Json(body)) =
                     crypto::pair_open(frame, KIND_PAIR_COMMIT, &o.pid, &o.keys.up)
                 else {
-                    self.wrong_frame(now, now_wall, &mut step);
+                    if !committed {
+                        self.wrong_frame(now, now_wall, &mut step);
+                    }
                     return step;
                 };
                 if !o.seen.insert(KIND_PAIR_COMMIT) {
@@ -307,7 +318,9 @@ impl Pairings {
                 let Ok(Envelope::Json(body)) =
                     crypto::pair_open(frame, KIND_PAIR_REVEAL, &o.pid, &o.keys.up)
                 else {
-                    self.wrong_frame(now, now_wall, &mut step);
+                    if !committed {
+                        self.wrong_frame(now, now_wall, &mut step);
+                    }
                     return step;
                 };
                 let in_time = o
@@ -368,7 +381,8 @@ impl Pairings {
                 step.request = Some(request);
                 step.changed = true;
             }
-            _ => self.wrong_frame(now, now_wall, &mut step),
+            _ if !committed => self.wrong_frame(now, now_wall, &mut step),
+            _ => {}
         }
         step
     }
