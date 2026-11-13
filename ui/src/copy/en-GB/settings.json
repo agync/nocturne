@@ -3,7 +3,7 @@
   "settings.saved": "Saved.",
   "settings.failed": "That didn’t save. Nothing was changed.",
   "settings.loading": "Opening settings…",
-  "settings.error": "I couldn’t open settings. What you kept is safe.",
+  "settings.error": "Nocturne couldn’t open settings. What you kept is safe.",
   "settings.page.label": "Morning page",
   "settings.page.hint": "When it is ready and how it arrives",
   "settings.page.time": "Morning page, time",

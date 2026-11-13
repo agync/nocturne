@@ -18,7 +18,7 @@
   "fading.empty.fading": "Nothing is fading right now.",
   "fading.empty.letGo": "Nothing has been let go.",
   "fading.loading": "Looking at what is fading…",
-  "fading.error": "I couldn’t open this list. What you kept is safe.",
+  "fading.error": "Nocturne couldn’t open this list. What you kept is safe.",
   "fading.announce.kept": "Kept. It will not fade for {days, plural, one {# day} other {# days}}.",
   "fading.announce.broughtBack": "{count, plural, one {Brought back. It will not fade for {days, plural, one {# day} other {# days}}.} other {Brought back # things. They will not fade for {days, plural, one {# day} other {# days}}.}}",
   "fading.announce.forgotten": "{count, plural, one {Forgotten.} other {# things forgotten.}}",

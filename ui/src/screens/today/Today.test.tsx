@@ -183,7 +183,7 @@ describe("the morning page on Today", () => {
     };
     renderApp({ hash: "#/today", engine });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "I couldn’t get this page. What you kept is safe.",
+      "Nocturne couldn’t get this page. What you kept is safe.",
     );
   });
 

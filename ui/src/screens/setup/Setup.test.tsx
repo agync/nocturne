@@ -347,7 +347,7 @@ describe("done and the states around it", () => {
     const spy = vi.spyOn(engine, "getSetup").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/setup", engine });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "I couldn’t read how setup is going.",
+      "Nocturne couldn’t read how setup is going.",
     );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(

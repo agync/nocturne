@@ -179,7 +179,7 @@ describe("ForgetDialog", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
     expect(
       await screen.findByText(
-        "That list was out of date, so I refreshed it. Check it, then forget.",
+        "That list was out of date, so Nocturne refreshed it. Check it, then forget.",
       ),
     ).toBeInTheDocument();
     expect(previews).toHaveBeenCalledTimes(2);
@@ -206,7 +206,9 @@ describe("ForgetDialog", () => {
     const engine = createMockEngine();
     const spy = vi.spyOn(engine, "previewForget").mockRejectedValueOnce(new Error("no"));
     open({ memoryIds: ["mem-nut"] }, engine);
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t get the list ready.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t get the list ready.",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("button", { name: "Forget 2 things" })).toBeInTheDocument();
     expect(spy).toHaveBeenCalledTimes(2);

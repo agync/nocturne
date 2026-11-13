@@ -256,7 +256,7 @@ describe("Settings", () => {
     const engine = createMockEngine();
     const spy = vi.spyOn(engine, "getSettings").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/settings", engine });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t open settings.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t open settings.");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(spy).toHaveBeenCalledTimes(2);

@@ -266,7 +266,7 @@ describe("states", () => {
     const engine = createMockEngine({ sentMeasured: true });
     const spy = vi.spyOn(engine, "getPrivacy").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/privacy", engine });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t open this.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t open this.");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Nothing.")).toBeInTheDocument();
     expect(spy).toHaveBeenCalledTimes(2);

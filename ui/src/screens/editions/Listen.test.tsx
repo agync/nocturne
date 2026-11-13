@@ -236,7 +236,7 @@ describe("Listen", () => {
     vi.spyOn(engine, "speakPage").mockRejectedValueOnce(new EngineError("internal", "failed"));
     renderApp({ hash: "#/listen/2026-11-13", engine });
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("I couldn’t read it aloud just now.");
+    expect(alert).toHaveTextContent("Nocturne couldn’t read it aloud just now.");
     expect(alert).not.toHaveTextContent("still getting ready");
     expect(screen.getByRole("link", { name: "Read the page" })).toBeInTheDocument();
   });

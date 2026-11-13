@@ -99,7 +99,7 @@ test.describe("the Ask page", () => {
     await ready(page, "#/today");
     await ask(page, "When is my appointment?");
     await expect(
-      page.locator("article").getByText(/I’m not sure\. Nothing says that outright/),
+      page.locator("article").getByText(/Not sure\. Nothing says that outright/),
     ).toBeVisible();
     await expect(page.getByRole("link", { name: "Search everything you’ve kept" })).toHaveAttribute(
       "href",
@@ -115,7 +115,7 @@ test.describe("the Ask page", () => {
       page.locator("article").getByText("Nothing you’ve kept answers that."),
     ).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/ask-nothing-light.png` });
-    await page.getByRole("button", { name: "Search let go" }).click();
+    await page.getByRole("button", { name: "Search what was let go" }).click();
     await expect(page).toHaveURL(/#\/fading\?show=letGo$/);
   });
 
@@ -222,7 +222,7 @@ test.describe("a narrow window", () => {
   test("not sure and nothing found fit too", async ({ page }) => {
     await ready(page, "#/today");
     await ask(page, "When is my appointment?");
-    await expect(page.locator("article").getByText(/I’m not sure/)).toBeVisible();
+    await expect(page.locator("article").getByText(/Not sure/)).toBeVisible();
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await page.screenshot({ path: `${SHOTS}/ask-not-sure-narrow.png` });
     await ask(page, "Where is my passport?");
@@ -262,7 +262,7 @@ for (const scheme of ["light", "dark"] as const) {
     expect(await axe(page), "correction").toEqual([]);
     await page.keyboard.press("Escape");
     await ask(page, "When is my appointment?");
-    await expect(page.locator("article").getByText(/I’m not sure/)).toBeVisible();
+    await expect(page.locator("article").getByText(/Not sure/)).toBeVisible();
     expect(await axe(page), "not sure").toEqual([]);
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/ask-not-sure-dark.png` });
     await ask(page, "Where is my passport?");

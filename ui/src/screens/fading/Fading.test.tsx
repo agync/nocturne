@@ -253,7 +253,7 @@ describe("Fading & let go", () => {
     const engine = createMockEngine();
     const spy = vi.spyOn(engine, "listFading").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/fading", engine });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t open this list.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t open this list.");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Ava’s old swimming teacher is called Jo.")).toBeInTheDocument();
     expect(spy).toHaveBeenCalledTimes(2);

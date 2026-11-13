@@ -1,7 +1,7 @@
 {
   "setup.window": "Setting up Nocturne",
   "setup.loading": "Getting ready…",
-  "setup.error": "I couldn’t read how setup is going. What you kept is safe.",
+  "setup.error": "Nocturne couldn’t read how setup is going. What you kept is safe.",
   "setup.welcome.title": "Keep anything. Nocturne sleeps on it and hands you one page each morning.",
   "setup.welcome.body": "It remembers what matters, lets go of what doesn’t, and shows you where every answer came from.",
   "setup.welcome.promise": "Everything stays on this computer.",
@@ -40,7 +40,7 @@
   "setup.keep.type": "Type a note",
   "setup.keep.note.label": "Your note",
   "setup.keep.note.save": "Keep it",
-  "setup.keep.failed": "I couldn’t keep that just now. Nothing is lost; try again.",
+  "setup.keep.failed": "Nocturne couldn’t keep that just now. Nothing is lost; try again.",
   "setup.progress.label": "Setting up Nocturne’s mind",
   "setup.progress.installing": "Finishing up",
   "setup.progress.detail": "{done} of {total} · {eta}",

@@ -63,7 +63,9 @@ describe("Past pages", () => {
     const engine = createMockEngine();
     const spy = vi.spyOn(engine, "listPages").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/pages", engine });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t open your pages.");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t open your pages.",
+    );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(
       await screen.findByRole("heading", { level: 2, name: "November 2026" }),

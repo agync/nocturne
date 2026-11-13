@@ -242,7 +242,7 @@ describe("keeping and asking from the bar", () => {
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await userEvent.type(bar, "Ask Sam about Saturday{Enter}");
     expect(await screen.findByText("Kept.")).toBeInTheDocument();
-    expect(screen.getByText("I’ll read it tonight.")).toBeInTheDocument();
+    expect(screen.getByText("Nocturne will read it tonight.")).toBeInTheDocument();
     const items = await engine.listItems({ since: null, status: null, limit: 1 });
     expect(items[0]?.title).toBe("Ask Sam about Saturday");
     expect(bar).toHaveValue("");
@@ -464,7 +464,7 @@ describe("when a screen fails", () => {
     engine.getPage = async (date) => ({ ...(await real(date)), needsYou: null as never });
     renderApp({ engine });
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("I couldn’t show this. What you kept is safe.");
+    expect(alert).toHaveTextContent("Nocturne couldn’t show this. What you kept is safe.");
     expect(within(alert).getByRole("link", { name: "Back to today’s page" })).toHaveAttribute(
       "href",
       "#/today",

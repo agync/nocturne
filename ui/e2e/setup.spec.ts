@@ -166,7 +166,7 @@ test.describe("using it", () => {
     await expect(page.getByRole("textbox", { name: "Your note" })).toBeFocused();
     await page.keyboard.type("Ask Sam about Saturday");
     await page.getByRole("button", { name: "Keep it" }).click();
-    await expect(page.getByText("Kept. I’ll read it tonight.")).toBeVisible();
+    await expect(page.getByText("Kept. Nocturne will read it tonight.")).toBeVisible();
   });
 
   test("good defaults can be changed in place", async ({ page }) => {

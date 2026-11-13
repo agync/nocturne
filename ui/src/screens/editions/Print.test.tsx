@@ -234,7 +234,9 @@ describe("the print screen", () => {
     expect(platform.printed()).toBe(1);
     platform.print = vi.fn().mockRejectedValue(new Error("no"));
     await userEvent.click(screen.getByRole("button", { name: "Print" }));
-    expect(await screen.findByText("I couldn’t open printing. Nothing was lost.")).toBeVisible();
+    expect(
+      await screen.findByText("Nocturne couldn’t open printing. Nothing was lost."),
+    ).toBeVisible();
   });
 
   it("says nothing was sent to the internet only when that was measured", async () => {
@@ -273,6 +275,8 @@ describe("the print screen", () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "getEdition").mockRejectedValue(new Error("no"));
     renderApp({ hash: "#/print/2026-11-13", engine });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t get that page ready");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t get that page ready",
+    );
   });
 });

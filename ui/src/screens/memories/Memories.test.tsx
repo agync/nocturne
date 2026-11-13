@@ -237,7 +237,7 @@ describe("What Nocturne remembers", () => {
 
   it("says so for something that is not there", async () => {
     renderApp({ hash: "#/memories/nobody" });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t find that.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t find that.");
     expect(
       screen.getByRole("link", { name: "Back to what Nocturne remembers" }),
     ).toBeInTheDocument();
@@ -248,7 +248,7 @@ describe("What Nocturne remembers", () => {
     vi.spyOn(engine, "listEntities").mockRejectedValue(new Error("no"));
     renderApp({ hash: "#/memories", engine });
     expect(
-      await screen.findByText("I couldn’t open this. What you kept is safe."),
+      await screen.findByText("Nocturne couldn’t open this. What you kept is safe."),
     ).toBeInTheDocument();
   });
 });

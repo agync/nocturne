@@ -246,7 +246,7 @@ describe("states", () => {
     engine.fail = true;
     renderApp({ hash: "#/recent", engine });
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "I couldn’t get this list. What you kept is safe.",
+      "Nocturne couldn’t get this list. What you kept is safe.",
     );
     engine.fail = false;
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));

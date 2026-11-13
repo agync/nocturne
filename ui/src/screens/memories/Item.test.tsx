@@ -135,7 +135,7 @@ describe("an original", () => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("no"));
     await open("item-lake");
     await userEvent.click(screen.getByRole("button", { name: "Play" }));
-    expect(await screen.findByText(/I can’t play this here/)).toBeInTheDocument();
+    expect(await screen.findByText(/Nocturne can’t play this here/)).toBeInTheDocument();
   });
 
   it("marks the original private and keeps its memories forever", async () => {
@@ -191,7 +191,7 @@ describe("an original", () => {
 
   it("says so for an item that is gone", async () => {
     renderApp({ hash: "#/items/nothing" });
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t find that.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t find that.");
   });
 });
 

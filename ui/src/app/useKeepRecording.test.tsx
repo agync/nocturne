@@ -69,7 +69,7 @@ describe("useKeepRecording", () => {
     await record(result);
     const retry = await screen_findButton("Try again");
     expect(document.body).toHaveTextContent(
-      "I couldn’t keep that voice note just now. It is still here.",
+      "Nocturne couldn’t keep that voice note just now. It is still here.",
     );
     await userEvent.click(retry);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));

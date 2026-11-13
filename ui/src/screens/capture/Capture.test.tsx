@@ -92,8 +92,8 @@ describe("keeping words", () => {
     await userEvent.type(box(), "Buy milk{Enter}");
     expect(spy).toHaveBeenCalledWith("Buy milk", "quickCapture");
     expect(await screen.findByText("Kept.", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("I’ll read it tonight.")).toBeInTheDocument();
-    expect(live()).toHaveTextContent("Kept. I’ll read it tonight.");
+    expect(screen.getByText("Nocturne will read it tonight.")).toBeInTheDocument();
+    expect(live()).toHaveTextContent("Kept. Nocturne will read it tonight.");
     expect(close).not.toHaveBeenCalled();
     await waitFor(() => expect(close).toHaveBeenCalledOnce(), { timeout: CLOSE_AFTER_MS + 1500 });
   });
@@ -174,7 +174,9 @@ describe("keeping words", () => {
     const { engine } = await open();
     vi.spyOn(engine, "keepText").mockRejectedValue(new Error("no"));
     await userEvent.type(box(), "Buy milk{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t keep that just now");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t keep that just now",
+    );
     expect(box()).toHaveValue("Buy milk");
   });
 });
@@ -212,7 +214,9 @@ describe("pasting", () => {
     expect(screen.getByText("Web pages are never treated as true until you say so.")).toBeVisible();
     await userEvent.click(screen.getByRole("button", { name: /^Keep/ }));
     expect(spy).toHaveBeenCalledWith("Nut-free lunchbox ideas", "pastedWeb");
-    expect(await screen.findByText("Kept as unconfirmed. I’ll read it tonight.")).toBeVisible();
+    expect(
+      await screen.findByText("Kept as unconfirmed. Nocturne will read it tonight."),
+    ).toBeVisible();
   });
 
   it("plain text has no chip", async () => {
@@ -227,7 +231,7 @@ describe("pasting", () => {
     const spy = vi.spyOn(engine, "keepBytes");
     const file = new File([new Uint8Array([9, 9, 9])], "x.png", { type: "image/png" });
     fireEvent.paste(box(), { clipboardData: { files: [file], types: ["Files"] } });
-    expect(await screen.findByText("Photo. I’ll read it tonight.")).toBeVisible();
+    expect(await screen.findByText("Photo. Nocturne will read it tonight.")).toBeVisible();
     expect(spy).toHaveBeenCalledOnce();
     expect(spy.mock.calls[0]?.[1]).toBe("image/png");
   });
@@ -517,7 +521,9 @@ describe("when things go wrong", () => {
     const { handOff, close } = await open();
     handOff.mockRejectedValueOnce(new Error("no"));
     await userEvent.type(box(), "When is the dentist?{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t keep that just now");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t keep that just now",
+    );
     expect(close).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /^Ask/ }));
     await waitFor(() => expect(handOff).toHaveBeenCalledTimes(2));
@@ -574,7 +580,7 @@ describe("when things go wrong", () => {
     fireEvent.paste(box(), { clipboardData: { files: [file], types: ["Files"] } });
     await waitFor(() => expect(spy).toHaveBeenCalledOnce());
     await act(async () => finish());
-    await screen.findByText("Photo. I’ll read it tonight.");
+    await screen.findByText("Photo. Nocturne will read it tonight.");
     expect(spy).toHaveBeenCalledOnce();
   });
 

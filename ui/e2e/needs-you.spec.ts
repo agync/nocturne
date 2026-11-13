@@ -40,7 +40,7 @@ const withWebPage = async (page: Page) => {
   });
   await box.fill("Leo is allergic to nuts so I always make nut-free lunches");
   await page.keyboard.press("Enter");
-  await expect(page.getByText("Kept as unconfirmed. I’ll read it tonight.")).toBeVisible();
+  await expect(page.getByText("Kept as unconfirmed. Nocturne will read it tonight.")).toBeVisible();
   await page.waitForTimeout(5200);
   await page.evaluate(() => {
     window.location.hash = "#/needs-you";

@@ -19,7 +19,7 @@
   "notice.tierUnfinished.started": "Downloading the mind you chose. Nocturne carries on meanwhile.",
   "notice.restarts.text": "Nocturne stopped a few times and is not reading right now. It tries again by itself every few minutes.",
   "notice.restarts.action": "Try again",
-  "notice.couldntRead.text": "I couldn’t read something you kept. Nothing is lost.",
+  "notice.couldntRead.text": "Nocturne couldn’t read something you kept. Nothing is lost.",
   "notice.couldntRead.action": "Try again",
   "notice.micDenied.text": "Nocturne can’t hear you. Microphone access is turned off for it.",
   "notice.micDenied.action": "Open sound settings",

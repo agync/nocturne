@@ -4,7 +4,7 @@
   "needs.keys": "J / K to move · 1 2 3 to choose",
   "needs.list": "Things waiting for you",
   "needs.loading": "Getting what is waiting…",
-  "needs.error": "I couldn’t get this list. What you kept is safe.",
+  "needs.error": "Nocturne couldn’t get this list. What you kept is safe.",
   "needs.which.badge": "Which is right?",
   "needs.which.pick": "This one",
   "needs.which.choose": "This one: {text}",

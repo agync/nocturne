@@ -71,7 +71,7 @@
   "page.empty.quiet": "Nothing needs you.",
   "page.loading": "Getting today’s page…",
   "page.action.failed": "That did not go through, so nothing was changed. Try again.",
-  "page.error": "I couldn’t get this page. What you kept is safe.",
+  "page.error": "Nocturne couldn’t get this page. What you kept is safe.",
   "page.error.retry": "Try again",
   "page.today.quietLine": "Nothing is waiting for you."
 }

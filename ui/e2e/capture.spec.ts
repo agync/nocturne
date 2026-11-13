@@ -43,7 +43,7 @@ test.describe("the floating window", () => {
     await page.screenshot({ path: `${SHOTS}/capture-typed-light.png` });
     await page.keyboard.press("Enter");
     await expect(page.getByText("Kept.", { exact: true })).toBeVisible();
-    await expect(page.getByText("I’ll read it tonight.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Nocturne will read it tonight.", { exact: true })).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/capture-kept-light.png` });
     // The browser has no window to close, so the screen leaves for Today.
     await expect(page).toHaveURL(/#\/today$/, { timeout: 4000 });

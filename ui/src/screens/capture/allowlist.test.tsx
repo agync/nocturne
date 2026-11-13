@@ -98,7 +98,7 @@ describe("what the quick capture window asks of the engine", () => {
     box = await fresh();
     const file = new File([new Uint8Array([9])], "x.png", { type: "image/png" });
     fireEvent.paste(box, { clipboardData: { files: [file], types: ["Files"] } });
-    await screen.findByText("Photo. I’ll read it tonight.");
+    await screen.findByText("Photo. Nocturne will read it tonight.");
 
     await fresh();
     act(() => platform.drop(["/tmp/a.jpg"]));

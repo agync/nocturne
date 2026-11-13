@@ -42,6 +42,6 @@
   "privacy.delete.working": "Deleting…",
   "privacy.delete.failed": "That didn’t finish. Nothing was deleted. Try again in a moment.",
   "privacy.loading": "Checking what Nocturne has sent…",
-  "privacy.error": "I couldn’t open this. What you kept is safe.",
+  "privacy.error": "Nocturne couldn’t open this. What you kept is safe.",
   "privacy.watching.now": "Watching live"
 }

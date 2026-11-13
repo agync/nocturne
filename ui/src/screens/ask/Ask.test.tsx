@@ -297,15 +297,13 @@ describe("a slow first question", () => {
 describe("not sure", () => {
   it("shows the near matches and a link to search for the whole question", async () => {
     await open({ question: "When is my appointment?" });
-    expect(await screen.findByText(/I’m not sure\. Nothing says that outright/)).toBeVisible();
+    expect(await screen.findByText(/Not sure\. Nothing says that outright/)).toBeVisible();
     expect(screen.getAllByText(/Your dentist appointment is/)).toHaveLength(2);
     expect(screen.getByRole("link", { name: "Search everything you’ve kept" })).toHaveAttribute(
       "href",
       "#/memories?q=When+is+my+appointment%3F",
     );
-    await waitFor(() =>
-      expect(announcer()).toHaveTextContent("I’m not sure. 2 things come close."),
-    );
+    await waitFor(() => expect(announcer()).toHaveTextContent("Not sure. 2 things come close."));
   });
 });
 
@@ -319,7 +317,7 @@ describe("nothing found", () => {
     const spy = vi.spyOn(engine, "keepFiles");
     await userEvent.click(screen.getByRole("button", { name: "Keep a photo now" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith(["/tmp/passport.jpg"], "drop"));
-    await userEvent.click(screen.getByRole("button", { name: "Search let go" }));
+    await userEvent.click(screen.getByRole("button", { name: "Search what was let go" }));
     expect(window.location.hash).toBe("#/fading?show=letGo");
   });
 });
@@ -339,7 +337,7 @@ describe("before Nocturne is ready", () => {
     expect(spy).toHaveBeenCalledWith("When is the dentist?", "quickCapture");
     await waitFor(() =>
       expect(
-        screen.getAllByText("Kept as a note. I’ll answer when Nocturne is ready."),
+        screen.getAllByText("Kept as a note. Nocturne will answer when it is ready."),
       ).not.toHaveLength(0),
     );
     expect(screen.queryByRole("button", { name: "Keep it as a note" })).toBeNull();
@@ -498,11 +496,11 @@ describe("the page after asking", () => {
 
   it("an earlier not-sure answer says how many came close", async () => {
     await open({ question: "When is my appointment?" });
-    await screen.findByText(/I’m not sure\. Nothing says/);
+    await screen.findByText(/Not sure\. Nothing says/);
     await act(async () => askRequests.request("What is Gran’s new number?"));
     await heading("“What is Gran’s new number?”");
     const earlier = screen.getByRole("region", { name: "Earlier" });
-    expect(within(earlier).getByText("I’m not sure. 2 things come close.")).toBeInTheDocument();
+    expect(within(earlier).getByText("Not sure. 2 things come close.")).toBeInTheDocument();
   });
 });
 
