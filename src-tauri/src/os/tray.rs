@@ -12,7 +12,9 @@ use std::time::Duration;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, Zoned};
-use nocturne_contract::{EVENT_STATUS, EngineState, EngineStatus};
+use nocturne_contract::{
+    EVENT_DEVICE, EVENT_REMOTE, EVENT_STATUS, EngineState, EngineStatus, RemoteState, RemoteView,
+};
 use tauri::image::Image;
 use tauri::menu::{IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -36,6 +38,16 @@ pub enum Action {
     Pause(PauseFor),
     Resume,
     Quit,
+    Away(AwayAction),
+}
+
+/// What the Away from home part of the menu does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AwayAction {
+    AddPhone,
+    Phones,
+    ShowCode,
+    TurnOff,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -280,6 +292,10 @@ impl Action {
             Action::Pause(PauseFor::UntilResumed) => "pause-resume",
             Action::Resume => "resume",
             Action::Quit => "quit",
+            Action::Away(AwayAction::AddPhone) => "away-add",
+            Action::Away(AwayAction::Phones) => "away-phones",
+            Action::Away(AwayAction::ShowCode) => "away-code",
+            Action::Away(AwayAction::TurnOff) => "away-off",
         }
     }
 
@@ -293,6 +309,10 @@ impl Action {
             "pause-resume" => Action::Pause(PauseFor::UntilResumed),
             "resume" => Action::Resume,
             "quit" => Action::Quit,
+            "away-add" => Action::Away(AwayAction::AddPhone),
+            "away-phones" => Action::Away(AwayAction::Phones),
+            "away-code" => Action::Away(AwayAction::ShowCode),
+            "away-off" => Action::Away(AwayAction::TurnOff),
             _ => return None,
         })
     }
@@ -485,20 +505,23 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, entries: &[MenuEntry]) -> tauri::R
 /// What the tray shows now: the icon and the menu, from the real status.
 pub type Apply = Arc<dyn Fn(Icon, Vec<MenuEntry>) + Send + Sync>;
 
-/// Follow the status: whenever `status-changed` fires, draw the tray again.
+/// Follow the status: whenever `status-changed` fires (or Away from home's `remote-changed` or
+/// `device-active`), draw the tray again.
 ///
 /// The event is a trigger only. Any page in a window can emit an event with any payload, so the
 /// payload is never read: the status is computed fresh from the app's own state. The listener is
 /// `listen_any` because the app broadcasts its events (`emit` has no target), and a listener
 /// scoped to one target would hear less, not be safer.
 pub fn follow<R: Runtime>(app: &AppHandle<R>, apply: Apply) {
-    let handle = app.clone();
-    let on_change = apply.clone();
-    app.listen_any(EVENT_STATUS, move |_| {
-        let handle = handle.clone();
-        let apply = on_change.clone();
-        tauri::async_runtime::spawn(async move { draw(&handle, &apply).await });
-    });
+    for event in [EVENT_STATUS, EVENT_REMOTE, EVENT_DEVICE] {
+        let handle = app.clone();
+        let on_change = apply.clone();
+        app.listen_any(event, move |_| {
+            let handle = handle.clone();
+            let apply = on_change.clone();
+            tauri::async_runtime::spawn(async move { draw(&handle, &apply).await });
+        });
+    }
     let handle = app.clone();
     tauri::async_runtime::spawn(async move { draw(&handle, &apply).await });
 }
@@ -546,7 +569,11 @@ pub async fn current<R: Runtime>(app: &AppHandle<R>) -> (Icon, Vec<MenuEntry>) {
         state.now(),
         &state.clock.tz(),
     );
-    (icon_for(&status, public), model)
+    let away = match app.try_state::<crate::remote::Hub>() {
+        Some(hub) => Some(hub.0.view().await),
+        None => None,
+    };
+    (icon_for(&status, public), with_away(model, away.as_ref()))
 }
 
 async fn draw<R: Runtime>(app: &AppHandle<R>, apply: &Apply) {
@@ -577,6 +604,18 @@ async fn run<R: Runtime>(app: &AppHandle<R>, action: Action) {
             }
         }
         Action::Quit => app.exit(0),
+        Action::Away(AwayAction::AddPhone) => navigate(app, "/settings/away/add"),
+        Action::Away(AwayAction::Phones) => navigate(app, "/settings/away/phones"),
+        Action::Away(AwayAction::ShowCode) => navigate(app, "/settings/away"),
+        Action::Away(AwayAction::TurnOff) => {
+            // The hub's own state decides; nothing from an event is read.
+            if let Some(hub) = app.try_state::<crate::remote::Hub>()
+                && hub.0.state() != RemoteState::Off
+                && let Err(e) = hub.0.stop(false).await
+            {
+                tracing::warn!("the tray could not turn Away from home off: {:?}", e.code);
+            }
+        }
     }
 }
 
@@ -588,8 +627,89 @@ fn navigate<R: Runtime>(app: &AppHandle<R>, route: &str) {
     }
 }
 
-/// Rebuild the tray's Away from home lines from a view.
-pub fn refresh_away<R: Runtime>(_app: &AppHandle<R>, _view: &nocturne_contract::RemoteView) {}
+pub const AWAY_ON: &str = "Away from home is on";
+pub const AWAY_RELINK: &str = "Your phones need the new address";
+pub const AWAY_NEEDS_YOU: &str = "Away from home needs you";
+pub const AWAY_STARTING: &str = "Away from home is starting";
+pub const AWAY_MENU: &str = "Away from home";
+pub const AWAY_ADD: &str = "Add a phone\u{2026}";
+pub const AWAY_PHONES: &str = "Phones and activity\u{2026}";
+pub const AWAY_SHOW_CODE: &str = "Show the code and words\u{2026}";
+pub const AWAY_TURN_OFF: &str = "Turn off";
+
+/// "Pixel is using Nocturne".
+pub fn away_in_use(name: &str) -> String {
+    format!("{name} is using Nocturne")
+}
+
+/// The Away from home part of the menu, from the hub's own view: a line in words after the
+/// status, "Show the code and words..." when phones need the new address, and a submenu. Off
+/// adds nothing.
+pub fn away_entries(view: &RemoteView) -> (Vec<MenuEntry>, Option<MenuEntry>) {
+    let line = match &view.state {
+        RemoteState::Off => return (Vec::new(), None),
+        RemoteState::NeedsRelink { .. } => AWAY_RELINK.to_string(),
+        RemoteState::Problem { .. } | RemoteState::NeedsSignIn { .. } => AWAY_NEEDS_YOU.to_string(),
+        RemoteState::Downloading { .. } | RemoteState::Starting => AWAY_STARTING.to_string(),
+        RemoteState::On { .. } => match view.devices.iter().find(|d| d.active) {
+            Some(d) => away_in_use(&d.name),
+            None => AWAY_ON.to_string(),
+        },
+    };
+    let mut lines = vec![MenuEntry::Info(line)];
+    if matches!(view.state, RemoteState::NeedsRelink { .. }) {
+        lines.push(MenuEntry::Action {
+            action: Action::Away(AwayAction::ShowCode),
+            label: AWAY_SHOW_CODE.to_string(),
+        });
+    }
+    let item = |a, l: &str| MenuEntry::Action {
+        action: Action::Away(a),
+        label: l.to_string(),
+    };
+    let menu = MenuEntry::Submenu {
+        label: AWAY_MENU.to_string(),
+        items: vec![
+            item(AwayAction::AddPhone, AWAY_ADD),
+            item(AwayAction::Phones, AWAY_PHONES),
+            MenuEntry::Separator,
+            item(AwayAction::TurnOff, AWAY_TURN_OFF),
+        ],
+    };
+    (lines, Some(menu))
+}
+
+/// Put the Away from home part into a menu: its line after the status lines, its submenu after
+/// "Open today's page".
+pub fn with_away(mut menu: Vec<MenuEntry>, view: Option<&RemoteView>) -> Vec<MenuEntry> {
+    let Some(view) = view else {
+        return menu;
+    };
+    let (lines, submenu) = away_entries(view);
+    let first_separator = menu
+        .iter()
+        .position(|e| *e == MenuEntry::Separator)
+        .unwrap_or(menu.len());
+    let n = lines.len();
+    menu.splice(first_separator..first_separator, lines);
+    if let Some(sub) = submenu {
+        let after = menu
+            .iter()
+            .position(|e| {
+                matches!(
+                    e,
+                    MenuEntry::Action {
+                        action: Action::OpenToday,
+                        ..
+                    }
+                )
+            })
+            .map(|i| i + 1)
+            .unwrap_or(first_separator + n);
+        menu.insert(after, sub);
+    }
+    menu
+}
 
 #[cfg(test)]
 mod tests {
@@ -877,6 +997,194 @@ mod tests {
                 .map(str::to_string)
                 .collect();
             let spaced = format!(" {} ", words.join(" "));
+            for word in &never {
+                assert!(!spaced.contains(&format!(" {word} ")), "{text} says {word}");
+            }
+        }
+    }
+
+    fn away_view(state: RemoteState, active: Option<&str>) -> RemoteView {
+        RemoteView {
+            state,
+            connection: nocturne_contract::RemoteConnection::Simple,
+            auto_off: nocturne_contract::AutoOff::Unused30Days,
+            keep_awake: false,
+            devices: ["Pixel", "Work phone"]
+                .into_iter()
+                .map(|n| nocturne_contract::DeviceView {
+                    id: n.into(),
+                    name: n.into(),
+                    paired_at: "2026-11-13T07:00:00.000Z".into(),
+                    last_used_at: None,
+                    active: active == Some(n),
+                    needs_address: false,
+                })
+                .collect(),
+            sent_to_phones_bytes: 0.0,
+            last_on_at: None,
+            on_since: None,
+            set_up_before: true,
+            installed: Vec::new(),
+            trial: true,
+            pairing: None,
+            computer_name: "Kitchen laptop".into(),
+        }
+    }
+
+    fn away_states() -> Vec<RemoteState> {
+        vec![
+            RemoteState::Off,
+            RemoteState::Starting,
+            RemoteState::On {
+                address: "a.example".into(),
+                machine_name: None,
+            },
+            RemoteState::NeedsRelink {
+                address: "a.example".into(),
+                pairing_link: "https://a.example/r#a.example".into(),
+                qr: nocturne_contract::QrCode {
+                    size: 1,
+                    modules: "1".into(),
+                },
+                words: "a".into(),
+            },
+            RemoteState::Problem {
+                code: nocturne_contract::RemoteProblem::HelperFailed,
+                attempts: 1,
+                since: "2026-11-13T07:00:00.000Z".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn tray_away_states() {
+        let base = menu_model(
+            &status(EngineState::Resting),
+            0,
+            None,
+            at("2026-11-13T09:00:00Z"),
+            &london(),
+        );
+        let menu = |v: RemoteView| with_away(base.clone(), Some(&v));
+        assert_eq!(
+            menu(away_view(RemoteState::Off, None)),
+            base,
+            "off adds nothing"
+        );
+        assert_eq!(with_away(base.clone(), None), base);
+        let on = RemoteState::On {
+            address: "a.example".into(),
+            machine_name: None,
+        };
+        let m = menu(away_view(on.clone(), None));
+        assert_eq!(infos(&m), vec!["Resting", AWAY_ON]);
+        let sub = m
+            .iter()
+            .position(|e| matches!(e, MenuEntry::Submenu { label, .. } if label == AWAY_MENU))
+            .unwrap();
+        assert!(matches!(
+            &m[sub - 1],
+            MenuEntry::Action {
+                action: Action::OpenToday,
+                ..
+            }
+        ));
+        let MenuEntry::Submenu { items, .. } = &m[sub] else {
+            unreachable!()
+        };
+        for a in [
+            AwayAction::AddPhone,
+            AwayAction::Phones,
+            AwayAction::TurnOff,
+        ] {
+            assert!(has(items, Action::Away(a)), "{a:?}");
+        }
+        let m = menu(away_view(on, Some("Pixel")));
+        assert_eq!(infos(&m)[1], "Pixel is using Nocturne");
+        let states = away_states();
+        let m = menu(away_view(states[3].clone(), None));
+        assert_eq!(infos(&m)[1], AWAY_RELINK);
+        assert!(has(&m, Action::Away(AwayAction::ShowCode)));
+        let m = menu(away_view(states[4].clone(), None));
+        assert_eq!(infos(&m)[1], AWAY_NEEDS_YOU);
+        assert!(!has(&m, Action::Away(AwayAction::ShowCode)));
+        for a in [
+            AwayAction::AddPhone,
+            AwayAction::Phones,
+            AwayAction::ShowCode,
+            AwayAction::TurnOff,
+        ] {
+            assert_eq!(Action::from_id(Action::Away(a).id()), Some(Action::Away(a)));
+        }
+    }
+
+    #[test]
+    fn tray_text_has_no_jargon_or_dashes() {
+        let fixture = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ui/src/copy/never-say.fixture.json"
+        ))
+        .unwrap();
+        let fixture: Vec<serde_json::Value> = serde_json::from_str(&fixture).unwrap();
+        let mut never: Vec<String> = fixture
+            .iter()
+            .flat_map(|e| e["never"].as_array().unwrap().clone())
+            .map(|w| w.as_str().unwrap().to_lowercase())
+            .collect();
+        // Plan 12's additions, whether or not the fixture has them yet.
+        never.extend(
+            [
+                "tunnel",
+                "vpn",
+                "node",
+                "tailnet",
+                "port",
+                "certificate",
+                "token",
+                "endpoint",
+                "remote",
+                "encryption",
+            ]
+            .map(String::from),
+        );
+        let mut texts = vec![away_in_use("Pixel")];
+        let base = menu_model(
+            &status(EngineState::Resting),
+            0,
+            None,
+            at("2026-11-13T09:00:00Z"),
+            &london(),
+        );
+        for st in away_states() {
+            fn flatten(menu: &[MenuEntry], out: &mut Vec<String>) {
+                for e in menu {
+                    match e {
+                        MenuEntry::Info(s) => out.push(s.clone()),
+                        MenuEntry::Action { label, .. } => out.push(label.clone()),
+                        MenuEntry::Submenu { label, items } => {
+                            out.push(label.clone());
+                            flatten(items, out);
+                        }
+                        MenuEntry::Separator => {}
+                    }
+                }
+            }
+            flatten(
+                &with_away(base.clone(), Some(&away_view(st, None))),
+                &mut texts,
+            );
+        }
+        for text in texts {
+            assert!(!text.contains('\u{2014}'), "{text}");
+            assert!(copy::has_jargon(&text).is_none(), "{text}");
+            let spaced = format!(
+                " {} ",
+                text.to_lowercase()
+                    .split(|c: char| !c.is_alphanumeric())
+                    .filter(|w| !w.is_empty())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
             for word in &never {
                 assert!(!spaced.contains(&format!(" {word} ")), "{text} says {word}");
             }

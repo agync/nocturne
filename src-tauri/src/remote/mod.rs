@@ -69,7 +69,6 @@ impl<R: Runtime> session::Shell for AppShell<R> {
                 if let Err(e) = app.emit(EVENT_REMOTE, &view) {
                     tracing::warn!("could not emit Away from home's state: {e}");
                 }
-                crate::os::tray::refresh_away(&app, &view);
             }
         });
     }

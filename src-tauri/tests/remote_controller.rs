@@ -660,3 +660,18 @@ fn advanced_view_names_helper_and_listener() {
     }
     let _ = a.h.app.state::<nocturne_app_lib::AppState>();
 }
+
+#[test]
+fn tray_turn_off_reads_state() {
+    let a = away();
+    // A forged event claims Away from home is on: the tray draws from the hub, not the event.
+    let forged = json!({"state": {"type": "on", "address": "evil.example", "machineName": null}});
+    a.h.app.emit("remote-changed", forged).unwrap();
+    let (_, menu) = block(nocturne_app_lib::os::tray::current(a.h.app.handle()));
+    let text = format!("{menu:?}");
+    assert!(!text.contains("Away from home"), "{text}");
+    nothing_runs(&a);
+    a.on();
+    let (_, menu) = block(nocturne_app_lib::os::tray::current(a.h.app.handle()));
+    assert!(format!("{menu:?}").contains(nocturne_app_lib::os::tray::AWAY_ON));
+}
