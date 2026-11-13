@@ -550,3 +550,28 @@ async fn setup_for_another_tier_while_one_runs_is_refused() {
     );
     rig.sup.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn two_starts_for_different_tiers_at_once_let_one_run_and_refuse_the_other() {
+    let rig = rig("download-ms=1500", 64).await;
+    let (small, standard) = tokio::join!(
+        rig.setup.start(Tier::Small),
+        rig.setup.start(Tier::Standard)
+    );
+    let refused = [&small, &standard]
+        .into_iter()
+        .filter(|r| **r == Err(nocturne_lemonade::RuntimeError::Busy))
+        .count();
+    assert_eq!(
+        refused, 1,
+        "one is refused, not silently accepted: {small:?} {standard:?}"
+    );
+    assert_eq!(
+        [&small, &standard]
+            .into_iter()
+            .filter(|r| r.is_ok())
+            .count(),
+        1
+    );
+    rig.sup.shutdown().await.unwrap();
+}

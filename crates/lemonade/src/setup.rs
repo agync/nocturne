@@ -521,14 +521,18 @@ impl Inner {
             self.disk_failed(remaining, None);
             return Ok(());
         }
-        self.launch(tier);
-        Ok(())
+        self.launch(tier)
     }
 
-    fn launch(self: &Arc<Self>, tier: Tier) {
+    /// Starts the run unless one began while the checks above were waiting on the engine.
+    fn launch(self: &Arc<Self>, tier: Tier) -> Result<(), RuntimeError> {
         let mut ctl = self.ctl();
         if ctl.running {
-            return;
+            return if ctl.tier == Some(tier) {
+                Ok(())
+            } else {
+                Err(RuntimeError::Busy)
+            };
         }
         ctl.running = true;
         ctl.tier = Some(tier);
@@ -545,6 +549,7 @@ impl Inner {
             ctl.tier = None;
             ctl.job = None;
         }));
+        Ok(())
     }
 
     async fn pause(&self) -> Result<(), RuntimeError> {
@@ -945,7 +950,9 @@ impl Inner {
             Ok(job) if job.finished() => Ok(Begin::Finished(Some(job))),
             Ok(_) => Ok(Begin::Running),
             Err(RuntimeError::Offline) => {
-                let _ = self.control.set_online(true).await;
+                if !self.ctl().paused {
+                    let _ = self.control.set_online(true).await;
+                }
                 Err(None)
             }
             Err(e) if transient(&e) => Err(None),
