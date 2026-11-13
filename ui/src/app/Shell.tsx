@@ -64,7 +64,7 @@ export function Shell({ children }: ShellProps) {
   );
 
   useEffect(() => {
-    document.title = route ? `${t(route.title)} · ${t("app.name")}` : t("app.name");
+    document.title = `${t(route ? route.title : "screen.notFound.title")} · ${t("app.name")}`;
   }, [route]);
 
   const firstRoute = useRef(true);
@@ -220,7 +220,7 @@ export function Shell({ children }: ShellProps) {
     </div>
   );
 
-  const title = route ? t(route.title) : t("app.name");
+  const title = t(route ? route.title : "screen.notFound.title");
 
   return (
     <div

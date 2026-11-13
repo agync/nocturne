@@ -31,7 +31,7 @@ export const routes: readonly AppRoute[] = [
   {
     path: "/pages/:date",
     folder: "today",
-    title: "screen.today.title",
+    title: "screen.page.title",
     shell: true,
     Component: today,
   },

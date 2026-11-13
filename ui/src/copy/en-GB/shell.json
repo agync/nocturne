@@ -73,6 +73,7 @@
   "kept.tonight": "Tonight, from about {time} while this computer is plugged in and idle.",
   "kept.tonight.unknown": "Tonight, while this computer is plugged in and idle.",
   "screen.today.title": "Today",
+  "screen.page.title": "Morning page",
   "screen.ask.title": "Ask",
   "screen.needsYou.title": "Needs you",
   "screen.recent.title": "Recently kept",

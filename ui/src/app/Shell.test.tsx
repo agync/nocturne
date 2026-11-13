@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineClient } from "../engine/client";
@@ -53,6 +53,20 @@ describe("routes", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "That page isn’t here" }),
     ).toBeInTheDocument();
+  });
+
+  it("titles a page that is not there, and a past page, by what they are", async () => {
+    renderApp({ hash: "#/nowhere" });
+    await screen.findByRole("heading", { level: 1, name: "That page isn’t here" });
+    expect(document.title).toBe("That page isn’t here · Nocturne");
+    cleanup();
+    renderApp({ hash: "#/pages/2026-11-05" });
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.title).toBe("Morning page · Nocturne");
+    cleanup();
+    renderApp({ hash: "#/today" });
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.title).toBe("Today · Nocturne");
   });
 
   it("names the window after the screen", async () => {
