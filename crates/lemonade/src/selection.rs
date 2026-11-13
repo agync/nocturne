@@ -1,5 +1,7 @@
 //! `selection.json`: the model chosen for each job. The tier is the preset; `custom` overrides
-//! single jobs. It sits beside `nocturne-setup.json` and is ours alone.
+//! single jobs. It sits beside `nocturne-setup.json` and is ours alone. The tier always follows
+//! the installed one: when setup moves to another tier, the person's other choices go with the
+//! old tier, except the finding model, whose vectors fill the store.
 
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -18,6 +20,9 @@ pub struct Pending {
     pub role: ComponentRole,
     pub model: String,
     pub from: String,
+    /// The person paused the download; a restart does not carry it on by itself.
+    #[serde(default)]
+    pub paused: bool,
 }
 
 /// The model a job used before a change, kept until the person removes it.
@@ -70,12 +75,37 @@ impl Picks {
     }
 }
 
-/// The selection on disk. For now: the preset of the installed tier.
+/// The selection on disk, on the installed tier. No file, or one that cannot be read, is the
+/// tier's preset.
 pub fn read(config_dir: &Path) -> Selection {
     let tier = crate::record::read(config_dir)
         .and_then(|r| r.working_tier())
         .unwrap_or(Tier::Unsupported);
-    Selection::preset(tier)
+    let saved: Option<Selection> = std::fs::read(config_dir.join(FILE))
+        .ok()
+        .and_then(|b| serde_json::from_slice(&b).ok());
+    match saved {
+        Some(s) if s.tier == tier => s,
+        Some(s) => {
+            let mut moved = Selection::preset(tier);
+            if let Some(recall) = s.custom.get(&ComponentRole::Recall) {
+                moved.custom.insert(ComponentRole::Recall, recall.clone());
+            }
+            moved.pending = s.pending.filter(|p| p.role == ComponentRole::Recall);
+            moved.old = s.old;
+            moved
+        }
+        None => Selection::preset(tier),
+    }
+}
+
+/// Removes `selection.json`: every job goes back to its tier's own model.
+pub fn clear(config_dir: &Path) -> Result<(), RuntimeError> {
+    match std::fs::remove_file(config_dir.join(FILE)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 pub fn write(config_dir: &Path, s: &Selection) -> Result<(), RuntimeError> {

@@ -17,7 +17,7 @@ use nocturne_contract::{ComponentRole, Tier};
 use serde_json::{Map, Value, json};
 
 use crate::fit::Budget;
-use crate::selection::Selection;
+use crate::selection::{self, Selection};
 use crate::tier;
 
 /// Seconds a model in `role` on `tier` may sit idle before the engine unloads it, where the
@@ -79,22 +79,55 @@ pub fn alone(tier: Tier) -> Vec<String> {
     }
 }
 
-/// The options to save for the models of `s`. For now the same as [`saved_options`].
+/// The options to save for the models of `s`: those of every tier, and for each model the
+/// person chose instead, the options its job's model gets on `s`'s tier.
 pub fn saved_options_for(s: &Selection) -> Vec<(String, Map<String, Value>)> {
-    let _ = s;
-    saved_options()
+    let mut out: Vec<(String, Map<String, Value>)> = saved_options()
         .into_iter()
         .map(|(m, o)| (m.to_string(), o))
-        .collect()
+        .collect();
+    for (role, model) in &s.custom {
+        if out.iter().any(|(m, _)| m == model) {
+            continue;
+        }
+        let mut options = Map::new();
+        if let Some(secs) = evict_after(s.tier, *role) {
+            options.insert("evict_idle_timeout".into(), json!(secs));
+        }
+        match role {
+            ComponentRole::Recall => {
+                options.insert("ctx_size".into(), json!(tier::RECALL_CONTEXT));
+            }
+            ComponentRole::Mind => {
+                options.insert("ctx_size".into(), json!(mind_context_for(s)));
+            }
+            ComponentRole::Speech | ComponentRole::Voice => {}
+        }
+        if !options.is_empty() {
+            out.push((model.clone(), options));
+        }
+    }
+    out
 }
 
-/// Models that run with nothing else loaded for `s`. For now the same as [`alone`].
+/// Models that run with nothing else loaded for `s`: the tier's rule, and the voice too when
+/// the person's own choices would not fit beside it at the busiest moment of reading.
 pub fn alone_for(s: &Selection, b: &Budget) -> Vec<String> {
-    let _ = b;
-    alone(s.tier)
+    let mut out = alone(s.tier);
+    if s.custom.is_empty() {
+        return out;
+    }
+    let picks = selection::picks(s);
+    let mem = |m: &str| crate::fit::memory_of(m, None);
+    let read = crate::fit::read_set_with(&picks, mem);
+    if !picks.voice.is_empty() && read + mem(&picks.voice) > b.budget && !out.contains(&picks.voice)
+    {
+        out.push(picks.voice.clone());
+    }
+    out
 }
 
-/// The context the mind of `s` is loaded with. For now the same as [`mind_context`].
+/// The context the mind of `s` is loaded with: its tier's, whichever model answers.
 pub fn mind_context_for(s: &Selection) -> u32 {
     mind_context(s.tier)
 }
