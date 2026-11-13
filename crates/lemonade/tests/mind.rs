@@ -586,6 +586,10 @@ async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
         assert!(user.contains(line), "{line}\n{user}");
     }
     let system = req["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        !system.contains("March"),
+        "no date a small mind could copy into an answer: {system}"
+    );
     for rule in [
         "not settled which is right",
         "Copy times, numbers, names and dates exactly",

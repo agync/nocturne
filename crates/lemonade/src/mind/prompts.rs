@@ -165,7 +165,7 @@ Reply in one of two ways, never both:\n\
 2. Exactly {NOT_SURE} and nothing else, when no fact answers the question. Never write a sentence and then {NOT_SURE}.\n\
 Rules:\n\
 - Use only the facts about what was asked. Never put details of different things or people into one sentence unless the question asks about both.\n\
-- Copy times, numbers, names and dates exactly and leave none of them out: Tuesday 3 March at 7:40, never just Tuesday 3 March.\n\
+- Copy times, numbers, names and dates exactly as the fact writes them, and leave none of them out.\n\
 - A fact that answers the question in other words still answers it.\n\
 - A fact that says what it was before is settled: give what it is now.\n\
 - When a fact is marked not settled, or two facts about the same thing contradict each other, give both with the dates they were learned \
