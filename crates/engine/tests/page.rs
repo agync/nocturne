@@ -307,6 +307,39 @@ fn what_changed_sorts_by_how_often_the_subject_is_used() {
     assert!(order[3].starts_with("Gran"));
 }
 
+/// A change is news; a new fact is not. When the cap cuts, it cuts learned lines first, however
+/// often their subjects are used.
+#[test]
+fn changed_lines_go_before_learned_lines_when_the_page_is_cut() {
+    let f = fixture();
+    learn(
+        &f.engine,
+        "gran",
+        cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds."),
+    );
+    save_day(&f, "2026-11-14");
+    f.clock.set_str("2026-11-14T09:00:00Z");
+    for i in 0..PAGE_LINE_CAP + 2 {
+        learn(
+            &f.engine,
+            &format!("leo{i}"),
+            cand(
+                "Leo",
+                Predicate::Knows,
+                &format!("friend {i}"),
+                &format!("Leo knows friend {i}."),
+            ),
+        );
+    }
+    let mut york = cand("Gran", Predicate::LivesIn, "York", "Gran lives in York.");
+    york.valid_from = Some(date("2026-11-01"));
+    learn(&f.engine, "gran moved", york);
+    let p = compose(&f, "2026-11-15");
+    assert!(p.more_changed > 0, "the page was cut");
+    assert_eq!(p.changed.len(), 1);
+    assert_eq!(p.changed[0].text, "Gran lives in **York**.");
+}
+
 #[test]
 fn a_changed_value_is_a_changed_line_and_a_new_one_is_learned() {
     let f = fixture();

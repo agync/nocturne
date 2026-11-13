@@ -340,7 +340,8 @@ fn compose(
         }
     }
 
-    // What changed and what was learned in the window, by how often the subject is used.
+    // What changed and what was learned in the window, changes first, then by how often the
+    // subject is used.
     let freq: HashMap<String, u32> = {
         let mut stmt = conn.prepare(
             "SELECT m.subject_key, COUNT(*) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
@@ -378,8 +379,10 @@ fn compose(
             },
         ));
     }
+    // Changes first, so the cap below cuts what was merely learned before what changed.
     changes.sort_by(|a, b| {
-        b.0.cmp(&a.0)
+        b.3.cmp(&a.3)
+            .then_with(|| b.0.cmp(&a.0))
             .then_with(|| b.1.cmp(&a.1))
             .then_with(|| a.2.cmp(&b.2))
     });
