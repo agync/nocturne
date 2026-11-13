@@ -193,14 +193,15 @@ class RemoteMode(unittest.TestCase):
         tailnet = "/data/remote/helpers/tailnet/1.104.6/nocturne-tailnet"
         lines = [execve(100, APP), clone(100, 200), execve(200, tailnet)]
         for mode in ("remote", "off"):
-            failures = netlog.analyse(lines + ["200 listen(8, 128) = 0\n"], "/tmp/scratch", mode)["failures"]
+            trace = lines + udp_bind(200, "127.0.0.1") + ["200 listen(8, 128) = 0\n"]
+            failures = netlog.analyse(trace, "/tmp/scratch", mode)["failures"]
             failures = [f for f in failures if "executed the helper" not in f]
             self.assertEqual(len(failures), 1, failures)
             self.assertIn("pid 200 (helper)", failures[0])
             self.assertIn("must never listen", failures[0])
 
     def test_cloudflared_may_listen_for_its_metrics(self):
-        self.assertEqual(self.judge(["200 listen(8, 128) = 0\n"]), [])
+        self.assertEqual(self.judge(udp_bind(200, "0.0.0.0") + ["200 listen(8, 128) = 0\n"]), [])
 
     def test_helper_udp_bind_on_every_interface_passes_without_a_listen(self):
         result = netlog.analyse(processes() + udp_bind(200, "0.0.0.0"), "/tmp/scratch", "remote")
