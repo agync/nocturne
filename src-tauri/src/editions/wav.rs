@@ -26,6 +26,12 @@ pub enum WavError {
 }
 
 const STREAMING: u32 = 0xFFFF_FFFF;
+/// What a voice could plausibly produce: anything past this is a damaged header, and the
+/// silence between sections is sized from it.
+const MAX_RATE: u32 = 192_000;
+const MAX_CHANNELS: u16 = 8;
+/// The longest silence `join` will make between sections.
+const MAX_GAP_MS: u32 = 10_000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Format {
@@ -101,7 +107,7 @@ fn parse(bytes: &[u8]) -> Result<Parsed<'_>, WavError> {
                     (3, 32) => 3,
                     _ => return Err(WavError::Unsupported),
                 };
-                if channels == 0 || rate == 0 {
+                if channels == 0 || channels > MAX_CHANNELS || rate == 0 || rate > MAX_RATE {
                     return Err(WavError::Unsupported);
                 }
                 format = Some(Format {
@@ -181,6 +187,9 @@ pub fn join(
         .iter()
         .map(|(k, b)| parse(b).map(|p| (*k, p)))
         .collect::<Result<_, _>>()?;
+    if gap_ms > MAX_GAP_MS {
+        return Err(WavError::TooLong);
+    }
     let first = parsed.first().ok_or(WavError::NoParts)?.1.format;
     if parsed.iter().any(|(_, p)| p.format != first) {
         return Err(WavError::Mismatch);
@@ -258,6 +267,9 @@ pub fn sections_of(wav: &[u8]) -> Result<Vec<SpokenSection>, WavError> {
         match &id {
             b"cue " => {
                 let n = u32_at(body, 0).ok_or(WavError::Truncated)? as usize;
+                if n > body.len() / 24 {
+                    return Err(WavError::Truncated);
+                }
                 for i in 0..n {
                     let at = 4 + i * 24;
                     let cue_id = u32_at(body, at).ok_or(WavError::Truncated)?;
@@ -385,6 +397,76 @@ mod tests {
         let (wav, sections) = join(&[(SpokenKind::Opening, part)], 600).unwrap();
         assert_eq!(sections.len(), 1);
         assert_eq!(duration_ms(&wav).unwrap(), 1000);
+    }
+
+    /// `tone` with the sample rate field changed.
+    fn with_rate(rate: u32) -> Vec<u8> {
+        let mut wav = tone(24_000, 0.1, 1);
+        wav[24..28].copy_from_slice(&rate.to_le_bytes());
+        wav
+    }
+
+    #[test]
+    fn a_damaged_header_cannot_ask_for_a_huge_silence_or_an_absurd_format() {
+        assert_eq!(
+            join(&[(SpokenKind::Opening, with_rate(4_000_000_000))], 600),
+            Err(WavError::Unsupported)
+        );
+        assert_eq!(duration_ms(&with_rate(192_001)), Err(WavError::Unsupported));
+        assert!(duration_ms(&with_rate(192_000)).is_ok());
+        let mut many_channels = tone(24_000, 0.1, 1);
+        many_channels[22..24].copy_from_slice(&1000u16.to_le_bytes());
+        assert_eq!(duration_ms(&many_channels), Err(WavError::Unsupported));
+        let parts = [
+            (SpokenKind::Opening, tone(24_000, 0.1, 1)),
+            (SpokenKind::NeedsYou, tone(24_000, 0.1, 1)),
+        ];
+        assert_eq!(join(&parts, 4_000_000_000), Err(WavError::TooLong));
+        assert!(join(&parts, MAX_GAP_MS).is_ok());
+    }
+
+    /// A good file with its cue and label chunks replaced.
+    fn with_chunks(cue: &[u8], list: &[u8]) -> Vec<u8> {
+        let (good, _) = join(&[(SpokenKind::Opening, tone(24_000, 0.1, 1))], 0).unwrap();
+        let end = good.windows(4).position(|w| w == b"cue ").unwrap();
+        let mut out = good[..end].to_vec();
+        for (id, body) in [(b"cue ", cue), (b"LIST", list)] {
+            out.extend_from_slice(id);
+            out.extend_from_slice(&(body.len() as u32).to_le_bytes());
+            out.extend_from_slice(body);
+        }
+        let size = (out.len() - 8) as u32;
+        out[4..8].copy_from_slice(&size.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn malformed_cue_and_label_chunks_are_errors_or_empty_never_a_panic() {
+        // A count that promises more cue points than the chunk holds.
+        let lying = with_chunks(&1000u32.to_le_bytes(), b"adtl");
+        assert_eq!(sections_of(&lying), Err(WavError::Truncated));
+        // A cue chunk cut off inside a point.
+        let mut cut = 1u32.to_le_bytes().to_vec();
+        cut.extend_from_slice(&[1, 0, 0]);
+        assert_eq!(
+            sections_of(&with_chunks(&cut, b"adtl")),
+            Err(WavError::Truncated)
+        );
+        // A label whose size runs past the end of the list, and one with no text.
+        let mut cue = 1u32.to_le_bytes().to_vec();
+        cue.extend_from_slice(&[
+            1, 0, 0, 0, 0, 0, 0, 0, b'd', b'a', b't', b'a', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        ]);
+        let mut list = b"adtl".to_vec();
+        list.extend_from_slice(b"labl");
+        list.extend_from_slice(&u32::MAX.to_le_bytes());
+        list.extend_from_slice(&[1, 0, 0, 0]);
+        assert_eq!(sections_of(&with_chunks(&cue, &list)), Ok(vec![]));
+        let mut bare = b"adtl".to_vec();
+        bare.extend_from_slice(b"labl\x04\0\0\0\x01\0\0\0");
+        assert_eq!(sections_of(&with_chunks(&cue, &bare)), Ok(vec![]));
+        // A list too short to hold a chunk header.
+        assert_eq!(sections_of(&with_chunks(&cue, b"adtl\x01")), Ok(vec![]));
     }
 
     #[test]

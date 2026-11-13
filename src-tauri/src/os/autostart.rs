@@ -50,6 +50,13 @@ impl Target {
     }
 }
 
+/// Whether a program path can go in an `Exec` line at all: it must be text, and a line break
+/// would end the line and let the rest be read as another key.
+pub fn exec_is_safe(exec: &Path) -> bool {
+    exec.to_str()
+        .is_some_and(|s| !s.is_empty() && !s.contains(['\n', '\r', '\0']))
+}
+
 /// An `Exec` value for the desktop entry spec: quoted when it has anything the spec reserves,
 /// with `%` doubled so it is not read as a field code.
 fn exec_field(exec: &Path) -> String {
@@ -93,6 +100,12 @@ pub fn reconcile(want: bool, dir: &Path, exec: &Path) -> Action {
 
 /// Make the entry in `target.dir` match `want`. Touches that folder and nothing else.
 pub fn apply(want: bool, target: &Target) -> std::io::Result<Action> {
+    if want && !exec_is_safe(&target.exec) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "the program path cannot be written to an autostart entry",
+        ));
+    }
     let action = reconcile(want, &target.dir, &target.exec);
     let path = target.dir.join(ENTRY);
     match action {
@@ -178,6 +191,33 @@ mod tests {
             Action::Nothing,
             "on and current"
         );
+    }
+
+    #[test]
+    fn a_program_path_that_could_break_the_entry_is_refused() {
+        assert!(exec_is_safe(Path::new("/opt/My Apps/nocturne")));
+        assert!(!exec_is_safe(Path::new("/opt/a\nExec=/bin/evil")));
+        assert!(!exec_is_safe(Path::new("/opt/a\rb")));
+        assert!(!exec_is_safe(Path::new("")));
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let bytes = std::ffi::OsStr::from_bytes(b"/opt/caf\xe9");
+            assert!(!exec_is_safe(Path::new(bytes)), "not valid text");
+            let root = tempfile::tempdir().unwrap();
+            let target = Target {
+                dir: root.path().join("autostart"),
+                exec: PathBuf::from(bytes),
+            };
+            assert!(apply(true, &target).is_err());
+            assert!(!target.dir.exists(), "nothing was written");
+            let newline = Target {
+                dir: root.path().join("autostart"),
+                exec: PathBuf::from("/opt/a\nExec=evil"),
+            };
+            assert!(apply(true, &newline).is_err());
+            assert!(apply(false, &newline).is_ok(), "removing is always allowed");
+        }
     }
 
     #[test]
