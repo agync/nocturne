@@ -261,6 +261,7 @@ mod tests {
                 duration_ms: None,
                 span: None,
                 unconfirmed: false,
+                from_device: None,
             },
         };
         which.choices = vec![choice("Thursday at **10:00**"), choice("Friday at 9:00")];

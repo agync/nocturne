@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::{RemoteAdvanced, RemoteConnection};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -224,6 +226,10 @@ pub enum LedgerKind {
     AppUpdate,
     MindUpdate,
     UpdateCheck,
+    /// A connection helper downloaded for Away from home.
+    RemoteHelper,
+    /// Away from home turned on or off.
+    RemoteOnOff,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -249,6 +255,10 @@ pub struct PrivacyView {
     pub data_dir: String,
     pub lock: bool,
     pub check_updates: bool,
+    pub sent_to_phones_bytes: f64,
+    pub remote_on: bool,
+    pub remote_connection: Option<RemoteConnection>,
+    pub remote_last_on_at: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -304,6 +314,7 @@ pub struct AdvancedView {
     pub last_tidy: Option<TidyReport>,
     pub agents: bool,
     pub log_dir: String,
+    pub remote: Option<RemoteAdvanced>,
 }
 
 /// What an export wrote. `path` is the fresh folder created inside the chosen directory.

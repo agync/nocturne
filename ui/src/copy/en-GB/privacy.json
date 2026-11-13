@@ -14,6 +14,8 @@
   "privacy.ledger.appUpdate": "App update {label}",
   "privacy.ledger.mindUpdate": "Better mind: {label}",
   "privacy.ledger.updateCheck": "Update check: {label}",
+  "privacy.ledger.remoteHelper": "Away from home: {label}",
+  "privacy.ledger.remoteOnOff": "Away from home: {label}",
   "privacy.ledger.entry": "{size} · {day}",
   "privacy.ledger.empty": "Nothing has been downloaded.",
   "privacy.promise": "Nocturne has no account, no analytics and no crash reports. Once set up, Nocturne works without the internet.",

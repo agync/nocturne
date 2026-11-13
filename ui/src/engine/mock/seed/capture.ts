@@ -30,6 +30,7 @@ export function captureSeed({ at }: BaseContext): ItemView[] {
     summary: null,
     text: null,
     language: "en",
+    fromDevice: null,
     ...extra,
   });
 

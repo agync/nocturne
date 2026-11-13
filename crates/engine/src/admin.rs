@@ -81,6 +81,10 @@ impl Engine {
             data_dir: data_dir.to_string_lossy().into_owned(),
             lock: settings.lock,
             check_updates: settings.check_updates,
+            sent_to_phones_bytes: 0.0,
+            remote_on: false,
+            remote_connection: None,
+            remote_last_on_at: None,
         })
     }
 

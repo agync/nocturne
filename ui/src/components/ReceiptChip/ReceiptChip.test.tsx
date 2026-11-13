@@ -13,6 +13,7 @@ const base: Receipt = {
   durationMs: 10_000,
   span: null,
   unconfirmed: false,
+  fromDevice: null,
 };
 
 describe("ReceiptChip", () => {

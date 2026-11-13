@@ -13,6 +13,7 @@ mod events;
 mod item;
 mod memory;
 mod page;
+mod remote;
 mod system;
 
 pub use ask::*;
@@ -20,4 +21,5 @@ pub use events::*;
 pub use item::*;
 pub use memory::*;
 pub use page::*;
+pub use remote::*;
 pub use system::*;

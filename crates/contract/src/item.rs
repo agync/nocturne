@@ -26,6 +26,8 @@ pub enum Source {
     Recording,
     Agent,
     Setup,
+    /// Kept from a paired phone through Away from home.
+    Phone,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -90,6 +92,8 @@ pub struct ItemView {
     /// Transcript of audio, or the text itself for notes.
     pub text: Option<String>,
     pub language: Option<String>,
+    /// The paired phone it was kept from, by name; revoked phones keep their name.
+    pub from_device: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -143,4 +147,6 @@ pub struct Receipt {
     pub duration_ms: Option<u32>,
     pub span: Option<Span>,
     pub unconfirmed: bool,
+    /// The paired phone the item was kept from, by name.
+    pub from_device: Option<String>,
 }

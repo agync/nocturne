@@ -10,4 +10,8 @@ export type Receipt = { itemId: string, kind: ItemKind, source: Source,
 /**
  * The item title, for example "Appointment card" or "Bakery brief.pdf".
  */
-label: string, keptAt: string, durationMs: number | null, span: Span | null, unconfirmed: boolean, };
+label: string, keptAt: string, durationMs: number | null, span: Span | null, unconfirmed: boolean, 
+/**
+ * The paired phone the item was kept from, by name.
+ */
+fromDevice: string | null, };

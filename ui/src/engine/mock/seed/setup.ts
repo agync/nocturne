@@ -117,5 +117,6 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
     lastTidy: { from: "02:10", to: "02:16", items: 14, merged: 3, letGo: 3 },
     agents: false,
     logDir: "~/.local/share/nocturne/logs",
+    remote: null,
   };
 }

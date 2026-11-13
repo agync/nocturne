@@ -41,6 +41,7 @@
   "item.source.recording": "Recording",
   "item.source.agent": "Added by another app",
   "item.source.setup": "Setup",
+  "item.source.phone": "From your phone",
   "memories.title": "What Nocturne remembers",
   "memories.dek": "Everything it has learned from what you kept, by who or what it is about.",
   "memories.search.label": "Search everything kept",

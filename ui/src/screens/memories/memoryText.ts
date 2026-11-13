@@ -78,6 +78,7 @@ const SOURCE_WORD: Record<Source, string> = {
   recording: "item.source.recording",
   agent: "item.source.agent",
   setup: "item.source.setup",
+  phone: "item.source.phone",
 };
 
 export const sourceWord = (source: Source): string =>

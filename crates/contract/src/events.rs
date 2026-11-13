@@ -18,8 +18,14 @@ pub const EVENT_PAGE: &str = "page-ready";
 pub const EVENT_NEEDS_YOU: &str = "needs-you-changed";
 /// Payload: `ExportProgress`.
 pub const EVENT_EXPORT: &str = "export-progress";
+/// Payload: `RemoteView`.
+pub const EVENT_REMOTE: &str = "remote-changed";
+/// Payload: `PairingRequest`.
+pub const EVENT_PAIRING: &str = "pairing-request";
+/// Payload: `DeviceView`.
+pub const EVENT_DEVICE: &str = "device-active";
 
-pub const ALL_EVENTS: [&str; 7] = [
+pub const ALL_EVENTS: [&str; 10] = [
     EVENT_STATUS,
     EVENT_ITEM,
     EVENT_SETUP,
@@ -27,4 +33,7 @@ pub const ALL_EVENTS: [&str; 7] = [
     EVENT_PAGE,
     EVENT_NEEDS_YOU,
     EVENT_EXPORT,
+    EVENT_REMOTE,
+    EVENT_PAIRING,
+    EVENT_DEVICE,
 ];

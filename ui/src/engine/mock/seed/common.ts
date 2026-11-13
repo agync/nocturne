@@ -79,6 +79,7 @@ export function makeReceipt(items: ItemView[]): SeedContext["receipt"] {
       durationMs: found.durationMs,
       span,
       unconfirmed: found.status === "unconfirmed",
+      fromDevice: found.fromDevice,
     };
   };
 }

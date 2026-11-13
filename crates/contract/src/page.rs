@@ -37,6 +37,8 @@ pub enum Edition {
     Screen,
     Audio,
     Print,
+    /// For a paired phone: private lines dropped exactly as for print.
+    Phone,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

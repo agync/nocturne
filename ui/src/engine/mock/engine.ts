@@ -480,6 +480,7 @@ export class MockEngine implements EngineClient {
       summary: null,
       text: null,
       language: null,
+      fromDevice: null,
       ...extra,
     };
     this.items.unshift(item);
@@ -551,6 +552,7 @@ export class MockEngine implements EngineClient {
           durationMs: null,
           span: null,
           unconfirmed,
+          fromDevice: null,
         },
       ],
     });
@@ -1160,6 +1162,10 @@ export class MockEngine implements EngineClient {
       sentMeasured: this.status.sentMeasured,
       lock: this.settings.lock,
       checkUpdates: this.settings.checkUpdates,
+      sentToPhonesBytes: 0,
+      remoteOn: false,
+      remoteConnection: null,
+      remoteLastOnAt: null,
     };
   }
 

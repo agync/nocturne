@@ -30,6 +30,8 @@ function ledgerLabel(entry: LedgerEntry): string {
     appUpdate: "privacy.ledger.appUpdate",
     mindUpdate: "privacy.ledger.mindUpdate",
     updateCheck: "privacy.ledger.updateCheck",
+    remoteHelper: "privacy.ledger.remoteHelper",
+    remoteOnOff: "privacy.ledger.remoteOnOff",
   } as const;
   return t(id[entry.kind], { label: entry.label });
 }

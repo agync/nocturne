@@ -25,4 +25,8 @@ summary: string | null,
 /**
  * Transcript of audio, or the text itself for notes.
  */
-text: string | null, language: string | null, };
+text: string | null, language: string | null, 
+/**
+ * The paired phone it was kept from, by name; revoked phones keep their name.
+ */
+fromDevice: string | null, };

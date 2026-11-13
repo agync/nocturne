@@ -3,13 +3,16 @@ import { t } from "../../copy/t";
 import type { Edition } from "../../engine/bindings";
 import styles from "./EditionTabs.module.css";
 
-const EDITIONS: Edition[] = ["screen", "audio", "print"];
+/** The phone edition is for paired phones only and never a tab. */
+type TabEdition = Exclude<Edition, "phone">;
 
-const LABEL = {
+const EDITIONS: TabEdition[] = ["screen", "audio", "print"];
+
+const LABEL: Record<TabEdition, "edition.read" | "edition.listen" | "edition.print"> = {
   screen: "edition.read",
   audio: "edition.listen",
   print: "edition.print",
-} as const;
+};
 
 interface EditionTabsProps {
   current: Edition;
@@ -25,7 +28,7 @@ export function EditionTabs({ current, onSelect, panelId, tabIdFor }: EditionTab
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = EDITIONS.indexOf(
-      (document.activeElement as HTMLElement | null)?.dataset.edition as Edition,
+      (document.activeElement as HTMLElement | null)?.dataset.edition as TabEdition,
     );
     if (index === -1) return;
     let next = index;
@@ -35,7 +38,7 @@ export function EditionTabs({ current, onSelect, panelId, tabIdFor }: EditionTab
     else if (event.key === "End") next = EDITIONS.length - 1;
     else return;
     event.preventDefault();
-    refs.current[EDITIONS[next] as Edition]?.focus();
+    refs.current[EDITIONS[next] as TabEdition]?.focus();
   };
 
   return (

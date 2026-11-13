@@ -158,6 +158,7 @@ pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView,
             last_tidy: None,
             agents,
             log_dir: state.log_dir().to_string_lossy().into_owned(),
+            remote: None,
         })
     })
     .await

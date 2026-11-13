@@ -71,6 +71,7 @@ fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         text: row.get(14)?,
         language: row.get(15)?,
         memory_count: row.get(16)?,
+        from_device: None,
     })
 }
 
@@ -106,6 +107,7 @@ pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Rec
             duration_ms: r.get(6)?,
             span,
             unconfirmed: trust == Trust::Untrusted,
+            from_device: None,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
