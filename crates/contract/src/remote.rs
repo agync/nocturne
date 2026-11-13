@@ -36,6 +36,8 @@ pub enum SignInStep {
     SignIn,
     /// The account must allow secure links (HTTPS) once.
     AllowLinks,
+    /// The account's owner must approve this computer before it may join.
+    Approve,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]

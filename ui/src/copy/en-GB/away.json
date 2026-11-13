@@ -133,7 +133,7 @@
   "away.problem.downloadFailed": "The extra part didn’t finish downloading, so nothing was started.",
   "away.problem.checkFailed": "The extra part didn’t pass Nocturne’s check, so it wasn’t used and nothing was started.",
   "away.problem.helperFailed": "{company} didn’t answer, so your phones can’t reach this computer right now.",
-  "away.problem.accountBlocked": "Tailscale wouldn’t let this computer join your account. Try another account, or turn Away from home off.",
+  "away.problem.accountBlocked": "This Tailscale account asks computers to keep a log of their activity for Tailscale, which Most private never does, so this computer can’t join. Try another account, or turn Away from home off.",
   "away.problem.unsupported": "Most private isn’t available on this computer yet. Simple works here.",
   "away.problem.rest": "Everything else in Nocturne works as normal.",
   "away.problem.restPhones": "Everything else in Nocturne works as normal. Anything your phones keep waits on them until this is back.",
@@ -186,6 +186,10 @@
   "away.signIn.sees": "That this computer and your phone are connected, and when. Not what you keep or ask.",
   "away.signIn.name": "In your Tailscale account this computer shows under a made-up name, so its name says nothing about you.",
   "away.signIn.why.heading": "Why this is needed",
+  "away.approve.title": "Approve this computer in Tailscale.",
+  "away.approve.body": "Your Tailscale account asks for new computers to be approved before they join. The page listing this computer has opened in your browser. Approve it there, and Nocturne carries on by itself.",
+  "away.approve.waiting": "Waiting for the approval… Nocturne carries on by itself.",
+  "away.approve.why": "Tailscale lets you keep control of which computers join your account. Approving this one doesn’t let anyone else in.",
   "away.links.title": "Allow secure links in Tailscale.",
   "away.links.body": "Your phone needs a secure link to reach Nocturne, and Tailscale only gives one if your account allows it. The right page has opened in your browser.",
   "away.links.switch": "On that page, find HTTPS Certificates and choose Enable HTTPS. It’s one button, and you only do it once.",
@@ -355,7 +359,7 @@
   "advanced.away.hides.address": "A typed address must be exact, because a look-alike site is caught only if the three words are compared.",
   "advanced.away.hides.allow": "Tapping Allow without comparing the three words defeats them if someone in the middle also has the code, for example from a photo of the screen.",
   "advanced.away.hides.key": "After a new computer key, or Delete everything, phones can only say they can’t connect. No sealed removal notice is possible.",
-  "advanced.away.hides.account": "With Most private, other people and devices on the same Tailscale account can reach the listener and try to pair. They still need a code and your Allow.",
+  "advanced.away.hides.account": "With Most private, only your own devices signed in to your Tailscale account can reach the listener and try to pair. They still need a code and your Allow.",
   "away.announce.on": "Away from home is on.",
   "away.off.turnOnWith": "Turn on will use {connection}, through {company}."
 }

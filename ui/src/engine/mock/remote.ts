@@ -92,6 +92,7 @@ export const REMOTE_SCENARIOS = [
   "offBefore",
   "downloading",
   "signIn",
+  "approve",
   "allowLinks",
   "starting",
   "on",
@@ -243,6 +244,16 @@ export class RemoteSim {
           },
           events: [],
         };
+      case "approve":
+        return {
+          view: {
+            ...base,
+            connection: "mostPrivate",
+            installed: ["mostPrivate"],
+            state: { type: "needsSignIn", url: "https://login.example/a/3f9c", step: "approve" },
+          },
+          events: [],
+        };
       case "allowLinks":
         return {
           view: {
@@ -370,8 +381,8 @@ export class RemoteSim {
       .sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? ""))[0];
     return {
       connection: this.v.connection,
-      helperName: simple ? "cloudflared" : "tailscaled",
-      helperVersion: simple ? "2026.10.1" : "1.82.5",
+      helperName: simple ? "cloudflared" : "nocturne-tailnet",
+      helperVersion: simple ? "2026.10.1" : "1.104.6",
       helperChecked: true,
       helperUptimeSeconds: 25_440,
       helperRestarts: 0,

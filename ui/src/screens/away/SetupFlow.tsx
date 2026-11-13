@@ -5,7 +5,7 @@ import { Progress } from "../../components/Progress/Progress";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
-import type { RemoteConnection, RemoteView } from "../../engine/bindings";
+import type { RemoteConnection, RemoteView, SignInStep } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
 import styles from "./Away.module.css";
 import { AwayPage, SwitchDialog } from "./AwayPage";
@@ -16,11 +16,11 @@ import { useBusyAct, useRemoteAct } from "./useRemote";
 /** Roughly what each part weighs; the real size is shown while it downloads. */
 const ESTIMATE: Record<RemoteConnection, number> = { simple: 40e6, mostPrivate: 50e6 };
 
-type Step = "choice" | "download" | "signIn" | "allowLinks" | "phoneApp";
+type Step = "choice" | "download" | "signIn" | "approve" | "allowLinks" | "phoneApp";
 
 const STEP_NUMBER: Record<RemoteConnection, Record<Step, number>> = {
-  simple: { choice: 1, download: 2, signIn: 2, allowLinks: 2, phoneApp: 2 },
-  mostPrivate: { choice: 1, download: 2, signIn: 3, allowLinks: 4, phoneApp: 5 },
+  simple: { choice: 1, download: 2, signIn: 2, approve: 2, allowLinks: 2, phoneApp: 2 },
+  mostPrivate: { choice: 1, download: 2, signIn: 3, approve: 3, allowLinks: 4, phoneApp: 5 },
 };
 const TOTAL: Record<RemoteConnection, number> = { simple: 3, mostPrivate: 6 };
 
@@ -422,9 +422,39 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
   );
 }
 
+const SIGN_IN_WORDS: Record<
+  SignInStep,
+  Record<"whyHeading" | "why" | "name" | "title" | "body" | "waiting", CopyId>
+> = {
+  signIn: {
+    whyHeading: "away.signIn.sees.heading",
+    why: "away.signIn.sees",
+    name: "away.signIn.name",
+    title: "away.signIn.title",
+    body: "away.signIn.body",
+    waiting: "away.signIn.waiting",
+  },
+  approve: {
+    whyHeading: "away.signIn.why.heading",
+    why: "away.approve.why",
+    name: "away.signIn.name",
+    title: "away.approve.title",
+    body: "away.approve.body",
+    waiting: "away.approve.waiting",
+  },
+  allowLinks: {
+    whyHeading: "away.signIn.why.heading",
+    why: "away.links.why",
+    name: "away.links.name",
+    title: "away.links.title",
+    body: "away.links.body",
+    waiting: "away.links.waiting",
+  },
+};
+
 interface SignInProps {
   connection: RemoteConnection;
-  step: "signIn" | "allowLinks";
+  step: SignInStep;
   url: string;
   aside: ReactNode;
   onLeave: () => void;
@@ -451,27 +481,26 @@ function SignIn({ connection, step, url, aside, onLeave }: SignInProps) {
     }
   };
   const links = step === "allowLinks";
+  const words = SIGN_IN_WORDS[step];
   return (
     <Frame
       back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         <>
-          <h2 className={styles.label}>
-            {t(links ? "away.signIn.why.heading" : "away.signIn.sees.heading")}
-          </h2>
-          <p className={styles.muted}>{t(links ? "away.links.why" : "away.signIn.sees")}</p>
-          <p className={styles.muted}>{t(links ? "away.links.name" : "away.signIn.name")}</p>
+          <h2 className={styles.label}>{t(words.whyHeading)}</h2>
+          <p className={styles.muted}>{t(words.why)}</p>
+          <p className={styles.muted}>{t(words.name)}</p>
           {aside}
         </>
       }
     >
       <StepLabel connection={connection} step={step} named />
-      <h1 className="t-page-title">{t(links ? "away.links.title" : "away.signIn.title")}</h1>
-      <p className={styles.body}>{t(links ? "away.links.body" : "away.signIn.body")}</p>
+      <h1 className="t-page-title">{t(words.title)}</h1>
+      <p className={styles.body}>{t(words.body)}</p>
       {links ? <p className={styles.callout}>{t("away.links.switch")}</p> : null}
       <p className={styles.waiting} role="status">
         <span className={styles.pulse} aria-hidden="true" />
-        {t(links ? "away.links.waiting" : "away.signIn.waiting")}
+        {t(words.waiting)}
       </p>
       <div className={styles.actions}>
         <Button variant="secondary" onClick={() => void act(() => engine.openRemoteSignIn())}>

@@ -99,6 +99,14 @@ describe("setup", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/settings/away/add?setup=1"));
   });
 
+  it("approve_step: asks the owner to approve this computer and opens the page once", async () => {
+    const { engine } = await openAway(SETUP, "approve", /Approve this computer in Tailscale/);
+    expect(screen.getByText(/step 3 of 6 · Most private/)).toBeInTheDocument();
+    expect(screen.getByText(/Waiting for the approval/)).toBeInTheDocument();
+    expect(engine.remote.signInOpened).toBe(1);
+    expect(screen.getByRole("button", { name: "Copy the link" })).toBeInTheDocument();
+  });
+
   it("Simple goes straight to adding a phone once it is on", async () => {
     const { engine } = await openAway(SETUP, "starting", /Starting the connection/);
     act(() => engine.remote.advance());
