@@ -87,12 +87,13 @@ fn export_writes_readme_memories_pages_originals_and_data() {
     let w = world();
     let out = tempfile::tempdir().unwrap();
     let report = w.f.engine.export_to(out.path()).unwrap();
+    let root = report.path.clone();
     assert_eq!((report.memories, report.pages, report.originals), (4, 1, 1));
 
-    let readme = std::fs::read_to_string(out.path().join("README.txt")).unwrap();
+    let readme = std::fs::read_to_string(root.join("README.txt")).unwrap();
     assert!(readme.contains("nocturne.json"));
 
-    let md = std::fs::read_to_string(out.path().join("memories.md")).unwrap();
+    let md = std::fs::read_to_string(root.join("memories.md")).unwrap();
     let memory_lines: Vec<_> = md.lines().filter(|l| l.starts_with("- ")).collect();
     assert_eq!(memory_lines.len(), 4, "one line per current memory:\n{md}");
     let dentist = memory_lines.iter().find(|l| l.contains("dentist")).unwrap();
@@ -119,12 +120,11 @@ fn export_writes_readme_memories_pages_originals_and_data() {
         "earlier versions live in the data file, not the list"
     );
 
-    let page =
-        std::fs::read_to_string(out.path().join("pages").join(format!("{}.md", w.day))).unwrap();
+    let page = std::fs::read_to_string(root.join("pages").join(format!("{}.md", w.day))).unwrap();
     assert!(page.starts_with("# "));
     assert!(page.contains("Zebrafish47") && page.contains("[private]"));
 
-    let originals: Vec<_> = std::fs::read_dir(out.path().join("originals"))
+    let originals: Vec<_> = std::fs::read_dir(root.join("originals"))
         .unwrap()
         .map(|e| e.unwrap().path())
         .collect();
@@ -135,7 +135,7 @@ fn export_writes_readme_memories_pages_originals_and_data() {
     );
 
     let data: Value =
-        serde_json::from_str(&std::fs::read_to_string(out.path().join("nocturne.json")).unwrap())
+        serde_json::from_str(&std::fs::read_to_string(root.join("nocturne.json")).unwrap())
             .unwrap();
     assert_eq!(
         data["schemaVersion"],
@@ -167,9 +167,9 @@ fn a_forgotten_memory_is_not_in_a_later_export() {
             .unwrap();
     w.f.engine.forget(&p.token).unwrap();
     let out = tempfile::tempdir().unwrap();
-    w.f.engine.export_to(out.path()).unwrap();
+    let root = w.f.engine.export_to(out.path()).unwrap().path;
     for entry in ["memories.md", "nocturne.json", "pages/2026-11-14.md"] {
-        let text = std::fs::read_to_string(out.path().join(entry)).unwrap();
+        let text = std::fs::read_to_string(root.join(entry)).unwrap();
         assert!(!text.contains("Zebrafish47"), "{entry}");
     }
 }
@@ -265,4 +265,61 @@ fn ledger_privacy_and_stats() {
     assert!(s.integrity_ok);
     assert_eq!((s.item_count, s.memory_count), (1, 0));
     assert_eq!(s.store_version, nocturne_engine::store::latest_version());
+}
+
+#[test]
+fn export_goes_to_a_fresh_dated_folder_and_never_reuses_a_name() {
+    let f = fixture();
+    f.engine.keep_text("a note", Source::Paste).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let a = f.engine.export_to(out.path()).unwrap().path;
+    let b = f.engine.export_to(out.path()).unwrap().path;
+    assert_eq!(a.file_name().unwrap(), "Nocturne export 2026-11-13");
+    assert_eq!(b.file_name().unwrap(), "Nocturne export 2026-11-13 (1)");
+    assert!(a.join("nocturne.json").exists() && b.join("nocturne.json").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_waiting_in_the_target_folder_is_not_followed() {
+    let f = fixture();
+    f.engine.keep_text("a note", Source::Paste).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let victim = tempfile::tempdir().unwrap();
+    std::os::unix::fs::symlink(victim.path(), out.path().join("Nocturne export 2026-11-13"))
+        .unwrap();
+    let root = f.engine.export_to(out.path()).unwrap().path;
+    assert_eq!(root.file_name().unwrap(), "Nocturne export 2026-11-13 (1)");
+    assert_eq!(
+        std::fs::read_dir(victim.path()).unwrap().count(),
+        0,
+        "nothing was written through the link"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn export_folders_and_files_are_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    let w = world();
+    let out = tempfile::tempdir().unwrap();
+    let root = w.f.engine.export_to(out.path()).unwrap().path;
+    for d in [root.clone(), root.join("pages"), root.join("originals")] {
+        assert_eq!(mode(&d), 0o700, "{d:?}");
+    }
+    let mut files = vec![
+        root.join("README.txt"),
+        root.join("memories.md"),
+        root.join("nocturne.json"),
+    ];
+    for sub in ["pages", "originals"] {
+        for e in std::fs::read_dir(root.join(sub)).unwrap() {
+            files.push(e.unwrap().path());
+        }
+    }
+    assert!(files.len() >= 5);
+    for f in files {
+        assert_eq!(mode(&f), 0o600, "{f:?}");
+    }
 }

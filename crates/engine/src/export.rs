@@ -1,7 +1,7 @@
 //! Export and delete everything: the person's own data, out of the engine or gone.
 
 use std::fmt::Write as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use nocturne_contract::{PageLine, PageView};
 use rusqlite::Connection;
@@ -38,6 +38,20 @@ type ItemRow = (
     Option<String>,
     String,
 );
+
+fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
+    use std::io::Write;
+    let mut f = fsutil::create_private_file_new(path)?;
+    f.write_all(bytes)?;
+    Ok(())
+}
+
+fn copy_new(src: &Path, dest: &Path) -> Result<()> {
+    let mut input = std::fs::File::open(src)?;
+    let mut output = fsutil::create_private_file_new(dest)?;
+    std::io::copy(&mut input, &mut output)?;
+    Ok(())
+}
 
 fn marks(m: &MemRow) -> String {
     let mut out = String::new();
@@ -131,14 +145,38 @@ fn page_md(conn: &Connection, p: &PageView) -> Result<String> {
 }
 
 impl Engine {
-    /// Write everything to `dir`: `README.txt`, `memories.md`, `pages/`, `originals/` and
+    /// Write everything into a new folder `Nocturne export YYYY-MM-DD` (with ` (n)` if that name
+    /// is taken) inside `dir`, owner-only, and return its path. It contains `README.txt`, `memories.md`, `pages/`, `originals/` and
     /// `nocturne.json`. Private memories are included and marked: it is the person's own copy.
     pub fn export_to(&self, dir: &Path) -> Result<ExportReport> {
         let now = fmt_ts(self.clock().now());
         let originals_src = self.originals_dir();
-        std::fs::create_dir_all(dir.join("pages"))?;
-        std::fs::create_dir_all(dir.join("originals"))?;
-        let report = self.read(|conn| {
+        // A fresh, owner-only folder named for the day; never an existing one.
+        let day = self
+            .clock()
+            .now()
+            .to_zoned(self.clock().tz())
+            .date()
+            .to_string();
+        std::fs::create_dir_all(dir)?;
+        let mut n = 0u32;
+        let root: PathBuf = loop {
+            let name = if n == 0 {
+                format!("Nocturne export {day}")
+            } else {
+                format!("Nocturne export {day} ({n})")
+            };
+            let candidate = dir.join(name);
+            match fsutil::create_private_dir_new(&candidate) {
+                Ok(()) => break candidate,
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
+                Err(e) => return Err(e.into()),
+            }
+        };
+        let dir = root.as_path();
+        fsutil::create_private_dir_new(&dir.join("pages"))?;
+        fsutil::create_private_dir_new(&dir.join("originals"))?;
+        let mut report = self.read(|conn| {
             // Memories: current ones in the markdown, every version in the data file.
             let all: Vec<MemRow> = {
                 let sql = format!(
@@ -159,8 +197,8 @@ impl Engine {
                 let _ = writeln!(md, "- {}{} | sources: {}", m.sentence, marks(m), from.join("; "));
                 current += 1;
             }
-            std::fs::write(dir.join("memories.md"), md)?;
-            std::fs::write(dir.join("README.txt"), README)?;
+            write_new(&dir.join("memories.md"), md.as_bytes())?;
+            write_new(&dir.join("README.txt"), README.as_bytes())?;
 
             // Pages.
             let dates: Vec<String> = {
@@ -171,7 +209,7 @@ impl Engine {
             for d in &dates {
                 let day = d.parse()?;
                 if let Some(p) = load_page(conn, Some(day))? {
-                    std::fs::write(dir.join("pages").join(format!("{d}.md")), page_md(conn, &p)?)?;
+                    write_new(&dir.join("pages").join(format!("{d}.md")), page_md(conn, &p)?.as_bytes())?;
                     pages_json.push(serde_json::to_value(&p)?);
                 }
             }
@@ -206,7 +244,7 @@ impl Engine {
                         .collect();
                     let target = format!("{id}-{safe}");
                     if src.exists() {
-                        std::fs::copy(&src, dir.join("originals").join(&target))?;
+                        copy_new(&src, &dir.join("originals").join(&target))?;
                         copied += 1;
                         copy_name = Some(format!("originals/{target}"));
                     }
@@ -252,13 +290,15 @@ impl Engine {
                 "pages": pages_json,
                 "settings": settings,
             });
-            std::fs::write(dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?)?;
+            write_new(&dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?.as_bytes())?;
             Ok(ExportReport {
                 memories: current,
                 pages: dates.len() as u32,
                 originals: copied,
+                path: PathBuf::new(),
             })
         })?;
+        report.path = root;
         Ok(report)
     }
 

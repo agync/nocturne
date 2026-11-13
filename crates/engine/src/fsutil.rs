@@ -64,3 +64,28 @@ pub(crate) fn shred(path: &Path) {
     }
     let _ = std::fs::remove_file(path);
 }
+
+/// Create one new directory, owner-only. Fails if the name exists in any form, a symlink
+/// included, so nothing already there is followed or reused.
+pub(crate) fn create_private_dir_new(path: &Path) -> std::io::Result<()> {
+    let mut b = std::fs::DirBuilder::new();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        b.mode(0o700);
+    }
+    b.create(path)
+}
+
+/// Create one new file, owner-only, failing if the name exists (`O_CREAT | O_EXCL`, which does
+/// not follow a symlink at that name).
+pub(crate) fn create_private_file_new(path: &Path) -> std::io::Result<File> {
+    let mut opts = std::fs::OpenOptions::new();
+    opts.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        opts.mode(0o600);
+    }
+    opts.open(path)
+}
