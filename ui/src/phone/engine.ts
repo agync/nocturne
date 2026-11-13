@@ -27,7 +27,8 @@ export interface PhoneEngine {
   listPages(): Promise<PageSummary[]>;
   getItem(id: string): Promise<PhoneItem>;
   original(id: string): Promise<Blob>;
-  disconnect(): Promise<void>;
+  /** Forgets this phone. `reached` is false when the computer could not be told. */
+  disconnect(): Promise<{ reached: boolean }>;
 }
 
 /**

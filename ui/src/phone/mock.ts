@@ -376,7 +376,9 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
       if (!blob) throw new PhoneRequestError("notFound");
       return blob;
     },
-    async disconnect() {},
+    async disconnect() {
+      return { reached: true };
+    },
   };
 }
 

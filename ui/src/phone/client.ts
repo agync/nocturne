@@ -96,6 +96,8 @@ export function createPhoneEngine(
   let state: Connection = { kind: "connecting" };
   let stickyPoll = options.preferPoll ?? false;
   let closed = false;
+  // Set while disconnect runs: an open that is still racing it must not save the device again.
+  let disconnecting = false;
   let upload: Promise<unknown> = Promise.resolve();
   const listeners = new Set<(c: Connection) => void>();
 
@@ -162,15 +164,16 @@ export function createPhoneEngine(
         set({ kind: "cantConnect" });
         throw new ConnectionError(closed ? "asleep" : "cantConnect");
       }
-      await store.save({
-        ...latest,
-        address: host,
-        deviceName: opened.hello.deviceName,
-        computerName: opened.hello.computerName,
-        connection: opened.hello.connection,
-        version: opened.hello.version,
-        lastConnectedAt: env.now(),
-      });
+      if (!disconnecting)
+        await store.save({
+          ...latest,
+          address: host,
+          deviceName: opened.hello.deviceName,
+          computerName: opened.hello.computerName,
+          connection: opened.hello.connection,
+          version: opened.hello.version,
+          lastConnectedAt: env.now(),
+        });
       set({ kind: "connected", hello: opened.hello });
       return opened;
     } catch (e) {
@@ -400,17 +403,22 @@ export function createPhoneEngine(
       });
     },
     async disconnect() {
-      // Closed first: nothing that is still opening may save the device again.
-      const live = session;
-      closed = true;
+      // Told to the computer first, through the usual path (a fresh session if none is open, once
+      // more if the session was lost). Meanwhile no racing open may save the device again.
+      disconnecting = true;
+      let reached = true;
       try {
-        if (live?.isOpen) await live.request({ cmd: "disconnect" }, type("done")).result;
-      } catch {
-        // The computer could not be reached: the phone forgets its keys all the same.
+        await once({ cmd: "disconnect" }, "done", true);
+      } catch (e) {
+        // A phone the computer already removed has nothing left to tell it.
+        reached = e instanceof ConnectionError && e.state === "removed";
       }
-      live?.close("disconnected");
+      closed = true;
+      session?.close("disconnected");
       session = null;
       await store.clear();
+      set({ kind: "cantConnect" });
+      return { reached };
     },
   };
   return engine;

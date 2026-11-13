@@ -167,6 +167,7 @@ export async function mockServices(): Promise<Services> {
       ...createMockPhoneEngine(script),
       disconnect: async () => {
         await store.clear();
+        return { reached: scenario !== "asleep" && scenario !== "cantConnect" };
       },
     }),
     pairFromLink: async () => pairing(),

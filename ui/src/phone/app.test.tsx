@@ -155,6 +155,23 @@ describe("the settings sheet", () => {
       await screen.findByRole("heading", { name: "Add this phone from your computer" }),
     ).toBeInTheDocument();
     expect(await services.store.device()).toBeNull();
+    expect(
+      screen.queryByText("Your computer may still list this phone. Remove it there too."),
+    ).not.toBeInTheDocument();
+  });
+
+  it("sheet.disconnect_unreachable_says_the_computer_may_still_list_it", async () => {
+    const services = await open("s=asleep");
+    await userEvent.click(await screen.findByRole("button", { name: "Menu" }));
+    await userEvent.click(button("Disconnect this phone…"));
+    await userEvent.click(button("Disconnect"));
+    expect(
+      await screen.findByRole("heading", { name: "Add this phone from your computer" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Your computer may still list this phone. Remove it there too."),
+    ).toBeInTheDocument();
+    expect(await services.store.device()).toBeNull();
   });
 });
 

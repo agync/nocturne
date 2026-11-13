@@ -14,6 +14,7 @@
   "phone.welcome.body": "On your computer, open Nocturne, choose Away from home, then Add a phone. Scan the code with this phone, or type it here.",
   "phone.welcome.scan": "Scan the code",
   "phone.welcome.type": "Type the code",
+  "phone.welcome.unreached": "Your computer may still list this phone. Remove it there too.",
   "phone.welcome.waiting": "{count, plural, one {# thing is} other {# things are}} still waiting on this phone.",
 
   "phone.scan.title.pair": "Scan the code",

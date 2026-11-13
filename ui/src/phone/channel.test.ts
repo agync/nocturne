@@ -333,23 +333,24 @@ describe("revocation", () => {
     const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
     computer.handler = async (ctx) => {
       if (ctx.request.call.cmd === "ask") await ctx.reply({ type: "askStarted", askId: "ask-1" });
+      else await computer.defaultHandler(ctx);
     };
     const asked = engine.ask("When is it?", () => undefined);
     await vi.waitFor(() => expect(computer.sessions.size).toBe(1));
-    const opensBefore = computer.opens;
     saves = 0;
     hold = new Promise((done) => {
       release = done;
     });
     computer.dropAll();
     await expect(asked).rejects.toBeInstanceOf(ConnectionError);
-    await engine.disconnect();
-    expect(inner.current()).toBeNull();
+    // The open that the dropped answer started is still reading the record when the person
+    // disconnects; it finishes afterwards and must not bring the record back.
+    const gone = engine.disconnect();
     release();
+    await gone;
     await new Promise((done) => setTimeout(done, 50));
     expect(inner.current()).toBeNull();
     expect(saves).toBe(0);
-    expect(computer.opens).toBe(opensBefore);
     expect(engine.connection().kind).not.toBe("connected");
   });
 
@@ -375,6 +376,63 @@ describe("revocation", () => {
     expect(saves).toBe(0);
     expect(engine.connection().kind).toBe("cantConnect");
     engine.close();
+  });
+
+  it("disconnect with no open session still reaches the computer", async () => {
+    const { computer, device } = await paired();
+    const store = memoryKeyStore(device);
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    const told: string[] = [];
+    computer.handler = async (ctx) => {
+      told.push(ctx.request.call.cmd);
+      await computer.defaultHandler(ctx);
+    };
+    expect(computer.sessions.size).toBe(0);
+    expect(await engine.disconnect()).toEqual({ reached: true });
+    expect(told).toEqual(["disconnect"]);
+    expect(store.current()).toBeNull();
+  });
+
+  it("disconnect while the computer is unreachable forgets the phone and says it was not told", async () => {
+    const { computer, device } = await paired();
+    const store = memoryKeyStore(device);
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    await engine.status();
+    computer.networkDown = true;
+    computer.dropAll();
+    expect(await engine.disconnect()).toEqual({ reached: false });
+    expect(store.current()).toBeNull();
+  });
+
+  it("an open racing disconnect saves nothing", async () => {
+    const { computer, device } = await paired();
+    const inner = memoryKeyStore(device);
+    let hold: Promise<void> | null = null;
+    let release: () => void = () => undefined;
+    let saves = 0;
+    const store = {
+      ...inner,
+      async device() {
+        const d = await inner.device();
+        if (hold) await hold;
+        return d;
+      },
+      async save(d: PairedDevice) {
+        saves += 1;
+        await inner.save(d);
+      },
+    };
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    hold = new Promise((done) => {
+      release = done;
+    });
+    const racing = engine.connect();
+    const gone = engine.disconnect();
+    release();
+    await racing.catch(() => undefined);
+    expect(await gone).toEqual({ reached: true });
+    expect(saves).toBe(0);
+    expect(inner.current()).toBeNull();
   });
 
   it("unsealed_revoked_keeps_keys: a refusal, an HTTP error, a forged REVOKED and silence all keep the key", async () => {

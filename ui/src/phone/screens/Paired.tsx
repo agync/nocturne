@@ -48,7 +48,8 @@ const RETRY_MS = 30_000;
 interface PairedProps {
   services: Services;
   initial: PairedDevice;
-  onUnpaired(): void;
+  /** `unreached` when the computer could not be told, so it may still list this phone. */
+  onUnpaired(unreached: boolean): void;
   onRelink(kind: "scan" | "words" | "pair" | "type"): void;
   /** Bump to re-read the device after a re-link. */
   deviceVersion: number;
@@ -166,9 +167,9 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
       version={services.version}
       onClose={() => setSheet(false)}
       onDisconnect={async () => {
-        await engine.disconnect();
+        const { reached } = await engine.disconnect();
         setSheet(false);
-        onUnpaired();
+        onUnpaired(!reached);
       }}
     />
   );

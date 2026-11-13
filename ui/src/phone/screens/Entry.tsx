@@ -7,11 +7,14 @@ import { Bar, Button, Icon, Page } from "./ui";
 /** Nothing paired yet: how to start. */
 export function Welcome({
   waiting,
+  unreached = false,
   onScan,
   onType,
   onClear,
 }: {
   waiting: number;
+  /** The computer could not be told this phone was disconnected. */
+  unreached?: boolean;
   onScan(): void;
   onType(): void;
   onClear(): void;
@@ -21,6 +24,11 @@ export function Welcome({
       <main className="ph-main">
         <h1 className="ph-h1 ph-h1--big">{t("phone.welcome.title")}</h1>
         <p className="ph-body">{t("phone.welcome.body")}</p>
+        {unreached && (
+          <p className="ph-hint" role="status">
+            {t("phone.welcome.unreached")}
+          </p>
+        )}
         <div className="ph-stack">
           <Button kind="primary" onClick={onScan}>
             <Icon name="camera" size={20} />

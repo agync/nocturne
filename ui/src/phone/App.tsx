@@ -43,6 +43,7 @@ function offerFromScan(text: string, host: string) {
 export function App({ services }: { services: Services }) {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [waiting, setWaiting] = useState(0);
+  const [unreached, setUnreached] = useState(false);
   const [deviceVersion, setDeviceVersion] = useState(0);
   const origin = useRef<Screen | null>(null);
 
@@ -114,8 +115,15 @@ export function App({ services }: { services: Services }) {
       return (
         <Welcome
           waiting={waiting}
-          onScan={() => setScreen({ name: "scanPair" })}
-          onType={() => setScreen({ name: "typed", error: null, busy: false })}
+          unreached={unreached}
+          onScan={() => {
+            setUnreached(false);
+            setScreen({ name: "scanPair" });
+          }}
+          onType={() => {
+            setUnreached(false);
+            setScreen({ name: "typed", error: null, busy: false });
+          }}
           onClear={async () => {
             await services.queue.clear();
             setWaiting(0);
@@ -228,7 +236,10 @@ export function App({ services }: { services: Services }) {
           services={services}
           initial={screen.device}
           deviceVersion={deviceVersion}
-          onUnpaired={() => void toWelcome()}
+          onUnpaired={(notTold) => {
+            setUnreached(notTold);
+            void toWelcome();
+          }}
           onRelink={(kind) => {
             origin.current = screen;
             if (kind === "pair") return setScreen({ name: "scanPair" });
