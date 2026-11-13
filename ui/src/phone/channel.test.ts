@@ -57,6 +57,34 @@ describe("a session", () => {
     s.close();
   });
 
+  it("socket_lost_before_session: an opened socket that closes first falls back to long-poll, once", async () => {
+    const { computer, device } = await paired();
+    computer.dropSocketOpens = 1;
+    const before = computer.opens;
+    const s = await open(computer, device);
+    expect(s.linkKind).toBe("poll");
+    expect(computer.opens - before).toBe(1);
+    const status = await s.request({ cmd: "getStatus" }, (a) =>
+      a.type === "status" ? { done: a.status } : undefined,
+    ).result;
+    expect(status.needsYou).toBe(2);
+    s.close();
+
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+    });
+    computer.dropSocketOpens = 1;
+    expect((await engine.connect()).kind).toBe("connected");
+  });
+
+  it("socket_lost_before_session: the unsealed refusal is not retried", async () => {
+    const { computer, device } = await paired();
+    computer.refuseOpens = true;
+    const before = computer.opens;
+    await expect(open(computer, device)).rejects.toMatchObject({ failure: "refused" });
+    expect(computer.opens - before).toBe(1);
+  });
+
   it("session_up_only_after_hello_opens: a Hello that does not open ends the open", async () => {
     const { computer, device } = await paired();
     computer.mutate = (frame, ctr) => {
@@ -545,6 +573,7 @@ describe("revocation", () => {
       },
       handshakeMs: 2000,
     });
+    computer.httpStatus = 502;
     expect((await closesOther.connect()).kind).toBe("asleep");
     expect(store.current()).not.toBeNull();
   });

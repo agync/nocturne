@@ -213,6 +213,8 @@ export class FakeComputer {
   holdMs = 50;
   /** Rewrites the frames the computer sends in a session: replay, reorder, drop or tamper. */
   mutate: ((frame: Bytes, ctr: number) => Bytes[]) | null = null;
+  /** How many sockets close, unanswered, when their first frame arrives. */
+  dropSocketOpens = 0;
   /** Answer every open with an unsealed refusal. */
   refuseOpens = false;
   /** A REVOKED sealed for a different open than the phone's. */
@@ -858,6 +860,11 @@ export class FakeSocket implements WebSocketLike {
 
   send(data: Uint8Array): void {
     if (this.closed) throw new Error("socket closed");
+    if (this.computer.dropSocketOpens > 0) {
+      this.computer.dropSocketOpens -= 1;
+      this.serverClose(1006);
+      return;
+    }
     const frame = copy(data);
     void this.computer.receive(frame, this.sink).then((outcome) => {
       // The unsealed refusal is a close with 4403; a session that is gone is an ordinary close.

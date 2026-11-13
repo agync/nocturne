@@ -389,11 +389,14 @@ export type OpenFailure = "revoked" | "refused" | "network" | "ended" | "off" | 
 export class OpenError extends Error {
   readonly failure: OpenFailure;
   readonly status: number | undefined;
-  constructor(failure: OpenFailure, status?: number) {
+  /** An opened WebSocket closed before the session was established. */
+  readonly socketLost: boolean;
+  constructor(failure: OpenFailure, status?: number, socketLost = false) {
     super(failure);
     this.name = "OpenError";
     this.failure = failure;
     this.status = status;
+    this.socketLost = socketLost;
   }
 }
 
@@ -423,7 +426,8 @@ function failureFor(end: LinkEnd): OpenError {
     case "protocol":
       return new OpenError("protocol");
     case "closed":
-      return new OpenError(end.code === WS_REFUSED ? "refused" : "network");
+      if (end.code === WS_REFUSED) return new OpenError("refused");
+      return new OpenError("network", undefined, end.opened);
   }
 }
 
@@ -490,8 +494,23 @@ export class Session {
     return this.pending.size;
   }
 
-  /** The handshake: SESSION_OPEN, then SESSION_ACCEPT (or a sealed REVOKED), then Hello. */
+  /**
+   * Opens a session. A WebSocket that opens and then closes before the session is established
+   * (a busy computer can drop it) is tried again once, over long-poll.
+   */
   static async open(init: OpenInit): Promise<Session> {
+    try {
+      return await Session.openOnce(init);
+    } catch (e) {
+      if (e instanceof OpenError && e.socketLost && !init.preferPoll) {
+        return Session.openOnce({ ...init, preferPoll: true });
+      }
+      throw e;
+    }
+  }
+
+  /** The handshake: SESSION_OPEN, then SESSION_ACCEPT (or a sealed REVOKED), then Hello. */
+  private static async openOnce(init: OpenInit): Promise<Session> {
     const { device, env } = init;
     const inbox = new Inbox();
     const link = await openLink(init.address, env, inbox, {
