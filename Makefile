@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -23,7 +23,7 @@ dev: ui/node_modules ## Run the desktop app with a scripted mind and a scratch d
 
 build: rust/build $(if $(UI_PRESENT),ui/build) ## Build everything
 
-test: rust/test $(if $(UI_PRESENT),ui/test) ## Run unit and integration tests
+test: rust/test scripts/test $(if $(UI_PRESENT),ui/test) ## Run unit and integration tests
 
 lint: rust/lint $(if $(UI_PRESENT),ui/lint) contract/check docs/check ## Run every linter and drift check
 	pre-commit run --all-files
@@ -62,6 +62,9 @@ ui/lint: ui/node_modules ## Lint and type-check the interface
 
 ui/fmt: ui/node_modules ## Format the interface
 	cd ui && npm run fmt
+
+scripts/test: ui/node_modules ## Unit-test the packaging scripts
+	python3 -I -m unittest discover -s scripts -p 'test_*.py'
 
 ##@ Lemonade
 
