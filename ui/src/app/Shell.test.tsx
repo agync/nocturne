@@ -358,6 +358,18 @@ describe("a screen asked for by the quick capture window", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "Letter" })).toBeInTheDocument();
     expect(window.location.hash).toBe("#/items/item-letter");
   });
+
+  it("ignores a route that is not a screen of the main window", async () => {
+    const platform = fakePlatform();
+    renderApp({ hash: "#/privacy", platform });
+    await screen.findByRole("heading", { level: 1, name: "Privacy" });
+    for (const forged of ["/quick-capture", "/setup", "/print/2026-11-13", "/nowhere", "today"]) {
+      await act(async () => platform.openInMain(forged));
+      expect(window.location.hash).toBe("#/privacy");
+    }
+    await act(async () => platform.openInMain("/ask"));
+    expect(window.location.hash).toBe("#/ask");
+  });
 });
 
 describe("theme", () => {

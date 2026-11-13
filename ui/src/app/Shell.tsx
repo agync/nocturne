@@ -55,6 +55,9 @@ export function Shell({ children }: ShellProps) {
   useEffect(
     () =>
       platform.onOpenInMain((path) => {
+        // Only the screens of this window: never quick capture, setup or print, whose close or
+        // exit behaviour would act on the main window.
+        if (typeof path !== "string" || !path.startsWith("/") || !findRoute(path)?.shell) return;
         window.location.hash = `#${path}`;
       }),
     [platform],
