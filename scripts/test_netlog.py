@@ -128,7 +128,7 @@ class Verdicts(unittest.TestCase):
 
 
 APP = "/opt/nocturne/nocturne"
-HELPER = "/data/remote/helpers/cloudflared/2024.3.0/cloudflared"
+HELPER = "/data/remote/helpers/cloudflared/2026.11.0/cloudflared"
 LEMOND = "/opt/nocturne/lemonade/lemond"
 
 

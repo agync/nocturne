@@ -10,38 +10,37 @@
 
 [[helpers]]
 kind = "cloudflared"
-version = "2024.3.0"
+version = "2026.11.0"
 licence = "Apache-2.0"
 pinned_at = "2026-11-13"
 # The upstream release date; a release build refuses a pin whose release is older than 183 days.
-released_at = "2024-03-20"
-base_url = "https://github.com/cloudflare/cloudflared/releases/download/2024.3.0"
-placeholder = true
-redirect_hosts = ["objects.githubusercontent.com", "release-assets.githubusercontent.com"]
+released_at = "2026-11-12"
+base_url = "https://github.com/cloudflare/cloudflared/releases/download/2026.11.0"
+redirect_hosts = ["release-assets.githubusercontent.com"]
 
 [helpers.assets.linux-x86_64]
 file = "cloudflared-linux-amd64"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "51f7c68b57ed7269164075d7e789efce5b59355982f06392deeb037d982a51fd"
+size = 40283099
 
 [helpers.assets.linux-aarch64]
 file = "cloudflared-linux-arm64"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "abe54a006acf9faf2d19ee9d953cb0d0804e92f59c5382a162e57b84d086f56f"
+size = 37668707
 
-# Upstream publishes only an Intel build at this version, which runs under Rosetta on Apple
-# silicon. Switch to a native arm64 asset when the pinned version has one.
+# Cloudflare signs and repackages this archive after it posts its checksums, so the posted value
+# for the .tgz is the sha256 of the binary inside, which is member_sha256.
 [helpers.assets.macos-aarch64]
-file = "cloudflared-darwin-amd64.tgz"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+file = "cloudflared-darwin-arm64.tgz"
+sha256 = "8c2f90277ef06a6080bb40b964d33f09f1188102f8798f2e344174b6cf41accf"
+size = 19890696
 member = "cloudflared"
-member_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+member_sha256 = "97e24268d9704a570fab276293028f3580ae2c7d5d2678621a4809e90f776a5e"
 
 [helpers.assets.windows-x86_64]
 file = "cloudflared-windows-amd64.exe"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "d5c1d82031da6253dcdcff64c944cd0fe063016edeb2e4fd088075fc9bd52d0a"
+size = 55397592
 
 [[helpers]]
 kind = "tailnet"
@@ -52,8 +51,9 @@ kind = "tailnet"
 version = "1.104.6"
 licence = "BSD-3-Clause"
 pinned_at = "2026-11-13"
-# The tailscale v1.104.6 tag date. The checksums and sizes are placeholders until the first
-# release, set by scripts/helpers-pin.sh.
+# The tailscale v1.104.6 tag date. The checksums and sizes are of two identical builds with
+# scripts/build-tailnet.sh. base_url and go_licenses_version stay placeholders until the first
+# release exists, so this pin stays a placeholder.
 released_at = "2026-11-10"
 source = "helpers/tailnet"
 go_version = "go1.27.3"
@@ -64,20 +64,20 @@ redirect_hosts = ["objects.githubusercontent.com", "release-assets.githubusercon
 
 [helpers.assets.linux-x86_64]
 file = "nocturne-tailnet-linux-x86_64"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "9dd0880de029e6856e9a7476dd5578e8aea74865e1abb79172b9db76c2b83d8e"
+size = 19218556
 
 [helpers.assets.linux-aarch64]
 file = "nocturne-tailnet-linux-aarch64"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "df0f7014dd2eafd465c29000e95bb155e06712a590c7169a15583b11d3155fa9"
+size = 17825916
 
 [helpers.assets.macos-aarch64]
 file = "nocturne-tailnet-macos-aarch64"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "25d7ab3b1f84bf7f9594c869b369ccafc840bad27f1fb213d1e05dc933ffd8ae"
+size = 18053042
 
 [helpers.assets.windows-x86_64]
 file = "nocturne-tailnet-windows-x86_64.exe"
-sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-size = 0
+sha256 = "21d58f6751c7775def20f5283a438b2449e8be3c510a9adeb8858e890b575238"
+size = 19673088

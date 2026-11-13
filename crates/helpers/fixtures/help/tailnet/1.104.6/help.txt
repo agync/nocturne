@@ -1,4 +1,3 @@
-# captured from nocturne-tailnet built from helpers/tailnet (tailscale.com 1.104.6) with scripts/tailnet-tags.sh; run scripts/helpers-pin.sh once pinned
 Usage of nocturne-tailnet:
   -hostname string
     	machine name on the tailnet

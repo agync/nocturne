@@ -315,9 +315,9 @@ mod tests {
         };
         assert_eq!(installed(HelperKind::Tailnet, &dirs), None);
         let (tx, _) = watch::channel(InstallProgress::default());
-        // The pins are not set yet, so there is nothing to download.
+        // The tailnet pin has no release address yet, so there is nothing to download.
         assert_eq!(
-            install(HelperKind::Cloudflared, &dirs, tx, CancellationToken::new()).await,
+            install(HelperKind::Tailnet, &dirs, tx, CancellationToken::new()).await,
             Err(HelperError::Unsupported)
         );
     }

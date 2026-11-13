@@ -255,7 +255,7 @@ mod tests {
             };
             assert_eq!(a.file, format!("nocturne-tailnet-{platform}{exe}"));
         }
-        let old = EMBEDDED.replacen("size = 0", "size = 0\nextras = []", 1);
+        let old = EMBEDDED.replacen("licence = ", "extras = []\nlicence = ", 1);
         assert!(
             HelpersLock::parse(&old).is_err(),
             "an unknown field is refused"

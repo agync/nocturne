@@ -882,7 +882,7 @@ mod tests {
     fn unpinned_helpers_are_not_downloaded() {
         let lock = HelpersLock::parse(HelpersLock::embedded_text()).unwrap();
         assert_eq!(
-            source_for(&lock, HelperKind::Cloudflared).err(),
+            source_for(&lock, HelperKind::Tailnet).err(),
             Some(HelperError::Unsupported)
         );
     }
@@ -900,7 +900,10 @@ mod tests {
         if platform().is_some() {
             let found = found.unwrap();
             assert_eq!(found.version, version);
-            assert!(is_unpinned(&found.sha256));
+            assert_eq!(
+                found.sha256,
+                lock.helper(HelperKind::Tailnet).unwrap().assets[platform().unwrap()].sha256
+            );
             assert_eq!(crate::verify(&found), Err(HelperError::Mismatch));
         }
     }

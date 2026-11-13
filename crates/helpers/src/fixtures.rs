@@ -13,7 +13,7 @@ const FIXTURES: &[(HelperKind, &str, &str)] = &[
     (
         HelperKind::Cloudflared,
         "tunnel",
-        include_str!("../fixtures/help/cloudflared/2024.3.0/tunnel.txt"),
+        include_str!("../fixtures/help/cloudflared/2026.11.0/tunnel.txt"),
     ),
     (
         HelperKind::Tailnet,
