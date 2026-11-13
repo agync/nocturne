@@ -230,3 +230,214 @@ fn entities_matching_searches_name_and_role_and_ranks_by_memory_count() {
     );
     assert_eq!(names(None, Some("ZOË")), ["Zoë"]);
 }
+
+// ---- keep_bytes ----
+
+#[test]
+fn keep_bytes_stores_a_private_original_and_follows_keep_file() {
+    let f = fixture();
+    let item = kept_item(
+        f.engine
+            .keep_bytes(b"\x89PNG pasted", "PNG", Source::Paste)
+            .unwrap(),
+    );
+    assert_eq!(item.kind, nocturne_contract::ItemKind::Image);
+    assert_eq!(item.trust, nocturne_contract::Trust::Trusted);
+    assert_eq!(item.status, nocturne_contract::ItemStatus::Kept);
+    assert!(item.has_original);
+    assert_eq!(item.file_name.as_deref(), Some("Pasted image.png"));
+    let path = std::path::PathBuf::from(item.original_path.clone().unwrap());
+    assert_eq!(std::fs::read(&path).unwrap(), b"\x89PNG pasted");
+    assert_eq!(path.parent().unwrap(), f.dir.path().join("originals"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+    // No temporary file is left behind.
+    for e in std::fs::read_dir(f.dir.path().join("originals")).unwrap() {
+        let name = e.unwrap().file_name().to_string_lossy().into_owned();
+        assert!(!name.starts_with(".tmp-"), "{name}");
+    }
+
+    // The same bytes again are a duplicate, whatever the source or a leading dot.
+    match f
+        .engine
+        .keep_bytes(b"\x89PNG pasted", ".png", Source::Screenshot)
+        .unwrap()
+    {
+        Kept::Duplicate { item: d } => assert_eq!(d.id, item.id),
+        Kept::New { .. } => panic!("expected a duplicate"),
+    }
+    assert_eq!(f.engine.items(ItemFilter::default()).unwrap().len(), 1);
+
+    // It is read like any file: the queue hands out the stored original.
+    let leased = f
+        .engine
+        .lease_pending(1, std::time::Duration::from_secs(60))
+        .unwrap();
+    assert_eq!(leased[0].id, item.id);
+    assert_eq!(leased[0].original.as_deref(), Some(path.as_path()));
+    assert_eq!(leased[0].mime.as_deref(), Some("image/png"));
+}
+
+#[test]
+fn keep_bytes_takes_kind_from_the_extension_and_trust_from_the_source() {
+    let f = fixture();
+    let rec = kept_item(
+        f.engine
+            .keep_bytes(b"audio bytes", "m4a", Source::Recording)
+            .unwrap(),
+    );
+    assert_eq!(rec.kind, nocturne_contract::ItemKind::Audio);
+    assert_eq!(rec.file_name.as_deref(), Some("Recording.m4a"));
+    let agent = kept_item(
+        f.engine
+            .keep_bytes(b"agent image", "jpg", Source::Agent)
+            .unwrap(),
+    );
+    assert_eq!(agent.trust, nocturne_contract::Trust::Untrusted);
+}
+
+#[test]
+fn keep_bytes_rejects_unsupported_kinds_and_empty_input_without_writing() {
+    let f = fixture();
+    for (bytes, ext) in [
+        (&b"MZ"[..], "exe"),
+        (b"x", ""),
+        (b"x", "png/../x"),
+        (b"", "png"),
+    ] {
+        let err = f.engine.keep_bytes(bytes, ext, Source::Paste).unwrap_err();
+        assert!(
+            matches!(err, nocturne_engine::Error::Invalid(_)),
+            "{ext}: {err:?}"
+        );
+    }
+    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM items"), 0);
+    assert_eq!(
+        std::fs::read_dir(f.dir.path().join("originals"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+// ---- prioritize ----
+
+fn lease_ids(f: &Fixture, n: usize) -> Vec<String> {
+    f.engine
+        .lease_pending(n, std::time::Duration::from_secs(60))
+        .unwrap()
+        .into_iter()
+        .map(|p| p.id)
+        .collect()
+}
+
+#[test]
+fn a_prioritised_item_is_leased_first_and_the_latest_request_goes_first() {
+    let f = fixture();
+    let a = keep(&f.engine, "note a");
+    f.clock.advance_days(1);
+    let b = keep(&f.engine, "note b");
+    f.clock.advance_days(1);
+    let c = keep(&f.engine, "note c");
+    f.engine.prioritize(&c).unwrap();
+    assert_eq!(f.engine.pending_items(3).unwrap()[0].id, c);
+    f.engine.prioritize(&b).unwrap();
+    assert_eq!(lease_ids(&f, 3), [b.clone(), c.clone(), a.clone()]);
+
+    assert!(matches!(
+        f.engine.prioritize("itm_nope"),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn priority_does_not_outlive_a_lease() {
+    let f = fixture();
+    let a = keep(&f.engine, "note a");
+    f.clock.advance_days(1);
+    let b = keep(&f.engine, "note b");
+    f.engine.prioritize(&b).unwrap();
+    assert_eq!(lease_ids(&f, 1), vec![b.clone()]);
+    // The lease runs out; b is waiting again, in its ordinary place.
+    f.clock.advance_days(1);
+    assert_eq!(lease_ids(&f, 2), [a, b]);
+}
+
+#[test]
+fn retry_item_accepts_waiting_items_and_puts_them_first() {
+    let f = fixture();
+    let a = keep(&f.engine, "note a");
+    f.clock.advance_days(1);
+    let b = keep(&f.engine, "note b");
+    f.engine.retry_item(&b).unwrap();
+    assert_eq!(f.engine.pending_items(2).unwrap()[0].id, b);
+    assert_eq!(
+        f.engine.get_item(&b).unwrap().status,
+        nocturne_contract::ItemStatus::Kept
+    );
+
+    // An unreadable one is queued again, also first.
+    let p = f
+        .engine
+        .lease_item(&a, std::time::Duration::from_secs(60))
+        .unwrap();
+    f.engine
+        .fail_item(&a, &p.lease, nocturne_contract::CouldntReadReason::Corrupt)
+        .unwrap();
+    f.engine.retry_item(&a).unwrap();
+    assert_eq!(f.engine.pending_items(2).unwrap()[0].id, a);
+
+    assert!(matches!(
+        f.engine.retry_item("itm_nope"),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
+
+// ---- migration 3 ----
+
+#[test]
+fn a_store_at_version_two_upgrades_in_place() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+        for (version, sql) in nocturne_engine::store::migrations() {
+            if version <= 2 {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", version).unwrap();
+            }
+        }
+        conn.execute(
+            "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status) \
+             VALUES ('itm_old', 'text', 'quickCapture', 'trusted', 'abc', 't', \
+             '2026-11-01T00:00:00.000Z', 'kept')",
+            [],
+        )
+        .unwrap();
+    }
+    let clock = std::sync::Arc::new(nocturne_engine::ManualClock::at(
+        "2026-11-13T07:00:00Z",
+        "Europe/London",
+    ));
+    let engine = nocturne_engine::Engine::open(dir.path(), clock).unwrap();
+    assert_eq!(engine.get_item("itm_old").unwrap().title, "t");
+    let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+    let v: u32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(v, nocturne_engine::store::latest_version());
+    assert!(v >= 3);
+    for (table, column) in [("items", "priority"), ("memories", "snoozed_until")] {
+        let n: u32 = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name = ?1"),
+                [column],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1, "{table}.{column}");
+    }
+}

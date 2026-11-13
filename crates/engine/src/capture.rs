@@ -81,6 +81,15 @@ struct NewItem<'a> {
     origin: Option<&'a str>,
 }
 
+/// A copy of the bytes in a temporary file, hashed, with what the row needs.
+struct Stored {
+    tmp: PathBuf,
+    sha: String,
+    ext: Option<String>,
+    file_name: String,
+    origin: Option<String>,
+}
+
 fn find_by_sha(tx: &Transaction<'_>, originals: &Path, sha: &str) -> Result<Option<ItemView>> {
     let id: Option<String> = tx
         .query_row("SELECT id FROM items WHERE sha256 = ?1", [sha], |r| {
@@ -178,9 +187,6 @@ impl Engine {
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase())
             .filter(|e| !e.is_empty());
-        let known = ext.as_deref().and_then(kind_for_ext);
-        let kind = known.map(|k| k.0).unwrap_or(ItemKind::Document);
-        let mime = known.map(|k| k.1);
         let file_name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -189,6 +195,75 @@ impl Engine {
             .parent()
             .map(|p| p.to_string_lossy().into_owned())
             .filter(|p| !p.is_empty());
+        self.keep_stored(
+            Stored {
+                tmp,
+                sha,
+                ext,
+                file_name,
+                origin,
+            },
+            source,
+        )
+    }
+
+    /// Keep bytes that never had a file: a pasted image or a recording. The extension must be
+    /// one of the supported kinds (see [`kind_for_ext`]); the rest follows `keep_file`.
+    pub fn keep_bytes(&self, bytes: &[u8], ext: &str, source: Source) -> Result<Kept> {
+        let ext = ext.trim().trim_start_matches('.').to_lowercase();
+        let Some((kind, _)) = kind_for_ext(&ext) else {
+            return Err(Error::invalid(format!(
+                "{ext:?} is not a kind of file Nocturne keeps"
+            )));
+        };
+        if bytes.is_empty() {
+            return Err(Error::invalid("there is nothing to keep"));
+        }
+        let originals = self.originals_dir();
+        std::fs::create_dir_all(&originals)?;
+        let tmp = originals.join(format!(".tmp-{}", random_hex(8)));
+        let written = (|| -> Result<()> {
+            let mut out = crate::fsutil::create_private_file(&tmp)?;
+            std::io::Write::write_all(&mut out, bytes)?;
+            out.sync_all()?;
+            Ok(())
+        })();
+        if let Err(e) = written {
+            let _ = std::fs::remove_file(&tmp);
+            return Err(e);
+        }
+        let base = match (source, kind) {
+            (Source::Screenshot, _) => "Screenshot",
+            (Source::Recording, _) | (_, ItemKind::Audio) => "Recording",
+            (_, ItemKind::Image) => "Pasted image",
+            _ => "Pasted file",
+        };
+        self.keep_stored(
+            Stored {
+                tmp,
+                sha: sha256_hex(bytes),
+                file_name: format!("{base}.{ext}"),
+                ext: Some(ext),
+                origin: None,
+            },
+            source,
+        )
+    }
+
+    /// Put a hashed temporary file in its place and insert its row, or recognise a duplicate.
+    /// The temporary file is gone afterwards either way.
+    fn keep_stored(&self, stored: Stored, source: Source) -> Result<Kept> {
+        let Stored {
+            tmp,
+            sha,
+            ext,
+            file_name,
+            origin,
+        } = stored;
+        let originals = self.originals_dir();
+        let known = ext.as_deref().and_then(kind_for_ext);
+        let kind = known.map(|k| k.0).unwrap_or(ItemKind::Document);
+        let mime = known.map(|k| k.1);
         let dest = original_path(&originals, &sha, ext.as_deref());
         let now = fmt_ts(self.clock().now());
 
@@ -260,7 +335,8 @@ impl Engine {
             .ok_or_else(|| Error::not_found(format!("item {id}")))
     }
 
-    /// Put an item that could not be read back in the queue.
+    /// Put an item that could not be read back in the queue, at the front. An item that is
+    /// already waiting is only moved to the front; anything else is left alone.
     pub fn retry_item(&self, id: &str) -> Result<()> {
         self.write(|tx| {
             let n = tx.execute(
@@ -278,7 +354,23 @@ impl Engine {
                     return Err(Error::not_found(format!("item {id}")));
                 }
             }
-            Ok(())
+            bump_priority(tx, id)
+        })
+    }
+
+    /// The person pressed Read now: this waiting item is leased before the others. Items that
+    /// are not waiting (being read, read, or unreadable) are unaffected.
+    pub fn prioritize(&self, id: &str) -> Result<()> {
+        self.write(|tx| {
+            let exists: bool = tx.query_row(
+                "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
+                [id],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                return Err(Error::not_found(format!("item {id}")));
+            }
+            bump_priority(tx, id)
         })
     }
 
@@ -397,6 +489,16 @@ impl Engine {
     }
 }
 
+/// Move a waiting item ahead of everything waiting, the latest request first.
+fn bump_priority(tx: &Transaction<'_>, id: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE items SET priority = (SELECT COALESCE(MAX(priority), 0) + 1 FROM items) \
+         WHERE id = ?1 AND status = 'kept'",
+        [id],
+    )?;
+    Ok(())
+}
+
 fn lease_until(now: jiff::Timestamp, lease: Duration) -> Result<jiff::Timestamp> {
     now.checked_add(SignedDuration::try_from(lease).map_err(Error::invalid)?)
         .map_err(Error::invalid)
@@ -407,7 +509,7 @@ fn take_lease(tx: &Transaction<'_>, item: &mut PendingItem, until: &str) -> Resu
     item.lease = random_hex(16);
     tx.execute(
         "UPDATE items SET status = 'reading', lease_until = ?2, lease_token = ?3, \
-         attempts = attempts + 1 WHERE id = ?1",
+         attempts = attempts + 1, priority = 0 WHERE id = ?1",
         params![item.id, until, item.lease],
     )?;
     Ok(())
@@ -484,7 +586,7 @@ fn pending(
     sql.push_str(if only.is_some() {
         "id = ?1"
     } else {
-        "status = 'kept' ORDER BY kept_at, id LIMIT ?1"
+        "status = 'kept' ORDER BY priority DESC, kept_at, id LIMIT ?1"
     });
     let mut stmt = conn.prepare(&sql)?;
     let map = |r: &rusqlite::Row<'_>| {
