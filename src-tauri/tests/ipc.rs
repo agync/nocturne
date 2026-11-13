@@ -14,7 +14,7 @@ use nocturne_engine::{Candidate, Predicate};
 use serde_json::{Value, json};
 use tauri::Manager;
 
-const CSP: &str = "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost";
+const CSP: &str = "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost asset: http://asset.localhost";
 
 /// The roadmap's command list (plan 00), plus the additions the UI asked for that the engine
 /// can serve today.
