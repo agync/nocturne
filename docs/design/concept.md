@@ -32,7 +32,9 @@ flowchart TD
    documents. Capture always succeeds instantly, even when understanding has to wait.
 2. **Consolidate.** When the computer is idle and on power, Nocturne turns new items into facts,
    merges duplicates, surfaces contradictions, and lowers the strength of what is not reinforced. A
-   laptop that sleeps at night catches up on the next wake.
+   laptop that sleeps at night catches up on the next wake. That catch-up is the one deliberate
+   exception to the rule against tidying on battery: it keeps running above 40 per cent charge, and
+   below that it waits for power unless the person asks.
 3. **Serve.** A question gets a short answer built from a small, cited package of facts, never the
    whole archive. Every claim links to the original it came from.
 4. **Publish.** The morning page has four parts: what changed, what needs you, what was let go, and

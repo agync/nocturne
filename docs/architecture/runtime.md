@@ -119,7 +119,7 @@ How Nocturne keeps to it:
 | One model of each kind at a time | `max_loaded_models` 1 in `config.json` | A second mind never loads beside the first |
 | The voice runs alone on Tiny and Small | `residency::alone`, `Client::set_alone`, and `Mind::ready_to_speak`, called once per page | Before the page is read aloud, every other model that is not busy is unloaded once, so the voice (2 to 3 GB while it speaks) never shares memory with the mind; the engine has no setting for this |
 | The page is read aloud one line at a time | `editions::speech::make` asks the voice for one line per request and `wav::Joiner` takes each answer into the file at once | The voice's memory grows with the length of what it is asked to say, so no request is longer than a line, and nothing is held between requests but the samples. Section starts are still written into the file, so skipping between sections works as before |
-| No overnight tidy on battery | the scheduler | The night tidy waits for mains power; a catch-up tidy runs on battery only above 40 per cent or when the person asks |
+| No overnight tidy on battery | the scheduler | The night tidy waits for mains power; the one deliberate exception is the catch-up tidy after a sleep or a missed night, which keeps running on battery above 40 per cent (the owner decided this); below 40 it waits for power unless the person asks |
 
 The real end-to-end test (`make e2e-real`, with `NOCTURNE_E2E_TIER=tiny`) samples the memory and
 processor use of the app and every process under it in each phase, on Linux from `/proc` (with
