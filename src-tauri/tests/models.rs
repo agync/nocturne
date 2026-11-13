@@ -13,6 +13,7 @@ use nocturne_app_lib::models::{self, HubOptions};
 use nocturne_app_lib::runtime::{Services, StartOptions};
 use nocturne_contract::{ComponentRole, LedgerKind, Tier};
 use nocturne_intelligence::FakeHost;
+use nocturne_intelligence::reindex::ReindexOptions;
 use nocturne_lemonade::jobs::JobOptions;
 use nocturne_lemonade::record::{self, SetupRecord};
 use nocturne_lemonade::selection::{self, Pending, Selection};
@@ -137,8 +138,13 @@ fn lab(mode: &str, extra: &[&str], before: impl FnOnce(&Path)) -> Lab {
             retry_delay: Duration::from_millis(50),
             give_up: Duration::from_secs(10),
         },
+        reindex: ReindexOptions {
+            chunk: 2,
+            pause: Duration::from_millis(5),
+            retry: Duration::from_millis(50),
+            embed_limit: Duration::from_secs(10),
+        },
         ram_bytes: Some(32 * GIB),
-        ..HubOptions::default()
     });
     models::install(h.app.handle()).unwrap();
     let mut opts = StartOptions::with_engine(FakeHost::new(), bundle.path());
@@ -321,19 +327,27 @@ fn old_model_kept_by_default_and_remove_asks_the_engine() {
     assert_eq!(lab.h.code("remove_old_model", json!({})), "invalid");
     assert!(lab.requests("/v1/delete").is_empty());
     lab.change("recordings", "Whisper-Tiny", false).unwrap();
-    let removed = lab.h.call("remove_old_model", json!({}));
+    let view = lab.h.ok("remove_old_model", json!({}));
+    assert_eq!(view["old"]["model"], "Whisper-Small");
+    assert_eq!(view["old"]["removed"], true);
+    assert_eq!(view["old"]["bytes"], 488_000_000.0);
+    assert!(lab.selection().old.is_none());
     let deletes = lab.requests("/v1/delete");
-    assert!(
-        deletes
-            .iter()
-            .any(|d| d["body"]["model_name"] == "Whisper-Small"),
-        "{deletes:?}"
+    assert_eq!(deletes.len(), 1, "{deletes:?}");
+    assert_eq!(deletes[0]["body"]["model_name"], "Whisper-Small");
+    let present = block_on(async {
+        let client = lab.services.client().await.unwrap();
+        client.models().await.unwrap()
+    })
+    .into_iter()
+    .any(|m| m.id == "Whisper-Small" && m.present());
+    assert!(!present, "the old model's files are gone");
+    // Going back to it now needs a download, and the person's yes.
+    assert_eq!(
+        lab.change("recordings", "Whisper-Small", false)
+            .unwrap_err()["code"],
+        "invalid"
     );
-    // The fake engine has no delete route; against the real one the view shows it removed.
-    if let Ok(view) = removed {
-        assert_eq!(view["old"]["removed"], true);
-        assert_eq!(view["old"]["bytes"], 488_000_000.0);
-    }
 }
 
 #[test]
@@ -459,6 +473,28 @@ fn quality_warning_when_smaller() {
     );
     assert_eq!(p["reindexItems"], 0);
     assert_eq!(p["downloadBytes"], 0.0);
+    // While memories are read again either finding model may be loaded beside the others,
+    // never both (the engine keeps one per kind): the larger set counts.
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "finding", "model": "nomic-embed-text-v1-GGUF"}),
+    );
+    assert_eq!(p["memoryAfter"], p["memoryNow"]);
+    assert_eq!(p["smaller"], true);
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "finding", "model": "Qwen3-Embedding-4B-GGUF"}),
+    );
+    assert!(p["memoryAfter"].as_f64().unwrap() > p["memoryNow"].as_f64().unwrap());
+    assert_eq!(p["tested"], false);
+    let thinking = lab
+        .h
+        .call(
+            "preview_model_change",
+            json!({"job": "answering", "model": "MiniCPM-V-4.6-Thinking-GGUF"}),
+        )
+        .unwrap_err();
+    assert_eq!(thinking["code"], "invalid");
     let choices = lab.h.ok("list_model_choices", json!({"job": "answering"}));
     let list = choices.as_array().unwrap();
     assert_eq!(list[0]["id"], "Qwen3.5-9B-GGUF");
@@ -508,4 +544,85 @@ fn the_view_names_each_job_and_the_memory_meter() {
     assert_eq!(answering["job"], "answering");
     assert_eq!(answering["name"], "Qwen3.5-9B");
     assert_eq!(answering["recommended"], true);
+}
+
+#[test]
+fn a_new_finding_model_is_fetched_read_with_and_swapped_in() {
+    let lab = lab("download-ms=600", &[], |_| {});
+    for i in 0..5 {
+        lab.h.learn(
+            &format!("note {i}"),
+            &format!("Sam likes thing {i}."),
+            "Sam",
+            &format!("thing {i}"),
+        );
+    }
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "finding", "model": "Qwen3-Embedding-4B-GGUF"}),
+    );
+    assert_eq!(p["reindexItems"], 5);
+    assert!(p["reindexEtaSeconds"].as_u64().is_some());
+    let view = lab
+        .change("finding", "Qwen3-Embedding-4B-GGUF", true)
+        .unwrap();
+    assert_eq!(view["change"]["model"], "Qwen3-Embedding-4B-GGUF");
+    // Until the re-read is done, memories are found with the old model.
+    assert_eq!(lab.job_model("finding"), "Qwen3-Embedding-0.6B-GGUF");
+    wait_for("the re-read to finish", || {
+        lab.view()["reindex"]["phase"] == "done"
+    });
+    let view = lab.view();
+    assert_eq!(view["reindex"]["total"], 5);
+    assert_eq!(view["reindex"]["done"], 5);
+    assert_eq!(view["reindex"]["from"], "Qwen3-Embedding-0.6B-GGUF");
+    assert_eq!(lab.job_model("finding"), "Qwen3-Embedding-4B-GGUF");
+    assert_eq!(view["old"]["model"], "Qwen3-Embedding-0.6B-GGUF");
+    let engine = lab.h.engine();
+    assert_eq!(engine.recall_model(), "Qwen3-Embedding-4B-GGUF");
+    assert_eq!(
+        engine.indexed_model().unwrap().as_deref(),
+        Some("Qwen3-Embedding-4B-GGUF")
+    );
+    assert_eq!(
+        lab.selection().custom.get(&ComponentRole::Recall).unwrap(),
+        "Qwen3-Embedding-4B-GGUF"
+    );
+    assert_eq!(lab.downloads_in_ledger(), ["Qwen3-Embedding-4B-GGUF"]);
+    // The worker read with the new model.
+    let embedded: Vec<Value> = lab.requests("/v1/embeddings");
+    assert!(
+        embedded
+            .iter()
+            .any(|r| r["body"]["model"] == "Qwen3-Embedding-4B-GGUF"),
+        "{embedded:?}"
+    );
+}
+
+#[test]
+fn a_re_read_can_be_cancelled_and_the_old_way_stays() {
+    let lab = lab("download-ms=300", &["Qwen3-Embedding-4B-GGUF"], |_| {});
+    for i in 0..40 {
+        lab.h.learn(
+            &format!("note {i}"),
+            &format!("Sam likes thing {i}."),
+            "Sam",
+            &format!("thing {i}"),
+        );
+    }
+    lab.change("finding", "Qwen3-Embedding-4B-GGUF", false)
+        .unwrap();
+    let view = lab.h.ok("cancel_reindex", json!({}));
+    assert!(view["reindex"]["phase"] != "running", "{view}");
+    wait_for("the worker to stop", || {
+        lab.view()["reindex"]["phase"] == "cancelled"
+    });
+    assert_eq!(lab.job_model("finding"), "Qwen3-Embedding-0.6B-GGUF");
+    let engine = lab.h.engine();
+    assert_eq!(engine.recall_model(), "Qwen3-Embedding-0.6B-GGUF");
+    assert_eq!(
+        engine.reindex_state().unwrap().unwrap().phase,
+        nocturne_contract::ReindexPhase::Cancelled
+    );
+    assert!(!lab.selection().custom.contains_key(&ComponentRole::Recall));
 }

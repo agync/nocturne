@@ -181,13 +181,17 @@ async fn pause_resume_cancel() {
     r.wait_offline(true).await;
     assert!(!r.present("Whisper-Small").await);
     assert_eq!(r.jobs.model(), None);
-    // The job is gone from the engine; the partial files go with `/v1/delete`, which the
-    // relaunch that closed the window has already put out of the fake's request log.
+    // The job is gone from the engine, and so are the bytes it had received.
     let jobs = r.sup.client().downloads().await.unwrap();
     assert!(
         jobs.iter().all(|j| j.id != "model:Whisper-Small"),
         "{jobs:?}"
     );
+    let state: Value = serde_json::from_slice(
+        &std::fs::read(r.sup.dirs().cache().join("fake-state.json")).unwrap(),
+    )
+    .unwrap();
+    assert!(state["partial"].get("Whisper-Small").is_none(), "{state}");
     assert!(r.ledger.lock().unwrap().is_empty());
 }
 
@@ -261,18 +265,16 @@ async fn setup_and_picker_share_one_download_window() {
 async fn remove_frees_the_models_bytes() {
     let r = rig("downloaded=all").await;
     assert!(r.present("Whisper-Base").await);
-    let freed = nocturne_lemonade::jobs::remove(&r.sup.client(), "Whisper-Base").await;
-    let deletes = r.requests("/v1/delete").await;
-    assert!(
-        deletes
-            .iter()
-            .any(|d| d["body"]["model_name"] == "Whisper-Base"),
-        "the engine is asked to delete it: {deletes:?}"
-    );
-    // The fake engine has no delete route yet; the real one answers 200.
-    if let Ok(bytes) = freed {
-        assert_eq!(bytes, 148_000_000);
-    }
+    let freed = nocturne_lemonade::jobs::remove(&r.sup.client(), "Whisper-Base")
+        .await
+        .unwrap();
+    assert_eq!(freed, 148_000_000);
+    assert!(!r.present("Whisper-Base").await);
+    // Removing it again frees nothing; a model the catalogue lacks is an error.
+    let again = nocturne_lemonade::jobs::remove(&r.sup.client(), "Whisper-Base").await;
+    assert_eq!(again.unwrap(), 0);
+    let unknown = nocturne_lemonade::jobs::remove(&r.sup.client(), "No-Such-Model").await;
+    assert!(unknown.is_err());
     let gone = Client::new(common::CLOSED_PORT, "k");
     assert!(
         nocturne_lemonade::jobs::remove(&gone, "Whisper-Base")
