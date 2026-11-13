@@ -72,7 +72,8 @@ function recording() {
 }
 
 describe("what the quick capture window asks of the engine", () => {
-  it("is only what the shell allows it to call", async () => {
+  // Seven windows are opened one after another and typed into, so this one is given room.
+  it("is only what the shell allows it to call", { timeout: 30_000 }, async () => {
     const allowed = allowedCommands();
     expect(allowed).toContain("keep_text");
 

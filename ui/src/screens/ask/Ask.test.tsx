@@ -188,9 +188,11 @@ describe("the answer", () => {
     const mondays = await screen.findByRole("button", {
       name: "on Mondays. Show where this came from.",
     });
-    const coach = screen.getByRole("button", { name: "Coach Sam. Show where this came from." });
-    const groups = await screen.findAllByRole("list", { name: /^Where “/ });
-    expect(groups).toHaveLength(2);
+    const coach = await screen.findByRole("button", {
+      name: "Coach Sam. Show where this came from.",
+    });
+    await waitFor(() => expect(screen.getAllByRole("list", { name: /^Where “/ })).toHaveLength(2));
+    const groups = screen.getAllByRole("list", { name: /^Where “/ });
     const cardOf = (group: HTMLElement) => group.querySelector("li") as HTMLElement;
     const [first, second] = groups as [HTMLElement, HTMLElement];
     expect(first).toHaveAttribute("aria-label", expect.stringContaining("swimming is on Mondays"));
