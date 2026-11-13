@@ -89,8 +89,8 @@
   --m-rest-easing: cubic-bezier(.4,0,.2,1);
   --m-breathe-duration: 2400ms;
   --m-fade-away-duration: 400ms;
-  --size-control: 40px;
-  --size-touch: 44px;
+  --size-control: 2.5rem;
+  --size-touch: 2.75rem;
   --size-rail: 232px;
   --size-page-measure: 680px;
   --bp-narrow: 400px;

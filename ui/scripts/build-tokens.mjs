@@ -72,7 +72,11 @@ export function generate(tokens) {
     .join("\n");
   const sizes = Object.entries(tokens.size)
     .filter(([, v]) => typeof v === "number")
-    .map(([k, v]) => `  --size-${kebab(k)}: ${v}px;`)
+    // Control and touch sizes grow with the text, so a button never clips enlarged words.
+    .map(
+      ([k, v]) =>
+        `  --size-${kebab(k)}: ${["control", "touch"].includes(k) ? `${v / 16}rem` : `${v}px`};`,
+    )
     .join("\n");
   const breakpoints = Object.entries(tokens.breakpoints)
     .map(([k, v]) => `  --bp-${k}: ${v}px;`)
