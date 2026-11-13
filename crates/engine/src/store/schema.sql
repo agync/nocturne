@@ -181,3 +181,8 @@ CREATE TABLE remote_state(
   first_on_at TEXT, on_since TEXT, last_on_at TEXT, last_off_at TEXT,
   address TEXT, address_since TEXT, machine_name TEXT);
 INSERT INTO remote_state(id) VALUES (1);
+
+-- migration 8
+-- What each paired phone kept today, in bytes, so its daily limit holds across a restart.
+ALTER TABLE remote_devices ADD COLUMN day TEXT;
+ALTER TABLE remote_devices ADD COLUMN day_bytes INTEGER NOT NULL DEFAULT 0;

@@ -192,6 +192,18 @@ pub(crate) fn withheld_from_phones(conn: &rusqlite::Connection, item_id: &str) -
     Ok(false)
 }
 
+fn day_bytes(conn: &rusqlite::Connection, device_id: &str, date: &str) -> Result<u64> {
+    let used: Option<i64> = conn
+        .query_row(
+            "SELECT CASE WHEN day = ?2 THEN day_bytes ELSE 0 END FROM remote_devices \
+             WHERE id = ?1",
+            params![device_id, date],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(used.unwrap_or(0).max(0) as u64)
+}
+
 impl Engine {
     pub fn remote_state(&self) -> Result<RemoteRow> {
         self.read(load_state)
@@ -307,6 +319,46 @@ impl Engine {
                 "UPDATE remote_devices SET last_used_at = ?2, address = ?3 \
                  WHERE id = ?1 AND revoked_at IS NULL",
                 params![id, now, address],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Bytes a phone has kept on `date`, a local `YYYY-MM-DD`.
+    pub fn remote_day(&self, device_id: &str, date: &str) -> Result<u64> {
+        self.read(|conn| day_bytes(conn, device_id, date))
+    }
+
+    /// Count `bytes` against a phone's `date`. False, with nothing counted, when that would go
+    /// past `max` or the phone is not paired.
+    pub fn charge_remote_day(
+        &self,
+        device_id: &str,
+        date: &str,
+        bytes: u64,
+        max: u64,
+    ) -> Result<bool> {
+        self.write(|tx| {
+            let used = day_bytes(tx, device_id, date)?;
+            let Some(total) = used.checked_add(bytes).filter(|t| *t <= max) else {
+                return Ok(false);
+            };
+            let changed = tx.execute(
+                "UPDATE remote_devices SET day = ?2, day_bytes = ?3 \
+                 WHERE id = ?1 AND revoked_at IS NULL",
+                params![device_id, date, total as i64],
+            )?;
+            Ok(changed > 0)
+        })
+    }
+
+    /// Give back what a keep that did not happen was charged on `date`.
+    pub fn refund_remote_day(&self, device_id: &str, date: &str, bytes: u64) -> Result<()> {
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE remote_devices SET day_bytes = MAX(0, day_bytes - ?3) \
+                 WHERE id = ?1 AND day = ?2",
+                params![device_id, date, bytes as i64],
             )?;
             Ok(())
         })

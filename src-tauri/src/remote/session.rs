@@ -219,8 +219,6 @@ pub struct OnState {
 pub struct PhoneState {
     /// Item ids sent to this phone, and when: only these may be opened from it.
     pub cited: HashMap<String, Instant>,
-    /// Bytes kept from this phone today, by local date.
-    pub day: (String, u64),
     /// An original is on its way down to this phone.
     pub sending_original: bool,
 }

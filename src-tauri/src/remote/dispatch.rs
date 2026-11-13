@@ -236,11 +236,20 @@ impl<R: Runtime> Call<R> {
                     self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
                     return err(PhoneError::TooMany);
                 }
+                let size = text.len() as u64;
+                if let Err(code) = self.core.incoming.charge_day(&self.core, me, size) {
+                    return err(code);
+                }
                 let e = self.engine()?;
                 let sent = Sent::Text(text.clone());
                 let kept = blocking(move || e.keep_text(&text, Source::Phone)).await;
-                self.kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0, sent)
-                    .await
+                let answer = self
+                    .kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0, sent)
+                    .await;
+                if matches!(answer, Some(RemoteAnswer::Error { .. })) {
+                    self.core.incoming.refund_day(&self.core, me, size);
+                }
+                answer
             }
             RemoteCall::KeepBytes {
                 mime,
@@ -577,7 +586,12 @@ impl<R: Runtime> Call<R> {
         if now.duration_since(kept_at) >= jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64) {
             return err(PhoneError::TooLate);
         }
-        self.app.state::<AppState>().asks.cancel_all();
+        // Only this phone's asks: one may cite what is being taken back. The desktop's and
+        // other phones' go on.
+        self.app
+            .state::<AppState>()
+            .asks
+            .cancel_lane(&AskLane::Phone(self.device.id.clone()));
         let e = self.engine()?;
         match blocking(move || e.unkeep(&id)).await {
             Ok(_) => {

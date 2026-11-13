@@ -117,16 +117,14 @@ impl Incoming {
         if !allowed || (decl.recording && decl.mime != "audio/wav") {
             return Err(PhoneError::Invalid);
         }
-        {
-            let today = core.shell.wall_now().strftime("%Y-%m-%d").to_string();
-            let mut phones = core.phones.lock().unwrap_or_else(|e| e.into_inner());
-            let p = phones.entry(device.to_string()).or_default();
-            if p.day.0 != today {
-                p.day = (today, 0);
-            }
-            if p.day.1 + size > MAX_DAY {
-                return Err(PhoneError::TooLarge);
-            }
+        let used = core
+            .shell
+            .engine()
+            .ok_or(PhoneError::NotReady)?
+            .remote_day(device, &today(core))
+            .map_err(|_| PhoneError::Busy)?;
+        if used.saturating_add(size) > MAX_DAY {
+            return Err(PhoneError::TooLarge);
         }
         // The day is charged by the keep itself, once admitted (see `charge_day`).
         let mut uploads = self.uploads();
@@ -166,26 +164,23 @@ impl Incoming {
         Ok(rx)
     }
 
-    /// Count `size` bytes against a phone's day, once the keep is admitted.
+    /// Count `size` bytes against a phone's day, once the keep is admitted. The count is kept
+    /// in the store, so a restart does not start the day over.
     pub fn charge_day(&self, core: &Core, device: &str, size: u64) -> Result<(), PhoneError> {
-        let today = core.shell.wall_now().strftime("%Y-%m-%d").to_string();
-        let mut phones = core.phones.lock().unwrap_or_else(|e| e.into_inner());
-        let p = phones.entry(device.to_string()).or_default();
-        if p.day.0 != today {
-            p.day = (today, 0);
+        let engine = core.shell.engine().ok_or(PhoneError::NotReady)?;
+        match engine.charge_remote_day(device, &today(core), size, MAX_DAY) {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(PhoneError::TooLarge),
+            Err(_) => Err(PhoneError::Busy),
         }
-        if p.day.1 + size > MAX_DAY {
-            return Err(PhoneError::TooLarge);
-        }
-        p.day.1 += size;
-        Ok(())
     }
 
     /// Give back what a keep that did not happen was charged.
     pub fn refund_day(&self, core: &Core, device: &str, size: u64) {
-        let mut phones = core.phones.lock().unwrap_or_else(|e| e.into_inner());
-        if let Some(p) = phones.get_mut(device) {
-            p.day.1 = p.day.1.saturating_sub(size);
+        if let Some(engine) = core.shell.engine()
+            && let Err(e) = engine.refund_remote_day(device, &today(core), size)
+        {
+            tracing::warn!("could not give back a phone's day: {e}");
         }
     }
 
@@ -294,4 +289,9 @@ fn private_file(path: &Path) -> std::io::Result<std::fs::File> {
         opts.mode(0o600);
     }
     opts.open(path)
+}
+
+/// The day a phone's keeps count toward.
+fn today(core: &Core) -> String {
+    core.shell.wall_now().strftime("%Y-%m-%d").to_string()
 }

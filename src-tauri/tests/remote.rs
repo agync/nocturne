@@ -905,6 +905,61 @@ fn day_cap_500mb() {
 }
 
 #[test]
+fn kept_text_counts_toward_the_day_and_survives_a_restart() {
+    let p = on();
+    let (keys, mut c) = p.session("Pixel");
+    p.hub
+        .core
+        .incoming
+        .charge_day(&p.hub.core, &keys.id(), MAX_DAY - 10)
+        .unwrap();
+    // What the computer held in memory is gone, as after a restart.
+    p.hub.core.phones.lock().unwrap().clear();
+    assert_eq!(
+        error_of(&keep_text(&mut c, "Longer than ten bytes", "c-1")),
+        Some(PhoneError::TooLarge)
+    );
+    assert!(matches!(
+        keep_text(&mut c, "Short", "c-2"),
+        RemoteAnswer::Kept { .. }
+    ));
+    assert_eq!(
+        error_of(&keep_text(&mut c, "Six by", "c-3")),
+        Some(PhoneError::TooLarge),
+        "five bytes left today"
+    );
+}
+
+#[test]
+fn a_phones_take_back_cancels_only_its_own_asks() {
+    let mind = Arc::new(FakeMind::new());
+    let gate = mind.gate("answer");
+    let p = on_with(mind);
+    p.h.learn(
+        "dentist",
+        "The dentist is on Thursday.",
+        "Dentist",
+        "Thursday",
+    );
+    p.h.ok("ask", json!({"question": "When is the dentist?"}));
+    block(gate.entered());
+    let (_, mut c) = p.session("Pixel");
+    let id = kept_id(&keep_text(&mut c, "Mine to take back", "c-1"));
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id }),
+        RemoteAnswer::Done
+    ));
+    assert_eq!(
+        p.h.state()
+            .asks
+            .in_flight_in(&nocturne_app_lib::ask::AskLane::Desktop),
+        1,
+        "the desktop's ask goes on"
+    );
+    gate.open();
+}
+
+#[test]
 fn chunks_not_counted_as_requests() {
     let p = on();
     let (_, mut c) = p.session("Pixel");
