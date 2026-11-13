@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -70,6 +70,9 @@ scripts/test: ui/node_modules ## Unit-test the packaging scripts
 
 package: ui/node_modules ## Build the Linux packages (AppImage, deb, rpm) with the private engine
 	scripts/package.sh
+
+smoke: ## Launch the built binary and packages under a virtual display and judge them
+	scripts/smoke-launch.sh all
 
 ##@ Lemonade
 
