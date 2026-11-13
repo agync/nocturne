@@ -81,7 +81,7 @@
   "privacy.away.never.body": "Things you marked private stay on this computer.",
   "privacy.away.risks.heading": "Worth knowing",
   "privacy.away.risks.phone": "Anyone holding an unlocked or stolen phone can read everything not marked private until you remove that phone here.",
-  "privacy.away.risks.code": "If a pairing code leaks, from a photo, a screen share or a cloud QR scanner, only comparing the three words stops it.",
+  "privacy.away.risks.code": "If a pairing code leaks, from a photo, a screen share or an online QR scanner, only comparing the three words stops it.",
   "privacy.away.risks.local": "In Simple, anyone using this computer can see the public address. It doesn’t let them in.",
   "privacy.sent.awayOn.measured": "Nocturne can’t count what the connection part itself sends to {company}. What goes to your phones is counted here."
 }

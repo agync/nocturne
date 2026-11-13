@@ -66,7 +66,9 @@ describe("the welcome", () => {
     ).toBeInTheDocument();
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
     expect(screen.getByText("Everything stays on this computer.")).toBeInTheDocument();
-    expect(screen.getByText(/No account. No cloud./)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing leaves this computer unless you turn it on/),
+    ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Get started" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: "Checking this computer…" }),
