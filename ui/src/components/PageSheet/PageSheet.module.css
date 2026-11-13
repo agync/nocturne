@@ -29,6 +29,7 @@
 
 .previous {
   color: var(--ink3);
+  font-size: 0.8125rem;
   text-decoration: none;
 }
 

@@ -157,7 +157,7 @@ export function PageSheet({
             {previousDate ? (
               <>
                 {" · "}
-                <a className={styles.previous} href={`#/pages/${previousDate}`}>
+                <a className={`${styles.previous} hit`} href={`#/pages/${previousDate}`}>
                   <span className="sr-only">{t("page.previous.hidden")}</span>{" "}
                   {t("page.previous", { day: formatWeekday(previousDate) })}
                 </a>

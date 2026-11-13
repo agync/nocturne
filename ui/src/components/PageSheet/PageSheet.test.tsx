@@ -258,7 +258,7 @@ describe("PageSheet, a normal day", () => {
       ),
     };
     render(<PageSheet page={page} onAction={vi.fn()} />);
-    expect(screen.getByText("Forgotten. This line is gone from the page.")).toBeInTheDocument();
+    expect(screen.getByText("Deleted. This line is gone from the page.")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("4471");
   });
 });
@@ -414,7 +414,7 @@ describe("PageSheet, other days", () => {
     };
     const onAction = vi.fn();
     render(<PageSheet page={{ ...today, needsYou: [line] }} onAction={onAction} />);
-    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
     expect(onAction).toHaveBeenCalledWith({ type: "forget", line });
     expect(screen.queryByText(/Forgotten/)).toBeNull();
   });

@@ -62,7 +62,7 @@ export function receiptLabel(receipt: Receipt): string {
 export function ReceiptChip({ receipt, playing = false, onOpen }: ReceiptChipProps) {
   const text = receiptText(receipt);
   const common = {
-    className: `${styles.chip} ${receipt.unconfirmed ? styles.unconfirmed : ""}`.trim(),
+    className: `${styles.chip} hit ${receipt.unconfirmed ? styles.unconfirmed : ""}`.trim(),
     "data-kind": receipt.kind,
     "data-unconfirmed": receipt.unconfirmed,
     "data-playing": playing,
