@@ -52,7 +52,7 @@
   "setup.paused.offline": "Waiting for the internet. It carries on by itself.",
   "setup.paused.battery": "Paused while on battery. It carries on when plugged in.",
   "setup.installing": "Almost there. Nocturne is putting the last pieces in place.",
-  "setup.error.notEnoughMemory": "This computer doesn’t have enough memory for Nocturne yet. Nothing has been downloaded.",
+  "setup.error.notEnoughMemory": "This computer doesn’t have enough memory for the size you chose.",
   "setup.error.engineFailed": "Nocturne couldn’t finish getting ready. What you kept is safe.",
   "setup.action.failed": "That didn’t work. Nothing was lost; try again in a moment.",
   "setup.done.title": "Nocturne is ready.",
@@ -68,5 +68,6 @@
   "setup.defaults.login.hint": "So the tidy can run overnight",
   "setup.defaults.updates": "Check for updates",
   "setup.tonight.title": "Tonight",
-  "setup.tonight.body": "When this computer is plugged in and idle, Nocturne reads what you kept, links it together and writes your first page. If the lid is closed, it catches up when you open it."
+  "setup.tonight.body": "When this computer is plugged in and idle, Nocturne reads what you kept, links it together and writes your first page. If the lid is closed, it catches up when you open it.",
+  "setup.error.chooseSmaller": "Choose a smaller size"
 }

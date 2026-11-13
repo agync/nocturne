@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { goTo } from "../../app/query";
 import { useKeepRecording } from "../../app/useKeepRecording";
 import { Button } from "../../components/Button/Button";
 import { Progress } from "../../components/Progress/Progress";
@@ -11,9 +12,10 @@ import { usePlatform } from "../../platform/context";
 import { Defaults } from "./Defaults";
 import styles from "./Setup.module.css";
 
-/** What the engine says is wrong, in one sentence and at most one button. */
+/** What is wrong, in one sentence and one button. A failed setup always has a way on. */
 function Problem({ view, onAgain }: { view: SetupView; onAgain: () => void }) {
-  if (!view.error) return null;
+  const error = view.error ?? (view.phase === "failed" ? "engineFailed" : null);
+  if (!error) return null;
   const sentence = {
     offline: t("notice.downloadStalled.text"),
     diskFull:
@@ -22,21 +24,22 @@ function Problem({ view, onAgain }: { view: SetupView; onAgain: () => void }) {
         : t("notice.diskFull.text.unknown"),
     notEnoughMemory: t("setup.error.notEnoughMemory"),
     engineFailed: t("setup.error.engineFailed"),
-  }[view.error];
+  }[error];
   const button = {
     offline: t("notice.downloadStalled.action"),
     diskFull: t("button.tryAgain"),
-    notEnoughMemory: null,
+    notEnoughMemory: t("setup.error.chooseSmaller"),
     engineFailed: t("button.tryAgain"),
-  }[view.error];
+  }[error];
   return (
     <div className={styles.problemBox} role="alert">
       <p>{sentence}</p>
-      {button ? (
-        <Button variant="secondary" onClick={onAgain}>
-          {button}
-        </Button>
-      ) : null}
+      <Button
+        variant="secondary"
+        onClick={error === "notEnoughMemory" ? () => goTo("/setup", { step: "choosing" }) : onAgain}
+      >
+        {button}
+      </Button>
     </div>
   );
 }
@@ -105,7 +108,7 @@ export function GettingReady({ view }: { view: SetupView }) {
 
   const paused = view.phase === "paused";
   const installing = view.phase === "installing";
-  const hasProblem = view.error !== null;
+  const hasProblem = view.error !== null || view.phase === "failed";
   const detail =
     view.etaSeconds !== null && !paused
       ? t("setup.progress.detail", {

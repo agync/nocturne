@@ -208,6 +208,27 @@ describe("getting ready", () => {
     expect(spy).toHaveBeenCalledWith("standard");
   });
 
+  it("offers Try again for a failed setup even when the engine gave no reason", async () => {
+    const { engine } = await open("failedQuietly");
+    expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t finish getting ready");
+    const spy = vi.spyOn(engine, "startSetup");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(spy).toHaveBeenCalledWith("standard");
+  });
+
+  it("says the chosen size is too big for this computer and leads to choosing a smaller one", async () => {
+    await open("tooBig");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "This computer doesn’t have enough memory for the size you chose.",
+    );
+    expect(screen.queryByText(/Nothing has been downloaded/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Choose a smaller size" }));
+    expect(window.location.hash).toBe("#/setup?step=choosing");
+    expect(
+      await screen.findByRole("heading", { level: 1, name: /lighter mind/ }),
+    ).toBeInTheDocument();
+  });
+
   it("lets the person keep a file, a note or a voice note straight away", async () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFiles").mockResolvedValue(["letter.jpg"]);

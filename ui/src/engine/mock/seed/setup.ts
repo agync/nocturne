@@ -76,6 +76,8 @@ export const SETUP_SCENARIOS: Record<string, SetupView> = {
   diskFull: downloading({ phase: "paused", error: "diskFull", neededBytes: 6e9 }),
   installing: downloading({ phase: "installing", downloadedBytes: 8.4e9, etaSeconds: null }),
   failed: downloading({ phase: "failed", error: "engineFailed", etaSeconds: null }),
+  failedQuietly: downloading({ phase: "failed", etaSeconds: null }),
+  tooBig: downloading({ phase: "paused", error: "notEnoughMemory" }),
 };
 
 /** Maya's computer is set up. A visit with `?mockSetup=<name>` starts from one of the other states. */

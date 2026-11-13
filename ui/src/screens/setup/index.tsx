@@ -41,7 +41,13 @@ export default function Setup() {
       case "paused":
       case "installing":
       case "failed":
-        body = <GettingReady view={view} />;
+        // A paused or failed setup can be pointed at a different size.
+        body =
+          step === "choosing" && (view.phase === "paused" || view.phase === "failed") ? (
+            <Choosing view={view} onStarted={() => goTo("/setup")} />
+          ) : (
+            <GettingReady view={view} />
+          );
         break;
       case "done":
         body =
