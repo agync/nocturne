@@ -794,7 +794,10 @@ fn strip_stale(
     Ok(page)
 }
 
-fn load_page(conn: &Connection, day: Option<Date>) -> Result<Option<nocturne_contract::PageView>> {
+pub(crate) fn load_page(
+    conn: &Connection,
+    day: Option<Date>,
+) -> Result<Option<nocturne_contract::PageView>> {
     let row: Option<(String, String)> = match day {
         Some(d) => conn
             .query_row(

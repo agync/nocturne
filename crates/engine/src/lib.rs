@@ -9,10 +9,12 @@
 //! Every public method is synchronous. Callers on an async runtime use `spawn_blocking`.
 //! Policy (decay, ranking, windows) takes its time from the [`Clock`], so tests control it.
 
+mod admin;
 mod audio;
 mod capture;
 mod clock;
 mod error;
+mod export;
 mod forget;
 mod fsutil;
 mod lifecycle;
@@ -31,6 +33,7 @@ pub mod store;
 pub use capture::{MAX_AUDIO_MS, MAX_PAGES, kind_for_ext, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
+pub use export::DELETE_PHRASE;
 pub use mind::{AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding};
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, hash_embedding};
