@@ -70,6 +70,7 @@
 
 .all {
   min-height: 24px;
+  text-decoration: none;
   font-size: 0.8125rem;
   font-weight: 500;
 }
@@ -81,4 +82,9 @@
   color: var(--ink3);
   font-size: 0.8125rem;
   line-height: 1.5;
+}
+
+.all:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
