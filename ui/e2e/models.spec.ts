@@ -110,3 +110,34 @@ test.describe("narrow", () => {
     await page.screenshot({ path: `${SHOTS}/models-pick-narrow.png`, fullPage: true });
   });
 });
+
+test("pause, resume and cancel a download, from the page", async ({ page }) => {
+  await open(page, "/settings/models", "downloading");
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect(page.getByText("Paused: getting Qwen3-VL-8B")).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
+  await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
+  await page.getByRole("button", { name: "Cancel…" }).click();
+  await page.getByRole("dialog", { name: "Stop getting Qwen3-VL-8B?" }).waitFor();
+  await page.getByRole("button", { name: "Stop and remove" }).click();
+  await expect(page.getByRole("progressbar")).toHaveCount(0);
+  await expect(page.getByText("Qwen3.5-9B-GGUF", { exact: true })).toBeVisible();
+});
+
+test("keep and remove the old one, and reset to the tier", async ({ page }) => {
+  await open(page, "/settings/models", "oldKeep");
+  await page.getByRole("button", { name: "Remove, free 6.9 GB" }).click();
+  await expect(page.getByText(/Removed Qwen3.5-9B-GGUF and freed 6.9 GB/)).toBeVisible();
+  await page.reload();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  await expect(page.getByRole("button", { name: "Keep it" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reset to Standard" }).click();
+  await expect(page.getByText("Standard · for this computer")).toBeVisible();
+});
+
+test("the confirm opens on the safe button", async ({ page }) => {
+  await open(page, "/settings/models/answering");
+  await page.getByRole("radio", { name: /Qwen3-VL-8B/ }).check();
+  await page.getByRole("button", { name: "Use the chosen one…" }).click();
+  await expect(page.getByRole("button", { name: "Not now" })).toBeFocused();
+});

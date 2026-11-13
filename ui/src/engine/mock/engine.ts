@@ -1557,13 +1557,13 @@ export class MockEngine implements EngineClient {
     this.models.preview(job, model);
   changeModel = (job: Job, model: string, allowDownload: boolean): Promise<ModelsView> =>
     this.models.change(job, model, allowDownload);
-  pauseModelDownload = (): Promise<ModelsView> => this.models.step();
-  resumeModelDownload = (): Promise<ModelsView> => this.models.step();
-  cancelModelChange = (): Promise<ModelsView> => this.models.step();
-  cancelReindex = (): Promise<ModelsView> => this.models.step();
-  keepOldModel = (): Promise<ModelsView> => this.models.step();
-  removeOldModel = (): Promise<ModelsView> => this.models.step();
-  resetModelsToTier = (): Promise<ModelsView> => this.models.step();
+  pauseModelDownload = (): Promise<ModelsView> => this.models.pause();
+  resumeModelDownload = (): Promise<ModelsView> => this.models.resume();
+  cancelModelChange = (): Promise<ModelsView> => this.models.cancel();
+  cancelReindex = (): Promise<ModelsView> => this.models.cancelReindex();
+  keepOldModel = (): Promise<ModelsView> => this.models.keepOld();
+  removeOldModel = (): Promise<ModelsView> => this.models.removeOld();
+  resetModelsToTier = (): Promise<ModelsView> => this.models.reset();
 }
 
 export function createMockEngine(options: MockOptions = {}): MockEngine {
