@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use common::*;
 use nocturne_contract::{CouldntReadReason, ItemStatus, NoticeCode, Source};
-use nocturne_engine::{FakeMind, MindError, Predicate, Transcript, Understanding};
+use nocturne_engine::{Clock, FakeMind, MindError, Transcript, Understanding};
 use nocturne_intelligence::{Event, Outcome, Step};
 
 fn text_world(text: &str) -> World {
@@ -155,7 +155,7 @@ async fn on_battery_new_items_wait_but_voice_notes_and_read_now_go() {
     );
     assert_eq!(w.reader.tick().await, Step::Idle, "the note still waits");
 
-    w.reader.read_now(Some(&note));
+    w.reader.read_now(Some(&note)).await;
     let step = w.reader.tick().await;
     assert!(matches!(step, Step::Read { ref item, outcome: Outcome::Understood } if *item == note));
 }
@@ -166,7 +166,7 @@ async fn read_now_for_everything_ignores_power_until_the_queue_is_empty() {
     w.host.on_battery(50);
     let a = keep(&w, "a note");
     let b = keep(&w, "another");
-    w.reader.read_now(None);
+    w.reader.read_now(None).await;
     read_all(&w).await;
     assert_eq!(status(&w, &a), ItemStatus::Understood);
     assert_eq!(status(&w, &b), ItemStatus::Understood);
@@ -188,15 +188,14 @@ async fn unknown_power_counts_as_mains() {
 #[tokio::test]
 async fn read_now_goes_before_new_items() {
     let w = text_world("x");
-    let first = keep(&w, "first");
+    keep(&w, "first");
     let second = keep(&w, "second");
-    w.reader.read_now(Some(&second));
+    w.reader.read_now(Some(&second)).await;
     let step = w.reader.tick().await;
     assert!(
         matches!(step, Step::Read { ref item, .. } if *item == second),
         "{step:?}"
     );
-    let _ = first;
 }
 
 // ---- failures ----
@@ -545,7 +544,6 @@ async fn re_reads_wait_for_everything_else_and_for_mains() {
             .all()
             .contains(&Event::NoticeCleared(NoticeCode::ReReading))
     );
-    let _ = Predicate::Knows;
 }
 
 #[tokio::test]
@@ -556,7 +554,6 @@ async fn a_re_read_that_fails_never_takes_away_what_was_understood() {
     w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
     for err in [
         MindError::Unsupported("x".into()),
-        MindError::TooLong,
         MindError::Failed("boom".into()),
     ] {
         w.mind.fail_next("extract", err);
@@ -576,4 +573,170 @@ async fn a_re_read_that_fails_never_takes_away_what_was_understood() {
         assert_eq!(w.engine.rereads(10).unwrap().len(), 1, "still marked");
     }
     assert_eq!(w.engine.memories(Default::default()).unwrap().len(), 1);
+}
+
+// ---- forgetting, re-read failures, commits ----
+
+#[tokio::test]
+async fn a_forget_during_a_re_read_does_not_bring_the_memory_back() {
+    let w = text_world("Gran lives in Leeds");
+    let id = keep(&w, "Gran lives in Leeds");
+    w.reader.tick().await;
+    let mem = w.engine.memories(Default::default()).unwrap()[0].id.clone();
+    w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
+    let gate = w.mind.gate("extract");
+    let reader = w.reader.clone();
+    let task = tokio::spawn(async move { reader.tick().await });
+    gate.entered().await;
+    let preview = w
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    w.engine.forget(&preview.token).unwrap();
+    gate.open();
+    let step = task.await.unwrap();
+    assert!(
+        matches!(
+            step,
+            Step::Read {
+                outcome: Outcome::Lost,
+                ..
+            }
+        ),
+        "{step:?}"
+    );
+    assert!(w.engine.memories(Default::default()).unwrap().is_empty());
+    // Not stuck as being read, and not queued again.
+    assert_eq!(status(&w, &id), ItemStatus::Understood);
+    assert!(w.engine.rereads(10).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_later_re_read_does_not_say_the_forgotten_thing_again() {
+    let w = text_world("Gran lives in Leeds");
+    let id = keep(&w, "Gran lives in Leeds");
+    w.reader.tick().await;
+    let mem = w.engine.memories(Default::default()).unwrap()[0].id.clone();
+    let preview = w
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    w.engine.forget(&preview.token).unwrap();
+    w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
+    let step = w.reader.tick().await;
+    assert!(
+        matches!(
+            step,
+            Step::Read {
+                outcome: Outcome::Understood,
+                ..
+            }
+        ),
+        "{step:?}"
+    );
+    assert!(w.engine.memories(Default::default()).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_failing_re_read_waits_ten_minutes_and_is_given_up_after_three() {
+    let w = text_world("Gran lives in Leeds");
+    let id = keep(&w, "Gran lives in Leeds");
+    w.reader.tick().await;
+    w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
+    w.mind
+        .fail_always("extract", MindError::Failed("boom".into()));
+    for round in 1..=3 {
+        let step = w.reader.tick().await;
+        assert!(
+            matches!(
+                step,
+                Step::Read {
+                    outcome: Outcome::Returned,
+                    ..
+                }
+            ),
+            "{round} {step:?}"
+        );
+        // Thirty seconds later it is still left alone.
+        let now = w.clock.now();
+        w.clock.set(now + jiff::SignedDuration::from_secs(40));
+        assert_eq!(w.reader.tick().await, Step::Idle, "round {round}");
+        w.clock.set(now + jiff::SignedDuration::from_mins(11));
+    }
+    assert!(w.engine.rereads(10).unwrap().is_empty(), "given up");
+    assert_eq!(status(&w, &id), ItemStatus::Understood);
+    assert_eq!(w.reader.tick().await, Step::Idle);
+    assert!(
+        w.events
+            .all()
+            .contains(&Event::NoticeCleared(NoticeCode::ReReading))
+    );
+}
+
+#[tokio::test]
+async fn a_re_read_that_is_too_long_leaves_a_partly_understood_scan_alone() {
+    let w = world(FakeMind::new());
+    let (scan, name) = keep_pdf(&w, b"%PDF scan");
+    let blank = FakeMind::new().with_understanding(
+        &name,
+        Understanding {
+            title: "Gas bill".into(),
+            ..Default::default()
+        },
+    );
+    *w.slot.write().unwrap() = Some(Arc::new(blank));
+    w.reader.tick().await;
+    assert_eq!(status(&w, &scan), ItemStatus::PartlyUnderstood);
+    w.engine.queue_reread(std::slice::from_ref(&scan)).unwrap();
+    let long = FakeMind::new().with_understanding(
+        &name,
+        Understanding {
+            title: "Gas bill".into(),
+            text: "pages and pages".into(),
+            pages: Some(150),
+            ..Default::default()
+        },
+    );
+    *w.slot.write().unwrap() = Some(Arc::new(long));
+    let step = w.reader.tick().await;
+    assert!(
+        matches!(
+            step,
+            Step::Read {
+                outcome: Outcome::Returned,
+                ..
+            }
+        ),
+        "{step:?}"
+    );
+    assert_eq!(status(&w, &scan), ItemStatus::PartlyUnderstood);
+}
+
+#[tokio::test]
+async fn an_ask_after_the_write_committed_reports_the_item_as_understood() {
+    let w = text_world("Gran lives in Leeds");
+    let id = keep(&w, "Gran lives in Leeds");
+    // The memories are written; only the vectors are left when the ask arrives.
+    let gate = w.mind.gate("embed");
+    let reader = w.reader.clone();
+    let task = tokio::spawn(async move { reader.tick().await });
+    gate.entered().await;
+    assert_eq!(status(&w, &id), ItemStatus::Understood);
+    let _ask = w.reader.ask_begin();
+    let step = task.await.unwrap();
+    assert!(
+        matches!(
+            step,
+            Step::Read {
+                outcome: Outcome::Understood,
+                ..
+            }
+        ),
+        "{step:?}"
+    );
+    assert_eq!(w.engine.memories(Default::default()).unwrap().len(), 1);
+    assert_eq!(
+        w.events.statuses(&id),
+        [ItemStatus::Reading, ItemStatus::Understood]
+    );
 }

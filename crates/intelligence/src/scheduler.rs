@@ -238,7 +238,7 @@ impl Scheduler {
                 .eng(move |e| Ok(e.page(Some(coming.date))?.is_some()))
                 .await
                 .unwrap_or(true);
-            if saved {
+            if saved || !self.anything_to_write(now).await {
                 return SchedStep::Idle;
             }
             // Unknown idle time counts as away: this is the small hours.
@@ -278,23 +278,33 @@ impl Scheduler {
     /// No page dated on or after `target` is saved, and there is something to write one about.
     async fn page_missed(&self, target: jiff::civil::Date, hm: (i8, i8)) -> bool {
         let tz = self.inner.clock.tz();
+        let Ok(by) = nocturne_engine::day::page_instant(target, hm, &tz) else {
+            return false;
+        };
+        let saved = self
+            .eng(move |e| Ok(e.pages()?.first().map(|p| p.date.clone())))
+            .await
+            .unwrap_or(None);
+        if saved.is_some_and(|d| d >= target.to_string()) {
+            return false;
+        }
+        self.anything_to_write(by).await
+    }
+
+    /// Once a page exists, any later page is worth writing. The very first waits for something
+    /// kept before `before`: a fresh install writes no empty page.
+    async fn anything_to_write(&self, before: Timestamp) -> bool {
         self.eng(move |e| {
-            let pages = e.pages()?;
-            if pages.first().is_some_and(|p| p.date >= target.to_string()) {
-                return Ok(false);
-            }
-            if !pages.is_empty() {
+            if !e.pages()?.is_empty() {
                 return Ok(true);
             }
-            // The very first page waits for something kept before that page time.
-            let by = nocturne_engine::day::page_instant(target, hm, &tz)?;
             Ok(e.items(ItemFilter {
                 since: None,
                 status: None,
                 limit: None,
             })?
             .iter()
-            .any(|i| i.kept_at.parse::<Timestamp>().is_ok_and(|k| k < by)))
+            .any(|i| i.kept_at.parse::<Timestamp>().is_ok_and(|k| k < before)))
         })
         .await
         .unwrap_or(false)

@@ -37,10 +37,12 @@ const BACKOFF: [Duration; 4] = [
     Duration::from_secs(120),
     Duration::from_secs(300),
 ];
-/// An item the mind failed on waits this long (times the failures so far) before another try.
+/// An item the mind failed on waits this long before another try.
 const FAILURE_COOLDOWN: Duration = Duration::from_secs(30);
 /// A re-read that failed is left alone this long.
 const REREAD_COOLDOWN: jiff::SignedDuration = jiff::SignedDuration::from_mins(10);
+/// A re-read that has failed this many times is given up on: its mark is cleared.
+const REREAD_FAILURES: u32 = 3;
 /// How long the run loop sleeps when there is nothing to do.
 const IDLE_POLL: Duration = Duration::from_secs(30);
 /// Known entities offered to the extractor.
@@ -151,6 +153,10 @@ impl DrainHandle {
         }
     }
 
+    fn ids(&self) -> Vec<String> {
+        self.lock().remaining.iter().cloned().collect()
+    }
+
     /// Nothing left to read.
     pub fn is_done(&self) -> bool {
         self.lock().remaining.is_empty()
@@ -198,6 +204,7 @@ struct State {
     backoff_until: Option<Timestamp>,
     unavailable_since: Option<Timestamp>,
     cooldown: HashMap<String, Timestamp>,
+    reread_failures: HashMap<String, u32>,
     rereading: bool,
 }
 
@@ -305,11 +312,12 @@ impl Reader {
 
     /// The person pressed Read now on one item, or on everything waiting (`None`). Bypasses the
     /// power policy.
-    pub fn read_now(&self, item: Option<&str>) {
+    pub async fn read_now(&self, item: Option<&str>) {
         match item {
             Some(id) => {
                 // Moves it to the front of the queue as well.
-                let _ = self.inner.engine.prioritize(id);
+                let i = id.to_string();
+                let _ = self.eng(move |e| e.prioritize(&i)).await;
                 self.state().read_now.insert(id.to_string());
             }
             None => self.state().read_all_now = true,
@@ -338,6 +346,38 @@ impl Reader {
         }
     }
 
+    /// Whether an ask holds the mind.
+    pub fn is_asking(&self) -> bool {
+        self.state().asks > 0
+    }
+
+    /// Forget the drain's items that are gone (undone, forgotten, deleted) or no longer
+    /// waiting, so the tidy never waits for what cannot come back.
+    pub async fn prune_drain(&self, handle: &DrainHandle) {
+        let ids = handle.ids();
+        if ids.is_empty() {
+            return;
+        }
+        let gone = self
+            .eng(move |e| {
+                let mut gone = Vec::new();
+                for id in ids {
+                    match e.get_item(&id) {
+                        Ok(v) if matches!(v.status, ItemStatus::Kept | ItemStatus::Reading) => {}
+                        Ok(_) | Err(EngineError::NotFound(_)) => gone.push(id),
+                        Err(_) => {}
+                    }
+                }
+                Ok(gone)
+            })
+            .await
+            .unwrap_or_default();
+        let mut st = handle.lock();
+        for id in gone {
+            st.remaining.remove(&id);
+        }
+    }
+
     /// Since when the mind has been unavailable (absent, or failing), if it is.
     pub fn unavailable_since(&self) -> Option<Timestamp> {
         self.state().unavailable_since
@@ -357,19 +397,17 @@ impl Reader {
                         ids.push(item.id);
                     }
                 }
-                for status in [ItemStatus::Reading] {
-                    for item in e.items(nocturne_contract::ItemFilter {
-                        since: None,
-                        status: Some(status),
-                        limit: None,
-                    })? {
-                        if item
-                            .kept_at
-                            .parse::<Timestamp>()
-                            .is_ok_and(|kept| kept < cutoff)
-                        {
-                            ids.push(item.id);
-                        }
+                for item in e.items(nocturne_contract::ItemFilter {
+                    since: None,
+                    status: Some(ItemStatus::Reading),
+                    limit: None,
+                })? {
+                    if item
+                        .kept_at
+                        .parse::<Timestamp>()
+                        .is_ok_and(|kept| kept < cutoff)
+                    {
+                        ids.push(item.id);
                     }
                 }
                 Ok(ids)
@@ -601,8 +639,11 @@ impl Reader {
             tokio::select! {
                 biased;
                 _ = preempt.changed() => {
-                    self.give_back(&id, &lease).await;
-                    return Outcome::Returned;
+                    if self.give_back(&id, &lease).await {
+                        return Outcome::Returned;
+                    }
+                    // Too late: the write had already committed. Report what it made.
+                    return self.committed_outcome(&id).await;
                 }
                 r = &mut work => break r,
                 _ = renew.tick() => {
@@ -623,12 +664,56 @@ impl Reader {
         }
     }
 
-    async fn give_back(&self, id: &str, lease: &str) {
+    /// Give the lease back uncounted. False when there was nothing to give back (the read had
+    /// already finished, or the item is gone).
+    async fn give_back(&self, id: &str, lease: &str) -> bool {
         let (i, l) = (id.to_string(), lease.to_string());
         match self.eng(move |e| e.release_lease(&i, &l, false)).await {
-            Ok(()) | Err(EngineError::LeaseLost) | Err(EngineError::NotFound(_)) => {}
-            Err(e) => tracing::warn!("could not give a lease back: {e}"),
+            Ok(()) => true,
+            Err(EngineError::LeaseLost) | Err(EngineError::NotFound(_)) => false,
+            Err(e) => {
+                tracing::warn!("could not give a lease back: {e}");
+                false
+            }
         }
+    }
+
+    /// What an item became when the read finished before it could be stopped.
+    async fn committed_outcome(&self, id: &str) -> Outcome {
+        let i = id.to_string();
+        match self.eng(move |e| e.get_item(&i)).await {
+            Ok(v) => match v.status {
+                ItemStatus::Understood | ItemStatus::NeedsYou | ItemStatus::Unconfirmed => {
+                    Outcome::Understood
+                }
+                ItemStatus::PartlyUnderstood => Outcome::PartlyUnderstood,
+                ItemStatus::CouldntRead => {
+                    Outcome::CouldntRead(v.reason.unwrap_or(CouldntReadReason::Unsupported))
+                }
+                ItemStatus::Kept | ItemStatus::Reading => Outcome::Lost,
+            },
+            Err(_) => Outcome::Lost,
+        }
+    }
+
+    /// A re-read went wrong: the item stays as it was. After a few failures the mark is
+    /// cleared and the item is left alone.
+    async fn reread_failed(&self, id: &str, now: Timestamp) -> Outcome {
+        let failures = {
+            let mut st = self.state();
+            st.cooldown.insert(id.to_string(), now + REREAD_COOLDOWN);
+            let n = st.reread_failures.entry(id.to_string()).or_insert(0);
+            *n += 1;
+            *n
+        };
+        if failures >= REREAD_FAILURES {
+            let i = vec![id.to_string()];
+            let _ = self.eng(move |e| e.clear_reread(&i)).await;
+            let mut st = self.state();
+            st.reread_failures.remove(id);
+            st.cooldown.remove(id);
+        }
+        Outcome::Returned
     }
 
     /// The mind (or the engine) stopped the read; decide what that means for the item.
@@ -645,7 +730,11 @@ impl Reader {
             }
         };
         match abort {
-            Abort::Engine(EngineError::LeaseLost) | Abort::Engine(EngineError::NotFound(_)) => {
+            Abort::Engine(EngineError::NotFound(_)) => Outcome::Lost,
+            // A forget or an undo since the read began: nothing was written. Hand the lease
+            // back so the item is not stuck as being read.
+            Abort::Engine(EngineError::LeaseLost) => {
+                self.give_back(id, lease).await;
                 Outcome::Lost
             }
             Abort::Engine(e) => {
@@ -676,10 +765,7 @@ impl Reader {
                 | MindError::Failed(_),
             ) if reread => {
                 self.give_back(id, lease).await;
-                self.state()
-                    .cooldown
-                    .insert(id.to_string(), now + REREAD_COOLDOWN);
-                Outcome::Returned
+                self.reread_failed(id, now).await
             }
             Abort::Mind(MindError::TooLong) => fail(CouldntReadReason::TooLong).await,
             Abort::Mind(MindError::Unsupported(_)) => fail(CouldntReadReason::Unsupported).await,
@@ -705,6 +791,7 @@ impl Reader {
     async fn settle(&self, id: &str, outcome: Outcome, took: Duration, class: u8) {
         let ok = matches!(outcome, Outcome::Understood | Outcome::PartlyUnderstood);
         if ok {
+            self.state().reread_failures.remove(id);
             self.mark_available();
             self.inner.items_read.fetch_add(1, Ordering::SeqCst);
         }
@@ -717,11 +804,6 @@ impl Reader {
             let mut st = self.state();
             if left_queue {
                 st.read_now.remove(id);
-            }
-            if class == CLASS_REREAD && outcome == Outcome::Returned {
-                // Do not pick the same re-read again at once.
-                let until = self.now() + jiff::SignedDuration::from_secs(30);
-                st.cooldown.insert(id.to_string(), until);
             }
             let announce = class == CLASS_REREAD && !st.rereading;
             if announce {
@@ -737,9 +819,7 @@ impl Reader {
         if left_queue && let Some(d) = drain {
             d.settle(id, ok.then_some(took), 0);
         }
-        if let Some(view) = &view
-            && outcome != Outcome::Lost
-        {
+        if let Some(view) = &view {
             self.inner.events.item_changed(view);
         }
         if outcome == Outcome::GaveUp {
@@ -787,7 +867,7 @@ impl Reader {
                     let (i, l) = (id.clone(), lease.clone());
                     let recorded = self.eng(move |e| e.record_transcript(&i, &l, t)).await?;
                     if recorded == RecordOutcome::TooLong {
-                        return Ok(Outcome::CouldntRead(CouldntReadReason::TooLong));
+                        return self.too_long(&id, &lease, reread).await;
                     }
                     if body.trim().is_empty() {
                         return self
@@ -828,7 +908,7 @@ impl Reader {
                     let (i, l) = (id.clone(), lease.clone());
                     let recorded = self.eng(move |e| e.record_understanding(&i, &l, u)).await?;
                     if recorded == RecordOutcome::TooLong {
-                        return Ok(Outcome::CouldntRead(CouldntReadReason::TooLong));
+                        return self.too_long(&id, &lease, reread).await;
                     }
                     text = Some(body);
                 }
@@ -878,6 +958,16 @@ impl Reader {
         Ok(Outcome::Understood)
     }
 
+    /// The engine refused the reading as too long. For a first reading it has marked the item;
+    /// for a re-read it has left the item alone and the lease goes back.
+    async fn too_long(&self, id: &str, lease: &str, reread: bool) -> Result<Outcome, Abort> {
+        if reread {
+            self.give_back(id, lease).await;
+            return Ok(self.reread_failed(id, self.now()).await);
+        }
+        Ok(Outcome::CouldntRead(CouldntReadReason::TooLong))
+    }
+
     async fn fail(
         &self,
         id: &str,
@@ -887,7 +977,7 @@ impl Reader {
     ) -> Result<Outcome, Abort> {
         if reread {
             self.give_back(id, lease).await;
-            return Ok(Outcome::Returned);
+            return Ok(self.reread_failed(id, self.now()).await);
         }
         let (i, l) = (id.to_string(), lease.to_string());
         self.eng(move |e| e.fail_item(&i, &l, reason)).await?;

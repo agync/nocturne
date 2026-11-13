@@ -19,15 +19,15 @@ impl<T> Default for Slot<T> {
 }
 
 impl<T: Copy> Slot<T> {
-    fn get(&mut self, read: impl FnOnce() -> Option<T>) -> Option<T> {
-        if let Some(at) = self.read_at
-            && at.elapsed() < CACHE_TTL
-        {
-            return self.value;
-        }
-        self.value = read();
+    fn fresh(&self) -> Option<Option<T>> {
+        self.read_at
+            .filter(|at| at.elapsed() < CACHE_TTL)
+            .map(|_| self.value)
+    }
+
+    fn store(&mut self, value: Option<T>) {
+        self.value = value;
         self.read_at = Some(Instant::now());
-        self.value
     }
 }
 
@@ -61,19 +61,34 @@ impl SystemHost {
     fn cache(&self) -> std::sync::MutexGuard<'_, Cache> {
         self.cache.lock().unwrap_or_else(|e| e.into_inner())
     }
+
+    /// The cached value, or a fresh read taken with the cache unlocked, so a slow bus never
+    /// holds up the other questions.
+    fn cached<T: Copy>(
+        &self,
+        slot: fn(&mut Cache) -> &mut Slot<T>,
+        read: fn() -> Option<T>,
+    ) -> Option<T> {
+        if let Some(v) = slot(&mut self.cache()).fresh() {
+            return v;
+        }
+        let value = read();
+        slot(&mut self.cache()).store(value);
+        value
+    }
 }
 
 impl Host for SystemHost {
     fn on_ac_power(&self) -> Option<bool> {
-        self.cache().ac.get(platform::on_ac_power)
+        self.cached(|c| &mut c.ac, platform::on_ac_power)
     }
 
     fn battery_percent(&self) -> Option<u8> {
-        self.cache().percent.get(platform::battery_percent)
+        self.cached(|c| &mut c.percent, platform::battery_percent)
     }
 
     fn idle_for(&self) -> Option<Duration> {
-        self.cache().idle.get(platform::idle_for)
+        self.cached(|c| &mut c.idle, platform::idle_for)
     }
 
     fn inhibit_sleep(&self) -> Option<SleepGuard> {

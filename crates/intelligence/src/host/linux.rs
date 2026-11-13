@@ -3,9 +3,9 @@
 //! API with a one second limit per call; every failure is `None`.
 
 use std::path::Path;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::sync::{Arc, Mutex, mpsc};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder;
@@ -16,54 +16,122 @@ use super::{SleepGuard, idle_from_hint};
 const CALL_LIMIT: Duration = Duration::from_secs(1);
 const POWER_SUPPLY: &str = "/sys/class/power_supply";
 
-fn system_bus() -> Option<Connection> {
-    Builder::system()
-        .ok()?
-        .method_timeout(CALL_LIMIT)
-        .build()
-        .ok()
+/// One connection per bus, made once and shared. Connecting is bounded (a stuck bus must not
+/// hold a probe), and a failed attempt is not repeated for half a minute.
+struct Bus {
+    conn: Mutex<Option<Connection>>,
+    retry_after: Mutex<Option<Instant>>,
+    session: bool,
 }
 
-fn session_bus() -> Option<Connection> {
-    Builder::session()
-        .ok()?
-        .method_timeout(CALL_LIMIT)
-        .build()
-        .ok()
-}
+static SYSTEM: Bus = Bus::new(false);
+static SESSION: Bus = Bus::new(true);
 
-/// `org.freedesktop.DBus.Properties.Get`, decoded to `T`.
-fn property<T: TryFrom<OwnedValue>>(
-    conn: &Connection,
-    dest: &str,
-    path: &str,
-    iface: &str,
-    name: &str,
-) -> Option<T> {
-    let reply = conn
-        .call_method(
-            Some(dest),
+const RETRY_AFTER: Duration = Duration::from_secs(30);
+
+impl Bus {
+    const fn new(session: bool) -> Bus {
+        Bus {
+            conn: Mutex::new(None),
+            retry_after: Mutex::new(None),
+            session,
+        }
+    }
+
+    fn get(&self) -> Option<Connection> {
+        let mut conn = self.conn.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(c) = conn.as_ref() {
+            return Some(c.clone());
+        }
+        let mut retry = self.retry_after.lock().unwrap_or_else(|e| e.into_inner());
+        if retry.is_some_and(|t| Instant::now() < t) {
+            return None;
+        }
+        let session = self.session;
+        let (tx, rx) = mpsc::channel();
+        let spawned = std::thread::Builder::new()
+            .name("nocturne-dbus-connect".into())
+            .spawn(move || {
+                let builder = if session {
+                    Builder::session()
+                } else {
+                    Builder::system()
+                };
+                let made = builder
+                    .ok()
+                    .map(|b| b.method_timeout(CALL_LIMIT))
+                    .and_then(|b| b.build().ok());
+                let _ = tx.send(made);
+            });
+        let made = spawned
+            .ok()
+            .and_then(|_| rx.recv_timeout(CALL_LIMIT).ok())
+            .flatten();
+        match made {
+            Some(c) => {
+                *retry = None;
+                *conn = Some(c.clone());
+                Some(c)
+            }
+            None => {
+                *retry = Some(Instant::now() + RETRY_AFTER);
+                None
+            }
+        }
+    }
+
+    /// The connection broke: make a new one next time.
+    fn reset(&self) {
+        *self.conn.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    }
+
+    fn call<B>(
+        &self,
+        dest: &str,
+        path: &str,
+        iface: &str,
+        method: &str,
+        body: &B,
+    ) -> Option<zbus::Message>
+    where
+        B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
+    {
+        let conn = self.get()?;
+        match conn.call_method(Some(dest), path, Some(iface), method, body) {
+            Ok(reply) => Some(reply),
+            Err(zbus::Error::InputOutput(_)) => {
+                self.reset();
+                None
+            }
+            Err(_) => None,
+        }
+    }
+
+    /// `org.freedesktop.DBus.Properties.Get`, decoded to `T`.
+    fn property<T: TryFrom<OwnedValue>>(
+        &self,
+        dest: &str,
+        path: &str,
+        iface: &str,
+        name: &str,
+    ) -> Option<T> {
+        let reply = self.call(
+            dest,
             path,
-            Some("org.freedesktop.DBus.Properties"),
+            "org.freedesktop.DBus.Properties",
             "Get",
             &(iface, name),
-        )
-        .ok()?;
-    let value: OwnedValue = reply.body().deserialize().ok()?;
-    T::try_from(value).ok()
+        )?;
+        let value: OwnedValue = reply.body().deserialize().ok()?;
+        T::try_from(value).ok()
+    }
 }
 
 const UPOWER: &str = "org.freedesktop.UPower";
 
 pub fn on_ac_power() -> Option<bool> {
-    if let Some(conn) = system_bus()
-        && let Some(on_battery) = property::<bool>(
-            &conn,
-            UPOWER,
-            "/org/freedesktop/UPower",
-            UPOWER,
-            "OnBattery",
-        )
+    if let Some(on_battery) =
+        SYSTEM.property::<bool>(UPOWER, "/org/freedesktop/UPower", UPOWER, "OnBattery")
     {
         return Some(!on_battery);
     }
@@ -71,70 +139,64 @@ pub fn on_ac_power() -> Option<bool> {
 }
 
 pub fn battery_percent() -> Option<u8> {
-    if let Some(conn) = system_bus() {
-        let display = "/org/freedesktop/UPower/devices/DisplayDevice";
-        let device = "org.freedesktop.UPower.Device";
-        match property::<bool>(&conn, UPOWER, display, device, "IsPresent") {
-            Some(false) => return None,
-            Some(true) => {
-                if let Some(p) = property::<f64>(&conn, UPOWER, display, device, "Percentage") {
-                    return Some(p.round().clamp(0.0, 100.0) as u8);
-                }
+    let display = "/org/freedesktop/UPower/devices/DisplayDevice";
+    let device = "org.freedesktop.UPower.Device";
+    match SYSTEM.property::<bool>(UPOWER, display, device, "IsPresent") {
+        Some(false) => return None,
+        Some(true) => {
+            if let Some(p) = SYSTEM.property::<f64>(UPOWER, display, device, "Percentage") {
+                return Some(p.round().clamp(0.0, 100.0) as u8);
             }
-            None => {}
         }
+        None => {}
     }
     sysfs_percent(Path::new(POWER_SUPPLY))
 }
 
 pub fn idle_for() -> Option<Duration> {
-    if let Some(conn) = session_bus() {
-        // GNOME.
-        if let Ok(reply) = conn.call_method(
-            Some("org.gnome.Mutter.IdleMonitor"),
-            "/org/gnome/Mutter/IdleMonitor/Core",
-            Some("org.gnome.Mutter.IdleMonitor"),
-            "GetIdletime",
-            &(),
-        ) && let Ok(ms) = reply.body().deserialize::<u64>()
-        {
-            return Some(Duration::from_millis(ms));
-        }
-        // KDE and others: the session idle time, in milliseconds.
-        if let Ok(reply) = conn.call_method(
-            Some("org.freedesktop.ScreenSaver"),
-            "/org/freedesktop/ScreenSaver",
-            Some("org.freedesktop.ScreenSaver"),
-            "GetSessionIdleTime",
-            &(),
-        ) && let Ok(ms) = reply.body().deserialize::<u32>()
-        {
-            return Some(Duration::from_millis(u64::from(ms)));
-        }
+    // GNOME.
+    if let Some(reply) = SESSION.call(
+        "org.gnome.Mutter.IdleMonitor",
+        "/org/gnome/Mutter/IdleMonitor/Core",
+        "org.gnome.Mutter.IdleMonitor",
+        "GetIdletime",
+        &(),
+    ) && let Ok(ms) = reply.body().deserialize::<u64>()
+    {
+        return Some(Duration::from_millis(ms));
+    }
+    // KDE and others: the session idle time, in milliseconds.
+    if let Some(reply) = SESSION.call(
+        "org.freedesktop.ScreenSaver",
+        "/org/freedesktop/ScreenSaver",
+        "org.freedesktop.ScreenSaver",
+        "GetSessionIdleTime",
+        &(),
+    ) && let Ok(ms) = reply.body().deserialize::<u32>()
+    {
+        return Some(Duration::from_millis(u64::from(ms)));
     }
     // logind's idle hint for this session.
-    let conn = system_bus()?;
     let dest = "org.freedesktop.login1";
     let path = "/org/freedesktop/login1/session/auto";
     let iface = "org.freedesktop.login1.Session";
-    let hint = property::<bool>(&conn, dest, path, iface, "IdleHint")?;
-    let since = property::<u64>(&conn, dest, path, iface, "IdleSinceHint").unwrap_or(0);
+    let hint = SYSTEM.property::<bool>(dest, path, iface, "IdleHint")?;
+    let since = SYSTEM
+        .property::<u64>(dest, path, iface, "IdleSinceHint")
+        .unwrap_or(0);
     let now = SystemTime::now().duration_since(UNIX_EPOCH).ok()?;
     Some(idle_from_hint(hint, since, now.as_micros() as u64))
 }
 
 /// logind `Inhibit("sleep", ..., "block")`: the returned descriptor holds the lock until closed.
 pub fn inhibit_sleep() -> Option<SleepGuard> {
-    let conn = system_bus()?;
-    let reply = conn
-        .call_method(
-            Some("org.freedesktop.login1"),
-            "/org/freedesktop/login1",
-            Some("org.freedesktop.login1.Manager"),
-            "Inhibit",
-            &("sleep", "Nocturne", "Writing this morning's page", "block"),
-        )
-        .ok()?;
+    let reply = SYSTEM.call(
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1",
+        "org.freedesktop.login1.Manager",
+        "Inhibit",
+        &("sleep", "Nocturne", "Writing this morning's page", "block"),
+    )?;
     let fd: OwnedFd = reply.body().deserialize().ok()?;
     Some(SleepGuard::new(fd))
 }

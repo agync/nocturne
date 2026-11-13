@@ -55,8 +55,11 @@ pub trait Host: Send + Sync {
     fn idle_for(&self) -> Option<Duration>;
     /// Keep the machine from sleeping until the guard is dropped. `None` when it cannot.
     fn inhibit_sleep(&self) -> Option<SleepGuard>;
-    /// How many times the machine has woken from sleep since the host started watching. A
-    /// platform without the signal returns 0 always (the scheduler also checks the clock).
+    /// How many times the machine has woken from sleep since the host started watching. Linux
+    /// counts logind's `PrepareForSleep(false)`. Windows has no listener yet and returns 0
+    /// always: there a wake is noticed by the wall clock running ahead of the monotonic one
+    /// (if the monotonic clock stops during sleep) and otherwise by the five-minute check for
+    /// a missed page. Not verified on a real machine.
     fn resume_count(&self) -> u64 {
         0
     }

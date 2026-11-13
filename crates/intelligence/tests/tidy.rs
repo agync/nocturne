@@ -574,3 +574,140 @@ async fn pausing_lets_the_machine_sleep() {
     assert_eq!(w.scheduler.tick().await, SchedStep::Paused);
     assert_eq!(w.host.inhibitors(), 0);
 }
+
+// ---- a drain that cannot finish, a fresh install, a slow mind ----
+
+/// A catch-up for a note kept just before the page time, started just after it.
+async fn catch_up_with_a_fresh_note() -> (World, String) {
+    let w = world_at("2026-11-13T06:58:00Z", mind());
+    w.host.set_idle(Some(Duration::from_secs(30)));
+    let note = keep(&w, TEXT);
+    at(&w, "2026-11-13T06:59:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    at(&w, "2026-11-13T07:05:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::CatchUp)
+    );
+    (w, note)
+}
+
+#[tokio::test]
+async fn an_item_undone_during_a_catch_up_does_not_hold_the_tidy_forever() {
+    let (w, note) = catch_up_with_a_fresh_note().await;
+    assert_eq!(w.host.inhibitors(), 0);
+    w.engine.unkeep(&note).unwrap();
+    let step = w.scheduler.tick().await;
+    assert!(
+        matches!(
+            step,
+            SchedStep::Tidy(TidyStep::Finished(_) | TidyStep::Skipped)
+        ),
+        "{step:?}"
+    );
+    assert!(!w.tidy.running().await);
+    assert_eq!(w.host.inhibitors(), 0);
+}
+
+#[tokio::test]
+async fn delete_everything_during_a_catch_up_ends_the_tidy_too() {
+    let (w, _) = catch_up_with_a_fresh_note().await;
+    w.scheduler.tick().await;
+    assert_eq!(w.host.inhibitors(), 1);
+    w.engine
+        .delete_everything(nocturne_engine::DELETE_PHRASE)
+        .unwrap();
+    let step = w.scheduler.tick().await;
+    assert!(
+        matches!(
+            step,
+            SchedStep::Tidy(TidyStep::Finished(_) | TidyStep::Skipped)
+        ),
+        "{step:?}"
+    );
+    assert!(!w.tidy.running().await);
+    assert_eq!(w.host.inhibitors(), 0);
+}
+
+#[tokio::test]
+async fn a_catch_up_saves_its_page_after_two_hours_whatever_is_unread() {
+    let (w, note) = catch_up_with_a_fresh_note().await;
+    let gate = w.mind.gate("extract");
+    let reader = w.reader.clone();
+    let reading = tokio::spawn(async move { reader.tick().await });
+    gate.entered().await;
+    at(&w, "2026-11-13T08:59:00Z");
+    assert!(matches!(
+        w.scheduler.tick().await,
+        SchedStep::Tidy(TidyStep::Running { .. })
+    ));
+    at(&w, "2026-11-13T09:05:00Z");
+    let step = w.scheduler.tick().await;
+    assert!(
+        matches!(step, SchedStep::Tidy(TidyStep::Finished(_))),
+        "{step:?}"
+    );
+    assert_eq!(
+        w.engine
+            .page(Some(date("2026-11-13")))
+            .unwrap()
+            .unwrap()
+            .pending,
+        1
+    );
+    assert_eq!(status(&w, &note), ItemStatus::Reading);
+    gate.open();
+    reading.await.unwrap();
+}
+
+#[tokio::test]
+async fn a_fresh_install_writes_no_page_overnight_until_something_was_kept() {
+    let w = world_at("2026-11-13T03:00:00Z", mind());
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    at(&w, "2026-11-13T03:10:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert!(w.engine.pages().unwrap().is_empty());
+    assert!(w.events.pages().is_empty());
+
+    // The same night with a note kept the evening before does write one.
+    let w = world_at("2026-11-12T21:00:00Z", mind());
+    keep(&w, TEXT);
+    at(&w, "2026-11-13T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+}
+
+#[tokio::test]
+async fn a_slow_mind_filling_in_vectors_does_not_freeze_pause_or_status() {
+    let (w, note) = world_with_note("2026-11-13T02:00:00Z", "2026-11-13T03:00:00Z");
+    // The note is read but its vector is not stored: the tidy will fill it in.
+    w.mind.fail_next("embed", MindError::Failed("later".into()));
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    read_all(&w).await;
+    assert_eq!(status(&w, &note), ItemStatus::Understood);
+    assert_eq!(w.engine.memories_without_embedding(10).unwrap().len(), 1);
+
+    let gate = w.mind.gate("embed");
+    let scheduler = w.scheduler.clone();
+    let finishing = tokio::spawn(async move { scheduler.tick().await });
+    gate.entered().await;
+    // The page is being written, the mind is slow: pausing and asking still answer at once.
+    let running = tokio::time::timeout(Duration::from_secs(2), w.tidy.running()).await;
+    assert_eq!(running, Ok(true));
+    w.scheduler
+        .set_paused_until(Some("2026-11-13T04:00:00Z".parse::<Timestamp>().unwrap()));
+    let step = tokio::time::timeout(Duration::from_secs(2), w.scheduler.tick()).await;
+    assert_eq!(step, Ok(SchedStep::Paused));
+    gate.open();
+    let step = finishing.await.unwrap();
+    assert!(
+        matches!(step, SchedStep::Tidy(TidyStep::Finished(_))),
+        "{step:?}"
+    );
+    assert!(w.engine.memories_without_embedding(10).unwrap().is_empty());
+}

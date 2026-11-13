@@ -27,9 +27,14 @@ use crate::{MindSlot, current_mind};
 pub const LOW_BATTERY: u8 = 40;
 /// How long the mind may be unavailable before the page is written without what is unread.
 pub const UNAVAILABLE_LIMIT: Duration = Duration::from_secs(20 * 60);
+/// A tidy with no page time ahead (a catch-up) saves its page after this long at the latest.
+pub const CATCH_UP_LIMIT: Duration = Duration::from_secs(2 * 60 * 60);
 /// The headline gets this long.
 const HEADLINE_LIMIT: Duration = Duration::from_secs(60);
 const BACKFILL_CHUNK: usize = 200;
+/// Filling in missing vectors gets this long in all, and each call this long.
+const BACKFILL_LIMIT: Duration = Duration::from_secs(3 * 60);
+const EMBED_LIMIT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TidyKind {
@@ -62,8 +67,9 @@ struct Run {
     started: Timestamp,
     /// The one end the page is composed and saved to.
     end: Timestamp,
-    /// The page time, when it is still ahead: the page is saved by then whatever is unread.
-    deadline: Option<Timestamp>,
+    /// The page is saved by then whatever is unread: the page time when it is still ahead,
+    /// otherwise a fixed time after the start.
+    deadline: Timestamp,
     drain: DrainHandle,
     guard: Option<SleepGuard>,
     paused: bool,
@@ -92,6 +98,8 @@ struct Inner {
     clock: Arc<dyn Clock>,
     events: Arc<dyn Events>,
     slots: Mutex<Slots>,
+    /// A page is being written (the lock is not held meanwhile, so pause and status still work).
+    finishing: AtomicBool,
     anyway: AtomicBool,
     progress: watch::Sender<Option<TidyProgress>>,
 }
@@ -120,6 +128,7 @@ impl Tidy {
                 clock,
                 events,
                 slots: Mutex::new(Slots::default()),
+                finishing: AtomicBool::new(false),
                 anyway: AtomicBool::new(false),
                 progress: watch::channel(None).0,
             }),
@@ -151,7 +160,7 @@ impl Tidy {
 
     /// Whether a tidy is running.
     pub async fn running(&self) -> bool {
-        self.inner.slots.lock().await.run.is_some()
+        self.inner.finishing.load(Ordering::SeqCst) || self.inner.slots.lock().await.run.is_some()
     }
 
     fn now(&self) -> Timestamp {
@@ -207,7 +216,11 @@ impl Tidy {
             date,
             started,
             end,
-            deadline: (instant > started).then_some(instant),
+            deadline: if instant > started {
+                instant
+            } else {
+                started + SignedDuration::try_from(CATCH_UP_LIMIT).unwrap_or_default()
+            },
             drain,
             guard: None,
             paused: false,
@@ -228,7 +241,14 @@ impl Tidy {
     pub async fn tick(&self) -> TidyStep {
         let mut slots = self.inner.slots.lock().await;
         if slots.run.is_none() {
-            return self.tick_watch(&mut slots).await;
+            let watch = slots.watch.take();
+            drop(slots);
+            return self.tick_watch(watch).await;
+        }
+        // Items undone or forgotten meanwhile must not be waited for.
+        let drain = slots.run.as_ref().map(|r| r.drain.clone());
+        if let Some(drain) = drain {
+            self.inner.reader.prune_drain(&drain).await;
         }
         let now = self.now();
         let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
@@ -270,7 +290,7 @@ impl Tidy {
             .unavailable_since()
             .map(|since| since.max(run.started))
             .map(|since| now.duration_since(since));
-        let late = run.deadline.is_some_and(|d| now >= d);
+        let late = now >= run.deadline;
         let mind_gone = unavailable_for
             .is_some_and(|d| d >= SignedDuration::try_from(UNAVAILABLE_LIMIT).unwrap_or_default());
         if !(run.drain.is_done() || late || mind_gone) {
@@ -287,12 +307,20 @@ impl Tidy {
             };
         }
         let run = slots.run.take().expect("checked above");
+        self.inner.finishing.store(true, Ordering::SeqCst);
+        drop(slots);
         self.inner.reader.end_drain(&run.drain);
-        self.finish(run, &mut slots).await
+        // The mind is asked for things now; the lock is free so pausing and status still work.
+        let (step, watch) = self.finish(run).await;
+        if watch.is_some() {
+            self.inner.slots.lock().await.watch = watch;
+        }
+        self.inner.finishing.store(false, Ordering::SeqCst);
+        step
     }
 
-    /// Write and save the page.
-    async fn finish(&self, run: Run, slots: &mut Slots) -> TidyStep {
+    /// Write and save the page. The watch is set when items are still unread behind it.
+    async fn finish(&self, run: Run) -> (TidyStep, Option<Watch>) {
         let Run {
             kind,
             date,
@@ -300,10 +328,8 @@ impl Tidy {
             end,
             drain,
             guard,
-            overridden,
             ..
         } = run;
-        let _ = overridden;
         // The page is composed to `end` now; anything still unread stays counted as pending.
         let progress = drain.progress();
         drop(guard);
@@ -319,7 +345,7 @@ impl Tidy {
         // A page for this date may have been saved while the tidy ran.
         let existing = self.eng(move |e| e.page(Some(date))).await;
         if matches!(existing, Ok(Some(_))) {
-            return TidyStep::Skipped;
+            return (TidyStep::Skipped, None);
         }
 
         let decayed = self
@@ -333,7 +359,7 @@ impl Tidy {
         self.backfill_embeddings().await;
 
         let Some(mut page) = self.compose(date, end).await else {
-            return TidyStep::Skipped;
+            return (TidyStep::Skipped, None);
         };
         let finished = self.now();
         self.write_headline(&mut page).await;
@@ -346,7 +372,7 @@ impl Tidy {
         };
         if let Err(e) = saved {
             tracing::warn!("could not save the page: {e}");
-            return TidyStep::Skipped;
+            return (TidyStep::Skipped, None);
         }
         let summary = self.summary(date).await.unwrap_or(PageSummary {
             date: date.to_string(),
@@ -362,15 +388,13 @@ impl Tidy {
             let_go: decayed.let_go,
         };
         let _ = self.eng(move |e| e.record_tidy(report)).await;
-        if pending > 0 {
-            slots.watch = Some(Watch {
-                date,
-                end,
-                tidied_from: started,
-            });
-        }
+        let watch = (pending > 0).then_some(Watch {
+            date,
+            end,
+            tidied_from: started,
+        });
         self.inner.events.page_ready(summary.clone());
-        TidyStep::Finished(summary)
+        (TidyStep::Finished(summary), watch)
     }
 
     async fn compose(&self, date: Date, end: Timestamp) -> Option<PageView> {
@@ -409,12 +433,20 @@ impl Tidy {
         }
     }
 
-    /// Vectors for memories that have none, newest first.
+    /// Vectors for memories that have none, newest first. Bounded in time, and it gives way to
+    /// an ask: a stuck mind must not hold up the page.
     async fn backfill_embeddings(&self) {
+        let _ = tokio::time::timeout(BACKFILL_LIMIT, self.backfill_loop()).await;
+    }
+
+    async fn backfill_loop(&self) {
         let Some(mind) = current_mind(&self.inner.slot) else {
             return;
         };
         loop {
+            if self.inner.reader.is_asking() {
+                return;
+            }
             let Ok(rows) = self
                 .eng(|e| e.memories_without_embedding(BACKFILL_CHUNK))
                 .await
@@ -425,8 +457,8 @@ impl Tidy {
                 return;
             }
             let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
-            match mind.embed(&texts).await {
-                Ok(vecs) if vecs.len() == rows.len() => {
+            match tokio::time::timeout(EMBED_LIMIT, mind.embed(&texts)).await {
+                Ok(Ok(vecs)) if vecs.len() == rows.len() => {
                     let n = rows.len();
                     let pairs: Vec<(String, Vec<f32>)> =
                         rows.into_iter().map(|r| r.0).zip(vecs).collect();
@@ -444,8 +476,8 @@ impl Tidy {
 
     /// With no tidy running: a saved page with unread items behind it is written again, once,
     /// when they have all been read and the person has not yet opened it.
-    async fn tick_watch(&self, slots: &mut Slots) -> TidyStep {
-        let Some(w) = slots.watch.as_ref() else {
+    async fn tick_watch(&self, watch: Option<Watch>) -> TidyStep {
+        let Some(w) = watch else {
             return TidyStep::Idle;
         };
         let (date, end, from) = (w.date, w.end, w.tidied_from);
@@ -454,14 +486,20 @@ impl Tidy {
             .await
             .unwrap_or(false);
         if !can {
-            slots.watch = None;
             return TidyStep::Idle;
         }
+        let waiting = |this: &Tidy, w: Watch| {
+            let this = this.clone();
+            async move {
+                this.inner.slots.lock().await.watch = Some(w);
+                TidyStep::Idle
+            }
+        };
         let Some(mut page) = self.compose(date, end).await else {
-            return TidyStep::Idle;
+            return waiting(self, w).await;
         };
         if page.pending > 0 {
-            return TidyStep::Idle;
+            return waiting(self, w).await;
         }
         self.write_headline(&mut page).await;
         page.tidied_from = Some(from.to_string());
@@ -470,7 +508,6 @@ impl Tidy {
             let page = page.clone();
             self.eng(move |e| e.resave_page(&page, end)).await
         };
-        slots.watch = None;
         match saved {
             Ok(true) => {
                 let summary = self.summary(date).await.unwrap_or(PageSummary {
