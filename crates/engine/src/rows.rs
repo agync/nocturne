@@ -31,7 +31,9 @@ pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.
     (SELECT COUNT(*) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
      WHERE s.item_id = i.id AND (m.superseded_at IS NULL OR NOT EXISTS ( \
        SELECT 1 FROM memory_sources n WHERE n.memory_id = m.superseded_by AND n.item_id = i.id))), \
-    i.sha256, i.ext";
+    i.sha256, i.ext, \
+    (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
+     WHERE rk.item_id = i.id)";
 
 /// Builds an `ItemView` from an `ITEM_COLS` row. `originals` is the directory the stored files
 /// live in; the view names the original only while that file exists.
@@ -71,7 +73,7 @@ fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         text: row.get(14)?,
         language: row.get(15)?,
         memory_count: row.get(16)?,
-        from_device: None,
+        from_device: row.get(19)?,
     })
 }
 
@@ -90,7 +92,9 @@ pub(crate) fn get_item_view(
 
 pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Receipt>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT i.id, i.kind, i.source, i.trust, i.title, i.kept_at, i.duration_ms, s.span \
+        "SELECT i.id, i.kind, i.source, i.trust, i.title, i.kept_at, i.duration_ms, s.span, \
+                (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
+                 WHERE rk.item_id = i.id) \
          FROM memory_sources s JOIN items i ON i.id = s.item_id \
          WHERE s.memory_id = ?1 ORDER BY i.kept_at, i.id",
     )?;
@@ -107,7 +111,7 @@ pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Rec
             duration_ms: r.get(6)?,
             span,
             unconfirmed: trust == Trust::Untrusted,
-            from_device: None,
+            from_device: r.get(8)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)

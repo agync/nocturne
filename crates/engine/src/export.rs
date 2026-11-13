@@ -263,8 +263,8 @@ impl Engine {
                         view: to_view(r)?,
                         sha: r.get(17)?,
                         ext: r.get(18)?,
-                        origin: r.get(19)?,
-                        metadata: r.get(20)?,
+                        origin: r.get(20)?,
+                        metadata: r.get(21)?,
                     })
                 })?
                 .collect::<rusqlite::Result<_>>()?
