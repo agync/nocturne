@@ -154,6 +154,18 @@ export function Choosing({ view, onStarted }: Props) {
           free: formatBytes(view.freeDiskBytes),
         })}
       </p>
+      {chosen?.tier === "tiny" ? (
+        <p
+          className={styles.lead}
+          style={{
+            paddingTop: "var(--s-4)",
+            borderTop: "1px solid var(--rule)",
+            color: "var(--ink)",
+          }}
+        >
+          {t("setup.tiny.online")}
+        </p>
+      ) : null}
       <div className={styles.foot}>
         <Button
           variant="quiet"
