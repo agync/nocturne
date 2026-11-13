@@ -1,1 +1,26 @@
-{}
+{
+  "fading.title": "Fading & let go",
+  "fading.explain": "Things you haven’t used fade after 30 days and are let go after 90. Nothing here is deleted. Bring anything back with one tap.",
+  "fading.section.fading": "Fading · will be let go soon",
+  "fading.section.letGo": "Let go · {count}",
+  "fading.section.letGo.selected": "Let go · {count} selected",
+  "fading.keepIt": "Keep it",
+  "fading.keepIt.named": "Keep it: {sentence}",
+  "fading.bringBack.named": "Bring back: {sentence}",
+  "fading.bulk.bringBack": "Bring back {count}",
+  "fading.bulk.forget": "Forget {count} completely…",
+  "fading.letGo.tonight": "let go tonight",
+  "fading.letGo.days": "let go in {count, plural, one {# day} other {# days}}",
+  "fading.letGo.weeks": "let go in {count, plural, one {# week} other {# weeks}}",
+  "fading.letGo.on": "Let go {day}",
+  "fading.notUsedSince": "not used since {month}",
+  "fading.empty.all": "Nothing is fading or let go. Things you haven’t used for a while show up here first.",
+  "fading.empty.fading": "Nothing is fading right now.",
+  "fading.empty.letGo": "Nothing has been let go.",
+  "fading.loading": "Looking at what is fading…",
+  "fading.error": "I couldn’t open this list. What you kept is safe.",
+  "fading.announce.kept": "Kept. It will not fade for 30 days.",
+  "fading.announce.broughtBack": "{count, plural, one {Brought back. It will not fade for 30 days.} other {Brought back # things. They will not fade for 30 days.}}",
+  "fading.announce.forgotten": "{count, plural, one {Forgotten.} other {# things forgotten.}}",
+  "fading.announce.failed": "That didn’t work. Nothing was changed."
+}

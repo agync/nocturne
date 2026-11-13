@@ -1,0 +1,120 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, type Page, test } from "@playwright/test";
+
+const SHOTS = "test-results/screens";
+const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
+
+const ready = async (page: Page, hash = "#/fading") => {
+  await page.goto(`/${hash}`);
+  await page.getByRole("heading", { level: 1, name: "Fading & let go" }).waitFor();
+  await page.getByText("Ava’s old swimming teacher is called Jo.").waitFor();
+  await page.evaluate(() => document.fonts.ready);
+};
+
+const overflow = (page: Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+
+test.describe("screenshots of #/fading", () => {
+  test("light", async ({ page }) => {
+    await ready(page);
+    await page
+      .getByRole("checkbox", { name: "The old gym door code is 4821." })
+      .check({ force: true });
+    await page
+      .getByRole("checkbox", { name: "The pizza place on Elm Street is good." })
+      .check({ force: true });
+    await page.screenshot({ path: `${SHOTS}/fading-light.png` });
+  });
+
+  test("dark", async ({ browser }) => {
+    const context = await browser.newContext({
+      colorScheme: "dark",
+      locale: "en-GB",
+      timezoneId: "Europe/London",
+      viewport: { width: 1280, height: 800 },
+    });
+    const page = await context.newPage();
+    await ready(page);
+    await page.screenshot({ path: `${SHOTS}/fading-dark.png` });
+    await context.close();
+  });
+
+  test.describe("narrow", () => {
+    test.use({ viewport: { width: 400, height: 760 } });
+    test("400 wide", async ({ page }) => {
+      await ready(page);
+      expect(await overflow(page)).toBeLessThanOrEqual(0);
+      await page.screenshot({ path: `${SHOTS}/fading-narrow.png` });
+    });
+  });
+});
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`axe passes on fading in ${scheme}, also with a selection`, async ({ browser }) => {
+    const context = await browser.newContext({
+      colorScheme: scheme,
+      locale: "en-GB",
+      timezoneId: "Europe/London",
+    });
+    const page = await context.newPage();
+    await ready(page);
+    let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    expect(results.violations.map((v) => v.id)).toEqual([]);
+    await page
+      .getByRole("checkbox", { name: "The old gym door code is 4821." })
+      .check({ force: true });
+    results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    expect(results.violations.map((v) => v.id)).toEqual([]);
+    await context.close();
+  });
+}
+
+test.describe("using the list", () => {
+  test("Keep it works from the keyboard and focus moves to the next row", async ({ page }) => {
+    await ready(page);
+    const first = page.getByRole("button", {
+      name: "Keep it: Ava’s old swimming teacher is called Jo.",
+    });
+    await first.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Kept. It will not fade for 30 days.")).toBeVisible();
+    await expect(page.getByText("Ava’s old swimming teacher is called Jo.")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Keep it: Bin day moved to Tuesdays over summer." }),
+    ).toBeFocused();
+  });
+
+  test("rows leave at once when motion is reduced", async ({ browser }) => {
+    const context = await browser.newContext({ reducedMotion: "reduce", locale: "en-GB" });
+    const page = await context.newPage();
+    await ready(page);
+    await page
+      .getByRole("button", { name: "Bring back: The pizza place on Elm Street is good." })
+      .click();
+    await expect(page.getByText("The pizza place on Elm Street is good.")).toHaveCount(0, {
+      timeout: 300,
+    });
+    await context.close();
+  });
+
+  test("bringing back a selection counts them and removes them", async ({ page }) => {
+    await ready(page);
+    await page
+      .getByRole("checkbox", { name: "The old gym door code is 4821." })
+      .check({ force: true });
+    await page
+      .getByRole("checkbox", { name: "The pizza place on Elm Street is good." })
+      .check({ force: true });
+    await expect(page.getByRole("heading", { name: "Let go · 2 selected" })).toBeVisible();
+    await page.getByRole("button", { name: "Bring back 2" }).click();
+    await expect(page.getByText(/Brought back 2 things/)).toBeVisible();
+    await expect(page.getByText("The old gym door code is 4821.")).toHaveCount(0);
+    await expect(page.getByText("Nothing has been let go.")).toBeVisible();
+  });
+
+  test("?show=letGo lands on the let-go list", async ({ page }) => {
+    await page.goto("/#/fading?show=letGo");
+    await page.getByRole("heading", { name: /^Let go · 2/ }).waitFor();
+    await expect(page.getByRole("heading", { name: /^Let go · 2/ })).toBeFocused();
+  });
+});
