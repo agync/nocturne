@@ -3,15 +3,25 @@
 
 use std::path::Path;
 
+use nocturne_contract::Tier;
 use serde_json::{Map, Value, json};
 
 use crate::error::RuntimeError;
 
-/// Flags for every llama.cpp server the engine starts. Its defaults keep up to 8 GiB of old
-/// prompts and 32 snapshots of a conversation in memory for reuse; Nocturne's prompts change
-/// with every question, so that memory only grows. A few snapshots and a small prompt store keep
-/// the reuse that matters (the shared start of each prompt) at a fraction of the cost.
+/// llama.cpp flags for the tiers made for computers with little memory. The engine's defaults
+/// keep up to 8 GiB of old prompts and 32 snapshots of a conversation for reuse; Nocturne's
+/// prompts change with every question, so that memory only grows. A few snapshots and a small
+/// prompt store keep the reuse that matters (the shared start of each prompt) at a fraction of
+/// the cost. The larger tiers keep the engine's defaults, which were not measured with these.
 pub const LLAMACPP_ARGS: &str = "--cache-ram 256 --ctx-checkpoints 4";
+
+/// The llama.cpp flags for `tier`, empty where the engine's defaults stand.
+pub fn llamacpp_args(tier: Tier) -> &'static str {
+    match tier {
+        Tier::Tiny | Tier::Small => LLAMACPP_ARGS,
+        Tier::Large | Tier::Standard | Tier::Unsupported => "",
+    }
+}
 
 /// What Nocturne decides at each launch.
 #[derive(Debug, Clone)]
@@ -24,6 +34,8 @@ pub struct Settings<'a> {
     pub websocket_port: u16,
     pub llamacpp_backend: Option<&'a str>,
     pub whispercpp_backend: Option<&'a str>,
+    /// Flags for every llama.cpp server; empty for none (see [`llamacpp_args`]).
+    pub llamacpp_args: &'a str,
 }
 
 /// Merges `settings` into `<config_dir>/config.json`, creating it when absent.
@@ -59,7 +71,7 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
         root.insert(key.to_string(), value);
     }
     set_nested(&mut root, "telemetry", "enabled", json!(false));
-    set_nested(&mut root, "llamacpp", "args", json!(LLAMACPP_ARGS));
+    set_nested(&mut root, "llamacpp", "args", json!(settings.llamacpp_args));
     if let Some(b) = settings.llamacpp_backend {
         set_nested(&mut root, "llamacpp", "backend", json!(b));
     }
@@ -131,6 +143,7 @@ mod tests {
             websocket_port: 41234,
             llamacpp_backend: None,
             whispercpp_backend: None,
+            llamacpp_args: "",
         }
     }
 
@@ -148,7 +161,7 @@ mod tests {
         assert_eq!(v["telemetry"]["enabled"], false);
         assert_eq!(v["auto_update_models"], false);
         assert_eq!(v["models_dir"], models.to_string_lossy().as_ref());
-        assert_eq!(v["llamacpp"]["args"], LLAMACPP_ARGS);
+        assert_eq!(v["llamacpp"]["args"], "");
         assert_eq!(v["max_loaded_models"], 1);
         assert_eq!(v["ctx_size"], 8192);
     }
@@ -164,13 +177,14 @@ mod tests {
         let models = tmp.path().join("m");
         let mut s = settings(&models);
         s.llamacpp_backend = Some("vulkan");
+        s.llamacpp_args = "--cache-ram 256";
         write(tmp.path(), &s).unwrap();
         let v = read(tmp.path());
         assert_eq!(v["future_key"]["a"], 1);
         assert_eq!(v["offline"], true);
         assert_eq!(v["telemetry"]["hide_inputs"], true);
         assert_eq!(v["telemetry"]["enabled"], false);
-        assert_eq!(v["llamacpp"]["args"], LLAMACPP_ARGS);
+        assert_eq!(v["llamacpp"]["args"], "--cache-ram 256");
         assert_eq!(v["llamacpp"]["backend"], "vulkan");
     }
 
@@ -194,6 +208,14 @@ mod tests {
         assert_eq!(v["builtin.Recall"]["llamacpp_args"], "-x");
         assert_eq!(v["builtin.Other"]["ctx_size"], 8192);
         assert_eq!(v["builtin.Voice"]["evict_idle_timeout"], 60);
+    }
+
+    #[test]
+    fn only_the_small_tiers_cap_the_caches() {
+        assert_eq!(llamacpp_args(Tier::Tiny), LLAMACPP_ARGS);
+        assert_eq!(llamacpp_args(Tier::Small), LLAMACPP_ARGS);
+        assert_eq!(llamacpp_args(Tier::Standard), "");
+        assert_eq!(llamacpp_args(Tier::Large), "");
     }
 
     #[test]

@@ -274,6 +274,12 @@ async fn fill<R: Runtime>(
         return;
     }
     tracing::info!("the mind is ready ({tier:?})");
+    // On a first setup the engine was started before the tier was known.
+    let args =
+        serde_json::json!({"llamacpp": {"args": nocturne_lemonade::config::llamacpp_args(tier)}});
+    if let Err(e) = client.set(&args).await {
+        tracing::warn!("could not set the engine's cache sizes: {e}");
+    }
     let changed = previous.is_some_and(|from| from != tier);
     if changed {
         super::memory_settled(&state, services);

@@ -451,6 +451,7 @@ impl Actor {
             let key = new_key()?;
             let online = self.shared.online.load(Ordering::SeqCst);
             let (llama, whisper) = read_backends(&self.dirs.config());
+            let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
             config::write(
                 &self.dirs.config(),
                 &config::Settings {
@@ -460,6 +461,7 @@ impl Actor {
                     websocket_port: ws_port,
                     llamacpp_backend: llama.as_deref(),
                     whispercpp_backend: whisper.as_deref(),
+                    llamacpp_args: installed.map(config::llamacpp_args).unwrap_or(""),
                 },
             )?;
             let saved = residency::saved_options();
