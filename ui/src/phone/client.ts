@@ -334,28 +334,36 @@ export function createPhoneEngine(
       checkItemId(id);
       return call(async (s) => {
         const parts: Bytes[] = [];
-        let meta: { mime: string; size: number } | null = null;
+        // Set once, by the one originalStart, to a type taken from the allowlist itself.
+        let meta: Readonly<{ mime: string; size: number }> | null = null;
         let total = 0;
         const { result } = s.request(
           { cmd: "getOriginal", id },
           (answer) => {
-            if (answer.type === "originalStart") meta = { mime: answer.mime, size: answer.size };
+            if (answer.type !== "originalStart") return undefined;
+            // One start only, before any byte; a later one cannot change what was checked.
+            if (meta !== null || parts.length > 0) throw new Refusal("badEnvelope");
+            const allowed = P.MIME_MAGIC.find((x) => x.mime === answer.mime);
+            if (!allowed) throw new Refusal("badMagic");
+            if (!Number.isInteger(answer.size) || answer.size < 1 || answer.size > P.MAX_ITEM) {
+              throw new Refusal("badEnvelope");
+            }
+            meta = Object.freeze({ mime: allowed.mime, size: answer.size });
             return undefined;
           },
           {
             onChunk: (chunk) => {
-              const m = meta;
+              const m = meta as Readonly<{ mime: string; size: number }> | null;
               if (!m) throw new Refusal("badEnvelope");
-              if (parts.length === 0) {
-                if (!P.MIME_MAGIC.some((x) => x.mime === m.mime)) throw new Refusal("badMagic");
-                checkMagic(m.mime, chunk.data);
-              }
+              if (parts.length === 0) checkMagic(m.mime, chunk.data);
               parts.push(copy(chunk.data));
               total += chunk.data.length;
-              if (total > P.MAX_ITEM) throw new Refusal("badEnvelope");
+              if (total > m.size) throw new Refusal("badEnvelope");
               if (!chunk.last) return undefined;
               if (total !== m.size) throw new Refusal("badEnvelope");
-              return { done: new Blob(parts, { type: m.mime }) };
+              const allowed = P.MIME_MAGIC.find((x) => x.mime === m.mime);
+              if (!allowed) throw new Refusal("badMagic");
+              return { done: new Blob(parts, { type: allowed.mime }) };
             },
           },
         );

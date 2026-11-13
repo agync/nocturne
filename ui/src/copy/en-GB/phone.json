@@ -241,6 +241,7 @@
   "phone.original.meta": "{kind} · kept {day}",
   "phone.original.zoom": "Pinch to zoom. Shown from your computer; nothing is saved on this phone.",
   "phone.original.text": "Shown from your computer; nothing is saved on this phone.",
+  "phone.original.cantShow": "This one can’t be shown on the phone. Open it on your computer.",
   "phone.original.cut": "Only the start is shown here. Open it on your computer to read the rest.",
   "phone.original.used": "The highlighted part is what the answer used.",
   "phone.original.voice": "Played from your computer; nothing is saved on this phone.",

@@ -453,6 +453,87 @@ describe("the engine's calls", () => {
     engine.close();
   });
 
+  describe("an original from the computer", () => {
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 1, 2, 3, 4, 5]);
+    type Send = (ctx: import("./testing/fakeComputer").CallContext) => Promise<void>;
+
+    async function fetchWith(send: Send) {
+      const { computer, device } = await paired();
+      const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+        env: computer.env,
+      });
+      computer.handler = async (ctx) => {
+        if (ctx.request.call.cmd !== "getOriginal") return computer.defaultHandler(ctx);
+        await send(ctx);
+      };
+      return { engine, computer };
+    }
+
+    const refused = async (send: Send) => {
+      const { engine } = await fetchWith(send);
+      await expect(engine.original("item-1")).rejects.toBeInstanceOf(ConnectionError);
+      engine.close();
+    };
+
+    it("a second originalStart is refused, whatever it says", async () => {
+      await refused(async (ctx) => {
+        await ctx.reply({ type: "originalStart", mime: "image/png", size: png.length });
+        await ctx.reply({ type: "originalStart", mime: "image/jpeg", size: png.length });
+        await ctx.chunk(0, true, png);
+      });
+    });
+
+    it("an originalStart after a chunk is refused", async () => {
+      await refused(async (ctx) => {
+        await ctx.reply({ type: "originalStart", mime: "image/png", size: png.length });
+        await ctx.chunk(0, false, png.slice(0, 5));
+        await ctx.reply({ type: "originalStart", mime: "image/jpeg", size: png.length });
+        await ctx.chunk(1, true, png.slice(5));
+      });
+    });
+
+    it("a type that can run script is refused at the start", async () => {
+      for (const mime of ["text/html", "image/svg+xml", "application/xml", "text/xml"]) {
+        await refused(async (ctx) => {
+          await ctx.reply({ type: "originalStart", mime, size: 4 });
+          await ctx.chunk(0, true, new Uint8Array([0x3c, 0x73, 0x76, 0x67]));
+        });
+      }
+    });
+
+    it("a size over the limit, or not a size, is refused at the start", async () => {
+      for (const size of [P.MAX_ITEM + 1, 0, -1, 1.5]) {
+        await refused(async (ctx) => {
+          await ctx.reply({ type: "originalStart", mime: "image/png", size });
+          await ctx.chunk(0, true, png);
+        });
+      }
+    });
+
+    it("more bytes than declared, or fewer, are refused", async () => {
+      await refused(async (ctx) => {
+        await ctx.reply({ type: "originalStart", mime: "image/png", size: 5 });
+        await ctx.chunk(0, false, png.slice(0, 4));
+        await ctx.chunk(1, true, png.slice(4));
+      });
+      await refused(async (ctx) => {
+        await ctx.reply({ type: "originalStart", mime: "image/png", size: png.length + 3 });
+        await ctx.chunk(0, true, png);
+      });
+    });
+
+    it("chunks with no start are refused, and one start with its bytes is accepted", async () => {
+      await refused(async (ctx) => ctx.chunk(0, true, png));
+      const { engine } = await fetchWith(async (ctx) => {
+        await ctx.reply({ type: "originalStart", mime: "image/png", size: png.length });
+        await ctx.chunk(0, true, png);
+      });
+      const blob = await engine.original("item-1");
+      expect(blob.type).toBe("image/png");
+      engine.close();
+    });
+  });
+
   it("disconnect tells the computer and forgets the keys", async () => {
     const { computer, device } = await paired();
     const store = memoryKeyStore(device);

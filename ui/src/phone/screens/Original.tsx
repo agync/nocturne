@@ -3,6 +3,7 @@ import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PhoneItem } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
+import { renderingFor } from "../renderable";
 import { Button, Icon, Page } from "./ui";
 
 type Load =
@@ -43,7 +44,9 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
   const [attempt, setAttempt] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const blob = load.name === "ready" ? load.blob : null;
-  const url = useBlobUrl(blob);
+  const rendering = blob ? renderingFor(blob.type) : null;
+  // A type that cannot be shown safely never gets a URL.
+  const url = useBlobUrl(rendering ? blob : null);
 
   useEffect(() => {
     void attempt;
@@ -144,7 +147,7 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
           </h1>
           <span className="ph-rc">{meta}</span>
         </div>
-        {item.kind === "image" && url && (
+        {item.kind === "image" && rendering === "image" && url && (
           <>
             <div className="ph-original-photo">
               <img src={url} alt={item.title} />
@@ -152,8 +155,8 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
             <p className="ph-hint ph-hint--ink2">{t("phone.original.zoom")}</p>
           </>
         )}
-        {item.kind === "audio" && url && <Voice url={url} item={item} />}
-        {item.kind === "document" && url && (
+        {item.kind === "audio" && rendering === "audio" && url && <Voice url={url} item={item} />}
+        {item.kind === "document" && rendering === "pdf" && url && (
           <>
             <a className="ph-btn ph-btn--primary" href={url} target="_blank" rel="noopener">
               <Icon name="document" size={20} />
@@ -161,6 +164,9 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
             </a>
             <p className="ph-hint ph-hint--ink2">{t("phone.original.document.hint")}</p>
           </>
+        )}
+        {blob && !rendering && (
+          <p className="ph-hint ph-hint--ink2">{t("phone.original.cantShow")}</p>
         )}
         {(item.kind === "text" || item.kind === "web") && (
           <>

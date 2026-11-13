@@ -550,6 +550,25 @@ describe("originals", () => {
     expect(screen.getByText("The highlighted part is what the answer used.")).toBeInTheDocument();
   });
 
+  it("an original whose type could run script is never given a URL or drawn", async () => {
+    const create = vi.spyOn(URL, "createObjectURL");
+    for (const type of ["text/html", "image/svg+xml", "application/xml"]) {
+      const engine = engineWith(
+        {},
+        { original: async () => new Blob(["<svg onload=alert(1)>"], { type }) },
+      );
+      render(
+        <Original engine={engine} itemId="item-letter" quote={null} onBack={() => undefined} />,
+      );
+      expect(await screen.findByText(/can’t be shown on the phone/)).toBeInTheDocument();
+      expect(
+        document.querySelector("img, iframe, embed, object, audio, a[href^='blob:']"),
+      ).toBeNull();
+      cleanup();
+    }
+    expect(create).not.toHaveBeenCalled();
+  });
+
   it("a private or missing item says so, and a failure offers to try again", async () => {
     render(
       <Original
