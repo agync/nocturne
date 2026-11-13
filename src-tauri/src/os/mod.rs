@@ -9,9 +9,11 @@ use tauri::{AppHandle, Runtime};
 
 use crate::error::CommandError;
 
+pub mod copy;
 pub mod quick_capture;
 pub mod shortcut;
 pub mod state;
+pub mod tray;
 
 use std::sync::Arc;
 
@@ -19,6 +21,9 @@ pub use state::OsState;
 use tauri::Manager;
 
 use crate::state::AppState;
+
+/// Sent to the main window when the tray asks for a screen (the payload is its route).
+pub const EVENT_NAVIGATE: &str = "navigate";
 
 /// The commands the quick capture window may call. Everything else is refused for it.
 const QUICK_CAPTURE_COMMANDS: &[&str] = &[
@@ -49,6 +54,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
     }
+    tray::install(app);
     let handle = app.clone();
     shell.on_exit(Box::new(move || {
         if let Some(os) = handle.try_state::<OsState>() {

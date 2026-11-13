@@ -85,6 +85,11 @@ impl OsState {
         self.shortcut().registrar = Some(registrar);
     }
 
+    /// How the registered quick keep shortcut is spelled, when it is registered.
+    pub fn shortcut_spelling(&self) -> Option<String> {
+        self.shortcut().spelling.clone()
+    }
+
     /// Whether the quick keep shortcut is registered right now.
     pub fn shortcut_registered(&self) -> bool {
         self.shortcut().current.is_some()

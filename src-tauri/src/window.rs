@@ -32,6 +32,8 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
 pub enum ShowReason {
     InterfaceReady,
     Grace,
+    /// A hidden start with nowhere to hide: the tray is not available.
+    NoTray,
 }
 
 /// Show the window because the interface is ready (or the grace period ran out): unless
@@ -44,6 +46,7 @@ pub fn show_when_ready<R: Runtime>(app: &AppHandle<R>, reason: ShowReason) {
         match reason {
             ShowReason::InterfaceReady => tracing::info!("window shown: interface ready"),
             ShowReason::Grace => tracing::info!("window shown: grace"),
+            ShowReason::NoTray => tracing::info!("window shown: no tray"),
         }
         show_main(app);
     }

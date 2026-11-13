@@ -24,6 +24,8 @@ pub trait Registrar: Send + Sync {
 pub struct ShortcutSlot {
     pub(super) registrar: Option<Arc<dyn Registrar>>,
     pub(super) current: Option<Shortcut>,
+    /// How the registered shortcut was spelled.
+    pub(super) spelling: Option<String>,
     /// Whether this session lets the app grab keys (set at install).
     pub(super) grab_allowed: bool,
 }
@@ -120,6 +122,7 @@ pub fn install(state: &OsState, spelling: &str, grab_allowed: bool) {
         Ok(()) => {
             tracing::info!("global shortcut registered");
             slot.current = Some(shortcut);
+            slot.spelling = Some(spelling.trim().to_string());
         }
         Err(e) => tracing::warn!("global shortcut not registered: {e}"),
     }
@@ -140,12 +143,14 @@ pub fn change(state: &OsState, spelling: &str) -> Result<(), crate::error::Comma
     apply(registrar.as_ref(), slot.current.as_ref(), &new)
         .map_err(|_| CommandError::invalid("that shortcut is already taken"))?;
     slot.current = Some(new);
+    slot.spelling = Some(spelling.trim().to_string());
     Ok(())
 }
 
 /// Stop holding the shortcut (the app is exiting).
 pub fn release(state: &OsState) {
     let mut slot = state.shortcut();
+    slot.spelling = None;
     if let (Some(r), Some(s)) = (slot.registrar.clone(), slot.current.take()) {
         let _ = r.unregister(&s);
     }
