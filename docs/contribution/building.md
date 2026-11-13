@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: Building and packaging
-description: The development loop, the Linux packages, the checks that prove them, and the Windows and macOS builds.
+description: The development loop, the real preview, the Linux packages, the checks that prove them, and the Windows and macOS builds.
 status: draft
 tags: [contribution, build, packaging, windows, macos]
 ---
@@ -34,6 +34,41 @@ cd src-tauri && NOCTURNE_DATA_DIR=<scratch> ../ui/node_modules/.bin/tauri dev
 A debug build finds the bundle there. A release build finds it among its own resources, and
 `NOCTURNE_LEMOND` (a folder, or the `lemond` file in it) overrides both. Every working folder of
 the engine lives under the data folder, never beside the program, so a read-only install works.
+
+## Real preview in a browser
+
+For development only, and never shipped. `make preview-real` runs the real app (the private engine,
+the real models, every command) behind a small HTTP server, so you can use the real product from a
+browser, a phone on your own network included. The desktop shell is not involved: the server builds
+the app on Tauri's mock runtime, the way the real-model end-to-end test does, and sends what the
+browser asks through the same per-window allowlist as the main window.
+
+```bash
+PREVIEW_DATA_DIR=<scratch> PREVIEW_MODELS_FROM=<engine folder of a finished setup> make preview-real
+```
+
+It prints one link, `http://127.0.0.1:55066/#token=...`. The token is made at every launch and read
+by the page from the fragment, so it never travels in a URL. The server binds loopback only; to
+reach it from elsewhere, put a TLS proxy in front and name its address with
+`PREVIEW_PUBLIC_ORIGIN`, the only other origin it accepts. Everything that carries data needs the
+token as a bearer header. Two things cannot send one, so they take a short ticket from
+`POST /api/ticket`: the event stream (one use, 30 seconds) and the pictures and audio of kept
+originals, which are fetched by item id, never by path.
+
+| Setting | Meaning |
+|---|---|
+| `PREVIEW_DATA_DIR` | Its own data folder (default `target/preview-real`). It must be empty or one the tool made. |
+| `PREVIEW_PORT` | The loopback port (default 55066). |
+| `PREVIEW_PUBLIC_ORIGIN` | Where other machines reach it. |
+| `PREVIEW_MODELS_FROM` | An engine folder from a finished setup. Its models are hard-linked in, so nothing downloads; without it the first run offers the usual setup. |
+
+What a browser cannot do is reported as unavailable: folder and file dialogs, opening a folder or a
+file in the system's app, the logs folder, printing, sound settings and exporting to a folder.
+Files are chosen in the page and travel as bytes.
+
+The feature is `preview` on `nocturne-app` and sits in no default feature set. `make check` tests it
+(`cargo test -p nocturne-app --features preview`), and the package check fails if a package holds
+`nocturne-preview`, the text the server prints or the preview interface.
 
 ## Linux packages
 
