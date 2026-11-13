@@ -78,6 +78,56 @@ fn quick_capture_capability_is_exact() {
     assert!(c.get("remote").is_none(), "no remote origins");
 }
 
+fn adapter() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../ui/src/platform/tauri.ts"
+    ))
+    .expect("ui/src/platform/tauri.ts must exist")
+}
+
+/// The window methods the adapter uses that the quick capture window can reach, each with the
+/// permission it needs. Anything the adapter calls beyond these is for the main window.
+#[test]
+fn quick_capture_capability_covers_what_the_adapter_calls_for_it() {
+    let src = adapter();
+    let c = capability("quick-capture");
+    let granted: BTreeSet<&str> = c["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap())
+        .collect();
+    for (call, permission) in [
+        (".close()", "core:window:allow-close"),
+        ("Window.getByLabel(", "core:window:allow-get-all-windows"),
+        (".show()", "core:window:allow-show"),
+        (".setFocus()", "core:window:allow-set-focus"),
+        ("emitTo(", "core:event:default"),
+        ("listen<", "core:event:default"),
+    ] {
+        assert!(src.contains(call), "the adapter no longer uses {call}");
+        assert!(granted.contains(permission), "{call} needs {permission}");
+    }
+    // Nothing is granted that the adapter does not use for this window, beyond the basics.
+    for p in &granted {
+        assert!(p.starts_with("core:"), "{p}");
+    }
+}
+
+#[test]
+fn the_tray_sends_screens_on_the_event_the_interface_listens_to() {
+    let src = adapter();
+    let line = src
+        .lines()
+        .find(|l| l.contains("const OPEN_IN_MAIN"))
+        .expect("the adapter names the open-in-main event");
+    assert!(
+        line.contains(&format!("\"{}\"", nocturne_app_lib::os::EVENT_NAVIGATE)),
+        "{line}"
+    );
+}
+
 #[test]
 fn the_main_capability_does_not_cover_quick_capture() {
     assert_eq!(capability("default")["windows"], json!(["main"]));

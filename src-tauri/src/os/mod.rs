@@ -25,8 +25,10 @@ use tauri::Manager;
 
 use crate::state::AppState;
 
-/// Sent to the main window when the tray asks for a screen (the payload is its route).
-pub const EVENT_NAVIGATE: &str = "navigate";
+/// Sent to the main window when the tray asks for a screen (the payload is its route). It is
+/// the event the interface already listens to for screens the quick capture window opens
+/// (`onOpenInMain`), so the tray needs no receiver of its own.
+pub const EVENT_NAVIGATE: &str = "open-in-main";
 
 /// The commands the quick capture window may call. Everything else is refused for it.
 const QUICK_CAPTURE_COMMANDS: &[&str] = &[
