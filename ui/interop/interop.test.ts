@@ -23,15 +23,14 @@ import { serveComputer } from "./serveComputer";
 function routed(port: number): Env {
   const from = `https://${HOST}`;
   const to = `http://127.0.0.1:${port}`;
-  const Socket = ((url: string) =>
-    new globalThis.WebSocket(
-      url.replace(`wss://${HOST}`, `ws://127.0.0.1:${port}`),
-    )) as unknown as new (
-    url: string,
-  ) => WebSocketLike;
+  class Socket extends globalThis.WebSocket {
+    constructor(url: string) {
+      super(url.replace(`wss://${HOST}`, `ws://127.0.0.1:${port}`));
+    }
+  }
   return {
     fetch: (input, init) => globalThis.fetch(String(input).replace(from, to), init),
-    WebSocket: Socket,
+    WebSocket: Socket as unknown as new (url: string) => WebSocketLike,
     now: () => Date.now(),
   };
 }
