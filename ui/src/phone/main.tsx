@@ -1,16 +1,16 @@
 import { createRoot } from "react-dom/client";
-import { Mark } from "../components/Mark/Mark";
-import { t } from "../copy/t";
 import "../design/global.css";
+import { App } from "./App";
+import "./phone.css";
+import { loadServices } from "./services";
+import { registerWorker } from "./shell";
 
 /** The phone app, served by the computer to the person's paired phones. */
-function Phone() {
-  return (
-    <main>
-      <Mark state="resting" decorative />
-      <h1 className="t-page-title">{t("phone.name")}</h1>
-    </main>
-  );
+async function start() {
+  const services = await loadServices();
+  if (!services.scripted && import.meta.env.PROD) registerWorker();
+  const root = document.getElementById("root");
+  if (root) createRoot(root).render(<App services={services} />);
 }
 
-createRoot(document.getElementById("root") as HTMLElement).render(<Phone />);
+void start();
