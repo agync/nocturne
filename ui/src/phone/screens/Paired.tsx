@@ -15,7 +15,7 @@ type View =
   | { name: "keep" }
   | { name: "ask" }
   | { name: "page" }
-  | { name: "original"; id: string; quote: string | null };
+  | { name: "original"; id: string };
 
 const HOME: View = { name: "home" };
 
@@ -68,6 +68,7 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
   const [headline, setHeadline] = useState<string | null>(null);
   const [noPage, setNoPage] = useState(false);
   const ask = useAskSession(engine);
+  const quote = useRef<string | null>(null);
   const now = services.now();
 
   const refreshWaiting = useCallback(() => {
@@ -136,8 +137,9 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
 
   const open = useCallback(
     (receipt: Receipt) => {
-      const quote = receipt.span?.type === "quote" ? receipt.span.text : null;
-      go({ name: "original", id: receipt.itemId, quote });
+      // The words of the answer stay in memory; history entries hold no content.
+      quote.current = receipt.span?.type === "quote" ? receipt.span.text : null;
+      go({ name: "original", id: receipt.itemId });
     },
     [go],
   );
@@ -192,7 +194,7 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
   }
   if (view.name === "page") return <PageScreen engine={engine} onOpen={open} onBack={back} />;
   if (view.name === "original") {
-    return <Original engine={engine} itemId={view.id} quote={view.quote} onBack={back} />;
+    return <Original engine={engine} itemId={view.id} quote={quote.current} onBack={back} />;
   }
 
   const toKeep = () => go({ name: "keep" });
