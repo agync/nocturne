@@ -1,12 +1,47 @@
-__pycache__/
-*.py[cod]
-.venv/
+# Scratch area (local-only, never committed)
+.agents/brain/
+
+# Generated tool shims (written by .agents/bootstrap.sh)
+CLAUDE.md
+GEMINI.md
+.claude/
+.gemini/
+.cursor/
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Build output and dependencies
+node_modules/
 dist/
 build/
-*.egg-info/
+target/
+src-tauri/gen/
+
+# Rendered docs
+_site/
+
+# Local app state from development runs
+.nocturne/
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
-.nocturne/
+
+# Embedded Lemonade artifacts fetched at build time
+vendor/lemonade/
+
+# Editor and OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# Leftovers from the retired Python scaffold
+.venv/
+__pycache__/
 .pytest_cache/
 .ruff_cache/

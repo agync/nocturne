@@ -1,0 +1,44 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: check-executables-have-shebangs
+      - id: check-shebang-scripts-are-executable
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.0.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: local
+    hooks:
+      - id: forbid-em-dash
+        name: Forbid em dashes
+        language: pygrep
+        entry: "\u2014"
+        types: [text]
+        exclude: ^\.pre-commit-config\.yaml$
+
+      - id: forbid-home-paths
+        name: Forbid host-specific home directory paths
+        language: pygrep
+        entry: "/(home|Users)/[a-z]"
+        types: [text]
+        exclude: ^\.pre-commit-config\.yaml$
+
+      - id: okf-validate
+        name: Validate the OKF docs bundle
+        entry: okf validate docs
+        language: system
+        files: ^docs/
+        pass_filenames: false
