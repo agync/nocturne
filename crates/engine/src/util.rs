@@ -61,6 +61,12 @@ pub(crate) fn key_of(s: &str) -> String {
     words.join(" ")
 }
 
+/// What a claim is, without its words: a hash of the keys of its subject, predicate and object.
+/// Callers pass already-keyed subject and object (`key_of`).
+pub(crate) fn claim_hash(subject_key: &str, predicate: &str, object_key: &str) -> String {
+    sha256_hex(format!("{subject_key}\u{1}{predicate}\u{1}{object_key}").as_bytes())
+}
+
 /// Encode a unit-variant enum the way serde does (camelCase through the contract).
 pub(crate) fn enum_str<T: Serialize>(v: &T) -> String {
     match serde_json::to_value(v) {

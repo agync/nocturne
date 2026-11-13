@@ -450,3 +450,117 @@ async fn a_gate_holds_a_call_mid_flight_until_opened() {
     gate.open();
     assert!(task.await.unwrap().is_ok());
 }
+
+// ---- forgetting and re-reads ----
+
+fn zebra() -> nocturne_engine::Candidate {
+    cand(
+        "Me",
+        Predicate::Knows,
+        "Zebrafish47",
+        "You know about Zebrafish47.",
+    )
+}
+
+#[test]
+fn a_forget_during_an_in_flight_reread_stops_the_result_from_bringing_the_memory_back() {
+    let f = fixture();
+    let (item, mem) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    f.engine.queue_reread(std::slice::from_ref(&item)).unwrap();
+    // The re-read is under way: its lease was taken before the forget.
+    let p = f.engine.lease_item(&item, MIN).unwrap();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    // The mind's answer arrives after the forget finished and its job row is gone.
+    let err = f
+        .engine
+        .apply_candidates(&item, &p.lease, vec![zebra()])
+        .unwrap_err();
+    assert!(matches!(err, nocturne_engine::Error::LeaseLost), "{err:?}");
+    assert!(f.engine.memories(Default::default()).unwrap().is_empty());
+    // The item keeps its text and the person's choice: it is not marked for another re-read.
+    assert!(f.engine.rereads(10).unwrap().is_empty());
+}
+
+#[test]
+fn a_later_reread_does_not_say_the_forgotten_thing_again() {
+    let f = fixture();
+    let (item, mem) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    let other = cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds.");
+    f.engine.apply(&item, vec![zebra(), other.clone()]).unwrap();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    assert_eq!(
+        f.engine.queue_reread(std::slice::from_ref(&item)).unwrap(),
+        1
+    );
+    let p = f.engine.lease_item(&item, MIN).unwrap();
+    f.engine
+        .apply_candidates(&item, &p.lease, vec![zebra(), other])
+        .unwrap();
+    let sentences: Vec<String> = f
+        .engine
+        .memories(Default::default())
+        .unwrap()
+        .into_iter()
+        .map(|m| m.sentence)
+        .collect();
+    assert_eq!(sentences, ["Gran lives in Leeds."]);
+    // The store keeps the item's own text, but no trace of the forgotten claim's wording.
+    let db = std::fs::read(f.dir.path().join("nocturne.db")).unwrap();
+    assert!(!String::from_utf8_lossy(&db).contains("You know about Zebrafish47"));
+}
+
+#[test]
+fn a_reread_that_is_too_long_gives_the_item_back_as_it_was() {
+    let f = fixture();
+    let (item, _) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    f.engine.queue_reread(std::slice::from_ref(&item)).unwrap();
+    let p = f.engine.lease_item(&item, MIN).unwrap();
+    let out = f
+        .engine
+        .record_understanding(
+            &item,
+            &p.lease,
+            nocturne_engine::Understanding {
+                text: "long".into(),
+                pages: Some(150),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(out, nocturne_engine::RecordOutcome::TooLong);
+    f.engine.release_lease(&item, &p.lease, false).unwrap();
+    assert_eq!(status(&f.engine, &item), ItemStatus::Understood);
+
+    // A first reading of the same size is still final.
+    let fresh = keep(&f.engine, "a long one");
+    let p = f.engine.lease_item(&fresh, MIN).unwrap();
+    f.engine
+        .record_understanding(
+            &fresh,
+            &p.lease,
+            nocturne_engine::Understanding {
+                text: "long".into(),
+                pages: Some(150),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(status(&f.engine, &fresh), ItemStatus::CouldntRead);
+}
+
+#[test]
+fn a_reread_mark_can_be_cleared() {
+    let f = fixture();
+    let (item, _) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    f.engine.queue_reread(std::slice::from_ref(&item)).unwrap();
+    f.engine.clear_reread(std::slice::from_ref(&item)).unwrap();
+    assert!(f.engine.rereads(10).unwrap().is_empty());
+}

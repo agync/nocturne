@@ -22,7 +22,7 @@ use crate::fsutil;
 use crate::memory::restore_replaced;
 use crate::page::{template_dek, template_headline};
 use crate::types::ForgetOutcome;
-use crate::util::{fmt_ts, new_id_hex, parse_enum, parse_ts};
+use crate::util::{claim_hash, fmt_ts, new_id_hex, parse_enum, parse_ts};
 
 /// A preview is good for ten minutes.
 const TOKEN_MINUTES: i64 = 10;
@@ -89,6 +89,36 @@ fn source_items(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
         }
     }
     Ok(out.into_iter().collect())
+}
+
+/// Remember, per item that said them, the claims being forgotten, and move those items to a
+/// new forget epoch: a read that began before the forget can no longer write, and no later
+/// read writes the forgotten claims again. Nothing is queued for a re-read.
+fn stamp_sources(tx: &Transaction<'_>, memories: &[String], items: &[String]) -> Result<()> {
+    for id in memories {
+        let claim: Option<(String, String, String)> = tx
+            .query_row(
+                "SELECT subject_key, predicate, object_key FROM memories WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        let Some((subject, predicate, object)) = claim else {
+            continue;
+        };
+        tx.execute(
+            "INSERT OR IGNORE INTO forgotten_claims(item_id, claim) \
+             SELECT item_id, ?2 FROM memory_sources WHERE memory_id = ?1",
+            params![id, claim_hash(&subject, &predicate, &object)],
+        )?;
+    }
+    for item in items {
+        tx.execute(
+            "UPDATE items SET forget_epoch = forget_epoch + 1, reread = 0 WHERE id = ?1",
+            [item],
+        )?;
+    }
+    Ok(())
 }
 
 fn other_memories(conn: &Connection, item: &str, ids: &[String]) -> Result<u32> {
@@ -242,6 +272,7 @@ impl Engine {
             let job = tx.last_insert_rowid();
             self.bump_audio();
             self.bump_forget();
+            stamp_sources(tx, &all, &items)?;
             for id in &all {
                 tx.execute(
                     "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \

@@ -519,6 +519,16 @@ impl Engine {
         })
     }
 
+    /// Take the re-read mark off items (a re-read that keeps failing is given up on).
+    pub fn clear_reread(&self, ids: &[String]) -> Result<()> {
+        self.write(|tx| {
+            for id in ids {
+                tx.execute("UPDATE items SET reread = 0 WHERE id = ?1", [id])?;
+            }
+            Ok(())
+        })
+    }
+
     /// Items marked for a re-read, most recently kept first, that nobody is reading now.
     pub fn rereads(&self, limit: usize) -> Result<Vec<String>> {
         self.read(|conn| {
@@ -545,6 +555,9 @@ impl Engine {
         self.write(|tx| {
             check_lease(tx, item, lease)?;
             if t.duration_ms > MAX_AUDIO_MS {
+                if is_reread(tx, item)? {
+                    return Ok(RecordOutcome::TooLong);
+                }
                 fail(
                     tx,
                     item,
@@ -574,6 +587,9 @@ impl Engine {
         self.write(|tx| {
             check_lease(tx, item, lease)?;
             if u.pages.is_some_and(|p| p > MAX_PAGES) {
+                if is_reread(tx, item)? {
+                    return Ok(RecordOutcome::TooLong);
+                }
                 fail(tx, item, CouldntReadReason::TooLong, None, u.pages)?;
                 return Ok(RecordOutcome::TooLong);
             }
@@ -595,6 +611,16 @@ impl Engine {
     }
 }
 
+/// The lease is a re-read of an item that was read before: a reading that fails must not
+/// take away what the earlier one understood.
+fn is_reread(conn: &rusqlite::Connection, item: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT status_before IS NOT NULL FROM items WHERE id = ?1",
+        [item],
+        |r| r.get(0),
+    )?)
+}
+
 /// Move a waiting item ahead of everything waiting, the latest request first.
 fn bump_priority(tx: &Transaction<'_>, id: &str) -> Result<()> {
     tx.execute(
@@ -614,8 +640,8 @@ fn take_lease(tx: &Transaction<'_>, item: &mut PendingItem, until: &str) -> Resu
     item.attempts += 1;
     item.lease = random_hex(16);
     tx.execute(
-        "UPDATE items SET status_before = CASE WHEN status IN ('kept', 'reading') THEN NULL \
-                                               ELSE status END, \
+        "UPDATE items SET lease_epoch = forget_epoch, \
+         status_before = CASE WHEN status IN ('kept', 'reading') THEN NULL ELSE status END, \
          status = 'reading', lease_until = ?2, lease_token = ?3, \
          attempts = attempts + 1, priority = 0 WHERE id = ?1",
         params![item.id, until, item.lease],

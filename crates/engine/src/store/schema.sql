@@ -148,3 +148,12 @@ ALTER TABLE items ADD COLUMN status_before TEXT;
 ALTER TABLE items ADD COLUMN reread INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE pages ADD COLUMN opened_at TEXT;
 ALTER TABLE pages ADD COLUMN resaves INTEGER NOT NULL DEFAULT 0;
+-- A forget stamps the items that said what was forgotten: a read that began before it must not
+-- write, and a later read must not say the same thing again. Claims are kept as hashes, so the
+-- forgotten words are not left in the store.
+ALTER TABLE items ADD COLUMN forget_epoch INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE items ADD COLUMN lease_epoch INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE forgotten_claims(
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  claim TEXT NOT NULL,
+  PRIMARY KEY(item_id, claim));

@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use crate::error::{Error, Result};
 use crate::rows::{MEM_COLS, MemRow, load_mem, mem_row, mem_view, query_mems, receipts_for};
 use crate::types::{ApplyReport, Candidate, CorrectPatch, Predicate};
-use crate::util::{enum_str, fmt_ts, fts_and, key_of, new_id, overlaps};
+use crate::util::{claim_hash, enum_str, fmt_ts, fts_and, key_of, new_id, overlaps};
 
 /// A real-world change (moved house, new dose) closes the old row at the new row's start date.
 fn closes_old_value(predicate: &str) -> bool {
@@ -270,6 +270,30 @@ fn apply(
     cands: Vec<Candidate>,
 ) -> Result<(ApplyReport, Vec<PathBuf>)> {
     check_lease(tx, item_id, lease)?;
+    // A forget since the read began: what the mind found may be what was forgotten.
+    let stale: bool = tx.query_row(
+        "SELECT forget_epoch <> lease_epoch FROM items WHERE id = ?1",
+        [item_id],
+        |r| r.get(0),
+    )?;
+    if stale {
+        return Err(Error::LeaseLost);
+    }
+    let forgotten: HashSet<String> = {
+        let mut stmt = tx.prepare("SELECT claim FROM forgotten_claims WHERE item_id = ?1")?;
+        stmt.query_map([item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let cands: Vec<Candidate> = cands
+        .into_iter()
+        .filter(|c| {
+            !forgotten.contains(&claim_hash(
+                &key_of(&c.subject),
+                c.predicate.as_str(),
+                &key_of(&c.object),
+            ))
+        })
+        .collect();
     let (trust, origin, private): (String, Option<String>, bool) = tx
         .query_row(
             "SELECT trust, origin, private FROM items WHERE id = ?1",
