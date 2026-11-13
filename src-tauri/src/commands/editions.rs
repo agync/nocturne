@@ -3,7 +3,7 @@
 use nocturne_contract::{Edition, PageView, SpokenPage};
 use tauri::{AppHandle, Runtime};
 
-use super::{not_yet, parse_date, read, run};
+use super::{parse_date, read, run};
 use crate::error::CommandError;
 
 /// A saved page in one edition (private lines are already removed from the spoken and printed
@@ -22,9 +22,12 @@ pub async fn get_edition<R: Runtime>(
     .await
 }
 
+/// Open the system's print dialog for the window that asked (the print screen).
 #[tauri::command]
-pub async fn print_page<R: Runtime>(_app: AppHandle<R>) -> Result<(), CommandError> {
-    Err(not_yet("printing"))
+pub async fn print_page<R: Runtime>(webview: tauri::WebviewWindow<R>) -> Result<(), CommandError> {
+    webview
+        .print()
+        .map_err(|_| CommandError::unavailable("printing is not available"))
 }
 
 /// The spoken edition of a page, made once and kept (private lines are never spoken). Returns

@@ -15,6 +15,7 @@ pub mod inbox;
 pub mod notify;
 pub mod quick_capture;
 pub mod shortcut;
+pub mod sound;
 pub mod state;
 pub mod tray;
 

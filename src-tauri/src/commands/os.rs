@@ -2,12 +2,17 @@
 
 use tauri::{AppHandle, Runtime};
 
-use super::not_yet;
-use crate::error::CommandError;
+use crate::error::{CommandError, blocking_cmd};
 
+/// Open the system's sound settings. `unavailable` when this desktop has none to open.
 #[tauri::command]
 pub async fn open_sound_settings<R: Runtime>(_app: AppHandle<R>) -> Result<(), CommandError> {
-    Err(not_yet("sound settings"))
+    blocking_cmd(|| {
+        crate::os::sound::open()
+            .map(|_| ())
+            .map_err(|_| CommandError::unavailable("no sound settings found"))
+    })
+    .await
 }
 
 /// The command line that opens quick capture, for a desktop shortcut.
