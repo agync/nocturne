@@ -40,6 +40,8 @@ pub(crate) fn item_view(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         pages: row.get(9)?,
         has_original: row.get::<_, Option<String>>(10)?.is_some(),
         file_name: row.get(10)?,
+        // Filled by the engine methods that know the data directory.
+        original_path: None,
         private: row.get(11)?,
         understood_in_ms: row.get(12)?,
         summary: row.get(13)?,

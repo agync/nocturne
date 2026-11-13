@@ -304,3 +304,22 @@ pub struct AdvancedView {
     pub agents: bool,
     pub log_dir: String,
 }
+
+/// What an export wrote. `path` is the fresh folder created inside the chosen directory.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ExportReport {
+    pub path: String,
+    pub memories: u32,
+    pub pages: u32,
+    pub originals: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ExportProgress {
+    pub done: u32,
+    pub total: u32,
+}

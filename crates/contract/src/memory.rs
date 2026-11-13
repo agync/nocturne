@@ -77,6 +77,8 @@ pub struct EntityView {
 #[ts(export)]
 pub struct MemoryFilter {
     pub entity_id: Option<String>,
+    /// Only memories that came from this item.
+    pub item_id: Option<String>,
     pub status: Option<MemoryStatus>,
     pub query: Option<String>,
     pub limit: Option<u32>,

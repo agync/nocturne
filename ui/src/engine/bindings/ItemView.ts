@@ -12,7 +12,12 @@ export type ItemView = { id: string, kind: ItemKind,
 /**
  * A short title: the first line of a note, a file name, or what the mind called it.
  */
-title: string, source: Source, trust: Trust, keptAt: string, status: ItemStatus, reason: CouldntReadReason | null, durationMs: number | null, pages: number | null, fileName: string | null, hasOriginal: boolean, private: boolean, memoryCount: number, understoodInMs: number | null, 
+title: string, source: Source, trust: Trust, keptAt: string, status: ItemStatus, reason: CouldntReadReason | null, durationMs: number | null, pages: number | null, fileName: string | null, hasOriginal: boolean, 
+/**
+ * Absolute path of the stored original, for the interface to show through the asset
+ * protocol. `None` for typed notes and for originals that were forgotten.
+ */
+originalPath: string | null, private: boolean, memoryCount: number, understoodInMs: number | null, 
 /**
  * What the mind understood: a description of an image or document.
  */

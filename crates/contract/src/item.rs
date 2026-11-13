@@ -79,6 +79,9 @@ pub struct ItemView {
     pub pages: Option<u32>,
     pub file_name: Option<String>,
     pub has_original: bool,
+    /// Absolute path of the stored original, for the interface to show through the asset
+    /// protocol. `None` for typed notes and for originals that were forgotten.
+    pub original_path: Option<String>,
     pub private: bool,
     pub memory_count: u32,
     pub understood_in_ms: Option<u32>,

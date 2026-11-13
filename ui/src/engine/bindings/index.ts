@@ -13,6 +13,8 @@ export type { EngineState } from "./EngineState";
 export type { EngineStatus } from "./EngineStatus";
 export type { EntityKind } from "./EntityKind";
 export type { EntityView } from "./EntityView";
+export type { ExportProgress } from "./ExportProgress";
+export type { ExportReport } from "./ExportReport";
 export type { ForgetOriginal } from "./ForgetOriginal";
 export type { ForgetPreview } from "./ForgetPreview";
 export type { ForgetReport } from "./ForgetReport";

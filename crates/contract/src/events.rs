@@ -16,12 +16,15 @@ pub const EVENT_ASK: &str = "ask-delta";
 pub const EVENT_PAGE: &str = "page-ready";
 /// Payload: `u32`, the number of things waiting on the person.
 pub const EVENT_NEEDS_YOU: &str = "needs-you-changed";
+/// Payload: `ExportProgress`.
+pub const EVENT_EXPORT: &str = "export-progress";
 
-pub const ALL_EVENTS: [&str; 6] = [
+pub const ALL_EVENTS: [&str; 7] = [
     EVENT_STATUS,
     EVENT_ITEM,
     EVENT_SETUP,
     EVENT_ASK,
     EVENT_PAGE,
     EVENT_NEEDS_YOU,
+    EVENT_EXPORT,
 ];
