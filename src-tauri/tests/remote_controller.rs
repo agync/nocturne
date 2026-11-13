@@ -588,6 +588,13 @@ fn delete_everything_stops_signs_out_and_removes_remote_folder() {
     );
     assert!(!a.helpers.transport.running());
     assert_eq!(a.helpers.transport.sign_outs.load(Ordering::SeqCst), 1);
+    assert!(
+        a.helpers
+            .transport
+            .signed_out_running
+            .load(Ordering::SeqCst),
+        "signed out before the helper stopped"
+    );
     assert!(!a.remote_dir().exists());
     assert_eq!(a.view().state, RemoteState::Off);
 }
@@ -674,4 +681,47 @@ fn tray_turn_off_reads_state() {
     a.on();
     let (_, menu) = block(nocturne_app_lib::os::tray::current(a.h.app.handle()));
     assert!(format!("{menu:?}").contains(nocturne_app_lib::os::tray::AWAY_ON));
+}
+
+#[test]
+fn delete_everything_while_off_starts_nothing() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailscaled);
+    a.h.ok(
+        "delete_everything",
+        json!({"confirmPhrase": nocturne_engine::DELETE_PHRASE}),
+    );
+    assert_eq!(a.helpers.transport.starts.load(Ordering::SeqCst), 0);
+    assert_eq!(
+        a.helpers.transport.sign_outs.load(Ordering::SeqCst),
+        1,
+        "local state forgotten"
+    );
+    assert!(
+        !a.helpers
+            .transport
+            .signed_out_running
+            .load(Ordering::SeqCst)
+    );
+    assert!(a.hub.listener_origin().is_none());
+}
+
+#[test]
+fn leaving_most_private_signs_out_first() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Cloudflared);
+    a.start("mostPrivate", false).unwrap();
+    a.settle();
+    a.h.ok(
+        "update_remote_settings",
+        json!({"patch": {"connection": "simple"}}),
+    );
+    assert_eq!(a.helpers.transport.sign_outs.load(Ordering::SeqCst), 1);
+    assert!(
+        a.helpers
+            .transport
+            .signed_out_running
+            .load(Ordering::SeqCst)
+    );
 }

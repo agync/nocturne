@@ -366,6 +366,8 @@ pub struct FakeTransport {
     pub starts: AtomicUsize,
     pub stops: AtomicUsize,
     pub sign_outs: AtomicUsize,
+    /// Whether the last sign-out came while the helper ran.
+    pub signed_out_running: AtomicBool,
     pub last_spec: Mutex<Option<LaunchSpec>>,
     /// Addresses handed out on each start, in turn; the last repeats.
     pub addresses: Mutex<Vec<String>>,
@@ -388,6 +390,7 @@ impl FakeTransport {
             starts: AtomicUsize::new(0),
             stops: AtomicUsize::new(0),
             sign_outs: AtomicUsize::new(0),
+            signed_out_running: AtomicBool::new(false),
             last_spec: Mutex::new(None),
             addresses: Mutex::new(vec![format!("https://{TEST_HOST}")]),
             auto_up: AtomicBool::new(true),
@@ -460,6 +463,9 @@ impl Transport for Shared {
     fn sign_out(&self) -> nocturne_helpers::BoxFuture<'_, Result<(), HelperError>> {
         Box::pin(async move {
             self.0.sign_outs.fetch_add(1, Ordering::SeqCst);
+            self.0
+                .signed_out_running
+                .store(self.0.running(), Ordering::SeqCst);
             Ok(())
         })
     }

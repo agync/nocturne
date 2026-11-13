@@ -397,7 +397,8 @@ impl RemoteHub {
             if previous == connection && !problem {
                 return Ok(self.view().await);
             }
-            self.stop_inner(false, false).await;
+            self.stop_inner(previous == RemoteConnection::MostPrivate, false)
+                .await;
             ctl = self.ctl.lock().await;
         }
         engine
@@ -757,14 +758,27 @@ impl RemoteHub {
         for t in ctl.tasks.drain(..) {
             t.abort();
         }
-        if let Some(t) = ctl.transport.take() {
-            if let Err(e) = t.stop().await {
-                tracing::warn!("the connection helper did not stop cleanly: {e}");
-            }
-            if sign_out && t.kind() == HelperKind::Tailscaled {
+        // Signing out of Tailscale needs its helper running, so it comes before the stop. With
+        // the helper off, its sign-out only forgets the local state and starts nothing.
+        if sign_out {
+            let running = ctl
+                .transport
+                .clone()
+                .filter(|t| t.kind() == HelperKind::Tailscaled);
+            let t = running.or_else(|| {
+                self.helpers
+                    .installed(HelperKind::Tailscaled)
+                    .map(|i| Arc::from(self.helpers.transport(HelperKind::Tailscaled, &i)))
+            });
+            if let Some(t) = t {
                 let _ = t.sign_out().await;
-                let _ = std::fs::remove_dir_all(self.dir.join("tailscale"));
             }
+            let _ = std::fs::remove_dir_all(self.dir.join("tailscale"));
+        }
+        if let Some(t) = ctl.transport.take()
+            && let Err(e) = t.stop().await
+        {
+            tracing::warn!("the connection helper did not stop cleanly: {e}");
         }
         self.core.flush_sent();
         self.core.set_on(None);
@@ -984,8 +998,11 @@ impl RemoteHub {
         {
             self.unpair_all(&engine, RemoteAction::SwitchedConnection)?;
             let running = self.ctl.lock().await.transport.is_some();
+            let leaving_tailscale = before.connection == RemoteConnection::MostPrivate;
+            if running || leaving_tailscale {
+                self.stop_inner(leaving_tailscale, false).await;
+            }
             if running {
-                self.stop_inner(false, false).await;
                 engine
                     .update_remote_state(|r| r.connection = to)
                     .map_err(failed)?;
