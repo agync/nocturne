@@ -6,7 +6,7 @@ import { type CopyId, t } from "../../copy/t";
 import type { RemoteAction, RemoteEvent } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
 import styles from "./Away.module.css";
-import { Back, Frame } from "./parts";
+import { Frame } from "./parts";
 import { useRemoteAct } from "./useRemote";
 import { atText, dayHeading } from "./when";
 
@@ -70,8 +70,7 @@ export function Activity() {
 
   if (query.isError) {
     return (
-      <Frame>
-        <Back to="/settings/away" label={t("away.back.away")} />
+      <Frame back={{ to: "/settings/away", label: t("screen.away.title") }}>
         <div role="alert" className={styles.panel}>
           <p>{t("away.activity.error")}</p>
           <Button variant="secondary" onClick={() => void query.refetch()}>
@@ -89,6 +88,7 @@ export function Activity() {
 
   return (
     <Frame
+      back={{ to: "/settings/away", label: t("screen.away.title") }}
       aside={
         <>
           <h2 className={styles.label}>{t("away.activity.listed.heading")}</h2>
@@ -100,7 +100,6 @@ export function Activity() {
         </>
       }
     >
-      <Back to="/settings/away" label={t("away.back.away")} />
       <h1 className="t-page-title">{t("away.activity.title")}</h1>
       {unusual && !dismissed ? (
         <div className={styles.banner} role="status">

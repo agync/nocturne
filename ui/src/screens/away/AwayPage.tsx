@@ -16,7 +16,7 @@ import { useEngine } from "../../engine/context";
 import { AdvancedDetails } from "./Advanced";
 import styles from "./Away.module.css";
 import { mostPrivateAvailable } from "./os";
-import { Back, Confirm, companyOf, connectionName, DeviceStatus, Frame } from "./parts";
+import { Confirm, companyOf, connectionName, DeviceStatus, Frame } from "./parts";
 import { QrMatrix } from "./QrMatrix";
 import { settingsPatch, useBusyAct, useRemoteAct } from "./useRemote";
 import { sinceText, whenText } from "./when";
@@ -158,6 +158,7 @@ function OffPage({ view }: { view: RemoteView }) {
 
   return (
     <Frame
+      back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         <>
           <h2 className={styles.label}>{t("away.cant.heading")}</h2>
@@ -171,7 +172,6 @@ function OffPage({ view }: { view: RemoteView }) {
         </>
       }
     >
-      <Back to="/settings" label={t("away.back.settings")} />
       <Title tag={t("away.tag.off")} />
       <p className={styles.lede}>{t("away.off.lead")}</p>
       <ul className={styles.features}>
@@ -208,8 +208,7 @@ function OffPage({ view }: { view: RemoteView }) {
 
 function StartingPage() {
   return (
-    <Frame>
-      <Back to="/settings" label={t("away.back.settings")} />
+    <Frame back={{ to: "/settings", label: t("screen.settings.title") }}>
       <Title tag={t("away.tag.starting")} />
       <p className={styles.lede} role="status">
         {t("away.starting")}
@@ -271,6 +270,7 @@ function OnPage({
 
   return (
     <Frame
+      back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         <>
           <PhonesAside view={view}>
@@ -301,7 +301,6 @@ function OnPage({
         </>
       }
     >
-      <Back to="/settings" label={t("away.back.settings")} />
       <Title />
       <p className={styles.lede}>{t("away.on.lead")}</p>
       <div className={styles.switch}>
@@ -324,9 +323,6 @@ function OnPage({
                   ? "away.connection.simple.through"
                   : "away.connection.mostPrivate.through",
               )}
-              {view.connection === "simple" && view.trial ? (
-                <span className={styles.tag}>{t("away.tag.trial")}</span>
-              ) : null}
             </span>
             <span className={styles.sub}>
               {t(view.connection === "simple" ? "away.simple.hint" : "away.mostPrivate.hint")}
@@ -394,14 +390,9 @@ function OnPage({
         >
           {advanced ? t("away.advanced.hide") : t("away.advanced.show")}
         </button>
-        <button
-          type="button"
-          className={styles.linkButton}
-          data-kind="danger"
-          onClick={() => setDialog("off")}
-        >
+        <Button variant="forget" onClick={() => setDialog("off")}>
           {t("away.removeAll")}
-        </button>
+        </Button>
       </div>
       {advanced ? <AdvancedDetails id={advancedId} /> : null}
       {dialog === "change" ? <SwitchDialog view={view} onClose={() => setDialog(null)} /> : null}
@@ -422,8 +413,7 @@ function RelinkPage({
   const words = state.words.split(/[\s·]+/).filter(Boolean);
   const waiting = view.devices.filter((d) => d.needsAddress);
   return (
-    <Frame narrow>
-      <Back to="/settings" label={t("away.back.settings")} />
+    <Frame narrow back={{ to: "/settings", label: t("screen.settings.title") }}>
       <Title />
       <div className={styles.relink}>
         <div className={styles.qrBox}>
@@ -505,6 +495,7 @@ function ProblemPage({
   const canSwitch = view.connection === "mostPrivate" || mostPrivateAvailable();
   return (
     <Frame
+      back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         view.devices.length > 0 ? (
           <PhonesAside view={view}>
@@ -513,7 +504,6 @@ function ProblemPage({
         ) : null
       }
     >
-      <Back to="/settings" label={t("away.back.settings")} />
       <Title tag={t("away.tag.problem")} tagKind="problem" />
       <div className={styles.problem}>
         <div className={styles.alertText} role="alert">

@@ -13,6 +13,9 @@ describe("away", () => {
     await openAway("/settings/away");
     expect(screen.getByText("Off", { selector: "span" })).toBeInTheDocument();
     expect(
+      screen.getAllByRole("link", { name: "Settings" }).map((a) => a.className),
+    ).toContainEqual(expect.stringContaining("back"));
+    expect(
       screen.getByText(/Nothing is downloaded, started or connected until you set it up/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set up…" })).toBeInTheDocument();
@@ -25,8 +28,8 @@ describe("away", () => {
   it("on_simple_two_phones: shows the switch, the connection, the phones and what was sent", async () => {
     await openAway("/settings/away", "on");
     expect(screen.getByRole("switch", { name: "Away from home is on" })).toBeChecked();
-    expect(screen.getByText("Simple, through Cloudflare")).toBeInTheDocument();
-    expect(screen.getByText("Trial")).toBeInTheDocument();
+    expect(screen.getByText("Simple")).toBeInTheDocument();
+    expect(screen.queryByText("Trial")).toBeNull();
     expect(screen.getByText("Phones · 2")).toBeInTheDocument();
     expect(screen.getByText("Work phone")).toBeInTheDocument();
     expect(screen.getByText("Last used yesterday, 18:40")).toBeInTheDocument();

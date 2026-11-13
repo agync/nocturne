@@ -14,15 +14,15 @@ const SETUP = "/settings/away/setup";
 const STEP1 = /Use Nocturne from your phone when you’re out/;
 
 describe("setup", () => {
-  it("simple_is_preselected_with_trial: offers both ways, Simple first and marked Trial", async () => {
+  it("simple_is_preselected_with_trial: offers both ways, Simple first, no Trial badge", async () => {
     await openAway(SETUP, "off", STEP1);
     expect(screen.getByRole("radio", { name: /Simple/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /Most private/ })).not.toBeChecked();
-    expect(screen.getByText("Trial")).toBeInTheDocument();
+    expect(screen.queryByText("Trial")).toBeNull();
     expect(screen.getByText(/Nothing to sign up for/)).toBeInTheDocument();
     expect(screen.getByText(/A Tailscale account and its app on your phone/)).toBeInTheDocument();
     expect(screen.getByText(/it hands your phone the page it opens/)).toBeInTheDocument();
-    expect(screen.getByText(/step 1 of 3/)).toBeInTheDocument();
+    expect(screen.getByText("Away from home · step 1")).toBeInTheDocument();
   });
 
   it("download_needs_the_click: nothing downloads until Download is pressed", async () => {

@@ -35,7 +35,7 @@ const press = async (page: Page, role: "button" | "link" | "radio", name: string
 test.describe("S1, the page, in each state", () => {
   const states: Array<[string, string, string | RegExp]> = [
     ["off", "off", /It’s off\. Nothing is downloaded/],
-    ["on", "on", "Simple, through Cloudflare"],
+    ["on", "on", "Simple"],
     ["in-use", "inUse", "Using Nocturne now"],
     ["relink", "relink", /river · copper · meadow · thistle/],
     ["problem", "problem", /Cloudflare didn’t answer/],
@@ -241,6 +241,15 @@ test.describe("privacy and the rail", () => {
     await expect(rail.getByText("Sent to your phones")).toBeVisible();
     await press(page, "link", "Away from home is on");
     await expect(page.getByRole("heading", { name: "Away from home", level: 1 })).toBeVisible();
+  });
+
+  test("the back link and the Simple label carry no Trial badge", async ({ page }) => {
+    await open(page, "/settings/away", "on");
+    await expect(page.getByRole("link", { name: "Settings" }).first()).toBeVisible();
+    await expect(page.getByText("Trial", { exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Turn off and remove all phones…" }),
+    ).toBeVisible();
   });
 
   test("the Settings row opens Away from home", async ({ page }) => {

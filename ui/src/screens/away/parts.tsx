@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Dialog } from "../../components/Dialog/Dialog";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { t } from "../../copy/t";
 import type { DeviceView, RemoteConnection } from "../../engine/bindings";
 import styles from "./Away.module.css";
@@ -11,27 +13,21 @@ export function Frame({
   children,
   aside,
   narrow = false,
+  back,
 }: {
   children: ReactNode;
   aside?: ReactNode;
   narrow?: boolean;
+  back: { to: string; label: string };
 }) {
   return (
-    <div className={styles.frame}>
+    <ScreenSheet>
+      <BackLink to={back.to} label={back.label} />
       <div className={styles.columns} data-narrow={narrow}>
         <section className={styles.main}>{children}</section>
         {aside ? <aside className={styles.aside}>{aside}</aside> : null}
       </div>
-    </div>
-  );
-}
-
-export function Back({ to, label }: { to: string; label: string }) {
-  return (
-    <a className={styles.back} href={`#${to}`}>
-      <span aria-hidden="true">←</span>
-      {label}
-    </a>
+    </ScreenSheet>
   );
 }
 

@@ -7,7 +7,7 @@ import { t } from "../../copy/t";
 import type { DeviceView, RemoteView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
 import styles from "./Away.module.css";
-import { Back, Confirm, DeviceStatus, Frame } from "./parts";
+import { Confirm, DeviceStatus, Frame } from "./parts";
 import { useRemoteAct } from "./useRemote";
 import { whenText } from "./when";
 
@@ -117,7 +117,7 @@ function PhoneRow({ device, renaming, onRename, onDone, onRemove }: RowProps) {
             {t("away.phones.rename")}
           </Button>
           <Button
-            variant="quiet"
+            variant="forget"
             aria-label={t("away.phones.remove.named", { name: device.name })}
             onClick={onRemove}
           >
@@ -151,6 +151,7 @@ export function Phones({ view }: { view: RemoteView }) {
 
   return (
     <Frame
+      back={{ to: "/settings/away", label: t("screen.away.title") }}
       aside={
         <>
           <h2 className={styles.label}>{t("away.phones.lost.heading")}</h2>
@@ -159,7 +160,6 @@ export function Phones({ view }: { view: RemoteView }) {
         </>
       }
     >
-      <Back to="/settings/away" label={t("away.back.away")} />
       <h1 className="t-page-title">{t("away.phones.title")}</h1>
       <p className={styles.lede}>{t("away.phones.lead")}</p>
       {view.devices.length === 0 ? (

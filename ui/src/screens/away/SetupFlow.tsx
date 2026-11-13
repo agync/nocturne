@@ -48,7 +48,8 @@ function StepLabel({
     total: TOTAL[connection],
     connection: connectionName(connection),
   };
-  return <span className={styles.label}>{t(named ? "away.step.named" : "away.step", values)}</span>;
+  const key = !named ? "away.step.first" : "away.step.named";
+  return <span className={styles.label}>{t(key, values)}</span>;
 }
 
 function StillToCome({ connection, after }: { connection: RemoteConnection; after: number }) {
@@ -158,9 +159,12 @@ export function SetupFlow({ view }: { view: RemoteView }) {
   }
   if (state.type === "off") {
     return (
-      <Frame aside={aside("download")}>
+      <Frame
+        back={{ to: "/settings", label: t("screen.settings.title") }}
+        aside={aside("download")}
+      >
         <StepLabel connection={choice} step="download" named />
-        <h1 className={styles.statement}>
+        <h1 className="t-page-title">
           {t("away.ask.title", { company: companyOf(choice), size: formatBytes(ESTIMATE[choice]) })}
         </h1>
         <p className={styles.body}>{t("away.ask.body", { company: companyOf(choice) })}</p>
@@ -196,9 +200,12 @@ export function SetupFlow({ view }: { view: RemoteView }) {
   }
   if (state.type === "downloading") {
     return (
-      <Frame aside={aside("download")}>
+      <Frame
+        back={{ to: "/settings", label: t("screen.settings.title") }}
+        aside={aside("download")}
+      >
         <StepLabel connection={connection} step="download" named />
-        <h1 className={styles.statement}>
+        <h1 className="t-page-title">
           {t("away.download.title", { company: companyOf(connection) })}
         </h1>
         <p className={styles.body}>{t("away.download.body")}</p>
@@ -244,9 +251,12 @@ export function SetupFlow({ view }: { view: RemoteView }) {
   }
   if (state.type === "starting") {
     return (
-      <Frame aside={aside("download")}>
+      <Frame
+        back={{ to: "/settings", label: t("screen.settings.title") }}
+        aside={aside("download")}
+      >
         <StepLabel connection={connection} step="download" named />
-        <h1 className={styles.statement}>
+        <h1 className="t-page-title">
           {t("away.starting.title", { company: companyOf(connection) })}
         </h1>
         <p className={styles.body} role="status">
@@ -279,9 +289,12 @@ export function SetupFlow({ view }: { view: RemoteView }) {
     view.devices.length === 0
   ) {
     return (
-      <Frame aside={<PhoneAppAside connection={connection} />}>
+      <Frame
+        back={{ to: "/settings", label: t("screen.settings.title") }}
+        aside={<PhoneAppAside connection={connection} />}
+      >
         <StepLabel connection={connection} step="phoneApp" named />
-        <h1 className={styles.statement}>{t("away.phoneApp.title")}</h1>
+        <h1 className="t-page-title">{t("away.phoneApp.title")}</h1>
         <p className={styles.body}>{t("away.phoneApp.body")}</p>
         <ul className={styles.features}>
           <li>
@@ -344,6 +357,7 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
   ];
   return (
     <Frame
+      back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         <>
           <h2 className={styles.label}>{t("away.can.heading")}</h2>
@@ -359,7 +373,7 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
       }
     >
       <StepLabel connection={choice} step="choice" named={false} />
-      <h1 className={styles.statement}>{t("away.off.lead")}</h1>
+      <h1 className="t-page-title">{t("away.off.lead")}</h1>
       <fieldset className={styles.choices}>
         <legend className={styles.legend}>{t("away.choice.legend")}</legend>
         {options
@@ -376,12 +390,7 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
                   onChange={() => onChoice(o.value)}
                 />
                 <span className={styles.choiceText}>
-                  <span className={styles.name}>
-                    {connectionName(o.value)}
-                    {simple && view.trial ? (
-                      <span className={styles.tag}>{t("away.tag.trial")}</span>
-                    ) : null}
-                  </span>
+                  <span className={styles.name}>{connectionName(o.value)}</span>
                   <span>
                     <b>{t("away.choice.needs")}</b>{" "}
                     {t(simple ? "away.choice.simple.needs" : "away.choice.mostPrivate.needs")}
@@ -444,6 +453,7 @@ function SignIn({ connection, step, url, aside, onLeave }: SignInProps) {
   const links = step === "allowLinks";
   return (
     <Frame
+      back={{ to: "/settings", label: t("screen.settings.title") }}
       aside={
         <>
           <h2 className={styles.label}>
@@ -456,7 +466,7 @@ function SignIn({ connection, step, url, aside, onLeave }: SignInProps) {
       }
     >
       <StepLabel connection={connection} step={step} named />
-      <h1 className={styles.statement}>{t(links ? "away.links.title" : "away.signIn.title")}</h1>
+      <h1 className="t-page-title">{t(links ? "away.links.title" : "away.signIn.title")}</h1>
       <p className={styles.body}>{t(links ? "away.links.body" : "away.signIn.body")}</p>
       {links ? <p className={styles.callout}>{t("away.links.switch")}</p> : null}
       <p className={styles.waiting} role="status">
@@ -473,7 +483,7 @@ function SignIn({ connection, step, url, aside, onLeave }: SignInProps) {
       </div>
       <p className={styles.muted}>
         {t("away.signIn.noBrowser")}{" "}
-        <button type="button" className={styles.linkButton} onClick={() => void copy()}>
+        <button type="button" className={`${styles.linkButton} hit`} onClick={() => void copy()}>
           {t("away.signIn.copy")}
         </button>
       </p>

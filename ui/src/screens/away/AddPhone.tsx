@@ -8,7 +8,7 @@ import type { PairingOffer, PairingPhase, RemoteView } from "../../engine/bindin
 import { useEngine } from "../../engine/context";
 import styles from "./Away.module.css";
 import { PairingDialog } from "./PairingDialog";
-import { Back, Frame } from "./parts";
+import { Frame } from "./parts";
 import { QrMatrix } from "./QrMatrix";
 import { useRemoteAct } from "./useRemote";
 
@@ -295,8 +295,7 @@ export function AddPhone({ view }: { view: RemoteView }) {
   }
 
   return (
-    <Frame>
-      <Back to="/settings/away" label={t("away.back.away")} />
+    <Frame back={{ to: "/settings/away", label: t("screen.away.title") }}>
       <h1 className="t-page-title">{t("away.add.title")}</h1>
       {body}
       {first ? <p className={styles.muted}>{t("away.todo.leaving")}</p> : null}
