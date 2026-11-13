@@ -14,7 +14,7 @@ use jiff::civil::Date;
 use jiff::{SignedDuration, Timestamp};
 use nocturne_contract::{Edition, NoticeCode, PageSummary, PageView, TidyProgress, TidyReport};
 use nocturne_engine::day::page_instant;
-use nocturne_engine::{Clock, Engine, Error as EngineError};
+use nocturne_engine::{Clock, Engine, Error as EngineError, MindError};
 use tokio::sync::{Mutex, watch};
 
 use crate::events::{Events, notice};
@@ -457,7 +457,15 @@ impl Tidy {
                 return;
             }
             let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
-            match tokio::time::timeout(EMBED_LIMIT, mind.embed(&texts)).await {
+            // The vectors are marked with the store's finding model, so they are made with it.
+            let model = self.inner.engine.recall_model();
+            let embedded = async {
+                match mind.embed_with(&model, &texts).await {
+                    Err(MindError::Unsupported(_)) => mind.embed(&texts).await,
+                    other => other,
+                }
+            };
+            match tokio::time::timeout(EMBED_LIMIT, embedded).await {
                 Ok(Ok(vecs)) if vecs.len() == rows.len() => {
                     let n = rows.len();
                     let pairs: Vec<(String, Vec<f32>)> =

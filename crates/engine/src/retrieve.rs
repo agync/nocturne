@@ -41,6 +41,8 @@ fn who_is(query: &str) -> Option<String> {
 
 /// All current vectors, normalised, held in memory so a search is one pass over them.
 pub(crate) struct VecIndex {
+    /// The finding model the vectors came from.
+    pub model: String,
     pub dim: usize,
     pub ids: Vec<String>,
     pub data: Vec<f32>,
@@ -53,27 +55,39 @@ fn normalise(v: &mut [f32]) {
     }
 }
 
-fn build_index(conn: &Connection) -> Result<VecIndex> {
+/// The index of `model`'s vectors only: during a re-read, and just after its swap, vectors of
+/// another model are never mixed in.
+fn build_index(conn: &Connection, model: &str) -> Result<VecIndex> {
     let mut stmt = conn.prepare(
         "SELECT e.memory_id, e.dim, e.vec FROM embeddings e \
-         JOIN memories m ON m.id = e.memory_id WHERE m.superseded_at IS NULL",
+         JOIN memories m ON m.id = e.memory_id WHERE m.superseded_at IS NULL AND e.model = ?1",
     )?;
     let mut index = VecIndex {
+        model: model.to_string(),
         dim: 0,
         ids: Vec::new(),
         data: Vec::new(),
     };
-    let mut rows = stmt.query([])?;
+    let mut rows = stmt.query([model])?;
+    let mut read: Vec<(String, usize, Vec<u8>)> = Vec::new();
     while let Some(row) = rows.next()? {
-        let id: String = row.get(0)?;
-        let dim: usize = row.get::<_, i64>(1)? as usize;
+        let dim = row.get::<_, i64>(1)? as usize;
         let blob: Vec<u8> = row.get(2)?;
         if dim == 0 || blob.len() != dim * 4 {
             continue;
         }
-        if index.dim == 0 {
-            index.dim = dim;
-        }
+        read.push((row.get(0)?, dim, blob));
+    }
+    // The size most vectors have: a stray of another size never decides the index.
+    let mut counts: HashMap<usize, usize> = HashMap::new();
+    for (_, dim, _) in &read {
+        *counts.entry(*dim).or_default() += 1;
+    }
+    index.dim = counts
+        .into_iter()
+        .max_by_key(|(dim, n)| (*n, *dim))
+        .map_or(0, |(dim, _)| dim);
+    for (id, dim, blob) in read {
         if dim != index.dim {
             continue;
         }
@@ -90,16 +104,18 @@ fn build_index(conn: &Connection) -> Result<VecIndex> {
 
 impl Engine {
     fn vector_index(&self) -> Result<Arc<VecIndex>> {
+        let model = self.recall_model();
         if let Some(i) = self
             .inner
             .vectors
             .read()
             .unwrap_or_else(|e| e.into_inner())
             .as_ref()
+            .filter(|i| i.model == model)
         {
             return Ok(i.clone());
         }
-        let built = Arc::new(self.read(build_index)?);
+        let built = Arc::new(self.read(|conn| build_index(conn, &model))?);
         *self
             .inner
             .vectors

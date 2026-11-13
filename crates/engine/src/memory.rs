@@ -1278,7 +1278,8 @@ impl Engine {
     }
 
     /// Store vectors for memories, in chunks so capture never waits long. Unknown ids are ignored.
-    /// Each is marked with the current finding model.
+    /// Each is marked with the current finding model. A memory given a new vector here (new, or
+    /// re-worded) is read again by a re-read under way: what it built for the memory is dropped.
     pub fn store_embeddings(&self, rows: Vec<(String, Vec<f32>)>) -> Result<()> {
         let model = self.recall_model();
         for chunk in rows.chunks(200) {
@@ -1290,6 +1291,7 @@ impl Engine {
                          SELECT id, ?2, ?3, ?4 FROM memories WHERE id = ?1",
                         params![id, vec.len() as i64, blob, model],
                     )?;
+                    tx.execute("DELETE FROM embeddings_next WHERE memory_id = ?1", [id])?;
                 }
                 Ok(())
             })?;
@@ -1298,16 +1300,19 @@ impl Engine {
         Ok(())
     }
 
-    /// Memories that need a vector, newest first.
+    /// Memories that need a vector from the current finding model, newest first.
     pub fn memories_without_embedding(&self, limit: usize) -> Result<Vec<(String, String)>> {
+        let model = self.recall_model();
         self.read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT m.id, m.sentence FROM memories m \
                  WHERE m.superseded_at IS NULL \
-                   AND NOT EXISTS (SELECT 1 FROM embeddings e WHERE e.memory_id = m.id) \
+                   AND NOT EXISTS (SELECT 1 FROM embeddings e \
+                                   WHERE e.memory_id = m.id AND e.model = ?2) \
                  ORDER BY m.recorded_at DESC, m.id LIMIT ?1",
             )?;
-            let rows = stmt.query_map([limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+            let rows =
+                stmt.query_map(params![limit as i64, model], |r| Ok((r.get(0)?, r.get(1)?)))?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
         })
     }
