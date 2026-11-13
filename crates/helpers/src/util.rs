@@ -1,17 +1,10 @@
-//! Small helpers shared by the two transports: a loopback HTTP probe that never uses a proxy,
-//! and running a helper's command line tool with a scrubbed environment.
+//! Small helpers for the transports: a loopback HTTP probe that never uses a proxy, and finding
+//! an address in a helper's output.
 
-use std::ffi::OsString;
-use std::path::Path;
-use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
-
-use crate::{HelperError, Installed, verify};
 
 /// `GET path` on `127.0.0.1:port`: the status and the body, or `None` when nothing answers.
 pub(crate) async fn local_get(port: u16, path: &str) -> Option<(u16, String)> {
@@ -30,107 +23,6 @@ pub(crate) async fn local_get(port: u16, path: &str) -> Option<(u16, String)> {
         .await
         .ok()
         .flatten()
-}
-
-fn command(
-    program: &Path,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-) -> tokio::process::Command {
-    let mut c = tokio::process::Command::new(program);
-    c.args(args)
-        .env_clear()
-        .envs(env.iter().map(|(k, v)| (k, v)))
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    c
-}
-
-/// Run to the end and return the exit code and what it printed, or kill after `within`. The
-/// program is hashed against its pin first, on every call.
-pub(crate) async fn run_cli_code(
-    pin: &Installed,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-    within: Duration,
-) -> Result<(Option<i32>, String), HelperError> {
-    verify(pin)?;
-    let child = command(&pin.path, args, env)
-        .spawn()
-        .map_err(|e| HelperError::Spawn(e.to_string()))?;
-    match tokio::time::timeout(within, child.wait_with_output()).await {
-        Ok(Ok(out)) => Ok((
-            out.status.code(),
-            String::from_utf8_lossy(&out.stdout).into_owned(),
-        )),
-        Ok(Err(e)) => Err(HelperError::Spawn(e.to_string())),
-        Err(_) => Err(HelperError::Exited("the command took too long".into())),
-    }
-}
-
-pub(crate) async fn run_cli(
-    pin: &Installed,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-    within: Duration,
-) -> Result<String, HelperError> {
-    run_cli_code(pin, args, env, within)
-        .await
-        .map(|(_, out)| out)
-}
-
-/// Run to the end, handing every output line (both streams) to `on_line` as it arrives.
-/// Returns the exit code. Cancelling kills the command.
-pub(crate) async fn run_cli_watch(
-    pin: &Installed,
-    args: &[OsString],
-    env: &[(OsString, OsString)],
-    cancel: &CancellationToken,
-    mut on_line: impl FnMut(&str),
-) -> Result<Option<i32>, HelperError> {
-    verify(pin)?;
-    let mut child = command(&pin.path, args, env)
-        .spawn()
-        .map_err(|e| HelperError::Spawn(e.to_string()))?;
-    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
-    if let Some(out) = child.stdout.take() {
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(out).lines();
-            while let Ok(Some(l)) = lines.next_line().await {
-                let _ = tx.send(l);
-            }
-        });
-    }
-    if let Some(err) = child.stderr.take() {
-        let tx = tx.clone();
-        tokio::spawn(async move {
-            let mut lines = BufReader::new(err).lines();
-            while let Ok(Some(l)) = lines.next_line().await {
-                let _ = tx.send(l);
-            }
-        });
-    }
-    drop(tx);
-    let status = loop {
-        tokio::select! {
-            Some(line) = rx.recv() => on_line(&line),
-            s = child.wait() => break s.map_err(|e| HelperError::Exited(e.to_string()))?,
-            () = cancel.cancelled() => {
-                let _ = child.start_kill();
-                return Err(HelperError::Stopped);
-            }
-        }
-    };
-    let drain = async {
-        while let Some(line) = rx.recv().await {
-            on_line(&line);
-        }
-    };
-    let _ = tokio::time::timeout(Duration::from_secs(2), drain).await;
-    Ok(status.code())
 }
 
 /// The last `https://<name><suffix>` address printed in `text`.

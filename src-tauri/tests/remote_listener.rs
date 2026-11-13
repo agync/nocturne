@@ -13,7 +13,7 @@ use nocturne_app_lib::remote::testing::client::{
 };
 use nocturne_app_lib::remote::testing::{self, Bench, TEST_HOST};
 use nocturne_contract::{RemoteAnswer, RemoteCall};
-use nocturne_helpers::{KeyCarrier, Origin};
+use nocturne_helpers::{HELPER_KEY_HEADER as HEADER, KeyCarrier, Origin};
 
 const KEY: &str = "k7f3a9c2e1b8d4f6a0c3e5b7d9f1a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6";
 
@@ -175,47 +175,57 @@ async fn refuses_without_helper_key() {
         "the path does not carry the key for this helper"
     );
 
-    let path = start(tcp(KeyCarrier::PathPrefix)).await;
+    let header = start(tcp(KeyCarrier::Header)).await;
+    let status = |extra: Vec<(&'static str, String)>| {
+        let addr = header.addr.clone();
+        async move {
+            let h: Vec<(&str, &str)> = extra.iter().map(|(k, v)| (*k, v.as_str())).collect();
+            http(&addr, "GET", "/p", &h, &[]).await.unwrap().status
+        }
+    };
+    assert_eq!(status(vec![]).await, 404);
+    assert_eq!(status(vec![(HEADER, KEY.into())]).await, 200);
+    assert_eq!(status(vec![("NOCTURNE-HELPER-KEY", KEY.into())]).await, 200);
+    assert_eq!(status(vec![(HEADER, KEY[..40].into())]).await, 404);
+    assert_eq!(status(vec![(HEADER, format!("{KEY}x"))]).await, 404);
     assert_eq!(
-        http(&path.addr, "GET", "/p", &[], &[])
-            .await
-            .unwrap()
-            .status,
-        404
+        status(vec![("host", KEY.into())]).await,
+        404,
+        "not the Host"
     );
     assert_eq!(
-        http(&path.addr, "GET", &format!("/{KEY}/p"), &[], &[])
-            .await
-            .unwrap()
-            .status,
-        200
+        status(vec![(HEADER, KEY.into()), (HEADER, KEY.into())]).await,
+        404,
+        "exactly one"
     );
-    assert_eq!(
-        http(&path.addr, "GET", &format!("/{}/p", &KEY[..40]), &[], &[])
-            .await
-            .unwrap()
-            .status,
-        404
-    );
-    let ws = Ws::connect(&path.addr, PATH_SESSION, &[]).await;
+    let ws = Ws::connect(&header.addr, PATH_SESSION, &[]).await;
     assert_eq!(ws.err().map(|h| h.status), Some(404));
+    let ws = Ws::connect(&header.addr, PATH_SESSION, &[(HEADER, KEY)]).await;
+    assert_ne!(
+        ws.err().map(|h| h.status),
+        Some(404),
+        "the key header reaches the session path"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn key_never_echoed_or_redirected() {
-    for carrier in [KeyCarrier::HostHeader, KeyCarrier::PathPrefix] {
+    for carrier in [KeyCarrier::HostHeader, KeyCarrier::Header] {
         let r = start(tcp(carrier)).await;
         let paths = ["/", "/p", "/s", "/nope", "/assets/app.js", "/../etc"];
         for p in paths {
-            for (path, host) in [
-                (p.to_string(), KEY.to_string()),
-                (format!("/{KEY}{p}"), "phone.test".to_string()),
-                (p.to_string(), "phone.test".to_string()),
+            for (path, host, header) in [
+                (p.to_string(), KEY, None),
+                (p.to_string(), "phone.test", Some(KEY)),
+                (format!("/{KEY}{p}"), "phone.test", None),
+                (p.to_string(), "phone.test", None),
             ] {
                 for method in ["GET", "POST", "OPTIONS"] {
-                    let res = http(&r.addr, method, &path, &[("host", &host)], &[])
-                        .await
-                        .unwrap();
+                    let mut h = vec![("host", host)];
+                    if let Some(k) = header {
+                        h.push((HEADER, k));
+                    }
+                    let res = http(&r.addr, method, &path, &h, &[]).await.unwrap();
                     let raw = String::from_utf8_lossy(&res.raw);
                     assert!(!raw.contains(KEY), "{method} {path}: {raw}");
                     assert!(!(300..400).contains(&res.status), "{method} {path}");
@@ -386,7 +396,7 @@ async fn lemond_never_reachable() {
             });
         }
     });
-    for r in [local().await, start(tcp(KeyCarrier::PathPrefix)).await] {
+    for r in [local().await, start(tcp(KeyCarrier::Header)).await] {
         if let Origin::Tcp { port: mine, .. } = r.handle.origin {
             assert_ne!(mine, port);
         }

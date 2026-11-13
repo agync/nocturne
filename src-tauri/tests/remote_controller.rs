@@ -68,7 +68,7 @@ impl Away {
 
     fn on(&self) -> RemoteView {
         self.helpers.install_now(HelperKind::Cloudflared);
-        self.helpers.install_now(HelperKind::Tailscaled);
+        self.helpers.install_now(HelperKind::Tailnet);
         self.start("simple", false).unwrap();
         self.settle();
         self.view()
@@ -363,7 +363,7 @@ fn relink_code_cannot_pair() {
 #[test]
 fn most_private_keeps_its_address() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     *a.helpers.transport.addresses.lock().unwrap() =
         vec!["https://nocturne-ab12.tail1234.ts.net".into()];
     a.start("mostPrivate", false).unwrap();
@@ -418,9 +418,9 @@ fn switching_connection_unpairs_phones() {
 }
 
 #[test]
-fn sign_in_then_allow_links_then_on() {
+fn sign_in_then_allow_links_then_approve_then_on() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     *a.helpers.transport.on_start.lock().unwrap() = Some(TransportState::NeedsSignIn {
         url: "https://login.tailscale.com/a/abc".into(),
         allow_links: false,
@@ -452,6 +452,22 @@ fn sign_in_then_allow_links_then_on() {
             }
         )
     });
+    a.helpers.transport.set(TransportState::NeedsApproval {
+        url: nocturne_helpers::APPROVE_URL.into(),
+    });
+    wait_for("approve", || {
+        matches!(
+            a.hub.state(),
+            RemoteState::NeedsSignIn {
+                step: SignInStep::Approve,
+                ..
+            }
+        )
+    });
+    assert_eq!(
+        a.hub.sign_in_url().as_deref(),
+        Some(nocturne_helpers::APPROVE_URL)
+    );
     a.helpers.transport.set(TransportState::Up {
         address: "https://nocturne-ab12.tail1234.ts.net".into(),
         route: None,
@@ -560,7 +576,7 @@ fn keep_awake_only_on_mains_and_while_on() {
 #[test]
 fn remove_all_revokes_and_signs_out() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     *a.helpers.transport.addresses.lock().unwrap() =
         vec!["https://nocturne-ab12.tail1234.ts.net".into()];
     a.start("mostPrivate", false).unwrap();
@@ -580,7 +596,7 @@ fn remove_all_revokes_and_signs_out() {
 #[test]
 fn delete_everything_stops_signs_out_and_removes_remote_folder() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     *a.helpers.transport.addresses.lock().unwrap() =
         vec!["https://nocturne-ab12.tail1234.ts.net".into()];
     a.start("mostPrivate", false).unwrap();
@@ -691,7 +707,7 @@ fn tray_turn_off_reads_state() {
 #[test]
 fn delete_everything_while_off_starts_nothing() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     a.h.ok(
         "delete_everything",
         json!({"confirmPhrase": nocturne_engine::DELETE_PHRASE}),
@@ -714,7 +730,7 @@ fn delete_everything_while_off_starts_nothing() {
 #[test]
 fn leaving_most_private_signs_out_first() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     a.helpers.install_now(HelperKind::Cloudflared);
     a.start("mostPrivate", false).unwrap();
     a.settle();
@@ -734,7 +750,7 @@ fn leaving_most_private_signs_out_first() {
 #[test]
 fn switching_during_download_starts_the_right_helper() {
     let a = away();
-    a.helpers.install_now(HelperKind::Tailscaled);
+    a.helpers.install_now(HelperKind::Tailnet);
     *a.helpers.transport.addresses.lock().unwrap() =
         vec!["https://nocturne-ab12.tail1234.ts.net".into()];
     a.start("simple", true).unwrap();
@@ -753,7 +769,7 @@ fn switching_during_download_starts_the_right_helper() {
     );
     assert_eq!(
         *a.helpers.transport.kind.lock().unwrap(),
-        HelperKind::Tailscaled
+        HelperKind::Tailnet
     );
     assert_eq!(
         a.helpers.installs.load(Ordering::SeqCst),

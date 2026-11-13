@@ -26,7 +26,6 @@ pub(crate) struct Source {
     pub sha256: String,
     pub member: Option<String>,
     pub member_sha256: Option<String>,
-    pub extras: Vec<(String, String)>,
     /// The download's exact size: nothing larger is accepted or kept.
     pub max_bytes: u64,
     /// Hosts a redirect may lead to (https only).
@@ -38,7 +37,11 @@ pub(crate) fn kind_dir(kind: HelperKind) -> &'static str {
 }
 
 pub(crate) fn binary_name(kind: HelperKind) -> String {
-    format!("{}{}", kind.name(), if cfg!(windows) { ".exe" } else { "" })
+    let name = match kind {
+        HelperKind::Cloudflared => "cloudflared",
+        HelperKind::Tailnet => "nocturne-tailnet",
+    };
+    format!("{name}{}", if cfg!(windows) { ".exe" } else { "" })
 }
 
 pub(crate) fn helpers_dir(dirs: &HelperDirs) -> PathBuf {
@@ -71,33 +74,6 @@ pub(crate) fn installed_with(
             .unwrap_or_else(|| asset.sha256.clone()),
         path,
     })
-}
-
-/// The pinned extra binaries installed beside the main one, each with its own pin.
-pub(crate) fn extras_with(
-    lock: &HelpersLock,
-    kind: HelperKind,
-    dirs: &HelperDirs,
-) -> Vec<Installed> {
-    let Some(helper) = lock.helper(kind) else {
-        return Vec::new();
-    };
-    let Some(asset) = platform().and_then(|p| helper.assets.get(p)) else {
-        return Vec::new();
-    };
-    asset
-        .extras
-        .iter()
-        .filter_map(|e| {
-            let name = e.member.rsplit('/').next()?;
-            Some(Installed {
-                kind,
-                version: helper.version.clone(),
-                sha256: e.sha256.clone(),
-                path: install_dir(dirs, kind, &helper.version).join(name),
-            })
-        })
-        .collect()
 }
 
 /// The hosts a download may come from: the one in the lock, and the ones the lock names for
@@ -133,11 +109,6 @@ pub(crate) fn source_for(lock: &HelpersLock, kind: HelperKind) -> Result<Source,
         sha256: asset.sha256.clone(),
         member: asset.member.clone(),
         member_sha256: asset.member_sha256.clone(),
-        extras: asset
-            .extras
-            .iter()
-            .map(|e| (e.member.clone(), e.sha256.clone()))
-            .collect(),
         max_bytes: asset.size,
         hosts: allowed_hosts(helper, asset),
     })
@@ -434,14 +405,7 @@ fn extract_and_place(
             std::fs::copy(part, &main).map_err(disk_error)?;
         }
         Some(member) => {
-            let mut wanted: Vec<(&str, PathBuf)> = vec![(member.as_str(), main.clone())];
-            for (extra, _) in &source.extras {
-                if !safe_member(extra) {
-                    return Err(HelperError::Mismatch);
-                }
-                let name = extra.rsplit('/').next().unwrap_or(extra);
-                wanted.push((extra.as_str(), staging.join(name)));
-            }
+            let wanted: Vec<(&str, PathBuf)> = vec![(member.as_str(), main.clone())];
             if source.file.ends_with(".zip") {
                 extract_zip(part, &wanted)?;
             } else {
@@ -457,14 +421,6 @@ fn extract_and_place(
             .unwrap_or(source.sha256.clone())
     {
         return Err(HelperError::Mismatch);
-    }
-    for (extra, pin) in &source.extras {
-        let name = extra.rsplit('/').next().unwrap_or(extra);
-        let path = staging.join(name);
-        restrict(&path, 0o700)?;
-        if hash_file(&path)? != *pin {
-            return Err(HelperError::Mismatch);
-        }
     }
     std::fs::create_dir_all(kind_root).map_err(disk_error)?;
     restrict(kind_root, 0o700)?;
@@ -644,7 +600,6 @@ mod tests {
             sha256: sha(body),
             member: None,
             member_sha256: None,
-            extras: Vec::new(),
             max_bytes: 1 << 20,
             hosts: Vec::new(),
         }
@@ -834,7 +789,6 @@ mod tests {
             sha256: sha(b"x"),
             member: None,
             member_sha256: None,
-            extras: Vec::new(),
             max_bytes: 1 << 20,
             hosts: Vec::new(),
         };
@@ -853,7 +807,7 @@ mod tests {
         let server = serve(archive.clone(), None).await;
         let mut source = raw_source(&server, &archive);
         source.file = "pkg.tgz".into();
-        source.member = Some("pkg/tailscaled".into());
+        source.member = Some("pkg/cloudflared".into());
         source.member_sha256 = Some(sha(b"evil"));
         let dirs = tmp.dirs();
         let (result, _) = run(&source, &dirs).await;
@@ -874,32 +828,29 @@ mod tests {
     #[tokio::test]
     async fn archives_install_their_pinned_members() {
         let tmp = TempDir::new("archives");
-        let daemon = b"daemon bytes".to_vec();
-        let cli = b"cli bytes".to_vec();
+        let helper = b"helper bytes".to_vec();
         for (zip, name) in [(false, "pkg.tgz"), (true, "pkg.zip")] {
             let entries: [(&str, &[u8]); 3] = [
                 ("pkg/readme", b"hello"),
-                ("pkg/tailscaled", &daemon),
-                ("pkg/tailscale", &cli),
+                ("pkg/cloudflared", &helper),
+                ("pkg/other", b"other"),
             ];
             let archive = if zip { zip_of(&entries) } else { tgz(&entries) };
             let server = serve(archive.clone(), None).await;
             let mut source = raw_source(&server, &archive);
-            source.kind = HelperKind::Tailscaled;
             source.file = name.into();
-            source.member = Some("pkg/tailscaled".into());
-            source.member_sha256 = Some(sha(&daemon));
-            source.extras = vec![("pkg/tailscale".into(), sha(&cli))];
+            source.member = Some("pkg/cloudflared".into());
+            source.member_sha256 = Some(sha(&helper));
             let dirs = tmp.dirs();
             let (result, _) = run(&source, &dirs).await;
             let installed = result.unwrap();
-            assert_eq!(installed.sha256, sha(&daemon));
-            assert_eq!(std::fs::read(&installed.path).unwrap(), daemon);
-            let beside = installed.path.parent().unwrap().join("tailscale");
-            assert_eq!(std::fs::read(beside).unwrap(), cli);
+            assert_eq!(installed.sha256, sha(&helper));
+            assert_eq!(std::fs::read(&installed.path).unwrap(), helper);
+            let dir = installed.path.parent().unwrap();
+            assert!(!dir.join("other").exists() && !dir.join("readme").exists());
 
             let mut wrong = source.clone();
-            wrong.extras = vec![("pkg/tailscale".into(), sha(b"other"))];
+            wrong.member_sha256 = Some(sha(b"other"));
             let (result, _) = run(&wrong, &dirs).await;
             assert_eq!(result, Err(HelperError::Mismatch));
         }
@@ -912,7 +863,7 @@ mod tests {
         let dirs = tmp.dirs();
         let lock = HelpersLock::current();
         assert!(installed_with(&lock, HelperKind::Cloudflared, &dirs).is_none());
-        assert!(extras_with(&lock, HelperKind::Tailscaled, &dirs).len() <= 1);
+        assert!(installed_with(&lock, HelperKind::Tailnet, &dirs).is_none());
         let pinned = Installed {
             kind: HelperKind::Cloudflared,
             version: "1".into(),
@@ -941,11 +892,11 @@ mod tests {
         let tmp = TempDir::new("pin");
         let dirs = tmp.dirs();
         let lock = HelpersLock::parse(HelpersLock::embedded_text()).unwrap();
-        let version = lock.helper(HelperKind::Tailscaled).unwrap().version.clone();
-        let dir = install_dir(&dirs, HelperKind::Tailscaled, &version);
+        let version = lock.helper(HelperKind::Tailnet).unwrap().version.clone();
+        let dir = install_dir(&dirs, HelperKind::Tailnet, &version);
         std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join(binary_name(HelperKind::Tailscaled)), b"x").unwrap();
-        let found = installed_with(&lock, HelperKind::Tailscaled, &dirs);
+        std::fs::write(dir.join(binary_name(HelperKind::Tailnet)), b"x").unwrap();
+        let found = installed_with(&lock, HelperKind::Tailnet, &dirs);
         if platform().is_some() {
             let found = found.unwrap();
             assert_eq!(found.version, version);
@@ -986,7 +937,6 @@ mod tests {
             sha256: sha(b"x"),
             member: None,
             member_sha256: None,
-            extras: Vec::new(),
             max_bytes,
             hosts: vec!["127.0.0.1".into()],
         }

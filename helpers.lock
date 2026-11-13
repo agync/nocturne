@@ -44,52 +44,40 @@ sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
 
 [[helpers]]
-kind = "tailscaled"
+kind = "tailnet"
+# Built by Nocturne from helpers/tailnet (scripts/build-tailnet.sh, the tailnet CI workflow) with
+# the pinned Go toolchain; version is the tailscale.com module it is built on. Every platform is a
+# bare binary attached to Nocturne's own release, whose address is filled in when the first release
+# is cut.
 version = "1.104.6"
 licence = "BSD-3-Clause"
 pinned_at = "2026-11-13"
-# PLACEHOLDER dates and pins, set by scripts/helpers-pin.sh and the maintainer.
-released_at = "2000-01-01"
-go_version = "PLACEHOLDER"
-tag_commit = "PLACEHOLDER"
+# The tailscale v1.104.6 tag date. The checksums and sizes are placeholders until the first
+# release, set by scripts/helpers-pin.sh.
+released_at = "2026-11-10"
+source = "helpers/tailnet"
+go_version = "go1.27.3"
 go_licenses_version = "PLACEHOLDER"
-base_url = "https://pkgs.tailscale.com/stable"
+base_url = "https://example.invalid/nocturne/releases/download/PLACEHOLDER"
 placeholder = true
 redirect_hosts = []
 
 [helpers.assets.linux-x86_64]
-file = "tailscale_1.104.6_amd64.tgz"
+file = "nocturne-tailnet-linux-x86_64"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
-member = "tailscale_1.104.6_amd64/tailscaled"
-member_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-extras = [{ member = "tailscale_1.104.6_amd64/tailscale", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }]
 
 [helpers.assets.linux-aarch64]
-file = "tailscale_1.104.6_arm64.tgz"
+file = "nocturne-tailnet-linux-aarch64"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
-member = "tailscale_1.104.6_arm64/tailscaled"
-member_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-extras = [{ member = "tailscale_1.104.6_arm64/tailscale", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }]
 
-# macOS and Windows have no upstream standalone tailscaled: release CI builds them from the pinned
-# tag (scripts/build-tailscaled.sh) and attaches them to Nocturne's own release, whose address is
-# filled in when the first release is cut.
 [helpers.assets.macos-aarch64]
-file = "tailscaled-1.104.6-darwin-arm64.tgz"
-base_url = "https://example.invalid/nocturne/releases/download/PLACEHOLDER"
+file = "nocturne-tailnet-macos-aarch64"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
-member = "tailscaled"
-member_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-extras = [{ member = "tailscale", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }]
 
 [helpers.assets.windows-x86_64]
-file = "tailscaled-1.104.6-windows-amd64.zip"
-base_url = "https://example.invalid/nocturne/releases/download/PLACEHOLDER"
+file = "nocturne-tailnet-windows-x86_64.exe"
 sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
 size = 0
-member = "tailscaled.exe"
-member_sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-extras = [{ member = "tailscale.exe", sha256 = "0000000000000000000000000000000000000000000000000000000000000000" }]

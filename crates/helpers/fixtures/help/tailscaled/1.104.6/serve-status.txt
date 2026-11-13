@@ -1,9 +1,0 @@
-# captured from tailscale 1.104.6 on a developer machine; not yet the pinned binary, run scripts/helpers-pin.sh
-View current serve configuration
-
-USAGE
-  tailscale serve status [--json]
-
-FLAGS
-  --json, --json=false
-    	output JSON (default false)

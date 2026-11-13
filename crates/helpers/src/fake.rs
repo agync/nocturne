@@ -1,4 +1,4 @@
-//! Stand-ins for `cloudflared`, `tailscaled` and `tailscale`, for tests only (the `fake` feature).
+//! Stand-ins for `cloudflared` and `nocturne-tailnet`, for tests only (the `fake` feature).
 //!
 //! A stand-in accepts only the flags in the captured help fixtures, appends its arguments and
 //! environment to `fake-record.jsonl` beside its own binary, and is steered by
@@ -62,6 +62,19 @@ pub fn record(role: &str, args: &[String]) -> usize {
         let _ = writeln!(f, "{line}");
     }
     before + 1
+}
+
+/// Append one event of a run to the record: an input line it read, or how it ended.
+pub fn note(role: &str, value: Value) {
+    let line =
+        json!({ "role": role, "value": value, "pid": std::process::id(), "at_ms": now_ms() });
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(exe_dir().join(RECORD_FILE))
+    {
+        let _ = writeln!(f, "{line}");
+    }
 }
 
 pub fn now_ms() -> u64 {
@@ -233,13 +246,19 @@ fn pump(
     }
 }
 
-/// Forward every connection to `origin`. Where `host` is given the first request's Host header is
-/// replaced with it, as cloudflared does with `TUNNEL_HTTP_HOST_HEADER`. With `record` every byte
-/// is appended there, for the "relay sees no plaintext" proofs.
-pub fn relay(listener: TcpListener, origin: Origin, host: Option<String>, record: Option<PathBuf>) {
+/// Forward every connection to `origin`. Where `header` is given the first request carries it as
+/// `(name, value)` in place of any header of that name the client sent: the Host, as cloudflared
+/// does with `TUNNEL_HTTP_HOST_HEADER`, or the helper key header, as nocturne-tailnet does. With
+/// `record` every byte is appended there, for the "relay sees no plaintext" proofs.
+pub fn relay(
+    listener: TcpListener,
+    origin: Origin,
+    header: Option<(String, String)>,
+    record: Option<PathBuf>,
+) {
     let record = record.map(Arc::new);
     for client in listener.incoming().flatten() {
-        let (origin, host, record) = (origin.clone(), host.clone(), record.clone());
+        let (origin, header, record) = (origin.clone(), header.clone(), record.clone());
         std::thread::spawn(move || {
             let Ok(upstream) = connect(&origin) else {
                 return;
@@ -256,8 +275,8 @@ pub fn relay(listener: TcpListener, origin: Origin, host: Option<String>, record
                 }
                 head.push(byte[0]);
             }
-            let head = match &host {
-                Some(h) => rewrite_host(&head, h),
+            let head = match &header {
+                Some((name, value)) => rewrite_header(&head, name, value),
                 None => head,
             };
             tee(&record, ">", &head);
@@ -280,14 +299,23 @@ pub fn relay(listener: TcpListener, origin: Origin, host: Option<String>, record
     }
 }
 
-fn rewrite_host(head: &[u8], host: &str) -> Vec<u8> {
+fn rewrite_header(head: &[u8], name: &str, value: &str) -> Vec<u8> {
     let text = String::from_utf8_lossy(head);
+    let wanted = name.to_ascii_lowercase().replace('_', "-");
     let mut out = String::new();
-    for line in text.split_inclusive("\r\n") {
-        if line.to_ascii_lowercase().starts_with("host:") {
-            out.push_str(&format!("Host: {host}\r\n"));
-        } else {
-            out.push_str(line);
+    for (i, line) in text.split_inclusive("\r\n").enumerate() {
+        let field = line
+            .split(':')
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase()
+            .replace('_', "-");
+        if i > 0 && line.contains(':') && field.trim() == wanted {
+            continue;
+        }
+        out.push_str(line);
+        if i == 0 {
+            out.push_str(&format!("{name}: {value}\r\n"));
         }
     }
     out.into_bytes()

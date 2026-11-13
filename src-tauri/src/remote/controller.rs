@@ -81,7 +81,7 @@ impl Helpers for RealHelpers {
 pub fn kind_of(c: RemoteConnection) -> HelperKind {
     match c {
         RemoteConnection::Simple => HelperKind::Cloudflared,
-        RemoteConnection::MostPrivate => HelperKind::Tailscaled,
+        RemoteConnection::MostPrivate => HelperKind::Tailnet,
     }
 }
 
@@ -622,6 +622,12 @@ impl RemoteHub {
                     },
                 });
             }
+            TransportState::NeedsApproval { url } => {
+                self.set_state(RemoteState::NeedsSignIn {
+                    url,
+                    step: SignInStep::Approve,
+                });
+            }
             TransportState::Up { address, route } => {
                 let host = host_of(&address);
                 let machine = (self.core.connection() == Some(RemoteConnection::MostPrivate))
@@ -774,11 +780,11 @@ impl RemoteHub {
             let running = ctl
                 .transport
                 .clone()
-                .filter(|t| t.kind() == HelperKind::Tailscaled);
+                .filter(|t| t.kind() == HelperKind::Tailnet);
             let t = running.or_else(|| {
                 self.helpers
-                    .installed(HelperKind::Tailscaled)
-                    .map(|i| Arc::from(self.helpers.transport(HelperKind::Tailscaled, &i)))
+                    .installed(HelperKind::Tailnet)
+                    .map(|i| Arc::from(self.helpers.transport(HelperKind::Tailnet, &i)))
             });
             if let Some(t) = t {
                 let _ = t.sign_out().await;
@@ -1136,13 +1142,13 @@ impl RemoteHub {
 fn helper_name(kind: HelperKind) -> &'static str {
     match kind {
         HelperKind::Cloudflared => "cloudflared",
-        HelperKind::Tailscaled => "tailscaled",
+        HelperKind::Tailnet => "nocturne-tailnet",
     }
 }
 
 fn helper_label(kind: HelperKind) -> &'static str {
     match kind {
         HelperKind::Cloudflared => "Cloudflare",
-        HelperKind::Tailscaled => "Tailscale",
+        HelperKind::Tailnet => "Tailscale",
     }
 }

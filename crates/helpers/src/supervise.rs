@@ -1,6 +1,7 @@
 //! Run one helper process: its own process group (a job object on Windows), a scrubbed
 //! environment, output kept in an owner-only log, restarts with backoff, and a stop that proves
-//! nothing is left running.
+//! nothing is left running. A helper that speaks in lines keeps its input open and has its
+//! output read line by line instead of logged.
 
 use std::collections::VecDeque;
 use std::ffi::OsString;
@@ -11,7 +12,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
-use tokio::sync::{oneshot, watch};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
+use tokio::process::ChildStdin;
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
@@ -29,6 +32,29 @@ pub struct HelperCommand {
     pub cwd: Option<PathBuf>,
 }
 
+/// A line written to a helper that must never show in `Debug` output or logs.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Secret(pub String);
+
+impl std::fmt::Debug for Secret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("<hidden>")
+    }
+}
+
+/// Whether a helper that ended by itself is started again, from its exit code and the last
+/// lines it printed.
+pub type RestartRule = fn(Option<i32>, &[String]) -> bool;
+
+fn always(_: Option<i32>, _: &[String]) -> bool {
+    true
+}
+
+/// The longest output line kept; a longer one is dropped.
+const MAX_LINE: usize = 8192;
+/// How many of a run's last output lines the restart rule sees.
+const TAIL: usize = 16;
+
 #[derive(Debug, Clone)]
 pub struct SuperviseOptions {
     /// Folder for `helper-<name>.log`.
@@ -44,6 +70,16 @@ pub struct SuperviseOptions {
     /// `rotate_every`.
     pub log_limit: u64,
     pub rotate_every: Duration,
+    /// Keep the helper's input open and read its output as lines (see [`Supervisor::take_lines`])
+    /// instead of logging it. Errors still go to the log.
+    pub lines: bool,
+    /// Written as the first input line of every start, restarts included.
+    pub first_line: Option<Secret>,
+    /// Written to ask the helper to stop, `stop_wait` before it is sent SIGTERM.
+    pub stop_line: Option<String>,
+    pub stop_wait: Duration,
+    /// Decides whether a helper that ended by itself is started again.
+    pub restart: RestartRule,
 }
 
 impl SuperviseOptions {
@@ -56,6 +92,11 @@ impl SuperviseOptions {
             grace: Duration::from_secs(3),
             log_limit: 1 << 20,
             rotate_every: Duration::from_secs(30),
+            lines: false,
+            first_line: None,
+            stop_line: None,
+            stop_wait: Duration::from_secs(15),
+            restart: always,
         }
     }
 }
@@ -63,8 +104,12 @@ impl SuperviseOptions {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Phase {
     Running,
-    Backoff { attempt: u32 },
+    Backoff {
+        attempt: u32,
+    },
     GaveUp(String),
+    /// Ended by itself with this exit code and, by the restart rule, not started again.
+    Ended(Option<i32>),
     Stopped,
 }
 
@@ -83,6 +128,9 @@ pub struct SupState {
 struct Running {
     child: Box<dyn ChildWrapper>,
     pgid: u32,
+    stdin: Option<ChildStdin>,
+    /// Forwards output lines and returns the run's last ones at the end of its output.
+    reader: Option<JoinHandle<Vec<String>>>,
 }
 
 /// Asks a supervised helper to stop; the stop itself is still waited for by `Supervisor::stop`.
@@ -102,6 +150,8 @@ pub struct Supervisor {
     log: PathBuf,
     stop: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     task: Option<JoinHandle<Result<(), HelperError>>>,
+    input: mpsc::UnboundedSender<String>,
+    lines: Option<mpsc::UnboundedReceiver<String>>,
 }
 
 impl Supervisor {
@@ -109,7 +159,10 @@ impl Supervisor {
     pub async fn start(cmd: HelperCommand, opts: SuperviseOptions) -> Result<Self, HelperError> {
         std::fs::create_dir_all(&opts.logs).map_err(|e| HelperError::Spawn(e.to_string()))?;
         let log = opts.logs.join(format!("helper-{}.log", cmd.name));
-        let (running, offset) = spawn(&cmd, &opts, &log)?;
+        let (lines_tx, lines_rx) = mpsc::unbounded_channel();
+        let (input_tx, input_rx) = mpsc::unbounded_channel();
+        let (mut running, offset) = spawn(&cmd, &opts, &log, &lines_tx)?;
+        greet(&mut running, &opts).await;
         let (tx, rx) = watch::channel(SupState {
             phase: Phase::Running,
             pid: running.child.id(),
@@ -119,13 +172,37 @@ impl Supervisor {
             log_offset: offset,
         });
         let (stop_tx, stop_rx) = oneshot::channel();
-        let task = tokio::spawn(run(cmd, opts, log.clone(), running, tx, stop_rx));
+        let task = tokio::spawn(run(
+            cmd,
+            opts,
+            log.clone(),
+            running,
+            tx,
+            stop_rx,
+            Io {
+                lines: lines_tx,
+                input: input_rx,
+            },
+        ));
         Ok(Self {
             state: rx,
             log,
             stop: Arc::new(Mutex::new(Some(stop_tx))),
             task: Some(task),
+            input: input_tx,
+            lines: Some(lines_rx),
         })
+    }
+
+    /// The helper's output lines, in order, across restarts. Only with `lines`; taken once.
+    pub fn take_lines(&mut self) -> Option<mpsc::UnboundedReceiver<String>> {
+        self.lines.take()
+    }
+
+    /// Writes lines to the running helper's input. Lines sent while none runs wait for the next
+    /// start.
+    pub fn input(&self) -> mpsc::UnboundedSender<String> {
+        self.input.clone()
     }
 
     /// A handle that asks the helper to stop from elsewhere (a monitor that found a failure).
@@ -185,6 +262,7 @@ fn spawn(
     cmd: &HelperCommand,
     opts: &SuperviseOptions,
     log: &Path,
+    lines: &mpsc::UnboundedSender<String>,
 ) -> Result<(Running, u64), HelperError> {
     crate::verify_file(&cmd.program, &cmd.sha256)?;
     let (file, offset) = open_log(log, opts.log_limit)?;
@@ -196,9 +274,12 @@ fn spawn(
         .args(&cmd.args)
         .env_clear()
         .envs(cmd.env.iter().map(|(k, v)| (k, v)))
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(file))
         .stderr(Stdio::from(err));
+    if opts.lines {
+        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+    } else {
+        command.stdin(Stdio::null()).stdout(Stdio::from(file));
+    }
     if let Some(cwd) = &cmd.cwd {
         command.current_dir(cwd);
     }
@@ -208,11 +289,96 @@ fn spawn(
     #[cfg(windows)]
     wrap.wrap(process_wrap::tokio::JobObject);
     wrap.wrap(KillOnDrop);
-    let child = wrap
+    let mut child = wrap
         .spawn()
         .map_err(|e| HelperError::Spawn(format!("could not run {}: {e}", cmd.name)))?;
     let pgid = child.id().unwrap_or(0);
-    Ok((Running { child, pgid }, offset))
+    let stdin = child.stdin().take();
+    let reader = child
+        .stdout()
+        .take()
+        .map(|out| tokio::spawn(read_lines(out, lines.clone())));
+    Ok((
+        Running {
+            child,
+            pgid,
+            stdin,
+            reader,
+        },
+        offset,
+    ))
+}
+
+/// Forward each output line until the output ends; return the last few.
+async fn read_lines(out: impl AsyncRead + Unpin, to: mpsc::UnboundedSender<String>) -> Vec<String> {
+    let mut reader = BufReader::new(out);
+    let mut tail = VecDeque::new();
+    let mut buf = Vec::new();
+    let limit = MAX_LINE as u64 + 1;
+    loop {
+        buf.clear();
+        match (&mut reader).take(limit).read_until(b'\n', &mut buf).await {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        if buf.len() > MAX_LINE {
+            // Too long: skip to the end of this line without holding it.
+            while !buf.ends_with(b"\n") {
+                buf.clear();
+                match (&mut reader).take(limit).read_until(b'\n', &mut buf).await {
+                    Ok(0) | Err(_) => return tail.into(),
+                    Ok(_) => {}
+                }
+            }
+            continue;
+        }
+        let line = String::from_utf8_lossy(&buf).trim_end().to_string();
+        if tail.len() == TAIL {
+            tail.pop_front();
+        }
+        tail.push_back(line.clone());
+        let _ = to.send(line);
+    }
+    tail.into()
+}
+
+async fn write_line(running: &mut Running, line: &str) {
+    if let Some(stdin) = running.stdin.as_mut() {
+        let mut bytes = line.as_bytes().to_vec();
+        bytes.push(b'\n');
+        let wrote = tokio::time::timeout(Duration::from_secs(5), async {
+            stdin.write_all(&bytes).await?;
+            stdin.flush().await
+        })
+        .await;
+        if !matches!(wrote, Ok(Ok(()))) {
+            running.stdin = None;
+        }
+    }
+}
+
+/// The first line of a start, when there is one.
+async fn greet(running: &mut Running, opts: &SuperviseOptions) {
+    if let Some(Secret(line)) = &opts.first_line {
+        write_line(running, line).await;
+    }
+}
+
+/// The last lines of a run that ended, once its output is read to the end.
+async fn tail_of(running: &mut Running) -> Vec<String> {
+    match running.reader.take() {
+        Some(reader) => tokio::time::timeout(Duration::from_secs(2), reader)
+            .await
+            .ok()
+            .and_then(Result::ok)
+            .unwrap_or_default(),
+        None => Vec::new(),
+    }
+}
+
+struct Io {
+    lines: mpsc::UnboundedSender<String>,
+    input: mpsc::UnboundedReceiver<String>,
 }
 
 async fn run(
@@ -222,6 +388,7 @@ async fn run(
     first: Running,
     tx: watch::Sender<SupState>,
     mut stop: oneshot::Receiver<()>,
+    mut io: Io,
 ) -> Result<(), HelperError> {
     let mut running = first;
     let mut restarts: VecDeque<Instant> = VecDeque::new();
@@ -235,8 +402,12 @@ async fn run(
                 rotate_running(&log, opts.log_limit);
                 continue;
             }
+            Some(line) = io.input.recv() => {
+                write_line(&mut running, &line).await;
+                continue;
+            }
             _ = &mut stop => {
-                let result = terminate(&mut running, opts.grace).await;
+                let result = terminate(&mut running, &opts).await;
                 publish(&tx, |s| {
                     s.phase = Phase::Stopped;
                     s.pid = None;
@@ -244,12 +415,19 @@ async fn run(
                 return result;
             }
         };
-        let why = match status {
-            Ok(s) => s.to_string(),
-            Err(e) => e.to_string(),
+        let (why, code) = match status {
+            Ok(s) => (s.to_string(), s.code()),
+            Err(e) => (e.to_string(), None),
         };
+        let tail = tail_of(&mut running).await;
         reap_group(&mut running).await;
         publish(&tx, |s| s.pid = None);
+        if !(opts.restart)(code, &tail) {
+            publish(&tx, |s| s.phase = Phase::Ended(code));
+            let _ = (&mut stop).await;
+            publish(&tx, |s| s.phase = Phase::Stopped);
+            return Ok(());
+        }
         // A new start is tried until one starts or the limit is reached.
         loop {
             let now = Instant::now();
@@ -282,9 +460,10 @@ async fn run(
             }
             restarts.push_back(Instant::now());
             total += 1;
-            match spawn(&cmd, &opts, &log) {
+            match spawn(&cmd, &opts, &log, &io.lines) {
                 Ok((next, offset)) => {
                     running = next;
+                    greet(&mut running, &opts).await;
                     generation += 1;
                     let pid = running.child.id();
                     publish(&tx, |s| {
@@ -327,18 +506,37 @@ fn publish(tx: &watch::Sender<SupState>, f: impl FnOnce(&mut SupState)) {
     tx.send_modify(f);
 }
 
-/// SIGTERM to the group, then a kill, then proof that nothing is left.
-async fn terminate(running: &mut Running, grace: Duration) -> Result<(), HelperError> {
+/// The stop line where there is one, then SIGTERM to the group, then a kill, then proof that
+/// nothing is left.
+async fn terminate(running: &mut Running, opts: &SuperviseOptions) -> Result<(), HelperError> {
+    if let Some(line) = &opts.stop_line
+        && running.stdin.is_some()
+    {
+        write_line(running, line).await;
+        if tokio::time::timeout(opts.stop_wait, running.child.wait())
+            .await
+            .is_ok()
+        {
+            let _ = tail_of(running).await;
+            reap_group(running).await;
+            return left_over(running);
+        }
+    }
     #[cfg(unix)]
     let _ = running.child.signal(15);
-    if tokio::time::timeout(grace, running.child.wait())
+    if tokio::time::timeout(opts.grace, running.child.wait())
         .await
         .is_err()
     {
         let _ = running.child.start_kill();
         let _ = tokio::time::timeout(Duration::from_secs(5), running.child.wait()).await;
     }
+    let _ = tail_of(running).await;
     reap_group(running).await;
+    left_over(running)
+}
+
+fn left_over(running: &Running) -> Result<(), HelperError> {
     let left = members(running.pgid);
     if left.is_empty() {
         Ok(())

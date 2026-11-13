@@ -38,6 +38,7 @@ pub struct HelpersLock {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LockedHelper {
     pub kind: String,
     pub version: String,
@@ -47,12 +48,12 @@ pub struct LockedHelper {
     /// The date upstream published this version; release freshness counts from here.
     #[serde(default)]
     pub released_at: Option<String>,
-    /// For a helper built from source: the Go toolchain, the commit the tag must point at and the
+    /// For a helper Nocturne builds itself: its source folder, the Go toolchain and the
     /// go-licenses version, all pinned here.
     #[serde(default)]
-    pub go_version: Option<String>,
+    pub source: Option<String>,
     #[serde(default)]
-    pub tag_commit: Option<String>,
+    pub go_version: Option<String>,
     #[serde(default)]
     pub go_licenses_version: Option<String>,
     #[serde(default)]
@@ -64,6 +65,7 @@ pub struct LockedHelper {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct LockedAsset {
     pub file: String,
     /// Replaces the helper's `base_url` for this platform.
@@ -80,15 +82,6 @@ pub struct LockedAsset {
     /// Lowercase hex of the binary inside an archive.
     #[serde(default)]
     pub member_sha256: Option<String>,
-    /// More binaries installed beside the main one (the `tailscale` command).
-    #[serde(default)]
-    pub extras: Vec<LockedExtra>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
-pub struct LockedExtra {
-    pub member: String,
-    pub sha256: String,
 }
 
 impl HelpersLock {
@@ -122,7 +115,7 @@ impl HelpersLock {
     /// Everything wrong with the lock, empty when it is well formed.
     pub fn problems(&self) -> Vec<String> {
         let mut out = Vec::new();
-        for kind in [HelperKind::Cloudflared, HelperKind::Tailscaled] {
+        for kind in [HelperKind::Cloudflared, HelperKind::Tailnet] {
             if self.helper(kind).is_none() {
                 out.push(format!("{}: not in the lock", kind.name()));
             }
@@ -166,17 +159,8 @@ impl HelpersLock {
                             ));
                         }
                     }
-                    (None, None) => {
-                        if !a.extras.is_empty() {
-                            out.push(format!("{at}: extras need an archive member"));
-                        }
-                    }
+                    (None, None) => {}
                     _ => out.push(format!("{at}: member and member_sha256 go together")),
-                }
-                for e in &a.extras {
-                    if !safe_member(&e.member) || !is_hex64(&e.sha256) {
-                        out.push(format!("{at}: extra {:?} is malformed", e.member));
-                    }
                 }
             }
         }
@@ -211,7 +195,7 @@ mod tests {
     fn lock_covers_every_platform() {
         let lock = HelpersLock::current();
         assert_eq!(lock.problems(), Vec::<String>::new());
-        for kind in [HelperKind::Cloudflared, HelperKind::Tailscaled] {
+        for kind in [HelperKind::Cloudflared, HelperKind::Tailnet] {
             let h = lock.helper(kind).unwrap();
             for platform in PLATFORMS {
                 assert!(h.assets.contains_key(platform), "{kind:?} {platform}");
@@ -237,10 +221,36 @@ mod tests {
     }
 
     #[test]
+    fn the_tailnet_helper_is_one_bare_binary_built_here() {
+        let lock = HelpersLock::current();
+        let h = lock.helper(HelperKind::Tailnet).unwrap();
+        assert_eq!(h.source.as_deref(), Some("helpers/tailnet"));
+        assert_eq!(h.go_version.as_deref(), Some("go1.27.3"));
+        for platform in PLATFORMS {
+            let a = &h.assets[platform];
+            assert!(
+                a.member.is_none() && a.member_sha256.is_none(),
+                "{platform}"
+            );
+            let exe = if platform.starts_with("windows") {
+                ".exe"
+            } else {
+                ""
+            };
+            assert_eq!(a.file, format!("nocturne-tailnet-{platform}{exe}"));
+        }
+        let old = EMBEDDED.replacen("size = 0", "size = 0\nextras = []", 1);
+        assert!(
+            HelpersLock::parse(&old).is_err(),
+            "an unknown field is refused"
+        );
+    }
+
+    #[test]
     fn members_cannot_leave_the_archive() {
-        assert!(safe_member("pkg/tailscaled"));
-        assert!(!safe_member("../tailscaled"));
-        assert!(!safe_member("/tailscaled"));
+        assert!(safe_member("pkg/cloudflared"));
+        assert!(!safe_member("../cloudflared"));
+        assert!(!safe_member("/cloudflared"));
         assert!(!safe_member("a//b"));
         assert!(!safe_member("a\\b"));
     }

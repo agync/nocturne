@@ -288,6 +288,12 @@ async fn monitor(
                 });
                 return;
             }
+            Phase::Ended(code) => {
+                tx.send_replace(TransportState::Failed {
+                    error: HelperError::Exited(format!("the helper ended ({code:?})")),
+                });
+                return;
+            }
             Phase::Backoff { attempt } => {
                 tx.send_replace(TransportState::Restarting { attempt });
             }

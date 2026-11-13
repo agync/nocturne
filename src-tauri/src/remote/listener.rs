@@ -29,7 +29,7 @@ use axum::body::Body;
 use axum::extract::FromRequestParts;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
 use axum::http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode, header};
-use nocturne_helpers::{KeyCarrier, Origin};
+use nocturne_helpers::{HELPER_KEY_HEADER, KeyCarrier, Origin};
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
@@ -182,16 +182,12 @@ fn keyed_path(ctx: &Ctx, req: &Request<Body>) -> Option<String> {
                 .unwrap_or_default();
             crypto::eq_ct(host, key.as_bytes()).then_some(path)
         }
-        KeyCarrier::PathPrefix => {
-            let rest = path.strip_prefix('/')?;
-            let (first, tail) = rest.split_at(rest.find('/').unwrap_or(rest.len()));
-            crypto::eq_ct(first.as_bytes(), key.as_bytes()).then(|| {
-                if tail.is_empty() {
-                    "/".into()
-                } else {
-                    tail.into()
-                }
-            })
+        KeyCarrier::Header => {
+            let mut values = req.headers().get_all(HELPER_KEY_HEADER).iter();
+            let (Some(value), None) = (values.next(), values.next()) else {
+                return None;
+            };
+            crypto::eq_ct(value.as_bytes(), key.as_bytes()).then_some(path)
         }
         KeyCarrier::UnixSocket => Some(path),
     }

@@ -50,7 +50,9 @@ fn main() {
                 addr.port().to_string(),
             );
         }
-        let key = std::env::var("TUNNEL_HTTP_HOST_HEADER").ok();
+        let key = std::env::var("TUNNEL_HTTP_HOST_HEADER")
+            .ok()
+            .map(|k| ("Host".to_string(), k));
         let record = control
             .get("record_relay")
             .and_then(|v| v.as_str())

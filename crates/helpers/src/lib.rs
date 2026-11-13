@@ -1,5 +1,6 @@
 //! The connection helpers behind Away from home: pinned download, verification and supervision
-//! of `cloudflared` (Simple) and `tailscaled` (Most private), each behind one [`Transport`].
+//! of `cloudflared` (Simple) and Nocturne's own `nocturne-tailnet` (Most private), each behind
+//! one [`Transport`].
 //!
 //! Nothing here runs until the person turns Away from home on and agrees to the download.
 //! Secrets (the helper key) never reach argv, logs or `Debug` output.
@@ -22,19 +23,19 @@ mod fixtures;
 mod install;
 mod lock;
 mod supervise;
-mod tailscaled;
+mod tailnet;
 mod util;
 
 pub use cloudflared::{CloudflaredOptions, CloudflaredTransport};
 pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
 pub use install::remove_partial;
-pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
+pub use lock::{HelpersLock, LockedAsset, LockedHelper, PLATFORMS, platform};
 pub use supervise::{
-    HelperCommand, Phase, StopHandle, SupState, SuperviseOptions, Supervisor,
+    HelperCommand, Phase, RestartRule, Secret, StopHandle, SupState, SuperviseOptions, Supervisor,
     members as group_members,
 };
-pub use tailscaled::{
-    TailscaledOptions, TailscaledTransport, new_machine_name, valid_machine_name,
+pub use tailnet::{
+    APPROVE_URL, HTTPS_URL, TailnetOptions, TailnetTransport, new_machine_name, valid_machine_name,
 };
 
 /// Present only in builds with the `fake` feature, so the package check can refuse them.
@@ -44,7 +45,7 @@ pub const FAKE_MARKER: &str = "nocturne-fake-helpers-marker";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HelperKind {
     Cloudflared,
-    Tailscaled,
+    Tailnet,
 }
 
 impl HelperKind {
@@ -52,7 +53,7 @@ impl HelperKind {
     pub fn name(self) -> &'static str {
         match self {
             HelperKind::Cloudflared => "cloudflared",
-            HelperKind::Tailscaled => "tailscaled",
+            HelperKind::Tailnet => "tailnet",
         }
     }
 }
@@ -171,9 +172,15 @@ impl fmt::Debug for Origin {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeyCarrier {
     UnixSocket,
+    /// The key is the Host header (cloudflared).
     HostHeader,
-    PathPrefix,
+    /// The key is the [`HELPER_KEY_HEADER`] header (nocturne-tailnet).
+    Header,
 }
+
+/// The header nocturne-tailnet carries the helper key in to a loopback listener (Windows). The
+/// helper refuses a request that already has it, so only the helper can set it.
+pub const HELPER_KEY_HEADER: &str = "Nocturne-Helper-Key";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LaunchSpec {
@@ -188,6 +195,10 @@ pub enum TransportState {
     NeedsSignIn {
         url: String,
         allow_links: bool,
+    },
+    /// The account's owner must approve this computer; the helper waits for it.
+    NeedsApproval {
+        url: String,
     },
     Up {
         address: String,
@@ -224,18 +235,18 @@ pub trait Transport: Send + Sync {
     ) -> BoxFuture<'_, Result<watch::Receiver<TransportState>, HelperError>>;
     /// Returns once no helper process remains.
     fn stop(&self) -> BoxFuture<'_, Result<(), HelperError>>;
-    /// Tailscaled: log out and forget its state. Cloudflared: nothing to do.
+    /// Tailnet: sign out and forget its state. Cloudflared: nothing to do.
     fn sign_out(&self) -> BoxFuture<'_, Result<(), HelperError>>;
     fn info(&self) -> Option<HelperInfo>;
 }
 
 /// How a helper proves a request came through it: the file permissions of the Unix socket, or a
-/// key in the Host (cloudflared) or the path (tailscale serve) on Windows.
+/// key in the Host (cloudflared) or in [`HELPER_KEY_HEADER`] (nocturne-tailnet) on Windows.
 pub(crate) fn key_carrier(kind: HelperKind) -> KeyCarrier {
     match (cfg!(windows), kind) {
         (false, _) => KeyCarrier::UnixSocket,
         (true, HelperKind::Cloudflared) => KeyCarrier::HostHeader,
-        (true, HelperKind::Tailscaled) => KeyCarrier::PathPrefix,
+        (true, HelperKind::Tailnet) => KeyCarrier::Header,
     }
 }
 
@@ -247,12 +258,7 @@ pub fn transport_for(
 ) -> Box<dyn Transport> {
     match kind {
         HelperKind::Cloudflared => Box::new(CloudflaredTransport::new(dirs, installed)),
-        HelperKind::Tailscaled => {
-            let cli = install::extras_with(&HelpersLock::current(), kind, dirs)
-                .into_iter()
-                .next();
-            Box::new(TailscaledTransport::new(dirs, installed, cli))
-        }
+        HelperKind::Tailnet => Box::new(TailnetTransport::new(dirs, installed)),
     }
 }
 
@@ -307,7 +313,7 @@ mod tests {
         let dirs = HelperDirs {
             root: PathBuf::from("unused"),
         };
-        assert_eq!(installed(HelperKind::Tailscaled, &dirs), None);
+        assert_eq!(installed(HelperKind::Tailnet, &dirs), None);
         let (tx, _) = watch::channel(InstallProgress::default());
         // The pins are not set yet, so there is nothing to download.
         assert_eq!(

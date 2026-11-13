@@ -16,13 +16,8 @@ path = "src/bin/fake-cloudflared.rs"
 required-features = ["fake"]
 
 [[bin]]
-name = "fake-tailscaled"
-path = "src/bin/fake-tailscaled.rs"
-required-features = ["fake"]
-
-[[bin]]
-name = "fake-tailscale"
-path = "src/bin/fake-tailscale.rs"
+name = "fake-tailnet"
+path = "src/bin/fake-tailnet.rs"
 required-features = ["fake"]
 
 [dependencies]

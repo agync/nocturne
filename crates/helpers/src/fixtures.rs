@@ -7,7 +7,8 @@ use std::sync::OnceLock;
 
 use crate::HelperKind;
 
-/// `(kind, command, help text)`. A command is a file stem: `tunnel`, `daemon`, `up`, `serve-status`.
+/// `(kind, command, help text)`. A command is a file stem: `tunnel` for cloudflared, `help` for
+/// nocturne-tailnet.
 const FIXTURES: &[(HelperKind, &str, &str)] = &[
     (
         HelperKind::Cloudflared,
@@ -15,54 +16,9 @@ const FIXTURES: &[(HelperKind, &str, &str)] = &[
         include_str!("../fixtures/help/cloudflared/2024.3.0/tunnel.txt"),
     ),
     (
-        HelperKind::Tailscaled,
-        "daemon",
-        include_str!("../fixtures/help/tailscaled/1.104.6/daemon.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "tailscale",
-        include_str!("../fixtures/help/tailscaled/1.104.6/tailscale.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "up",
-        include_str!("../fixtures/help/tailscaled/1.104.6/up.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "set",
-        include_str!("../fixtures/help/tailscaled/1.104.6/set.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "status",
-        include_str!("../fixtures/help/tailscaled/1.104.6/status.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "logout",
-        include_str!("../fixtures/help/tailscaled/1.104.6/logout.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "serve",
-        include_str!("../fixtures/help/tailscaled/1.104.6/serve.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "serve-status",
-        include_str!("../fixtures/help/tailscaled/1.104.6/serve-status.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "serve-reset",
-        include_str!("../fixtures/help/tailscaled/1.104.6/serve-reset.txt"),
-    ),
-    (
-        HelperKind::Tailscaled,
-        "serve-set-config",
-        include_str!("../fixtures/help/tailscaled/1.104.6/serve-set-config.txt"),
+        HelperKind::Tailnet,
+        "help",
+        include_str!("../fixtures/help/tailnet/1.104.6/help.txt"),
     ),
 ];
 
@@ -86,8 +42,8 @@ fn parsed() -> &'static Parsed {
 
 /// The flags listed by one command's help text, each as `--long` or `-s`.
 ///
-/// Both help styles are read: `--flag value   description` (cloudflared, tailscale) and Go's
-/// `-flag string` followed by an indented description (tailscaled). Lines starting with `#` are
+/// Both help styles are read: `--flag value   description` (cloudflared) and Go's
+/// `-flag string` followed by an indented description (nocturne-tailnet). Lines starting with `#` are
 /// provenance notes, not help.
 pub fn parse_flags(help: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
@@ -122,7 +78,7 @@ pub fn parse_flags(help: &str) -> BTreeSet<String> {
 pub fn allowed_flags(kind: HelperKind) -> &'static [&'static str] {
     static ALL: OnceLock<Vec<(HelperKind, Vec<&'static str>)>> = OnceLock::new();
     let all = ALL.get_or_init(|| {
-        [HelperKind::Cloudflared, HelperKind::Tailscaled]
+        [HelperKind::Cloudflared, HelperKind::Tailnet]
             .into_iter()
             .map(|kind| {
                 let set: BTreeSet<&'static str> = parsed()
@@ -186,18 +142,10 @@ mod tests {
         ] {
             assert!(tunnel.contains(&f), "{f}");
         }
-        let daemon = allowed_flags_for(HelperKind::Tailscaled, "daemon");
-        for f in [
-            "--tun",
-            "--statedir",
-            "--socket",
-            "--port",
-            "--no-logs-no-support",
-        ] {
-            assert!(daemon.contains(&f), "{f}");
-        }
-        assert!(allowed_flags(HelperKind::Tailscaled).contains(&"--hostname"));
-        assert!(allowed_flags_for(HelperKind::Tailscaled, "nonsense").is_empty());
+        let tailnet = allowed_flags_for(HelperKind::Tailnet, "help");
+        assert_eq!(tailnet, ["--hostname", "--state-dir", "--target"]);
+        assert!(allowed_flags(HelperKind::Tailnet).contains(&"--hostname"));
+        assert!(allowed_flags_for(HelperKind::Tailnet, "nonsense").is_empty());
     }
 
     #[test]
@@ -206,7 +154,7 @@ mod tests {
             crate::lock::HelpersLock::parse(crate::lock::HelpersLock::embedded_text()).unwrap();
         for (kind, dir) in [
             (HelperKind::Cloudflared, "cloudflared"),
-            (HelperKind::Tailscaled, "tailscaled"),
+            (HelperKind::Tailnet, "tailnet"),
         ] {
             let version = &lock.helper(kind).unwrap().version;
             let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
