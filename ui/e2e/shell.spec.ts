@@ -67,7 +67,8 @@ test.describe("wide window layout", () => {
     await ready(page);
     const height = page.viewportSize()?.height ?? 800;
     const status = await page.getByRole("region", { name: "Nocturne status" }).boundingBox();
-    const privacy = await page.getByRole("link", { name: "Privacy" }).boundingBox();
+    // The rail comes first in the document; the page's own footer has a Privacy link too.
+    const privacy = await page.getByRole("link", { name: "Privacy" }).first().boundingBox();
     const tonight = await page.getByText(/^Tonight, from about/).boundingBox();
     expect((privacy?.y ?? 0) + (privacy?.height ?? 0)).toBeGreaterThan(height - 40);
     expect((status?.y ?? 0) + (status?.height ?? 0)).toBeGreaterThan(height - 140);
