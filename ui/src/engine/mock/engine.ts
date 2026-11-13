@@ -28,6 +28,8 @@ import type {
 } from "../bindings";
 import type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "../client";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
+import { privacySeed } from "./seed/privacy";
+import { advancedSeed } from "./seed/setup";
 
 export interface MockOptions {
   /** The fixed clock. Defaults to `VITE_MOCK_NOW`, else 2026-11-13T07:02:00Z. */
@@ -146,24 +148,7 @@ export class MockEngine implements EngineClient {
       nextTidy: "01:00",
       notices: [],
     };
-    this.setup = {
-      phase: "done",
-      detected: "standard",
-      chosen: "standard",
-      ramGib: 32,
-      freeDiskBytes: 220e9,
-      options: [
-        { tier: "large", downloadBytes: 26e9, minRamGib: 60, fits: false },
-        { tier: "standard", downloadBytes: 8.4e9, minRamGib: 28, fits: true },
-        { tier: "small", downloadBytes: 4.8e9, minRamGib: 14, fits: true },
-      ],
-      downloadedBytes: 8.4e9,
-      totalBytes: 8.4e9,
-      etaSeconds: null,
-      paused: null,
-      error: null,
-      neededBytes: null,
-    };
+    this.setup = seed.setup;
     this.refreshStatus();
   }
 
@@ -282,6 +267,7 @@ export class MockEngine implements EngineClient {
       pages: null,
       fileName: null,
       hasOriginal: true,
+      originalPath: `originals/new-${this.counter}`,
       private: false,
       memoryCount: 0,
       understoodInMs: null,
@@ -568,6 +554,7 @@ export class MockEngine implements EngineClient {
     const q = filter.query?.toLowerCase() ?? null;
     let out = this.memories
       .filter((m) => filter.entityId === null || m.entityId === filter.entityId)
+      .filter((m) => filter.itemId === null || m.receipts.some((r) => r.itemId === filter.itemId))
       .filter((m) => filter.status === null || m.status === filter.status)
       .filter((m) => q === null || `${m.sentence} ${m.subject}`.toLowerCase().includes(q));
     if (filter.limit !== null) out = out.slice(0, filter.limit);
@@ -737,15 +724,9 @@ export class MockEngine implements EngineClient {
 
   async getPrivacy(): Promise<PrivacyView> {
     return {
+      ...privacySeed(this.clock),
       sentToInternetBytes: this.status.sentToInternetBytes,
       sentMeasured: this.status.sentMeasured,
-      checkedAt: new Date(this.clock.getTime() - 2000).toISOString(),
-      ledger: [
-        { kind: "setup", label: "Nocturne’s mind", bytes: 8.4e9, at: this.clock.toISOString() },
-      ],
-      keptBytes: 4.3e9,
-      mindBytes: 8.4e9,
-      dataDir: "Documents/Nocturne",
       lock: this.settings.lock,
       checkUpdates: this.settings.checkUpdates,
     };
@@ -790,35 +771,7 @@ export class MockEngine implements EngineClient {
   }
 
   async getAdvanced(): Promise<AdvancedView> {
-    return {
-      tier: "standard",
-      ramGib: 32,
-      gpu: "Integrated graphics",
-      npu: false,
-      components: [
-        { role: "mind", name: "Qwen3.5-9B-GGUF", bytes: 5.9e9, backend: "vulkan", loaded: true },
-        { role: "speech", name: "Whisper-Small", bytes: 0.5e9, backend: "cpu", loaded: false },
-        { role: "voice", name: "kokoro-v1", bytes: 0.3e9, backend: "cpu", loaded: false },
-        {
-          role: "recall",
-          name: "Qwen3-Embedding-0.6B-GGUF",
-          bytes: 0.6e9,
-          backend: "cpu",
-          loaded: true,
-        },
-      ],
-      engineVersion: "mock",
-      enginePort: null,
-      engineUptimeSeconds: 0,
-      restarts: 0,
-      storeVersion: 1,
-      memoryCount: this.memories.length,
-      itemCount: this.items.length,
-      integrityOk: true,
-      lastTidy: { from: "02:10", to: "02:16", items: 14, merged: 3, letGo: 3 },
-      agents: false,
-      logDir: "logs",
-    };
+    return advancedSeed({ memories: this.memories.length, items: this.items.length });
   }
 
   async speakPage(date: string): Promise<string> {

@@ -99,6 +99,7 @@ describe("MockEngine forgetting", () => {
   it("previews, then removes the memory from lists and redacts the page line", async () => {
     const engine = createMockEngine({ now: NOW });
     const before = await engine.listMemories({
+      itemId: null,
       entityId: null,
       status: null,
       query: null,
@@ -116,6 +117,7 @@ describe("MockEngine forgetting", () => {
     expect(report.originalsRemoved).toBe(1);
 
     const after = await engine.listMemories({
+      itemId: null,
       entityId: null,
       status: null,
       query: null,
@@ -145,6 +147,7 @@ describe("MockEngine page", () => {
     const engine = createMockEngine({ now: NOW });
     const page = await engine.getPage();
     const memories = await engine.listMemories({
+      itemId: null,
       entityId: null,
       status: null,
       query: null,
@@ -184,7 +187,13 @@ describe("MockEngine page", () => {
     expect(counts.at(-1)).toBe(1);
     expect(page.headline).toBe("One thing needs you today.");
     const chosen = (
-      await engine.listMemories({ entityId: null, status: null, query: "dentist", limit: null })
+      await engine.listMemories({
+        itemId: null,
+        entityId: null,
+        status: null,
+        query: "dentist",
+        limit: null,
+      })
     ).find((m) => m.id === "mem-dentist-thu");
     expect(chosen?.status).toBe("active");
   });
@@ -198,7 +207,13 @@ describe("MockEngine page", () => {
     expect(page.needsYou.find((l) => l.id === "line-trip")?.done).toBe(true);
     expect(page.question?.answered).toBe("yes");
     const gym = (
-      await engine.listMemories({ entityId: null, status: null, query: "gym", limit: null })
+      await engine.listMemories({
+        itemId: null,
+        entityId: null,
+        status: null,
+        query: "gym",
+        limit: null,
+      })
     )[0];
     expect(gym?.status).toBe("active");
   });
