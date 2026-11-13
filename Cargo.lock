@@ -2811,6 +2811,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "nocturne-intelligence"
+version = "0.1.0"
+dependencies = [
+ "jiff",
+ "nocturne-contract",
+ "nocturne-engine",
+ "nocturne-intelligence",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "windows",
+ "zbus 5.19.0",
+]
+
+[[package]]
 name = "nocturne-lemonade"
 version = "0.1.0"
 dependencies = [
