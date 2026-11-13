@@ -12,8 +12,13 @@ tags: [architecture, layout, contract]
 |---|---|---|
 | `crates/contract/` | `nocturne-contract` | Types that cross the boundary between engine, app shell and interface; exported to TypeScript |
 | `crates/engine/` | `nocturne-engine` | Store, capture, memories, forgetting policy, the page, retrieval, export; the `Mind` trait |
+| `crates/intelligence/` | `nocturne-intelligence` | Reading what was kept, the overnight tidy and the scheduler that runs them |
 | `crates/lemonade/` | `nocturne-lemonade` | The private `lemond`: supervision, setup downloads, and the `Mind` implementation |
-| `src-tauri/` | `nocturne-app` | Commands, events, windows, tray, shortcut, notifications |
+| `src-tauri/` | `nocturne-app` | Commands, events, windows and the runtime that wires the engine to the shell |
+| `src-tauri/src/os/` | part of `nocturne-app` | The desktop: tray, quick keep shortcut, quick capture window, notification, start with the computer, watched folder |
+| `src-tauri/src/editions/` | part of `nocturne-app` | The spoken and printed editions of the page |
+| `src-tauri/bundle/` | configuration | Packaging overlays merged over `tauri.conf.json` at bundle time (`linux.json`, `windows.json`) |
+| `scripts/` | scripts | Fetching the engine, building and checking packages, the launch smoke test, the outbound check, the third-party notices, and their unit tests |
 | `ui/` | `nocturne-ui` | The interface; talks only to an `EngineClient` |
 | `ui/src/engine/bindings/` | generated | TypeScript types from `crates/contract`; regenerate with `make contract/ts` |
 

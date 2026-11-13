@@ -11,3 +11,4 @@ not deleted.
 - [0006 The NPU is optional](0006-npu-optional.md) - The NPU works only when the GPU is idle, with a GPU fallback.
 - [0007 Forgetting by default](0007-forgetting-by-default.md) - Facts fade at 30 days and archive at 90; deletion is explicit.
 - [0008 A small schema](0008-small-schema.md) - A short list of predicates; new ones are quarantined until confirmed.
+- [0009 Package locally and prove it stays local](0009-packaging.md) - Linux packages with the private engine inside, and a release-time proof that nothing leaves the computer.
