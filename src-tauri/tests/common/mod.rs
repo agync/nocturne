@@ -1,6 +1,8 @@
 //! Shared harness: a mock-runtime app over a temp data dir, a fixed clock and an IPC helper.
 #![allow(dead_code)]
 
+pub mod vectors;
+
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

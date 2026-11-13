@@ -143,6 +143,14 @@ class Output(unittest.TestCase):
         ):
             self.assertIn(needle, out)
 
+    def test_word_list_included(self):
+        out = notices.build_notices([], "x")
+        self.assertIn("BIP-39 English word list  (MIT)", out)
+        self.assertIn("Copyright held by: Marek Palatinus", out)
+        self.assertIn("bitcoin/bips/blob/", out)
+        for work in notices.WORKS:
+            self.assertTrue(notices.evaluate(work["license"]))
+
     def test_identical_texts_are_printed_once(self):
         tmp = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, tmp, True)

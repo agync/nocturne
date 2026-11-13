@@ -57,6 +57,18 @@ FONT_NAMES = {
     "@fontsource/ibm-plex-mono": "IBM Plex Mono",
 }
 
+# Works carried in the app that are not packages: each is listed with its own licence.
+WORKS = [
+    {
+        "name": "BIP-39 English word list",
+        "license": "MIT",
+        "holder": "Marek Palatinus, Pavol Rusnak, Aaron Voisine, Sean Bowe",
+        "source": "https://github.com/bitcoin/bips/blob/"
+        "b34d9f751791d4feb22feff4f2ed00bcac83961b/bip-0039/english.txt",
+        "use": "the check words shown when a phone is added (Away from home)",
+    },
+]
+
 # Standard texts, used only for a package that ships no licence file of its own. The holder
 # line comes from the package's own metadata.
 TEMPLATES = {
@@ -381,6 +393,10 @@ def build_notices(packages, lemonade_text, lemonade_version=""):
     lines += [rule, "Lemonade (private local engine)", rule, ""]
     lines += [f"Lemonade {lemonade_version}".strip(), "", lemonade_text, ""]
 
+    lines += [rule, "Word lists", rule, ""]
+    for work in WORKS:
+        lines += [f"{work['name']}  ({work['license']}), for {work['use']}", fallback_text(work), ""]
+
     lines += [rule, "Libraries", rule, ""]
     for pkg in others:
         lines += [f"{pkg['name']} {pkg['version']}  ({pkg['kind']}, {pkg['license']})"]
@@ -481,7 +497,9 @@ def main(argv=None):
             return 0
 
         packages = rust_packages(load_rust(args.target)) + npm_packages(load_npm())
-        failures = check_policy(packages)
+        failures = check_policy(packages) + [
+            f"{w['name']}: licence {w['license']} is not allowed" for w in WORKS if not evaluate(w["license"])
+        ]
         if failures:
             print("licence check failed:", file=sys.stderr)
             for failure in failures:

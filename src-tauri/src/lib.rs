@@ -20,6 +20,7 @@ pub mod logging;
 pub mod os;
 #[cfg(feature = "preview")]
 pub mod preview;
+pub mod remote;
 pub mod runtime;
 pub mod state;
 pub mod status;

@@ -1,0 +1,1932 @@
+{
+  "format": 1,
+  "about": "Reference vectors for Away from home's sealed channel. Written by scripts/remote_vectors.py; do not edit.",
+  "generator": {
+    "script": "scripts/remote_vectors.py",
+    "library": "cryptography"
+  },
+  "checkOrder": [
+    "A frame shorter than its kind's fixed length (header, nonce, body and tag) is tooShort.",
+    "Then version (badVersion), kind (wrongKind), sid (wrongSid), then the counter: a handshake",
+    "frame must carry 0 (badCounter), a DATA frame exactly last + 1 (counterGap).",
+    "Then the AEAD tag (badTag). The receive counter moves to ctr only after the tag verifies;",
+    "a refused frame never advances it. Only then the envelope (badPadding, badEnvelope).",
+    "Public keys are checked for length and the 0x04 prefix before any parse (badPublicKey).",
+    "An unknown device id and a bad open proof give the same refusal (badProof)."
+  ],
+  "refusals": [
+    "badPublicKey",
+    "samePublicKey",
+    "badCode",
+    "badDeviceName",
+    "tooShort",
+    "badVersion",
+    "wrongKind",
+    "wrongSid",
+    "badCounter",
+    "counterGap",
+    "badTag",
+    "badProof",
+    "commitMismatch",
+    "badPadding",
+    "badEnvelope",
+    "chunkGap",
+    "badMagic",
+    "badId"
+  ],
+  "constants": {
+    "VERSION": 1,
+    "HEADER_LEN": 26,
+    "KIND_HELLO": 1,
+    "KIND_PAIR_COMMIT": 2,
+    "KIND_PAIR_NONCE": 3,
+    "KIND_PAIR_REVEAL": 4,
+    "KIND_PAIR_OUTCOME": 5,
+    "KIND_SESSION_OPEN": 6,
+    "KIND_SESSION_ACCEPT": 7,
+    "KIND_DATA": 8,
+    "KIND_REVOKED": 9,
+    "S_LEN": 15,
+    "CODE_LEN": 24,
+    "CODE_GROUP": 6,
+    "CODE_SEPARATOR": " ",
+    "CODE_ALPHABET": "0123456789ABCDEFGHJKMNPQRSTVWXYZ",
+    "PAIRING_ID_LEN": 16,
+    "NONCE_PAIR_LEN": 32,
+    "DEVICE_ID_LEN": 16,
+    "SID_LEN": 16,
+    "OPEN_NONCE_LEN": 12,
+    "GCM_NONCE_LEN": 12,
+    "GCM_TAG_LEN": 16,
+    "PUBKEY_LEN": 65,
+    "ECDH_OUT_LEN": 32,
+    "MAX_DEVICE_NAME": 40,
+    "LINK_VERSION": "v1",
+    "PATH_PAIR": "/p",
+    "PATH_RELINK": "/r",
+    "PATH_SESSION": "/s",
+    "INFO_PAIR_ID": "nocturne pair id v1",
+    "INFO_PAIR": "nocturne pair v1",
+    "INFO_WORDS": "nocturne words v1",
+    "INFO_DEVICE": "nocturne device v1",
+    "INFO_SESSION": "nocturne session v1",
+    "HASH_QR": "nocturne qr v1",
+    "HASH_COMMIT": "nocturne commit v1",
+    "HASH_WORDS": "nocturne words v1",
+    "HASH_SESSION": "nocturne session v1",
+    "PROOF_OPEN": "open v1",
+    "PROOF_REVOKED": "revoked v1",
+    "NONCE_UP": "up__",
+    "NONCE_DOWN": "down",
+    "PATH_SCANNED": 1,
+    "PATH_TYPED": 2,
+    "WORDS_OUT_LEN": 5,
+    "WORD_COUNT": 3,
+    "WORD_BITS": 11,
+    "TYPE_JSON": 1,
+    "TYPE_CHUNK": 2,
+    "ENVELOPE_HEADER_LEN": 3,
+    "CHUNK_HEADER_LEN": 9,
+    "PAD_BLOCK": 256,
+    "DELTA_FLUSH_MS": 100,
+    "PAIR_TTL_SECS": 300,
+    "REVEAL_WINDOW_SECS": 10,
+    "DECIDE_TTL_SECS": 120,
+    "PENDING_SESSION_TTL_SECS": 10,
+    "SESSION_TTL_SECS": 900,
+    "HANDSHAKE_TIMEOUT_SECS": 10,
+    "LONG_POLL_HOLD_SECS": 25,
+    "TAKE_BACK_SECS": 600,
+    "CITED_TTL_SECS": 3600,
+    "PAUSE_SECS": 900,
+    "CHUNK": 262144,
+    "MAX_FRAME": 270336,
+    "MAX_TEXT": 102400,
+    "MAX_QUESTION": 2048,
+    "MAX_CAPTION": 120,
+    "MAX_ID": 36,
+    "ID_ALPHABET": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+    "MAX_ITEM_TEXT": 16384,
+    "MAX_ITEM": 52428800,
+    "MAX_DAY": 524288000,
+    "MAX_INCOMING_TOTAL": 104857600,
+    "MAX_LONG_POLL_BATCH": 8,
+    "MAX_CONNECTIONS": 16,
+    "MAX_SESSIONS_PER_DEVICE": 3,
+    "LIMIT_NO_KEY": 20,
+    "LIMIT_STATIC": 300,
+    "LIMIT_PAIRING_FRAMES": 20,
+    "LIMIT_FAILED_SESSION_OPEN": 10,
+    "LIMIT_SESSION_OPENS_PER_DEVICE": 6,
+    "LIMIT_REQUESTS": 60,
+    "LIMIT_ASKS": 10,
+    "LIMIT_KEEPS": 30,
+    "WRONG_CODES": 5,
+    "PAGES_BACK": 7,
+    "EVENTS_KEPT_DAYS": 90,
+    "NAME_FORBIDDEN": [
+      [
+        0,
+        31
+      ],
+      [
+        127,
+        159
+      ],
+      [
+        1564,
+        1564
+      ],
+      [
+        8203,
+        8207
+      ],
+      [
+        8232,
+        8238
+      ],
+      [
+        8294,
+        8297
+      ],
+      [
+        65279,
+        65279
+      ]
+    ],
+    "MIME_MAGIC": [
+      {
+        "mime": "image/jpeg",
+        "magic": [
+          [
+            0,
+            "ffd8ff"
+          ]
+        ]
+      },
+      {
+        "mime": "image/png",
+        "magic": [
+          [
+            0,
+            "89504e47"
+          ]
+        ]
+      },
+      {
+        "mime": "image/heic",
+        "magic": [
+          [
+            4,
+            "6674797068656963"
+          ],
+          [
+            4,
+            "6674797068656978"
+          ],
+          [
+            4,
+            "667479706d696631"
+          ]
+        ]
+      },
+      {
+        "mime": "image/webp",
+        "magic": [
+          [
+            0,
+            "52494646........57454250"
+          ]
+        ]
+      },
+      {
+        "mime": "application/pdf",
+        "magic": [
+          [
+            0,
+            "255044462d"
+          ]
+        ]
+      },
+      {
+        "mime": "audio/webm",
+        "magic": [
+          [
+            0,
+            "1a45dfa3"
+          ]
+        ]
+      },
+      {
+        "mime": "audio/mp4",
+        "magic": [
+          [
+            4,
+            "66747970"
+          ]
+        ]
+      },
+      {
+        "mime": "audio/ogg",
+        "magic": [
+          [
+            0,
+            "4f676753"
+          ]
+        ]
+      },
+      {
+        "mime": "audio/mpeg",
+        "magic": [
+          [
+            0,
+            "494433"
+          ],
+          [
+            0,
+            "fff."
+          ]
+        ]
+      },
+      {
+        "mime": "audio/wav",
+        "magic": [
+          [
+            0,
+            "52494646........57415645"
+          ]
+        ]
+      }
+    ]
+  },
+  "words": {
+    "count": 2048,
+    "sha256": "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda"
+  },
+  "keys": {
+    "C": {
+      "scalar": "de84b83942afab2421d268f4941cfd61f005a4c9b391d2a2d6b1109867f6b9d0",
+      "public": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+    },
+    "D": {
+      "scalar": "871def7d0e7edee854e44557d9090711faf2d86c0d2d56f9b476b369dfc6a3f0",
+      "public": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+    },
+    "E": {
+      "scalar": "21c08f53bd6bcf2a954f3b899964b03f79d220a5782c4469d3e19c973294bb6f",
+      "public": "04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd7"
+    },
+    "F": {
+      "scalar": "d90120c4a1618793dad7707a478b70937bdac0391ab21be75bb07b1f8dfa056a",
+      "public": "04d76e862ce30ab278e8c779a98309ecba93b75e05632406a2b5beb6ac86888291081571ec21c4985ac15d34cc5fc357d3b980279a5220fa7767fe25c7a88ea544"
+    },
+    "F2": {
+      "scalar": "77f2dbb6817ef9b388a336ed4f8d736094e550edef41f1350330252441ee5816",
+      "public": "041213801268f038e9d7eb9969b9beb9196fe07cd3c2f242f9a0908dfb7e8a3569c7cb2cb7ff18c4cbbb5617d8172c42dbb216c15e2179cdac0bd99a23ab2b27ab"
+    },
+    "relay": {
+      "scalar": "3a870fe4e667445164d5c6aec610ccc404670c0c9adb3118f14a3dc21b4cb67d",
+      "public": "04034fe6046602a0959c9ddd9d55e48246f9ba9994aad8d51f6e7743a752582342b85e02972520e48c697498bdad30b6a5cd370d57368a7f7577fbfd90db35572e"
+    },
+    "otherD": {
+      "scalar": "8ca9ec1e9dd1c8cfedf5a07ab0c22d5c5aa98efe58a32b14b50e68bfb07c77d9",
+      "public": "04f1cfb66b270332f3947feb073fcdca214261f20bd42cd659df86f48a58f5a4cd2d6a2e7f9d6375a5aab9a49b1779b8f82b9c08c7cafaa78d9a720a6ed8b54331"
+    }
+  },
+  "positive": [
+    {
+      "name": "code_round_trip",
+      "step": "code",
+      "inputs": {
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      },
+      "intermediate": {
+        "bits": "110111001000010001110111101000101010000011100001010001111100010000101101000111111100001011111110110010000110011001010101"
+      },
+      "output": {
+        "code": "VJ27F8N0W53W8B8ZRBZCGSJN",
+        "display": "VJ27F8 N0W53W 8B8ZRB ZCGSJN",
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      }
+    },
+    {
+      "name": "code_round_trip_all_zero",
+      "step": "code",
+      "inputs": {
+        "s": "000000000000000000000000000000"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "000000000000000000000000",
+        "display": "000000 000000 000000 000000",
+        "s": "000000000000000000000000000000"
+      }
+    },
+    {
+      "name": "code_round_trip_all_ones",
+      "step": "code",
+      "inputs": {
+        "s": "ffffffffffffffffffffffffffffff"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "ZZZZZZZZZZZZZZZZZZZZZZZZ",
+        "display": "ZZZZZZ ZZZZZZ ZZZZZZ ZZZZZZ",
+        "s": "ffffffffffffffffffffffffffffff"
+      }
+    },
+    {
+      "name": "code_normalise_lower_case",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "vj27f8n0w53w8b8zrbzcgsjn"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "VJ27F8N0W53W8B8ZRBZCGSJN",
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      }
+    },
+    {
+      "name": "code_normalise_spaces",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8 N0W53W 8B8ZRB ZCGSJN"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "VJ27F8N0W53W8B8ZRBZCGSJN",
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      }
+    },
+    {
+      "name": "code_normalise_hyphens",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8-N0W53W-8B8ZRB-ZCGSJN"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "VJ27F8N0W53W8B8ZRBZCGSJN",
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      }
+    },
+    {
+      "name": "code_normalise_mixed_spacing",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": " vj27f8 - n0w53w - 8b8zrb - zcgsjn "
+      },
+      "intermediate": {},
+      "output": {
+        "code": "VJ27F8N0W53W8B8ZRBZCGSJN",
+        "s": "dc8477a2a0e147c42d1fc2fec86655"
+      }
+    },
+    {
+      "name": "code_normalise_look_alikes",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "0O1IL0oil01i000000111111"
+      },
+      "intermediate": {},
+      "output": {
+        "code": "001110011011000000111111",
+        "s": "000210800108021000000002108421"
+      }
+    },
+    {
+      "name": "pairing_id",
+      "step": "pairingId",
+      "inputs": {
+        "s": "dc8477a2a0e147c42d1fc2fec86655",
+        "salt": "",
+        "info": "nocturne pair id v1"
+      },
+      "intermediate": {},
+      "output": {
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8"
+      }
+    },
+    {
+      "name": "pairing_link",
+      "step": "link",
+      "inputs": {
+        "host": "amber-otter-lamp-quiet.trycloudflare.com",
+        "s": "dc8477a2a0e147c42d1fc2fec86655",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+      },
+      "intermediate": {
+        "sBase64url": "3IR3oqDhR8QtH8L-yGZV",
+        "cpubBase64url": "BPAXluv6BombYV4wdhGmtCZ-wV59STReIWNO36-PmjmX6oeNqL9AH_hILe8DJVEDBbFMehEA5AzrZRps-1fig3A"
+      },
+      "output": {
+        "link": "https://amber-otter-lamp-quiet.trycloudflare.com/p#v1.3IR3oqDhR8QtH8L-yGZV.BPAXluv6BombYV4wdhGmtCZ-wV59STReIWNO36-PmjmX6oeNqL9AH_hILe8DJVEDBbFMehEA5AzrZRps-1fig3A"
+      }
+    },
+    {
+      "name": "pair_keys",
+      "step": "pairKeys",
+      "inputs": {
+        "s": "dc8477a2a0e147c42d1fc2fec86655",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8"
+      },
+      "intermediate": {
+        "salt": "3225b05ed3b77a283183fe83ae510bcd351c43554df4fd5da82e01a9ed6d950a",
+        "info": "nocturne pair v1"
+      },
+      "output": {
+        "up": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8",
+        "down": "d41808a9621f546363a6729d979ad5b452690514d88343ccf580e3e2f7f0fd64"
+      }
+    },
+    {
+      "name": "hello",
+      "step": "hello",
+      "inputs": {
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+      },
+      "intermediate": {
+        "request": "0101e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "answer": "0101e8379f7d15ef55f9acc03bdf38eb39b8000000000000000004f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+      }
+    },
+    {
+      "name": "commitment",
+      "step": "commit",
+      "inputs": {
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "deviceName": "Ana\u2019s iPhone",
+        "deviceNameUtf8": "416e61e2809973206950686f6e65"
+      },
+      "intermediate": {
+        "prefix": "nocturne commit v1",
+        "nameHash": "13d7ffd2561852e376bad152f69312f6cbd7573e2574f40e29aa71d45bd1325f"
+      },
+      "output": {
+        "commit": "d71f1e8fd9f3769cc6279a993c2f52a7f1a596143ccbbef5a704ac37c536f1c3"
+      }
+    },
+    {
+      "name": "pair_commit",
+      "step": "pairFrame",
+      "inputs": {
+        "kind": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8",
+        "keyHalf": "up",
+        "nonce": "b62fa7d6f99e8dad4d298684",
+        "body": "{\"path\":1,\"deviceName\":\"Ana\u2019s iPhone\",\"commit\":\"1x8ej9nzdpzGJ5qZPC9Sp_GllhQ8y771pwSsN8U28cM\"}"
+      },
+      "intermediate": {
+        "header": "0102e8379f7d15ef55f9acc03bdf38eb39b80000000000000000",
+        "envelope": "01009e7b2270617468223a312c226465766963654e616d65223a22416e61e2809973206950686f6e65222c22636f6d6d6974223a22317838656a396e7a64707a474a35715a50433953705f476c6c68513879373731707753734e38553238634d227d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "aad": "0102e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "frame": "0102e8379f7d15ef55f9acc03bdf38eb39b80000000000000000b62fa7d6f99e8dad4d298684a011ba98fbe7aa0a469c5dfb386e1b99f915525fbcc09cde209e9d207aefe20d4c26c4a703900db95c933b9ea36d8747300cbc1e4a9984b6a9636d8027f45b2411005cb2301c0ed7242ea41a416238c30564144672142148a8150bded86d713d1edc126135ae1d6b67231f7aace4140a946635c6b6711583727bda6ed0b6b86665ae24c963ec994c528b5c8fcadc51f7b0edf2b4b48354a0db1679305c477ed6d279785d01dd64ec7afb2c3c0d63c711b57332feef80fe37e9856097a1d0bbe93b835d217bd5b82b53b2f34686b7371de288ae57a12b04f602590c0f5a683d9a19c07ed8e3698009539f1c1a69d1927d8f34f14b7b543406608541c09657b881955e8bb82e50741ca6265678aebdd64f"
+      }
+    },
+    {
+      "name": "pair_nonce",
+      "step": "pairFrame",
+      "inputs": {
+        "kind": 3,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "d41808a9621f546363a6729d979ad5b452690514d88343ccf580e3e2f7f0fd64",
+        "keyHalf": "down",
+        "nonce": "a5132903b1082773ef7fcce3",
+        "body": "{\"nc\":\"fAvjyk49UEe3K47m7YQwHgDitrfKulGkooA1J3ZholA\"}"
+      },
+      "intermediate": {
+        "header": "0103e8379f7d15ef55f9acc03bdf38eb39b80000000000000000",
+        "envelope": "0100c97b226e63223a226641766a796b3439554565334b34376d37595177486744697472664b756c476b6f6f41314a335a686f6c41227d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "aad": "0103e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "frame": "0103e8379f7d15ef55f9acc03bdf38eb39b80000000000000000a5132903b1082773ef7fcce36608bc24a772c1d556879a992118ec025632054cfe5b95013c04d08aa959ac7f878b46206e7b1e107919e96dca34ab6b066ff49538fded4b0c972cbd511ed2ceacd72b9cff1d17f8e8efe3b5c6134acd5c7d3b466d79d16b8dc9812f92738c730e032d9f349f6996170ac3a78623328fd071df738a4fd90d4046f8fe51f4b07c0e0182d08fcb58d2670831ddc286258955fdb58a14c4deee7528709c0a0ff946813e65506d5040c1bc1a2a1e57d1b2cc0b712c5beea6f5d14784167c99fb201a90480c6ac993181e468bb99b5997ffeeb24a0353e04d6196855033d60b29d96cfb93d41fd531a531e12ead2a4a2603f5a9c69c240972cb6fb91f80d48df9b9aa7f0a2831675408027555d22dde0e39b7"
+      }
+    },
+    {
+      "name": "pair_reveal",
+      "step": "pairFrame",
+      "inputs": {
+        "kind": 4,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8",
+        "keyHalf": "up",
+        "nonce": "10c677833191d017d0fef45c",
+        "body": "{\"dpub\":\"BMV6GDqa4y4u2m8gmGLOWvmMq4qrHNb6Vw3c78jD7ii5_jquNoa6rX0rjspn-QcUvN3-eC_SFGVrReHa5aTvM9U\",\"np\":\"xVVA054f5SIRQDhOfHa-Ayea2_0Ugb8aXCCIKgB1d8A\"}"
+      },
+      "intermediate": {
+        "header": "0104e8379f7d15ef55f9acc03bdf38eb39b80000000000000000",
+        "envelope": "0100687b2264707562223a22424d56364744716134793475326d38676d474c4f57766d4d71347172484e62365677336337386a44376969355f6a71754e6f6136725830726a73706e2d516355764e332d65435f534647567252654861356154764d3955222c226e70223a227856564130353466355349525144684f6648612d41796561325f305567623861584343494b674231643841227d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "aad": "0104e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "frame": "0104e8379f7d15ef55f9acc03bdf38eb39b8000000000000000010c677833191d017d0fef45c4492323f3b1fae65bcd706e7fc8618239683fc21d6bc35c10f5c5d86d8b4fbf4fb1caff3572481b699277d52311fda0ee45ead6b1fed88f4667dc95f66ef21875bbf795f34b391992af11dc59a3df2a7ffe0b6d2e50487eab8b204adc8678d4cfeb0c8ae8e475d439f85d24b964f6f7eb19467d13d45471cbdc1c2fafc746f4eb741d945beec38032a9fc9f8ce8d99cc62eddbfebb6a8fe56dc0bb54c1f884b5da2dc01b88501fe36818b923468ff9354dca237d27383db283e0b0d8bda00299416942f78489a89591875227ed8836547da0c654ae8ed70d05e7d8eb58e966034f466f319eb95112e24d35e762f5057ae26cd590a2b7b50321e181788386ee3ab7a6e0f06ffc2b686895e6c55d7b36f3"
+      }
+    },
+    {
+      "name": "pair_outcome_allowed",
+      "step": "pairFrame",
+      "inputs": {
+        "kind": 5,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "d41808a9621f546363a6729d979ad5b452690514d88343ccf580e3e2f7f0fd64",
+        "keyHalf": "down",
+        "nonce": "407d00aa6299044f78ae06e6",
+        "body": "{\"allowed\":true,\"deviceId\":\"MwioNqKS4gu2axd7w2BsSw\"}"
+      },
+      "intermediate": {
+        "header": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000",
+        "envelope": "0100c97b22616c6c6f776564223a747275652c226465766963654964223a224d77696f4e714b533467753261786437773242735377227d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "aad": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "frame": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000407d00aa6299044f78ae06e6f41e626202e5f4530fe1882d5704557ee413dd75e4102fab2cd22e271387fe52bbcb5f8100cce82cd46367a999fa113291a5cd07544c37957f6d155c7dbc8c4e58d8cc049602d74ea95977ef429aa488d31bbb3f4fdbeb49650e7de241d7edd9d77b3611a5d25d4035c38f47f58e6fa175a6fe969139c9731d563328a44ad58edfed609b7bd1bf93634350862527c239d3b972dd9ad86ab490ec1639e3404b283b7b8c6fde39b41b8197a5a9e0a1538660e2e9efd808769b7d7f2c6906658e7535d3e9f85146043d95ebb5bc1b9cf10a9236e87b53b7a8dd93426d732f4d000be22a22800d8fd1d69c6476bd06a03a191fddee92bd539dfe72e96d34264866ac88350afcbc642519d8f87cad546a631a"
+      }
+    },
+    {
+      "name": "pair_outcome_refused",
+      "step": "pairFrame",
+      "inputs": {
+        "kind": 5,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "d41808a9621f546363a6729d979ad5b452690514d88343ccf580e3e2f7f0fd64",
+        "keyHalf": "down",
+        "nonce": "b88ad049eeafb34b5734c7c4",
+        "body": "{\"allowed\":false}"
+      },
+      "intermediate": {
+        "header": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000",
+        "envelope": "0100ec7b22616c6c6f776564223a66616c73657d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "aad": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000"
+      },
+      "output": {
+        "frame": "0105e8379f7d15ef55f9acc03bdf38eb39b80000000000000000b88ad049eeafb34b5734c7c4cf29a030dcf833cdc511619aac4dc4fd74dcac53a7cda0d7ddfe7fd954b36a1a6e336b9c1b345bb36ac2bdee2c69228a439d71f70127ce942232740d9a9b2b2f1c562ad471980efaaa23ef0304126fd2f160caad25ca9fc36e2dc03065c339ec8182b8cde9c4806fdeffba9fcee590959e39525607025c01386089967217468689b9a5f348203889a19652fb53a32d475dc7a8d415e084cb55daa74f734bb62920f71582ad03a4d819e33e2a59b0318976b03df89527d139c0b08bed8cf96f83e23b8b2222534eebf9eb79f1aa8cc6839c4a32b1fd968a7d7cab5c4bb1b8fc0b9cfef4bd921817d551979a9e070332484498499393bc13a6ba9161781303eceaf49f0fc1530dd7412dc1d606e154027a"
+      }
+    },
+    {
+      "name": "words_scanned",
+      "step": "words",
+      "inputs": {
+        "path": 1,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "host": "amber-otter-lamp-quiet.trycloudflare.com",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "deviceName": "Ana\u2019s iPhone",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "nc": "7c0be3ca4e3d5047b72b8ee6ed84301e00e2b6b7caba51a4a28035277661a250"
+      },
+      "intermediate": {
+        "ecdhCD": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "salt": "4419c8b8f185fc137c3dae424bdb32925c7f20645de9e1e683ad63e3de7d18b7",
+        "out": "00b1320e2b",
+        "bit32": 0
+      },
+      "output": {
+        "indices": [
+          5,
+          1100,
+          1052
+        ],
+        "words": [
+          "absent",
+          "maze",
+          "logic"
+        ]
+      }
+    },
+    {
+      "name": "words_typed",
+      "step": "words",
+      "inputs": {
+        "path": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "host": "amber-otter-lamp-quiet.trycloudflare.com",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "deviceName": "Ana\u2019s iPhone",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "nc": "7c0be3ca4e3d5047b72b8ee6ed84301e00e2b6b7caba51a4a28035277661a250"
+      },
+      "intermediate": {
+        "ecdhCD": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "salt": "80551c2a8b5e30bf0489f68cf2ef8c2597280c767dd8bcd8bbbc3c619632511c",
+        "out": "291439d1f1",
+        "bit32": 1
+      },
+      "output": {
+        "indices": [
+          328,
+          1294,
+          931
+        ],
+        "words": [
+          "cinnamon",
+          "peace",
+          "inner"
+        ]
+      }
+    },
+    {
+      "name": "words_look_alike_host",
+      "step": "words",
+      "inputs": {
+        "path": 1,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "host": "amber-otter-lamp-quiet.trycloudflare.co",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "deviceName": "Ana\u2019s iPhone",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "nc": "7c0be3ca4e3d5047b72b8ee6ed84301e00e2b6b7caba51a4a28035277661a250"
+      },
+      "intermediate": {
+        "ecdhCD": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "salt": "8f5fe294d2de5cd0703bd94085cc371a6d4ea45afee7e48f41357a9733aafda3",
+        "out": "c0bf3cbab6",
+        "bit32": 1
+      },
+      "output": {
+        "indices": [
+          1541,
+          1999,
+          373
+        ],
+        "words": [
+          "scheme",
+          "wheat",
+          "concert"
+        ]
+      }
+    },
+    {
+      "name": "words_bit32_set",
+      "step": "words",
+      "inputs": {
+        "path": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "host": "amber-otter-lamp-quiet.trycloudflare.com",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "deviceName": "Ana\u2019s iPhone",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "nc": "072b1173dea94a71e35138ba3acbe4a879f2d1daea2f92d952211128a5fa84f4",
+        "searchAttempt": 0
+      },
+      "intermediate": {
+        "ecdhCD": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "salt": "93d03a997cf8c8abd19adf1bf2fb0fd77169412556086fa568dc345ec2a4f7c5",
+        "out": "93b6abed90",
+        "bit32": 1
+      },
+      "output": {
+        "indices": [
+          1181,
+          1450,
+          2011
+        ],
+        "words": [
+          "neck",
+          "relief",
+          "window"
+        ]
+      }
+    },
+    {
+      "name": "ecdh_leading_zero",
+      "step": "ecdh",
+      "inputs": {
+        "a": {
+          "scalar": "864a9e621547c6a3ae8862df8d8b6c6a23b15197a2c402a7e5997390794d2eee",
+          "public": "04b24b821938dfff53acf01ac31bc0f7778d74505be8b699a38a0fbb024e80c601f10827054a6ca3b5774e09714beea92775830ca42dc8f70e9c11af390469fa15"
+        },
+        "b": {
+          "scalar": "b4c0f865e48c20f2e61fb86ab9bde1030935b95e9552393441e4fc463f67622d",
+          "public": "0430f8dec6b738e6dad5846bd6a60f577a86ae0c91a0c56fa58dc83dcd99f11befaf40d65c965eab7988b73b85aaf95904635da61f4ed53da08a550fb08e3b15a9",
+          "searchCounter": 339
+        },
+        "deviceId": "449387e5d716088e70911d9404832a10"
+      },
+      "intermediate": {
+        "kd": "0b0f4eb893393ffd06ad631a1205b664d760a3a2eb72f6a24e780aa459feddf9"
+      },
+      "output": {
+        "shared": "000fb0e28c06d66e7517b7e5732bdb7fd30e09bb1243a2ad81d2f5583a6e4650",
+        "length": 32
+      }
+    },
+    {
+      "name": "device_key",
+      "step": "deviceKey",
+      "inputs": {
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b"
+      },
+      "intermediate": {
+        "ecdhDC": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "info": "nocturne device v1"
+      },
+      "output": {
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4"
+      }
+    },
+    {
+      "name": "session_open",
+      "step": "sessionOpen",
+      "inputs": {
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "epub": "04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd7",
+        "openNonce": "2b0cb8675d73870b502dfd5e",
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4"
+      },
+      "intermediate": {
+        "header": "0106000000000000000000000000000000000000000000000000",
+        "aad": "01060000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd7",
+        "proof": "47cf135183d530c89e82b831e8ccd729057f340d8a396f"
+      },
+      "output": {
+        "frame": "01060000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd72b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f"
+      }
+    },
+    {
+      "name": "session_accept",
+      "step": "sessionAccept",
+      "inputs": {
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "fpub": "04d76e862ce30ab278e8c779a98309ecba93b75e05632406a2b5beb6ac86888291081571ec21c4985ac15d34cc5fc357d3b980279a5220fa7767fe25c7a88ea544"
+      },
+      "intermediate": {},
+      "output": {
+        "frame": "0107d5e36e98c098668556058c46425ec659000000000000000004d76e862ce30ab278e8c779a98309ecba93b75e05632406a2b5beb6ac86888291081571ec21c4985ac15d34cc5fc357d3b980279a5220fa7767fe25c7a88ea544"
+      }
+    },
+    {
+      "name": "session_keys",
+      "step": "sessionKeys",
+      "inputs": {
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "epub": "04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd7",
+        "openNonce": "2b0cb8675d73870b502dfd5e",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "fpub": "04d76e862ce30ab278e8c779a98309ecba93b75e05632406a2b5beb6ac86888291081571ec21c4985ac15d34cc5fc357d3b980279a5220fa7767fe25c7a88ea544",
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+      },
+      "intermediate": {
+        "ecdhEF": "cbb397eddb71ec0e9e493b2ef6b124dd93eedacfad4f843b6ed1cac22506ade3",
+        "ecdhEC": "bc03e141cad4eebae40da4176e33769d1897d2bbb2c0785c39578126025e7ec6",
+        "ecdhDF": "0b6011b5bbc58fbfaaaef47006c68307798c9b6b33ccf6c1d671fe9d3ce5a4dd",
+        "ecdhDC": "85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "ikm": "cbb397eddb71ec0e9e493b2ef6b124dd93eedacfad4f843b6ed1cac22506ade3bc03e141cad4eebae40da4176e33769d1897d2bbb2c0785c39578126025e7ec60b6011b5bbc58fbfaaaef47006c68307798c9b6b33ccf6c1d671fe9d3ce5a4dd85f2e6d087896d5f39cb48f3be7800a89815cc9eb564008429a4b3b6ab2d536e",
+        "salt": "a7cb84c98eba1a91ff4bff9ec40d37e92892842630337607a34f652312a0e033",
+        "info": "nocturne session v1"
+      },
+      "output": {
+        "up": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "down": "cc91fe81a10189a20270d93408a3b2d3e34c78061a344ae07609c57b9b50759d"
+      }
+    },
+    {
+      "name": "revoked",
+      "step": "revoked",
+      "inputs": {
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "openNonce": "2b0cb8675d73870b502dfd5e",
+        "nonce": "10e0f6e9315050713702b7b5"
+      },
+      "intermediate": {
+        "header": "0109000000000000000000000000000000000000000000000000",
+        "aad": "01090000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b2b0cb8675d73870b502dfd5e"
+      },
+      "output": {
+        "frame": "010900000000000000000000000000000000000000000000000010e0f6e9315050713702b7b590c5d732eb211575eb2722e20ab7709b6c53347f8c5564080b48"
+      }
+    },
+    {
+      "name": "envelope_json",
+      "step": "envelope",
+      "inputs": {
+        "type": 1,
+        "body": "{\"id\":1,\"call\":{\"cmd\":\"getStatus\"}}"
+      },
+      "intermediate": {
+        "bodyLength": 35,
+        "padLen": 218
+      },
+      "output": {
+        "envelope": "0100da7b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "length": 256
+      }
+    },
+    {
+      "name": "envelope_json_exact_block",
+      "step": "envelope",
+      "inputs": {
+        "type": 1,
+        "body": "{\"id\":7,\"call\":{\"cmd\":\"ask\",\"question\":\"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\"}}"
+      },
+      "intermediate": {
+        "bodyLength": 253,
+        "padLen": 0
+      },
+      "output": {
+        "envelope": "0100007b226964223a372c2263616c6c223a7b22636d64223a2261736b222c227175657374696f6e223a22787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878227d7d",
+        "length": 256
+      }
+    },
+    {
+      "name": "envelope_chunk",
+      "step": "envelope",
+      "inputs": {
+        "type": 2,
+        "callId": 5,
+        "seq": 0,
+        "last": true,
+        "bytes": "9161fdb4fec9e3030d50b4c6a920bf8477cd8cb2a8bff3ffbd97e3e9c24394141882d841ea401a8ddb4b1d6c9dabee4b"
+      },
+      "intermediate": {
+        "body": "0000000500000000019161fdb4fec9e3030d50b4c6a920bf8477cd8cb2a8bff3ffbd97e3e9c24394141882d841ea401a8ddb4b1d6c9dabee4b",
+        "padLen": 0
+      },
+      "output": {
+        "envelope": "0200000000000500000000019161fdb4fec9e3030d50b4c6a920bf8477cd8cb2a8bff3ffbd97e3e9c24394141882d841ea401a8ddb4b1d6c9dabee4b",
+        "length": 60
+      }
+    },
+    {
+      "name": "data_down_1",
+      "step": "data",
+      "inputs": {
+        "direction": "down",
+        "ctr": 1,
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "key": "cc91fe81a10189a20270d93408a3b2d3e34c78061a344ae07609c57b9b50759d",
+        "body": "{\"id\":0,\"answer\":{\"type\":\"hello\",\"hello\":{\"computerName\":\"Kitchen laptop\",\"deviceName\":\"Ana\u2019s iPhone\",\"connection\":\"simple\",\"version\":\"0.1.0\"}}}"
+      },
+      "intermediate": {
+        "header": "0108d5e36e98c098668556058c46425ec6590000000000000001",
+        "nonce": "646f776e0000000000000001",
+        "envelope": "01006b7b226964223a302c22616e73776572223a7b2274797065223a2268656c6c6f222c2268656c6c6f223a7b22636f6d70757465724e616d65223a224b69746368656e206c6170746f70222c226465766963654e616d65223a22416e61e2809973206950686f6e65222c22636f6e6e656374696f6e223a2273696d706c65222c2276657273696f6e223a22302e312e30227d7d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "output": {
+        "frame": "0108d5e36e98c098668556058c46425ec659000000000000000120bcde4d382b6b560462d913ba0ce42106f08340c526b26141ace3967a2b9dd40a1ad7329da62221b38e6e849347e082cf2d8b7a95d8d0bacde602ef4579a6670e75ca855cf6edab19afbc14884b5542bb21a39dd25397be000578693ad2844c7dcf89d51dc8726e8410d8c802323da52a830329cafb537f1ddb5fba072f56909846761228f9b6dd1fb24cc562de88094eb16954e66eafaea5ed3ec7a1bf7d965647e79a8195a073cec5854f7752d87c3b0847b1182c0e4610c159c50f4164d38a9649f9f3139001d4fb66cddb57887eec1c1b3b087823660ff496ca4c428b2fdbb21b2055bb06df290d023722e3e2b92fb7fc7720a32b68d28e54ee7265b2f3e756c1fedc1e1a530a20a9b6ab4ff535"
+      }
+    },
+    {
+      "name": "data_up_1",
+      "step": "data",
+      "inputs": {
+        "direction": "up",
+        "ctr": 1,
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "body": "{\"id\":1,\"call\":{\"cmd\":\"getStatus\"}}"
+      },
+      "intermediate": {
+        "header": "0108d5e36e98c098668556058c46425ec6590000000000000001",
+        "nonce": "75705f5f0000000000000001",
+        "envelope": "0100da7b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "output": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39"
+      }
+    },
+    {
+      "name": "data_up_2",
+      "step": "data",
+      "inputs": {
+        "direction": "up",
+        "ctr": 2,
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "body": "{\"id\":2,\"call\":{\"cmd\":\"keepText\",\"text\":\"Bin day moved to Thursday\",\"clientId\":\"c-0001\"}}"
+      },
+      "intermediate": {
+        "header": "0108d5e36e98c098668556058c46425ec6590000000000000002",
+        "nonce": "75705f5f0000000000000002",
+        "envelope": "0100a47b226964223a322c2263616c6c223a7b22636d64223a226b65657054657874222c2274657874223a2242696e20646179206d6f76656420746f205468757273646179222c22636c69656e744964223a22632d30303031227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "output": {
+        "frame": "0108d5e36e98c098668556058c46425ec65900000000000000029e5962c827b7c321007e2699460c1410fc2571bf66298f36e8bba19b821942e1070f1457b675adf3e6d9d77180e134a7320fd9584e725951da3d0e85d27b1cdc478d31b3ac3ca17cf79a5ea37fd99ba0f7e73d34dc3292b8c951114c1d9ca812aefb47be7a4bc950fca6ce9bf9dae753dac157a90465f434d4324ccf654f83409289965b7be8ee744825df3a2436dd4b8c80b05fdeeb31d0e8dc7a186d14153eeb23304b29459799d218e472d5a4e14f8ad0ba98977b8bb838bca1faad77e5ae6816e3dfb7b6902cde8498881cc783ba81aaba0dbb1b4f84676e5117405396fb215e5a90cdd25f38eb987491fccab29d67aa3664dde746a3613cf8dee40ff5a865df76f983abcf44b0418e2a09ea8b54"
+      }
+    },
+    {
+      "name": "data_down_2",
+      "step": "data",
+      "inputs": {
+        "direction": "down",
+        "ctr": 2,
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "key": "cc91fe81a10189a20270d93408a3b2d3e34c78061a344ae07609c57b9b50759d",
+        "body": "{\"id\":1,\"answer\":{\"type\":\"status\",\"status\":{\"readiness\":\"ready\",\"pageDate\":\"2026-11-13\",\"needsYou\":2}}}"
+      },
+      "intermediate": {
+        "header": "0108d5e36e98c098668556058c46425ec6590000000000000002",
+        "nonce": "646f776e0000000000000002",
+        "envelope": "0100967b226964223a312c22616e73776572223a7b2274797065223a22737461747573222c22737461747573223a7b2272656164696e657373223a227265616479222c227061676544617465223a22323032362d31312d3133222c226e65656473596f75223a327d7d7d000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "output": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000002ea378c7258fd7d90715d0d083e4cdcf9dbb7e2503776b3d9b65787c1a532e06c8a1a8695bf5bc925193eb4d7aaff3c05197595b887ef84ab86206795908b70cfdc550286913995363d222fe0ad6c1ef775f7441223f058e69bc83e2cd6304dab135d638b0e9ce4293c5714e01fc88f38710b3dc039e2e3a615c95b26185be25844f18f7c119c5b70af50a3d8bddf30df5cd2796401e80a43373acbb5b29272ca05822de507b036d7511f722cdb8548695cc9cf14ba2cb826f5ecc122e23c64b7865cc5f8ccccd8ff08a37bb3105e1d9c128ad9eaec152ab671b82deea39c1a62efd4b7f939e1af4c8d616604d837a4d2776db1cd07f74ded06aba099e7627eecf70fd0f8019c9398610a902d0c67fd7c"
+      }
+    },
+    {
+      "name": "data_up_3_chunk",
+      "step": "data",
+      "inputs": {
+        "direction": "up",
+        "ctr": 3,
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "envelope": "0200000000000200000000019161fdb4fec9e3030d50b4c6a920bf8477cd8cb2a8bff3ffbd97e3e9c24394141882d841ea401a8ddb4b1d6c9dabee4b"
+      },
+      "intermediate": {
+        "header": "0108d5e36e98c098668556058c46425ec6590000000000000003",
+        "nonce": "75705f5f0000000000000003"
+      },
+      "output": {
+        "frame": "0108d5e36e98c098668556058c46425ec65900000000000000034ce6968c5fcf5731c977a2d4931dc7fd4471b6132e3ece25670c1cbf679823257d742cabcff568335afe1a7a3d9105e8b4b58bbf77ea8a3e341bf89714b9d358f927323c9036970b646168c9"
+      }
+    },
+    {
+      "name": "magic_image_jpeg_0",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/jpeg",
+        "bytes": "ffd8ffe000104a464946"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_image_png_1",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/png",
+        "bytes": "89504e470d0a1a0a"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_image_heic_2",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/heic",
+        "bytes": "0000001866747970686569630000"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_image_webp_3",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/webp",
+        "bytes": "52494646240000005745425056503820"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_application_pdf_4",
+      "step": "magic",
+      "inputs": {
+        "mime": "application/pdf",
+        "bytes": "255044462d312e370a"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_webm_5",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/webm",
+        "bytes": "1a45dfa39f4286"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_mp4_6",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/mp4",
+        "bytes": "0000001c667479704d344120"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_ogg_7",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/ogg",
+        "bytes": "4f6767530002"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_mpeg_8",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/mpeg",
+        "bytes": "4944330400"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_mpeg_9",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/mpeg",
+        "bytes": "fffb9064"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "magic_audio_wav_10",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/wav",
+        "bytes": "524946462400000057415645666d7420"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "device_name_40_bytes",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9"
+      },
+      "intermediate": {},
+      "output": {
+        "utf8": "c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9"
+      }
+    },
+    {
+      "name": "id_item",
+      "step": "id",
+      "inputs": {
+        "id": "itm_534d16db92627d15"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "id_ask",
+      "step": "id",
+      "inputs": {
+        "id": "ask_9d09a035c6de8a2e"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "id_client",
+      "step": "id",
+      "inputs": {
+        "id": "c-0001"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "id_longest",
+      "step": "id",
+      "inputs": {
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "intermediate": {},
+      "output": {
+        "accepted": true
+      }
+    },
+    {
+      "name": "item_text_fits",
+      "step": "itemText",
+      "inputs": {
+        "length": 16384,
+        "sha256": "f3336bea752b5a28743033dd2c844a4a63fba08871aaee2586a2bf2d69be83a2",
+        "tail": "aa"
+      },
+      "intermediate": {},
+      "output": {
+        "length": 16384,
+        "sha256": "f3336bea752b5a28743033dd2c844a4a63fba08871aaee2586a2bf2d69be83a2",
+        "truncated": false
+      }
+    },
+    {
+      "name": "item_text_ascii_over",
+      "step": "itemText",
+      "inputs": {
+        "length": 16385,
+        "sha256": "608b801060d579a7b659a01755259a13dec8853b97d3d8062763c97ffac6ddae",
+        "tail": "aa"
+      },
+      "intermediate": {},
+      "output": {
+        "length": 16384,
+        "sha256": "f3336bea752b5a28743033dd2c844a4a63fba08871aaee2586a2bf2d69be83a2",
+        "truncated": true
+      }
+    },
+    {
+      "name": "item_text_multibyte_boundary",
+      "step": "itemText",
+      "inputs": {
+        "length": 16385,
+        "sha256": "dae4387aa21a2045a6d23c5b6a776ea44151f94261c0a6b14bca192b6ec68f30",
+        "tail": "a\u00e9"
+      },
+      "intermediate": {},
+      "output": {
+        "length": 16383,
+        "sha256": "2e1023f5ad46df0d01aa4b73ce3db452ed0a768387949efa5a858b532b763012",
+        "truncated": true
+      }
+    },
+    {
+      "name": "item_text_four_byte_boundary",
+      "step": "itemText",
+      "inputs": {
+        "length": 16386,
+        "sha256": "3c8d7afd39ace608b9b2e337ae91601237e2a1f268176520f771fe23d8324829",
+        "tail": "a\ud83c\udf19"
+      },
+      "intermediate": {},
+      "output": {
+        "length": 16382,
+        "sha256": "0710c4c7a5fd27a4c9ab91bf0ce178cc3ae3caa3b7b7656182ad5d9e932703e7",
+        "truncated": true
+      }
+    },
+    {
+      "name": "item_text_worst_case_fits_one_frame",
+      "step": "itemText",
+      "inputs": {
+        "summaryBytes": 16384,
+        "textBytes": 16384,
+        "titleChars": 255,
+        "every": "U+0001, which JSON writes as six bytes"
+      },
+      "intermediate": {
+        "bodyLength": 198400,
+        "envelopeLength": 198656
+      },
+      "output": {
+        "envelopeBudget": 270294,
+        "fits": true
+      }
+    }
+  ],
+  "negative": [
+    {
+      "name": "public_key_off_curve",
+      "step": "publicKey",
+      "inputs": {
+        "key": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28371"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_compressed_33",
+      "step": "publicKey",
+      "inputs": {
+        "key": "02f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_single_zero",
+      "step": "publicKey",
+      "inputs": {
+        "key": "00"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_x_not_below_p",
+      "step": "publicKey",
+      "inputs": {
+        "key": "04ffffffff00000001000000000000000000000000ffffffffffffffffffffffffea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_y_not_below_p",
+      "step": "publicKey",
+      "inputs": {
+        "key": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ffffffff00000001000000000000000000000000ffffffffffffffffffffffff"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_no_0x04_prefix",
+      "step": "publicKey",
+      "inputs": {
+        "key": "05f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "public_key_too_long",
+      "step": "publicKey",
+      "inputs": {
+        "key": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e2837000"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "reveal_dpub_equals_cpub",
+      "step": "reveal",
+      "inputs": {
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "deviceName": "Ana\u2019s iPhone",
+        "commit": "2bcacfcba00ec2226ef39898cafe3616685f5b6288c4f3aaf12cf4452a3c3b68"
+      },
+      "expect": "samePublicKey"
+    },
+    {
+      "name": "code_with_u",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8N0W53W8B8ZRBZCGSJU"
+      },
+      "expect": "badCode"
+    },
+    {
+      "name": "code_too_short",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8N0W53W8B8ZRBZCGSJ"
+      },
+      "expect": "badCode"
+    },
+    {
+      "name": "code_too_long",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8N0W53W8B8ZRBZCGSJN0"
+      },
+      "expect": "badCode"
+    },
+    {
+      "name": "code_other_character",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8N0W53W8B8ZRBZCGSJ*"
+      },
+      "expect": "badCode"
+    },
+    {
+      "name": "code_tab_separator",
+      "step": "codeNormalise",
+      "inputs": {
+        "typed": "VJ27F8N0W53W\t8B8ZRBZCGSJN"
+      },
+      "expect": "badCode"
+    },
+    {
+      "name": "device_name_41_bytes",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "utf8": "7878787878787878787878787878787878787878787878787878787878787878787878787878787878"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_multibyte_over_40",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9\u00e9",
+        "utf8": "c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9c3a9"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_empty",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "",
+        "utf8": ""
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_bidi_rlo",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u202e9",
+        "utf8": "506978656ce280ae39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_bidi_lrm",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "\u200ePixel",
+        "utf8": "e2808e506978656c"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_bidi_isolate",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u20669",
+        "utf8": "506978656ce281a639"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_c0_control",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\n9",
+        "utf8": "506978656c0a39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_c1_control",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u00859",
+        "utf8": "506978656cc28539"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_arabic_letter_mark",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u061c9",
+        "utf8": "506978656cd89c39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_zero_width_space",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u200b9",
+        "utf8": "506978656ce2808b39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_zero_width_non_joiner",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u200c9",
+        "utf8": "506978656ce2808c39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_zero_width_joiner",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u200d9",
+        "utf8": "506978656ce2808d39"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_line_separator",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u20289",
+        "utf8": "506978656ce280a839"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_paragraph_separator",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "Pixel\u20299",
+        "utf8": "506978656ce280a939"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "device_name_byte_order_mark",
+      "step": "deviceName",
+      "inputs": {
+        "deviceName": "\ufeffPixel",
+        "utf8": "efbbbf506978656c"
+      },
+      "expect": "badDeviceName"
+    },
+    {
+      "name": "data_other_direction_key",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "cc91fe81a10189a20270d93408a3b2d3e34c78061a344ae07609c57b9b50759d",
+        "direction": "down",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "data_up_key_down_nonce",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "down",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "data_replayed_under_other_sid",
+      "step": "data",
+      "inputs": {
+        "frame": "01083fd20891f9e5107af566271eb82c8a9c0000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "d12722527bb4189fe611e119c1d445cb37f99974a30e7569863b0c009ccf993b",
+        "direction": "up",
+        "sid": "3fd20891f9e5107af566271eb82c8a9c",
+        "lastCtr": 0,
+        "otherSession": {
+          "fpub": "041213801268f038e9d7eb9969b9beb9196fe07cd3c2f242f9a0908dfb7e8a3569c7cb2cb7ff18c4cbbb5617d8172c42dbb216c15e2179cdac0bd99a23ab2b27ab",
+          "sid": "3fd20891f9e5107af566271eb82c8a9c"
+        }
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "data_unknown_sid",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "d12722527bb4189fe611e119c1d445cb37f99974a30e7569863b0c009ccf993b",
+        "direction": "up",
+        "sid": "3fd20891f9e5107af566271eb82c8a9c",
+        "lastCtr": 0
+      },
+      "expect": "wrongSid"
+    },
+    {
+      "name": "data_counter_gap",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec65900000000000000034fe64cf77da63113f3468ef7611d562598822e3240031ec1f40ec45e6406dbf6a1beac760f1f8bda98bd8e6e2513dda95ef59132aca19752a9b016dcd43a0a414b325000c3d1273fca4ec42cfae80b6b2ff3a29ddfc6a4e6c685e928aa2f829b0fe68d7bbd6fc92a5c918b4e27f36fcfe2a305326c72f9b4028a6e9c41d732af29e53965e52d655a272edc7f7789f55b708e95534e944d10f73281f5cefab40ebde8619a5fb1d02bccc061c7e51275de999b33d8efcabfdafafbe23eb5d23ed1ee26a3bee6ce99edfadc79008685091797c90dcd24f8eb9ae4b101b4d3b9ad9f45b8fefe86b3065fdaf52e51d86e8647512b1eed11a1e7ef32dd91c106b547762f523d02ad7099ee0381660fd43951cc",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 1
+      },
+      "expect": "counterGap"
+    },
+    {
+      "name": "data_counter_repeat",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 1
+      },
+      "expect": "counterGap"
+    },
+    {
+      "name": "data_kind_changed",
+      "step": "data",
+      "inputs": {
+        "frame": "0106d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "wrongKind"
+    },
+    {
+      "name": "data_version_2",
+      "step": "data",
+      "inputs": {
+        "frame": "0208d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a39",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "badVersion"
+    },
+    {
+      "name": "data_tag_flipped",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c973f6d3e5ab669ddbdff486ec5db6adabde8fc457fa261d4ad10541d0404197bb757aec205e255be601d909a53e2adae1b57b7aa0fca1c8340f7e77eea51e6250723fb4f21bfe0bc9889619044942ba287d64681e9dfd59631ea2ba9257f1a0747770b593ecf40950990eb092336051712381544179954c3f771fef24aa4edf39f1686eb5ce4683cd23f49e401bda2364bb6f4aa08a3f09cfc37a1279b0c7b411fe8a6d53a22e4ad00fec92ce1600fb453f9bc18df1b28854fceedfafdf0d26eb7436bd49077143b5cce31df3e84280e5572b7372df985fa24cb586215f3e70003723db228081059bfc86228b7f5fe72e9df0c689b912ba3789406819a8744cedc5dbd40093788c323408a38",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "data_too_short",
+      "step": "data",
+      "inputs": {
+        "frame": "0108d5e36e98c098668556058c46425ec6590000000000000001f415da4c",
+        "key": "bfa2b61be73a73ab7c19f712f66e3d54cbe8894227d3f724bfa839eeb04c4e38",
+        "direction": "up",
+        "sid": "d5e36e98c098668556058c46425ec659",
+        "lastCtr": 0
+      },
+      "expect": "tooShort"
+    },
+    {
+      "name": "pair_kind_swapped",
+      "step": "pairFrame",
+      "inputs": {
+        "frame": "0104e8379f7d15ef55f9acc03bdf38eb39b80000000000000000b62fa7d6f99e8dad4d298684a011ba98fbe7aa0a469c5dfb386e1b99f915525fbcc09cde209e9d207aefe20d4c26c4a703900db95c933b9ea36d8747300cbc1e4a9984b6a9636d8027f45b2411005cb2301c0ed7242ea41a416238c30564144672142148a8150bded86d713d1edc126135ae1d6b67231f7aace4140a946635c6b6711583727bda6ed0b6b86665ae24c963ec994c528b5c8fcadc51f7b0edf2b4b48354a0db1679305c477ed6d279785d01dd64ec7afb2c3c0d63c711b57332feef80fe37e9856097a1d0bbe93b835d217bd5b82b53b2f34686b7371de288ae57a12b04f602590c0f5a683d9a19c07ed8e3698009539f1c1a69d1927d8f34f14b7b543406608541c09657b881955e8bb82e50741ca6265678aebdd64f",
+        "kind": 4,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8"
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "pair_other_direction_key",
+      "step": "pairFrame",
+      "inputs": {
+        "frame": "0102e8379f7d15ef55f9acc03bdf38eb39b80000000000000000b62fa7d6f99e8dad4d298684a011ba98fbe7aa0a469c5dfb386e1b99f915525fbcc09cde209e9d207aefe20d4c26c4a703900db95c933b9ea36d8747300cbc1e4a9984b6a9636d8027f45b2411005cb2301c0ed7242ea41a416238c30564144672142148a8150bded86d713d1edc126135ae1d6b67231f7aace4140a946635c6b6711583727bda6ed0b6b86665ae24c963ec994c528b5c8fcadc51f7b0edf2b4b48354a0db1679305c477ed6d279785d01dd64ec7afb2c3c0d63c711b57332feef80fe37e9856097a1d0bbe93b835d217bd5b82b53b2f34686b7371de288ae57a12b04f602590c0f5a683d9a19c07ed8e3698009539f1c1a69d1927d8f34f14b7b543406608541c09657b881955e8bb82e50741ca6265678aebdd64f",
+        "kind": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "d41808a9621f546363a6729d979ad5b452690514d88343ccf580e3e2f7f0fd64"
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "pair_relay_cpub",
+      "step": "pairFrame",
+      "inputs": {
+        "frame": "0102e8379f7d15ef55f9acc03bdf38eb39b8000000000000000054a6459e6fd7f3846be034fefc0847c8a0963f08e3ae3bb396084045e4d285310968c0ad0f141756f1111e35f8ae4e73f35c9a3a98908d37661543079bdd4d2e8944e4b166296dd0504677daf1b6ced9b08a35473a13db0e2c0f44f6b9b34e4551026fcd42139de6fe1d972e81442679f7e7339b617ee4b559e67b5e1e1828ba858e996363e274dd8e1aaf24924b294b95d8d56babf0d4911f5ee9b3620d6e620f579386fc363d65bc58f4eebf96516bb42772170a5f00bad6dc897b13c2696b6af86acb7ee18685eb8bbacb76153f107455ee0a40703c895e49124c3426a0724e3c2dfb83c2df2e7912f80f7d73b1bd069b73ab31e86d6a09f4bd448061b211e3ce7b1177a6e9035adb28a48fda0d34eceda6722e59b9a39c077a10",
+        "kind": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8",
+        "relayCpub": "04034fe6046602a0959c9ddd9d55e48246f9ba9994aad8d51f6e7743a752582342b85e02972520e48c697498bdad30b6a5cd370d57368a7f7577fbfd90db35572e",
+        "relayKpUp": "e3c02a9524d95f445fea42833cd121353cf2bd0408641d08f3bd033724fdad2e"
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "reveal_not_matching_commit",
+      "step": "reveal",
+      "inputs": {
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "np": "3d75bf22ad4b675090c407d98234d177e8081b977c96389e27fe52c239cbf282",
+        "deviceName": "Ana\u2019s iPhone",
+        "commit": "d71f1e8fd9f3769cc6279a993c2f52a7f1a596143ccbbef5a704ac37c536f1c3"
+      },
+      "expect": "commitMismatch"
+    },
+    {
+      "name": "reveal_changed_device_name",
+      "step": "reveal",
+      "inputs": {
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "deviceName": "Ana\u2019s iPad",
+        "commit": "d71f1e8fd9f3769cc6279a993c2f52a7f1a596143ccbbef5a704ac37c536f1c3"
+      },
+      "expect": "commitMismatch"
+    },
+    {
+      "name": "reveal_other_dpub",
+      "step": "reveal",
+      "inputs": {
+        "cpub": "04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e28370",
+        "dpub": "04f1cfb66b270332f3947feb073fcdca214261f20bd42cd659df86f48a58f5a4cd2d6a2e7f9d6375a5aab9a49b1779b8f82b9c08c7cafaa78d9a720a6ed8b54331",
+        "np": "c55540d39e1fe5221140384e7c76be03279adbfd1481bf1a5c20882a007577c0",
+        "deviceName": "Ana\u2019s iPhone",
+        "commit": "d71f1e8fd9f3769cc6279a993c2f52a7f1a596143ccbbef5a704ac37c536f1c3"
+      },
+      "expect": "commitMismatch"
+    },
+    {
+      "name": "open_proof_epub_changed",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b04f3c5c2662577c86ee3d254362b9e3d96f9b948ca31ba70113b97e3121937b2666f9cd7d894e13a47a3846b77ee9b5e6d8f589df4e8743eec86f52a62169c06312b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C"
+      },
+      "expect": "badProof"
+    },
+    {
+      "name": "open_proof_device_id_changed",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000007927f02a701ba0cead287d429625f55204cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd72b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5",
+          "7927f02a701ba0cead287d429625f552": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C"
+      },
+      "expect": "badProof"
+    },
+    {
+      "name": "open_unknown_device",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000007927f02a701ba0cead287d429625f55204cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd72b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C"
+      },
+      "expect": "badProof"
+    },
+    {
+      "name": "open_epub_off_curve",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd62b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C",
+        "note": "the proof binds Epub, so the proof fails first: no ECDH on Epub happens"
+      },
+      "expect": "badProof"
+    },
+    {
+      "name": "open_valid_proof_off_curve_epub",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000003308a836a292e20bb66b177bc3606c4b04f01796ebfa06899b615e307611a6b4267ec15e7d49345e21634edfaf8f9a3997ea878da8bf401ff8482def0325510305b14c7a1100e40ceb651a6cfb57e283712b0cb8675d73870b502dfd5e47cf135183d5304a99588ec9d39ca4ed57d13a642778fd",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C"
+      },
+      "expect": "badPublicKey"
+    },
+    {
+      "name": "open_counter_not_zero",
+      "step": "sessionOpen",
+      "inputs": {
+        "frame": "01060000000000000000000000000000000000000000000000013308a836a292e20bb66b177bc3606c4b04cf725c39fff8fff13062b26a24e3e3ea02cf26e1735555b2bff3d9bdf346c5ec54d2a607890ec1c8dc7ae3ae96489ab4669d18d2cdda5ae302d57c31432ffcd72b0cb8675d73870b502dfd5e47cf135183d530c89e82b831e8ccd729057f340d8a396f",
+        "registry": {
+          "3308a836a292e20bb66b177bc3606c4b": "04c57a183a9ae32e2eda6f209862ce5af98cab8aab1cd6fa570ddcefc8c3ee28b9fe3aae3686baad7d2b8eca67f90714bcddfe782fd214656b45e1dae5a4ef33d5"
+        },
+        "computer": "C"
+      },
+      "expect": "badCounter"
+    },
+    {
+      "name": "revoked_for_other_open",
+      "step": "revoked",
+      "inputs": {
+        "frame": "010900000000000000000000000000000000000000000000000010e0f6e9315050713702b7b590c5d732eb211575eb2722e20ab7709b6c53347f8c5564080b48",
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "pendingOpenNonce": "2a10b1ba9f5a5fa1c96a3f07"
+      },
+      "expect": "badTag"
+    },
+    {
+      "name": "revoked_sid_not_zero",
+      "step": "revoked",
+      "inputs": {
+        "frame": "0109d5e36e98c098668556058c46425ec659000000000000000010e0f6e9315050713702b7b590c5d732eb211575eb2722e20ab7709b6c53347f8c5564080b48",
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "pendingOpenNonce": "2b0cb8675d73870b502dfd5e"
+      },
+      "expect": "wrongSid"
+    },
+    {
+      "name": "revoked_counter_not_zero",
+      "step": "revoked",
+      "inputs": {
+        "frame": "010900000000000000000000000000000000000000000000000110e0f6e9315050713702b7b590c5d732eb211575eb2722e20ab7709b6c53347f8c5564080b48",
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "pendingOpenNonce": "2b0cb8675d73870b502dfd5e"
+      },
+      "expect": "badCounter"
+    },
+    {
+      "name": "revoked_wrong_length",
+      "step": "revoked",
+      "inputs": {
+        "frame": "010900000000000000000000000000000000000000000000000010e0f6e9315050713702b7b590c5d732eb211575eb2722e20ab7709b6c53347f8c5564080b4800",
+        "kd": "94251a8aecbd883f2731b51a82dca7879c764d3822f857fa9c8cfc56457c79a4",
+        "deviceId": "3308a836a292e20bb66b177bc3606c4b",
+        "pendingOpenNonce": "2b0cb8675d73870b502dfd5e"
+      },
+      "expect": "tooShort"
+    },
+    {
+      "name": "pair_counter_not_zero",
+      "step": "pairFrame",
+      "inputs": {
+        "frame": "0102e8379f7d15ef55f9acc03bdf38eb39b80000000000000001b62fa7d6f99e8dad4d298684a011ba98fbe7aa0a469c5dfb386e1b99f915525fbcc09cde209e9d207aefe20d4c26c4a703900db95c933b9ea36d8747300cbc1e4a9984b6a9636d8027f45b2411005cb2301c0ed7242ea41a416238c30564144672142148a8150bded86d713d1edc126135ae1d6b67231f7aace4140a946635c6b6711583727bda6ed0b6b86665ae24c963ec994c528b5c8fcadc51f7b0edf2b4b48354a0db1679305c477ed6d279785d01dd64ec7afb2c3c0d63c711b57332feef80fe37e9856097a1d0bbe93b835d217bd5b82b53b2f34686b7371de288ae57a12b04f602590c0f5a683d9a19c07ed8e3698009539f1c1a69d1927d8f34f14b7b543406608541c09657b881955e8bb82e50741ca6265678aebdd64f",
+        "kind": 2,
+        "pairingId": "e8379f7d15ef55f9acc03bdf38eb39b8",
+        "key": "2a32fff4a99141391d3389ff1a76ddafd9788f161004066126d81f9a13ddb7f8"
+      },
+      "expect": "badCounter"
+    },
+    {
+      "name": "envelope_pad_beyond_body",
+      "step": "envelope",
+      "inputs": {
+        "envelope": "01012c7b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expect": "badPadding"
+    },
+    {
+      "name": "envelope_nonzero_padding",
+      "step": "envelope",
+      "inputs": {
+        "envelope": "0100da7b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001"
+      },
+      "expect": "badPadding"
+    },
+    {
+      "name": "envelope_json_not_block_multiple",
+      "step": "envelope",
+      "inputs": {
+        "envelope": "0100007b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d"
+      },
+      "expect": "badPadding"
+    },
+    {
+      "name": "envelope_unknown_type",
+      "step": "envelope",
+      "inputs": {
+        "envelope": "0300da7b226964223a312c2263616c6c223a7b22636d64223a22676574537461747573227d7d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "expect": "badEnvelope"
+    },
+    {
+      "name": "chunk_sequence_gap",
+      "step": "chunks",
+      "inputs": {
+        "bodies": [
+          "0000000900000000006161616161616161",
+          "0000000900000002016262626262626262"
+        ]
+      },
+      "expect": "chunkGap"
+    },
+    {
+      "name": "magic_png_declared_jpeg",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/jpeg",
+        "bytes": "89504e470d0a1a0a"
+      },
+      "expect": "badMagic"
+    },
+    {
+      "name": "magic_riff_wave_declared_webp",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/webp",
+        "bytes": "524946462400000057415645666d7420"
+      },
+      "expect": "badMagic"
+    },
+    {
+      "name": "magic_mp3_bad_sync",
+      "step": "magic",
+      "inputs": {
+        "mime": "audio/mpeg",
+        "bytes": "ffe39064"
+      },
+      "expect": "badMagic"
+    },
+    {
+      "name": "magic_not_allowed_mime",
+      "step": "magic",
+      "inputs": {
+        "mime": "text/html",
+        "bytes": "3c21646f63747970652068746d6c3e"
+      },
+      "expect": "badMagic"
+    },
+    {
+      "name": "magic_short_heic",
+      "step": "magic",
+      "inputs": {
+        "mime": "image/heic",
+        "bytes": "00000018667479"
+      },
+      "expect": "badMagic"
+    },
+    {
+      "name": "id_empty",
+      "step": "id",
+      "inputs": {
+        "id": ""
+      },
+      "expect": "badId"
+    },
+    {
+      "name": "id_too_long",
+      "step": "id",
+      "inputs": {
+        "id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "expect": "badId"
+    },
+    {
+      "name": "id_slash",
+      "step": "id",
+      "inputs": {
+        "id": "itm/1"
+      },
+      "expect": "badId"
+    },
+    {
+      "name": "id_dot",
+      "step": "id",
+      "inputs": {
+        "id": "itm.1"
+      },
+      "expect": "badId"
+    },
+    {
+      "name": "id_space",
+      "step": "id",
+      "inputs": {
+        "id": "itm 1"
+      },
+      "expect": "badId"
+    },
+    {
+      "name": "id_non_ascii",
+      "step": "id",
+      "inputs": {
+        "id": "itm_\u00e9"
+      },
+      "expect": "badId"
+    }
+  ]
+}
