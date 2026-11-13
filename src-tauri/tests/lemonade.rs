@@ -23,34 +23,53 @@ const GIB: u64 = 1 << 30;
 
 /// The fake engine binary, brought up to date once per test run. A test run of this package alone
 /// does not build another package's binaries, so one left by an earlier checkout would otherwise
-/// be used as it is.
+/// be used as it is. `NOCTURNE_FAKE_LEMOND` names a prebuilt one instead, for a layout this does
+/// not follow.
 fn fake_engine() -> PathBuf {
     static BUILT: OnceLock<PathBuf> = OnceLock::new();
     BUILT.get_or_init(build_fake_engine).clone()
 }
 
 fn build_fake_engine() -> PathBuf {
+    if let Some(path) = std::env::var_os("NOCTURNE_FAKE_LEMOND") {
+        let path = PathBuf::from(path);
+        assert!(path.is_file(), "NOCTURNE_FAKE_LEMOND is a file");
+        return path;
+    }
+    // The tests sit in `<target>/[<triple>/]<profile>/deps`, so the profile and the triple are
+    // read from there and cargo is asked where it put the binary.
     let exe = std::env::current_exe().unwrap();
-    let profile_dir = exe.parent().and_then(Path::parent).unwrap().to_path_buf();
-    let target_dir = profile_dir.parent().unwrap();
+    let profile_dir = exe.parent().and_then(Path::parent).unwrap();
+    let profile = profile_dir.file_name().unwrap().to_string_lossy();
+    let triple = profile_dir
+        .parent()
+        .and_then(Path::file_name)
+        .map(|n| n.to_string_lossy().into_owned())
+        .filter(|n| n.contains('-'));
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut build = std::process::Command::new(cargo);
     build
-        .args(["build", "-p", "nocturne-lemonade"])
+        .args(["build", "--locked", "-p", "nocturne-lemonade"])
         .args(["--features", "fake-server", "--bin", "fake-lemond"])
-        .arg("--target-dir")
-        .arg(target_dir);
-    if profile_dir.file_name().is_some_and(|n| n == "release") {
-        build.arg("--release");
+        .args([
+            "--profile",
+            if profile == "debug" { "dev" } else { &profile },
+        ])
+        .arg("--message-format=json-render-diagnostics");
+    if let Some(triple) = triple {
+        build.args(["--target", &triple]);
     }
-    let built = build.status().expect("cargo runs");
-    let bin = profile_dir.join(if cfg!(windows) {
-        "fake-lemond.exe"
-    } else {
-        "fake-lemond"
-    });
-    assert!(built.success() && bin.exists(), "the fake engine is built");
-    bin
+    let out = build
+        .stderr(std::process::Stdio::inherit())
+        .output()
+        .expect("cargo runs");
+    assert!(out.status.success(), "the fake engine is built");
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+        .filter(|m| m["reason"] == "compiler-artifact" && m["target"]["name"] == "fake-lemond")
+        .find_map(|m| m["executable"].as_str().map(PathBuf::from))
+        .expect("cargo says where the fake engine is")
 }
 
 struct Lab {
@@ -414,6 +433,22 @@ fn try_again_starts_the_engine_now_instead_of_waiting_for_the_timer() {
 }
 
 #[test]
+fn an_engine_that_gave_up_reports_no_version_port_or_uptime() {
+    let lab = lab(Plan {
+        restart_limit: 1,
+        ..Plan::new("downloaded=all").installed(Tier::Small)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    crash_until_it_gives_up(&lab);
+    wait_for("the notice", || lab.has_notice("restarts"));
+    let details = lab.h.ok("get_advanced", json!({}));
+    assert!(details["engineVersion"].is_null(), "{details}");
+    assert!(details["enginePort"].is_null(), "{details}");
+    assert!(details["engineUptimeSeconds"].is_null(), "{details}");
+    assert_eq!(details["restarts"], 1);
+}
+
+#[test]
 fn try_again_while_the_engine_is_healthy_leaves_it_alone() {
     let lab = lab(Plan::new("downloaded=all").installed(Tier::Small));
     wait_for("the mind to arrive", || lab.has_mind());
@@ -618,19 +653,27 @@ fn the_offer_is_withdrawn_once_memory_has_stayed_back_for_ten_minutes() {
     runtime::out_of_memory(app);
     runtime::out_of_memory(app);
     wait_for("the offer", || lab.has_notice("tierDropped"));
+    // Looks the watcher has made since this call, so a "still there" means it looked.
+    let looked = |more: u64| {
+        let from = lab.services.memory_checks();
+        wait_for("the watcher to look", || {
+            lab.services.memory_checks() >= from + more
+        });
+    };
 
-    lab.free.store(64 * GIB, Ordering::SeqCst);
-    std::thread::sleep(Duration::from_millis(200));
+    // Enough for the mind to load, though less than the whole computer needs to run it.
+    lab.free.store(20 * GIB, Ordering::SeqCst);
+    looked(3);
     lab.h.clock.set_str("2026-11-13T07:05:00Z");
-    std::thread::sleep(Duration::from_millis(200));
+    looked(3);
     assert!(lab.has_notice("tierDropped"), "five minutes is not enough");
 
     lab.free.store(2 * GIB, Ordering::SeqCst);
-    std::thread::sleep(Duration::from_millis(200));
-    lab.free.store(64 * GIB, Ordering::SeqCst);
-    std::thread::sleep(Duration::from_millis(200));
+    looked(3);
+    lab.free.store(20 * GIB, Ordering::SeqCst);
+    looked(3);
     lab.h.clock.set_str("2026-11-13T07:12:00Z");
-    std::thread::sleep(Duration::from_millis(200));
+    looked(3);
     assert!(
         lab.has_notice("tierDropped"),
         "a dip starts the ten minutes again"
@@ -727,6 +770,42 @@ fn an_unfinished_change_of_tier_does_not_leave_the_next_launch_without_a_mind() 
     assert_eq!(lab.services.tier(), Some(Tier::Standard));
     wait_for("setup to read done", || lab.setup_phase() == "done");
     assert_ne!(lab.h.ok("get_status", json!({}))["state"], "gettingReady");
+}
+
+#[test]
+fn a_change_that_did_not_finish_is_dropped_with_a_notice_and_can_be_started_again() {
+    let lab = lab(Plan {
+        unfinished: Some(Tier::Small),
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    wait_for("the notice", || lab.has_notice("tierUnfinished"));
+    assert_eq!(lab.h.ok("get_unfinished_tier", json!({})), "small");
+    assert_eq!(
+        lab.services.tier(),
+        Some(Tier::Standard),
+        "nothing swapped by itself"
+    );
+
+    lab.h.ok("start_setup", json!({"tier": "small"}));
+    wait_for("the notice to go", || !lab.has_notice("tierUnfinished"));
+    assert!(lab.h.ok("get_unfinished_tier", json!({})).is_null());
+    wait_for("the smaller mind", || {
+        lab.services.tier() == Some(Tier::Small)
+    });
+}
+
+#[test]
+fn not_now_forgets_the_change_that_did_not_finish() {
+    let lab = lab(Plan {
+        unfinished: Some(Tier::Small),
+        ..Plan::new("downloaded=all").installed(Tier::Standard)
+    });
+    wait_for("the notice", || lab.has_notice("tierUnfinished"));
+    lab.h.ok("decline_unfinished_tier", json!({}));
+    assert!(!lab.has_notice("tierUnfinished"));
+    assert!(lab.h.ok("get_unfinished_tier", json!({})).is_null());
+    assert_eq!(lab.services.tier(), Some(Tier::Standard));
 }
 
 /// Nothing leaves the machine unless the person started it: an unfinished setup is not resumed

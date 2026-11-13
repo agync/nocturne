@@ -137,6 +137,8 @@ pub struct Services {
     out_of_memory: Mutex<Vec<Timestamp>>,
     /// True while a task is waiting for memory to recover.
     memory_watch: AtomicBool,
+    /// How many times the watcher has looked at memory, for tests that wait on it.
+    memory_checks: std::sync::atomic::AtomicU64,
 }
 
 impl Services {
@@ -152,6 +154,11 @@ impl Services {
     /// The smaller tier on offer, while the notice about memory stands.
     pub fn tier_offer(&self) -> Option<Tier> {
         *self.offer.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// How many times the task waiting for memory to recover has looked at it.
+    pub fn memory_checks(&self) -> u64 {
+        self.memory_checks.load(Ordering::SeqCst)
     }
 
     /// Memory free for use right now, in bytes.
@@ -255,6 +262,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         unfinished: Mutex::new(None),
         out_of_memory: Mutex::new(Vec::new()),
         memory_watch: AtomicBool::new(false),
+        memory_checks: std::sync::atomic::AtomicU64::new(0),
     });
     if !state.install_services(services.clone()) {
         services.token.cancel();
@@ -334,8 +342,16 @@ fn memory_needed(tier: Tier) -> u64 {
     u64::from(nocturne_lemonade::tier::min_ram_gib(tier)) * GIB
 }
 
-/// Withdraw the offer once memory has been back above what the mind in the slot is meant for,
-/// without a dip, for as long as it takes two failed loads to count as a pair.
+/// Memory that has to be free for the mind of `tier` to load comfortably: its models, as sized in
+/// the tier table (`nocturne_lemonade::tier::components`), plus headroom to run beside them.
+/// The tier's total-RAM minimum is no use here: it is what the whole computer needs, and a
+/// computer that just meets it never has that much free.
+fn memory_to_recover(tier: Tier) -> u64 {
+    nocturne_lemonade::tier::download_bytes(tier) + 2 * GIB
+}
+
+/// Withdraw the offer once free memory has stayed above `memory_to_recover` for the mind in the
+/// slot, without a dip, for as long as it takes two failed loads to count as a pair.
 fn watch_memory<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     if services.memory_watch.swap(true, Ordering::SeqCst) {
         return;
@@ -356,7 +372,8 @@ fn watch_memory<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
             };
             let state = app.state::<AppState>();
             let now = state.now();
-            if services.free_memory() < memory_needed(current) {
+            services.memory_checks.fetch_add(1, Ordering::SeqCst);
+            if services.free_memory() < memory_to_recover(current) {
                 roomy_since = None;
                 continue;
             }

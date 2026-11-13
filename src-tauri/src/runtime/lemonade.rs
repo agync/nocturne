@@ -390,17 +390,22 @@ impl Services {
         let Some(engine) = slot.as_ref() else {
             return EngineDetails::default();
         };
-        let (version, port) = match &*engine.supervisor.state().borrow() {
-            RuntimeState::Ready { port, version } => (Some(version.clone()), Some(*port)),
-            _ => (None, None),
+        let ready = match &*engine.supervisor.state().borrow() {
+            RuntimeState::Ready { port, version } => Some((version.clone(), *port)),
+            _ => None,
         };
-        EngineDetails {
-            version,
-            port,
-            uptime_seconds: engine
+        // Uptime belongs to a running engine: nothing is reported for one that is starting,
+        // restarting or has given up.
+        let uptime_seconds = ready.as_ref().and_then(|_| {
+            engine
                 .supervisor
                 .uptime()
-                .map(|d| u32::try_from(d.as_secs()).unwrap_or(u32::MAX)),
+                .map(|d| u32::try_from(d.as_secs()).unwrap_or(u32::MAX))
+        });
+        EngineDetails {
+            version: ready.as_ref().map(|(v, _)| v.clone()),
+            port: ready.map(|(_, p)| p),
+            uptime_seconds,
             restarts: engine.supervisor.restarts(),
         }
     }
