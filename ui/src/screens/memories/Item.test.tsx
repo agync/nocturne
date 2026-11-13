@@ -33,6 +33,21 @@ describe("an original", () => {
     );
   });
 
+  it("says Unconfirmed before how long it took to understand", async () => {
+    const engine = createMockEngine();
+    const real = engine.getItem.bind(engine);
+    vi.spyOn(engine, "getItem").mockImplementation(async (itemId) => ({
+      ...(await real(itemId)),
+      understoodInMs: 3000,
+    }));
+    await open("item-nut", engine);
+    const unconfirmed = await screen.findByText("Unconfirmed", { selector: "span" });
+    const understood = screen.getByText("Understood in 3 seconds");
+    expect(
+      unconfirmed.compareDocumentPosition(understood) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("lists the memories from it, with a Needs you marker for unconfirmed ones", async () => {
     await open("item-letter");
     const from = screen.getByRole("region", { name: "Memories from it · 4" });

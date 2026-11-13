@@ -115,12 +115,13 @@ export function ItemPage({ id }: { id: string }) {
             {it.title}
           </h1>
           <div className={styles.status}>
+            {it.status === "unconfirmed" ? <StatusLabel status="unconfirmed" /> : null}
             {seconds !== null && it.status !== "partlyUnderstood" ? (
               <span className={styles.understood}>
                 <span className={styles.check} aria-hidden="true" />
                 {t("item.understood", { count: seconds })}
               </span>
-            ) : (
+            ) : it.status === "unconfirmed" ? null : (
               <StatusLabel
                 status={it.status}
                 tonight={it.status === "kept"}
