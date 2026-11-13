@@ -28,7 +28,7 @@ test.describe("forgetting completely", () => {
 
   test("focus starts on Keep them and Enter does not forget", async ({ page }) => {
     const dialog = await openDialog(page);
-    await expect(dialog.getByRole("button", { name: "Keep them" })).toBeFocused();
+    await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(dialog).toHaveCount(0);
     await expect(page.getByText(GYM)).toBeVisible();
@@ -92,7 +92,7 @@ test.describe("forgetting completely", () => {
           () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
         ),
       ).toBeLessThanOrEqual(0);
-      await expect(dialog.getByRole("button", { name: "Keep them" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeVisible();
       await page.screenshot({ path: `${SHOTS}/forget-narrow.png` });
     });
   });

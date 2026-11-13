@@ -79,7 +79,7 @@ describe("Not true, forget it, with the real forget dialog", () => {
     const forget = vi.spyOn(engine, "forget");
     renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
     expect(forget).not.toHaveBeenCalled();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
       "2 things are waiting",

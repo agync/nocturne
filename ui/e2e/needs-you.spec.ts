@@ -83,7 +83,7 @@ test.describe("an unconfirmed web page", () => {
     await withWebPage(page);
     await page.getByRole("button", { name: "Not true, forget it" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("button", { name: "Keep them" })).toBeFocused();
+    await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
     await dialog.getByRole("button", { name: /^Forget 1 memory$/ }).click();
     await expect(dialog.getByText("Gone.")).toBeVisible();
     // Behind the dialog the entry has already gone.

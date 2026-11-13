@@ -62,5 +62,5 @@
   "toggle.off": "Off",
   "icon.mic": "Microphone",
   "forget.title": "{count, plural, one {Forget # thing?} other {Forget # things?}}",
-  "forget.keep": "Keep them"
+  "forget.keep": "{count, plural, one {Keep it} other {Keep them}}"
 }

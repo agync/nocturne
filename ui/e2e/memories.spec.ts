@@ -154,7 +154,7 @@ test.describe("using it", () => {
     await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
     await page.getByRole("button", { name: "Forget…" }).click();
     const dialog = page.getByRole("dialog");
-    await expect(dialog.getByRole("button", { name: "Keep them" })).toBeFocused();
+    await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
     await dialog.getByRole("button", { name: /^Forget 2 things/ }).click();
     await expect(dialog.getByText("Gone.")).toBeVisible();
     await dialog.getByRole("button", { name: "OK" }).click();

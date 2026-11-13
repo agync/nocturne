@@ -227,7 +227,7 @@ describe("the morning page on Today", () => {
       const forget = vi.spyOn(engine, "forget");
       await open(engine);
       await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
-      await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+      await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
       expect(forget).not.toHaveBeenCalled();
       expect(screen.queryByRole("dialog")).toBeNull();
       expect(screen.getByRole("button", { name: "Not true, forget it…" })).toBeInTheDocument();

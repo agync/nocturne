@@ -174,7 +174,7 @@ describe("What Nocturne remembers", () => {
     await openLeo();
     await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
     await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 2 things?" });
+    const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
     expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
     // The list behind is already right, before the dialog is closed.

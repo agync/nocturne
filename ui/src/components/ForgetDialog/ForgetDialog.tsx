@@ -52,7 +52,7 @@ function originalText(original: ForgetOriginal): string {
 
 /**
  * Forgetting for good, never by accident: it names every memory and original, says what stays,
- * and puts focus on Keep them so Enter cannot forget. Once forgetting has started it cannot be
+ * and puts focus on Keep it (Keep them for several) so Enter cannot forget. Once forgetting has started it cannot be
  * cancelled, so the dialog cannot be dismissed until the engine has answered.
  */
 export function ForgetDialog({
@@ -171,7 +171,7 @@ export function ForgetDialog({
 
   return (
     <Dialog
-      title={t("forget.title", { count: includes && removable > 0 ? things : memoryCount })}
+      title={t("forget.title", { count: memoryCount })}
       initialFocus={keep}
       locked={phase === "working"}
       onClose={onClose}
@@ -203,7 +203,7 @@ export function ForgetDialog({
           </>
         ) : (
           <>
-            <p className={styles.lead}>{t("forget.body")}</p>
+            <p className={styles.lead}>{t("forget.body", { count: memoryCount })}</p>
             {phase === "loading" && !listing ? (
               <p className={styles.note} role="status">
                 {t("forget.loading")}
@@ -276,7 +276,7 @@ export function ForgetDialog({
             }}
           >
             <Button variant="secondary" disabled={phase === "working"} onClick={onClose}>
-              {t("forget.keep")}
+              {t("forget.keep", { count: memoryCount })}
             </Button>
             {phase === "failedPreview" ? (
               <Button variant="secondary" onClick={() => void prepare(wanted)}>

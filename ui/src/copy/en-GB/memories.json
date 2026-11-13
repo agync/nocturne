@@ -1,5 +1,5 @@
 {
-  "forget.body": "This will be removed from this computer for good, along with anything Nocturne worked out from it.",
+  "forget.body": "{count, plural, one {This will be removed from this computer for good, along with anything Nocturne worked out from it.} other {These will be removed from this computer for good, along with anything Nocturne worked out from them.}}",
   "forget.list.label": "What will be forgotten",
   "forget.row.memory": "Memory",
   "forget.row.original": "Original",
