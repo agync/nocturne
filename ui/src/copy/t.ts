@@ -1,5 +1,5 @@
 import { IntlMessageFormat } from "intl-messageformat";
-import enGB from "./en-GB.json";
+import { enGB } from "./deck";
 
 export type CopyId = keyof typeof enGB;
 export type CopyValues = Record<string, string | number | boolean | Date | null | undefined>;

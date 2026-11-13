@@ -1,0 +1,14 @@
+{
+  "capture.kept.lead": "Kept.",
+  "capture.kept.later": "I’ll read it tonight.",
+  "capture.kept.toast": "Kept. {kind}, {duration}. Reading it now.",
+  "capture.kept.text": "Kept. I’ll read it tonight.",
+  "capture.duplicate": "You already kept this {kind} on {day}. Nothing new to add.",
+  "capture.duplicate.action": "Keep anyway",
+  "capture.undo": "Undo",
+  "capture.undone": "Taken back. Nothing was kept.",
+  "capture.files": "{count, plural, one {Kept # file.} other {Kept # files.}} I’ll read {count, plural, one {it} other {them}} tonight.",
+  "capture.recording.failed": "I couldn’t keep that voice note just now. It is still here.",
+  "capture.mic.unsupported": "This computer can’t record sound inside Nocturne. You can still type, or drop a voice note on the window.",
+  "capture.mic.failed": "I couldn’t start the microphone. Check that nothing else is using it, then try again."
+}

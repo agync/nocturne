@@ -1,0 +1,7 @@
+{
+  "settings.updates.title": "Checking for updates",
+  "settings.updates.off": "Off. Nocturne only checks when you ask.",
+  "settings.updates.on": "On. Nocturne asks before it downloads anything.",
+  "theme.light": "Light",
+  "theme.dark": "Dark"
+}
