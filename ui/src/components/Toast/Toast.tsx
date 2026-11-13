@@ -15,6 +15,11 @@ export interface ToastOptions {
   /** The short bold start: "Kept." */
   lead?: string;
   message: string;
+  /**
+   * What makes two toasts the same one. Showing a toast whose key is already on screen replaces
+   * it and starts its clock again. Defaults to the message.
+   */
+  key?: string;
   action?: { label: string; onAction: () => void };
   /** Milliseconds on screen. Default 6000, long enough to press Undo. */
   duration?: number;
@@ -104,7 +109,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback((options: ToastOptions) => {
     const id = next.current++;
-    setToasts((all) => [...all.slice(-2), { ...options, id }]);
+    const key = options.key ?? options.message;
+    setToasts((all) => {
+      const at = all.findIndex((x) => (x.key ?? x.message) === key);
+      if (at === -1) return [...all.slice(-2), { ...options, id }];
+      return all.map((x, i) => (i === at ? { ...options, id } : x));
+    });
     return id;
   }, []);
 

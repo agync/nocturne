@@ -122,4 +122,79 @@ describe("Toast", () => {
     expect(screen.queryByText("Kept.")).toBeNull();
     expect(opener).toHaveFocus();
   });
+
+  it("shows an identical message once, however often it is shown", async () => {
+    function Thrice() {
+      const { show } = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            show({ message: "No sound here." });
+            show({ message: "No sound here." });
+            show({ message: "No sound here." });
+          }}
+        >
+          Three
+        </button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <Thrice />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Three" }));
+    expect(screen.getAllByText("No sound here.")).toHaveLength(1);
+  });
+
+  it("starts the clock again when the same message is shown again", async () => {
+    render(
+      <ToastProvider>
+        <Opener />
+      </ToastProvider>,
+    );
+    const opener = screen.getByRole("button", { name: "Keep" });
+    await userEvent.click(opener);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    await userEvent.click(opener);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4000);
+    });
+    expect(screen.getAllByText("Kept.")).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+    expect(screen.queryByText("Kept.")).toBeNull();
+  });
+
+  it("keeps different messages apart, and an explicit key joins them", async () => {
+    function Mixed() {
+      const { show } = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            show({ message: "One" });
+            show({ message: "Two" });
+            show({ message: "Three", key: "same" });
+            show({ message: "Four", key: "same" });
+          }}
+        >
+          Mix
+        </button>
+      );
+    }
+    render(
+      <ToastProvider>
+        <Mixed />
+      </ToastProvider>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Mix" }));
+    expect(screen.queryByText("Three")).toBeNull();
+    expect(screen.getByText("Four")).toBeInTheDocument();
+    expect(screen.getByText("Two")).toBeInTheDocument();
+  });
 });
