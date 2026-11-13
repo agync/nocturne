@@ -100,7 +100,7 @@ fn tidy_anyway_sets_the_battery_rule_aside() {
     let host = FakeHost::new();
     host.set_ac(Some(false));
     host.set_percent(Some(20));
-    let services = start_runtime(&h, host);
+    let services = start_manual(&h, host);
     h.clock.set_str("2026-11-13T03:00:00Z");
 
     assert_eq!(
@@ -143,7 +143,7 @@ fn a_page_being_written_says_so_until_it_is_saved() {
     let host = FakeHost::new();
     host.set_ac(Some(false));
     let id = keep(&h);
-    let services = start_runtime(&h, host.clone());
+    let services = start_manual(&h, host.clone());
     h.clock.set_str("2026-11-13T03:00:00Z");
     host.set_ac(Some(true));
 
@@ -195,7 +195,7 @@ fn a_page_being_written_says_so_until_it_is_saved() {
 #[test]
 fn pausing_stops_the_scheduler_and_the_reader_and_resuming_restarts_them() {
     let h = world(&mind(), "2026-11-13T12:00:00Z");
-    let services = start_runtime(&h, FakeHost::new());
+    let services = start_manual(&h, FakeHost::new());
     h.ok("pause", json!({"until": "2026-11-13T18:00:00Z"}));
     assert_eq!(block_on(services.scheduler.tick()), SchedStep::Paused);
 
@@ -275,7 +275,7 @@ fn a_notice_the_scheduler_raises_reaches_the_status_and_clears_with_it() {
     let host = FakeHost::new();
     host.set_ac(Some(false));
     host.set_percent(Some(20));
-    let services = start_runtime(&h, host.clone());
+    let services = start_manual(&h, host.clone());
     h.clock.set_str("2026-11-13T03:00:00Z");
     block_on(services.scheduler.tick());
     wait_for("the notice", || {

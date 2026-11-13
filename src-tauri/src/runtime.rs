@@ -78,6 +78,9 @@ pub struct StartOptions {
     pub available_memory: Option<Arc<dyn Fn() -> u64 + Send + Sync>>,
     /// How often memory is looked at while an offer of the smaller mind stands.
     pub memory_poll: Duration,
+    /// Whether the scheduler looks by itself every few seconds. A test that calls `tick`
+    /// itself turns this off so the two cannot race.
+    pub scheduler_loop: bool,
 }
 
 impl Default for StartOptions {
@@ -91,6 +94,7 @@ impl Default for StartOptions {
             quit_budget: QUIT_BUDGET,
             available_memory: None,
             memory_poll: MEMORY_POLL,
+            scheduler_loop: true,
         }
     }
 }
@@ -237,16 +241,16 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
     );
     let scheduler = Scheduler::new(engine, reader.clone(), tidy.clone(), host, clock, events);
     let token = CancellationToken::new();
-    let tasks = vec![
-        tauri::async_runtime::spawn({
-            let (reader, token) = (reader.clone(), token.clone());
-            async move { reader.run(token).await }
-        }),
-        tauri::async_runtime::spawn({
+    let mut tasks = vec![tauri::async_runtime::spawn({
+        let (reader, token) = (reader.clone(), token.clone());
+        async move { reader.run(token).await }
+    })];
+    if opts.scheduler_loop {
+        tasks.push(tauri::async_runtime::spawn({
             let (scheduler, token) = (scheduler.clone(), token.clone());
             async move { scheduler.run(token).await }
-        }),
-    ];
+        }));
+    }
     let services = Arc::new(Services {
         reader,
         tidy,

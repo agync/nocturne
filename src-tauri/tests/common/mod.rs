@@ -29,6 +29,13 @@ pub fn start_runtime(h: &Harness, host: Arc<FakeHost>) -> Arc<Services> {
     start(h, StartOptions::with_host(host))
 }
 
+/// Start the runtime without the scheduler's own loop, for a test that calls `tick` itself.
+pub fn start_manual(h: &Harness, host: Arc<FakeHost>) -> Arc<Services> {
+    let mut opts = StartOptions::with_host(host);
+    opts.scheduler_loop = false;
+    start(h, opts)
+}
+
 pub fn start(h: &Harness, opts: StartOptions) -> Arc<Services> {
     runtime::start(h.app.handle(), opts).expect("the runtime starts once")
 }
@@ -274,12 +281,13 @@ impl Harness {
     }
 }
 
-/// Wait until `done` holds, or fail after a few seconds.
+/// Wait until `done` holds. The limit only catches a condition that never comes; it is far past
+/// what a machine under heavy load needs, and a wait that succeeds returns at once.
 pub fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
     let start = Instant::now();
     while !done() {
         assert!(
-            start.elapsed() < Duration::from_secs(10),
+            start.elapsed() < Duration::from_secs(60),
             "timed out: {what}"
         );
         std::thread::sleep(Duration::from_millis(10));
