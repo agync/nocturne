@@ -3,6 +3,7 @@ import {
   addDays,
   formatBytes,
   formatDay,
+  formatDayMonth,
   formatDuration,
   formatDurationSpoken,
   formatEta,
@@ -16,6 +17,12 @@ describe("format", () => {
   it("formats days the way the design writes them", () => {
     expect(formatDay("2026-11-11")).toBe("Wed 11 Nov");
     expect(formatLongDay("2026-11-13")).toBe("Friday 13 November");
+  });
+
+  it("formats a day and month with no weekday, spelling September Sep", () => {
+    expect(formatDayMonth("2026-11-13")).toBe("13 Nov");
+    expect(formatDayMonth("2026-09-07T15:00:00Z")).toBe("7 Sep");
+    expect(formatDayMonth("nonsense")).toBe("");
   });
 
   it("reads a bare day as a calendar day regardless of zone", () => {

@@ -1,18 +1,6 @@
-import { addDays, formatMonth, localDay } from "../../copy/format";
+import { addDays, formatDayMonth, formatMonth, localDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ItemKind, MemoryView, Source } from "../../engine/bindings";
-
-const DAY_MONTH = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
-
-/** "13 Nov". The design's memory lines carry no weekday. */
-export function formatDayMonth(input: string | Date): string {
-  const d =
-    typeof input === "string"
-      ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(input) ? `${input}T12:00:00` : input)
-      : input;
-  // Some locale data spells September "Sept"; the design and the other dates use "Sep".
-  return Number.isNaN(d.getTime()) ? "" : DAY_MONTH.format(d).replace("Sept", "Sep");
-}
 
 /** The small right-hand line of a memory: when it started, ended, was last used or was learned. */
 export function memoryWhen(m: MemoryView): string {

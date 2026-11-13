@@ -42,6 +42,14 @@ export function formatDay(input: string | Date): string {
   );
 }
 
+/** "13 Nov": a day and month with no weekday, for lines that sit beside other dates. */
+export function formatDayMonth(input: string | Date): string {
+  // Some locale data spells September "Sept"; the design and the other dates use "Sep".
+  return safely(input, (d) =>
+    fmt({ day: "numeric", month: "short" }).format(d).replace("Sept", "Sep"),
+  );
+}
+
 /** "Thursday 13 November" */
 export function formatLongDay(input: string | Date): string {
   return safely(input, (d) =>
