@@ -421,6 +421,7 @@ impl Mind for TestMind {
                     cited: Vec::new(),
                     not_sure: true,
                     spans: Vec::new(),
+                    online: None,
                 }),
                 AnswerMode::Slow(d) => {
                     tokio::time::sleep(d).await;
@@ -448,6 +449,7 @@ impl Mind for TestMind {
                         cited,
                         not_sure: false,
                         spans,
+                        online: None,
                     })
                 }
                 AnswerMode::BoldBothForTheFirst => {
@@ -459,6 +461,7 @@ impl Mind for TestMind {
                         cited: vec![a.id.clone(), b.id.clone()],
                         not_sure: false,
                         spans: vec![a.id.clone(), a.id.clone()],
+                        online: None,
                     })
                 }
                 AnswerMode::CitesNothing => {

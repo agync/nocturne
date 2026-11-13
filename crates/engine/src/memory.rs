@@ -1260,16 +1260,35 @@ impl Engine {
         })
     }
 
+    /// The finding model new vectors are made with. The app sets it when the mind is filled.
+    pub fn set_recall_model(&self, model: &str) {
+        *self
+            .inner
+            .recall_model
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = model.to_string();
+    }
+
+    pub fn recall_model(&self) -> String {
+        self.inner
+            .recall_model
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
     /// Store vectors for memories, in chunks so capture never waits long. Unknown ids are ignored.
+    /// Each is marked with the current finding model.
     pub fn store_embeddings(&self, rows: Vec<(String, Vec<f32>)>) -> Result<()> {
+        let model = self.recall_model();
         for chunk in rows.chunks(200) {
             self.write(|tx| {
                 for (id, vec) in chunk {
                     let blob: Vec<u8> = vec.iter().flat_map(|f| f.to_le_bytes()).collect();
                     tx.execute(
-                        "INSERT OR REPLACE INTO embeddings(memory_id, dim, vec) \
-                         SELECT id, ?2, ?3 FROM memories WHERE id = ?1",
-                        params![id, vec.len() as i64, blob],
+                        "INSERT OR REPLACE INTO embeddings(memory_id, dim, vec, model) \
+                         SELECT id, ?2, ?3, ?4 FROM memories WHERE id = ?1",
+                        params![id, vec.len() as i64, blob, model],
                     )?;
                 }
                 Ok(())

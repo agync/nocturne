@@ -423,6 +423,7 @@ impl Engine {
             });
             write_new(&dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?.as_bytes())?;
             step();
+            crate::online::export_section(conn, dir)?;
             Ok(ExportReport {
                 memories: current,
                 pages: dates.len() as u32,
@@ -456,6 +457,10 @@ impl Engine {
         self.bump_forget();
         let wrote = self.write(|tx| {
             for table in [
+                "online_sends",
+                "online_state",
+                "embeddings_next",
+                "reindex_state",
                 "remote_keeps",
                 "remote_events",
                 "remote_devices",
@@ -481,6 +486,8 @@ impl Engine {
                 tx.execute(&format!("DELETE FROM {table}"), [])?;
             }
             tx.execute("INSERT INTO remote_state(id) VALUES (1)", [])?;
+            tx.execute("INSERT INTO online_state(id) VALUES (1)", [])?;
+            tx.execute("INSERT INTO reindex_state(id) VALUES (1)", [])?;
             tx.execute(
                 "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
                 [],

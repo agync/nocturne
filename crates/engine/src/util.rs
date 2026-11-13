@@ -207,9 +207,45 @@ mod tests {
         for (kind, text) in [
             (LedgerKind::RemoteHelper, "remoteHelper"),
             (LedgerKind::RemoteOnOff, "remoteOnOff"),
+            (LedgerKind::OnlineOnOff, "onlineOnOff"),
+            (LedgerKind::OnlineConnected, "onlineConnected"),
+            (LedgerKind::ModelDownload, "modelDownload"),
         ] {
             assert_eq!(enum_str(&kind), text);
             assert_eq!(parse_enum::<LedgerKind>(text).unwrap(), kind);
+        }
+    }
+
+    #[test]
+    fn online_and_model_values_round_trip() {
+        use nocturne_contract::{LocalReason, NoticeCode, SendKind};
+        for (code, text) in [
+            (NoticeCode::OnlineKeyRefused, "onlineKeyRefused"),
+            (NoticeCode::OnlineNoCredit, "onlineNoCredit"),
+            (NoticeCode::OnlineLimit, "onlineLimit"),
+            (NoticeCode::ModelDownloadStopped, "modelDownloadStopped"),
+        ] {
+            assert_eq!(enum_str(&code), text);
+            assert_eq!(parse_enum::<NoticeCode>(text).unwrap(), code);
+        }
+        for (kind, text) in [(SendKind::Question, "question"), (SendKind::Check, "check")] {
+            assert_eq!(enum_str(&kind), text);
+            assert_eq!(parse_enum::<SendKind>(text).unwrap(), kind);
+        }
+        for (reason, text) in [
+            (LocalReason::Chosen, "chosen"),
+            (LocalReason::NoInternet, "noInternet"),
+            (LocalReason::CouldntReach, "couldntReach"),
+            (LocalReason::Slow, "slow"),
+            (LocalReason::Limit, "limit"),
+            (LocalReason::NoCredit, "noCredit"),
+            (LocalReason::KeyRefused, "keyRefused"),
+            (LocalReason::KeptHere, "keptHere"),
+            (LocalReason::Problem, "problem"),
+            (LocalReason::Downloading, "downloading"),
+        ] {
+            assert_eq!(enum_str(&reason), text);
+            assert_eq!(parse_enum::<LocalReason>(text).unwrap(), reason);
         }
     }
 

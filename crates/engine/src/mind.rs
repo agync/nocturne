@@ -8,7 +8,7 @@ use std::pin::Pin;
 
 use jiff::Timestamp;
 use jiff::civil::Date;
-use nocturne_contract::{EntityKind, ItemKind, MemoryView, PageView};
+use nocturne_contract::{EntityKind, ItemKind, MemoryView, PageView, SentLine};
 use tokio::sync::mpsc;
 
 use crate::types::{Candidate, MemoryId};
@@ -66,6 +66,46 @@ pub struct AnswerMeta {
     /// The memory each bold span in the answer stands for, in order: the one cited by the next
     /// marker after it. Empty when there is no bold, or when a span could not be paired.
     pub spans: Vec<MemoryId>,
+    /// Set when the answer was written online: what went out and what came back.
+    pub online: Option<OnlineReceipt>,
+}
+
+/// What an online answer sent and received. `template` is the body as sent with each memory
+/// sentence replaced by its number; `sent_ids` are the memories sent, in `[mN]` order, and
+/// `line_hashes` the hash of each exact line sent, in the same order.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct OnlineReceipt {
+    pub bytes_up: u64,
+    pub bytes_down: u64,
+    pub status: Option<u16>,
+    pub seconds: f32,
+    pub cost_usd: Option<f64>,
+    pub template: Vec<SentLine>,
+    pub sent_ids: Vec<MemoryId>,
+    pub line_hashes: Vec<String>,
+}
+
+/// Why an online answer did not come.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum OnlineFailure {
+    #[error("no internet")]
+    NoInternet,
+    #[error("the provider could not be reached")]
+    Unreachable,
+    #[error("the provider took too long")]
+    Slow,
+    #[error("the provider refused the key")]
+    KeyRefused,
+    #[error("the provider account has no credit")]
+    NoCredit,
+    #[error("the provider does not have the model")]
+    ModelMissing,
+    #[error("the provider is busy")]
+    Busy,
+    #[error("the provider refused the request")]
+    Refused,
+    #[error("the provider answered with status {0}")]
+    Other(u16),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -85,6 +125,9 @@ pub enum MindError {
     /// A model could not be loaded because memory is short. Never the item's fault.
     #[error("not enough memory to load a model")]
     OutOfMemory,
+    /// An online answer did not come.
+    #[error("online: {0}")]
+    Online(OnlineFailure),
 }
 
 pub trait Mind: Send + Sync {
@@ -101,6 +144,19 @@ pub trait Mind: Send + Sync {
         cx: &'a ExtractContext,
     ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>>;
     fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>>;
+    /// Embed with a named recall model rather than the current one, for a re-read.
+    fn embed_with<'a>(
+        &'a self,
+        model: &'a str,
+        texts: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
+        let _ = (model, texts);
+        Box::pin(async {
+            Err(MindError::Unsupported(
+                "embedding with another model".into(),
+            ))
+        })
+    }
     fn answer<'a>(
         &'a self,
         question: &'a str,
@@ -445,6 +501,7 @@ mod fake {
                     cited: facts.iter().map(|f| f.memory.id.clone()).collect(),
                     not_sure: facts.is_empty(),
                     spans: Vec::new(),
+                    online: None,
                 })
             })
         }

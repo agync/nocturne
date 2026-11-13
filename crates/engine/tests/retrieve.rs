@@ -521,3 +521,44 @@ fn a_plain_is_does_not_say_who_someone_is() {
     let hits = f.engine.retrieve("Who is Leo?", None, 1).unwrap();
     assert_ne!(hits[0].memory.id, tall);
 }
+
+#[test]
+fn each_vector_names_the_finding_model_that_made_it() {
+    let f = fixture();
+    assert_eq!(
+        f.engine.recall_model(),
+        nocturne_engine::DEFAULT_RECALL_MODEL
+    );
+    let a = learn_embedded(
+        &f,
+        "The bins go out on Tuesday.",
+        cand(
+            "Bins",
+            Predicate::Scheduled,
+            "Tuesday",
+            "The bins go out on Tuesday.",
+        ),
+    );
+    f.engine.set_recall_model("Other-Embedding-GGUF");
+    let b = learn_embedded(
+        &f,
+        "The dentist is on Friday.",
+        cand(
+            "Dentist",
+            Predicate::Scheduled,
+            "Friday",
+            "The dentist is on Friday.",
+        ),
+    );
+    let model = |id: &str| -> String {
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.query_row(
+            "SELECT model FROM embeddings WHERE memory_id = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(model(&a), nocturne_engine::DEFAULT_RECALL_MODEL);
+    assert_eq!(model(&b), "Other-Embedding-GGUF");
+}

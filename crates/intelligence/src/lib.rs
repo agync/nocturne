@@ -12,6 +12,7 @@ mod chunk;
 mod events;
 pub mod host;
 mod reader;
+pub mod reindex;
 mod schedule;
 mod scheduler;
 mod tidy;

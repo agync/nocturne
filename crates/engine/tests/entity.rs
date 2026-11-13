@@ -771,9 +771,13 @@ fn delete_everything_leaves_no_row_of_filing_behind() {
         .collect::<Result<_, _>>()
         .unwrap();
     for table in tables {
-        // The full-text indexes keep their own bookkeeping, and the Away from home state is
-        // put back as its one empty row.
-        if table.starts_with("sqlite_") || table.contains("_fts") || table == "remote_state" {
+        // The full-text indexes keep their own bookkeeping, and the settings of Away from home,
+        // Online answers and a re-read are each put back as their one empty row.
+        let one_row = ["remote_state", "online_state", "reindex_state"];
+        if table.starts_with("sqlite_")
+            || table.contains("_fts")
+            || one_row.contains(&table.as_str())
+        {
             continue;
         }
         let n: i64 = conn

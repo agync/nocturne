@@ -540,3 +540,50 @@ fn the_export_has_former_names_and_moves_and_leaves_out_merged_in_things() {
     assert_eq!(moved["movedFrom"], "Pops");
     assert_eq!(moved["entityId"], eb);
 }
+
+#[test]
+fn delete_everything_resets_online_and_reindex() {
+    let w = world();
+    let dir = w.f.dir.path();
+    {
+        let conn = rusqlite::Connection::open(dir.join("nocturne.db")).unwrap();
+        conn.execute_batch(
+            "UPDATE online_state SET wanted_on = 1, set_up = 1, base_url = 'https://a.example/v1', \
+               model = 'm', send_sensitive = 1, sent_bytes = 42, key_storage = 'file'; \
+             INSERT INTO online_sends(at, kind, host, model, question, template, result) \
+               VALUES ('2026-11-13T07:00:00.000Z', 'question', 'a.example', 'm', \
+                 'When are the bins?', '[]', 'answered'); \
+             INSERT INTO embeddings_next(memory_id, model, dim, vec) \
+               SELECT id, 'other', 2, x'0000803f00000000' FROM memories LIMIT 1; \
+             UPDATE reindex_state SET model = 'other', from_model = 'old', total = 4, \
+               phase = 'running';",
+        )
+        .unwrap();
+    }
+    w.f.engine.delete_everything(DELETE_PHRASE).unwrap();
+    for table in ["online_sends", "embeddings_next"] {
+        assert_eq!(
+            sql_count(dir, &format!("SELECT COUNT(*) FROM {table}")),
+            0,
+            "{table}"
+        );
+    }
+    assert_eq!(
+        sql_count(
+            dir,
+            "SELECT COUNT(*) FROM online_state WHERE wanted_on = 0 AND set_up = 0 \
+             AND base_url IS NULL AND model IS NULL AND send_sensitive = 0 AND phones = 1 \
+             AND sent_bytes = 0 AND key_storage IS NULL AND limit_questions = 200"
+        ),
+        1,
+        "Online answers is back to off, one row"
+    );
+    assert_eq!(
+        sql_count(
+            dir,
+            "SELECT COUNT(*) FROM reindex_state WHERE model IS NULL AND phase IS NULL AND total = 0"
+        ),
+        1,
+        "no re-read under way, one row"
+    );
+}

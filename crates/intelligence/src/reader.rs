@@ -780,7 +780,8 @@ impl Reader {
                     .insert(id.to_string(), now + FAILURE_COOLDOWN);
                 Outcome::Returned
             }
-            Abort::Mind(MindError::Unavailable | MindError::Busy) => {
+            // Reading never goes online; an online failure here is treated as the mind away.
+            Abort::Mind(MindError::Unavailable | MindError::Busy | MindError::Online(_)) => {
                 self.give_back(id, lease).await;
                 self.back_off(now);
                 Outcome::Returned

@@ -210,6 +210,7 @@ impl LemonadeMind {
                 cited: Vec::new(),
                 not_sure: true,
                 spans: Vec::new(),
+                online: None,
             });
         }
         let model = self.warm_mind().await?;
@@ -289,6 +290,7 @@ impl LemonadeMind {
             cited,
             not_sure: judged.not_sure || !sent_any || cited_none,
             spans,
+            online: None,
         })
     }
 

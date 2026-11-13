@@ -21,7 +21,9 @@ mod fsutil;
 mod lifecycle;
 mod memory;
 mod mind;
+mod online;
 mod page;
+mod reindex;
 mod remote;
 mod retrieve;
 mod rows;
@@ -37,11 +39,14 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
 pub use mind::{
-    AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, Transcript, Understanding,
+    AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
+    Transcript, Understanding,
 };
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
+pub use online::{NewSend, OnlineRow};
 pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count, phone_view};
+pub use reindex::ReindexRow;
 pub use remote::{DeviceRow, RemoteRow};
 pub use types::*;
 
@@ -54,6 +59,9 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 const READERS: usize = 4;
 const DB_FILE: &str = "nocturne.db";
 const TRUNCATE_PENDING: &str = "_truncatePending";
+/// The finding model every tier uses until the person chooses another; vectors stored before
+/// migration 10 were all made by it.
+pub const DEFAULT_RECALL_MODEL: &str = "Qwen3-Embedding-0.6B-GGUF";
 
 /// The engine. Cheap to clone; all clones share one store.
 #[derive(Clone)]
@@ -75,6 +83,8 @@ pub(crate) struct Inner {
     pub(crate) audio_gen: AtomicU64,
     /// Bumped when a forget or an undone keep begins: an export that ran across one is void.
     pub(crate) forget_gen: AtomicU64,
+    /// The finding model new vectors are made with, written beside each one.
+    pub(crate) recall_model: RwLock<String>,
 }
 
 impl Engine {
@@ -99,6 +109,7 @@ impl Engine {
                 vec_gen: AtomicU64::new(0),
                 audio_gen: AtomicU64::new(0),
                 forget_gen: AtomicU64::new(0),
+                recall_model: RwLock::new(DEFAULT_RECALL_MODEL.to_string()),
             }),
         };
         // Items a worker was reading when the app last stopped go back where they were.

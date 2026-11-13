@@ -203,3 +203,33 @@ CREATE INDEX entity_names_key ON entity_names(key);
 CREATE INDEX entity_names_entity ON entity_names(entity_id);
 CREATE TABLE entity_changes(
   id TEXT PRIMARY KEY, kind TEXT NOT NULL, at TEXT NOT NULL, undone_at TEXT, detail TEXT NOT NULL);
+
+-- migration 10
+-- Online answers: the feature's own settings (never the key) and every question it sent, kept as
+-- a template in which each memory sentence is replaced by its memory id, with a hash of the exact
+-- line sent (`memory_lines`, JSON `[{"id", "hash"}]`). The template keeps the rest of each line
+-- (dates, what it was before). A line is shown again only while the memory still hashes the same,
+-- so a forgotten or re-read memory's words sent are not kept here. Choosing the model
+-- for each job: which recall model made each vector, and the vectors a re-read is building.
+CREATE TABLE online_state(
+  id INTEGER PRIMARY KEY CHECK (id = 1), wanted_on INTEGER NOT NULL DEFAULT 0,
+  set_up INTEGER NOT NULL DEFAULT 0, base_url TEXT, model TEXT, phones INTEGER NOT NULL DEFAULT 1,
+  send_sensitive INTEGER NOT NULL DEFAULT 0, limit_kind TEXT NOT NULL DEFAULT 'questions',
+  limit_questions INTEGER NOT NULL DEFAULT 200, limit_usd REAL, pause TEXT, problem TEXT,
+  problem_since TEXT, sent_bytes REAL NOT NULL DEFAULT 0, first_on_at TEXT, on_since TEXT,
+  last_on_at TEXT, last_off_at TEXT, key_storage TEXT);
+INSERT INTO online_state(id) VALUES (1);
+CREATE TABLE online_sends(
+  id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT NOT NULL, host TEXT NOT NULL, model TEXT NOT NULL,
+  question TEXT NOT NULL, template TEXT NOT NULL, memory_lines TEXT NOT NULL DEFAULT '[]',
+  bytes_up REAL NOT NULL DEFAULT 0, bytes_down REAL NOT NULL DEFAULT 0, cost_usd REAL,
+  status INTEGER, seconds REAL, result TEXT NOT NULL, reason TEXT, counted INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX online_sends_at ON online_sends(at);
+ALTER TABLE embeddings ADD COLUMN model TEXT NOT NULL DEFAULT 'Qwen3-Embedding-0.6B-GGUF';
+CREATE TABLE embeddings_next(
+  memory_id TEXT PRIMARY KEY REFERENCES memories(id) ON DELETE CASCADE,
+  model TEXT NOT NULL, dim INTEGER NOT NULL, vec BLOB NOT NULL);
+CREATE TABLE reindex_state(
+  id INTEGER PRIMARY KEY CHECK (id = 1), model TEXT, from_model TEXT, dim INTEGER,
+  total INTEGER NOT NULL DEFAULT 0, started_at TEXT, finished_at TEXT, phase TEXT);
+INSERT INTO reindex_state(id) VALUES (1);

@@ -31,6 +31,10 @@ const TABLES: &[&str] = &[
     "remote_keeps",
     "remote_events",
     "remote_state",
+    "online_state",
+    "online_sends",
+    "embeddings_next",
+    "reindex_state",
 ];
 
 #[test]
@@ -184,4 +188,107 @@ fn migration_7_applies_on_a_v6_store() {
             .is_err(),
         "one row only"
     );
+}
+
+/// A store at version 9, as the release before Online answers left it.
+fn v9_store(dir: &std::path::Path) -> rusqlite::Connection {
+    let conn = rusqlite::Connection::open(dir.join("nocturne.db")).unwrap();
+    for (version, sql) in store::migrations() {
+        if version <= 9 {
+            conn.execute_batch(sql).unwrap();
+            conn.pragma_update(None, "user_version", version).unwrap();
+        }
+    }
+    conn
+}
+
+#[test]
+fn migration_10_applies_on_a_v9_store() {
+    let dir = tempfile::tempdir().unwrap();
+    drop(v9_store(dir.path()));
+    drop(engine(dir.path()));
+
+    let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+    let version: u32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert!(version >= 10);
+    for table in ["online_sends", "embeddings_next"] {
+        let n: u32 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "{table} starts empty");
+    }
+    // Off is the fresh state: nothing wanted on, nothing set up, phones on, sensitive off,
+    // 200 questions a month, nothing sent, no key storage named.
+    let row: (
+        i64,
+        i64,
+        i64,
+        i64,
+        String,
+        i64,
+        f64,
+        Option<String>,
+        Option<String>,
+    ) = conn
+        .query_row(
+            "SELECT wanted_on, set_up, phones, send_sensitive, limit_kind, limit_questions, \
+             sent_bytes, base_url, key_storage FROM online_state",
+            [],
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get(6)?,
+                    r.get(7)?,
+                    r.get(8)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(row, (0, 0, 1, 0, "questions".into(), 200, 0.0, None, None));
+    let phase: Option<String> = conn
+        .query_row("SELECT phase FROM reindex_state", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(phase, None, "no re-read under way");
+    for table in ["online_state", "reindex_state"] {
+        assert!(
+            conn.execute(&format!("INSERT INTO {table}(id) VALUES (2)"), [])
+                .is_err(),
+            "{table} has one row only"
+        );
+    }
+}
+
+#[test]
+fn migration_10_backfills_embedding_model() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let conn = v9_store(dir.path());
+        conn.execute_batch(
+            "INSERT INTO memories(id, subject, subject_key, predicate, object, object_key, \
+               sentence, recorded_at, confidence, status) \
+             VALUES ('mem_old', 'Bins', 'bins', 'go out', 'Tuesday', 'tuesday', \
+               'Bins go out on Tuesday.', '2026-11-01T00:00:00.000Z', 0.9, 'active'); \
+             INSERT INTO embeddings(memory_id, dim, vec) VALUES ('mem_old', 2, x'0000803f00000000');",
+        )
+        .unwrap();
+    }
+    drop(engine(dir.path()));
+
+    let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+    let (model, dim): (String, u32) = conn
+        .query_row(
+            "SELECT model, dim FROM embeddings WHERE memory_id = 'mem_old'",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!(model, "Qwen3-Embedding-0.6B-GGUF");
+    assert_eq!(dim, 2, "the vector itself is untouched");
 }
