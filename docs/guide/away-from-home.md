@@ -1,0 +1,95 @@
+---
+type: Guide
+title: Away from home
+description: Ask, keep and read your page from a phone when you are out, what that lets other companies see, and how to remove a phone or turn it off.
+status: draft
+tags: [guide, phone, privacy, remote]
+---
+
+# Away from home
+
+Away from home lets your phone ask Nocturne a question, keep something and read today's page while
+you are out. It is off until you turn it on. Everything stays on your computer; your phone talks to
+it through a connection you choose, and what travels is sealed so that only your phone and your
+computer can read it.
+
+> [!NOTE]
+> This page describes how the feature is designed to behave. It has not yet been tried on the real
+> internet, and the notes below say so where it matters.
+
+## Turn it on
+
+1. Open Away from home and turn it on.
+2. Choose a connection. Simple is the default and needs no account. Most private uses your own
+   Tailscale account and is harder for anyone else to observe.
+3. Nocturne asks before it downloads the small helper program the connection needs. Nothing is
+   downloaded until you say yes.
+4. Your computer must stay on and awake for the phone to reach it. Nocturne can keep it awake, but
+   only while it is plugged in.
+
+## Add a phone
+
+1. Choose Add a phone. Nocturne shows a code that works once and lasts five minutes.
+2. On the phone, scan the code with its camera. If you cannot scan it, open the address shown and
+   type the 24 characters of the typed code instead. Type the address exactly: a look-alike address
+   is how someone would try to trick you.
+3. Name the phone.
+4. Compare the three words. Both screens show three words. If they are the same, press Allow on the
+   computer. If they differ, or you did not start this, press Don't allow.
+
+If an iPhone is involved, add Nocturne to the home screen first and open it from there, so the phone
+keeps its key.
+
+## What the phone can do
+
+Ask a question, keep text, a photo, a document or a voice note, take back what it just kept, read
+today's page and the last seven, and open an original that an answer or the page cited. It never
+sees anything you marked private. It cannot forget, delete, export, change settings or add other
+phones.
+
+If the phone has no signal, what it keeps waits on the phone and is sent when it connects again.
+That waiting list sits in the phone's own storage and is not hidden from someone who has the phone.
+
+## What the companies can see
+
+Content is sealed, so neither company can read your questions, your page or your files. They can see
+other things.
+
+- **Simple (Cloudflare).** Your phone's internet address and rough place, when it connects, the size
+  of everything sent each way, and that Cloudflare hands your phone the page it opens. Someone able
+  to change that page could misuse your phone's key while the page is open, which a native phone app
+  would later fix.
+- **Most private (Tailscale).** Your account, the computers on it and when they connect. When your
+  phone and computer cannot connect directly, Tailscale carries the sealed traffic. Other people and
+  devices on your Tailscale account can reach your computer and try to pair, and would still need a
+  code and your Allow.
+- **Both.** The helper also talks to its company's servers to stay connected while Away from home
+  is on. Your computer may ask whether Nocturne's helper may accept connections. That is expected.
+  It is why this feature is not described as staying on your own computer: while it is on, a
+  helper listens on your computer's network interfaces, not only on its internal address.
+
+Nocturne does not measure this live. Privacy shows what was sent to your phones.
+
+## When the address changes
+
+With Simple, the address changes each time Nocturne starts it. Your phones then need the new
+address. Nocturne shows a code for it: on the phone, open Nocturne from the home screen, choose Scan
+the code and point it at your computer, or type the four words shown. Most private does not need
+this.
+
+## Switching connection
+
+Changing between Simple and Most private removes every phone, and the screen tells you before it
+does. Add them again afterwards.
+
+## Remove a lost phone
+
+Open Away from home, choose the phone and remove it. It stops at once and any answer in progress
+ends. Do this first if a phone is lost or stolen. If you set up a new computer key, or choose Delete
+everything, phones can no longer connect and only show "can't connect". That is expected.
+
+## Turn it off
+
+Turn Away from home off. The helper stops, and no helper program is left running or listening.
+Phones stay paired unless you choose to remove them. You can also set it to turn itself off after a
+day, a week or 30 days unused.

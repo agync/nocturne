@@ -62,6 +62,11 @@ Afterwards Nocturne starts again from setup.
 Nocturne has no account, no analytics and no crash reports. Its reading engine is a private one that
 listens only on your own computer's internal address, with a fresh key every time Nocturne starts.
 
+Away from home is the one exception, and it is off until you turn it on. While it is on, sealed
+traffic goes to your own paired phones through the connection you chose, and that connection's helper
+talks to its company. Privacy then shows what was sent to your phones, and
+[Away from home](away-from-home.md) lists what each company can see.
+
 You do not have to take that on trust:
 
 - Privacy lists everything Nocturne ever downloaded, with the day and the size. Setup and any
