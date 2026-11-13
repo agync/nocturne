@@ -1,0 +1,15 @@
+[
+  { "never": ["model", "LLM", "AI", "inference"], "say": "Nocturne, thinking" },
+  { "never": ["NPU", "GPU", "VRAM"], "say": "This computer's AI chip" },
+  { "never": ["model download"], "say": "Getting ready" },
+  { "never": ["event", "capture", "ingest"], "say": "Keep, something you kept" },
+  { "never": ["fact", "triple", "graph"], "say": "Memory, what Nocturne remembers" },
+  { "never": ["provenance", "citation"], "say": "Where it came from, the original" },
+  { "never": ["consolidation"], "say": "Overnight tidy" },
+  { "never": ["decay", "archived"], "say": "Fading / let go" },
+  { "never": ["hard delete", "cascade"], "say": "Forget completely" },
+  { "never": ["quarantine"], "say": "Unconfirmed" },
+  { "never": ["contradiction"], "say": "Which is right?" },
+  { "never": ["tokens", "embeddings"], "say": "(never shown)" },
+  { "never": ["backend", "server", "Lemonade", "vector"], "say": "(never shown)" }
+]
