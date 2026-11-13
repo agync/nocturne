@@ -1,0 +1,264 @@
+.frame {
+  padding: 24px 28px 0;
+}
+
+.card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  min-height: 34rem;
+  overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.original {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6);
+  background: var(--bg);
+}
+
+.details {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  min-width: 0;
+  padding: var(--s-6);
+}
+
+.meta {
+  color: var(--ink2);
+}
+
+.title {
+  font-size: 1.75rem;
+  font-weight: 400;
+  outline-offset: 4px;
+}
+
+.status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.understood {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink);
+  font-size: 0.8125rem;
+}
+
+.check {
+  width: 8px;
+  height: 5px;
+  margin-top: -3px;
+  border-left: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.reason {
+  color: var(--ember);
+}
+
+.says,
+.from {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-2);
+}
+
+.says h2,
+.from h2,
+.highlights h3 {
+  color: var(--ink2);
+}
+
+.says p {
+  color: var(--ink2);
+}
+
+.from ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.fromRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  min-height: var(--size-touch);
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.fromRow a {
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.fromRow a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.none {
+  color: var(--ink2);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  margin-top: auto;
+  padding-top: var(--s-5);
+}
+
+.actions button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-6) 28px;
+  color: var(--ink2);
+}
+
+.figure {
+  margin: 0;
+}
+
+.photo {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+  box-shadow: var(--e1);
+}
+
+.photo img {
+  max-width: 100%;
+  max-height: 28rem;
+  background: var(--raised);
+}
+
+.region {
+  position: absolute;
+  background: color-mix(in srgb, var(--marker) 55%, transparent);
+  outline: 2px solid var(--marker);
+}
+
+.paper {
+  width: 100%;
+  max-width: 30rem;
+  min-height: 16rem;
+  padding: var(--s-5);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  box-shadow: var(--e1);
+}
+
+.paperText {
+  font: 400 1.0625rem / 1.6 var(--font-serif);
+  white-space: pre-wrap;
+}
+
+.quote {
+  background: var(--marker);
+  color: var(--ink);
+}
+
+.unavailable {
+  color: var(--ink2);
+}
+
+.audio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  width: 100%;
+  max-width: 32rem;
+  padding: var(--s-5);
+  border-radius: var(--r-md);
+  background: var(--raised);
+  box-shadow: var(--e1);
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 6rem;
+}
+
+.bar {
+  flex: 1;
+  min-width: 1px;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--ink) 30%, transparent);
+}
+
+.bar[data-marked="true"] {
+  background: var(--marker);
+}
+
+.bar[data-played="true"] {
+  background: var(--ink);
+}
+
+.transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.seek {
+  flex: 1;
+  min-width: 8rem;
+  accent-color: var(--ink);
+}
+
+.time {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+}
+
+.highlights ul {
+  margin: var(--s-2) 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink2);
+  font-size: 0.875rem;
+}
+
+:global([data-size="narrow"]) .frame {
+  padding: 0;
+}
+
+:global([data-size="narrow"]) .card {
+  grid-template-columns: minmax(0, 1fr);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:global([data-size="narrow"]) .original,
+:global([data-size="narrow"]) .details {
+  padding: var(--s-4);
+}
+
+:global([data-size="narrow"]) .message {
+  padding: var(--s-5) var(--s-4);
+}

@@ -1,11 +1,11 @@
 import { useRoute } from "wouter";
-import { Placeholder } from "../Placeholder";
+import { Browser } from "./Browser";
+import { ItemPage } from "./ItemPage";
 
 /** Serves #/memories, #/memories/:entityId and #/items/:itemId. */
 export default function Memories() {
-  const [isItem] = useRoute("/items/:itemId");
-  const [isEntity] = useRoute("/memories/:entityId");
-  if (isItem) return <Placeholder title="screen.item.title" />;
-  if (isEntity) return <Placeholder title="screen.entity.title" />;
-  return <Placeholder title="screen.memories.title" />;
+  const [isItem, item] = useRoute("/items/:itemId");
+  const [isEntity, entity] = useRoute("/memories/:entityId");
+  if (isItem && item) return <ItemPage key={item.itemId} id={item.itemId} />;
+  return <Browser entityId={isEntity && entity ? entity.entityId : null} />;
 }

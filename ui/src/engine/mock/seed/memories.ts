@@ -1,4 +1,4 @@
-import type { EntityView, MemoryView, Receipt } from "../../bindings";
+import type { EntityKind, EntityView, MemoryView, Receipt } from "../../bindings";
 import { SAFETY_PREDICATES, type SeedContext } from "./common";
 
 /** What Nocturne remembers, and who and what it is about. The memories screens own this file. */
@@ -53,6 +53,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "decided",
       "Lake District cottage",
       [receipt("item-lake", { type: "time", startMs: 0, endMs: 42000 })],
+      { entityId: "ent-lake" },
     ),
     memory(
       "mem-gran",
@@ -79,7 +80,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "appointmentAt",
       tuesdayText,
       [receipt("item-card")],
-      { status: "unconfirmed", certainty: "notSure" },
+      { status: "unconfirmed", certainty: "notSure", entityId: "ent-dentist" },
     ),
     memory(
       "mem-dentist-thu",
@@ -88,7 +89,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "appointmentAt",
       thursdayText,
       [receipt("item-dentist-voice", { type: "time", startMs: 0, endMs: 8000 })],
-      { status: "unconfirmed", certainty: "notSure" },
+      { status: "unconfirmed", certainty: "notSure", entityId: "ent-dentist" },
     ),
     memory(
       "mem-dentist-chen",
@@ -178,38 +179,64 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "movedTo",
       "Tuesdays",
       [receipt("item-bin")],
-      { status: "fading", lastUsed: at(-84, 8, 0), certainty: "notSure" },
+      { status: "fading", lastUsed: at(-84, 8, 0), certainty: "notSure", entityId: "ent-bin" },
+    ),
+    // What the school letter says, so "memories from it" has more than one line.
+    memory(
+      "mem-trip-where",
+      "The Year 4 trip is to the Ridgeway Science Centre.",
+      "Year 4 trip",
+      "isTo",
+      "Ridgeway Science Centre",
+      [receipt("item-letter", { type: "quote", text: "Ridgeway Science Centre" })],
+      { entityId: "ent-leo", certainty: "sure" },
+    ),
+    memory(
+      "mem-trip-lunch",
+      "Leo needs a packed lunch on the trip day.",
+      "Leo",
+      "needs",
+      "packed lunch",
+      [receipt("item-letter", { type: "quote", text: "Packed lunches are needed" })],
+      { entityId: "ent-leo" },
+    ),
+    memory(
+      "mem-okafor",
+      "Leo’s teacher is Mrs Okafor.",
+      "Mrs Okafor",
+      "teacherOf",
+      "Leo",
+      [receipt("item-letter")],
+      { entityId: "ent-okafor", certainty: "sure" },
+    ),
+    memory(
+      "mem-sam-saturday",
+      "You want to ask Sam about Saturday.",
+      "You",
+      "wantsToAsk",
+      "Sam about Saturday",
+      [receipt("item-sam", { type: "time", startMs: 0, endMs: 6000 })],
+      { entityId: "ent-sam" },
     ),
   ];
 
+  const entity = (id: string, kind: EntityKind, name: string, role: string): EntityView => {
+    // Counts are what the screens will find, so a person never sees a number that is not there.
+    const mine = memories.filter((m) => m.entityId === id && m.status !== "letGo");
+    const items = new Set(mine.flatMap((m) => m.receipts.map((r) => r.itemId)));
+    return { id, kind, name, role, memoryCount: mine.length, itemCount: items.size };
+  };
+
   const entities: EntityView[] = [
-    { id: "ent-leo", kind: "person", name: "Leo", role: "Son", memoryCount: 5, itemCount: 5 },
-    { id: "ent-ava", kind: "person", name: "Ava", role: "Daughter", memoryCount: 2, itemCount: 2 },
-    {
-      id: "ent-gran",
-      kind: "person",
-      name: "Gran (Margaret)",
-      role: "Mother",
-      memoryCount: 3,
-      itemCount: 3,
-    },
-    {
-      id: "ent-okafor",
-      kind: "person",
-      name: "Mrs Okafor",
-      role: "Leo’s teacher",
-      memoryCount: 1,
-      itemCount: 1,
-    },
-    { id: "ent-sam", kind: "person", name: "Sam", role: "Partner", memoryCount: 2, itemCount: 2 },
-    {
-      id: "ent-chen",
-      kind: "person",
-      name: "Dr Chen",
-      role: "Dentist",
-      memoryCount: 1,
-      itemCount: 1,
-    },
+    entity("ent-leo", "person", "Leo", "Son"),
+    entity("ent-ava", "person", "Ava", "Daughter"),
+    entity("ent-gran", "person", "Gran (Margaret)", "Mother"),
+    entity("ent-okafor", "person", "Mrs Okafor", "Leo’s teacher"),
+    entity("ent-sam", "person", "Sam", "Partner"),
+    entity("ent-chen", "person", "Dr Chen", "Dentist"),
+    entity("ent-dentist", "thing", "Dentist appointment", "Appointment"),
+    entity("ent-lake", "thing", "Lake District cottage", "Half-term trip"),
+    entity("ent-bin", "thing", "Bin day", "Household"),
   ];
 
   return { memories, entities };
