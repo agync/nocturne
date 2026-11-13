@@ -71,7 +71,7 @@ const status = () =>
 describe("Listen", () => {
   it("shows the page's headline, the sections in order and the player", async () => {
     const { audio } = await open();
-    expect(screen.getByText(/^Listen · Friday 13 November · Voice: Emma$/)).toBeInTheDocument();
+    expect(screen.getByText(/^Listen · Friday 13 November/)).toHaveTextContent("Voice: Emma");
     const items = within(screen.getByRole("list", { name: "Sections" })).getAllByRole("listitem");
     expect(items[0]).toHaveTextContent("The night in one line");
     expect(within(items[0] as HTMLElement).getByRole("button")).toHaveAttribute(

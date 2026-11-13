@@ -186,7 +186,9 @@ export function Phones({ view }: { view: RemoteView }) {
         >
           {t("away.phones.add")}
         </Button>
-        <a href="#/settings/away/activity">{t("away.link.activity")}</a>
+        <a className="hit" href="#/settings/away/activity">
+          {t("away.link.activity")}
+        </a>
       </div>
       {removing ? (
         <Confirm

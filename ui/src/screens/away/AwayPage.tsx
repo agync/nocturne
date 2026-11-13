@@ -280,7 +280,9 @@ function OnPage({
                 {t("away.phones.add")}
               </Button>
               {view.devices.length > 0 ? (
-                <a href="#/settings/away/phones">{t("away.phones.see")}</a>
+                <a className="hit" href="#/settings/away/phones">
+                  {t("away.phones.see")}
+                </a>
               ) : null}
             </div>
             <p className={styles.muted}>{t("away.phones.lost")}</p>
@@ -381,10 +383,12 @@ function OnPage({
         </li>
       </ul>
       <div className={styles.links}>
-        <a href="#/settings/away/activity">{t("away.link.activity")}</a>
+        <a className="hit" href="#/settings/away/activity">
+          {t("away.link.activity")}
+        </a>
         <button
           type="button"
-          className={styles.linkButton}
+          className={`${styles.linkButton} hit`}
           aria-expanded={advanced}
           aria-controls={advancedId}
           onClick={() => setAdvanced(!advanced)}
@@ -469,7 +473,9 @@ function RelinkPage({
                 : t("away.relink.waiting", { count: waiting.length, name: waiting[0]?.name ?? "" })}
             </span>
           </div>
-          <a href="#/settings/away/phones">{t("away.phones.see")}</a>
+          <a className="hit" href="#/settings/away/phones">
+            {t("away.phones.see")}
+          </a>
         </div>
       </div>
       <p className={styles.muted}>{t("away.relink.mostPrivate")}</p>

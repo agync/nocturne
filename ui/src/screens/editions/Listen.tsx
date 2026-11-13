@@ -118,7 +118,8 @@ function PlayerView({
     <div ref={body} className={styles.body} tabIndex={-1}>
       <header className={styles.head}>
         <p className={styles.eyebrow}>
-          {t("listen.eyebrow", { day: formatLongDay(page.date), voice })}
+          {t("listen.eyebrow", { day: formatLongDay(page.date) })}
+          <span className={styles.eyebrowVoice}> · {t("listen.voice", { voice })}</span>
         </p>
         <h1 className={styles.headline}>{page.headline}</h1>
       </header>
@@ -187,6 +188,7 @@ function PlayerView({
           <Button variant="quiet" onClick={player.next}>
             {t("listen.next")}
           </Button>
+          <span className={styles.voice}>{t("listen.voice", { voice })}</span>
           <span className={styles.speed}>
             <Button variant="quiet" onClick={player.slower} aria-label={t("listen.slower")}>
               −
@@ -201,7 +203,7 @@ function PlayerView({
           </span>
         </div>
         <p className={styles.keys}>{t("listen.keys")}</p>
-        <a className={styles.back} href={`#/pages/${page.date}`}>
+        <a className={`${styles.back} hit`} href={`#/pages/${page.date}`}>
           {t("listen.read")}
         </a>
       </section>
@@ -262,7 +264,7 @@ export function Listen() {
               {t("button.tryAgain")}
             </Button>
           ) : null}
-          <a className={styles.back} href={`#/pages/${date}`}>
+          <a className={`${styles.back} hit`} href={`#/pages/${date}`}>
             {t("listen.read")}
           </a>
         </div>

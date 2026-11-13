@@ -8,7 +8,9 @@ export function NotFound() {
       <p className="t-ui-body" style={{ margin: "var(--s-3) 0", color: "var(--ink2)" }}>
         {t("screen.notFound.body")}
       </p>
-      <a href="#/today">{t("screen.notFound.action")}</a>
+      <a className="hit" href="#/today">
+        {t("screen.notFound.action")}
+      </a>
     </ScreenSheet>
   );
 }

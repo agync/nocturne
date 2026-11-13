@@ -95,7 +95,10 @@ export function Activity() {
           <p className={styles.muted}>{t("away.activity.listed.body")}</p>
           <p className={styles.muted}>{t("away.activity.kept")}</p>
           <p className={styles.muted}>
-            {t("away.activity.unknown")} <a href="#/settings/away/phones">{t("away.phones.see")}</a>
+            {t("away.activity.unknown")}{" "}
+            <a className="hit" href="#/settings/away/phones">
+              {t("away.phones.see")}
+            </a>
           </p>
         </>
       }

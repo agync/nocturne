@@ -155,7 +155,9 @@ export function ItemPage({ id }: { id: string }) {
                 {list.map((m) => (
                   <li key={m.id} className={styles.fromRow}>
                     {m.entityId ? (
-                      <a href={`#/memories/${m.entityId}`}>{m.sentence}</a>
+                      <a className="hit" href={`#/memories/${m.entityId}`}>
+                        {m.sentence}
+                      </a>
                     ) : (
                       <span>{m.sentence}</span>
                     )}

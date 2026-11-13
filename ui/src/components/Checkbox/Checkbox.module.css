@@ -3,7 +3,7 @@
   display: flex;
   align-items: flex-start;
   gap: var(--s-3);
-  min-height: var(--size-touch);
+  min-height: var(--size-control);
   padding: var(--s-2) 0;
   cursor: pointer;
 }

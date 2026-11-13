@@ -341,7 +341,7 @@ export function Settings() {
           <Row label={t("away.row.label")} hint={t("away.row.hint")}>
             {(hint) => (
               <a
-                className={styles.value}
+                className={`${styles.value} hit`}
                 href="#/settings/away"
                 aria-describedby={hint}
                 aria-label={t("away.row.open", { value: awayValue(away) })}
@@ -352,7 +352,7 @@ export function Settings() {
           </Row>
         ) : null}
       </ul>
-      <a className={styles.advanced} href="#/settings/advanced">
+      <a className={`${styles.advanced} hit`} href="#/settings/advanced">
         {t("settings.advanced.show")}
       </a>
     </ScreenSheet>

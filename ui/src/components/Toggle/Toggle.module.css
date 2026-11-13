@@ -3,7 +3,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--s-4);
-  min-height: var(--size-touch);
+  min-height: var(--size-control);
   cursor: pointer;
 }
 

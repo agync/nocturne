@@ -1,5 +1,6 @@
 {
-  "listen.eyebrow": "Listen · {day} · Voice: {voice}",
+  "listen.eyebrow": "Listen · {day}",
+  "listen.voice": "Voice: {voice}",
   "listen.sections": "Sections",
   "listen.section.opening": "The night in one line",
   "listen.section.needsYou": "Needs you",

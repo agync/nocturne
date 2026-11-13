@@ -112,6 +112,7 @@
 
 .range {
   width: 100%;
+  height: var(--size-touch);
   margin: 0;
   accent-color: var(--accent);
 }
@@ -143,6 +144,20 @@
   display: inline-flex;
   align-items: center;
   margin-left: auto;
+}
+
+.controls button {
+  white-space: nowrap;
+}
+
+.speed button {
+  min-width: var(--size-touch);
+}
+
+.voice {
+  display: none;
+  color: var(--ink2);
+  font-size: 0.8125rem;
 }
 
 .rate {
@@ -208,5 +223,13 @@
 
   .speed {
     margin-left: auto;
+  }
+
+  .eyebrowVoice {
+    display: none;
+  }
+
+  .voice {
+    display: block;
   }
 }

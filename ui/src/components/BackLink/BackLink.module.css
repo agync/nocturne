@@ -1,12 +1,16 @@
 .back {
   display: inline-flex;
   align-self: flex-start;
-  align-items: center;
+  align-items: baseline;
   gap: var(--s-1);
   margin-bottom: var(--s-4);
   color: var(--ink2);
   font: 500 0.875rem / 1.4 var(--font-sans);
   text-decoration: none;
+}
+
+.back > span {
+  flex: none;
 }
 
 .back:hover {

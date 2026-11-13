@@ -217,6 +217,7 @@
 
 .seek {
   flex: 1;
+  height: var(--size-touch);
   min-width: 8rem;
   accent-color: var(--ink);
 }

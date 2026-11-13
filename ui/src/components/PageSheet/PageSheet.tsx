@@ -396,7 +396,7 @@ export function PageSheet({
             {sentToInternet === undefined ? (
               <span>
                 {t("page.footer.unmeasured")}{" "}
-                <a className={styles.more} href="#/privacy">
+                <a className={`${styles.more} hit`} href="#/privacy">
                   {t("page.footer.privacy")}
                 </a>
               </span>
