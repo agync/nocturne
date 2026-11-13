@@ -144,6 +144,7 @@ async fn our_config_is_what_the_engine_sees_and_the_websocket_port_is_pinned() {
     let cfg = client.config().await.unwrap();
     assert_eq!(cfg["host"], "127.0.0.1");
     assert_eq!(cfg["offline"], true);
+    assert_eq!(cfg["no_fetch_executables"], true);
     assert_eq!(cfg["broadcast"], false);
     assert_eq!(cfg["telemetry"]["enabled"], false);
     let ws = cfg["websocket_port"].as_u64().unwrap() as u16;
@@ -276,13 +277,37 @@ async fn a_slow_start_past_the_timeout_is_an_error_and_leaves_nothing() {
     );
 }
 
+#[cfg(unix)]
 #[tokio::test]
-async fn online_survives_a_restart() {
+async fn online_relaunches_the_engine_and_survives_a_crash() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
-    let sup = start(&dirs, Some("crash-first-after-ms=600")).await;
+    let sup = start(&dirs, None).await;
+    let first = sup.client().endpoint().unwrap().port;
     sup.set_online(true).await.unwrap();
-    assert_eq!(sup.client().config().await.unwrap()["offline"], false);
+    assert_ne!(
+        sup.client().endpoint().unwrap().port,
+        first,
+        "the engine was relaunched"
+    );
+    assert_eq!(sup.restarts(), 0, "a relaunch is not a crash");
+    let cfg = sup.client().config().await.unwrap();
+    assert_eq!(
+        (
+            cfg["offline"].as_bool(),
+            cfg["no_fetch_executables"].as_bool()
+        ),
+        (Some(false), Some(false))
+    );
+    let launches = |d: &Dirs| std::fs::read_to_string(d.cache().join("fake-launches")).unwrap();
+    assert_eq!(launches(&dirs).trim(), "2");
+    sup.set_online(true).await.unwrap();
+    assert_eq!(launches(&dirs).trim(), "2", "no change, no relaunch");
+
+    let pid = sup.pid().unwrap();
+    let _ = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status();
     let mut rx = sup.state();
     wait_state(
         &mut rx,
@@ -291,10 +316,75 @@ async fn online_survives_a_restart() {
     )
     .await;
     wait_state(&mut rx, |s| ready_port(s).is_some(), Duration::from_secs(5)).await;
-    assert_eq!(sup.client().config().await.unwrap()["offline"], false);
+    let cfg = sup.client().config().await.unwrap();
+    assert_eq!(
+        (
+            cfg["offline"].as_bool(),
+            cfg["no_fetch_executables"].as_bool()
+        ),
+        (Some(false), Some(false))
+    );
+
     sup.set_online(false).await.unwrap();
-    assert_eq!(sup.client().config().await.unwrap()["offline"], true);
+    let cfg = sup.client().config().await.unwrap();
+    assert_eq!(
+        (
+            cfg["offline"].as_bool(),
+            cfg["no_fetch_executables"].as_bool()
+        ),
+        (Some(true), Some(true))
+    );
     sup.shutdown().await.unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn a_stuck_engine_is_stopped_within_the_budget() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some("hang-shutdown,no-watchdog,leak-sleeper")).await;
+    let pgid = sup.pid().unwrap();
+    let begun = Instant::now();
+    sup.shutdown().await.unwrap();
+    let took = begun.elapsed();
+    assert!(
+        took >= Duration::from_secs(2),
+        "the request got its two seconds: {took:?}"
+    );
+    assert!(took < Duration::from_secs(12), "{took:?}");
+    assert_eq!(common::group_members(pgid), Vec::<u32>::new());
+}
+
+#[tokio::test]
+async fn an_engine_that_ignores_its_key_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, "ignore-key");
+    let err = Supervisor::start(dirs.clone(), quick())
+        .await
+        .err()
+        .unwrap();
+    assert!(
+        matches!(err, RuntimeError::Start(ref m) if m.contains("key")),
+        "{err:?}"
+    );
+    #[cfg(target_os = "linux")]
+    assert_eq!(
+        common::processes_mentioning(&dirs.cache().to_string_lossy()),
+        Vec::<u32>::new()
+    );
+}
+
+#[tokio::test]
+async fn an_engine_on_the_wrong_websocket_port_is_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, "bad-ws-port");
+    let err = Supervisor::start(dirs, quick()).await.err().unwrap();
+    assert!(
+        matches!(err, RuntimeError::Start(ref m) if m.contains("websocket")),
+        "{err:?}"
+    );
 }
 
 #[cfg(target_os = "linux")]

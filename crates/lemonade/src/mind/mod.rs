@@ -29,10 +29,19 @@ const MAX_IMAGE_EDGE: u32 = 2048;
 const MAX_AUDIO_SECONDS: f64 = 2.0 * 3600.0;
 const EXTRACT_ATTEMPTS: usize = 2;
 
+/// What has been checked or loaded since the engine last (re)started.
+#[derive(Default)]
+struct Seen {
+    generation: u64,
+    installed: HashSet<String>,
+    loaded: HashSet<String>,
+}
+
 pub struct LemonadeMind {
     client: Client,
     tier: Tier,
-    loaded: Mutex<HashSet<String>>,
+    overrides: Vec<(ComponentRole, String)>,
+    seen: Mutex<Seen>,
 }
 
 impl LemonadeMind {
@@ -40,19 +49,55 @@ impl LemonadeMind {
         LemonadeMind {
             client,
             tier,
-            loaded: Mutex::new(HashSet::new()),
+            overrides: Vec::new(),
+            seen: Mutex::new(Seen::default()),
         }
     }
 
-    fn model(&self, role: ComponentRole) -> Result<&'static str, MindError> {
-        tier::model_for(self.tier, role).ok_or(MindError::Unavailable)
+    /// Uses `model` for `role` instead of the tier's own. For tests with small models.
+    #[doc(hidden)]
+    pub fn with_model(mut self, role: ComponentRole, model: &str) -> Self {
+        self.overrides.push((role, model.to_string()));
+        self
     }
 
-    /// Loads the thinking model once, with a context size to suit the tier.
-    async fn warm_mind(&self) -> Result<&'static str, MindError> {
-        let model = self.model(ComponentRole::Mind)?;
-        let mut loaded = self.loaded.lock().await;
-        if !loaded.contains(model) {
+    fn model(&self, role: ComponentRole) -> Result<String, MindError> {
+        if let Some((_, m)) = self.overrides.iter().find(|(r, _)| *r == role) {
+            return Ok(m.clone());
+        }
+        tier::model_for(self.tier, role)
+            .map(str::to_string)
+            .ok_or(MindError::Unavailable)
+    }
+
+    /// The model, once it is certain to be fully on disk. The engine downloads a missing model
+    /// on first use even when told to stay offline, so nothing may reach it before this passes.
+    async fn installed(&self, role: ComponentRole) -> Result<String, MindError> {
+        let model = self.model(role)?;
+        let mut seen = self.seen.lock().await;
+        let generation = self.client.generation();
+        if seen.generation != generation {
+            *seen = Seen {
+                generation,
+                ..Seen::default()
+            };
+        }
+        if seen.installed.contains(&model) {
+            return Ok(model);
+        }
+        let listed = self.client.models().await?;
+        if !listed.iter().any(|m| m.id == model && m.present()) {
+            return Err(RuntimeError::NotInstalled(model).into());
+        }
+        seen.installed.insert(model.clone());
+        Ok(model)
+    }
+
+    /// Loads the thinking model once per engine launch, with a context size to suit the tier.
+    async fn warm_mind(&self) -> Result<String, MindError> {
+        let model = self.installed(ComponentRole::Mind).await?;
+        let mut seen = self.seen.lock().await;
+        if !seen.loaded.contains(&model) {
             let ctx = if self.tier == Tier::Large {
                 16384
             } else {
@@ -60,7 +105,7 @@ impl LemonadeMind {
             };
             self.client
                 .load(
-                    model,
+                    &model,
                     &LoadOptions {
                         ctx_size: Some(ctx),
                         ..LoadOptions::default()
@@ -71,13 +116,13 @@ impl LemonadeMind {
                     RuntimeError::Rejected { .. } => MindError::Unavailable,
                     other => other.into(),
                 })?;
-            loaded.insert(model.to_string());
+            seen.loaded.insert(model.clone());
         }
         Ok(model)
     }
 
     async fn forget_loaded(&self) {
-        self.loaded.lock().await.clear();
+        self.seen.lock().await.loaded.clear();
     }
 
     async fn chat_text(&self, req: &ChatRequest) -> Result<String, MindError> {
@@ -107,7 +152,7 @@ impl LemonadeMind {
         ];
         let mut last_error = String::new();
         for attempt in 0..EXTRACT_ATTEMPTS {
-            let mut req = ChatRequest::new(model, messages.clone());
+            let mut req = ChatRequest::new(&model, messages.clone());
             req.temperature = Some(0.0);
             req.response_format = Some(crate::client::json_schema_format(
                 &prompts::extraction_schema(),
@@ -152,7 +197,7 @@ impl LemonadeMind {
         }
         let model = self.warm_mind().await?;
         let mut req = ChatRequest::new(
-            model,
+            &model,
             vec![
                 Message::system(&prompts::answer_system()),
                 Message::user(&prompts::answer_user(question, facts)),
@@ -247,7 +292,7 @@ impl LemonadeMind {
             .await
             .map_err(|e| MindError::Failed(e.to_string()))??;
         let mut req = ChatRequest::new(
-            model,
+            &model,
             vec![
                 Message::system(prompts::image_system()),
                 Message::user_with_image("Describe and read this image.", &uri),
@@ -296,7 +341,7 @@ impl LemonadeMind {
     async fn headline_impl(&self, page: &PageView) -> Result<(String, String), MindError> {
         let model = self.warm_mind().await?;
         let mut req = ChatRequest::new(
-            model,
+            &model,
             vec![
                 Message::system(prompts::headline_system()),
                 Message::user(&prompts::headline_user(page)),
@@ -324,11 +369,11 @@ impl LemonadeMind {
     }
 
     async fn transcribe_impl(&self, audio: &Path) -> Result<Transcript, MindError> {
-        let model = self.model(ComponentRole::Speech)?;
         if wav_seconds(audio).is_some_and(|s| s > MAX_AUDIO_SECONDS) {
             return Err(MindError::TooLong);
         }
-        let t = self.client.transcribe(audio, model, None).await?;
+        let model = self.installed(ComponentRole::Speech).await?;
+        let t = self.client.transcribe(audio, &model, None).await?;
         if t.duration.is_some_and(|d| d > MAX_AUDIO_SECONDS) {
             return Err(MindError::TooLong);
         }
@@ -571,8 +616,8 @@ impl Mind for LemonadeMind {
             if texts.is_empty() {
                 return Ok(Vec::new());
             }
-            let model = self.model(ComponentRole::Recall)?;
-            Ok(self.client.embeddings(model, texts).await?)
+            let model = self.installed(ComponentRole::Recall).await?;
+            Ok(self.client.embeddings(&model, texts).await?)
         })
     }
 
@@ -598,8 +643,8 @@ impl Mind for LemonadeMind {
         voice: &'a str,
     ) -> BoxFuture<'a, Result<Vec<u8>, MindError>> {
         Box::pin(async move {
-            let model = self.model(ComponentRole::Voice)?;
-            Ok(self.client.speech(model, voice, text).await?)
+            let model = self.installed(ComponentRole::Voice).await?;
+            Ok(self.client.speech(&model, voice, text).await?)
         })
     }
 }

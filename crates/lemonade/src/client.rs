@@ -3,6 +3,7 @@
 
 use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -56,6 +57,7 @@ struct Shared {
     stream_http: reqwest::Client,
     timeouts: Timeouts,
     endpoint: RwLock<Option<Endpoint>>,
+    generation: AtomicU64,
 }
 
 #[derive(Clone)]
@@ -130,11 +132,19 @@ impl Client {
                 stream_http,
                 timeouts,
                 endpoint: RwLock::new(None),
+                generation: AtomicU64::new(0),
             }),
         }
     }
 
+    /// Changes whenever the engine's address does, that is, at every launch and every stop.
+    /// Anything remembered about the engine (models loaded, files present) is stale after it.
+    pub fn generation(&self) -> u64 {
+        self.shared.generation.load(Ordering::SeqCst)
+    }
+
     pub(crate) fn set_endpoint(&self, endpoint: Option<Endpoint>) {
+        self.shared.generation.fetch_add(1, Ordering::SeqCst);
         *self
             .shared
             .endpoint
@@ -222,7 +232,11 @@ impl Client {
 
     /// `POST /internal/shutdown`: unloads every model and stops the engine.
     pub async fn shutdown(&self) -> Result<(), RuntimeError> {
-        let _: Value = self.post_json("/internal/shutdown", &json!({})).await?;
+        let rb = self
+            .request(Method::POST, "/internal/shutdown")?
+            .timeout(Duration::from_secs(2))
+            .json(&json!({}));
+        let _: Value = Self::json(rb).await?;
         Ok(())
     }
 }

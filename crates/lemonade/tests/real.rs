@@ -39,7 +39,6 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
         panic!("not ready");
     };
     assert!(!version.is_empty());
-    let pgid = sup.pid().unwrap();
     let client = sup.client();
 
     let health = client.health().await.unwrap();
@@ -60,7 +59,20 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
         .unwrap();
     assert_eq!(raw.status(), 401, "everything but /live wants the key");
 
+    // Backends read as unsupported while the engine may not fetch executables, and it reads
+    // that switch only at launch. Relaunching online shows what setup would see; nothing is
+    // fetched by looking.
+    sup.set_online(true).await.unwrap();
+    let client = sup.client();
     let info = client.system_info().await.unwrap();
+    let relaunched_from = sup.pid().unwrap();
+    sup.set_online(false).await.unwrap();
+    let pgid = sup.pid().unwrap();
+    assert_ne!(pgid, relaunched_from);
+    #[cfg(target_os = "linux")]
+    assert_eq!(common::group_members(relaunched_from), Vec::<u32>::new());
+    let client = sup.client();
+    assert_eq!(client.config().await.unwrap()["no_fetch_executables"], true);
     let ram = {
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
@@ -75,7 +87,12 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
         BackendState::Unsupported
     );
 
-    let models = client.models().await.unwrap();
+    // With nothing to fetch the engine lists only models it can already run, so the names are
+    // checked against the catalogue that ships in the bundle.
+    let catalogue: serde_json::Value = serde_json::from_slice(
+        &std::fs::read(dirs.bundle.join("resources/server_models.json")).unwrap(),
+    )
+    .unwrap();
     for tier in [
         nocturne_contract::Tier::Large,
         nocturne_contract::Tier::Standard,
@@ -83,7 +100,7 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
     ] {
         for c in tier::components(tier) {
             assert!(
-                models.iter().any(|m| m.id == c.model),
+                catalogue.get(c.model).is_some(),
                 "{} is not in the catalogue",
                 c.model
             );
@@ -133,4 +150,73 @@ async fn the_real_engine_exits_when_its_owner_is_killed() {
     );
     assert!(gone, "the real engine outlived its owner");
     assert_eq!(common::group_members(pid), Vec::<u32>::new());
+}
+
+fn files_under(dir: &std::path::Path) -> usize {
+    std::fs::read_dir(dir)
+        .map(|rd| {
+            rd.flatten()
+                .map(|e| {
+                    if e.path().is_dir() {
+                        files_under(&e.path())
+                    } else {
+                        1
+                    }
+                })
+                .sum()
+        })
+        .unwrap_or(0)
+}
+
+/// The engine fetches a missing model on first use even when offline. The mind must not let it.
+#[tokio::test]
+#[ignore = "needs NOCTURNE_LEMOND"]
+async fn the_mind_never_triggers_a_download_for_a_missing_model() {
+    use nocturne_engine::{Mind, MindError};
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = nocturne_lemonade::Dirs::new(bundle(), tmp.path().join("root"));
+    let sup = Supervisor::start(dirs.clone(), SupervisorOptions::default())
+        .await
+        .unwrap();
+    let client = sup.client();
+    let mind = nocturne_lemonade::LemonadeMind::new(client.clone(), nocturne_contract::Tier::Small)
+        .with_model(nocturne_contract::ComponentRole::Speech, "Whisper-Tiny");
+    let wav = tmp.path().join("one-second.wav");
+    let mut bytes = b"RIFF".to_vec();
+    bytes.extend((36u32 + 32_000).to_le_bytes());
+    bytes.extend(b"WAVEfmt ");
+    bytes.extend(16u32.to_le_bytes());
+    bytes.extend([1, 0, 1, 0]);
+    bytes.extend(16_000u32.to_le_bytes());
+    bytes.extend(32_000u32.to_le_bytes());
+    bytes.extend([2, 0, 16, 0]);
+    bytes.extend(b"data");
+    bytes.extend(32_000u32.to_le_bytes());
+    bytes.extend(vec![0u8; 32_000]);
+    std::fs::write(&wav, bytes).unwrap();
+
+    let result = mind.transcribe(&wav).await;
+
+    let started = client.downloads().await.unwrap();
+    for job in &started {
+        let _ = client
+            .control(&job.id, nocturne_lemonade::client::Action::Cancel)
+            .await;
+    }
+    assert!(started.is_empty(), "a download began: {started:?}");
+    assert_eq!(result.unwrap_err(), MindError::Unavailable);
+    let models = client.models().await.unwrap();
+    assert!(
+        models
+            .iter()
+            .filter(|m| m.id == "Whisper-Tiny")
+            .all(|m| !m.present() && !m.downloaded),
+        "with no executables to fetch the engine may not list it at all"
+    );
+    assert_eq!(
+        files_under(&dirs.models()),
+        0,
+        "nothing reached the models folder"
+    );
+    sup.shutdown().await.unwrap();
 }

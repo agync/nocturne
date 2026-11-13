@@ -85,21 +85,37 @@ async fn wait_view(
 }
 
 async fn raw(sup: &Supervisor, method: &str, path: &str, body: Value) -> Value {
-    let e = sup.client().endpoint().unwrap();
     let http = reqwest::Client::new();
-    let url = format!("http://127.0.0.1:{}{path}", e.port);
-    let rb = if method == "POST" {
-        http.post(url).json(&body)
-    } else {
-        http.get(url)
-    };
-    rb.bearer_auth(e.key)
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap()
+    for _ in 0..100 {
+        if let Some(e) = sup.client().endpoint() {
+            let url = format!("http://127.0.0.1:{}{path}", e.port);
+            let rb = if method == "POST" {
+                http.post(url).json(&body)
+            } else {
+                http.get(url)
+            };
+            if let Ok(r) = rb.bearer_auth(e.key).send().await
+                && let Ok(v) = r.json().await
+            {
+                return v;
+            }
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the engine never answered {path}");
+}
+
+async fn wait_offline(sup: &Supervisor) {
+    for _ in 0..200 {
+        if let Ok(cfg) = sup.client().config().await
+            && cfg["offline"] == true
+            && cfg["no_fetch_executables"] == true
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the engine was left online");
 }
 
 async fn requests_to(sup: &Supervisor, path: &str) -> Vec<Value> {
@@ -259,18 +275,69 @@ async fn pause_and_resume_call_the_download_controls() {
     )
     .await;
     wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 5).await;
-    let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 40).await;
-    assert!(done.paused.is_none());
-    let actions: Vec<String> = requests_to(&rig.sup, "/v1/downloads/control")
-        .await
-        .iter()
-        .map(|r| r["body"]["action"].as_str().unwrap().to_string())
-        .collect();
+    let mut actions = Vec::new();
+    for _ in 0..100 {
+        actions = requests_to(&rig.sup, "/v1/downloads/control")
+            .await
+            .iter()
+            .map(|r| r["body"]["action"].as_str().unwrap().to_string())
+            .collect();
+        if actions.len() > 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
     assert_eq!(actions[0], "pause");
     assert!(actions.contains(&"remove".to_string()), "{actions:?}");
+    let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 40).await;
+    assert!(done.paused.is_none());
     rig.sup.shutdown().await.unwrap();
 }
 
+#[tokio::test]
+async fn resume_waits_for_the_worker_to_stop_and_retries_a_conflict() {
+    let rig = rig(
+        "download-ms=1500,pause-lag-ms=400,conflict-first-remove",
+        32,
+    )
+    .await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Small).await.unwrap();
+    wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.downloaded_bytes > 0.0,
+        20,
+    )
+    .await;
+    rig.setup.pause().await.unwrap();
+    rig.setup.resume().await.unwrap();
+    raw(
+        &rig.sup,
+        "POST",
+        "/fake/mode",
+        json!({"mode": "download-ms=100,pause-lag-ms=400,conflict-first-remove"}),
+    )
+    .await;
+    wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.paused.is_none(),
+        10,
+    )
+    .await;
+    let mut conflicts = 0;
+    for _ in 0..100 {
+        conflicts = raw(&rig.sup, "GET", "/fake/stats", json!({})).await["conflicts"]
+            .as_u64()
+            .unwrap();
+        if conflicts > 0 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(conflicts, 1, "one refusal, then the retry went through");
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    rig.sup.shutdown().await.unwrap();
+}
 #[tokio::test]
 async fn a_stalled_download_reads_as_offline_and_recovers_when_bytes_move() {
     let rig = rig("download-ms=300,no-progress", 16).await;
@@ -303,12 +370,18 @@ async fn a_full_disk_stops_with_how_much_more_is_needed() {
     rig.setup.start(Tier::Small).await.unwrap();
     let failed = wait_view(&mut rx, |v| v.phase == SetupPhase::Failed, 20).await;
     assert_eq!(failed.error, Some(SetupError::DiskFull));
-    assert!(failed.needed_bytes.unwrap() > 0.0);
     assert!(failed.paused.is_none());
+    // The engine said "requires 2.4 GB but only 0.3 GB": 2.1 GiB short, plus the 2 GiB margin.
+    let expected = (2.1 + 2.0) * GIB as f64;
+    assert!(
+        (failed.needed_bytes.unwrap() - expected).abs() < 1e6,
+        "{:?}",
+        failed.needed_bytes
+    );
     assert_eq!(rig.setup.installed(), None);
+    wait_offline(&rig.sup).await;
     rig.sup.shutdown().await.unwrap();
 }
-
 #[tokio::test]
 async fn not_enough_free_space_is_reported_before_anything_downloads() {
     let free = tier::download_bytes(Tier::Small) - GIB;
@@ -321,7 +394,8 @@ async fn not_enough_free_space_is_reported_before_anything_downloads() {
     let view = rig.setup.view().borrow().clone();
     assert_eq!(view.phase, SetupPhase::Failed);
     assert_eq!(view.error, Some(SetupError::DiskFull));
-    let expected = (tier::download_bytes(Tier::Small) + DISK_HEADROOM - free) as f64;
+    let backends = 3 * 150_000_000;
+    let expected = (tier::download_bytes(Tier::Small) + backends + DISK_HEADROOM - free) as f64;
     assert_eq!(view.needed_bytes, Some(expected));
     assert!(requests_to(&rig.sup, "/v1/pull").await.is_empty());
     assert!(requests_to(&rig.sup, "/v1/install").await.is_empty());
@@ -397,7 +471,7 @@ async fn a_restarted_engine_resumes_the_partial_download() {
 }
 
 #[tokio::test]
-async fn a_new_setup_attaches_to_a_job_the_engine_already_runs() {
+async fn a_dropped_setup_leaves_the_engine_offline_and_a_new_one_carries_on() {
     let rig = rig("download-ms=1500", 16).await;
     rig.setup.start(Tier::Small).await.unwrap();
     let mut rx = rig.setup.view();
@@ -407,10 +481,13 @@ async fn a_new_setup_attaches_to_a_job_the_engine_already_runs() {
         20,
     )
     .await;
+    assert_eq!(rig.sup.client().config().await.unwrap()["offline"], false);
     drop(rig.setup);
+    wait_offline(&rig.sup).await;
 
     let second = new_setup(&rig.sup, &rig.dirs, 16, &rig.ledger);
-    second.check().await.unwrap();
+    let checked = second.check().await.unwrap();
+    assert_eq!(checked.phase, SetupPhase::Paused);
     let mut rx = second.view();
     second.resume().await.unwrap();
     raw(
@@ -421,22 +498,28 @@ async fn a_new_setup_attaches_to_a_job_the_engine_already_runs() {
     )
     .await;
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
-    let installs = requests_to(&rig.sup, "/v1/install").await;
-    let llama: Vec<_> = installs
-        .iter()
-        .filter(|r| r["body"]["recipe"] == "llamacpp")
-        .collect();
-    assert_eq!(llama.len(), 1, "attached instead of starting a second job");
+    wait_offline(&rig.sup).await;
     rig.sup.shutdown().await.unwrap();
 }
-
+#[cfg(unix)]
 #[tokio::test]
-async fn setup_rides_out_an_engine_restart() {
-    let rig = rig("download-ms=700,crash-first-after-ms=900", 16).await;
+async fn setup_rides_out_an_engine_crash() {
+    let rig = rig("download-ms=700", 16).await;
     let mut rx = rig.setup.view();
     rig.setup.start(Tier::Small).await.unwrap();
+    wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.downloaded_bytes > 0.0,
+        20,
+    )
+    .await;
+    let pid = rig.sup.pid().unwrap();
+    let _ = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     assert!(rig.sup.restarts() >= 1);
     assert_eq!(rig.setup.installed(), Some(Tier::Small));
+    wait_offline(&rig.sup).await;
     rig.sup.shutdown().await.unwrap();
 }

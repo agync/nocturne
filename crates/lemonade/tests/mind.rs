@@ -532,7 +532,7 @@ fn wav_header(seconds: u32) -> Vec<u8> {
 
 #[tokio::test]
 async fn transcribe_maps_segments_and_refuses_long_audio() {
-    let r = rig_with("", Tier::Small).await;
+    let r = rig_with("downloaded=all", Tier::Small).await;
     let short = put(&r.dirs.root, "note.wav", &wav_header(3));
     let t = r.mind.transcribe(&short).await.unwrap();
     assert_eq!(t.text, "hello world");
@@ -570,7 +570,7 @@ async fn transcribe_maps_segments_and_refuses_long_audio() {
 
 #[tokio::test]
 async fn embed_and_speak_use_the_tiers_models() {
-    let r = rig_with("", Tier::Large).await;
+    let r = rig_with("downloaded=all", Tier::Large).await;
     let vectors = r.mind.embed(&["a".into(), "bb".into()]).await.unwrap();
     assert_eq!(vectors.len(), 2);
     assert!(r.mind.embed(&[]).await.unwrap().is_empty());
@@ -628,11 +628,87 @@ async fn write_headline_returns_the_pair() {
 }
 
 #[tokio::test]
-async fn a_model_that_is_not_downloaded_reads_as_unavailable() {
+async fn a_model_that_is_not_downloaded_reads_as_unavailable_and_is_never_fetched() {
     let r = rig_with("", Tier::Standard).await;
+    let wav = put(&r.dirs.root, "n.wav", &wav_header(2));
+    let unavailable = MindError::Unavailable;
     assert_eq!(
         r.mind.extract("t", &context()).await.unwrap_err(),
+        unavailable
+    );
+    assert_eq!(r.mind.embed(&["a".into()]).await.unwrap_err(), unavailable);
+    assert_eq!(r.mind.speak("a", "v").await.unwrap_err(), unavailable);
+    assert_eq!(r.mind.transcribe(&wav).await.unwrap_err(), unavailable);
+    let image = put(&r.dirs.root, "i.png", &png(8, 8));
+    assert_eq!(r.mind.read_image(&image).await.unwrap_err(), unavailable);
+    let (result, _) = answer(&r, &[memory("a", "x")]).await;
+    assert_eq!(result.unwrap_err(), unavailable);
+    for path in [
+        "/v1/load",
+        "/v1/chat/completions",
+        "/v1/embeddings",
+        "/v1/audio/speech",
+        "/v1/audio/transcriptions",
+    ] {
+        assert!(r.seen(path).await.is_empty(), "{path} was called");
+    }
+    let stats = r.call("GET", "/fake/stats", json!({})).await;
+    assert_eq!(stats["fetched_on_use"], json!([]));
+    // The fake downloads on use as the real engine does, so the guard is what held it back.
+    r.sup
+        .client()
+        .load("Qwen3.5-9B-GGUF", &Default::default())
+        .await
+        .unwrap();
+    let stats = r.call("GET", "/fake/stats", json!({})).await;
+    assert_eq!(stats["fetched_on_use"], json!(["Qwen3.5-9B-GGUF"]));
+}
+
+#[tokio::test]
+async fn a_model_with_a_required_file_missing_is_not_installed() {
+    let r = rig_with("downloaded=all,half-present", Tier::Standard).await;
+    assert_eq!(
+        r.mind.embed(&["a".into()]).await.unwrap_err(),
         MindError::Unavailable
+    );
+    assert!(r.seen("/v1/embeddings").await.is_empty());
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn what_the_mind_remembers_about_the_engine_is_dropped_when_it_restarts() {
+    let r = rig().await;
+    r.mind.embed(&["a".into()]).await.unwrap();
+    r.mind.embed(&["b".into()]).await.unwrap();
+    assert_eq!(
+        r.seen("/v1/models").await.len(),
+        1,
+        "checked once per launch"
+    );
+    let pid = r.sup.pid().unwrap();
+    let _ = std::process::Command::new("kill")
+        .args(["-9", &pid.to_string()])
+        .status();
+    let mut state = r.sup.state();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let ready = matches!(
+                *state.borrow_and_update(),
+                nocturne_lemonade::RuntimeState::Ready { .. }
+            );
+            if ready && r.sup.restarts() == 1 {
+                break;
+            }
+            state.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    r.mind.embed(&["c".into()]).await.unwrap();
+    assert_eq!(
+        r.seen("/v1/models").await.len(),
+        1,
+        "checked again on the new engine"
     );
 }
 

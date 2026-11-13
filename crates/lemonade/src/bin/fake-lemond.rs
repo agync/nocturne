@@ -6,7 +6,9 @@
 //! `fake_mode` key in `config.json`. Modes: `crash-after-ms=N`, `crash-first-after-ms=N`,
 //! `slow-start-ms=N`, `fail-bind`, `fail-bind-first=N`, `no-progress`, `disk-full`,
 //! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
-//! `spawn-sleeper` (a helper process that the engine cleans up) and `leak-sleeper` (one it leaves).
+//! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
+//! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
+//! `conflict-first-remove`.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -58,6 +60,7 @@ struct Job {
     base: u64,
     started: Instant,
     status: Status,
+    stopped_at: Option<Instant>,
 }
 
 #[derive(Default)]
@@ -71,6 +74,8 @@ struct Inner {
     config: Map<String, Value>,
     loaded: Option<String>,
     pulls: u64,
+    fetched_on_use: Vec<String>,
+    conflicts: u64,
 }
 
 struct App {
@@ -159,7 +164,10 @@ impl App {
                 }
                 if self.flag("disk-full") && bytes as f64 >= job.total as f64 * 0.5 {
                     job.base = bytes;
-                    job.status = Status::Error("write failed: No space left on device".into());
+                    job.status = Status::Error(format!(
+                        "Insufficient disk space: download requires 2.4 GB but only 0.3 GB is available on {}",
+                        self.models_dir
+                    ));
                 }
             }
             inner.jobs.push(job);
@@ -178,6 +186,18 @@ impl App {
             "backends": inner.backends,
         });
         let _ = std::fs::write(self.cache.join("fake-state.json"), state.to_string());
+    }
+
+    /// Like the real engine, any use of a registered model that is not on disk downloads it first.
+    fn touch_model(&self, name: &str) {
+        if !CATALOG.iter().any(|m| m.0 == name) {
+            return;
+        }
+        let mut inner = self.inner();
+        if !inner.downloaded.iter().any(|d| d == name) {
+            inner.downloaded.push(name.to_string());
+            inner.fetched_on_use.push(name.to_string());
+        }
     }
 
     fn persist(&self) {
@@ -202,6 +222,15 @@ impl App {
         }
     }
 
+    /// A stopped job's worker keeps reporting `running` for a moment, as the real one does.
+    fn job_running(&self, job: &Job) -> bool {
+        if job.status == Status::Downloading {
+            return true;
+        }
+        let lag = Duration::from_millis(self.mode_u64("pause-lag-ms").unwrap_or(0));
+        job.stopped_at.is_some_and(|t| t.elapsed() < lag)
+    }
+
     fn snapshot(&self, job: &Job) -> Value {
         let bytes = self.job_bytes(job);
         let status = match &job.status {
@@ -214,7 +243,7 @@ impl App {
             "type": job.kind,
             "model_name": job.name,
             "status": status,
-            "running": job.status == Status::Downloading,
+            "running": self.job_running(job),
             "file": "fake.gguf",
             "file_index": 1,
             "total_files": 1,
@@ -241,6 +270,10 @@ fn err(status: u16, code: &str, message: &str) -> Response {
         Json(json!({"error": {"message": message, "code": code, "type": "error"}})),
     )
         .into_response()
+}
+
+fn modes_has(app: &App, key: &str) -> bool {
+    app.flag(key)
 }
 
 fn parse_modes(s: &str) -> HashMap<String, String> {
@@ -382,7 +415,7 @@ async fn main() {
         inner: Mutex::new(inner),
     });
 
-    if watchdog {
+    if watchdog && !modes_has(&app, "no-watchdog") {
         let app = app.clone();
         std::thread::spawn(move || {
             use std::io::Read;
@@ -450,7 +483,8 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
-    let authorised = supplied.as_deref() == Some(format!("Bearer {}", app.key).as_str());
+    let authorised = app.flag("ignore-key")
+        || supplied.as_deref() == Some(format!("Bearer {}", app.key).as_str());
     let method = req.method().to_string();
     let query = req.uri().query().unwrap_or("").to_string();
     let is_fake = path.starts_with("/fake/");
@@ -492,7 +526,7 @@ async fn health(State(app): State<Shared>) -> Json<Value> {
         "version": "fake-1.0",
         "model_loaded": loaded,
         "all_models_loaded": loaded.iter().map(|m| json!({"model_name": m, "type": "llm"})).collect::<Vec<_>>(),
-        "websocket_port": app.ws_port,
+        "websocket_port": if app.flag("bad-ws-port") { app.ws_port.wrapping_add(1) } else { app.ws_port },
         "max_models": {"llm": 1, "embedding": 1},
     }))
 }
@@ -548,6 +582,7 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
 async fn models(State(app): State<Shared>) -> Json<Value> {
     let mut inner = app.inner();
     app.tick(&mut inner);
+    let half = app.flag("half-present");
     let data: Vec<Value> = CATALOG
         .iter()
         .map(|(name, size, recipe, labels)| {
@@ -560,7 +595,7 @@ async fn models(State(app): State<Shared>) -> Json<Value> {
                 "downloaded": present,
                 "labels": labels.split(',').collect::<Vec<_>>(),
                 "checkpoint_status": [
-                    {"type": "main", "present": present, "required": true},
+                    {"type": "main", "present": present && !half, "required": true},
                     {"type": "npu_cache", "present": false, "required": false},
                 ],
             })
@@ -592,6 +627,7 @@ fn start_job(app: &App, inner: &mut Inner, kind: &'static str, name: String, tot
         base,
         started: Instant::now(),
         status: Status::Downloading,
+        stopped_at: None,
     };
     let snap = app.snapshot(&job);
     inner.jobs.push(job);
@@ -660,11 +696,18 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
             let job = &mut inner.jobs[pos];
             job.base = bytes;
             job.status = Status::Paused;
+            job.stopped_at = Some(Instant::now());
             let snap = app.snapshot(job);
             app.persist_locked(&mut inner);
             Json(snap).into_response()
         }
         "remove" => {
+            let busy = app.job_running(&inner.jobs[pos]);
+            let first = app.flag("conflict-first-remove") && inner.conflicts == 0;
+            if busy || first {
+                inner.conflicts += 1;
+                return err(409, "conflict", "the download worker is still running");
+            }
             let job = inner.jobs.remove(pos);
             inner.partial.insert(job.name, bytes);
             app.persist_locked(&mut inner);
@@ -682,7 +725,8 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         return err(404, "model_not_found", "model is not registered");
     }
     if !inner.downloaded.contains(&name) {
-        return err(400, "model_not_downloaded", "model is not downloaded");
+        inner.downloaded.push(name.clone());
+        inner.fetched_on_use.push(name.clone());
     }
     inner.loaded = Some(name.clone());
     Json(json!({"status": "success", "model_name": name})).into_response()
@@ -712,6 +756,7 @@ fn default_chat_content(body: &Value) -> String {
 }
 
 async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    app.touch_model(body["model"].as_str().unwrap_or(""));
     let scripted = app.inner().script.pop_front();
     let spec = scripted.unwrap_or_else(|| json!({"content": default_chat_content(&body)}));
     if let Some(status) = spec["status"].as_u64() {
@@ -811,7 +856,8 @@ fn fake_vector(text: &str) -> Vec<f32> {
     v
 }
 
-async fn embeddings(Json(body): Json<Value>) -> Json<Value> {
+async fn embeddings(State(app): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    app.touch_model(body["model"].as_str().unwrap_or(""));
     let inputs: Vec<String> = match &body["input"] {
         Value::String(s) => vec![s.clone()],
         Value::Array(a) => a
@@ -841,6 +887,7 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
             fields.insert(name, json!(field.text().await.unwrap_or_default()));
         }
     }
+    app.touch_model(fields.get("model").and_then(|m| m.as_str()).unwrap_or(""));
     app.inner().log.push(json!({
         "multipart": true, "fields": fields, "file_name": file_name, "file_len": file_len,
     }));
@@ -859,7 +906,8 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
     Json(json!({"text": " hello world"})).into_response()
 }
 
-async fn speech(Json(body): Json<Value>) -> Response {
+async fn speech(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    app.touch_model(body["model"].as_str().unwrap_or(""));
     let mut wav = b"RIFF\x24\x00\x00\x00WAVEfmt ".to_vec();
     wav.extend_from_slice(&[
         16, 0, 0, 0, 1, 0, 1, 0, 0x80, 0xbb, 0, 0, 0, 0x77, 1, 0, 2, 0, 16, 0,
@@ -877,6 +925,9 @@ async fn speech(Json(body): Json<Value>) -> Response {
 }
 
 async fn shutdown(State(app): State<Shared>) -> Json<Value> {
+    if app.flag("hang-shutdown") {
+        tokio::time::sleep(Duration::from_secs(60)).await;
+    }
     app.cleanup();
     tokio::spawn(async {
         tokio::time::sleep(Duration::from_millis(100)).await;
@@ -932,6 +983,8 @@ async fn fake_stats(State(app): State<Shared>) -> Json<Value> {
         "port": app.port,
         "downloaded": inner.downloaded,
         "backends": inner.backends,
+        "fetched_on_use": inner.fetched_on_use,
+        "conflicts": inner.conflicts,
         "jobs": inner.jobs.iter().map(|j| &j.id).collect::<Vec<_>>(),
     }))
 }

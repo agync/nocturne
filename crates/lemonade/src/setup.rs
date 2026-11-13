@@ -80,7 +80,11 @@ impl Step {
 
 enum Fail {
     Error(SetupError),
-    Disk { remaining: u64 },
+    /// `remaining` is what is still to fetch; `short` is how far under the engine says it is.
+    Disk {
+        remaining: u64,
+        short: Option<u64>,
+    },
 }
 
 enum Begin {
@@ -102,6 +106,7 @@ fn classify(message: &str) -> Classified {
         "enospc",
         "not enough space",
         "out of space",
+        "insufficient disk space",
     ]
     .iter()
     .any(|k| m.contains(k))
@@ -125,6 +130,31 @@ fn classify(message: &str) -> Classified {
         Classified::Network
     } else {
         Classified::Other
+    }
+}
+
+/// How many bytes short the engine says the disk is, from
+/// "Insufficient disk space: download requires 2.4 GB but only 0.3 GB is available on ...".
+/// Its gigabytes are 1024 cubed, written to one decimal place.
+fn disk_shortfall(message: &str) -> Option<u64> {
+    fn number_after(text: &str, marker: &str) -> Option<f64> {
+        let rest = &text[text.find(marker)? + marker.len()..];
+        let end = rest
+            .find(|c: char| !(c.is_ascii_digit() || c == '.'))
+            .unwrap_or(rest.len());
+        rest[..end].parse().ok()
+    }
+    let lower = message.to_lowercase();
+    let need = number_after(&lower, "requires ")?;
+    let have = number_after(&lower, "but only ")?;
+    Some(((need - have).max(0.0) * GIB as f64).round() as u64)
+}
+
+/// A guess at what installing a backend downloads, for the disk check before setup starts.
+fn backend_estimate(recipe: &str, backend: &str) -> u64 {
+    match (recipe, backend) {
+        ("llamacpp", "rocm") => 1_000_000_000,
+        _ => 150_000_000,
     }
 }
 
@@ -183,8 +213,18 @@ pub struct Setup {
 
 impl Drop for Setup {
     fn drop(&mut self) {
-        if let Some(handle) = self.inner.ctl().handle.take() {
-            handle.abort();
+        let running = {
+            let mut ctl = self.inner.ctl();
+            if let Some(handle) = ctl.handle.take() {
+                handle.abort();
+            }
+            std::mem::take(&mut ctl.running)
+        };
+        if running && let Ok(rt) = tokio::runtime::Handle::try_current() {
+            let control = self.inner.control.clone();
+            rt.spawn(async move {
+                let _ = control.set_online(false).await;
+            });
         }
     }
 }
@@ -403,7 +443,7 @@ impl Inner {
         if self.ctl().running {
             return Ok(());
         }
-        let (ram, free, _info) = self.host().await;
+        let (ram, free, info) = self.host().await;
         self.describe_host(ram, free);
         if ram < u64::from(tier::min_ram_gib(tier)) * GIB {
             self.update(|v| {
@@ -413,9 +453,20 @@ impl Inner {
             });
             return Ok(());
         }
-        let remaining: u64 = self.missing(tier).await?.iter().map(|c| c.bytes).sum();
+        let models: u64 = self.missing(tier).await?.iter().map(|c| c.bytes).sum();
+        let backends: u64 = ["llamacpp", "whispercpp", "kokoro"]
+            .into_iter()
+            .map(|recipe| {
+                let backend = tier::choose_backend(&info, recipe);
+                match info.backend_state(recipe, backend) {
+                    BackendState::Installed => 0,
+                    _ => backend_estimate(recipe, backend),
+                }
+            })
+            .sum();
+        let remaining = models + backends;
         if free < remaining + DISK_HEADROOM {
-            self.disk_failed(remaining);
+            self.disk_failed(remaining, None);
             return Ok(());
         }
         self.launch(tier);
@@ -435,6 +486,7 @@ impl Inner {
             if let Err(fail) = result {
                 inner.fail(fail).await;
             }
+            let _ = inner.control.set_online(false).await;
             let mut ctl = inner.ctl();
             ctl.running = false;
             ctl.job = None;
@@ -480,9 +532,12 @@ impl Inner {
         self.start(tier).await
     }
 
-    fn disk_failed(&self, remaining: u64) {
+    fn disk_failed(&self, remaining: u64, short: Option<u64>) {
         let free = self.view.borrow().free_disk_bytes as u64;
-        let needed = (remaining + DISK_HEADROOM).saturating_sub(free).max(GIB);
+        let needed = match short {
+            Some(short) => short + DISK_HEADROOM,
+            None => (remaining + DISK_HEADROOM).saturating_sub(free).max(GIB),
+        };
         self.update(|v| {
             v.phase = SetupPhase::Failed;
             v.paused = None;
@@ -493,10 +548,10 @@ impl Inner {
 
     async fn fail(&self, fail: Fail) {
         match fail {
-            Fail::Disk { remaining } => {
+            Fail::Disk { remaining, short } => {
                 let (_, free, _) = self.host().await;
                 self.update(|v| v.free_disk_bytes = free as f64);
-                self.disk_failed(remaining);
+                self.disk_failed(remaining, short);
             }
             Fail::Error(e) => self.update(|v| {
                 v.phase = SetupPhase::Failed;
@@ -719,6 +774,7 @@ impl Inner {
                             let (done, total) = lock(&self.progress).totals();
                             return Err(Fail::Disk {
                                 remaining: total.saturating_sub(done),
+                                short: disk_shortfall(&message),
                             });
                         }
                         Classified::Network => {
@@ -814,15 +870,14 @@ impl Inner {
             match job.status.as_str() {
                 "downloading" | "queued" if !job.finished() => return Ok(Begin::Running),
                 _ if job.finished() => return Ok(Begin::Finished(Some(job))),
-                _ => {
-                    let _ = self.client.control(&id, Action::Remove).await;
-                }
+                _ => self.remove_stopped(&id).await,
             }
         }
-        let started = match step {
-            Step::Model(c) => self.client.pull(c.model).await,
-            Step::Backend { recipe, backend } => self.client.install(recipe, backend).await,
-        };
+        let mut started = self.start_job(step).await;
+        if matches!(started, Err(RuntimeError::Rejected { status: 409, .. })) {
+            self.nap(self.opts.poll).await;
+            started = self.start_job(step).await;
+        }
         match started {
             Ok(job) if job.finished() => Ok(Begin::Finished(Some(job))),
             Ok(_) => Ok(Begin::Running),
@@ -831,7 +886,43 @@ impl Inner {
                 Err(None)
             }
             Err(e) if transient(&e) => Err(None),
+            Err(RuntimeError::Server { message, .. } | RuntimeError::Rejected { message, .. })
+                if matches!(classify(&message), Classified::Disk) =>
+            {
+                let (done, total) = lock(&self.progress).totals();
+                Err(Some(Fail::Disk {
+                    remaining: total.saturating_sub(done),
+                    short: disk_shortfall(&message),
+                }))
+            }
             Err(_) => Err(Some(Fail::Error(SetupError::EngineFailed))),
+        }
+    }
+
+    async fn start_job(&self, step: &Step) -> Result<Download, RuntimeError> {
+        match step {
+            Step::Model(c) => self.client.pull(c.model).await,
+            Step::Backend { recipe, backend } => self.client.install(recipe, backend).await,
+        }
+    }
+
+    /// Removes a stopped job once its worker has let go, trying once more on a conflict.
+    async fn remove_stopped(&self, id: &str) {
+        for _ in 0..200 {
+            match self.client.downloads().await {
+                Ok(jobs) if jobs.iter().any(|j| j.id == id && j.running) => {
+                    self.nap(self.opts.poll).await;
+                }
+                _ => break,
+            }
+        }
+        for attempt in 0..2 {
+            match self.client.control(id, Action::Remove).await {
+                Err(RuntimeError::Rejected { status: 409, .. }) if attempt == 0 => {
+                    self.nap(self.opts.poll).await;
+                }
+                _ => break,
+            }
         }
     }
 
@@ -894,5 +985,32 @@ impl Inner {
         }
         let _ = self.client.control(&step.id(), Action::Remove).await;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_engines_disk_message() {
+        let m = "Insufficient disk space: download requires 2.4 GB but only 0.3 GB is available on /models";
+        let short = disk_shortfall(m).unwrap() as f64 / GIB as f64;
+        assert!((short - 2.1).abs() < 1e-6, "{short}");
+        assert!(matches!(classify(m), Classified::Disk));
+        assert_eq!(
+            disk_shortfall("download requires 1.0 GB but only 3.0 GB"),
+            Some(0)
+        );
+        assert_eq!(disk_shortfall("No space left on device"), None);
+        assert!(matches!(
+            classify("No space left on device"),
+            Classified::Disk
+        ));
+        assert!(matches!(
+            classify("could not resolve host"),
+            Classified::Network
+        ));
+        assert!(matches!(classify("checksum mismatch"), Classified::Other));
     }
 }

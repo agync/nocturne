@@ -257,11 +257,7 @@ async fn statuses_map_to_error_variants() {
         .unwrap_err();
     assert!(matches!(missing, RuntimeError::NotFound(_)), "{missing:?}");
 
-    let rejected = fake
-        .client
-        .load("Whisper-Tiny", &LoadOptions::default())
-        .await
-        .unwrap_err();
+    let rejected = fake.client.set(&json!({})).await.unwrap_err();
     assert!(
         matches!(rejected, RuntimeError::Rejected { status: 400, .. }),
         "{rejected:?}"

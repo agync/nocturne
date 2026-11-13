@@ -13,6 +13,8 @@ pub struct Settings<'a> {
     pub models_dir: &'a Path,
     /// True except while the person has approved a download.
     pub offline: bool,
+    /// Stops the engine fetching backend executables; on except during setup.
+    pub no_fetch_executables: bool,
     pub websocket_port: u16,
     pub llamacpp_backend: Option<&'a str>,
     pub whispercpp_backend: Option<&'a str>,
@@ -35,6 +37,7 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
         ("broadcast", json!(false)),
         ("models_dir", json!(models_dir)),
         ("offline", json!(settings.offline)),
+        ("no_fetch_executables", json!(settings.no_fetch_executables)),
         ("auto_check_model_updates", json!(false)),
         ("auto_update_models", json!(false)),
         ("inhibit_suspend", json!(false)),
@@ -84,6 +87,7 @@ mod tests {
         Settings {
             models_dir: models,
             offline: true,
+            no_fetch_executables: true,
             websocket_port: 41234,
             llamacpp_backend: None,
             whispercpp_backend: None,
@@ -99,6 +103,7 @@ mod tests {
         assert_eq!(v["host"], "127.0.0.1");
         assert_eq!(v["broadcast"], false);
         assert_eq!(v["offline"], true);
+        assert_eq!(v["no_fetch_executables"], true);
         assert_eq!(v["websocket_port"], 41234);
         assert_eq!(v["telemetry"]["enabled"], false);
         assert_eq!(v["auto_update_models"], false);

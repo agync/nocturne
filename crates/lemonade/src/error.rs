@@ -33,6 +33,8 @@ pub enum RuntimeError {
     BadResponse(String),
     #[error("the engine is offline by policy")]
     Offline,
+    #[error("{0} is not on this machine")]
+    NotInstalled(String),
 }
 
 impl From<std::io::Error> for RuntimeError {
@@ -53,6 +55,7 @@ impl From<RuntimeError> for MindError {
             | RuntimeError::BundleMissing(_)
             | RuntimeError::NoPort(_)
             | RuntimeError::NotFound(_)
+            | RuntimeError::NotInstalled(_)
             | RuntimeError::Offline => MindError::Unavailable,
             RuntimeError::Rejected { status: 409, .. } => MindError::Busy,
             other => MindError::Failed(other.to_string()),

@@ -21,7 +21,13 @@ const PORT_TRIES: u32 = 5;
 const RESTART_WINDOW: Duration = Duration::from_secs(3600);
 const LIVE_POLL: Duration = Duration::from_millis(100);
 const HUNG_AFTER: u32 = 3;
-const GRACE: Duration = Duration::from_secs(10);
+/// How long each stage of a stop may take: the request, the wait after it, SIGTERM, SIGKILL.
+/// Together about twelve seconds. A process that exits without running `Drop` (as a Tauri
+/// `exit()` does) skips all of this; the engine's own watchdog then ends it, in about six seconds.
+const SHUTDOWN_REQUEST: Duration = Duration::from_secs(2);
+const AFTER_REQUEST: Duration = Duration::from_secs(4);
+const AFTER_TERM: Duration = Duration::from_secs(4);
+const AFTER_KILL: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone)]
 pub struct SupervisorOptions {
@@ -55,6 +61,8 @@ pub enum RuntimeState {
 
 enum Cmd {
     Shutdown(oneshot::Sender<Result<(), RuntimeError>>),
+    /// Stop the engine and start it again, so launch-time settings take effect.
+    Relaunch(oneshot::Sender<Result<(), RuntimeError>>),
 }
 
 struct Shared {
@@ -70,6 +78,7 @@ pub struct Control {
     dirs: Dirs,
     client: Client,
     shared: Arc<Shared>,
+    cmd: mpsc::Sender<Cmd>,
 }
 
 impl Control {
@@ -81,11 +90,20 @@ impl Control {
         self.client.clone()
     }
 
+    /// Lets the engine reach the internet (for a download the person approved) or not, and
+    /// fetch executables or not. The engine reads both only when it starts, so a change
+    /// relaunches it and this returns once the new one answers. The choice outlives a restart.
     pub async fn set_online(&self, online: bool) -> Result<(), RuntimeError> {
-        self.shared.online.store(online, Ordering::SeqCst);
-        self.client
-            .set(&serde_json::json!({ "offline": !online }))
+        let before = self.shared.online.swap(online, Ordering::SeqCst);
+        if before == online {
+            return Ok(());
+        }
+        let (tx, rx) = oneshot::channel();
+        self.cmd
+            .send(Cmd::Relaunch(tx))
             .await
+            .map_err(|_| RuntimeError::Unavailable)?;
+        rx.await.map_err(|_| RuntimeError::Unavailable)?
     }
 }
 
@@ -184,8 +202,7 @@ impl Supervisor {
             .map(|t| t.elapsed())
     }
 
-    /// Lets the engine reach the internet (for a download the person approved) or not.
-    /// The choice outlives a restart.
+    /// See [`Control::set_online`].
     pub async fn set_online(&self, online: bool) -> Result<(), RuntimeError> {
         self.control().set_online(online).await
     }
@@ -196,6 +213,7 @@ impl Supervisor {
             dirs: self.dirs.clone(),
             client: self.client.clone(),
             shared: self.shared.clone(),
+            cmd: self.cmd.clone(),
         }
     }
 
@@ -263,12 +281,19 @@ impl Actor {
         let mut first = Some(first);
         let mut crashes: VecDeque<Instant> = VecDeque::new();
         let mut attempt = 0u32;
+        let mut relaunch: Option<oneshot::Sender<Result<(), RuntimeError>>> = None;
         loop {
             let launched = tokio::select! {
                 r = self.launch() => r,
                 c = cmd.recv() => {
-                    if let Some(Cmd::Shutdown(reply)) = c {
-                        let _ = reply.send(Ok(()));
+                    match c {
+                        Some(Cmd::Relaunch(reply)) => {
+                            let _ = reply.send(Err(RuntimeError::Unavailable));
+                        }
+                        Some(Cmd::Shutdown(reply)) => {
+                            let _ = reply.send(Ok(()));
+                        }
+                        None => {}
                     }
                     self.set_state(RuntimeState::Stopped);
                     return;
@@ -279,14 +304,24 @@ impl Actor {
                     if let Some(f) = first.take() {
                         let _ = f.send(Ok(()));
                     }
+                    if let Some(reply) = relaunch.take() {
+                        let _ = reply.send(Ok(()));
+                    }
                     match self.supervise(running, &mut cmd).await {
                         Exit::Shutdown => return,
+                        Exit::Relaunch(reply) => {
+                            relaunch = Some(reply);
+                            continue;
+                        }
                         Exit::Crashed(why) => {
                             tracing::warn!("engine stopped unexpectedly: {why}");
                         }
                     }
                 }
                 Err(e) => {
+                    if let Some(reply) = relaunch.take() {
+                        let _ = reply.send(Err(e.clone()));
+                    }
                     if let Some(f) = first.take() {
                         self.set_state(RuntimeState::Stopped);
                         let _ = f.send(Err(e));
@@ -316,11 +351,18 @@ impl Actor {
             tokio::select! {
                 _ = tokio::time::sleep(delay) => {}
                 c = cmd.recv() => {
-                    if let Some(Cmd::Shutdown(reply)) = c {
-                        let _ = reply.send(Ok(()));
+                    match c {
+                        Some(Cmd::Relaunch(reply)) => relaunch = Some(reply),
+                        Some(Cmd::Shutdown(reply)) => {
+                            let _ = reply.send(Ok(()));
+                            self.set_state(RuntimeState::Stopped);
+                            return;
+                        }
+                        None => {
+                            self.set_state(RuntimeState::Stopped);
+                            return;
+                        }
                     }
-                    self.set_state(RuntimeState::Stopped);
-                    return;
                 }
             }
         }
@@ -331,8 +373,16 @@ impl Actor {
         self.client.set_endpoint(None);
         self.clear_ready();
         self.set_state(RuntimeState::Failed { reason });
-        if let Some(Cmd::Shutdown(reply)) = cmd.recv().await {
-            let _ = reply.send(Ok(()));
+        while let Some(c) = cmd.recv().await {
+            match c {
+                Cmd::Shutdown(reply) => {
+                    let _ = reply.send(Ok(()));
+                    return;
+                }
+                Cmd::Relaunch(reply) => {
+                    let _ = reply.send(Err(RuntimeError::Unavailable));
+                }
+            }
         }
     }
 
@@ -368,13 +418,14 @@ impl Actor {
                 &config::Settings {
                     models_dir: &self.dirs.models(),
                     offline: !online,
+                    no_fetch_executables: !online,
                     websocket_port: ws_port,
                     llamacpp_backend: llama.as_deref(),
                     whispercpp_backend: whisper.as_deref(),
                 },
             )?;
             let mut running = self.spawn(port, &key)?;
-            match self.await_ready(&mut running, port, &key).await {
+            match self.await_ready(&mut running, port, ws_port, &key).await {
                 Ok(version) => {
                     self.client.set_endpoint(Some(Endpoint { port, key }));
                     *self
@@ -442,6 +493,7 @@ impl Actor {
         &self,
         running: &mut Running,
         port: u16,
+        ws_port: u16,
         key: &str,
     ) -> Result<String, Launch> {
         let probe = Client::new(port, key);
@@ -452,7 +504,21 @@ impl Actor {
             }
             if probe.live().await.is_ok() {
                 match probe.health().await {
-                    Ok(h) => return Ok(h.version),
+                    Ok(h) => {
+                        if h.websocket_port != Some(ws_port) {
+                            return Err(Launch::Retry(format!(
+                                "the engine reports websocket port {:?}, not {ws_port}",
+                                h.websocket_port
+                            )));
+                        }
+                        let wrong = Client::new(port, "not-the-key");
+                        if wrong.health().await != Err(RuntimeError::Unauthorized) {
+                            return Err(Launch::Retry(
+                                "the engine does not enforce its key".into(),
+                            ));
+                        }
+                        return Ok(h.version);
+                    }
                     Err(RuntimeError::Unauthorized) => {
                         return Err(Launch::Retry("something else holds the port".into()));
                     }
@@ -497,39 +563,45 @@ impl Actor {
                     }
                 }
                 c = cmd.recv() => {
-                    let result = match c {
+                    let exit = match c {
                         Some(Cmd::Shutdown(reply)) => {
                             let r = self.stop_gracefully(&mut running).await;
-                            let _ = reply.send(r.clone());
-                            r
+                            let _ = reply.send(r);
+                            self.set_state(RuntimeState::Stopped);
+                            Exit::Shutdown
+                        }
+                        Some(Cmd::Relaunch(reply)) => {
+                            let _ = self.stop_gracefully(&mut running).await;
+                            self.set_state(RuntimeState::Starting);
+                            Exit::Relaunch(reply)
                         }
                         None => {
                             stop_hard(&mut running).await;
-                            Ok(())
+                            self.set_state(RuntimeState::Stopped);
+                            Exit::Shutdown
                         }
                     };
                     self.client.set_endpoint(None);
                     self.clear_ready();
-                    self.set_state(RuntimeState::Stopped);
-                    let _ = result;
-                    return Exit::Shutdown;
+                    return exit;
                 }
             }
         }
     }
 
-    /// Shutdown request, then SIGTERM, then SIGKILL, each given ten seconds.
+    /// The shutdown request, then SIGTERM, then SIGKILL, each stage with its own short limit.
     async fn stop_gracefully(&self, running: &mut Running) -> Result<(), RuntimeError> {
-        let _ = self.client.shutdown().await;
-        drop(running.stdin.take());
-        if wait_exit(running, GRACE).await.is_none() {
+        let _ = tokio::time::timeout(SHUTDOWN_REQUEST, self.client.shutdown()).await;
+        if wait_exit(running, AFTER_REQUEST).await.is_none() {
+            drop(running.stdin.take());
             #[cfg(unix)]
             let _ = running.child.signal(15);
-            if wait_exit(running, GRACE).await.is_none() {
+            if wait_exit(running, AFTER_TERM).await.is_none() {
                 let _ = running.child.start_kill();
-                wait_exit(running, GRACE).await;
+                wait_exit(running, AFTER_KILL).await;
             }
         }
+        drop(running.stdin.take());
         reap_group(running).await;
         let left = group_members(running.pgid);
         if left.is_empty() {
@@ -544,6 +616,7 @@ impl Actor {
 
 enum Exit {
     Shutdown,
+    Relaunch(oneshot::Sender<Result<(), RuntimeError>>),
     Crashed(String),
 }
 
@@ -571,7 +644,7 @@ async fn wait_exit(running: &mut Running, within: Duration) -> Option<()> {
 async fn stop_hard(running: &mut Running) {
     drop(running.stdin.take());
     let _ = running.child.start_kill();
-    let _ = tokio::time::timeout(GRACE, running.child.wait()).await;
+    let _ = tokio::time::timeout(AFTER_KILL, running.child.wait()).await;
     reap_group(running).await;
 }
 
