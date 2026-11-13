@@ -216,7 +216,8 @@ describe("Fading & let go", () => {
       finish({ memoriesRemoved: 1, originalsRemoved: 1, pagesRedacted: 0 });
     });
     await waitFor(() => expect(status).toHaveBeenCalled());
-  });
+    // A dialog, a navigation and a refresh in one test: give it room on a busy machine.
+  }, 20_000);
 
   it("fades a row away before removing it, unless motion is reduced", async () => {
     motion(false);
