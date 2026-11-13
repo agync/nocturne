@@ -1,6 +1,7 @@
 import type {
   AdvancedView,
   AskDelta,
+  Edition,
   EngineStatus,
   EntityKind,
   EntityView,
@@ -22,6 +23,7 @@ import type {
   SettingsView,
   SetupView,
   Source,
+  SpokenPage,
   Tier,
   WhichResolved,
 } from "./bindings";
@@ -144,7 +146,16 @@ export interface EngineClient {
   pause(until: string | null): Promise<void>;
   resume(): Promise<void>;
   getAdvanced(): Promise<AdvancedView>;
-  speakPage(date: string): Promise<string>;
+  /** The spoken edition of a page, made once and kept; private lines are never spoken. */
+  speakPage(date: string): Promise<SpokenPage>;
+  /** A saved page in another edition (audio and print leave private lines out). */
+  getEdition(date: string, edition: Edition): Promise<PageView>;
+  /** Opens the system's print dialog for the page on screen. */
+  printPage(): Promise<void>;
+  /** Opens the system's sound settings, where the microphone is allowed. */
+  openSoundSettings(): Promise<void>;
+  /** The command line that opens quick capture, for a desktop shortcut. */
+  quickKeepCommand(): Promise<string>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

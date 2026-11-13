@@ -2,6 +2,7 @@ import { localDay } from "../../copy/format";
 import type {
   AdvancedView,
   AskDelta,
+  Edition,
   EngineStatus,
   EntityKind,
   EntityView,
@@ -27,6 +28,8 @@ import type {
   SettingsView,
   SetupView,
   Source,
+  SpokenKind,
+  SpokenPage,
   Tier,
   WhichResolved,
 } from "../bindings";
@@ -48,6 +51,34 @@ export interface MockOptions {
 const UNKEEP_MINUTES = 10;
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** The mock voice is silence: each section lasts this long. */
+const MOCK_SECTION_MS = 4000;
+
+/** A silent 8 kHz mono 16-bit WAV of `ms` milliseconds, as a `blob:` URL (the CSP allows it). */
+function mockSpokenUrl(ms: number): string {
+  const rate = 8000;
+  const bytes = Math.floor((rate * ms) / 1000) * 2;
+  const wav = new ArrayBuffer(44 + bytes);
+  const view = new DataView(wav);
+  const text = (at: number, value: string) => {
+    for (let i = 0; i < value.length; i += 1) view.setUint8(at + i, value.charCodeAt(i));
+  };
+  text(0, "RIFF");
+  view.setUint32(4, 36 + bytes, true);
+  text(8, "WAVEfmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  text(36, "data");
+  view.setUint32(40, bytes, true);
+  if (typeof URL.createObjectURL !== "function") return `mock-audio/silence-${ms}.wav`;
+  return URL.createObjectURL(new Blob([wav], { type: "audio/wav" }));
+}
 
 const STOP_WORDS = new Set([
   "what",
@@ -138,6 +169,9 @@ export class MockEngine implements EngineClient {
   private readonly listeners = new Map<EngineEventName, Set<(payload: never) => void>>();
   private readonly previews = new Map<string, { ids: string[]; includeOriginals: boolean }>();
   private counter = 0;
+  /** How many times printing and the sound settings were asked for, for tests. */
+  printed = 0;
+  soundSettingsOpened = 0;
   private readonly snoozed = new Set<string>();
   private tierOffer: Tier | null;
   /** How many times "Tidy anyway" was pressed. */
@@ -960,8 +994,59 @@ export class MockEngine implements EngineClient {
     return advancedSeed({ memories: this.memories.length, items: this.items.length });
   }
 
-  async speakPage(date: string): Promise<string> {
-    return `mock-audio/${date}.wav`;
+  async getEdition(date: string, edition: Edition): Promise<PageView> {
+    const page = await this.getPage(date);
+    page.edition = edition;
+    if (edition === "screen") return page;
+    const hidden = new Set(this.memories.filter((m) => m.private).map((m) => m.id));
+    const open = (line: PageLine) => !line.memoryIds.some((id) => hidden.has(id));
+    let skipped = 0;
+    const keep = (lines: PageLine[]) =>
+      lines.filter((line) => {
+        const ok = open(line);
+        if (!ok) skipped += 1;
+        return ok;
+      });
+    page.needsYou = keep(page.needsYou);
+    page.changed = keep(page.changed);
+    page.letGo = keep(page.letGo);
+    page.upcoming = keep(page.upcoming);
+    page.learned = keep(page.learned);
+    if (page.question?.memoryId && hidden.has(page.question.memoryId)) {
+      page.question = null;
+      skipped += 1;
+    }
+    page.privateSkipped += skipped;
+    return page;
+  }
+
+  async speakPage(date: string): Promise<SpokenPage> {
+    const page = await this.getEdition(date, "audio");
+    const kinds: SpokenKind[] = ["opening"];
+    if (page.needsYou.length > 0) kinds.push("needsYou");
+    if (page.changed.length > 0) kinds.push("changed");
+    if (page.upcoming.length > 0) kinds.push("comingUp");
+    if (page.letGo.length > 0) kinds.push("letGo");
+    if (page.question) kinds.push("question");
+    const durationMs = kinds.length * MOCK_SECTION_MS;
+    return {
+      path: mockSpokenUrl(durationMs),
+      sections: kinds.map((kind, i) => ({ kind, startMs: i * MOCK_SECTION_MS })),
+      durationMs,
+      privateSkipped: page.privateSkipped,
+    };
+  }
+
+  async printPage(): Promise<void> {
+    this.printed += 1;
+  }
+
+  async openSoundSettings(): Promise<void> {
+    this.soundSettingsOpened += 1;
+  }
+
+  async quickKeepCommand(): Promise<string> {
+    return "nocturne --quick-capture";
   }
 }
 

@@ -411,3 +411,42 @@ describe("MockEngine, shared by the screen lanes", () => {
     vi.useRealTimers();
   });
 });
+
+describe("MockEngine editions", () => {
+  it("leaves lines about private memories out of the spoken and printed pages", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const screen = await engine.getEdition("2026-11-13", "screen");
+    const line = screen.needsYou.find((l) => l.memoryIds.length > 0);
+    expect(line).toBeDefined();
+    await engine.setPrivate(line?.memoryIds[0] as string, true);
+
+    for (const edition of ["audio", "print"] as const) {
+      const page = await engine.getEdition("2026-11-13", edition);
+      expect(page.edition).toBe(edition);
+      expect(page.needsYou.map((l) => l.id)).not.toContain(line?.id);
+      expect(page.privateSkipped).toBeGreaterThan(screen.privateSkipped);
+    }
+    expect((await engine.getEdition("2026-11-13", "screen")).needsYou.map((l) => l.id)).toContain(
+      line?.id,
+    );
+  });
+
+  it("speaks the page in sections that start in order and counts what it skipped", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const spoken = await engine.speakPage("2026-11-13");
+    expect(spoken.sections[0]).toEqual({ kind: "opening", startMs: 0 });
+    const starts = spoken.sections.map((s) => s.startMs);
+    expect([...starts].sort((a, b) => a - b)).toEqual(starts);
+    expect(spoken.durationMs).toBeGreaterThan(starts.at(-1) as number);
+    expect(spoken.path.length).toBeGreaterThan(0);
+  });
+
+  it("notes that printing and the sound settings were asked for", async () => {
+    const engine = createMockEngine({ now: NOW });
+    await engine.printPage();
+    await engine.openSoundSettings();
+    expect(engine.printed).toBe(1);
+    expect(engine.soundSettingsOpened).toBe(1);
+    expect(await engine.quickKeepCommand()).toContain("--quick-capture");
+  });
+});

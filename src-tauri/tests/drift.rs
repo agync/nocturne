@@ -7,12 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use nocturne_app_lib::COMMAND_NAMES;
 
 /// Commands the interface does not call, by design.
-const SHELL_ONLY: &[&str] = &[
-    "get_edition",
-    "print_page",
-    "open_sound_settings",
-    "quick_keep_command",
-];
+const SHELL_ONLY: &[&str] = &[];
 
 fn read(rel: &str) -> String {
     let path = format!("{}/{rel}", env!("CARGO_MANIFEST_DIR"));
@@ -166,7 +161,11 @@ fn rust_commands() -> BTreeMap<String, BTreeSet<String>> {
             }
             let keys = split_top(&rest[open..close])
                 .iter()
-                .filter_map(|p| p.split(':').next().map(|n| n.trim().to_string()))
+                .filter_map(|p| {
+                    p.split(':')
+                        .next()
+                        .map(|n| n.trim().trim_start_matches('_').to_string())
+                })
                 .filter(|n| !n.is_empty() && n != "app" && n != "request" && n != "webview")
                 .map(|n| camel(&n))
                 .collect();
