@@ -784,6 +784,37 @@ fn settings_read_and_write_with_validation() {
     assert_eq!(h.code("update_settings", bad), "invalid");
 }
 
+/// The interface says which pace is the default and the mock starts on it; both follow the
+/// engine's real default, so a change there cannot leave the label telling the wrong story.
+#[test]
+fn the_settings_screen_names_the_engines_default_pace() {
+    let h = harness();
+    let real = h.ok("get_settings", json!({}))["lettingGo"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let ui = |rel: &str| {
+        std::fs::read_to_string(format!("{}/../ui/{rel}", env!("CARGO_MANIFEST_DIR")))
+            .unwrap_or_else(|e| panic!("{rel} must exist: {e}"))
+    };
+    let copy: Value = serde_json::from_str(&ui("src/copy/en-GB/settings.json")).unwrap();
+    let labelled: Vec<&str> = copy
+        .as_object()
+        .unwrap()
+        .iter()
+        .filter(|(k, v)| {
+            k.starts_with("settings.letting.")
+                && v.as_str().is_some_and(|v| v.contains("(default)"))
+        })
+        .map(|(k, _)| k.trim_start_matches("settings.letting."))
+        .collect();
+    assert_eq!(labelled, [real.as_str()], "the pace marked as the default");
+    assert!(
+        ui("src/engine/mock/seed/settings.ts").contains(&format!("lettingGo: \"{real}\"")),
+        "the mock starts on the engine's default pace"
+    );
+}
+
 #[test]
 fn privacy_and_advanced_report_what_the_shell_knows() {
     let h = harness();

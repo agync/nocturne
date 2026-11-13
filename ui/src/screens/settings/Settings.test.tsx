@@ -38,7 +38,7 @@ describe("Settings", () => {
       "true",
     );
     expect(screen.getByRole("combobox", { name: "Letting go" })).toHaveDisplayValue(
-      "Gentle (default)",
+      "Normal (default)",
     );
     expect(screen.getByRole("combobox", { name: "Theme · language, theme" })).toHaveDisplayValue(
       "System",

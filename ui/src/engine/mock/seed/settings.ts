@@ -11,7 +11,7 @@ export function settingsSeed(): SettingsView {
     shortcutAvailable: true,
     inboxFolder: null,
     startAtLogin: true,
-    lettingGo: "gentle",
+    lettingGo: "normal",
     theme: "system",
     language: "en-GB",
     checkUpdates: false,
