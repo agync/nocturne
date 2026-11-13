@@ -20,10 +20,14 @@
   "include": [
     "src",
     "e2e",
+    "e2e-away",
+    "interop",
     "scripts",
     "vite.config.ts",
     "vite.phone.config.ts",
-    "playwright.config.ts"
+    "vitest.interop.config.ts",
+    "playwright.config.ts",
+    "playwright.away.config.ts"
   ],
   "exclude": ["src/engine/bindings"]
 }
