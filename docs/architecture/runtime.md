@@ -48,7 +48,7 @@ people never install or see a separate server.
 | Launch | `lemond` with a scrubbed environment, a random loopback port and a random key per launch; the log says `the private engine <version> is ready on 127.0.0.1:<port>` |
 | Isolation | Every working folder (`cache`, `config`, `models`, `logs`, an owner-only `run`) is under `engine/` in the data folder, never beside the program, so a read-only install works; no discovery beacon |
 | First run | `GET /v1/system-info` picks the hardware tier and backends; `POST /v1/install` and `POST /v1/pull` download with progress |
-| Steady state | `POST /v1/load` and `/v1/unload` on demand; models unload when idle so games and other apps get the memory back |
+| Steady state | `POST /v1/load` and `/v1/unload` on demand; models unload when idle so games and other apps get the memory back (see [Running on 8 GB](#running-on-8-gb)) |
 | Understanding | `/v1/audio/transcriptions`, vision chat for images, `/v1/chat/completions` for extraction and answers, `/v1/embeddings` for recall |
 | Voice | `/v1/audio/speech` reads the page aloud |
 | Health | `GET /live` and `/v1/health`; the supervisor restarts `lemond` on failure with backoff |
@@ -64,12 +64,72 @@ download plus 2 GiB). The source of truth is `crates/lemonade/src/tier.rs`.
 | Large | 60 GiB | `Qwen3.6-35B-A3B-MTP-GGUF` | `Whisper-Large-v3-Turbo` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 26.4 GB |
 | Standard | 28 GiB | `Qwen3.5-9B-GGUF` | `Whisper-Small` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 8.4 GB |
 | Small | 14 GiB | `Qwen3.5-4B-MTP-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 4.8 GB |
+| Tiny | 7 GiB | `Qwen3.5-2B-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 3.2 GB |
 
-Below the Small tier, or without the free disk, setup stops before downloading anything and says
-why. The backend follows the hardware: Vulkan on an integrated GPU, ROCm on a discrete AMD GPU,
-otherwise the CPU. When the machine runs short of memory later, the app offers the next smaller
-tier rather than failing, and keeps the working one until the smaller one is ready. The tier is
-shown in plain words; model names appear only in the advanced details view.
+The detected tier is the one offered first; the person may choose any smaller one that fits, and
+Tiny fits every computer that can run Nocturne at all. Tiny is for 8 GB computers, which report a
+little under 8 GiB (an 8 GB Mac reports exactly 8 GiB). Its answers are simpler and it may miss
+details, and the setup screen says so. Below the Tiny tier, or without the free disk, setup stops
+before downloading anything and says why.
+
+The backend follows the hardware: Metal on a Mac (the engine offers nothing else there), Vulkan on
+an integrated GPU, ROCm on a discrete AMD GPU, otherwise the CPU. When the machine runs short of
+memory later, the app offers the next smaller tier rather than failing (Large to Standard,
+Standard to Small, Small to Tiny; Tiny has nothing smaller), and keeps the working one until the
+smaller one is ready. The tier is shown in plain words; model names appear only in the advanced
+details view.
+
+## Running on 8 GB
+
+An 8 GB computer, an 8 GB MacBook in particular, must keep about 3.5 GB for the system and the
+person's other apps. Nocturne's share, everything included (the app, its web view, the engine and
+the models it has loaded), is therefore at most 4.5 GB at its busiest and close to nothing when it
+has nothing to do.
+
+| Moment | Budget | What is loaded |
+|---|---|---|
+| Idle, window open or closed | 0.5 GB, processor near zero | Nothing but the app and the engine |
+| Reading what was kept (text, photo, voice) | 4.5 GB | The mind, recall and, for a recording, speech |
+| Answering | 4.5 GB | The mind and recall |
+| The overnight tidy | 4.5 GB | The mind and recall |
+| Reading the page aloud | 3.5 GB | The voice on its own |
+| After 30 minutes idle | 0.5 GB | Nothing but the app and the engine |
+
+How Nocturne keeps to it:
+
+| Measure | Where | Effect |
+|---|---|---|
+| Recall loads with an 8192 context | `tier::RECALL_CONTEXT`, saved in the engine's `recipe_options.json` at each launch (the engine raises anything smaller to 8192) | Left to itself the engine gives the recall model 32768, about 3.7 GB of cache it never uses |
+| Small llama.cpp caches on Tiny and Small | `config::llamacpp_args` (`--cache-ram 256 --ctx-checkpoints 4`) in the engine's `config.json`, set at launch from the installed tier and again when the mind is ready | The defaults keep up to 8 GiB of old prompts and 32 snapshots per conversation, which grow with every answer. Standard and Large keep the defaults, which were not measured with these caps |
+| Idle models are unloaded by the engine | `auto_evict` in `config.json`, and `evict_idle_timeout` saved per model by `residency::saved_options` (voice 60 seconds, speech 120, the Tiny mind 180; the other minds and recall keep the engine's 300). A load that saves its own options sends these too, so they are not dropped | Memory goes back to the computer between uses; the next request loads the model again with its saved options. The engine never evicts a model that is serving a request. On a Mac the engine has no memory-pressure eviction, so these timers are the only thing that frees memory there |
+| Every model's context is saved | `residency::saved_options`, and `ctx_size` 8192 in `config.json` as the default | A model loaded with nothing saved would be sized to fill the free memory |
+| One model of each kind at a time | `max_loaded_models` 1 in `config.json` | A second mind never loads beside the first |
+| The voice runs alone on Tiny and Small | `residency::alone`, `Client::set_alone`, and `Mind::ready_to_speak`, called once per page | Before the page is read aloud, every other model that is not busy is unloaded once, so the voice (2 to 3 GB while it speaks) never shares memory with the mind; the engine has no setting for this |
+| No overnight tidy on battery | the scheduler | The night tidy waits for mains power; a catch-up tidy runs on battery only above 40 per cent or when the person asks |
+
+The real end-to-end test (`make e2e-real`, with `NOCTURNE_E2E_TIER=tiny`) samples the memory and
+processor use of the app and every process under it in each phase, on Linux from `/proc` (with
+the graphics memory each process holds) and on a Mac from `/usr/bin/footprint` and `ps` (the
+larger of footprint and resident set, since the footprint leaves out model files the engine
+maps), and writes them to its summary.
+
+Measured on the Tiny tier with this branch's final build, without the test's own use of the
+voice to make a recording; the idle rows come from the real app with its web view, on an earlier
+build of the branch whose idle behaviour is the same:
+
+| Moment | Linux, integrated Radeon (Vulkan) | Mac, Apple M4 Max (Metal) |
+|---|---|---|
+| Idle, window open | 0.43 GB, 0.4 per cent of one core | 0.1 GB footprint; 0.7 per cent of one core without the window |
+| Reading | 5.0 GB | 4.7 GB |
+| Answering | 5.2 GB | 4.4 GB |
+| Reading the page aloud | 2.5 GB | 3.8 GB |
+| Five minutes after the last use | 0.5 GB on average over six minutes | 0.7 GB on average over six minutes |
+
+On a Mac the Tiny tier fits the budget when idle and while answering. It is about 0.2 GB over
+while reading a recording, when the speech model is loaded beside the mind and the recall model
+(1.7 GB with its cache), and about 0.3 GB over while reading a long page aloud, when the voice
+alone grows to 3.7 GB. On Linux with an integrated GPU the model servers hold more graphics
+memory, about 0.7 GB more in all; the voice there stays near 2.5 GB.
 
 ## Packaged layout
 

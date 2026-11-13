@@ -11,7 +11,7 @@ tags: [guide, install, packages, setup]
 ## What your computer needs
 
 Nocturne works on a Linux desktop, on a 64-bit Intel or AMD computer. A Mac package is not published yet. The first time it runs, it checks the memory and free
-space and offers the largest setup the computer can carry comfortably. A smaller setup only means
+space and offers the largest setup the computer can carry comfortably. A smaller setup means
 slower answers and a slower overnight tidy; everything still works.
 
 | Setup | Memory it needs | Free space it needs | One-off download |
@@ -19,9 +19,13 @@ slower answers and a slower overnight tidy; everything still works.
 | Large | 60 GB or more | about 28 GB | about 26 GB |
 | Standard | 28 GB or more | about 11 GB | about 8.5 GB |
 | Small | 14 GB or more | about 7 GB | about 5 GB |
+| Tiny | 7 GB or more | about 5.2 GB | about 3.2 GB |
 
-The free space figure includes 2 GB of room to spare. If the computer has less memory than the
-Small setup needs, Nocturne says so plainly and downloads nothing.
+The free space figure includes 2 GB of room to spare. You can always choose a smaller setup than
+the one offered: it uses less memory, space and battery. Tiny is made for 8 GB computers, which
+report a little under 8 GB; everything works, but its answers are simpler and it may miss details.
+If the computer has less memory than the Tiny setup needs, Nocturne says so plainly and downloads
+nothing.
 
 ## Choose a package
 
