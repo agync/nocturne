@@ -719,9 +719,34 @@ mod tests {
         let source = normalise(prompts::EXAMPLE_NOTE);
         let (items, invalid) = parse_candidates(prompts::EXAMPLE_REPLY, &source).unwrap();
         assert!(invalid.is_empty(), "{invalid:?}");
-        assert_eq!(items.len(), 3, "every memory in it is grounded");
+        assert_eq!(items.len(), 5, "every memory in it is grounded");
         let system = prompts::extraction_system("n");
         assert!(system.contains(prompts::EXAMPLE_NOTE) && system.contains(prompts::EXAMPLE_REPLY));
+    }
+
+    /// The example shows one sentence giving several memories, a relationship said in passing
+    /// among them, and the rules say so in general words.
+    #[test]
+    fn one_sentence_with_several_facts_gives_several_memories() {
+        let source = normalise(prompts::EXAMPLE_NOTE);
+        let (items, _) = parse_candidates(prompts::EXAMPLE_REPLY, &source).unwrap();
+        let sentence_of = |c: &Candidate| {
+            let Some(Span::Quote { text }) = &c.span else {
+                return usize::MAX;
+            };
+            let at = prompts::EXAMPLE_NOTE.find(text.as_str()).unwrap();
+            prompts::EXAMPLE_NOTE[..at].matches(". ").count()
+        };
+        let last = items.iter().filter(|c| sentence_of(c) == 2).count();
+        assert!(last >= 3, "the last sentence gives {last} memories");
+        assert!(
+            items
+                .iter()
+                .any(|c| c.predicate == Predicate::Knows && c.object == "my cousin")
+        );
+        let system = prompts::extraction_system("n");
+        assert!(system.contains("One sentence can hold more than one fact"));
+        assert!(system.contains("How someone is related"));
     }
 
     #[test]
