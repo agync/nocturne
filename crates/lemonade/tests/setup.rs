@@ -599,3 +599,46 @@ async fn an_unfinished_change_of_tier_is_dropped_so_resume_does_not_aim_at_it() 
     assert_eq!(record.completed, Some(Tier::Small));
     rig.sup.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_download_that_stops_on_its_own_is_cleared_and_started_again_through_a_conflict() {
+    let rig = rig(
+        "download-ms=400,pause-itself-ms=100,conflict-first-remove",
+        32,
+    )
+    .await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Small).await.unwrap();
+    // The engine forgets its log when it restarts at the end, so watch while it runs.
+    let mut calls: Vec<String> = Vec::new();
+    while rx.borrow().phase != SetupPhase::Done {
+        let log = raw(&rig.sup, "GET", "/fake/requests", json!({})).await;
+        let seen: Vec<String> = log
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|r| match r["path"].as_str()? {
+                "/v1/pull" | "/v1/install" => Some("start".to_string()),
+                "/v1/downloads/control" => Some(r["body"]["action"].as_str()?.to_string()),
+                _ => None,
+            })
+            .collect();
+        if seen.len() > calls.len() {
+            calls = seen;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // The first download stopped by itself. The refused removal is repeated before the next start.
+    let first_start = calls.iter().position(|c| c == "start").unwrap();
+    let second_start = calls[first_start + 1..]
+        .iter()
+        .position(|c| c == "start")
+        .map(|i| i + first_start + 1)
+        .expect("the download was started again");
+    let removals = calls[first_start..second_start]
+        .iter()
+        .filter(|c| *c == "remove")
+        .count();
+    assert_eq!(removals, 2, "refused, then done: {calls:?}");
+    rig.sup.shutdown().await.unwrap();
+}

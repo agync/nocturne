@@ -8,7 +8,8 @@
 //! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
-//! `conflict-first-remove`, `load-oom`, `load-error`. `POST /fake/crash` kills it on demand.
+//! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms),
+//! `load-oom`, `load-error`. `POST /fake/crash` kills it on demand.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -76,6 +77,8 @@ struct Inner {
     pulls: u64,
     fetched_on_use: Vec<String>,
     conflicts: u64,
+    /// Downloads that have already stopped on their own.
+    self_paused: Vec<String>,
 }
 
 struct App {
@@ -162,6 +165,15 @@ impl App {
                         }
                     }
                     continue;
+                }
+                if let Some(ms) = self.mode_u64("pause-itself-ms")
+                    && job.started.elapsed() >= Duration::from_millis(ms)
+                    && !inner.self_paused.contains(&job.name)
+                {
+                    inner.self_paused.push(job.name.clone());
+                    job.base = bytes;
+                    job.status = Status::Paused;
+                    job.stopped_at = Some(Instant::now());
                 }
                 if self.flag("disk-full") && bytes as f64 >= job.total as f64 * 0.5 {
                     job.base = bytes;
