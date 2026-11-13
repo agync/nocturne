@@ -6,6 +6,7 @@
 //! swaps it when the status changes.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::Arc;
 #[cfg(target_os = "linux")]
 use std::time::Duration;
 
@@ -462,26 +463,53 @@ fn build_menu<R: Runtime>(app: &AppHandle<R>, entries: &[MenuEntry]) -> tauri::R
     Menu::with_items(app, &refs)
 }
 
-/// Follow the status: swap the icon and the menu whenever it changes.
-fn listen<R: Runtime>(app: &AppHandle<R>) {
+/// What the tray shows now: the icon and the menu, from the real status.
+pub type Apply = Arc<dyn Fn(Icon, Vec<MenuEntry>) + Send + Sync>;
+
+/// Follow the status: whenever `status-changed` fires, draw the tray again.
+///
+/// The event is a trigger only. Any page in a window can emit an event with any payload, so the
+/// payload is never read: the status is computed fresh from the app's own state. The listener is
+/// `listen_any` because the app broadcasts its events (`emit` has no target), and a listener
+/// scoped to one target would hear less, not be safer.
+pub fn follow<R: Runtime>(app: &AppHandle<R>, apply: Apply) {
     let handle = app.clone();
-    app.listen_any(EVENT_STATUS, move |event| {
-        let Ok(status) = serde_json::from_str::<EngineStatus>(event.payload()) else {
-            return;
-        };
+    let on_change = apply.clone();
+    app.listen_any(EVENT_STATUS, move |_| {
         let handle = handle.clone();
-        tauri::async_runtime::spawn(async move { show(&handle, status).await });
+        let apply = on_change.clone();
+        tauri::async_runtime::spawn(async move { draw(&handle, &apply).await });
     });
     let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let status = refresh_status(&handle).await;
-        show(&handle, status).await;
-    });
+    tauri::async_runtime::spawn(async move { draw(&handle, &apply).await });
 }
 
-/// Draw the tray for a status. The public needs-you count is read here, so a private memory
-/// never reaches the menu.
-async fn show<R: Runtime>(app: &AppHandle<R>, status: EngineStatus) {
+fn listen<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    follow(
+        app,
+        Arc::new(move |icon, model| {
+            let handle = handle.clone();
+            let _ = handle.clone().run_on_main_thread(move || {
+                let Some(tray) = handle.tray_by_id(ID) else {
+                    return;
+                };
+                let result = Image::from_bytes(icon.png())
+                    .and_then(|image| tray.set_icon(Some(image)))
+                    .and_then(|()| build_menu(&handle, &model))
+                    .and_then(|menu| tray.set_menu(Some(menu)));
+                if let Err(e) = result {
+                    tracing::warn!("the tray could not be updated: {e}");
+                }
+            });
+        }),
+    );
+}
+
+/// The icon and menu for the status as it is now. The public needs-you count is read here, so a
+/// private memory never reaches the menu.
+pub async fn current<R: Runtime>(app: &AppHandle<R>) -> (Icon, Vec<MenuEntry>) {
+    let status = refresh_status(app).await;
     let state = app.state::<AppState>();
     let public = match state.engine() {
         Ok(engine) => blocking(move || Ok(engine.needs_you_public()?.len() as u32))
@@ -499,20 +527,12 @@ async fn show<R: Runtime>(app: &AppHandle<R>, status: EngineStatus) {
         state.now(),
         &state.clock.tz(),
     );
-    let icon = icon_for(&status, public);
-    let handle = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        let Some(tray) = handle.tray_by_id(ID) else {
-            return;
-        };
-        let result = Image::from_bytes(icon.png())
-            .and_then(|image| tray.set_icon(Some(image)))
-            .and_then(|()| build_menu(&handle, &model))
-            .and_then(|menu| tray.set_menu(Some(menu)));
-        if let Err(e) = result {
-            tracing::warn!("the tray could not be updated: {e}");
-        }
-    });
+    (icon_for(&status, public), model)
+}
+
+async fn draw<R: Runtime>(app: &AppHandle<R>, apply: &Apply) {
+    let (icon, model) = current(app).await;
+    apply(icon, model);
 }
 
 async fn run<R: Runtime>(app: &AppHandle<R>, action: Action) {

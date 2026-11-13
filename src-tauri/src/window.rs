@@ -98,6 +98,11 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
     {
         state.allow_paths(paths.iter().cloned());
     }
+    if let WindowEvent::Focused(true) = event
+        && window.label() == MAIN
+    {
+        crate::os::on_main_focused(window.app_handle());
+    }
     if let WindowEvent::CloseRequested { api, .. } = event
         && window.label() == MAIN
     {

@@ -10,6 +10,7 @@ use tauri::{AppHandle, Runtime};
 use crate::error::CommandError;
 
 pub mod copy;
+pub mod notify;
 pub mod quick_capture;
 pub mod shortcut;
 pub mod state;
@@ -55,6 +56,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
         shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
     }
     tray::install(app);
+    notify::install(app, &os);
     let handle = app.clone();
     shell.on_exit(Box::new(move || {
         if let Some(os) = handle.try_state::<OsState>() {
@@ -109,7 +111,37 @@ pub async fn apply_settings<R: Runtime>(
 }
 
 /// Everything was deleted: drop what the desktop side remembers.
-pub fn on_delete_everything<R: Runtime>(_app: &AppHandle<R>) {}
+pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(os) = app.try_state::<OsState>() {
+        os.forget_all();
+    }
+}
+
+/// The main window came forward. If today's page is saved, the person is looking at it: record
+/// the open, so the page notification stays quiet. (`get_page` never records an open: a
+/// hidden start still renders the page.)
+pub fn on_main_focused<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>())
+        else {
+            return;
+        };
+        let Ok(engine) = shell.engine() else { return };
+        let today = shell.now().to_zoned(shell.clock.tz()).date();
+        let opened = crate::error::blocking(move || {
+            if engine.page(Some(today))?.is_none() {
+                return Ok(false);
+            }
+            engine.page_opened(today)?;
+            Ok(true)
+        })
+        .await;
+        if opened.unwrap_or(false) {
+            os.update(|f| f.seen = Some(today.to_string()));
+        }
+    });
+}
 
 #[cfg(test)]
 mod tests {

@@ -5,14 +5,16 @@ mod common;
 
 use std::collections::BTreeSet;
 
-use common::harness;
+use common::{harness, wait_for};
 use nocturne_app_lib::COMMAND_NAMES;
 use std::sync::{Arc, Mutex};
 
+use nocturne_app_lib::os::notify::{self, Notifier};
 use nocturne_app_lib::os::shortcut::{self, Registrar};
+use nocturne_app_lib::os::tray::{self, Icon, MenuEntry};
 use nocturne_app_lib::os::{OsState, on_second_launch, quick_capture, window_may_call};
 use serde_json::{Value, json};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri_plugin_global_shortcut::Shortcut;
 
 const CAPTURE_ALLOWED: &[&str] = &[
@@ -213,4 +215,90 @@ fn the_quick_keep_command_is_a_flagged_launch() {
     let h = harness();
     let cmd = h.ok("quick_keep_command", json!({}));
     assert!(cmd.as_str().unwrap().ends_with(" --quick-capture"), "{cmd}");
+}
+
+type Drawn = Arc<Mutex<Vec<(Icon, Vec<MenuEntry>)>>>;
+
+#[test]
+fn a_forged_status_event_does_not_change_the_tray() {
+    let h = harness();
+    let drawn: Drawn = Arc::default();
+    let sink = drawn.clone();
+    tray::follow(
+        h.app.handle(),
+        Arc::new(move |icon, model| sink.lock().unwrap().push((icon, model))),
+    );
+    wait_for("the first draw", || !drawn.lock().unwrap().is_empty());
+    let honest = drawn.lock().unwrap()[0].clone();
+
+    let forged = json!({
+        "state": "needsYou", "needsYou": 99, "waitingToRead": 0,
+        "sentToInternetBytes": 0.0, "sentMeasured": false, "pausedUntil": null,
+        "tidy": null, "nextTidy": null, "notices": []
+    });
+    h.app.emit("status-changed", forged).unwrap();
+    wait_for("a draw after the event", || {
+        drawn.lock().unwrap().len() >= 2
+    });
+    let after = drawn.lock().unwrap()[1].clone();
+    assert_eq!(after, honest, "the payload must not reach the tray");
+    assert_ne!(after.0, Icon::NeedsYou);
+    assert!(
+        !format!("{:?}", after.1).contains("99"),
+        "a forged count reached the menu"
+    );
+}
+
+#[derive(Default)]
+struct Sent(Mutex<Vec<(String, String)>>);
+
+impl Notifier for Sent {
+    fn notify(&self, title: &str, body: &str) -> Result<(), String> {
+        self.0.lock().unwrap().push((title.into(), body.into()));
+        Ok(())
+    }
+}
+
+fn with_notifier(h: &common::Harness) -> Arc<Sent> {
+    let sent = Arc::new(Sent::default());
+    h.app.manage(OsState::new(h.dir.path()));
+    h.app.state::<OsState>().set_notifier(sent.clone());
+    notify::listen(h.app.handle());
+    sent
+}
+
+#[test]
+fn a_forged_page_ready_with_no_page_saved_sends_nothing() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    let forged =
+        json!({"date": "2026-11-13", "pageNumber": 1, "headline": "A secret", "needsYou": 5});
+    h.app.emit("page-ready", forged).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    assert!(sent.0.lock().unwrap().is_empty());
+}
+
+#[test]
+fn page_ready_with_a_saved_page_sends_one_private_free_notification() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    let page = h.save_todays_page();
+    h.app
+        .emit("page-ready", json!({"headline": "A secret"}))
+        .unwrap();
+    wait_for("the notification", || !sent.0.lock().unwrap().is_empty());
+    h.app.emit("page-ready", json!({})).unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(400));
+    let sent = sent.0.lock().unwrap();
+    assert_eq!(sent.len(), 1, "once per page date");
+    let (title, body) = &sent[0];
+    assert_eq!(title, "Your page is ready");
+    assert!(
+        !body.contains(&page.headline) && !body.contains("secret"),
+        "{body}"
+    );
+    assert!(
+        body.ends_with("It\u{2019}s there when you open Nocturne."),
+        "{body}"
+    );
 }

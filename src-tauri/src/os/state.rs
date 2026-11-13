@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
+use super::notify::Notifier;
 use super::shortcut::{Registrar, ShortcutSlot};
 
 pub const FILE: &str = "os-state.json";
@@ -42,6 +43,7 @@ pub struct OsState {
     dir: PathBuf,
     file: Mutex<OsFile>,
     shortcut: Mutex<ShortcutSlot>,
+    notifier: Mutex<Option<Arc<dyn Notifier>>>,
 }
 
 impl OsState {
@@ -50,6 +52,7 @@ impl OsState {
             dir: dir.to_path_buf(),
             file: Mutex::new(load(dir)),
             shortcut: Mutex::new(ShortcutSlot::default()),
+            notifier: Mutex::new(None),
         }
     }
 
@@ -83,6 +86,17 @@ impl OsState {
     /// Hand the shortcut code the thing that grabs keys.
     pub fn set_registrar(&self, registrar: Arc<dyn Registrar>) {
         self.shortcut().registrar = Some(registrar);
+    }
+
+    pub fn set_notifier(&self, notifier: Arc<dyn Notifier>) {
+        *self.notifier.lock().unwrap_or_else(|e| e.into_inner()) = Some(notifier);
+    }
+
+    pub fn notifier(&self) -> Option<Arc<dyn Notifier>> {
+        self.notifier
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// How the registered quick keep shortcut is spelled, when it is registered.
