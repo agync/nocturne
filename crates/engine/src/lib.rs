@@ -40,7 +40,7 @@ pub use mind::{
 };
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
-pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count};
+pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count, phone_view};
 pub use remote::{DeviceRow, RemoteRow};
 pub use types::*;
 

@@ -1158,12 +1158,77 @@ fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Resu
     {
         page.question = None;
     }
-    page.headline = template_headline(page.date.parse()?);
-    page.dek = phone_dek(needs_you_count(page));
-    page.private_skipped = 0;
-    page.kept_count = 0;
-    page.let_go_count = 0;
-    // The lines past the cap are not known line by line, so none is claimed.
-    page.more_needs_you = 0;
+    *page = phone_view(std::mem::replace(page, empty_like(page)))?;
     Ok(())
+}
+
+fn empty_like(page: &nocturne_contract::PageView) -> nocturne_contract::PageView {
+    nocturne_contract::PageView {
+        date: page.date.clone(),
+        page_number: 0,
+        edition: page.edition,
+        variant: PageVariant::Normal,
+        headline: String::new(),
+        dek: String::new(),
+        needs_you: Vec::new(),
+        changed: Vec::new(),
+        let_go: Vec::new(),
+        upcoming: Vec::new(),
+        learned: Vec::new(),
+        question: None,
+        more_needs_you: 0,
+        more_changed: 0,
+        kept_count: 0,
+        changes_count: 0,
+        let_go_count: 0,
+        catch_up_days: 0,
+        private_skipped: 0,
+        pending: 0,
+        tidied_from: None,
+        tidied_to: None,
+        update: None,
+    }
+}
+
+/// A phone edition page carrying only what a phone may see, field by field: the lines it gets
+/// and what follows from them alone. Every total that could count something kept at home is
+/// left out or recounted from those lines, and the headline and dek are the templates, since
+/// the stored ones were written with everything in view. Safe to apply more than once.
+pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract::PageView> {
+    let day: Date = page.date.parse()?;
+    let needs = needs_you_count(&page);
+    let changes = page.changed.len() as u32;
+    Ok(nocturne_contract::PageView {
+        headline: template_headline(day),
+        dek: phone_dek(needs),
+        // Quiet and heavy are judged from everything kept, private included.
+        variant: match page.variant {
+            PageVariant::Quiet | PageVariant::Heavy => PageVariant::Normal,
+            v => v,
+        },
+        // Lines past the cap are not known one by one, so none is claimed.
+        more_needs_you: 0,
+        more_changed: 0,
+        changes_count: changes,
+        kept_count: 0,
+        let_go_count: 0,
+        private_skipped: 0,
+        // Unread items may be private: how many there are stays home.
+        pending: 0,
+        // An offer to update the app is for the computer.
+        update: None,
+        // Not content: when the page was tidied and how many days it catches up on.
+        catch_up_days: page.catch_up_days,
+        tidied_from: page.tidied_from,
+        tidied_to: page.tidied_to,
+        date: page.date,
+        page_number: page.page_number,
+        edition: Edition::Phone,
+        needs_you: page.needs_you,
+        changed: page.changed,
+        let_go: page.let_go,
+        upcoming: page.upcoming,
+        learned: page.learned,
+        question: page.question,
+    })
 }

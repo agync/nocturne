@@ -718,14 +718,20 @@ impl<R: Runtime> Call<R> {
             }
             Some(_) => return err(PhoneError::Invalid),
         };
-        match crate::commands::page::page_view(&self.app, day, Edition::Phone).await {
-            Ok(page) => {
+        // Again here: the page command adds what it knows of the tidy (unread items) after
+        // the engine has made the phone edition.
+        let page = crate::commands::page::page_view(&self.app, day, Edition::Phone)
+            .await
+            .ok()
+            .and_then(|p| nocturne_engine::phone_view(p).ok());
+        match page {
+            Some(page) => {
                 self.audit(RemoteAction::ReadPage, RemoteResult::Ok, 0.0);
                 Some(RemoteAnswer::Page {
                     page: Box::new(page),
                 })
             }
-            Err(_) => err(PhoneError::NotFound),
+            None => err(PhoneError::NotFound),
         }
     }
 

@@ -432,6 +432,12 @@ fn variants() {
         (heavy.variant, heavy.kept_count),
         (PageVariant::Heavy, HEAVY_ITEMS + 1)
     );
+    // A phone is not told how much was kept, by a count or by the kind of page.
+    let phone = f
+        .engine
+        .compose_page(date("2026-11-18"), Edition::Phone)
+        .unwrap();
+    assert_eq!((phone.variant, phone.kept_count), (PageVariant::Normal, 0));
     save_day(&f, "2026-11-18");
 
     // catch up: nothing saved for two days
@@ -517,9 +523,23 @@ fn audio_and_print_editions_exclude_private_memories_and_the_screen_shows_them()
                     p.private_skipped,
                     p.kept_count,
                     p.let_go_count,
-                    p.more_needs_you
+                    p.more_needs_you,
+                    p.more_changed,
+                    p.pending,
                 ),
-                (0, 0, 0, 0)
+                (0, 0, 0, 0, 0, 0)
+            );
+            assert_eq!(p.changes_count as usize, p.changed.len());
+            assert!(!matches!(
+                p.variant,
+                PageVariant::Quiet | PageVariant::Heavy
+            ));
+            assert!(p.update.is_none());
+            assert_eq!(p.catch_up_days, screen.catch_up_days);
+            assert_eq!(
+                nocturne_engine::phone_view(p.clone()).unwrap(),
+                p,
+                "settled"
             );
             assert!(screen.kept_count > 0);
             let json = serde_json::to_string(&p).unwrap();
