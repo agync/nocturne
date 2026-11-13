@@ -161,7 +161,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "livesAt",
       "Rowan Court",
       [receipt("item-gran-court")],
-      { entityId: "ent-gran", lastUsed: at(-40, 11, 0) },
+      { entityId: "ent-rowan", lastUsed: at(-40, 11, 0) },
     ),
     memory(
       "mem-jo",
@@ -189,7 +189,7 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       "isTo",
       "Ridgeway Science Centre",
       [receipt("item-letter", { type: "quote", text: "Ridgeway Science Centre" })],
-      { entityId: "ent-leo", certainty: "sure" },
+      { entityId: "ent-ridgeway", certainty: "sure" },
     ),
     memory(
       "mem-trip-lunch",
@@ -234,6 +234,8 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
     entity("ent-okafor", "person", "Mrs Okafor", "Leo’s teacher"),
     entity("ent-sam", "person", "Sam", "Partner"),
     entity("ent-chen", "person", "Dr Chen", "Dentist"),
+    entity("ent-ridgeway", "place", "Ridgeway Science Centre", "Year 4 trip"),
+    entity("ent-rowan", "place", "Rowan Court", "Where Gran lives"),
     entity("ent-dentist", "thing", "Dentist appointment", "Appointment"),
     entity("ent-lake", "thing", "Lake District cottage", "Half-term trip"),
     entity("ent-bin", "thing", "Bin day", "Household"),

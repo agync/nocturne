@@ -123,7 +123,7 @@ test.describe("keyboard", () => {
     await page.getByRole("tab", { name: "People" }).focus();
     await page.keyboard.press("ArrowRight");
     await expect(page.getByRole("tab", { name: "Places" })).toBeFocused();
-    await expect(page.getByText(/No places yet/)).toBeVisible();
+    await expect(page.getByRole("link", { name: /Rowan Court/ })).toBeVisible();
     await page.keyboard.press("End");
     await expect(page.getByRole("tab", { name: "Things" })).toBeFocused();
     await expect(page.getByRole("link", { name: /Dentist appointment/ })).toBeVisible();

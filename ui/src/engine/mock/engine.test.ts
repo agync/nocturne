@@ -298,7 +298,10 @@ describe("MockEngine, shared by the screen lanes", () => {
     expect((await engine.listEntities("person", "okafor")).map((e) => e.id)).toEqual([
       "ent-okafor",
     ]);
-    expect(await engine.listEntities("place", null)).toEqual([]);
+    expect((await engine.listEntities("place", null)).map((e) => e.id)).toEqual([
+      "ent-ridgeway",
+      "ent-rowan",
+    ]);
   });
 
   it("snoozes a fading memory back to active, and flags items", async () => {
