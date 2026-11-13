@@ -11,5 +11,24 @@
   { "never": ["quarantine"], "say": "Unconfirmed" },
   { "never": ["contradiction"], "say": "Which is right?" },
   { "never": ["tokens", "embeddings"], "say": "(never shown)" },
-  { "never": ["backend", "server", "Lemonade", "vector"], "say": "(never shown)" }
+  { "never": ["backend", "server", "Lemonade", "vector"], "say": "(never shown)" },
+  {
+    "never": [
+      "tunnel",
+      "VPN",
+      "node",
+      "tailnet",
+      "port",
+      "certificate",
+      "token",
+      "endpoint",
+      "remote",
+      "encryption",
+      "encryption key",
+      "private key",
+      "public key",
+      "security key"
+    ],
+    "say": "(never shown outside advanced details)"
+  }
 ]

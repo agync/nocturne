@@ -8,6 +8,7 @@ import { t } from "../../copy/t";
 import type { ExportProgress, ExportReport, LedgerEntry } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { AwaySection } from "./AwaySection";
 import { DeleteEverythingDialog } from "./DeleteEverythingDialog";
 import styles from "./Privacy.module.css";
 
@@ -111,7 +112,8 @@ export default function Privacy() {
     );
   }
 
-  const measured = view.sentMeasured;
+  // While Away from home is on the computer also talks to the phones, which nothing here measures live.
+  const measured = view.sentMeasured && !view.remoteOn;
   const total = view.keptBytes + view.mindBytes;
 
   return (
@@ -133,8 +135,33 @@ export default function Privacy() {
               {view.checkedAt ? checkedText(view.checkedAt, now) : t("privacy.watching.now")}
             </p>
           ) : (
-            <p className={styles.detail}>{t("privacy.sent.unmeasured.detail")}</p>
+            <p className={styles.detail}>
+              {view.remoteOn
+                ? t(
+                    view.sentMeasured
+                      ? "privacy.sent.awayOn.measured"
+                      : "privacy.sent.awayOn.detail",
+                    {
+                      company: t(
+                        view.remoteConnection === "mostPrivate"
+                          ? "away.company.mostPrivate"
+                          : "away.company.simple",
+                      ),
+                    },
+                  )
+                : t("privacy.sent.unmeasured.detail")}
+            </p>
           )}
+
+          {view.remoteOn || view.sentToPhonesBytes > 0 ? (
+            <div className={styles.phones}>
+              <span className={styles.sentLabel}>{t("privacy.phones.label")}</span>
+              <span className={styles.phonesAmount}>
+                {t("privacy.phones.amount", { size: formatBytes(view.sentToPhonesBytes) })}
+              </span>
+              <span className={styles.detail}>{t("privacy.phones.counted")}</span>
+            </div>
+          ) : null}
 
           <section aria-labelledby="ledger" className={styles.ledger}>
             <h2 id="ledger" className="t-section">
@@ -148,10 +175,12 @@ export default function Privacy() {
                   <li key={`${entry.kind}-${entry.label}-${entry.at}`}>
                     <span>{ledgerLabel(entry)}</span>
                     <span className={styles.mono}>
-                      {t("privacy.ledger.entry", {
-                        size: formatBytes(entry.bytes),
-                        day: formatDayMonth(entry.at),
-                      })}
+                      {entry.kind === "remoteOnOff"
+                        ? t("privacy.ledger.entryDay", { day: formatDayMonth(entry.at) })
+                        : t("privacy.ledger.entry", {
+                            size: formatBytes(entry.bytes),
+                            day: formatDayMonth(entry.at),
+                          })}
                     </span>
                   </li>
                 ))}
@@ -163,6 +192,7 @@ export default function Privacy() {
         </div>
 
         <div className={styles.controls}>
+          <AwaySection view={view} />
           <section aria-labelledby="here">
             <h2 id="here" className="t-section">
               {t("privacy.here.heading")}

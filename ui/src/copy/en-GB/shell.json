@@ -87,5 +87,11 @@
   "error.app.body": "Nocturne couldn’t draw the window. What you kept is safe.",
   "error.app.action": "Start again",
   "screen.placeholder": "This part of Nocturne is on its way.",
-  "screen.loading": "Loading…"
+  "screen.loading": "Loading…",
+  "rail.away.on": "Away from home is on",
+  "rail.away.use": "{name} is using Nocturne",
+  "rail.away.useMany": "{count} phones are using Nocturne",
+  "rail.away.relink": "Your phones need the new address",
+  "rail.away.needs": "Away from home needs you",
+  "status.phones.label": "Sent to your phones"
 }

@@ -218,3 +218,53 @@
 :global([data-size="medium"]) .nothing {
   font-size: 2.75rem;
 }
+
+.phones {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: var(--s-4);
+}
+
+.phonesAmount {
+  font: 500 1.5rem / 1.2 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+.awayActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+}
+
+.awaySub {
+  margin: var(--s-2) 0 0;
+  font: 500 0.9375rem / 1.4 var(--font-sans);
+}
+
+.awayLists {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: var(--s-4);
+}
+
+.awayLists ul {
+  margin: var(--s-1) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.awayLists li {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.awayHead {
+  color: var(--ink3);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}

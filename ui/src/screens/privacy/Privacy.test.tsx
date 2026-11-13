@@ -160,7 +160,7 @@ describe("Privacy", () => {
     await open();
     expect(
       screen.getByText(
-        "Nocturne has no account, no analytics and no crash reports. Once set up, Nocturne works without the internet.",
+        "Nocturne has no account, no analytics and no crash reports. Once set up, Nocturne works without the internet. Away from home, if you turn it on, uses Cloudflare or Tailscale to reach your phone.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/unplug/)).toBeNull();
