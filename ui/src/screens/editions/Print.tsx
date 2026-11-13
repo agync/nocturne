@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
@@ -8,6 +8,7 @@ import { useToast } from "../../components/Toast/Toast";
 import { formatLongDay, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PageLine, PageView, Question } from "../../engine/bindings";
+import { EngineError } from "../../engine/client";
 import { useEngine } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { type Fitted, fit, type PaperSize } from "./fit";
@@ -35,16 +36,25 @@ function rememberSize(size: PaperSize): void {
   }
 }
 
-/** The `@page` rule for a size: the paper, and the margin the layout was fitted to. */
-export function pageRule(size: PaperSize): string {
+/** The sheet's height in millimetres, from what the browser laid out (96 pixels to the inch). */
+export function pixelsToMm(px: number): number {
+  return (px * 25.4) / 96;
+}
+
+/**
+ * The `@page` rule for a size: the paper, and the margin the layout was fitted to. A receipt is
+ * a roll: its page is as long as the sheet is, measured, so the printer does not feed blank
+ * paper (`receiptMm` is that height, once it is known).
+ */
+export function pageRule(size: PaperSize, receiptMm?: number): string {
   switch (size) {
     case "a4":
       return "@page { size: A4; margin: 14mm; }";
     case "letter":
       return "@page { size: letter; margin: 0.6in; }";
     case "receipt":
-      // A roll has no page length: this is longer than the heaviest sheet needs.
-      return "@page { size: 80mm 500mm; margin: 4mm; }";
+      // The margins are inside the measured height; a little over keeps rounding from adding a page.
+      return `@page { size: 80mm ${receiptMm ? Math.ceil(receiptMm) + 2 : 297}mm; margin: 4mm; }`;
   }
 }
 
@@ -141,13 +151,19 @@ export interface SheetProps {
   printedAt: string;
   /** True only when the amount sent was measured and is zero. */
   sentNothing: boolean;
+  sheetRef?: React.Ref<HTMLElement>;
 }
 
 /** The sheet itself: black on white, no tint carries meaning, the source of each line in brackets. */
-export function Sheet({ page, size, fitted, printedAt, sentNothing }: SheetProps) {
+export function Sheet({ page, size, fitted, printedAt, sentNothing, sheetRef }: SheetProps) {
   const question = page.question && page.question.answered === null ? page.question : null;
   return (
-    <article className={styles.sheet} data-size={size} aria-label={t("screen.print.title")}>
+    <article
+      ref={sheetRef}
+      className={styles.sheet}
+      data-size={size}
+      aria-label={t("screen.print.title")}
+    >
       <header className={styles.masthead}>
         <p className={styles.brand}>{t("print.brand")}</p>
         <p className={styles.date}>
@@ -209,6 +225,8 @@ export function Print() {
   const toast = useToast();
   const [size, setSize] = useState<PaperSize>(savedSize);
   const [printedAt] = useState(() => formatTime(new Date()));
+  const sheet = useRef<HTMLElement>(null);
+  const [receiptMm, setReceiptMm] = useState<number | undefined>(undefined);
 
   const page = useQuery({
     queryKey: ["edition", date, "print"],
@@ -218,18 +236,35 @@ export function Print() {
   });
   const privacy = useQuery({ queryKey: ["privacy"], queryFn: () => engine.getPrivacy() });
 
+  // A receipt's page is as long as its sheet: measure it, and again if it changes size.
+  const ready = Boolean(page.data);
+  useLayoutEffect(() => {
+    const el = sheet.current;
+    if (!ready || !el || size !== "receipt") return;
+    const measure = () => setReceiptMm(pixelsToMm(el.offsetHeight));
+    measure();
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [ready, size]);
+
   useEffect(() => {
     document.title = `${t("screen.print.title")} · ${t("app.name")}`;
   }, []);
 
   if (page.isError) {
+    const missing = page.error instanceof EngineError && page.error.code === "notFound";
     return (
       <div className={styles.message} role="alert">
         <h1 className="sr-only">{t("screen.print.title")}</h1>
-        <p>{t("print.error")}</p>
-        <Button variant="secondary" onClick={() => void page.refetch()}>
-          {t("button.tryAgain")}
-        </Button>
+        <p>{missing ? t("print.missing") : t("print.error")}</p>
+        {missing ? null : (
+          <Button variant="secondary" onClick={() => void page.refetch()}>
+            {t("button.tryAgain")}
+          </Button>
+        )}
         <a className={styles.back} href={`#/pages/${date}`}>
           {t("print.back")}
         </a>
@@ -254,7 +289,7 @@ export function Print() {
   return (
     <div className={styles.screen}>
       <h1 className="sr-only">{t("screen.print.title")}</h1>
-      <style>{pageRule(size)}</style>
+      <style>{pageRule(size, receiptMm)}</style>
       <div className={styles.toolbar} role="toolbar" aria-label={t("print.toolbar")}>
         <a className={styles.back} href={`#/pages/${date}`}>
           {t("print.back")}
@@ -283,6 +318,7 @@ export function Print() {
         fitted={fit(page.data, size)}
         printedAt={printedAt}
         sentNothing={sentNothing}
+        sheetRef={sheet}
       />
     </div>
   );

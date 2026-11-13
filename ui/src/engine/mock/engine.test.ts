@@ -426,6 +426,10 @@ describe("MockEngine editions", () => {
       expect(page.needsYou.map((l) => l.id)).not.toContain(line?.id);
       expect(page.privateSkipped).toBeGreaterThan(screen.privateSkipped);
     }
+    const audio = await engine.getEdition("2026-11-13", "audio");
+    expect(audio.headline).toBe("Friday 13 November");
+    expect(audio.dek).toMatch(/^Last night Nocturne read \d+ things? you kept\. \d+ needs? you\./);
+    expect(audio.headline).not.toBe(screen.headline);
     expect((await engine.getEdition("2026-11-13", "screen")).needsYou.map((l) => l.id)).toContain(
       line?.id,
     );

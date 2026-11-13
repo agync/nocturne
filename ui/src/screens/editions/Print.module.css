@@ -226,6 +226,14 @@
   margin: 0;
 }
 
+/* Nothing on a receipt is smaller than its body (9 pt). */
+.sheet[data-size="receipt"] .date,
+.sheet[data-size="receipt"] .partTitle,
+.sheet[data-size="receipt"] .receipt,
+.sheet[data-size="receipt"] .footer {
+  font-size: 1em;
+}
+
 /* Receipts are text: brackets and plain marks stand in for boxes. */
 .sheet[data-size="receipt"] .box,
 .sheet[data-size="receipt"] .circle {

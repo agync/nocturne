@@ -2,11 +2,12 @@ import { cleanup, render, screen, waitFor, within } from "@testing-library/react
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PageView } from "../../engine/bindings";
+import { EngineError } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
 import { PRINT_STRESS_DATE } from "../../engine/mock/seed/print";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
 import { fit } from "./fit";
-import { pageRule, Sheet } from "./Print";
+import { pageRule, pixelsToMm, Sheet } from "./Print";
 
 beforeEach(() => {
   setViewport(1280);
@@ -127,10 +128,12 @@ describe("the printed sheet", () => {
     expect(draw(0, false)).not.toHaveTextContent("Sent to the internet");
   });
 
-  it("uses the paper rule for each size", () => {
+  it("uses the paper rule for each size, a receipt as long as it measures", () => {
     expect(pageRule("a4")).toContain("size: A4");
     expect(pageRule("letter")).toContain("size: letter");
-    expect(pageRule("receipt")).toContain("80mm");
+    expect(pageRule("receipt", 143.2)).toContain("size: 80mm 146mm");
+    expect(pageRule("receipt", 143.2)).not.toContain("500");
+    expect(pixelsToMm(96)).toBeCloseTo(25.4);
   });
 });
 
@@ -156,11 +159,20 @@ describe("the print screen", () => {
     const page = await engine.getPage("2026-11-13");
     const line = page.needsYou.find((l) => l.memoryIds.length > 0);
     expect(line).toBeDefined();
+    const words = (line?.text ?? "").replace(/\*\*/g, "");
+    renderApp({ hash: "#/print/2026-11-13", engine });
+    await screen.findByRole("article", { name: "Print" });
+    // The line is there to begin with, so its absence below means something.
+    expect(sheet().textContent).toContain(words);
+    cleanup();
     await engine.setPrivate(line?.memoryIds[0] as string, true);
     renderApp({ hash: "#/print/2026-11-13", engine });
     await screen.findByRole("article", { name: "Print" });
-    expect(screen.queryByText(line?.text.replace(/\*\*/g, "") ?? "", { exact: false })).toBeNull();
+    expect(sheet().textContent).not.toContain(words);
     expect(screen.getByRole("contentinfo")).toHaveTextContent("Private items left out.");
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Friday 13 November" }),
+    ).toBeInTheDocument();
   });
 
   it("remembers the paper for next time", async () => {
@@ -218,6 +230,14 @@ describe("the print screen", () => {
     renderApp({ hash: `#/print/${PRINT_STRESS_DATE}`, engine });
     await screen.findByRole("article", { name: "Print" });
     expect(screen.getByRole("contentinfo")).not.toHaveTextContent("Sent to the internet");
+  });
+
+  it("says a missing page in words, with nothing to retry", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "getEdition").mockRejectedValue(new EngineError("notFound", "page"));
+    renderApp({ hash: "#/print/2026-01-02", engine });
+    expect(await screen.findByRole("alert")).toHaveTextContent("There is no page for that day.");
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("explains a page that could not be opened", async () => {

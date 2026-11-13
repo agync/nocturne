@@ -1,4 +1,4 @@
-import { localDay } from "../../copy/format";
+import { formatLongDay, localDay } from "../../copy/format";
 import type {
   AdvancedView,
   AskDelta,
@@ -56,6 +56,14 @@ export interface MockOptions {
 const UNKEEP_MINUTES = 10;
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** The engine's plain dek, used when the written one could mention something private. */
+function templateDek(kept: number, needs: number, letGo: number): string {
+  const things = kept === 1 ? "thing" : "things";
+  const need = needs === 1 ? "needs" : "need";
+  const were = letGo === 1 ? "was" : "were";
+  return `Last night Nocturne read ${kept} ${things} you kept. ${needs} ${need} you. ${letGo} ${were} let go.`;
+}
 
 /** How long the mock says the first question takes to wake the voice. */
 const WAKE_SECONDS = 8;
@@ -1048,6 +1056,7 @@ export class MockEngine implements EngineClient {
     const hidden = new Set(this.memories.filter((m) => m.private).map((m) => m.id));
     const open = (line: PageLine) => !line.memoryIds.some((id) => hidden.has(id));
     let skipped = 0;
+    let droppedLetGo = 0;
     const keep = (lines: PageLine[]) =>
       lines.filter((line) => {
         const ok = open(line);
@@ -1056,7 +1065,9 @@ export class MockEngine implements EngineClient {
       });
     page.needsYou = keep(page.needsYou);
     page.changed = keep(page.changed);
+    const letGoBefore = page.letGo.length;
     page.letGo = keep(page.letGo);
+    droppedLetGo = letGoBefore - page.letGo.length;
     page.upcoming = keep(page.upcoming);
     page.learned = keep(page.learned);
     if (page.question?.memoryId && hidden.has(page.question.memoryId)) {
@@ -1064,6 +1075,13 @@ export class MockEngine implements EngineClient {
       skipped += 1;
     }
     page.privateSkipped += skipped;
+    if (skipped > 0) {
+      // The stored headline and dek were written with the private lines in view. Like the
+      // engine, never hand them out: fall back to the template, from the counts that remain.
+      const needs = page.needsYou.filter((l) => !l.forgotten).length + page.moreNeedsYou;
+      page.headline = formatLongDay(page.date);
+      page.dek = templateDek(page.keptCount, needs, Math.max(0, page.letGoCount - droppedLetGo));
+    }
     return page;
   }
 
