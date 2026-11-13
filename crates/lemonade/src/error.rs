@@ -52,6 +52,7 @@ impl From<RuntimeError> for MindError {
             | RuntimeError::Start(_)
             | RuntimeError::BundleMissing(_)
             | RuntimeError::NoPort(_)
+            | RuntimeError::NotFound(_)
             | RuntimeError::Offline => MindError::Unavailable,
             RuntimeError::Rejected { status: 409, .. } => MindError::Busy,
             other => MindError::Failed(other.to_string()),

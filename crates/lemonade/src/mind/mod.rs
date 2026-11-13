@@ -1,0 +1,605 @@
+//! [`LemonadeMind`]: the Nocturne mind served by the private engine.
+
+mod cite;
+mod documents;
+mod prompts;
+
+use std::collections::HashSet;
+use std::path::Path;
+
+use base64::Engine as _;
+use futures_util::StreamExt;
+use jiff::civil::Date;
+use nocturne_contract::{ComponentRole, EntityKind, MemoryView, PageView, Span, Tier};
+use nocturne_engine::{
+    AnswerMeta, BoxFuture, Candidate, ExtractContext, Mind, MindError, Predicate, Transcript,
+    Understanding,
+};
+use serde::Deserialize;
+use serde_json::Value;
+use tokio::sync::{Mutex, mpsc};
+
+use crate::client::{ChatRequest, Client, LoadOptions, Message};
+use crate::error::RuntimeError;
+use crate::tier;
+
+use cite::CiteFilter;
+
+const MAX_IMAGE_EDGE: u32 = 2048;
+const MAX_AUDIO_SECONDS: f64 = 2.0 * 3600.0;
+const EXTRACT_ATTEMPTS: usize = 2;
+
+pub struct LemonadeMind {
+    client: Client,
+    tier: Tier,
+    loaded: Mutex<HashSet<String>>,
+}
+
+impl LemonadeMind {
+    pub fn new(client: Client, tier: Tier) -> Self {
+        LemonadeMind {
+            client,
+            tier,
+            loaded: Mutex::new(HashSet::new()),
+        }
+    }
+
+    fn model(&self, role: ComponentRole) -> Result<&'static str, MindError> {
+        tier::model_for(self.tier, role).ok_or(MindError::Unavailable)
+    }
+
+    /// Loads the thinking model once, with a context size to suit the tier.
+    async fn warm_mind(&self) -> Result<&'static str, MindError> {
+        let model = self.model(ComponentRole::Mind)?;
+        let mut loaded = self.loaded.lock().await;
+        if !loaded.contains(model) {
+            let ctx = if self.tier == Tier::Large {
+                16384
+            } else {
+                8192
+            };
+            self.client
+                .load(
+                    model,
+                    &LoadOptions {
+                        ctx_size: Some(ctx),
+                        ..LoadOptions::default()
+                    },
+                )
+                .await
+                .map_err(|e| match e {
+                    RuntimeError::Rejected { .. } => MindError::Unavailable,
+                    other => other.into(),
+                })?;
+            loaded.insert(model.to_string());
+        }
+        Ok(model)
+    }
+
+    async fn forget_loaded(&self) {
+        self.loaded.lock().await.clear();
+    }
+
+    async fn chat_text(&self, req: &ChatRequest) -> Result<String, MindError> {
+        match self.client.chat_complete(req).await {
+            Ok(t) => Ok(t),
+            Err(e) => {
+                if matches!(e, RuntimeError::Unavailable | RuntimeError::StreamCut) {
+                    self.forget_loaded().await;
+                }
+                Err(e.into())
+            }
+        }
+    }
+
+    async fn extract_impl(
+        &self,
+        text: &str,
+        cx: &ExtractContext,
+    ) -> Result<Vec<Candidate>, MindError> {
+        if text.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let model = self.warm_mind().await?;
+        let mut messages = vec![
+            Message::system(&prompts::extraction_system()),
+            Message::user(&prompts::extraction_user(text, cx)),
+        ];
+        let mut last_error = String::new();
+        for attempt in 0..EXTRACT_ATTEMPTS {
+            let mut req = ChatRequest::new(model, messages.clone());
+            req.temperature = Some(0.0);
+            req.response_format = Some(crate::client::json_schema_format(
+                &prompts::extraction_schema(),
+            ));
+            let reply = self.chat_text(&req).await?;
+            match parse_candidates(&reply) {
+                Ok((items, invalid)) if invalid.is_empty() => return Ok(items),
+                Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                    tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
+                    return Ok(items);
+                }
+                Ok((_, invalid)) => last_error = invalid.join("; "),
+                Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                    return Err(MindError::Failed(format!("unusable extraction: {e}")));
+                }
+                Err(e) => last_error = e,
+            }
+            messages.push(Message {
+                role: "assistant".into(),
+                content: Value::String(reply),
+            });
+            messages.push(Message::user(&format!(
+                "That was not valid: {last_error}. Reply again with JSON only, matching the schema."
+            )));
+        }
+        Err(MindError::Failed(format!(
+            "unusable extraction: {last_error}"
+        )))
+    }
+
+    async fn answer_impl(
+        &self,
+        question: &str,
+        facts: &[MemoryView],
+        out: mpsc::Sender<String>,
+    ) -> Result<AnswerMeta, MindError> {
+        if facts.is_empty() {
+            return Ok(AnswerMeta {
+                cited: Vec::new(),
+                not_sure: true,
+            });
+        }
+        let model = self.warm_mind().await?;
+        let mut req = ChatRequest::new(
+            model,
+            vec![
+                Message::system(&prompts::answer_system()),
+                Message::user(&prompts::answer_user(question, facts)),
+            ],
+        );
+        req.temperature = Some(0.2);
+        let mut stream = match self.client.chat(&req).await {
+            Ok(s) => s,
+            Err(e) => {
+                self.forget_loaded().await;
+                return Err(e.into());
+            }
+        };
+        let mut filter = CiteFilter::new(facts.len());
+        let mut head = String::new();
+        let mut deciding = true;
+        let mut not_sure = false;
+        let mut sent_any = false;
+        while let Some(item) = stream.next().await {
+            let delta = match item {
+                Ok(d) => d,
+                Err(_) => {
+                    self.forget_loaded().await;
+                    return Err(MindError::Unavailable);
+                }
+            };
+            let text = if deciding {
+                head.push_str(&delta);
+                let trimmed = head.trim_start();
+                if trimmed.len() < prompts::NOT_SURE.len() && prompts::NOT_SURE.starts_with(trimmed)
+                {
+                    continue;
+                }
+                deciding = false;
+                if trimmed.starts_with(prompts::NOT_SURE) {
+                    not_sure = true;
+                    continue;
+                }
+                filter.push(&std::mem::take(&mut head))
+            } else if not_sure {
+                continue;
+            } else {
+                filter.push(&delta)
+            };
+            if !text.is_empty() {
+                sent_any = true;
+                if out.send(text).await.is_err() {
+                    return Err(MindError::Failed("the reader went away".into()));
+                }
+            }
+        }
+        if deciding && !head.trim().is_empty() {
+            if head.trim_start() == prompts::NOT_SURE {
+                not_sure = true;
+            } else {
+                let text = filter.push(&head);
+                if !text.is_empty() {
+                    sent_any = true;
+                    let _ = out.send(text).await;
+                }
+            }
+        }
+        let tail = if not_sure {
+            String::new()
+        } else {
+            filter.finish()
+        };
+        if !tail.is_empty() {
+            sent_any = true;
+            let _ = out.send(tail).await;
+        }
+        let cited = if not_sure {
+            Vec::new()
+        } else {
+            filter
+                .cited()
+                .iter()
+                .filter_map(|n| facts.get(n - 1))
+                .map(|f| f.id.clone())
+                .collect()
+        };
+        Ok(AnswerMeta {
+            cited,
+            not_sure: not_sure || !sent_any,
+        })
+    }
+
+    async fn read_image_impl(&self, image: &Path) -> Result<Understanding, MindError> {
+        let model = self.warm_mind().await?;
+        let path = image.to_path_buf();
+        let uri = tokio::task::spawn_blocking(move || image_data_uri(&path))
+            .await
+            .map_err(|e| MindError::Failed(e.to_string()))??;
+        let mut req = ChatRequest::new(
+            model,
+            vec![
+                Message::system(prompts::image_system()),
+                Message::user_with_image("Describe and read this image.", &uri),
+            ],
+        );
+        req.temperature = Some(0.0);
+        #[derive(Deserialize)]
+        struct Reading {
+            #[serde(default)]
+            title: String,
+            #[serde(default)]
+            text: String,
+            #[serde(default)]
+            summary: String,
+            #[serde(default)]
+            language: String,
+        }
+        let reading: Reading = match self.client.chat_json(&req, &prompts::image_schema()).await {
+            Ok(r) => r,
+            Err(e) => return Err(self.map_chat_error(e).await),
+        };
+        let title = if reading.title.trim().is_empty() {
+            image
+                .file_stem()
+                .map(|s| s.to_string_lossy().into_owned())
+                .unwrap_or_default()
+        } else {
+            reading.title.trim().to_string()
+        };
+        Ok(Understanding {
+            title,
+            text: reading.text.trim().to_string(),
+            summary: non_empty(reading.summary),
+            language: non_empty(reading.language),
+            pages: None,
+        })
+    }
+
+    async fn map_chat_error(&self, e: RuntimeError) -> MindError {
+        if matches!(e, RuntimeError::Unavailable | RuntimeError::StreamCut) {
+            self.forget_loaded().await;
+        }
+        e.into()
+    }
+
+    async fn headline_impl(&self, page: &PageView) -> Result<(String, String), MindError> {
+        let model = self.warm_mind().await?;
+        let mut req = ChatRequest::new(
+            model,
+            vec![
+                Message::system(prompts::headline_system()),
+                Message::user(&prompts::headline_user(page)),
+            ],
+        );
+        req.temperature = Some(0.4);
+        #[derive(Deserialize)]
+        struct Headline {
+            headline: String,
+            dek: String,
+        }
+        let h: Headline = match self
+            .client
+            .chat_json(&req, &prompts::headline_schema())
+            .await
+        {
+            Ok(h) => h,
+            Err(e) => return Err(self.map_chat_error(e).await),
+        };
+        let (headline, dek) = (h.headline.trim().to_string(), h.dek.trim().to_string());
+        if headline.is_empty() {
+            return Err(MindError::Failed("the headline came back empty".into()));
+        }
+        Ok((headline, dek))
+    }
+
+    async fn transcribe_impl(&self, audio: &Path) -> Result<Transcript, MindError> {
+        let model = self.model(ComponentRole::Speech)?;
+        if wav_seconds(audio).is_some_and(|s| s > MAX_AUDIO_SECONDS) {
+            return Err(MindError::TooLong);
+        }
+        let t = self.client.transcribe(audio, model, None).await?;
+        if t.duration.is_some_and(|d| d > MAX_AUDIO_SECONDS) {
+            return Err(MindError::TooLong);
+        }
+        let ms = |s: f64| (s.max(0.0) * 1000.0).round() as u32;
+        let segments: Vec<(u32, u32, String)> = t
+            .segments
+            .iter()
+            .map(|s| (ms(s.start), ms(s.end), s.text.trim().to_string()))
+            .collect();
+        let duration_ms = t
+            .duration
+            .map(ms)
+            .or_else(|| segments.last().map(|s| s.1))
+            .unwrap_or(0);
+        Ok(Transcript {
+            text: t.text.trim().to_string(),
+            language: t.language.filter(|l| !l.is_empty()),
+            duration_ms,
+            segments,
+        })
+    }
+}
+
+fn non_empty(s: String) -> Option<String> {
+    let t = s.trim();
+    (!t.is_empty()).then(|| t.to_string())
+}
+
+/// Length of a WAV file in seconds, from its header alone.
+fn wav_seconds(path: &Path) -> Option<f64> {
+    use std::io::Read;
+    let mut head = vec![0u8; 4096];
+    let n = std::fs::File::open(path).ok()?.read(&mut head).ok()?;
+    let head = &head[..n];
+    if head.len() < 44 || &head[..4] != b"RIFF" || &head[8..12] != b"WAVE" {
+        return None;
+    }
+    let mut pos = 12;
+    let (mut rate, mut channels, mut bits) = (0u32, 0u32, 0u32);
+    while pos + 8 <= head.len() {
+        let id = &head[pos..pos + 4];
+        let size = u32::from_le_bytes(head[pos + 4..pos + 8].try_into().ok()?);
+        if id == b"fmt " && pos + 24 <= head.len() {
+            channels = u32::from(u16::from_le_bytes(
+                head[pos + 10..pos + 12].try_into().ok()?,
+            ));
+            rate = u32::from_le_bytes(head[pos + 12..pos + 16].try_into().ok()?);
+            bits = u32::from(u16::from_le_bytes(
+                head[pos + 22..pos + 24].try_into().ok()?,
+            ));
+        }
+        if id == b"data" {
+            let per_second = f64::from(rate) * f64::from(channels) * f64::from(bits) / 8.0;
+            return (per_second > 0.0).then(|| f64::from(size) / per_second);
+        }
+        pos += 8 + size as usize + (size as usize & 1);
+    }
+    None
+}
+
+fn image_data_uri(path: &Path) -> Result<String, MindError> {
+    let bytes = std::fs::read(path).map_err(|e| MindError::Failed(e.to_string()))?;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    let (bytes, mime) = match image::load_from_memory(&bytes) {
+        Ok(img) if img.width().max(img.height()) > MAX_IMAGE_EDGE => {
+            let small = img.resize(
+                MAX_IMAGE_EDGE,
+                MAX_IMAGE_EDGE,
+                image::imageops::FilterType::Triangle,
+            );
+            let mut out = std::io::Cursor::new(Vec::new());
+            let jpeg = matches!(ext.as_str(), "jpg" | "jpeg");
+            let format = if jpeg {
+                image::ImageFormat::Jpeg
+            } else {
+                image::ImageFormat::Png
+            };
+            let prepared = if jpeg {
+                image::DynamicImage::ImageRgb8(small.to_rgb8())
+            } else {
+                small
+            };
+            prepared
+                .write_to(&mut out, format)
+                .map_err(|e| MindError::Failed(e.to_string()))?;
+            (
+                out.into_inner(),
+                if jpeg { "image/jpeg" } else { "image/png" },
+            )
+        }
+        Ok(_) => (bytes, mime_for(&ext)),
+        Err(_) => match ext.as_str() {
+            "gif" | "webp" | "bmp" => (bytes, mime_for(&ext)),
+            _ => return Err(MindError::Unsupported(format!("image type .{ext}"))),
+        },
+    };
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
+fn mime_for(ext: &str) -> &'static str {
+    match ext {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "bmp" => "image/bmp",
+        _ => "image/png",
+    }
+}
+
+#[derive(Deserialize)]
+struct Extraction {
+    memories: Vec<Value>,
+}
+
+/// Valid candidates, and a note for each item that did not validate.
+fn parse_candidates(reply: &str) -> Result<(Vec<Candidate>, Vec<String>), String> {
+    let parsed: Extraction = crate::client::parse_json_text(reply).map_err(|e| e.to_string())?;
+    let mut items = Vec::new();
+    let mut invalid = Vec::new();
+    for (i, raw) in parsed.memories.iter().enumerate() {
+        match candidate(raw) {
+            Ok(c) => items.push(c),
+            Err(why) => invalid.push(format!("memory {}: {why}", i + 1)),
+        }
+    }
+    Ok((items, invalid))
+}
+
+fn text_field(raw: &Value, key: &str) -> Result<String, String> {
+    match raw[key].as_str().map(str::trim) {
+        Some(s) if !s.is_empty() => Ok(s.to_string()),
+        _ => Err(format!("{key} is missing")),
+    }
+}
+
+fn date_field(raw: &Value, key: &str) -> Result<Option<Date>, String> {
+    match raw[key].as_str().map(str::trim) {
+        None | Some("") => Ok(None),
+        Some(s) => s
+            .parse::<Date>()
+            .map(Some)
+            .map_err(|_| format!("{key} is not a YYYY-MM-DD date")),
+    }
+}
+
+fn candidate(raw: &Value) -> Result<Candidate, String> {
+    let sentence = text_field(raw, "sentence")?;
+    let subject = text_field(raw, "subject")?;
+    let object = text_field(raw, "object")?;
+    let predicate = predicate(&text_field(raw, "predicate")?);
+    let confidence = raw["confidence"]
+        .as_f64()
+        .ok_or("confidence is missing")?
+        .clamp(0.0, 1.0) as f32;
+    let subject_kind = match raw["subjectKind"].as_str() {
+        Some("person") => Some(EntityKind::Person),
+        Some("place") => Some(EntityKind::Place),
+        Some("thing") => Some(EntityKind::Thing),
+        _ => None,
+    };
+    let span = raw["span"]["quote"]
+        .as_str()
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .map(|q| Span::Quote {
+            text: q.to_string(),
+        });
+    let tags = raw["tags"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|t| t.as_str())
+                .map(|t| t.trim().to_lowercase())
+                .filter(|t| !t.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(Candidate {
+        subject,
+        subject_kind,
+        predicate,
+        object,
+        sentence,
+        valid_from: date_field(raw, "validFrom")?,
+        valid_to: date_field(raw, "validTo")?,
+        due: date_field(raw, "due")?,
+        confidence,
+        span,
+        tags,
+    })
+}
+
+fn predicate(raw: &str) -> Predicate {
+    let norm = raw.trim().to_lowercase().replace([' ', '-'], "_");
+    match norm.strip_prefix("other:") {
+        Some(word) => Predicate::Other(word.trim().to_string()),
+        None => Predicate::parse(&norm),
+    }
+}
+
+impl Mind for LemonadeMind {
+    fn transcribe<'a>(&'a self, audio: &'a Path) -> BoxFuture<'a, Result<Transcript, MindError>> {
+        Box::pin(self.transcribe_impl(audio))
+    }
+
+    fn read_image<'a>(
+        &'a self,
+        image: &'a Path,
+    ) -> BoxFuture<'a, Result<Understanding, MindError>> {
+        Box::pin(self.read_image_impl(image))
+    }
+
+    fn read_document<'a>(
+        &'a self,
+        doc: &'a Path,
+    ) -> BoxFuture<'a, Result<Understanding, MindError>> {
+        Box::pin(async move {
+            let path = doc.to_path_buf();
+            tokio::task::spawn_blocking(move || documents::read(&path))
+                .await
+                .map_err(|e| MindError::Failed(e.to_string()))?
+        })
+    }
+
+    fn extract<'a>(
+        &'a self,
+        text: &'a str,
+        cx: &'a ExtractContext,
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        Box::pin(self.extract_impl(text, cx))
+    }
+
+    fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
+        Box::pin(async move {
+            if texts.is_empty() {
+                return Ok(Vec::new());
+            }
+            let model = self.model(ComponentRole::Recall)?;
+            Ok(self.client.embeddings(model, texts).await?)
+        })
+    }
+
+    fn answer<'a>(
+        &'a self,
+        question: &'a str,
+        facts: &'a [MemoryView],
+        out: mpsc::Sender<String>,
+    ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
+        Box::pin(self.answer_impl(question, facts, out))
+    }
+
+    fn write_headline<'a>(
+        &'a self,
+        page: &'a PageView,
+    ) -> BoxFuture<'a, Result<(String, String), MindError>> {
+        Box::pin(self.headline_impl(page))
+    }
+
+    fn speak<'a>(
+        &'a self,
+        text: &'a str,
+        voice: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<u8>, MindError>> {
+        Box::pin(async move {
+            let model = self.model(ComponentRole::Voice)?;
+            Ok(self.client.speech(model, voice, text).await?)
+        })
+    }
+}
