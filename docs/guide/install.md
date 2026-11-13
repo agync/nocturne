@@ -10,7 +10,7 @@ tags: [guide, install, packages, setup]
 
 ## What your computer needs
 
-Nocturne works on a Linux desktop, 64-bit. The first time it runs, it checks the memory and free
+Nocturne works on a Linux desktop, on a 64-bit Intel or AMD computer. The first time it runs, it checks the memory and free
 space and offers the largest setup the computer can carry comfortably. A smaller setup only means
 slower answers and a slower overnight tidy; everything still works.
 
@@ -25,7 +25,7 @@ Small setup needs, Nocturne says so plainly and downloads nothing.
 
 ## Choose a package
 
-You are given up to three files and a list of checksums. Pick one.
+You are given up to three packages and a list of fingerprints to check them (`SHA256SUMS`). Pick one package.
 
 | Package | Choose it when |
 |---|---|
@@ -33,13 +33,13 @@ You are given up to three files and a list of checksums. Pick one.
 | rpm | Your computer runs Fedora, Red Hat, openSUSE or something similar |
 | deb | Your computer runs Debian, Ubuntu, Linux Mint or something similar |
 
-Nocturne is not signed. Before you open a file, check it against the list that came with it:
+Nocturne is not signed. Before you open a package, check it against the list that came with it. Put the package and `SHA256SUMS` in the same folder and run:
 
 ```bash
-sha256sum --check SHA256SUMS
+sha256sum --check --ignore-missing SHA256SUMS
 ```
 
-Each file it checks should say `OK`. If one does not, do not open it.
+The list covers all the packages, so `--ignore-missing` skips the ones you did not download. Each file it checks should say `OK`. If one does not, do not open it.
 
 ### AppImage
 
@@ -52,6 +52,16 @@ chmod +x Nocturne_<version>_amd64.AppImage
 
 Keep the file where you will find it again. It carries everything it needs, including its own
 copy of the parts that run Nocturne's private reading engine.
+
+An AppImage opens by mounting itself, which needs FUSE on your computer (most desktops have it).
+If it will not open for that reason, run it this way instead, which unpacks it for the run:
+
+```bash
+./Nocturne_<version>_amd64.AppImage --appimage-extract-and-run
+```
+
+If you move the AppImage to another folder, turn "Start with this computer" off and on again in
+Settings, and copy the shortcut command shown there again, so both point at the new place.
 
 ### rpm
 
@@ -72,9 +82,9 @@ sudo apt install ./Nocturne_<version>_amd64.deb
 Nocturne opens a short setup:
 
 1. It looks at your computer and tells you which setup it will use.
-2. It downloads that setup once. This is the only time Nocturne uses the internet without being
-   asked, and it asks first. You can keep things straight away while it downloads, and the
-   download carries on by itself if the connection drops.
+2. It downloads that setup once. It asks before it downloads. This is the only time Nocturne uses
+   the internet. You can keep things straight away while it downloads, and the download carries on
+   by itself if the connection drops.
 3. It tells you when it is ready. Your first page arrives the next morning.
 
 After setup, Nocturne works with no internet at all.

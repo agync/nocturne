@@ -15,7 +15,6 @@ Everything Nocturne holds is on your computer, in one folder, and you can see al
 | System | Folder |
 |---|---|
 | Linux | `~/.local/share/app.nocturne.desktop/` |
-| Windows | `%APPDATA%\app.nocturne.desktop\` |
 
 Inside are the things you kept and what Nocturne remembers from them (in `store`), Nocturne's
 reading setup (in `engine`) and a few small log files (in `logs`) that hold counts and error
@@ -37,17 +36,22 @@ page, and all your originals exactly as you kept them. Nothing is changed or rem
 
 Nocturne does not delete anything quietly.
 
-- Things you have not used fade after 30 days and are let go after 90. "Fading & let go" lists
-  them, and one tap brings any of them back for another 30 days.
-- "Forget completely" in that list is the only way a single thing is removed, and it asks first.
+- Things you have not used fade after 30 days and are let go after 90. That is the Normal
+  setting. Change it under Letting go in Settings. "Fading & let go" lists them, and one tap
+  brings any of them back for another 30 days.
+- Forget removes a thing for good, and it asks first. You find it on a memory, on something you
+  kept, on an answer, and in Fading & let go.
+- Forgetting a memory keeps the original and its transcript. Tick "Also delete the original" to
+  remove that too. Anything you exported or printed is out of Nocturne's reach.
 - Unconfirmed things from the web are never treated as true until you say so.
 
 ## Delete everything
 
 Privacy has "Delete everything". It removes everything Nocturne holds from this computer: what you
 kept, what it remembers and every page. You have to type the words it shows before it goes ahead,
-and it cannot be undone, so export first if you might want a copy. Afterwards Nocturne starts again
-from setup.
+and it cannot be undone, so export first if you might want a copy. It keeps the reading setup it
+downloaded and the log files, turns off "Start with this computer" and resets the quick keep
+shortcut. Afterwards Nocturne starts again from setup.
 
 ## How you can tell nothing leaves your computer
 
@@ -58,12 +62,11 @@ You do not have to take that on trust:
 
 - Privacy lists everything Nocturne ever downloaded, with the day and the size. Setup and any
   update you allowed are the only entries.
-- Privacy and the page footer say "Sent to the internet: Nothing" when Nocturne can measure it. On
-  Linux it cannot count what a program sends, so the app says "Not measured on this computer" and
-  shows the list of downloads instead.
-- Before each release, the people who build Nocturne run it with its network cut to the
-  computer's own internal address, and check that every attempt to reach anywhere else is a
-  failure. The check also confirms that Nocturne still starts, shows its window, runs its reading
+- Nocturne only goes online to download what you agree to. It does not measure what a program
+  sends while it runs, so it does not claim a figure for that.
+- Each release is checked to send nothing else. The people who build Nocturne run it with its
+  network cut to the computer's own internal address, and treat every attempt to reach anywhere
+  else as a failure. The check also confirms that Nocturne still starts, shows its window, runs its reading
   engine and keeps a file in that state. The result goes in the release notes.
 - You can run the same sort of check yourself: switch off your internet and use Nocturne. Nothing
   changes.
