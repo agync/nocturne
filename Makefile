@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -73,6 +73,9 @@ package: ui/node_modules ## Build the Linux packages (AppImage, deb, rpm) with t
 
 smoke: ## Launch the built binary and packages under a virtual display and judge them
 	scripts/smoke-launch.sh all
+
+netcheck: ## Run the built binary in a loopback-only namespace and fail on any outbound traffic
+	scripts/net-check.sh launch binary
 
 ##@ Lemonade
 
