@@ -22,6 +22,7 @@ mod fixtures;
 mod install;
 mod lock;
 mod supervise;
+mod tailscaled;
 mod util;
 
 pub use cloudflared::{CloudflaredOptions, CloudflaredTransport};
@@ -30,6 +31,9 @@ pub use install::remove_partial;
 pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
 pub use supervise::{
     HelperCommand, Phase, SupState, SuperviseOptions, Supervisor, members as group_members,
+};
+pub use tailscaled::{
+    TailscaledOptions, TailscaledTransport, new_machine_name, valid_machine_name,
 };
 
 /// Present only in builds with the `fake` feature, so the package check can refuse them.
@@ -238,41 +242,12 @@ pub fn transport_for(
 ) -> Box<dyn Transport> {
     match kind {
         HelperKind::Cloudflared => Box::new(CloudflaredTransport::new(dirs, installed)),
-        HelperKind::Tailscaled => Box::new(NotYet { kind }),
-    }
-}
-
-/// A transport that starts nothing.
-struct NotYet {
-    kind: HelperKind,
-}
-
-impl Transport for NotYet {
-    fn kind(&self) -> HelperKind {
-        self.kind
-    }
-
-    fn key_carrier(&self) -> KeyCarrier {
-        key_carrier(self.kind)
-    }
-
-    fn start(
-        &self,
-        _spec: LaunchSpec,
-    ) -> BoxFuture<'_, Result<watch::Receiver<TransportState>, HelperError>> {
-        Box::pin(async { Err(HelperError::Unsupported) })
-    }
-
-    fn stop(&self) -> BoxFuture<'_, Result<(), HelperError>> {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn sign_out(&self) -> BoxFuture<'_, Result<(), HelperError>> {
-        Box::pin(async { Ok(()) })
-    }
-
-    fn info(&self) -> Option<HelperInfo> {
-        None
+        HelperKind::Tailscaled => {
+            let cli = install::extras_with(&HelpersLock::current(), kind, dirs)
+                .into_iter()
+                .next();
+            Box::new(TailscaledTransport::new(dirs, installed, cli))
+        }
     }
 }
 
