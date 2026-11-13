@@ -28,7 +28,6 @@
   "listen.skipped": "Private items are never read aloud. {count, plural, one {One was} =2 {Two were} =3 {Three were} other {# were}} skipped.",
   "listen.keys": "Space plays or pauses. Left and right arrows move ten seconds. Shift with an arrow changes section. Square brackets change the speed.",
   "listen.read": "Read the page",
-  "listen.audio": "The spoken page",
   "print.brand": "Nocturne",
   "print.page": "Page {number}",
   "print.toolbar": "Print options",

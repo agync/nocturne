@@ -1,7 +1,6 @@
 {
   "notice.action.failed": "That didn’t work. Nothing was lost; try again in a moment.",
   "notice.region": "Things to know",
-  "notice.dismiss": "Dismiss",
   "notice.downloadStalled.text": "The download stopped when the internet dropped. It will carry on by itself.",
   "notice.downloadStalled.action": "Try now",
   "notice.diskFull.text": "This computer needs {size} more free space to finish setting up.",

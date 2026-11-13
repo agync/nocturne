@@ -3,8 +3,6 @@
   "edition.read": "Read",
   "edition.listen": "Listen",
   "edition.print": "Print",
-  "edition.listen.title": "Listen",
-  "edition.print.title": "Print",
   "page.article": "Morning page, {date}",
   "page.number": "Page {number}",
   "page.previous": "← {day}",
@@ -24,10 +22,7 @@
   "page.firstNext.title": "Tomorrow’s page gets better with",
   "page.firstNext.body": "Appointment cards, voice notes after calls, school and work messages. Anything with a date, a promise or a name.",
   "page.line.done": "Done. Nocturne won’t bring it up again.",
-  "page.line.doneLabel": "Done",
   "page.line.forgotten": "Forgotten. This line is gone from the page.",
-  "page.which.group": "{subject}",
-  "page.which.fallback": "Which is right?",
   "page.which.resolved": "{chosen} it is. The other is kept as history, not deleted.",
   "page.which.announce": "{subject} set to {chosen}.",
   "page.unconfirmed.confirm": "It’s true",
@@ -68,10 +63,8 @@
   "page.writing.detail.pending": "{pending, plural, one {# thing still to read} other {# things still to read}}",
   "page.catchUp.dek": "Catching up on {count, plural, one {# day} other {# days}}.",
   "page.privateSkipped": "{count, plural, one {# private thing is not shown here.} other {# private things are not shown here.}}",
-  "page.empty.quiet": "Nothing needs you.",
   "page.loading": "Getting today’s page…",
   "page.action.failed": "That did not go through, so nothing was changed. Try again.",
   "page.error": "Nocturne couldn’t get this page. What you kept is safe.",
-  "page.error.retry": "Try again",
-  "page.today.quietLine": "Nothing is waiting for you."
+  "page.error.retry": "Try again"
 }

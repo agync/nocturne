@@ -21,6 +21,5 @@
   "fading.error": "Nocturne couldn’t open this list. What you kept is safe.",
   "fading.announce.kept": "Kept. It will not fade for {days, plural, one {# day} other {# days}}.",
   "fading.announce.broughtBack": "{count, plural, one {Brought back. It will not fade for {days, plural, one {# day} other {# days}}.} other {Brought back # things. They will not fade for {days, plural, one {# day} other {# days}}.}}",
-  "fading.announce.forgotten": "{count, plural, one {Forgotten.} other {# things forgotten.}}",
   "fading.announce.failed": "That didn’t work. Nothing was changed."
 }
