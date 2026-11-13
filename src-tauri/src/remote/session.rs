@@ -221,7 +221,23 @@ pub struct PhoneState {
     pub cited: HashMap<String, Instant>,
     /// An original is on its way down to this phone.
     pub sending_original: bool,
+    /// Keeps answered from what the phone sent (a repeat of someone else's keep): the id each
+    /// was given names nothing in the store, so later calls on it are answered from here.
+    pub made_up: HashMap<String, MadeUp>,
 }
+
+/// A keep answered from what the phone sent.
+#[derive(Clone)]
+pub struct MadeUp {
+    pub item: nocturne_contract::PhoneItem,
+    /// When it was kept, for the take-back window.
+    pub kept_at: jiff::Timestamp,
+    /// When it was made, for how long it is remembered.
+    pub at: Instant,
+}
+
+/// Made-up keeps remembered per phone; the oldest gives way.
+pub const MAX_MADE_UP: usize = 128;
 
 pub struct Core {
     pub shell: Arc<dyn Shell>,
@@ -481,6 +497,7 @@ impl Core {
         let cutoff = Duration::from_secs(CITED_TTL_SECS);
         for p in lock(&self.phones).values_mut() {
             p.cited.retain(|_, at| now.duration_since(*at) < cutoff);
+            p.made_up.retain(|_, m| now.duration_since(m.at) < cutoff);
         }
     }
 
@@ -877,6 +894,47 @@ impl Core {
         let p = phones.entry(device.to_string()).or_default();
         for id in ids {
             p.cited.insert(id, now);
+        }
+    }
+
+    /// Remember a keep answered from what the phone sent, for as long as a real one could be
+    /// opened (`CITED_TTL_SECS`), so a repeat behaves as a new keep does when called on later.
+    pub fn remember_made_up(
+        &self,
+        device: &str,
+        item: nocturne_contract::PhoneItem,
+        kept_at: jiff::Timestamp,
+    ) {
+        let at = self.now();
+        let mut phones = lock(&self.phones);
+        let p = phones.entry(device.to_string()).or_default();
+        if p.made_up.len() >= MAX_MADE_UP
+            && let Some(oldest) = p
+                .made_up
+                .iter()
+                .min_by_key(|(_, m)| m.at)
+                .map(|(id, _)| id.clone())
+        {
+            p.made_up.remove(&oldest);
+        }
+        p.made_up
+            .insert(item.id.clone(), MadeUp { item, kept_at, at });
+    }
+
+    /// A made-up keep of this phone that is still remembered.
+    pub fn made_up(&self, device: &str, id: &str) -> Option<MadeUp> {
+        let now = self.now();
+        lock(&self.phones)
+            .get(device)
+            .and_then(|p| p.made_up.get(id))
+            .filter(|m| now.duration_since(m.at) < Duration::from_secs(CITED_TTL_SECS))
+            .cloned()
+    }
+
+    /// Forget a made-up keep (it was taken back).
+    pub fn forget_made_up(&self, device: &str, id: &str) {
+        if let Some(p) = lock(&self.phones).get_mut(device) {
+            p.made_up.remove(id);
         }
     }
 

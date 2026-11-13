@@ -188,6 +188,11 @@ impl<R: Runtime> Call<R> {
         {
             return self.out.send(answer);
         }
+        if let RemoteAnswer::Item { item } = &answer
+            && self.core.made_up(&self.device.id, &item.id).is_some()
+        {
+            return self.out.send(answer);
+        }
         let ids = cited_ids(&answer);
         if !ids.is_empty() {
             let Some(engine) = self.engine() else {
@@ -292,10 +297,8 @@ impl<R: Runtime> Call<R> {
                         .collect(),
                 })
             }
-            RemoteCall::GetItem { id } => match self.cited_item(&id).await {
-                Ok(v) => Some(RemoteAnswer::Item {
-                    item: phone_item(&v),
-                }),
+            RemoteCall::GetItem { id } => match self.item_for_phone(&id).await {
+                Ok(item) => Some(RemoteAnswer::Item { item }),
                 Err(code) => err(code),
             },
             RemoteCall::GetOriginal { id } => self.original(&id).await,
@@ -458,20 +461,23 @@ impl<R: Runtime> Call<R> {
             .map(super::pairing::fmt_wall)
             .unwrap_or_default();
         *self.made_up.lock().unwrap_or_else(|e| e.into_inner()) = Some(fresh.clone());
+        let made = PhoneItem {
+            id: fresh,
+            kind: item.kind,
+            title,
+            kept_at: format!("{now:.3}"),
+            duration_ms: None,
+            pages: None,
+            has_original: item.has_original,
+            summary: None,
+            text,
+            truncated,
+        };
+        self.core
+            .remember_made_up(&self.device.id, made.clone(), now);
         RemoteAnswer::Kept {
             kept: PhoneKept {
-                item: PhoneItem {
-                    id: fresh,
-                    kind: item.kind,
-                    title,
-                    kept_at: format!("{now:.3}"),
-                    duration_ms: None,
-                    pages: None,
-                    has_original: item.has_original,
-                    summary: None,
-                    text,
-                    truncated,
-                },
+                item: made,
                 duplicate: false,
                 take_back_until: until,
             },
@@ -573,6 +579,9 @@ impl<R: Runtime> Call<R> {
         if crypto::check_id(&id).is_err() {
             return err(PhoneError::Invalid);
         }
+        if let Some(made) = self.core.made_up(&self.device.id, &id) {
+            return self.unkeep_made_up(&id, made.kept_at);
+        }
         let e = self.engine()?;
         let check = id.clone();
         let owner = blocking(move || e.remote_keep_owner(&check)).await.ok()?;
@@ -600,6 +609,22 @@ impl<R: Runtime> Call<R> {
             }
             Err(_) => err(PhoneError::TooLate),
         }
+    }
+
+    /// Taking back a keep that was answered from what the phone sent: the same answers as a new
+    /// keep gets, with nothing in the store to remove.
+    fn unkeep_made_up(&self, id: &str, kept_at: Timestamp) -> Option<RemoteAnswer> {
+        let now = self.app.state::<AppState>().now();
+        if now.duration_since(kept_at) >= jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64) {
+            return err(PhoneError::TooLate);
+        }
+        self.app
+            .state::<AppState>()
+            .asks
+            .cancel_lane(&AskLane::Phone(self.device.id.clone()));
+        self.core.forget_made_up(&self.device.id, id);
+        self.audit(RemoteAction::TookBack, RemoteResult::Ok, 0.0);
+        Some(RemoteAnswer::Done)
     }
 
     async fn ask(&self, question: String) -> Option<RemoteAnswer> {
@@ -733,6 +758,16 @@ impl<R: Runtime> Call<R> {
             }
             None => err(PhoneError::NotFound),
         }
+    }
+
+    /// What `GetItem` answers: a made-up keep gives back only what the phone sent.
+    async fn item_for_phone(&self, id: &str) -> Result<PhoneItem, PhoneError> {
+        if crypto::check_id(id).is_ok()
+            && let Some(made) = self.core.made_up(&self.device.id, id)
+        {
+            return Ok(made.item);
+        }
+        self.cited_item(id).await.map(|v| phone_item(&v))
     }
 
     /// An item this phone was sent in the last hour that is not private.

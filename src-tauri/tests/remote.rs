@@ -1822,14 +1822,96 @@ fn duplicate_of_a_desktop_item_is_not_the_phones() {
     let id = kept_id(&a);
     assert_ne!(id, desk, "the desktop's item is not named");
     assert_eq!(
-        error_of(&call(&mut c, RemoteCall::Unkeep { id: id.clone() })),
-        Some(PhoneError::NotYours)
-    );
-    assert_eq!(
         error_of(&call(&mut c, RemoteCall::GetItem { id: desk.clone() })),
         Some(PhoneError::NotFound)
     );
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: id.clone() }),
+        RemoteAnswer::Done
+    ));
+    assert!(
+        p.h.engine().get_item(&desk).is_ok(),
+        "taking back a repeat leaves the desktop's item"
+    );
     assert_eq!(p.h.engine().get_item(&desk).unwrap().from_device, None);
+}
+
+/// What a phone sees of an id for a repeated keep, next to a new keep, over the same calls.
+#[test]
+fn a_repeated_keep_is_known_to_later_calls_like_a_new_one() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    desk_keep(&p, "Bin day moved to Thursday");
+    let fresh = kept_id(&keep_text(&mut c, "Something nobody kept before", "c-0"));
+    let repeat = kept_id(&keep_text(&mut c, "Bin day moved to Thursday", "c-1"));
+    let item = |c: &mut PhoneClient, id: &str| match call(c, RemoteCall::GetItem { id: id.into() })
+    {
+        RemoteAnswer::Item { item } => item,
+        other => panic!("not an item: {other:?}"),
+    };
+    let (a, b) = (item(&mut c, &fresh), item(&mut c, &repeat));
+    assert_eq!(b.id, repeat);
+    assert_eq!(b.text.as_deref(), Some("Bin day moved to Thursday"));
+    assert_eq!(
+        (
+            a.kind,
+            a.summary.clone(),
+            a.duration_ms,
+            a.pages,
+            a.has_original
+        ),
+        (
+            b.kind,
+            b.summary.clone(),
+            b.duration_ms,
+            b.pages,
+            b.has_original
+        )
+    );
+    // Another phone cannot open or undo it, as for any other id.
+    let (_, mut other) = p.session("iPad");
+    assert_eq!(
+        error_of(&call(
+            &mut other,
+            RemoteCall::GetItem { id: repeat.clone() }
+        )),
+        Some(PhoneError::NotFound)
+    );
+    assert_eq!(
+        error_of(&call(&mut other, RemoteCall::Unkeep { id: repeat.clone() })),
+        Some(PhoneError::NotYours)
+    );
+    // Take back works for both, once, and then both are gone.
+    for id in [&fresh, &repeat] {
+        assert!(matches!(
+            call(&mut c, RemoteCall::Unkeep { id: id.clone() }),
+            RemoteAnswer::Done
+        ));
+        assert_eq!(
+            error_of(&call(&mut c, RemoteCall::GetItem { id: id.clone() })),
+            Some(PhoneError::NotFound)
+        );
+        assert_eq!(
+            error_of(&call(&mut c, RemoteCall::Unkeep { id: id.clone() })),
+            Some(PhoneError::NotYours)
+        );
+    }
+}
+
+#[test]
+fn a_repeated_keep_is_too_late_to_take_back_like_a_new_one() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    desk_keep(&p, "Bin day moved to Thursday");
+    let fresh = kept_id(&keep_text(&mut c, "Something nobody kept before", "c-0"));
+    let repeat = kept_id(&keep_text(&mut c, "Bin day moved to Thursday", "c-1"));
+    p.h.clock.advance_days(1);
+    for id in [fresh, repeat] {
+        assert_eq!(
+            error_of(&call(&mut c, RemoteCall::Unkeep { id })),
+            Some(PhoneError::TooLate)
+        );
+    }
 }
 
 #[test]
