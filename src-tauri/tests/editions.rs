@@ -371,3 +371,53 @@ fn a_page_that_is_not_there_is_not_found() {
         "notFound"
     );
 }
+
+#[test]
+fn spoken_pages_are_kept_as_wav_files() {
+    let h = harness_with_mind(Voice::new());
+    page_with_two_memories(&h);
+    let page = speak(&h);
+    assert!(page["path"].as_str().unwrap().ends_with(".wav"), "{page}");
+}
+
+#[test]
+fn old_spoken_pages_are_pruned_and_recent_ones_stay() {
+    let h = harness_with_mind(Voice::new());
+    let e = h.engine();
+    let keep = |date: &str| {
+        let stamp = e.audio_stamp(date);
+        e.cache_audio(date, "bf_emma", &wav(24_000, 100), stamp)
+            .unwrap()
+            .unwrap()
+    };
+    let old = keep("2026-11-01");
+    let edge = keep("2026-11-06");
+    let recent = keep("2026-11-12");
+    let today = keep("2026-11-13");
+    assert_eq!(
+        e.prune_audio(7).unwrap(),
+        1,
+        "only the day before the window goes"
+    );
+    assert!(!old.exists());
+    assert!(e.cached_audio("2026-11-01", "bf_emma").unwrap().is_none());
+    for kept in [&edge, &recent, &today] {
+        assert!(kept.exists());
+    }
+    assert_eq!(e.prune_audio(7).unwrap(), 0, "nothing left to prune");
+}
+
+#[test]
+fn the_background_check_prunes_old_pages() {
+    let h = harness_with_mind(Voice::new());
+    let e = h.engine();
+    let stamp = e.audio_stamp("2026-10-01");
+    let old = e
+        .cache_audio("2026-10-01", "bf_emma", &wav(24_000, 100), stamp)
+        .unwrap()
+        .unwrap();
+    h.app.manage(OsState::new(h.dir.path()));
+    let app = h.app.handle().clone();
+    tauri::async_runtime::block_on(prepare_if_due(&app));
+    assert!(!old.exists());
+}

@@ -89,7 +89,8 @@ impl Engine {
     ) -> Result<Option<PathBuf>> {
         let dir = self.inner.dir.join("audio");
         fsutil::create_private_dir(&dir)?;
-        let path = dir.join(format!("{}-{}.audio", safe(page_date), safe(voice)));
+        // `.wav`: the asset protocol and the web view pick how to play a file from its extension.
+        let path = dir.join(format!("{}-{}.wav", safe(page_date), safe(voice)));
         let stored = path.to_string_lossy().into_owned();
         // Checked under the write lock, which every change to what audio may say also holds, so
         // nothing can slip in between the check and the file.
@@ -110,6 +111,29 @@ impl Engine {
             Ok(true)
         })?;
         Ok(ok.then_some(path))
+    }
+
+    /// Remove the spoken editions of pages older than `keep_days` days: they are made again
+    /// when asked for, and a morning's worth is megabytes. Returns how many files went.
+    pub fn prune_audio(&self, keep_days: i64) -> Result<usize> {
+        let today: jiff::civil::Date = self.today().parse()?;
+        let cutoff = today
+            .checked_sub(jiff::Span::new().days(keep_days))
+            .map_err(|e| crate::error::Error::invalid(e.to_string()))?
+            .to_string();
+        let old: Vec<String> = self.read(|conn| {
+            let mut stmt =
+                conn.prepare("SELECT DISTINCT page_date FROM audio_cache WHERE page_date < ?1")?;
+            let rows = stmt.query_map([&cutoff], |r| r.get::<_, String>(0))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })?;
+        if old.is_empty() {
+            return Ok(0);
+        }
+        let files = self.write(|tx| drop_audio_rows(tx, &old))?;
+        let count = files.len();
+        shred_all(files);
+        Ok(count)
     }
 
     /// The cached spoken edition, when there is one.

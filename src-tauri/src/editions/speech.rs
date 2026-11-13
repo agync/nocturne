@@ -30,6 +30,8 @@ pub const GAP_MS: u32 = 600;
 const USED_WITHIN_DAYS: i64 = 14;
 /// How many times a day the background make is tried.
 const MAX_ATTEMPTS: u32 = 3;
+/// Spoken pages older than this are removed; they are made again when asked for.
+const KEEP_DAYS: i64 = 7;
 const CHECK_EVERY: Duration = Duration::from_secs(60);
 
 type Key = (PathBuf, String, String);
@@ -203,6 +205,8 @@ pub async fn prepare_if_due<R: Runtime>(app: &AppHandle<R>) -> bool {
     if shell.mind.get().is_none() {
         return false;
     }
+    let pruner = engine.clone();
+    let _ = blocking(move || Ok(pruner.prune_audio(KEEP_DAYS)?)).await;
     let now = shell.now();
     let tz = shell.clock.tz();
     let today = now.to_zoned(tz.clone()).date();
