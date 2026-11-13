@@ -218,6 +218,6 @@ The one exception is Away from home, which is off until the person turns it on. 
 sealed traffic goes to the person's own paired phones through the connection they chose, and that
 connection's helper makes its own upkeep traffic to its company's servers and relays. The
 listener for phones is local (an owner-only Unix socket, or loopback on Windows), but the feature
-is not: the Tailscale daemon binds UDP on every network interface while on, and both helpers talk to
+is not: the Tailscale helper binds UDP on every network interface while on, and both helpers talk to
 their company. The release check allows that only for helper processes and fails it for the app and
 the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home.md)).

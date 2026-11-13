@@ -64,10 +64,12 @@ touches the real internet.
   used subcommand's help text under `crates/helpers/fixtures/help/`. Helpers use only flags found
   there. Refresh `helpers.lock` and the fixtures at least every six months and whenever a helper
   has a security fix.
-- **tailscaled builds.** The macOS and Windows daemons are built in release CI by
-  `scripts/build-tailscaled.sh` from a pinned tag and toolchain, reproduced by a second independent
-  build before the hash is pinned, signed (and notarised on macOS), with a licence report. They are
-  not built on a laptop.
+- **Tailnet helper builds.** `nocturne-tailnet` (`helpers/tailnet`) is built for Linux, macOS and
+  Windows in release CI (`.github/workflows/tailnet.yml`, `scripts/build-tailnet.sh`) with the
+  pinned Go toolchain, no cgo and no embedded paths, and reproduced by a second independent build
+  that must match byte for byte before the hash is pinned. The macOS and Windows binaries are
+  signed (and notarised on macOS) and a licence report is written. Its Go tests run in `make check`
+  when the pinned Go is present.
 - **Reference vectors.** `scripts/remote_vectors.py` regenerates the channel's reference vectors
   from an independent implementation; both the Rust and browser tests read the committed file. A
   change to the channel changes the script first.

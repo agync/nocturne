@@ -23,13 +23,21 @@ outside is a risk to that promise, so it has to be off by default, small, and pr
   port and never a proxy to the engine. It answers ten calls and two phone verbs, each a typed
   match, never a generic forwarder.
 - **Two connections, one sealed channel.** Simple is a Cloudflare quick tunnel, labelled a trial by
-  its maker, and is the default. Most private is the official Tailscale daemon in userspace mode,
-  on the person's own tailnet only. Never Cloudflare named tunnels or Access, a project-run tunnel,
+  its maker, and is the default. Most private is a small helper Nocturne builds on Tailscale's
+  embeddable library, on the person's own tailnet only. Never Cloudflare named tunnels or Access, a project-run tunnel,
   Tailscale Funnel, or a listener on any network interface.
-- **Tailscale daemon, not an embedded library.** Nocturne ships no Go code of its own. The
-  official daemon is driven through the official command line, so upstream fixes arrive by moving
-  one pin, and one supervisor runs both helpers. macOS and Windows daemons are built in release CI
-  from the pinned tag and reproduced by a second build.
+- **Nocturne's own tailnet helper, not the official daemon.** Nocturne builds `nocturne-tailnet`
+  from `helpers/tailnet`, a small program on Tailscale's `tsnet` library (tailscale.com v1.104.6).
+  The first draft of this decision chose the official `tailscaled` in userspace mode. That was
+  reversed once it was built, for two reasons: userspace `tailscaled` forwards tailnet traffic that
+  nothing handles to 127.0.0.1, which would expose the computer's own loopback services to the
+  tailnet, and shields-up, the setting that stops that, would also drop the serve traffic Most
+  private depends on. The helper serves only port 443, admits only the person's own devices (the
+  same user, untagged, not shared in from elsewhere), never forwards to localhost, uploads no logs,
+  and is built without SSH, Taildrop, the web client and Funnel. One supervisor still runs both
+  helpers. The helper is built for all four platforms reproducibly in CI (two builds must match)
+  and tested offline against an in-process control server. Upstream fixes now arrive by moving the
+  library version and rebuilding, which is a cost this choice accepts.
 - **Pairing by scanning or typing.** The computer shows a one-time code (a link in a QR code, or 24
   typed characters carrying the same secret). The phone and computer each show three words, and
   the person compares them and presses Allow on the computer.
@@ -64,10 +72,11 @@ outside is a risk to that promise, so it has to be off by default, small, and pr
   example from a photo of the screen.
 - After a new computer key or Delete everything, phones can only show "can't connect", because no
   sealed notice can reach them.
-- With Most private, other people and devices on the same Tailscale account can reach the listener
-  and try to pair. They still need a code and the person's Allow.
-- The Tailscale daemon binds UDP on every network interface while on, and may cause a firewall
-  prompt on macOS and Windows. The feature as a whole is not loopback only.
+- With Most private, only the person's own devices on their tailnet are admitted, and they still
+  need a code and the person's Allow to pair. Devices of other users, tagged devices and devices
+  shared in are refused before any page is served.
+- The Tailscale helper binds UDP on every network interface while on (its connection layer,
+  magicsock, does this), and may cause a firewall prompt on macOS and Windows. The feature as a whole is not loopback only.
 - The phone's offline queue of waiting keeps is stored on the phone, in its own storage, and is not
   described as protected at rest.
 
@@ -77,7 +86,8 @@ Cloudflare sees the phone's internet address and rough place, when it connects, 
 everything sent each way, and that it delivers the phone page. It does not see content. Tailscale
 sees the account, the machines on it and when they connect, and carries traffic when no direct path
 exists. It does not see content. Each helper also makes its own upkeep traffic to its company while
-on. Helpers are pinned by hash, never update themselves and upload no logs.
+on. Helpers are pinned by hash, never update themselves and upload no logs. A tailnet that requires
+log upload is refused with a plain message, because the helper never uploads logs.
 
 ## Consequences
 

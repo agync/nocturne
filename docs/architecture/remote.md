@@ -32,8 +32,12 @@ that state is on and automatic switch-off is not due. The release check proves t
   before every start, and never updates itself or uploads logs. Flags are used only if they appear
   in help text captured from the pinned binary.
 - **Simple.** A Cloudflare quick tunnel to the listener. Its address changes each start.
-- **Most private.** The official Tailscale daemon in userspace mode with the person's own
-  tailnet, serving the listener over HTTPS. Funnel is never requested.
+- **Most private.** `nocturne-tailnet`, a small helper Nocturne builds on Tailscale's `tsnet`
+  library, joins the person's own tailnet and serves the listener over HTTPS on port 443 only. It
+  admits only the person's own devices (same user, untagged, not shared in), forwards nothing to
+  the computer's loopback, uploads no logs, and has no SSH, Taildrop, web client or Funnel. The
+  supervisor talks to it in JSON lines and it reports states such as sign-in needed, approval
+  needed and ready. It is built in CI and tested offline against an in-process control server.
 - **The phone app.** A second, small web app served by the listener. It lives at the address the
   phone was paired on, caches only its own shell, and talks to the current address.
 
@@ -87,6 +91,5 @@ The relay sees a stable device id per phone, session ids, frame counts, sizes an
 drop or delay frames. Cloudflare delivers the phone page's code, so an edge that alters it can use
 the phone's key while the page runs. A typed address must be exact, and the three words help only if
 compared. After a new computer key or Delete everything, phones can only show "can't connect". With
-Most private, other devices on the same Tailscale account can reach the listener and try to pair, and
-still need a code and the person's Allow. The Tailscale daemon binds UDP on every network
-interface while on. See the decision for the full list.
+Most private, only the person's own devices are admitted, and they still need a code and the
+person's Allow to pair. The Tailscale helper binds UDP on every network interface while on. See the decision for the full list.
