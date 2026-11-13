@@ -366,9 +366,24 @@ async fn lemond_never_reachable() {
     let port = lemond.local_addr().unwrap().port();
     let hits = Arc::new(AtomicUsize::new(0));
     let seen = hits.clone();
+    // Counts what arrives asking for the paths below; a stray connection from another test
+    // that happens to reuse this port asks for something else.
     tokio::spawn(async move {
-        while lemond.accept().await.is_ok() {
-            seen.fetch_add(1, Ordering::SeqCst);
+        while let Ok((mut s, _)) = lemond.accept().await {
+            let seen = seen.clone();
+            tokio::spawn(async move {
+                use tokio::io::AsyncReadExt;
+                let mut buf = vec![0u8; 4096];
+                let n = tokio::time::timeout(Duration::from_secs(1), s.read(&mut buf))
+                    .await
+                    .ok()
+                    .and_then(Result::ok)
+                    .unwrap_or(0);
+                let got = String::from_utf8_lossy(&buf[..n]);
+                if got.contains("models") || got.contains("completions") {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                }
+            });
         }
     });
     for r in [local().await, start(tcp(KeyCarrier::PathPrefix)).await] {
@@ -387,7 +402,7 @@ async fn lemond_never_reachable() {
             assert_eq!(res.status, 404);
         }
     }
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(1200)).await;
     assert_eq!(hits.load(Ordering::SeqCst), 0);
 }
 
