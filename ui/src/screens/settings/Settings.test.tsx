@@ -38,7 +38,7 @@ describe("Settings", () => {
       "true",
     );
     expect(screen.getByRole("combobox", { name: "Letting go" })).toHaveDisplayValue(
-      "Normal, the default (fades after 30 days)",
+      "Normal (default) · fades after 30 days",
     );
     expect(screen.getByRole("combobox", { name: "Theme" })).toHaveDisplayValue("System");
     expect(screen.getByText("Language: English (UK)")).toBeInTheDocument();
@@ -74,9 +74,9 @@ describe("Settings", () => {
         .getAllByRole("option")
         .map((o) => o.textContent),
     ).toEqual([
-      "Gentle (fades after 45 days)",
-      "Normal, the default (fades after 30 days)",
-      "Brisk (fades after 14 days)",
+      "Gentle · fades after 45 days",
+      "Normal (default) · fades after 30 days",
+      "Brisk · fades after 14 days",
     ]);
   });
 
