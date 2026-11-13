@@ -5,9 +5,9 @@
 //! The control file steers it: `refuse` exits 2 before any event; `events` is the script after
 //! `starting` (event objects, `{"wait": "<file beside the binary>"}`, `{"sleep_ms": n}` or
 //! `{"exit": code}`), by default one `running` event; `ignore_stop` ignores the stop command;
-//! `logout_fails` reports a failed sign-out; `serve: false` forwards nothing, so it never listens
-//! (the network check); `udp_any`, `edge_attempt`, `mode` and the rest are the shared stand-in
-//! behaviours.
+//! `events_runs` limits the script to the first n runs; `logout_fails` reports a failed
+//! sign-out; `serve: false` forwards nothing, so it never listens (the network check); `udp_any`, `edge_attempt`, `mode` and the
+//! rest are the shared stand-in behaviours.
 
 use std::io::{BufRead, Write};
 use std::net::TcpListener;
@@ -150,9 +150,17 @@ fn main() {
         .then(|| std::net::UdpSocket::bind("0.0.0.0:0"));
     fake::behave(&control, index);
 
-    let script = control.get("events").cloned().unwrap_or_else(
-        || json!([{"state": "running", "host": format!("{hostname}.tail-fake.ts.net")}]),
-    );
+    let scripted = control
+        .get("events_runs")
+        .and_then(Value::as_u64)
+        .is_none_or(|n| index as u64 <= n);
+    let script = control
+        .get("events")
+        .filter(|_| scripted)
+        .cloned()
+        .unwrap_or_else(
+            || json!([{"state": "running", "host": format!("{hostname}.tail-fake.ts.net")}]),
+        );
     let script_control = control.clone();
     let script_target = target.clone();
     std::thread::spawn(move || {

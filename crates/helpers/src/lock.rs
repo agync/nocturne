@@ -33,6 +33,7 @@ pub fn is_unpinned(sha256: &str) -> bool {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HelpersLock {
     pub helpers: Vec<LockedHelper>,
 }
@@ -130,6 +131,14 @@ impl HelpersLock {
             if !h.base_url.starts_with("https://") {
                 out.push(format!("{who}: base_url must be https"));
             }
+            let github = std::iter::once(h.base_url.as_str())
+                .chain(h.assets.values().filter_map(|a| a.base_url.as_deref()))
+                .any(|u| host_of(u) == Some("github.com"));
+            if github && !h.redirect_hosts.iter().any(|r| r == GITHUB_DOWNLOADS) {
+                out.push(format!(
+                    "{who}: a github.com download redirects, so redirect_hosts needs {GITHUB_DOWNLOADS}"
+                ));
+            }
             for platform in PLATFORMS {
                 let Some(a) = h.assets.get(platform) else {
                     out.push(format!("{who}: no asset for {platform}"));
@@ -173,6 +182,13 @@ impl LockedHelper {
         let base = asset.base_url.as_deref().unwrap_or(&self.base_url);
         format!("{}/{}", base.trim_end_matches('/'), asset.file)
     }
+}
+
+/// Where github.com sends a release download.
+const GITHUB_DOWNLOADS: &str = "release-assets.githubusercontent.com";
+
+fn host_of(url: &str) -> Option<&str> {
+    url.strip_prefix("https://")?.split(['/', ':']).next()
 }
 
 fn is_hex64(s: &str) -> bool {
@@ -243,6 +259,29 @@ mod tests {
         assert!(
             HelpersLock::parse(&old).is_err(),
             "an unknown field is refused"
+        );
+    }
+
+    #[test]
+    fn a_github_download_needs_its_redirect_host() {
+        let mut lock = HelpersLock::parse(EMBEDDED).unwrap();
+        assert_eq!(lock.problems(), Vec::<String>::new());
+        for h in &lock.helpers {
+            assert!(
+                h.redirect_hosts.iter().any(|r| r == GITHUB_DOWNLOADS),
+                "{}",
+                h.kind
+            );
+        }
+        let cloudflared = &mut lock.helpers[0];
+        assert!(cloudflared.base_url.starts_with("https://github.com/"));
+        cloudflared.redirect_hosts.clear();
+        let problems = lock.problems().join("\n");
+        assert!(problems.contains(GITHUB_DOWNLOADS), "{problems}");
+        let top = format!("unknown = 1\n{EMBEDDED}");
+        assert!(
+            HelpersLock::parse(&top).is_err(),
+            "a top-level unknown field is refused"
         );
     }
 

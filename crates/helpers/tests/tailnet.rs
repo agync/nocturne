@@ -274,7 +274,7 @@ async fn fails_for_good(label: &str, events: Value) -> (Sandbox, TransportState)
 
 #[tokio::test]
 async fn errors_that_end_the_helper_are_failures() {
-    for reason in ["start", "backend"] {
+    for reason in ["start"] {
         let (_, failed) = fails_for_good(
             &format!("tn-exit-{reason}"),
             json!([{"state": "error", "reason": reason}, {"state": "stopped"}, {"exit": 1}]),
@@ -294,7 +294,7 @@ async fn errors_that_end_the_helper_are_failures() {
 
 #[tokio::test]
 async fn errors_that_leave_it_running_stop_it() {
-    for reason in ["listen", "backend"] {
+    for reason in ["listen"] {
         let (sb, failed) = fails_for_good(
             &format!("tn-stay-{reason}"),
             json!([{"state": "error", "reason": reason}]),
@@ -421,15 +421,78 @@ async fn certificate_trouble_within_the_grace_is_not_shown() {
     t.stop().await.unwrap();
 }
 
+/// Every state the transport reports until it is up.
+async fn states_until_up(
+    rx: &mut tokio::sync::watch::Receiver<TransportState>,
+) -> Vec<TransportState> {
+    let mut seen = Vec::new();
+    loop {
+        let now = rx.borrow_and_update().clone();
+        seen.push(now.clone());
+        if is_up(&now) {
+            return seen;
+        }
+        tokio::time::timeout(Duration::from_secs(60), rx.changed())
+            .await
+            .expect("a state change")
+            .unwrap();
+    }
+}
+
 #[tokio::test]
-async fn stopped_then_exit_is_stopped() {
-    let sb = Sandbox::new("tn-clean");
+async fn a_stop_from_outside_is_restarted_not_shown_as_off() {
+    let sb = Sandbox::new("tn-outside");
     let t = transport(&sb);
-    script(&sb, json!([{"state": "stopped"}, {"exit": 0}]));
+    sb.control(
+        "t",
+        json!({"events": [{"state": "stopped"}, {"exit": 0}], "events_runs": 1}),
+    );
     let mut rx = t.start(spec(&sb)).await.unwrap();
-    wait_state(&mut rx, "stopped", 60, |s| *s == TransportState::Stopped).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
-    assert_eq!(runs(&sb).len(), 1, "not started again");
+    let seen = states_until_up(&mut rx).await;
+    assert!(!seen.contains(&TransportState::Stopped), "{seen:?}");
+    assert!(
+        seen.iter()
+            .any(|s| matches!(s, TransportState::Restarting { .. })),
+        "{seen:?}"
+    );
+    assert_eq!(runs(&sb).len(), 2);
+    t.stop().await.unwrap();
+    assert_eq!(
+        *rx.borrow(),
+        TransportState::Stopped,
+        "only Nocturne's own stop"
+    );
+}
+
+#[tokio::test]
+async fn backend_trouble_is_transient() {
+    let sb = Sandbox::new("tn-backend");
+    let t = transport(&sb);
+    script(
+        &sb,
+        json!([
+            {"state": "error", "reason": "backend"},
+            {"state": "running", "host": "nocturne-ab12.tail-fake.ts.net"},
+        ]),
+    );
+    let mut rx = t.start(spec(&sb)).await.unwrap();
+    let seen = states_until_up(&mut rx).await;
+    assert!(!seen.iter().any(is_failed), "{seen:?}");
+    t.stop().await.unwrap();
+
+    let sb = Sandbox::new("tn-backend-exit");
+    let t = transport(&sb);
+    sb.control(
+        "t",
+        json!({
+            "events": [{"state": "error", "reason": "backend"}, {"state": "stopped"}, {"exit": 1}],
+            "events_runs": 1,
+        }),
+    );
+    let mut rx = t.start(spec(&sb)).await.unwrap();
+    let seen = states_until_up(&mut rx).await;
+    assert!(!seen.iter().any(is_failed), "{seen:?}");
+    assert_eq!(runs(&sb).len(), 2, "the exit code decided a restart");
     t.stop().await.unwrap();
 }
 

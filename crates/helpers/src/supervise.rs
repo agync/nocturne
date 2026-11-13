@@ -44,10 +44,21 @@ impl std::fmt::Debug for Secret {
 
 /// Whether a helper that ended by itself is started again, from its exit code and the last
 /// lines it printed.
-pub type RestartRule = fn(Option<i32>, &[String]) -> bool;
+pub type RestartFn = dyn Fn(Option<i32>, &[String]) -> bool + Send + Sync;
 
-fn always(_: Option<i32>, _: &[String]) -> bool {
-    true
+#[derive(Clone)]
+pub struct RestartRule(pub Arc<RestartFn>);
+
+impl RestartRule {
+    pub fn always() -> Self {
+        Self(Arc::new(|_, _| true))
+    }
+}
+
+impl std::fmt::Debug for RestartRule {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("RestartRule")
+    }
 }
 
 /// The longest output line kept; a longer one is dropped.
@@ -96,7 +107,7 @@ impl SuperviseOptions {
             first_line: None,
             stop_line: None,
             stop_wait: Duration::from_secs(15),
-            restart: always,
+            restart: RestartRule::always(),
         }
     }
 }
@@ -422,7 +433,7 @@ async fn run(
         let tail = tail_of(&mut running).await;
         reap_group(&mut running).await;
         publish(&tx, |s| s.pid = None);
-        if !(opts.restart)(code, &tail) {
+        if !(opts.restart.0)(code, &tail) {
             publish(&tx, |s| s.phase = Phase::Ended(code));
             let _ = (&mut stop).await;
             publish(&tx, |s| s.phase = Phase::Stopped);
@@ -513,9 +524,11 @@ async fn terminate(running: &mut Running, opts: &SuperviseOptions) -> Result<(),
         && running.stdin.is_some()
     {
         write_line(running, line).await;
-        if tokio::time::timeout(opts.stop_wait, running.child.wait())
-            .await
-            .is_ok()
+        // A line that could not be written was not read either: go straight to SIGTERM.
+        if running.stdin.is_some()
+            && tokio::time::timeout(opts.stop_wait, running.child.wait())
+                .await
+                .is_ok()
         {
             let _ = tail_of(running).await;
             reap_group(running).await;

@@ -17,7 +17,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::install::make_private_dir;
 use crate::supervise::{
-    HelperCommand, Phase, Secret, StopHandle, SupState, SuperviseOptions, Supervisor,
+    HelperCommand, Phase, RestartRule, Secret, StopHandle, SupState, SuperviseOptions, Supervisor,
 };
 use crate::{
     BoxFuture, HelperDirs, HelperError, HelperInfo, HelperKind, Installed, KeyCarrier, LaunchSpec,
@@ -53,7 +53,7 @@ impl Default for TailnetOptions {
             poll: Duration::from_secs(30),
             cert_grace: Duration::from_secs(30),
             stop_wait: Duration::from_secs(15),
-            logout_wait: Duration::from_secs(45),
+            logout_wait: Duration::from_secs(75),
             backoff: None,
             grace: None,
         }
@@ -75,6 +75,8 @@ struct Run {
     state: Arc<watch::Sender<TransportState>>,
     sup_state: watch::Receiver<SupState>,
     logout_failed: Arc<AtomicBool>,
+    /// Set before the sign-out command, so the helper's own end is not taken for a crash.
+    leaving: Arc<AtomicBool>,
 }
 
 /// The helper's state folder.
@@ -162,16 +164,24 @@ pub(crate) enum Seen {
     State(TransportState),
     /// The certificate is not there yet; the helper tries again by itself.
     Certificate,
+    /// Trouble the helper reports and carries on from; its exit code, if it ends, decides.
+    Transient,
     /// A failure that ends this run: the helper is stopped and not started again.
     Fatal(HelperError),
     LogoutFailed,
     Stopped,
 }
 
-fn https_link(url: &str) -> bool {
+/// The hosts a sign-in link may point at: Tailscale's own login servers.
+const SIGN_IN_HOSTS: [&str; 2] = ["login.tailscale.com", "controlplane.tailscale.com"];
+
+/// An https link on one of Tailscale's login hosts, with no user part or port.
+fn sign_in_link(url: &str) -> bool {
     url.len() <= 2048
+        && !url.contains(|c: char| c.is_whitespace() || c.is_control())
         && url.strip_prefix("https://").is_some_and(|rest| {
-            !rest.is_empty() && !rest.contains(|c: char| c.is_whitespace() || c.is_control())
+            let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+            SIGN_IN_HOSTS.contains(&host)
         })
 }
 
@@ -191,7 +201,7 @@ pub(crate) fn read_event(line: &str) -> Option<Seen> {
     let seen = match e.state.as_str() {
         "starting" => Seen::State(TransportState::Starting),
         "needsLogin" => {
-            let url = e.auth_url.filter(|u| https_link(u))?;
+            let url = e.auth_url.filter(|u| sign_in_link(u))?;
             Seen::State(TransportState::NeedsSignIn {
                 url,
                 allow_links: false,
@@ -222,7 +232,7 @@ pub(crate) fn read_event(line: &str) -> Option<Seen> {
             "key" => Seen::Fatal(HelperError::Exited("the helper refused its key".into())),
             "input" => Seen::Fatal(HelperError::Exited("the helper refused its input".into())),
             "start" => Seen::Fatal(HelperError::Exited("the helper could not start".into())),
-            "backend" => Seen::Fatal(HelperError::Exited("the helper's connection failed".into())),
+            "backend" => Seen::Transient,
             "listen" => Seen::Fatal(HelperError::Exited(
                 "the helper could not open its address".into(),
             )),
@@ -233,15 +243,13 @@ pub(crate) fn read_event(line: &str) -> Option<Seen> {
     Some(seen)
 }
 
-/// Whether a run that ended by itself is started again. Not after it said it stopped or failed,
-/// and not after a refusal (exit code 2 before any event, so a wrong command line or setting);
-/// a crash is.
-pub(crate) fn restart_after(code: Option<i32>, tail: &[String]) -> bool {
+/// Whether a run that ended by itself is started again. Not after a failure, not when Nocturne
+/// asked it to sign out (`leaving`), and not after a refusal (exit code 2 before any event, so a
+/// wrong command line or setting). Anything else is a crash or a stop Nocturne did not ask for,
+/// a signal from outside among them, and is.
+pub(crate) fn restart_after(code: Option<i32>, tail: &[String], leaving: bool) -> bool {
     let events: Vec<Seen> = tail.iter().filter_map(|l| read_event(l)).collect();
-    if events
-        .iter()
-        .any(|e| matches!(e, Seen::Fatal(_) | Seen::Stopped))
-    {
+    if leaving || events.iter().any(|e| matches!(e, Seen::Fatal(_))) {
         return false;
     }
     !(code == Some(2) && events.is_empty())
@@ -265,7 +273,11 @@ impl TailnetTransport {
         self.run.lock().expect("run lock").take()
     }
 
-    async fn spawn(&self, spec: &LaunchSpec) -> Result<Supervisor, HelperError> {
+    async fn spawn(
+        &self,
+        spec: &LaunchSpec,
+        leaving: Arc<AtomicBool>,
+    ) -> Result<Supervisor, HelperError> {
         verify(&self.installed)?;
         let state = state_dir(&self.dirs);
         make_private_dir(&self.dirs.root)?;
@@ -289,7 +301,9 @@ impl TailnetTransport {
         opts.first_line = key_line(&spec.origin);
         opts.stop_line = Some(CMD_STOP.into());
         opts.stop_wait = self.opts.stop_wait;
-        opts.restart = restart_after;
+        opts.restart = RestartRule(Arc::new(move |code, tail| {
+            restart_after(code, tail, leaving.load(Ordering::SeqCst))
+        }));
         if let Some(b) = &self.opts.backoff {
             opts.backoff = b.clone();
         }
@@ -322,7 +336,8 @@ impl Transport for TailnetTransport {
             if let Some(old) = self.take_run() {
                 shut(old).await?;
             }
-            let mut sup = self.spawn(&spec).await?;
+            let leaving = Arc::new(AtomicBool::new(false));
+            let mut sup = self.spawn(&spec, leaving.clone()).await?;
             let lines = sup
                 .take_lines()
                 .ok_or_else(|| HelperError::Spawn("the helper has no output".into()))?;
@@ -341,6 +356,7 @@ impl Transport for TailnetTransport {
                 cancel: cancel.clone(),
                 opts: self.opts.clone(),
                 logout_failed: logout_failed.clone(),
+                leaving: leaving.clone(),
             }));
             *self.run.lock().expect("run lock") = Some(Run {
                 sup,
@@ -350,6 +366,7 @@ impl Transport for TailnetTransport {
                 state: tx,
                 sup_state,
                 logout_failed,
+                leaving,
             });
             Ok(rx)
         })
@@ -373,6 +390,7 @@ impl Transport for TailnetTransport {
                 let _ = std::fs::remove_dir_all(&state);
                 return Ok(());
             };
+            run.leaving.store(true, Ordering::SeqCst);
             let _ = run.input.send(CMD_LOGOUT.into());
             let mut phase = run.sup_state.clone();
             let ended = tokio::time::timeout(self.opts.logout_wait, async {
@@ -433,6 +451,7 @@ struct Watch {
     cancel: CancellationToken,
     opts: TailnetOptions,
     logout_failed: Arc<AtomicBool>,
+    leaving: Arc<AtomicBool>,
 }
 
 fn set(tx: &watch::Sender<TransportState>, next: TransportState) {
@@ -449,7 +468,6 @@ fn set(tx: &watch::Sender<TransportState>, next: TransportState) {
 #[derive(Default)]
 struct Run1 {
     failed: bool,
-    stopped: bool,
     cert_since: Option<Instant>,
     /// The certificate problem is shown; only progress replaces it, not a repeated `starting`.
     cert_shown: bool,
@@ -483,7 +501,7 @@ impl Watch {
                 self.halt.stop();
             }
             Seen::LogoutFailed => self.logout_failed.store(true, Ordering::SeqCst),
-            Seen::Stopped => r.stopped = true,
+            Seen::Transient | Seen::Stopped => {}
         }
     }
 
@@ -498,7 +516,6 @@ impl Watch {
         let phase = self.sup.borrow_and_update().phase.clone();
         match phase {
             Phase::Running => {
-                r.stopped = false;
                 if matches!(*self.tx.borrow(), TransportState::Restarting { .. }) {
                     set(&self.tx, TransportState::Starting);
                 }
@@ -521,16 +538,16 @@ impl Watch {
                 }
                 false
             }
+            // Stopped is published only by Nocturne's own stop. A run that ended without a
+            // failure and without being asked to sign out was refused.
             Phase::Ended(_) => {
-                if !r.failed {
-                    let next = if r.stopped {
-                        TransportState::Stopped
-                    } else {
+                if !r.failed && !self.leaving.load(Ordering::SeqCst) {
+                    set(
+                        &self.tx,
                         TransportState::Failed {
                             error: HelperError::Spawn("the helper refused to start".into()),
-                        }
-                    };
-                    set(&self.tx, next);
+                        },
+                    );
                 }
                 false
             }
@@ -676,9 +693,23 @@ mod tests {
             })
         );
         assert_eq!(
-            state(r#"{"state":"needsLogin","authUrl":"http://x/a"}"#),
-            None
+            state(r#"{"state":"needsLogin","authUrl":"https://controlplane.tailscale.com/a/x2"}"#),
+            Some(TransportState::NeedsSignIn {
+                url: "https://controlplane.tailscale.com/a/x2".into(),
+                allow_links: false
+            })
         );
+        for bad in [
+            "http://login.tailscale.com/a/x",
+            "https://evil.example/a/x",
+            "https://login.tailscale.com.evil.example/a/x",
+            "https://user@login.tailscale.com/a/x",
+            "https://login.tailscale.com:8443/a/x",
+            "https://login.tailscale.com/a/x y",
+        ] {
+            let line = serde_json::json!({"state": "needsLogin", "authUrl": bad}).to_string();
+            assert_eq!(state(&line), None, "{bad}");
+        }
         assert_eq!(
             state(r#"{"state":"needsHttps"}"#),
             Some(TransportState::NeedsSignIn {
@@ -700,7 +731,7 @@ mod tests {
             })
         );
         assert_eq!(state(r#"{"state":"running","host":"a b"}"#), None);
-        for reason in ["key", "input", "start", "backend", "listen"] {
+        for reason in ["key", "input", "start", "listen"] {
             let line = format!(r#"{{"state":"error","reason":"{reason}"}}"#);
             assert!(
                 matches!(read_event(&line), Some(Seen::Fatal(HelperError::Exited(_)))),
@@ -724,6 +755,10 @@ mod tests {
             Some(Seen::LogoutFailed)
         );
         assert_eq!(read_event(r#"{"state":"stopped"}"#), Some(Seen::Stopped));
+        assert_eq!(
+            read_event(r#"{"state":"error","reason":"backend"}"#),
+            Some(Seen::Transient)
+        );
         for junk in [
             "",
             "not json",
@@ -735,28 +770,38 @@ mod tests {
     }
 
     #[test]
-    fn restart_only_after_a_crash() {
+    fn restart_only_after_a_crash_or_an_outside_stop() {
         let lines = |l: &[&str]| l.iter().map(|s| s.to_string()).collect::<Vec<_>>();
         let started = lines(&[r#"{"state":"starting"}"#]);
-        assert!(restart_after(None, &started), "killed by a signal");
-        assert!(restart_after(Some(1), &started));
+        assert!(restart_after(None, &started, false), "killed by a signal");
+        assert!(restart_after(Some(1), &started, false));
         assert!(
-            restart_after(Some(2), &started),
+            restart_after(Some(2), &started, false),
             "a Go panic after starting"
         );
-        assert!(!restart_after(Some(2), &[]), "a refusal");
+        assert!(!restart_after(Some(2), &[], false), "a refusal");
         let stopped = lines(&[r#"{"state":"starting"}"#, r#"{"state":"stopped"}"#]);
-        assert!(!restart_after(Some(0), &stopped));
+        assert!(
+            restart_after(Some(0), &stopped, false),
+            "stopped from outside"
+        );
+        assert!(!restart_after(Some(0), &stopped, true), "signed out");
         let failed = lines(&[
             r#"{"state":"error","reason":"start"}"#,
             r#"{"state":"stopped"}"#,
         ]);
-        assert!(!restart_after(Some(1), &failed));
-        assert!(!restart_after(
-            Some(1),
-            &lines(&[r#"{"state":"error","reason":"key"}"#])
-        ));
-        assert!(restart_after(Some(0), &started), "exit without stopped");
+        assert!(!restart_after(Some(1), &failed, false));
+        let key = lines(&[r#"{"state":"error","reason":"key"}"#]);
+        assert!(!restart_after(Some(1), &key, false));
+        let backend = lines(&[
+            r#"{"state":"error","reason":"backend"}"#,
+            r#"{"state":"stopped"}"#,
+        ]);
+        assert!(restart_after(Some(1), &backend, false), "the exit decides");
+        assert!(
+            restart_after(Some(0), &started, false),
+            "exit without stopped"
+        );
     }
 
     #[test]

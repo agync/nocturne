@@ -199,3 +199,35 @@ async fn a_changed_binary_is_not_started() {
     );
     assert!(sb.records("c").is_empty());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn stop_goes_straight_to_sigterm_when_the_stop_line_cannot_be_written() {
+    let sb = Sandbox::new("closed-input");
+    let sh = std::path::Path::new("/bin/sh");
+    let cmd = HelperCommand {
+        name: "sh",
+        sha256: sha256_of(sh),
+        program: sh.into(),
+        args: ["-c", "exec 0<&-; : > ready; exec sleep 60"]
+            .map(OsString::from)
+            .to_vec(),
+        env: vec![("PATH".into(), "/usr/bin:/bin".into())],
+        cwd: Some(sb.root.clone()),
+    };
+    let mut opts = SuperviseOptions::new(sb.root.join("logs"));
+    opts.lines = true;
+    opts.stop_line = Some("stop".into());
+    opts.stop_wait = Duration::from_secs(30);
+    opts.grace = Duration::from_secs(2);
+    let sup = Supervisor::start(cmd, opts).await.unwrap();
+    let ready = sb.root.join("ready");
+    until("the input is closed", 30, || ready.exists()).await;
+    let asked = std::time::Instant::now();
+    sup.stop().await.unwrap();
+    assert!(
+        asked.elapsed() < Duration::from_secs(15),
+        "no stop wait: {:?}",
+        asked.elapsed()
+    );
+}

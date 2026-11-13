@@ -60,7 +60,7 @@ go_version = "go1.27.3"
 go_licenses_version = "PLACEHOLDER"
 base_url = "https://example.invalid/nocturne/releases/download/PLACEHOLDER"
 placeholder = true
-redirect_hosts = []
+redirect_hosts = ["objects.githubusercontent.com", "release-assets.githubusercontent.com"]
 
 [helpers.assets.linux-x86_64]
 file = "nocturne-tailnet-linux-x86_64"
