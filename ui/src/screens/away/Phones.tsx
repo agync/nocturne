@@ -193,6 +193,7 @@ export function Phones({ view }: { view: RemoteView }) {
           title={t("away.remove.title", { name: removing.name })}
           confirm={t("away.remove.confirm")}
           keep={t("away.remove.keep")}
+          destructive
           busy={busy}
           onClose={() => setRemoving(null)}
           onConfirm={() => void remove()}

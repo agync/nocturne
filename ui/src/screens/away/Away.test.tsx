@@ -105,6 +105,10 @@ describe("away", () => {
     await userEvent.click(screen.getByRole("button", { name: "Turn off and remove all phones…" }));
     const dialog = await screen.findByRole("dialog", { name: "Turn off and remove all phones?" });
     expect(within(dialog).getByText(/Nothing on this computer is deleted/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Turn off and remove" })).toHaveAttribute(
+      "data-variant",
+      "forget",
+    );
     await userEvent.click(within(dialog).getByRole("button", { name: "Keep it on" }));
     expect((await engine.getRemote()).state.type).toBe("on");
     await userEvent.click(screen.getByRole("button", { name: "Turn off and remove all phones…" }));

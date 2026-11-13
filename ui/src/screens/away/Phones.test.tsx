@@ -52,6 +52,10 @@ describe("phones", () => {
     const remove = vi.spyOn(engine, "removeDevice");
     await userEvent.click(screen.getByRole("button", { name: "Remove Work phone" }));
     const dialog = await screen.findByRole("dialog", { name: "Remove Work phone?" });
+    expect(within(dialog).getByRole("button", { name: "Remove" })).toHaveAttribute(
+      "data-variant",
+      "forget",
+    );
     expect(
       within(dialog).getByText("It stops working at once. You can pair it again later."),
     ).toBeInTheDocument();

@@ -225,6 +225,7 @@ function RemoveAllDialog({ onClose }: { onClose: () => void }) {
       title={t("away.removeAll.title")}
       confirm={t("away.removeAll.confirm")}
       keep={t("away.removeAll.keep")}
+      destructive
       busy={busy}
       onClose={onClose}
       onConfirm={() => {
