@@ -12,6 +12,7 @@ use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
 use tokio::process::{ChildStdin, Command};
 use tokio::sync::{mpsc, oneshot, watch};
 
+use crate::admin::{Admin, Keys};
 use crate::bundle::{self, Dirs};
 use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
@@ -105,6 +106,7 @@ struct Shared {
 pub struct Control {
     dirs: Dirs,
     client: Client,
+    admin: Admin,
     shared: Arc<Shared>,
     cmd: mpsc::Sender<Cmd>,
 }
@@ -116,6 +118,10 @@ impl Control {
 
     pub fn client(&self) -> Client {
         self.client.clone()
+    }
+
+    pub fn admin(&self) -> Admin {
+        self.admin.clone()
     }
 
     /// Lets the engine reach the internet (for a download the person approved) or not, and
@@ -138,6 +144,7 @@ impl Control {
 pub struct Supervisor {
     dirs: Dirs,
     client: Client,
+    admin: Admin,
     state: watch::Receiver<RuntimeState>,
     shared: Arc<Shared>,
     cmd: mpsc::Sender<Cmd>,
@@ -155,6 +162,7 @@ struct Actor {
     exe: std::path::PathBuf,
     opts: SupervisorOptions,
     client: Client,
+    admin: Admin,
     state: watch::Sender<RuntimeState>,
     shared: Arc<Shared>,
 }
@@ -165,6 +173,7 @@ impl Supervisor {
         let exe = bundle::locate(&dirs.bundle)?;
         dirs.ensure()?;
         let client = Client::detached(Timeouts::default());
+        let admin = Admin::detached();
         let (state_tx, state_rx) = watch::channel(RuntimeState::Starting);
         let shared = Arc::new(Shared {
             restarts: AtomicU32::new(0),
@@ -179,6 +188,7 @@ impl Supervisor {
             exe,
             opts,
             client: client.clone(),
+            admin: admin.clone(),
             state: state_tx,
             shared: shared.clone(),
         };
@@ -187,6 +197,7 @@ impl Supervisor {
             Ok(Ok(())) => Ok(Supervisor {
                 dirs,
                 client,
+                admin,
                 state: state_rx,
                 shared,
                 cmd: cmd_tx,
@@ -203,6 +214,11 @@ impl Supervisor {
     /// A cheap clone that follows restarts.
     pub fn client(&self) -> Client {
         self.client.clone()
+    }
+
+    /// The engine's `/internal/*` endpoints, with the admin key the client never holds.
+    pub fn admin(&self) -> Admin {
+        self.admin.clone()
     }
 
     pub fn state(&self) -> watch::Receiver<RuntimeState> {
@@ -240,6 +256,7 @@ impl Supervisor {
         Control {
             dirs: self.dirs.clone(),
             client: self.client.clone(),
+            admin: self.admin.clone(),
             shared: self.shared.clone(),
             cmd: self.cmd.clone(),
         }
@@ -408,7 +425,7 @@ impl Actor {
 
     /// Reports the failure and waits to be told to shut down.
     async fn fail(&self, reason: String, cmd: &mut mpsc::Receiver<Cmd>) {
-        self.client.set_endpoint(None);
+        self.forget_endpoints();
         self.clear_ready();
         self.set_state(RuntimeState::Failed { reason });
         while let Some(c) = cmd.recv().await {
@@ -439,7 +456,7 @@ impl Actor {
 
     /// Spawns the engine, retrying with new ports, and waits until it answers with our key.
     async fn launch(&self) -> Result<Running, RuntimeError> {
-        self.client.set_endpoint(None);
+        self.forget_endpoints();
         self.clear_ready();
         if !matches!(*self.state.borrow(), RuntimeState::Restarting { .. }) {
             self.set_state(RuntimeState::Starting);
@@ -448,7 +465,7 @@ impl Actor {
         for _ in 0..PORT_TRIES {
             let port = free_port(None)?;
             let ws_port = free_port(Some(port))?;
-            let key = new_key()?;
+            let keys = Keys::new(new_key()?, new_key()?)?;
             let online = self.shared.online.load(Ordering::SeqCst);
             let (llama, whisper) = read_backends(&self.dirs.config());
             let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
@@ -470,10 +487,20 @@ impl Actor {
                 tracing::warn!("could not save the models' load options: {e}");
             }
             self.client.set_saved_options(saved);
-            let mut running = self.spawn(port, &key)?;
-            match self.await_ready(&mut running, port, ws_port, &key).await {
+            let mut running = self.spawn(port, &keys)?;
+            match self
+                .await_ready(&mut running, port, ws_port, &keys.api)
+                .await
+            {
                 Ok(version) => {
-                    self.client.set_endpoint(Some(Endpoint { port, key }));
+                    self.client.set_endpoint(Some(Endpoint {
+                        port,
+                        key: keys.api,
+                    }));
+                    if let Err(e) = self.admin.set_endpoint(Some((port, keys.admin))) {
+                        stop_hard(&mut running).await;
+                        return Err(e);
+                    }
                     *self
                         .shared
                         .ready_since
@@ -498,7 +525,13 @@ impl Actor {
         )))
     }
 
-    fn spawn(&self, port: u16, key: &str) -> Result<Running, RuntimeError> {
+    /// Neither key works against a stopped engine.
+    fn forget_endpoints(&self) {
+        self.client.set_endpoint(None);
+        let _ = self.admin.set_endpoint(None);
+    }
+
+    fn spawn(&self, port: u16, keys: &Keys) -> Result<Running, RuntimeError> {
         let mut cmd = Command::new(&self.exe);
         cmd.arg(self.dirs.cache())
             .arg(self.dirs.config())
@@ -513,7 +546,8 @@ impl Actor {
             .env("PATH", default_path())
             .env("XDG_RUNTIME_DIR", self.dirs.run())
             .env("LANG", "C.UTF-8")
-            .env("LEMONADE_API_KEY", key);
+            .env("LEMONADE_API_KEY", &keys.api)
+            .env("LEMONADE_ADMIN_API_KEY", &keys.admin);
         #[cfg(windows)]
         if let Some(root) = std::env::var_os("SystemRoot") {
             cmd.env("SystemRoot", root);
@@ -591,7 +625,7 @@ impl Actor {
             tokio::select! {
                 status = running.child.wait() => {
                     reap_group(&mut running).await;
-                    self.client.set_endpoint(None);
+                    self.forget_endpoints();
                     self.clear_ready();
                     return Exit::Crashed(match status {
                         Ok(s) => s.to_string(),
@@ -606,7 +640,7 @@ impl Actor {
                     }
                     if misses >= HUNG_AFTER {
                         stop_hard(&mut running).await;
-                        self.client.set_endpoint(None);
+                        self.forget_endpoints();
                         self.clear_ready();
                         return Exit::Crashed("the engine stopped answering".into());
                     }
@@ -630,8 +664,8 @@ impl Actor {
                             Exit::Shutdown
                         }
                     };
-                    self.client.set_endpoint(None);
-                    self.clear_ready();
+                    self.forget_endpoints();
+                                self.clear_ready();
                     return exit;
                 }
             }
@@ -643,7 +677,7 @@ impl Actor {
     async fn stop_gracefully(&self, running: &mut Running, how: Stop) -> Result<(), RuntimeError> {
         let begun = tokio::time::Instant::now();
         let request = SHUTDOWN_REQUEST.min(how.polite);
-        let _ = tokio::time::timeout(request, self.client.shutdown()).await;
+        let _ = tokio::time::timeout(request, self.admin.shutdown()).await;
         let rest = how.polite.saturating_sub(begun.elapsed());
         if wait_exit(running, rest).await.is_none() {
             drop(running.stdin.take());

@@ -108,7 +108,7 @@ async fn raw(sup: &Supervisor, method: &str, path: &str, body: Value) -> Value {
 
 async fn wait_offline(sup: &Supervisor) {
     for _ in 0..200 {
-        if let Ok(cfg) = sup.client().config().await
+        if let Ok(cfg) = sup.admin().config().await
             && cfg["offline"] == true
             && cfg["no_fetch_executables"] == true
         {
@@ -136,7 +136,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
     let mut rx = rig.setup.view();
     let offline_while_downloading = {
         let mut rx = rig.setup.view();
-        let client = rig.sup.client();
+        let admin = rig.sup.admin();
         tokio::spawn(async move {
             while rx.changed().await.is_ok() {
                 let (phase, bytes) = {
@@ -145,7 +145,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
                 };
                 if phase == SetupPhase::Downloading
                     && bytes > 0.0
-                    && let Ok(cfg) = client.config().await
+                    && let Ok(cfg) = admin.config().await
                 {
                     return cfg["offline"] == false;
                 }
@@ -222,7 +222,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
     assert_eq!(record["done"], true);
     assert_eq!(record["backends"]["llamacpp"], "vulkan");
     assert_eq!(rig.setup.installed(), Some(Tier::Standard));
-    assert_eq!(rig.sup.client().config().await.unwrap()["offline"], true);
+    assert_eq!(rig.sup.admin().config().await.unwrap()["offline"], true);
 
     let ledger = rig.ledger.lock().unwrap().clone();
     for component in tier::components(Tier::Standard) {
@@ -253,7 +253,7 @@ async fn pausing_takes_the_engine_offline_and_resuming_brings_it_back_online() {
         20,
     )
     .await;
-    let cfg = rig.sup.client().config().await.unwrap();
+    let cfg = rig.sup.admin().config().await.unwrap();
     assert_eq!(cfg["offline"], false, "online while it downloads");
 
     rig.setup.pause().await.unwrap();
@@ -278,7 +278,7 @@ async fn pausing_takes_the_engine_offline_and_resuming_brings_it_back_online() {
         10,
     )
     .await;
-    let cfg = rig.sup.client().config().await.unwrap();
+    let cfg = rig.sup.admin().config().await.unwrap();
     assert_eq!(cfg["offline"], false, "online again after resuming");
     let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 40).await;
     assert!(done.paused.is_none());
@@ -463,7 +463,7 @@ async fn a_dropped_setup_leaves_the_engine_offline_and_a_new_one_carries_on() {
         20,
     )
     .await;
-    assert_eq!(rig.sup.client().config().await.unwrap()["offline"], false);
+    assert_eq!(rig.sup.admin().config().await.unwrap()["offline"], false);
     drop(rig.setup);
     wait_offline(&rig.sup).await;
 

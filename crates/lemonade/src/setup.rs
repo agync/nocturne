@@ -664,7 +664,8 @@ impl Inner {
         let whisper = tier::choose_backend(&info, "whispercpp");
         let voice = tier::choose_backend(&info, "kokoro");
         let _ = self
-            .client
+            .control
+            .admin()
             .set(&serde_json::json!({
                 "llamacpp": {"backend": llama},
                 "whispercpp": {"backend": whisper},

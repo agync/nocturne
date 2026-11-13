@@ -292,7 +292,7 @@ impl Client {
         })
     }
 
-    async fn send(rb: RequestBuilder) -> Result<Response, RuntimeError> {
+    pub(crate) async fn send(rb: RequestBuilder) -> Result<Response, RuntimeError> {
         let response = rb.send().await.map_err(map_transport)?;
         if response.status().is_success() {
             return Ok(response);
@@ -302,7 +302,7 @@ impl Client {
         Err(map_status(status, &text))
     }
 
-    async fn json<T: DeserializeOwned>(rb: RequestBuilder) -> Result<T, RuntimeError> {
+    pub(crate) async fn json<T: DeserializeOwned>(rb: RequestBuilder) -> Result<T, RuntimeError> {
         let response = Self::send(rb).await?;
         let bytes = response.bytes().await.map_err(map_transport)?;
         serde_json::from_slice(&bytes).map_err(|e| RuntimeError::BadResponse(e.to_string()))
@@ -324,27 +324,6 @@ impl Client {
 
     pub async fn health(&self) -> Result<Health, RuntimeError> {
         Self::json(self.request(Method::GET, "/v1/health")?).await
-    }
-
-    /// `POST /internal/set`: changes `config.json` settings without a restart.
-    pub async fn set(&self, settings: &Value) -> Result<(), RuntimeError> {
-        let _: Value = self.post_json("/internal/set", settings).await?;
-        Ok(())
-    }
-
-    /// `GET /internal/config`: the settings in force.
-    pub async fn config(&self) -> Result<Value, RuntimeError> {
-        Self::json(self.request(Method::GET, "/internal/config")?).await
-    }
-
-    /// `POST /internal/shutdown`: unloads every model and stops the engine.
-    pub async fn shutdown(&self) -> Result<(), RuntimeError> {
-        let rb = self
-            .request(Method::POST, "/internal/shutdown")?
-            .timeout(Duration::from_secs(2))
-            .json(&json!({}));
-        let _: Value = Self::json(rb).await?;
-        Ok(())
     }
 }
 

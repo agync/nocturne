@@ -43,7 +43,7 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
 
     let health = client.health().await.unwrap();
     assert_eq!(health.version, version);
-    let cfg = client.config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(cfg["host"], "127.0.0.1");
     assert_eq!(cfg["offline"], true);
     assert_eq!(cfg["broadcast"], false);
@@ -71,8 +71,10 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
     assert_ne!(pgid, relaunched_from);
     #[cfg(unix)]
     assert_eq!(common::group_members(relaunched_from), Vec::<u32>::new());
-    let client = sup.client();
-    assert_eq!(client.config().await.unwrap()["no_fetch_executables"], true);
+    assert_eq!(
+        sup.admin().config().await.unwrap()["no_fetch_executables"],
+        true
+    );
     let ram = {
         let mut sys = sysinfo::System::new();
         sys.refresh_memory();
@@ -282,7 +284,7 @@ async fn setup_pulls_whisper_tiny_through_the_real_engine() {
             .any(|(_, l, b)| l == "Whisper-Tiny" && *b > 50_000_000)
     );
     assert!(files_under(&dirs.models()) > 0);
-    let cfg = sup.client().config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(cfg["offline"], true);
     assert_eq!(cfg["no_fetch_executables"], true);
     let models = sup.client().models().await.unwrap();

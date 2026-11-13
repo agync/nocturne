@@ -115,12 +115,16 @@ async fn the_child_environment_holds_only_what_we_allow() {
         [
             "HOME",
             "LANG",
+            "LEMONADE_ADMIN_API_KEY",
             "LEMONADE_API_KEY",
             "PATH",
             "XDG_RUNTIME_DIR"
         ]
     );
     assert_eq!(env["LEMONADE_API_KEY"], endpoint.key.as_str());
+    let admin = env["LEMONADE_ADMIN_API_KEY"].as_str().unwrap();
+    assert!(!admin.is_empty());
+    assert_ne!(admin, endpoint.key.as_str());
     assert_eq!(env["LANG"], "C.UTF-8");
     assert_eq!(
         env["XDG_RUNTIME_DIR"],
@@ -140,15 +144,21 @@ async fn our_config_is_what_the_engine_sees_and_the_websocket_port_is_pinned() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
     let sup = start(&dirs, None).await;
-    let client = sup.client();
-    let cfg = client.config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(cfg["host"], "127.0.0.1");
     assert_eq!(cfg["offline"], true);
     assert_eq!(cfg["no_fetch_executables"], true);
     assert_eq!(cfg["broadcast"], false);
+    assert_eq!(
+        cfg["allowed_origins"],
+        nocturne_lemonade::config::ALLOWED_ORIGINS
+    );
     assert_eq!(cfg["telemetry"]["enabled"], false);
     let ws = cfg["websocket_port"].as_u64().unwrap() as u16;
-    assert_eq!(client.health().await.unwrap().websocket_port, Some(ws));
+    assert_eq!(
+        sup.client().health().await.unwrap().websocket_port,
+        Some(ws)
+    );
     assert_ne!(Some(ws), sup.client().endpoint().map(|e| e.port));
     sup.shutdown().await.unwrap();
 }
@@ -309,7 +319,7 @@ async fn online_relaunches_the_engine_and_survives_a_crash() {
         "the engine was relaunched"
     );
     assert_eq!(sup.restarts(), 0, "a relaunch is not a crash");
-    let cfg = sup.client().config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(
         (
             cfg["offline"].as_bool(),
@@ -334,7 +344,7 @@ async fn online_relaunches_the_engine_and_survives_a_crash() {
     )
     .await;
     wait_state(&mut rx, |s| ready_port(s).is_some(), Duration::from_secs(5)).await;
-    let cfg = sup.client().config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(
         (
             cfg["offline"].as_bool(),
@@ -344,7 +354,7 @@ async fn online_relaunches_the_engine_and_survives_a_crash() {
     );
 
     sup.set_online(false).await.unwrap();
-    let cfg = sup.client().config().await.unwrap();
+    let cfg = sup.admin().config().await.unwrap();
     assert_eq!(
         (
             cfg["offline"].as_bool(),
@@ -478,4 +488,95 @@ async fn killing_the_owner_makes_the_engine_exit_by_itself() {
         "the engine outlived its owner"
     );
     assert_eq!(common::group_members(pid), Vec::<u32>::new());
+}
+
+/// The admin key the supervisor gave the engine, read back from the engine's own environment.
+async fn admin_key_of(sup: &Supervisor) -> String {
+    let endpoint = sup.client().endpoint().unwrap();
+    let env: Value = reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{}/fake/env", endpoint.port))
+        .bearer_auth(&endpoint.key)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    env["LEMONADE_ADMIN_API_KEY"].as_str().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn the_client_never_sees_the_admin_key() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let admin = admin_key_of(&sup).await;
+    let client = sup.client();
+    let endpoint = client.endpoint().unwrap();
+    assert_ne!(endpoint.key, admin);
+    for shown in [
+        format!("{client:?}"),
+        format!("{endpoint:?}"),
+        format!("{:?}", sup.admin()),
+    ] {
+        assert!(!shown.contains(&admin), "{shown}");
+    }
+    sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_admin_endpoints_refuse_the_inference_key_and_take_the_admin_key() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let admin = admin_key_of(&sup).await;
+    let endpoint = sup.client().endpoint().unwrap();
+    let http = reqwest::Client::new();
+    let url = format!("http://127.0.0.1:{}/internal/config", endpoint.port);
+    let with_api = http
+        .get(&url)
+        .bearer_auth(&endpoint.key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(with_api.status(), 401);
+    let with_none = http.get(&url).send().await.unwrap();
+    assert_eq!(with_none.status(), 401);
+    let with_admin = http.get(&url).bearer_auth(&admin).send().await.unwrap();
+    assert_eq!(with_admin.status(), 200);
+    assert_eq!(sup.admin().config().await.unwrap()["host"], "127.0.0.1");
+    // The inference key still opens the ordinary routes.
+    sup.client().health().await.unwrap();
+    sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_empty_admin_key_is_impossible() {
+    use nocturne_lemonade::Admin;
+    assert!(Admin::new(1, "").is_err());
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    assert!(!admin_key_of(&sup).await.is_empty());
+    sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn each_launch_gets_new_keys() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let first = (
+        admin_key_of(&sup).await,
+        sup.client().endpoint().unwrap().key,
+    );
+    sup.set_online(true).await.unwrap();
+    let second = (
+        admin_key_of(&sup).await,
+        sup.client().endpoint().unwrap().key,
+    );
+    assert_ne!(first.0, second.0);
+    assert_ne!(first.1, second.1);
+    assert_ne!(second.0, second.1);
+    sup.shutdown().await.unwrap();
 }

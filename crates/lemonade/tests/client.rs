@@ -90,12 +90,12 @@ async fn each_call_sends_the_right_method_path_body_and_key() {
         json!({"model_name": "Qwen3.5-9B-GGUF"})
     );
 
-    c.set(&json!({"offline": true})).await.unwrap();
+    fake.admin.set(&json!({"offline": true})).await.unwrap();
     assert_eq!(
         only(fake.seen("/internal/set").await)["body"],
         json!({"offline": true})
     );
-    assert_eq!(c.config().await.unwrap()["offline"], true);
+    assert_eq!(fake.admin.config().await.unwrap()["offline"], true);
 
     let vecs = c
         .embeddings("Qwen3-Embedding-0.6B-GGUF", &["a".into(), "bb".into()])
@@ -257,7 +257,7 @@ async fn statuses_map_to_error_variants() {
         .unwrap_err();
     assert!(matches!(missing, RuntimeError::NotFound(_)), "{missing:?}");
 
-    let rejected = fake.client.set(&json!({})).await.unwrap_err();
+    let rejected = fake.admin.set(&json!({})).await.unwrap_err();
     assert!(
         matches!(rejected, RuntimeError::Rejected { status: 400, .. }),
         "{rejected:?}"
@@ -277,7 +277,7 @@ async fn statuses_map_to_error_variants() {
         }
     );
 
-    fake.client.set(&json!({"offline": true})).await.unwrap();
+    fake.admin.set(&json!({"offline": true})).await.unwrap();
     assert_eq!(
         fake.client.pull("Whisper-Tiny").await.unwrap_err(),
         RuntimeError::Offline
@@ -346,7 +346,7 @@ async fn a_stalled_stream_is_cut_after_the_idle_limit() {
 #[tokio::test]
 async fn shutdown_stops_the_engine() {
     let mut fake = Fake::started(None).await;
-    fake.client.shutdown().await.unwrap();
+    fake.admin.shutdown().await.unwrap();
     assert!(fake.wait_exit(Duration::from_secs(5)).is_some());
 }
 

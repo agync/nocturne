@@ -1,6 +1,7 @@
 //! Runs and supervises the private Lemonade server from the embedded bundle, sets it up for the
 //! person's hardware and implements [`nocturne_engine::Mind`] over its HTTP API.
 
+pub mod admin;
 pub mod bundle;
 pub mod client;
 pub mod config;
@@ -12,6 +13,7 @@ pub mod setup;
 pub mod supervisor;
 pub mod tier;
 
+pub use admin::Admin;
 pub use bundle::Dirs;
 pub use client::Client;
 pub use error::RuntimeError;

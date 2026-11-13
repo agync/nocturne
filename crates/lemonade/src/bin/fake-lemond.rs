@@ -87,6 +87,7 @@ struct Inner {
 
 struct App {
     key: String,
+    admin_key: String,
     port: u16,
     ws_port: u16,
     modes: RwLock<HashMap<String, String>>,
@@ -358,6 +359,8 @@ async fn main() {
         .unwrap_or_default();
     let modes = parse_modes(&mode_str);
     let key = std::env::var("LEMONADE_API_KEY").unwrap_or_default();
+    // Like the real engine, the admin key is the API key when it is not given.
+    let admin_key = std::env::var("LEMONADE_ADMIN_API_KEY").unwrap_or_else(|_| key.clone());
 
     let counter_path = cache.join("fake-launches");
     let launches = std::fs::read_to_string(&counter_path)
@@ -433,6 +436,7 @@ async fn main() {
     let leak = modes.contains_key("leak-sleeper");
     let app: Shared = Arc::new(App {
         key,
+        admin_key,
         port,
         ws_port,
         modes: RwLock::new(modes),
@@ -514,8 +518,16 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
         .get(header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
+    let is_internal = path.starts_with("/internal/");
+    let is_admin = supplied.as_deref() == Some(format!("Bearer {}", app.admin_key).as_str());
+    let is_api = supplied.as_deref() == Some(format!("Bearer {}", app.key).as_str());
+    // The admin key also opens the ordinary routes; the API key never opens /internal/*.
     let authorised = app.flag("ignore-key")
-        || supplied.as_deref() == Some(format!("Bearer {}", app.key).as_str());
+        || if is_internal {
+            is_admin
+        } else {
+            is_api || is_admin
+        };
     let method = req.method().to_string();
     let query = req.uri().query().unwrap_or("").to_string();
     let is_fake = path.starts_with("/fake/");

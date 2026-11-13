@@ -1315,8 +1315,8 @@ fn the_whole_product_works_with_real_models() {
             setup_bytes = v["downloadedBytes"].as_f64().unwrap_or(setup_bytes);
             if phase == "downloading" {
                 let off = block_on(async {
-                    let client = services.client().await?;
-                    client.config().await.ok()?["offline"].as_bool()
+                    let admin = services.admin().await?;
+                    admin.config().await.ok()?["offline"].as_bool()
                 });
                 if let Some(o) = off
                     && offline_during_download.len() < 5
@@ -1385,10 +1385,10 @@ fn the_whole_product_works_with_real_models() {
     let engine_pid = block_on(services.engine_pid());
     let offline_after = wait_until(Duration::from_secs(120), || {
         block_on(async {
-            let Some(client) = services.client().await else {
+            let Some(admin) = services.admin().await else {
                 return false;
             };
-            client
+            admin
                 .config()
                 .await
                 .map(|c| c["offline"] == true && c["no_fetch_executables"] == true)
@@ -1400,6 +1400,27 @@ fn the_whole_product_works_with_real_models() {
         "the engine is offline again after setup (offline and no executable fetching)",
         offline_after.is_some(),
         "",
+    );
+    let origin_refused = block_on(async {
+        let endpoint = services.client().await?.endpoint()?;
+        let response = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{}/v1/health", endpoint.port))
+            .bearer_auth(&endpoint.key)
+            .header("Origin", "https://evil.example")
+            .send()
+            .await
+            .ok()?;
+        let allowed = response
+            .headers()
+            .get("access-control-allow-origin")
+            .map(|v| format!("{v:?}"));
+        Some((response.status().as_u16(), allowed))
+    });
+    run.check(
+        "engine.origin",
+        "the engine gives a page from another origin no access-control-allow-origin",
+        matches!(&origin_refused, Some((status, None)) if *status == 403),
+        format!("{origin_refused:?}"),
     );
     let models_bytes_after_setup = dir_bytes(&engine_root.join("models"));
     let ledger_after_setup = h.ok("get_privacy", json!({}))["ledger"]

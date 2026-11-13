@@ -23,6 +23,14 @@ pub fn llamacpp_args(tier: Tier) -> &'static str {
     }
 }
 
+/// The engine's `allowed_origins`. Empty means "use the defaults": same-origin pages on the
+/// machine's own addresses are allowed. Any non-empty list is authoritative and drops that
+/// default, so this one names an origin under the reserved `.invalid` top level (RFC 2606),
+/// which no page can have. The engine still lets loopback and desktop-app origins through
+/// whatever is set (`is_origin_allowed`, layer 1, in lemonade v2026.46.2); the key is what
+/// stops those. Never `null` (it admits sandboxed frames) and never `*`.
+pub const ALLOWED_ORIGINS: &str = "https://none.invalid";
+
 /// What Nocturne decides at each launch.
 #[derive(Debug, Clone)]
 pub struct Settings<'a> {
@@ -53,6 +61,7 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
     let fixed = [
         ("host", json!("127.0.0.1")),
         ("broadcast", json!(false)),
+        ("allowed_origins", json!(ALLOWED_ORIGINS)),
         ("models_dir", json!(models_dir)),
         ("offline", json!(settings.offline)),
         ("no_fetch_executables", json!(settings.no_fetch_executables)),
@@ -148,6 +157,20 @@ mod tests {
     }
 
     #[test]
+    fn allowed_origins_is_never_empty_or_open() {
+        assert!(!ALLOWED_ORIGINS.is_empty());
+        assert!(ALLOWED_ORIGINS.ends_with(".invalid"));
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("config.json"),
+            r#"{"allowed_origins": "*"}"#,
+        )
+        .unwrap();
+        write(tmp.path(), &settings(&tmp.path().join("models"))).unwrap();
+        assert_eq!(read(tmp.path())["allowed_origins"], ALLOWED_ORIGINS);
+    }
+
+    #[test]
     fn creates_the_file_with_our_keys() {
         let tmp = tempfile::tempdir().unwrap();
         let models = tmp.path().join("models");
@@ -155,6 +178,7 @@ mod tests {
         let v = read(tmp.path());
         assert_eq!(v["host"], "127.0.0.1");
         assert_eq!(v["broadcast"], false);
+        assert_eq!(v["allowed_origins"], ALLOWED_ORIGINS);
         assert_eq!(v["offline"], true);
         assert_eq!(v["no_fetch_executables"], true);
         assert_eq!(v["websocket_port"], 41234);

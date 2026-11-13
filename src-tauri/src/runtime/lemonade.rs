@@ -13,8 +13,8 @@ use std::time::Duration;
 use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
 use nocturne_engine::Mind;
 use nocturne_lemonade::{
-    Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle, residency,
-    tier,
+    Admin, Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle,
+    residency, tier,
 };
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -47,6 +47,7 @@ pub(super) struct Lemonade {
     supervisor: Supervisor,
     setup: Arc<Setup>,
     client: Client,
+    admin: Admin,
     watchers: Vec<JoinHandle<()>>,
 }
 
@@ -156,6 +157,7 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
         services.opts.setup.clone(),
     ));
     let client = supervisor.client();
+    let admin = supervisor.admin();
     let watchers = vec![
         tauri::async_runtime::spawn(watch_engine(
             app.clone(),
@@ -168,6 +170,7 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
             setup.view(),
             setup.clone(),
             client.clone(),
+            admin.clone(),
         )),
     ];
     let mut slot = services.lemonade.lock().await;
@@ -177,6 +180,7 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
             supervisor,
             setup,
             client,
+            admin,
             watchers,
         }
         .stop(services.opts.quit_budget)
@@ -187,6 +191,7 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
         supervisor,
         setup: setup.clone(),
         client,
+        admin,
         watchers,
     });
     drop(slot);
@@ -242,6 +247,7 @@ async fn watch_setup<R: Runtime>(
     mut rx: watch::Receiver<nocturne_contract::SetupView>,
     setup: Arc<Setup>,
     client: Client,
+    admin: Admin,
 ) {
     let mut last = None;
     loop {
@@ -252,7 +258,7 @@ async fn watch_setup<R: Runtime>(
         }
         publish_setup(&app, view);
         if done && let Some(tier) = setup.installed() {
-            fill(&app, &services, client.clone(), tier).await;
+            fill(&app, &services, client.clone(), &admin, tier).await;
         }
         tokio::select! {
             _ = services.token().cancelled() => return,
@@ -266,6 +272,7 @@ async fn fill<R: Runtime>(
     app: &AppHandle<R>,
     services: &Arc<Services>,
     client: Client,
+    admin: &Admin,
     tier: Tier,
 ) {
     let state = app.state::<AppState>();
@@ -277,7 +284,7 @@ async fn fill<R: Runtime>(
     // On a first setup the engine was started before the tier was known.
     let args =
         serde_json::json!({"llamacpp": {"args": nocturne_lemonade::config::llamacpp_args(tier)}});
-    if let Err(e) = client.set(&args).await {
+    if let Err(e) = admin.set(&args).await {
         tracing::warn!("could not set the engine's cache sizes: {e}");
     }
     let changed = previous.is_some_and(|from| from != tier);
@@ -435,6 +442,11 @@ impl Services {
             .await
             .as_ref()
             .map(|l| l.client.clone())
+    }
+
+    /// The engine's admin endpoints, once it is running.
+    pub async fn admin(&self) -> Option<Admin> {
+        self.lemonade.lock().await.as_ref().map(|l| l.admin.clone())
     }
 
     /// Let go of every model the engine has loaded (the person paused).

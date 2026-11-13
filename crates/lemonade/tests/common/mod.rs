@@ -178,6 +178,7 @@ pub struct Fake {
     pub http: reqwest::Client,
     pub dirs: Dirs,
     pub client: nocturne_lemonade::Client,
+    pub admin: nocturne_lemonade::Admin,
     _tmp: tempfile::TempDir,
 }
 
@@ -196,6 +197,7 @@ impl Fake {
             .args(["--no-broadcast", "--watchdog-fd", "0"])
             .env_clear()
             .env("LEMONADE_API_KEY", "k3y")
+            .env("LEMONADE_ADMIN_API_KEY", "adm1n")
             .stdin(std::process::Stdio::piped())
             .spawn()
             .unwrap();
@@ -205,6 +207,7 @@ impl Fake {
             http: reqwest::Client::new(),
             dirs,
             client: nocturne_lemonade::Client::new(port, "k3y"),
+            admin: nocturne_lemonade::Admin::new(port, "adm1n").unwrap(),
             _tmp: tmp,
         }
     }

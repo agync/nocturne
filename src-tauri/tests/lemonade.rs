@@ -255,8 +255,8 @@ impl Lab {
     /// Whether the running engine is set to stay off the internet.
     fn engine_offline(&self) -> Option<bool> {
         block_on(async {
-            let client = self.services.client().await?;
-            client.config().await.ok()?["offline"].as_bool()
+            let admin = self.services.admin().await?;
+            admin.config().await.ok()?["offline"].as_bool()
         })
     }
 

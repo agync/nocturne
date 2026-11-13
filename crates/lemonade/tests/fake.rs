@@ -72,5 +72,5 @@ async fn echoes_its_environment() {
         .await
         .unwrap();
     let keys: Vec<&String> = env.as_object().unwrap().keys().collect();
-    assert_eq!(keys, vec!["LEMONADE_API_KEY"]);
+    assert_eq!(keys, vec!["LEMONADE_ADMIN_API_KEY", "LEMONADE_API_KEY"]);
 }
