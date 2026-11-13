@@ -61,6 +61,22 @@ export function EngineProvider({ engine, queryClient, children }: ProviderProps)
     };
   }, [engine, client]);
 
+  // The window stays hidden until the first screen has painted; then the shell shows it.
+  useEffect(() => {
+    let frame = 0;
+    const ready = () => {
+      void engine.appReady().catch((error: unknown) => console.error("app_ready failed", error));
+    };
+    if (typeof requestAnimationFrame === "function") {
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(ready);
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    ready();
+    return undefined;
+  }, [engine]);
+
   return (
     <QueryClientProvider client={client}>
       <EngineContext.Provider value={engine}>{children}</EngineContext.Provider>
@@ -181,6 +197,9 @@ export function useAsk(): AskResult {
   const ask = useCallback(
     async (question: string) => {
       const mine = ++call.current;
+      // One question at a time: the one on screen is stopped before the next starts.
+      const previous = active.current;
+      if (previous !== null) void engine.cancelAsk(previous).catch(() => undefined);
       active.current = null;
       early.current = [];
       setAsking(true);

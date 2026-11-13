@@ -13,8 +13,12 @@ export interface Platform {
   pickFiles(): Promise<string[]>;
   /** Asks the person for a folder; null when they cancel. */
   pickFolder(): Promise<string | null>;
-  /** Opens a file or folder with the system's own app. */
+  /** Opens the folder an export just made, with the system's own app. */
   openPath(path: string): Promise<void>;
+  /** Opens the kept original of an item with the system's own app. */
+  openOriginal(itemId: string): Promise<void>;
+  /** Opens the folder of log files. */
+  openLogs(): Promise<void>;
   /** A URL the page can show for a kept original on disk. */
   originalSrc(path: string): string;
   /** Closes the floating quick-capture window (or leaves the screen, in a browser). */

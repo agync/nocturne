@@ -217,3 +217,27 @@ describe("useAsk", () => {
     expect(result.current.deltas.length).toBeLessThanOrEqual(200);
   });
 });
+
+describe("shell hand-offs", () => {
+  it("tells the shell the first screen has painted, once", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const ready = vi.spyOn(engine, "appReady");
+    renderHook(() => useStatus(), { wrapper: wrapper(engine) });
+    await waitFor(() => expect(ready).toHaveBeenCalledTimes(1));
+  });
+
+  it("stops the answer on screen before the next question starts", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const cancel = vi.spyOn(engine, "cancelAsk");
+    const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
+    let first: string | null = null;
+    await act(async () => {
+      first = await result.current.ask("passport");
+    });
+    expect(cancel).not.toHaveBeenCalled();
+    await act(async () => {
+      await result.current.ask("dentist");
+    });
+    expect(cancel).toHaveBeenCalledWith(first);
+  });
+});

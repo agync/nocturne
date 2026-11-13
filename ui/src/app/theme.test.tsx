@@ -21,6 +21,8 @@ function fakePlatform(initial: SystemTheme | null) {
     pickFiles: async () => [],
     pickFolder: async () => null,
     openPath: async () => undefined,
+    openOriginal: async () => undefined,
+    openLogs: async () => undefined,
     originalSrc: (path) => `file:${path}`,
     closeQuickCapture: async () => undefined,
     handOffAsk: async () => undefined,

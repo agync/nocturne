@@ -79,6 +79,14 @@ export class WebPlatform implements Platform {
     console.info(`Would open ${path}`);
   }
 
+  async openOriginal(itemId: string): Promise<void> {
+    console.info(`Would open the original of ${itemId}`);
+  }
+
+  async openLogs(): Promise<void> {
+    console.info("Would open the logs");
+  }
+
   originalSrc(_path: string): string {
     return PLACEHOLDER;
   }

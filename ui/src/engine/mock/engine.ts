@@ -415,6 +415,14 @@ export class MockEngine implements EngineClient {
 
   // Asking
 
+  private readonly cancelledAsks = new Set<string>();
+
+  async cancelAsk(askId: string): Promise<void> {
+    this.cancelledAsks.add(askId);
+  }
+
+  async appReady(): Promise<void> {}
+
   async ask(question: string): Promise<string> {
     this.counter += 1;
     const askId = `ask-${this.counter}`;
@@ -433,6 +441,9 @@ export class MockEngine implements EngineClient {
       etaSeconds: null,
       ...d,
     });
+    const send = (d: AskDelta): void => {
+      if (!this.cancelledAsks.has(askId)) this.emit("ask-delta", d);
+    };
     const tokens = contentTokens(question);
     const scored = (status: MemoryView["status"]) =>
       this.memories
@@ -443,12 +454,11 @@ export class MockEngine implements EngineClient {
     const active = scored("active").slice(0, 2);
     const unconfirmed = scored("unconfirmed").slice(0, 2);
 
-    setTimeout(() => this.emit("ask-delta", delta({ phase: "searching" })), 0);
+    setTimeout(() => send(delta({ phase: "searching" })), 0);
     setTimeout(() => {
       if (active.length > 0) {
         const receipts = active.flatMap((x) => x.m.receipts);
-        this.emit(
-          "ask-delta",
+        send(
           delta({
             phase: "reading",
             found: active.length,
@@ -459,19 +469,14 @@ export class MockEngine implements EngineClient {
         const text = active.map((x) => x.m.sentence).join(" ");
         const pieces = text.split(/(?<=\s)/);
         pieces.forEach((piece, i) => {
-          setTimeout(
-            () => this.emit("ask-delta", delta({ phase: "streaming", textDelta: piece })),
-            30 * (i + 1),
-          );
+          setTimeout(() => send(delta({ phase: "streaming", textDelta: piece })), 30 * (i + 1));
         });
         setTimeout(
-          () =>
-            this.emit("ask-delta", delta({ phase: "done", memoryIds: active.map((x) => x.m.id) })),
+          () => send(delta({ phase: "done", memoryIds: active.map((x) => x.m.id) })),
           30 * (pieces.length + 1),
         );
       } else if (unconfirmed.length > 0) {
-        this.emit(
-          "ask-delta",
+        send(
           delta({
             phase: "notSure",
             near: unconfirmed.map((x) => ({
@@ -481,7 +486,7 @@ export class MockEngine implements EngineClient {
           }),
         );
       } else {
-        this.emit("ask-delta", delta({ phase: "nothing", found: 0 }));
+        send(delta({ phase: "nothing", found: 0 }));
       }
     }, 250);
   }

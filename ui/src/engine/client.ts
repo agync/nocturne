@@ -80,6 +80,8 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
  * Tauri implementation invokes the snake_case command of the same name.
  */
 export interface EngineClient {
+  /** The first screen has painted: the app shows its window now. */
+  appReady(): Promise<void>;
   getStatus(): Promise<EngineStatus>;
   getSetup(): Promise<SetupView>;
   startSetup(tier: Tier): Promise<void>;
@@ -103,6 +105,8 @@ export interface EngineClient {
 
   /** Resolves with the ask id as soon as the question is accepted; the answer streams as `ask-delta`. */
   ask(question: string): Promise<string>;
+  /** Stops an answer in progress; no more of it arrives. Stopping a finished one is fine. */
+  cancelAsk(askId: string): Promise<void>;
 
   getPage(date?: string): Promise<PageView>;
   listPages(): Promise<PageSummary[]>;

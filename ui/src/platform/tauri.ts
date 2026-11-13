@@ -46,14 +46,19 @@ export class TauriPlatform implements Platform {
   }
 
   async pickFolder(): Promise<string | null> {
-    const picked = await invoke<string | null>("plugin:dialog|open", {
-      options: { multiple: false, directory: true },
-    });
-    return picked ?? null;
+    return (await invoke<string | null>("pick_folder")) ?? null;
   }
 
   async openPath(path: string): Promise<void> {
-    await invoke("plugin:opener|open_path", { path });
+    await invoke("open_export", { path });
+  }
+
+  async openOriginal(itemId: string): Promise<void> {
+    await invoke("open_original", { itemId });
+  }
+
+  async openLogs(): Promise<void> {
+    await invoke("open_logs");
   }
 
   originalSrc(path: string): string {
@@ -76,9 +81,6 @@ export class TauriPlatform implements Platform {
   }
 
   async pickFiles(): Promise<string[]> {
-    const picked = await invoke<string[] | null>("plugin:dialog|open", {
-      options: { multiple: true, directory: false },
-    });
-    return picked ?? [];
+    return (await invoke<string[] | null>("pick_files")) ?? [];
   }
 }

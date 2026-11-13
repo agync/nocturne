@@ -96,6 +96,8 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["resume", [], "resume", []],
   ["getAdvanced", [], "get_advanced", []],
   ["speakPage", ["2026-11-13"], "speak_page", ["date"]],
+  ["cancelAsk", ["ask_1"], "cancel_ask", ["askId"]],
+  ["appReady", [], "app_ready", []],
 ];
 
 describe("TauriEngine commands", () => {

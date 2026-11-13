@@ -11,7 +11,7 @@ beforeEach(() => {
   mockIPC(
     (cmd, args) => {
       calls.push({ cmd, args });
-      return cmd === "plugin:dialog|open" ? "/chosen" : null;
+      return cmd === "pick_folder" ? "/chosen" : null;
     },
     { shouldMockEvents: true },
   );
@@ -19,17 +19,27 @@ beforeEach(() => {
 afterEach(() => clearMocks());
 
 describe("TauriPlatform shared pieces", () => {
-  it("asks for a folder through the dialog plugin", async () => {
+  it("asks the app for a folder, not the dialog plugin", async () => {
     await expect(new TauriPlatform().pickFolder()).resolves.toBe("/chosen");
-    expect(calls[0]).toEqual({
-      cmd: "plugin:dialog|open",
-      args: { options: { multiple: false, directory: true } },
-    });
+    expect(calls[0]).toEqual({ cmd: "pick_folder", args: {} });
   });
 
-  it("opens a path with the opener plugin", async () => {
-    await new TauriPlatform().openPath("/some/path");
-    expect(calls[0]).toEqual({ cmd: "plugin:opener|open_path", args: { path: "/some/path" } });
+  it("asks the app for files", async () => {
+    await new TauriPlatform().pickFiles();
+    expect(calls[0]?.cmd).toBe("pick_files");
+  });
+
+  it("opens only through the app's own commands, never the opener plugin", async () => {
+    const platform = new TauriPlatform();
+    await platform.openPath("/exports/Nocturne export");
+    await platform.openOriginal("itm_1");
+    await platform.openLogs();
+    expect(calls).toEqual([
+      { cmd: "open_export", args: { path: "/exports/Nocturne export" } },
+      { cmd: "open_original", args: { itemId: "itm_1" } },
+      { cmd: "open_logs", args: {} },
+    ]);
+    expect(calls.some((c) => c.cmd.startsWith("plugin:"))).toBe(false);
   });
 
   it("turns a file path into a URL the page may show", () => {

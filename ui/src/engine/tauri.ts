@@ -100,6 +100,8 @@ export class TauriEngine implements EngineClient {
   retryItem: EngineClient["retryItem"] = (id) => this.call("retry_item", { id });
 
   ask: EngineClient["ask"] = (question) => this.call("ask", { question });
+  cancelAsk: EngineClient["cancelAsk"] = (askId) => this.call("cancel_ask", { askId });
+  appReady: EngineClient["appReady"] = () => this.call("app_ready");
 
   getPage: EngineClient["getPage"] = (date) => this.call("get_page", { date: date ?? null });
   listPages: EngineClient["listPages"] = () => this.call("list_pages");
