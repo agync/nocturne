@@ -1,5 +1,6 @@
 //! [`LemonadeMind`]: the Nocturne mind served by the private engine.
 
+mod audio;
 mod cite;
 mod documents;
 mod prompts;
@@ -379,7 +380,7 @@ impl LemonadeMind {
     }
 
     async fn transcribe_impl(&self, audio: &Path) -> Result<Transcript, MindError> {
-        if wav_seconds(audio).is_some_and(|s| s > MAX_AUDIO_SECONDS) {
+        if audio::estimate_seconds(audio) > MAX_AUDIO_SECONDS {
             return Err(MindError::TooLong);
         }
         let model = self.installed(ComponentRole::Speech).await?;
@@ -410,38 +411,6 @@ impl LemonadeMind {
 fn non_empty(s: String) -> Option<String> {
     let t = s.trim();
     (!t.is_empty()).then(|| t.to_string())
-}
-
-/// Length of a WAV file in seconds, from its header alone.
-fn wav_seconds(path: &Path) -> Option<f64> {
-    use std::io::Read;
-    let mut head = vec![0u8; 4096];
-    let n = std::fs::File::open(path).ok()?.read(&mut head).ok()?;
-    let head = &head[..n];
-    if head.len() < 44 || &head[..4] != b"RIFF" || &head[8..12] != b"WAVE" {
-        return None;
-    }
-    let mut pos = 12;
-    let (mut rate, mut channels, mut bits) = (0u32, 0u32, 0u32);
-    while pos + 8 <= head.len() {
-        let id = &head[pos..pos + 4];
-        let size = u32::from_le_bytes(head[pos + 4..pos + 8].try_into().ok()?);
-        if id == b"fmt " && pos + 24 <= head.len() {
-            channels = u32::from(u16::from_le_bytes(
-                head[pos + 10..pos + 12].try_into().ok()?,
-            ));
-            rate = u32::from_le_bytes(head[pos + 12..pos + 16].try_into().ok()?);
-            bits = u32::from(u16::from_le_bytes(
-                head[pos + 22..pos + 24].try_into().ok()?,
-            ));
-        }
-        if id == b"data" {
-            let per_second = f64::from(rate) * f64::from(channels) * f64::from(bits) / 8.0;
-            return (per_second > 0.0).then(|| f64::from(size) / per_second);
-        }
-        pos += 8 + size as usize + (size as usize & 1);
-    }
-    None
 }
 
 fn image_data_uri(path: &Path) -> Result<String, MindError> {

@@ -1089,3 +1089,62 @@ async fn a_load_that_runs_out_of_memory_is_a_failure_not_an_absence() {
         "{err:?}"
     );
 }
+
+#[tokio::test]
+async fn long_audio_in_any_container_is_refused_before_upload() {
+    let r = rig_with("downloaded=all", Tier::Small).await;
+    let dir = &r.dirs.root;
+
+    let mut opus = b"OggS\0\x02".to_vec();
+    opus.extend(0i64.to_le_bytes());
+    opus.extend([0u8; 12]);
+    opus.extend(b"OpusHead\x01\x02");
+    opus.extend(b"OggS\0\x04");
+    opus.extend((48_000i64 * (2 * 3600 + 5)).to_le_bytes());
+    opus.extend([0u8; 12]);
+    opus.extend(b"audio");
+    assert_eq!(
+        r.mind
+            .transcribe(&put(dir, "long.opus", &opus))
+            .await
+            .unwrap_err(),
+        MindError::TooLong
+    );
+
+    let mut flac = b"fLaC\0\0\0\x22".to_vec();
+    let (rate, total) = (44_100u32, 44_100u64 * 3 * 3600);
+    flac.extend([0u8; 10]);
+    flac.extend([
+        (rate >> 12) as u8,
+        (rate >> 4) as u8,
+        ((rate & 0xf) << 4) as u8,
+    ]);
+    flac.push((total >> 32) as u8 & 0xf);
+    flac.extend((total as u32).to_be_bytes());
+    flac.extend([0u8; 16]);
+    assert_eq!(
+        r.mind
+            .transcribe(&put(dir, "long.flac", &flac))
+            .await
+            .unwrap_err(),
+        MindError::TooLong
+    );
+
+    let mp3 = dir.join("long.mp3");
+    std::fs::File::create(&mp3)
+        .unwrap()
+        .set_len(16_000 * (2 * 3600 + 5))
+        .unwrap();
+    assert_eq!(
+        r.mind.transcribe(&mp3).await.unwrap_err(),
+        MindError::TooLong
+    );
+    assert!(
+        r.seen("/v1/audio/transcriptions").await.is_empty(),
+        "nothing was uploaded"
+    );
+
+    let short = put(dir, "short.mp3", &vec![0u8; 32_000]);
+    assert!(r.mind.transcribe(&short).await.is_ok());
+    assert_eq!(r.seen("/v1/audio/transcriptions").await.len(), 1);
+}
