@@ -118,7 +118,7 @@ test.describe("turning it on, by keyboard", () => {
       timeout: 15_000,
     });
     await expect(page.getByRole("img", { name: /Code to scan/ })).toBeVisible();
-    await expect(page.getByRole("timer")).toContainText("left");
+    await expect(page.getByRole("timer").first()).toContainText("left");
     expect(await axe(page)).toEqual([]);
 
     const dialog = page.getByRole("alertdialog", { name: "A phone wants to connect" });
