@@ -1,6 +1,9 @@
 //! Memories and the people, places and things they are about.
 
-use nocturne_contract::{EntityKind, EntityView, MemoryFilter, MemoryView};
+use nocturne_contract::{
+    EntityKind, EntityView, MemoryFilter, MemoryView, MergeOutcome, RefileTarget, Refiled,
+    RenameOutcome,
+};
 use nocturne_engine::CorrectPatch;
 use tauri::{AppHandle, Runtime};
 
@@ -55,6 +58,46 @@ pub async fn correct_memory<R: Runtime>(
         e.get_memory(&new_id)
     })
     .await
+}
+
+/// Rename a person, place or thing. A name another already has changes nothing and says which,
+/// so the interface can offer a merge.
+#[tauri::command]
+pub async fn rename_entity<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    name: String,
+) -> Result<RenameOutcome, CommandError> {
+    change(app, move |e| e.rename_entity(&id, &name)).await
+}
+
+/// Make two people, places or things one, named as `into_id` is.
+#[tauri::command]
+pub async fn merge_entities<R: Runtime>(
+    app: AppHandle<R>,
+    from_id: String,
+    into_id: String,
+) -> Result<MergeOutcome, CommandError> {
+    change(app, move |e| e.merge_entities(&from_id, &into_id)).await
+}
+
+/// Move one memory to another person, place or thing, or to a new one.
+#[tauri::command]
+pub async fn refile_memory<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    target: RefileTarget,
+) -> Result<Refiled, CommandError> {
+    change(app, move |e| e.refile_memory(&id, target)).await
+}
+
+/// Take back a rename, a merge or a move.
+#[tauri::command]
+pub async fn undo_change<R: Runtime>(
+    app: AppHandle<R>,
+    change_id: String,
+) -> Result<(), CommandError> {
+    change(app, move |e| e.undo_change(&change_id)).await
 }
 
 #[tauri::command]

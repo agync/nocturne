@@ -744,6 +744,90 @@ fn memory_commands_browse_and_change() {
     assert_eq!(none.as_array().unwrap().len(), 0);
 }
 
+#[test]
+fn entities_are_renamed_merged_and_memories_refiled() {
+    let h = harness();
+    let claim = |subject: &str, object: &str, sentence: &str| {
+        let mut c = Candidate::new(subject, Predicate::Knows, object, sentence, 0.9);
+        c.subject_kind = Some(nocturne_contract::EntityKind::Thing);
+        c
+    };
+    let (_, a) = h.learn_candidate(
+        "trinks note",
+        claim("Trinks", "5 pounds", "Trinks are 5 pounds."),
+    );
+    let (_, b) = h.learn_candidate(
+        "drinks note",
+        claim("Drinks", "in the fridge", "Drinks are in the fridge."),
+    );
+    let (a, b) = (a[0].clone(), b[0].clone());
+    let ea = h.memory(&a).entity_id.unwrap();
+    let eb = h.memory(&b).entity_id.unwrap();
+
+    let out = h.ok("rename_entity", json!({"id": ea, "name": "Drinks"}));
+    assert_eq!(out["type"], json!("exists"));
+    assert_eq!(out["entity"]["id"], json!(eb));
+    let out = h.ok("rename_entity", json!({"id": ea, "name": "Pop"}));
+    assert_eq!(out["type"], json!("renamed"));
+    assert_eq!(out["entity"]["name"], json!("Pop"));
+    assert_eq!(out["entity"]["formerNames"], json!(["Trinks"]));
+    let change = out["changeId"].as_str().unwrap().to_string();
+    assert_eq!(h.memory(&a).sentence, "Pop are 5 pounds.");
+    h.ok("undo_change", json!({"changeId": change}));
+    assert_eq!(h.memory(&a).sentence, "Trinks are 5 pounds.");
+    assert_eq!(
+        h.code("undo_change", json!({"changeId": change})),
+        "invalid"
+    );
+    assert_eq!(
+        h.code("rename_entity", json!({"id": ea, "name": "  "})),
+        "invalid"
+    );
+    assert_eq!(
+        h.code("rename_entity", json!({"id": "ent_nope", "name": "X"})),
+        "notFound"
+    );
+
+    let moved = h.ok(
+        "refile_memory",
+        json!({"id": a, "target": {"type": "existing", "entityId": eb}}),
+    );
+    assert_eq!(moved["memory"]["subject"], json!("Drinks"));
+    assert_eq!(moved["memory"]["movedFrom"], json!("Trinks"));
+    assert_eq!(moved["entity"]["memoryCount"], json!(2));
+    h.ok(
+        "undo_change",
+        json!({"changeId": moved["changeId"].as_str().unwrap()}),
+    );
+    assert_eq!(h.memory(&a).entity_id.as_deref(), Some(ea.as_str()));
+    let fresh = h.ok(
+        "refile_memory",
+        json!({"id": a, "target": {"type": "new", "name": "Cellar", "kind": "place"}}),
+    );
+    assert_eq!(fresh["entity"]["kind"], json!("place"));
+
+    h.ok(
+        "undo_change",
+        json!({"changeId": fresh["changeId"].as_str().unwrap()}),
+    );
+    let merged = h.ok("merge_entities", json!({"fromId": ea, "intoId": eb}));
+    assert_eq!(merged["moved"], json!(1));
+    assert_eq!(merged["entity"]["memoryCount"], json!(2));
+    assert_eq!(h.code("get_entity", json!({"id": ea})), "notFound");
+    assert_eq!(
+        h.code("merge_entities", json!({"fromId": eb, "intoId": eb})),
+        "invalid"
+    );
+    h.ok(
+        "undo_change",
+        json!({"changeId": merged["changeId"].as_str().unwrap()}),
+    );
+    assert_eq!(
+        h.ok("get_entity", json!({"id": ea}))["name"],
+        json!("Trinks")
+    );
+}
+
 /// Review focus 5: forget, then get_page never returns the forgotten text, through IPC alone.
 #[test]
 fn a_forgotten_memory_never_comes_back_in_a_page_or_the_files() {

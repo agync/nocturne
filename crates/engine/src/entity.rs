@@ -835,16 +835,11 @@ fn undo_rename(tx: &Transaction<'_>, change: &str) -> Result<()> {
         return Err(Error::invalid("something else has that name now"));
     }
     rename_core(tx, &ent, &old_name, &old_key, Some(&d.reworded))?;
-    // The name it goes back to is current, and the name it had since is former.
+    // Taken back, the name it had since is no longer one it is known by.
     tx.execute("DELETE FROM entity_names WHERE change_id = ?1", [change])?;
     tx.execute(
         "DELETE FROM entity_names WHERE entity_id = ?1 AND key = ?2",
         params![ent.id, old_key],
-    )?;
-    tx.execute(
-        "INSERT INTO entity_names(entity_id, name, key, change_id, at) VALUES (?1, ?2, ?3, NULL, \
-         (SELECT at FROM entity_changes WHERE id = ?4))",
-        params![ent.id, ent.name, ent.subject_key(), change],
     )?;
     Ok(())
 }
