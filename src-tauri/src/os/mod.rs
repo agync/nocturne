@@ -70,6 +70,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         resume_inbox(app, &shell.data_dir, settings.inbox_folder.as_deref());
     }
+    crate::editions::speech::install(app);
     tray::install(app);
     notify::install(app, &os);
     let handle = app.clone();
@@ -233,6 +234,15 @@ pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
         os.replace_inbox(None);
         os.forget_all();
     }
+}
+
+/// The person listened to the spoken page today: keep making it ahead for a while.
+pub fn note_audio_used<R: Runtime>(app: &AppHandle<R>) {
+    let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>()) else {
+        return;
+    };
+    let today = shell.now().to_zoned(shell.clock.tz()).date();
+    os.update(|f| f.audio_used = Some(today.to_string()));
 }
 
 /// The main window came forward. If today's page is saved, the person is looking at it: record

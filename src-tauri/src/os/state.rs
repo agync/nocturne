@@ -51,6 +51,7 @@ pub struct OsState {
     autostart: Mutex<Option<Target>>,
     inbox: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
     inbox_timing: Mutex<Timing>,
+    audio_attempts: Mutex<(Option<jiff::civil::Date>, u32)>,
 }
 
 impl OsState {
@@ -63,6 +64,7 @@ impl OsState {
             autostart: Mutex::new(None),
             inbox: Mutex::new(None),
             inbox_timing: Mutex::new(Timing::default()),
+            audio_attempts: Mutex::new((None, 0)),
         }
     }
 
@@ -134,6 +136,27 @@ impl OsState {
 
     pub fn inbox_timing(&self) -> Timing {
         *self.inbox_timing.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// How many times today the spoken page was tried in the background.
+    pub fn audio_attempts(&self, day: jiff::civil::Date) -> u32 {
+        let g = self
+            .audio_attempts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if g.0 == Some(day) { g.1 } else { 0 }
+    }
+
+    pub fn note_audio_attempt(&self, day: jiff::civil::Date) {
+        let mut g = self
+            .audio_attempts
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        *g = if g.0 == Some(day) {
+            (g.0, g.1 + 1)
+        } else {
+            (Some(day), 1)
+        };
     }
 
     pub fn set_notifier(&self, notifier: Arc<dyn Notifier>) {

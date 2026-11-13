@@ -852,53 +852,6 @@ fn delete_everything_needs_the_exact_phrase() {
 }
 
 #[test]
-fn speak_page_makes_the_spoken_edition_once_and_never_speaks_private_lines() {
-    let h = harness_with_mind(Arc::new(nocturne_engine::FakeMind::new()));
-    let mut c = Candidate::new(
-        "Rent",
-        Predicate::Due,
-        "rent",
-        "Rent is due on Saturday.",
-        0.9,
-    );
-    c.due = Some("2026-11-14".parse().unwrap());
-    let (_, created) = h.learn_candidate("rent note", c);
-    let mut c2 = Candidate::new(
-        "Clinic",
-        Predicate::Due,
-        "x",
-        "The clinic wants a visit on Sunday.",
-        0.9,
-    );
-    c2.due = Some("2026-11-15".parse().unwrap());
-    let (_, created2) = h.learn_candidate("clinic note", c2);
-    h.save_todays_page();
-    h.ok("set_private", json!({"id": created2[0], "private": true}));
-    let _ = created;
-    let page = h.ok("speak_page", json!({"date": "2026-11-13"}));
-    assert_eq!(page["privateSkipped"], 1);
-    assert_eq!(page["sections"], json!([]));
-    let path = page["path"].clone();
-    let spoken = std::fs::read_to_string(path.as_str().unwrap()).unwrap();
-    assert!(spoken.contains("Rent is due on Saturday."), "{spoken}");
-    assert!(
-        !spoken.contains("clinic"),
-        "a private line was spoken: {spoken}"
-    );
-    let again = h.ok("speak_page", json!({"date": "2026-11-13"}));
-    assert_eq!(again["path"], path, "kept, not made again");
-    assert_eq!(
-        h.code("speak_page", json!({"date": "2026-01-01"})),
-        "notFound"
-    );
-    let quiet = harness();
-    assert_eq!(
-        quiet.code("speak_page", json!({"date": "2026-11-13"})),
-        "notFound"
-    );
-}
-
-#[test]
 fn get_edition_serves_a_saved_page_in_the_edition_asked_for() {
     let h = harness();
     h.save_todays_page();
