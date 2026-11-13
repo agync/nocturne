@@ -185,7 +185,6 @@ describe("the answer", () => {
     const engine = new Scripted();
     await twoMemoryAnswer(engine);
     await open({ engine, question: "When is Leo’s swimming?" });
-    await screen.findByText("Answer ready.", { exact: false }).catch(() => undefined);
     const mondays = await screen.findByRole("button", {
       name: "on Mondays. Show where this came from.",
     });
