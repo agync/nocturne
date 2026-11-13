@@ -144,6 +144,7 @@ impl Services {
 
     /// Stop reading and tidying. The item being read goes back to the queue, uncounted.
     pub async fn shutdown(&self) {
+        tracing::info!("quitting: stopping the reader and the private engine");
         self.token.cancel();
         let tasks = std::mem::take(&mut *self.tasks.lock().unwrap_or_else(|e| e.into_inner()));
         let joined = async {
@@ -157,6 +158,7 @@ impl Services {
         if let Some(engine) = self.take_engine().await {
             engine.stop(self.opts.quit_budget).await;
         }
+        tracing::info!("quit: everything stopped");
     }
 }
 

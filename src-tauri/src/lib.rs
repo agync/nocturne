@@ -232,6 +232,8 @@ pub fn run() {
     let app = builder
         .build(tauri::generate_context!())
         .expect("the Nocturne window could not start");
+    #[cfg(unix)]
+    quit_on_signals(app.handle());
     app.run(|app, event| {
         // The setup hook, which manages `AppState`, runs inside `run` before `Ready`.
         if matches!(event, RunEvent::Ready) {
@@ -241,6 +243,29 @@ pub fn run() {
             }
         }
         handle_run_event(app, &event);
+    });
+}
+
+/// A termination signal (a logout, `kill`, Ctrl-C in a development run) quits the way closing
+/// the last window does, so the private engine is stopped properly instead of left to its
+/// watchdog.
+#[cfg(unix)]
+fn quit_on_signals(app: &AppHandle) {
+    use tokio::signal::unix::{SignalKind, signal};
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let (Ok(mut term), Ok(mut int)) = (
+            signal(SignalKind::terminate()),
+            signal(SignalKind::interrupt()),
+        ) else {
+            return;
+        };
+        tokio::select! {
+            _ = term.recv() => {}
+            _ = int.recv() => {}
+        }
+        tracing::info!("asked to quit by a signal");
+        handle.exit(0);
     });
 }
 

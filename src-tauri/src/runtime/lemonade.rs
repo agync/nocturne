@@ -213,9 +213,13 @@ async fn watch_setup<R: Runtime>(
     setup: Arc<Setup>,
     client: Client,
 ) {
+    let mut last = None;
     loop {
         let view = rx.borrow_and_update().clone();
         let done = view.phase == SetupPhase::Done;
+        if last.replace(view.phase) != Some(view.phase) {
+            tracing::info!("setup is {:?}", view.phase);
+        }
         publish_setup(&app, view);
         if done && let Some(tier) = setup.installed() {
             fill(&app, &services, client.clone(), tier).await;
