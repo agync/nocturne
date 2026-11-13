@@ -735,7 +735,7 @@ export class MockEngine implements EngineClient {
       sentMeasured: this.status.sentMeasured,
       checkedAt: new Date(this.clock.getTime() - 2000).toISOString(),
       ledger: [
-        { kind: "setup", label: "Nocturne's mind", bytes: 8.4e9, at: this.clock.toISOString() },
+        { kind: "setup", label: "Nocturne’s mind", bytes: 8.4e9, at: this.clock.toISOString() },
       ],
       keptBytes: 4.3e9,
       mindBytes: 8.4e9,

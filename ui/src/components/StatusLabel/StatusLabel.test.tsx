@@ -9,7 +9,7 @@ const ITEM: Array<[ItemStatus, string]> = [
   ["reading", "Reading…"],
   ["understood", "Understood"],
   ["partlyUnderstood", "Partly understood"],
-  ["couldntRead", "Couldn't read"],
+  ["couldntRead", "Couldn’t read"],
   ["needsYou", "Needs you"],
   ["unconfirmed", "Unconfirmed"],
 ];
@@ -42,11 +42,11 @@ describe("StatusLabel", () => {
     expect(screen.getByText("Kept · reads tonight")).toBeInTheDocument();
   });
 
-  it("offers a retry beside Couldn't read", async () => {
+  it("offers a retry beside Couldn’t read", async () => {
     const onRetry = vi.fn();
     render(<StatusLabel status="couldntRead" onRetry={onRetry} />);
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(onRetry).toHaveBeenCalledOnce();
-    expect(screen.getByText("Couldn't read")).toBeInTheDocument();
+    expect(screen.getByText("Couldn’t read")).toBeInTheDocument();
   });
 });

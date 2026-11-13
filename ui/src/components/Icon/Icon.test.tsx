@@ -40,7 +40,7 @@ describe("Icon", () => {
       const { container, unmount } = render(<Icon name={name} />);
       const svg = container.querySelector("svg");
       expect(svg, name).toHaveAttribute("width", "20");
-      // absolute stroke: 1.5 px on screen means 1.8 units on lucide's 24 unit grid at 20 px
+      // absolute stroke: 1.5 px on screen means 1.8 units on lucide’s 24 unit grid at 20 px
       expect(Number(svg?.getAttribute("stroke-width")), name).toBeCloseTo(1.8, 5);
       unmount();
     }

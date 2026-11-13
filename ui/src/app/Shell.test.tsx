@@ -15,8 +15,8 @@ afterEach(() => {
 });
 
 const SCREENS: Array<[string, string]> = [
-  ["#/today", "Today"],
-  ["#/pages/2026-11-12", "Today"],
+  ["#/today", "Two things need you today."],
+  ["#/pages/2026-11-12", "One thing needs you today."],
   ["#/needs-you", "Needs you"],
   ["#/ask", "Ask"],
   ["#/recent", "Recently kept"],
@@ -42,7 +42,7 @@ describe("routes", () => {
     });
   }
 
-  it("opens on today's page", async () => {
+  it("opens on today’s page", async () => {
     renderApp({ hash: "" });
     expect(await screen.findByRole("heading", { level: 1 })).toBeInTheDocument();
     expect(window.location.hash).toBe("#/today");
@@ -51,7 +51,7 @@ describe("routes", () => {
   it("says kindly when a page is not here", async () => {
     renderApp({ hash: "#/nowhere" });
     expect(
-      await screen.findByRole("heading", { level: 1, name: "That page isn't here" }),
+      await screen.findByRole("heading", { level: 1, name: "That page isn’t here" }),
     ).toBeInTheDocument();
   });
 
@@ -212,7 +212,7 @@ describe("keeping and asking from the bar", () => {
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await userEvent.type(bar, "Ask Sam about Saturday{Enter}");
     expect(await screen.findByText("Kept.")).toBeInTheDocument();
-    expect(screen.getByText("I'll read it tonight.")).toBeInTheDocument();
+    expect(screen.getByText("I’ll read it tonight.")).toBeInTheDocument();
     const items = await engine.listItems({ since: null, status: null, limit: 1 });
     expect(items[0]?.title).toBe("Ask Sam about Saturday");
     expect(bar).toHaveValue("");

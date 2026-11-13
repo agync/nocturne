@@ -3,12 +3,14 @@ import { type RefObject, useEffect } from "react";
 const ORDER = ["keep", "main", "rail"] as const;
 
 function focusRegion(region: HTMLElement): void {
-  const target = region.matches("button, a, textarea, input")
-    ? region
-    : (region.querySelector<HTMLElement>(
-        '[aria-current="page"], textarea, a[href], button:not([disabled])',
-      ) ?? region);
-  target.focus({ preventScroll: false });
+  // The page region takes focus itself (it is tabindex -1); the others hand it to their first control.
+  const target =
+    region.dataset.region === "main" || region.matches("button, a, textarea, input")
+      ? region
+      : (region.querySelector<HTMLElement>(
+          '[aria-current="page"], textarea, a[href], button:not([disabled])',
+        ) ?? region);
+  target.focus();
 }
 
 /** F6 moves focus to the next region (keep or ask, page, rail); Shift+F6 goes back. */

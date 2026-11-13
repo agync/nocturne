@@ -21,7 +21,7 @@ describe("format", () => {
     expect(formatDay("2026-03-29")).toBe("Sun 29 Mar");
   });
 
-  it("formats times in 24 hours in the person's zone", () => {
+  it("formats times in 24 hours in the person’s zone", () => {
     expect(formatTime("2026-11-13T07:02:00Z")).toBe("07:02");
     expect(formatTime("2026-07-01T06:30:00Z")).toBe("07:30");
   });

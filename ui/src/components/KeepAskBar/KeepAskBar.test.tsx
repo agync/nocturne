@@ -35,7 +35,7 @@ describe("defaultVerb", () => {
   it("keeps everything else", () => {
     for (const text of [
       "Ask Sam about Saturday",
-      "Gran's number ends 4471",
+      "Gran’s number ends 4471",
       "Whatever",
       "Island trip",
       "",
@@ -59,8 +59,8 @@ describe("KeepAskBar", () => {
     const { onKeep, onAsk, input } = setup();
     await userEvent.type(input, "When is the dentist?{Control>}{Enter}{/Control}");
     expect(onKeep).toHaveBeenCalledWith("When is the dentist?");
-    await userEvent.type(input, "Gran's number ends 4471{Alt>}{Enter}{/Alt}");
-    expect(onAsk).toHaveBeenCalledWith("Gran's number ends 4471");
+    await userEvent.type(input, "Gran’s number ends 4471{Alt>}{Enter}{/Alt}");
+    expect(onAsk).toHaveBeenCalledWith("Gran’s number ends 4471");
   });
 
   it("shows both verbs once there is text, with the default as the primary", async () => {

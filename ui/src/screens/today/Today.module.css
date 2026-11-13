@@ -1,0 +1,36 @@
+.frame {
+  padding: 24px 28px 0;
+}
+
+.card {
+  overflow: hidden;
+  border-radius: 10px 10px 0 0;
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+:global([data-size="narrow"]) .frame {
+  padding: 0;
+}
+
+:global([data-size="narrow"]) .card {
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-6) var(--s-5);
+  color: var(--ink2);
+}
+
+.retry {
+  min-height: var(--size-control);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  background: transparent;
+  font-weight: 500;
+}

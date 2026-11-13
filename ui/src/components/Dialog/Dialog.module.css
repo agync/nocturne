@@ -35,6 +35,7 @@
 .backdrop[data-edge="start"] .panel {
   width: min(100%, 320px);
   border-radius: 0;
+  background: var(--bg);
 }
 
 .head {

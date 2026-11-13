@@ -11,7 +11,7 @@ function Opener({ onAction }: { onAction?: () => void }) {
       onClick={() =>
         show({
           lead: "Kept.",
-          message: "I'll read it tonight.",
+          message: "I’ll read it tonight.",
           action: onAction ? { label: "Undo", onAction } : undefined,
         })
       }
@@ -38,7 +38,7 @@ describe("Toast", () => {
     await userEvent.click(screen.getByRole("button", { name: "Keep" }));
     const region = screen.getByRole("status");
     expect(region).toHaveAttribute("aria-live", "polite");
-    expect(region).toHaveTextContent("Kept.I'll read it tonight.");
+    expect(region).toHaveTextContent("Kept.I’ll read it tonight.");
   });
 
   it("goes away by itself", async () => {

@@ -1,0 +1,158 @@
+.line {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--s-4) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.text {
+  font: 400 1.25rem / 1.45 var(--font-serif);
+  font-variant-numeric: oldstyle-nums;
+  text-wrap: pretty;
+}
+
+.text strong {
+  font-weight: 600;
+}
+
+.text[data-done="true"] {
+  color: var(--ink2);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1) 10px;
+}
+
+.status {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.forgotten {
+  color: var(--ink2);
+  font: italic 400 1rem / 1.45 var(--font-serif);
+}
+
+.choices {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  gap: var(--s-2);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  min-height: var(--size-touch);
+  padding: 12px 14px;
+  border: 1px solid var(--rule2);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  text-align: left;
+}
+
+.choice:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.choiceText {
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.choiceSource {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+}
+
+.result {
+  color: var(--ink2);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.result strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.letGo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.letGoText {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.letGoTitle {
+  color: var(--ink2);
+  font: 400 1.125rem / 1.4 var(--font-serif);
+  font-variant-numeric: oldstyle-nums;
+}
+
+.letGo[data-restored="true"] .letGoTitle {
+  color: var(--ink);
+}
+
+.why {
+  color: var(--ink3);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+}
+
+.upcoming {
+  display: grid;
+  grid-template-columns: 3.25rem 1fr;
+  gap: var(--s-3);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.weekday {
+  padding-top: var(--s-1);
+  color: var(--ink3);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+  text-transform: uppercase;
+}
+
+.upcomingBody {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upcomingText {
+  font: 400 1.125rem / 1.4 var(--font-serif);
+  font-variant-numeric: oldstyle-nums;
+}

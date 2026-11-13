@@ -143,3 +143,27 @@ for (const scheme of ["light", "dark"] as const) {
     await context.close();
   });
 }
+
+for (const scheme of ["light", "dark"] as const) {
+  test(`axe passes on the narrow menu in ${scheme}`, async ({ browser }) => {
+    const context = await browser.newContext({
+      colorScheme: scheme,
+      viewport: { width: 400, height: 760 },
+      locale: "en-GB",
+      timezoneId: "Europe/London",
+    });
+    const page = await context.newPage();
+    await ready(page);
+    await page.getByRole("button", { name: "Menu" }).click();
+    await page.getByRole("dialog", { name: "Menu" }).waitFor();
+    const results = await new AxeBuilder({ page })
+      .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+      .analyze();
+    expect(
+      results.violations.map(
+        (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+      ),
+    ).toEqual([]);
+    await context.close();
+  });
+}
