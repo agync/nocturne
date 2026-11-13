@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt};
+
 use nocturne_app_lib::remote::crypto;
 use nocturne_app_lib::remote::limits::Mono;
 use nocturne_app_lib::remote::listener::{self, Bind, ListenerConfig, ListenerHandle};
@@ -653,6 +655,67 @@ async fn idle_strangers_and_a_hello_flood_leave_room_for_a_paired_phone() {
     }
     session(&r, &keys).await;
     drop(strangers);
+}
+
+/// A POST that declares a body and never sends it, held open.
+async fn stalled_post(r: &Running) -> tokio::io::BufReader<Box<dyn StallIo>> {
+    let mut head = String::from("POST /s HTTP/1.1\r\n");
+    if !keyed(r).iter().any(|(k, _)| *k == "host") {
+        head.push_str("host: phone.test\r\n");
+    }
+    for (k, v) in keyed(r) {
+        head.push_str(&format!("{k}: {v}\r\n"));
+    }
+    head.push_str("content-length: 100\r\n\r\n");
+    let mut io: Box<dyn StallIo> = match &r.addr {
+        #[cfg(unix)]
+        Addr::Unix(p) => Box::new(tokio::net::UnixStream::connect(p).await.unwrap()),
+        Addr::Tcp(port) => Box::new(
+            tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, *port))
+                .await
+                .unwrap(),
+        ),
+        #[cfg(not(unix))]
+        Addr::Unix(_) => unreachable!(),
+    };
+    io.write_all(head.as_bytes()).await.unwrap();
+    tokio::io::BufReader::new(io)
+}
+
+trait StallIo: AsyncRead + AsyncWrite + Unpin + Send {}
+impl<T: AsyncRead + AsyncWrite + Unpin + Send> StallIo for T {}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn stalled_posts_do_not_take_a_paired_phones_place() {
+    let r = local().await;
+    let keys = r.bench.paired("Pixel");
+    let mut stalled = Vec::new();
+    for _ in 0..MAX_CONNECTIONS {
+        stalled.push(stalled_post(&r).await);
+    }
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // Every connection permit is still free: a paired phone connects, and files are served.
+    session(&r, &keys).await;
+    assert_eq!(get(&r, "/p", &[]).await.status, 200);
+    // The bodies are given up on, and the slots free up again.
+    let mut statuses = Vec::new();
+    for s in &mut stalled {
+        let mut line = String::new();
+        tokio::time::timeout(Duration::from_secs(20), s.read_line(&mut line))
+            .await
+            .expect("an answer for a body that never came")
+            .unwrap();
+        statuses.push(line.split(' ').nth(1).unwrap_or_default().to_string());
+    }
+    assert!(
+        statuses.iter().all(|c| c == "408" || c == "409"),
+        "{statuses:?}"
+    );
+    assert!(statuses.iter().any(|c| c == "408"), "{statuses:?}");
+    let wire = Wire::open_with(&r.addr, Mode::LongPoll, &keyed(&r)).await;
+    let Opened::Session(..) = PhoneClient::open_on(wire, &keys).await else {
+        panic!("a long-poll session once the stalled bodies are gone")
+    };
 }
 
 #[tokio::test(flavor = "multi_thread")]

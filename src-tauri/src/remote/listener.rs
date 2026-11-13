@@ -15,6 +15,10 @@
 //!   this way under the pairing id), 204 when nothing did, 410 once it has ended, 409 while
 //!   another poll for it is held.
 //!
+//! A body that stops arriving for `BODY_IDLE_SECS` is answered 408. A `POST` is read from a
+//! small pool of its own (`POST_SLOTS`), not from the connection permits that paired phones
+//! need, because nothing is known about who sent it until the body is read.
+//!
 //! While Away from home is off every keyed request gets a bare 503 (the phone reads it as
 //! "turned off").
 //! Everything else is a bare 404. Without the helper key (Windows) every request is a bare
@@ -43,6 +47,11 @@ use super::static_files::{self, PhoneFiles};
 pub const REFUSED_CLOSE: u16 = 4403;
 /// Length prefix of each frame in a long-poll body.
 const LEN_PREFIX: usize = 4;
+/// How long a long-poll body may go without a byte before it is given up on.
+const BODY_IDLE_SECS: u64 = 5;
+/// Long-poll bodies read at once. A body is read before its sender is known, so these are
+/// separate from the connection permits: a stalled POST cannot take a paired phone's place.
+const POST_SLOTS: usize = MAX_CONNECTIONS / 2;
 
 pub enum Bind {
     /// An owner-only socket at this path; its folder is made owner-only.
@@ -93,6 +102,7 @@ struct Ctx {
     files: Arc<dyn PhoneFiles>,
     key: Option<(String, KeyCarrier)>,
     permits: Arc<Semaphore>,
+    posts: Arc<Semaphore>,
 }
 
 /// Start listening and serving `core`.
@@ -107,6 +117,7 @@ pub async fn serve(cfg: ListenerConfig, core: Arc<Core>) -> std::io::Result<List
         files: cfg.files,
         key,
         permits: Arc::new(Semaphore::new(MAX_CONNECTIONS)),
+        posts: Arc::new(Semaphore::new(POST_SLOTS)),
     });
     let app = axum::Router::new().fallback(move |req: Request<Body>| {
         let ctx = ctx.clone();
@@ -203,7 +214,12 @@ async fn handle(ctx: Arc<Ctx>, req: Request<Body>) -> Response<Body> {
         return bare(code(HTTP_OFF));
     }
     // Full is not off: 503 means only "turned off" to the phone.
-    let Ok(permit) = ctx.permits.clone().try_acquire_owned() else {
+    let pool = if path == PATH_SESSION && *req.method() == Method::POST {
+        &ctx.posts
+    } else {
+        &ctx.permits
+    };
+    let Ok(permit) = pool.clone().try_acquire_owned() else {
         return bare(code(HTTP_POLL_BUSY));
     };
     if path == PATH_SESSION {
@@ -414,6 +430,32 @@ fn frames_response(core: &Core, frames: &[Vec<u8>]) -> Response<Body> {
         .expect("a frames response")
 }
 
+/// The body, at most `limit` bytes, given up on when it goes `BODY_IDLE_SECS` without a byte.
+async fn read_body(mut body: Body, limit: usize) -> Result<Vec<u8>, StatusCode> {
+    use axum::body::HttpBody;
+    let mut out = Vec::new();
+    loop {
+        let next = tokio::time::timeout(
+            Duration::from_secs(BODY_IDLE_SECS),
+            std::future::poll_fn(|cx| std::pin::Pin::new(&mut body).poll_frame(cx)),
+        )
+        .await;
+        match next {
+            Err(_) => return Err(StatusCode::REQUEST_TIMEOUT),
+            Ok(None) => return Ok(out),
+            Ok(Some(Err(_))) => return Err(StatusCode::BAD_REQUEST),
+            Ok(Some(Ok(frame))) => {
+                if let Ok(data) = frame.into_data() {
+                    if out.len() + data.len() > limit {
+                        return Err(StatusCode::PAYLOAD_TOO_LARGE);
+                    }
+                    out.extend_from_slice(&data);
+                }
+            }
+        }
+    }
+}
+
 fn is_pairing_kind(kind: u8) -> bool {
     matches!(kind, KIND_HELLO | KIND_PAIR_COMMIT | KIND_PAIR_REVEAL)
 }
@@ -432,8 +474,9 @@ async fn poll_up(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
         Some(n) if n <= limit => {}
         _ => return bare(StatusCode::PAYLOAD_TOO_LARGE),
     }
-    let Ok(body) = axum::body::to_bytes(req.into_body(), limit).await else {
-        return bare(StatusCode::PAYLOAD_TOO_LARGE);
+    let body = match read_body(req.into_body(), limit).await {
+        Ok(body) => body,
+        Err(status) => return bare(status),
     };
     let Some(frames) = split_frames(&body) else {
         return bare(StatusCode::PAYLOAD_TOO_LARGE);
