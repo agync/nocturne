@@ -76,11 +76,6 @@ test.describe("with Online answers off", () => {
 });
 
 test.describe("with Online answers on", () => {
-  test.skip(
-    process.env.PW_ONLINE_MOCK !== "1",
-    "needs the mock engine's online scenario (?mockOnline=on), which lands with the mock amendment",
-  );
-
   test("Answer this is reached before sending, and the choice is for one question", async ({
     page,
   }) => {

@@ -80,6 +80,7 @@ export class OnlineSim {
   private current: OnlineView;
   private checkMs: number;
   private pending: Pending | null = null;
+  private readonly log: OnlineSend[] = [];
   private provisional: { host: string; baseUrl: string; model: string } | null = null;
   private forced: CheckOutcome | null = null;
   private readonly onChange?: (view: OnlineView) => void;
@@ -218,7 +219,50 @@ export class OnlineSim {
   }
 
   advanced(): OnlineAdvanced | null {
-    return null;
+    const v = this.current;
+    if (!v.setUp) return null;
+    const last = this.log.find((s) => s.kind === "question");
+    return {
+      state: v.state.type,
+      route: "127.0.0.1:8020",
+      baseUrl: v.baseUrl,
+      host: v.host,
+      model: v.model,
+      maxTokens: 600,
+      keyStorage: v.keyStorage,
+      lastAt: last?.at ?? null,
+      lastStatus: last ? 200 : null,
+      lastSeconds: last ? 1.2 : null,
+      lastBytesUp: last?.bytesUp ?? null,
+      lastBytesDown: last?.bytesDown ?? null,
+      costReported: v.costReported,
+      sendsKept: this.log.length,
+      questionsThisMonth: v.questionsThisMonth,
+    };
+  }
+
+  /** Notes one question that went online, for the sent log. Returns its id. */
+  record(question: string, used: number): number {
+    const id = this.log.length + 1;
+    this.log.unshift({
+      id,
+      at: new Date(this.now()).toISOString(),
+      kind: "question",
+      host: this.current.host ?? HOST,
+      model: this.current.model ?? MODEL,
+      question,
+      lines: [
+        { type: "text", text: "Facts:" },
+        { type: "memory", n: 1, text: "Gran’s new number ends 4471.", state: "same" },
+        { type: "text", text: `Question: ${question}` },
+      ],
+      instructions: "Answer only from the facts.",
+      bytesUp: 1400,
+      bytesDown: 600,
+      costUsd: null,
+      result: { type: "answered", receipts: used },
+    });
+    return id;
   }
 
   private outcomeFor(form: OnlineForm): CheckOutcome {
@@ -344,7 +388,7 @@ export class OnlineSim {
     return this.view();
   }
 
-  async sends(_limit: number, _before: number | null): Promise<OnlineSend[]> {
-    return [];
+  async sends(limit: number, before: number | null): Promise<OnlineSend[]> {
+    return this.log.filter((s) => before === null || s.id < before).slice(0, limit);
   }
 }

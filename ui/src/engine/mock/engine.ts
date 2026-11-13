@@ -65,6 +65,7 @@ import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
+import { answeredBy, onlinePrelude } from "./onlineAsk";
 import { type RemoteOptions, RemoteSim } from "./remote";
 import { audioScript } from "./script";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
@@ -758,10 +759,10 @@ export class MockEngine implements EngineClient {
 
   async reportRecording(_state: RecordingState): Promise<void> {}
 
-  async ask(question: string, _place?: AskPlace): Promise<string> {
+  async ask(question: string, place?: AskPlace): Promise<string> {
     this.counter += 1;
     const askId = `ask-${this.counter}`;
-    this.runAsk(askId, question);
+    this.runAsk(askId, question, place);
     return askId;
   }
 
@@ -798,7 +799,8 @@ export class MockEngine implements EngineClient {
     return chosen.length > 0 ? chosen.map((m) => ({ m, score: 1 })) : null;
   }
 
-  private runAsk(askId: string, question: string): void {
+  private runAsk(askId: string, question: string, place?: AskPlace): void {
+    const by = answeredBy(place, this.online.view());
     const delta = (d: Partial<AskDelta> & Pick<AskDelta, "phase">): AskDelta => ({
       askId,
       textDelta: null,
@@ -810,8 +812,15 @@ export class MockEngine implements EngineClient {
       plain: false,
       ...d,
     });
+    const terminal = new Set(["done", "notSure", "nothing"]);
     const send = (d: AskDelta): void => {
-      if (!this.cancelledAsks.has(askId)) this.emit("ask-delta", d);
+      if (this.cancelledAsks.has(askId)) return;
+      if (!terminal.has(d.phase)) {
+        this.emit("ask-delta", d);
+        return;
+      }
+      const sendId = by.type === "online" ? this.online.record(question, d.memoryIds.length) : null;
+      this.emit("ask-delta", { ...d, answeredBy: by, sendId });
     };
     const tokens = contentTokens(question);
     const asksWhen = /^\s*when\b/i.test(question);
@@ -837,6 +846,9 @@ export class MockEngine implements EngineClient {
       setTimeout(() => send(delta({ phase: "waking", etaSeconds: WAKE_SECONDS })), 0);
     }
     setTimeout(() => send(delta({ phase: "searching" })), 0);
+    for (const phase of onlinePrelude(by)) {
+      setTimeout(() => send(delta({ phase, found: active.length })), 100);
+    }
     setTimeout(() => {
       if (active.length > 0) {
         const receipts = active.flatMap((x) => x.m.receipts);

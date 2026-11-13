@@ -1,15 +1,12 @@
 import { vi } from "vitest";
 import type { AskDelta, AskPlace, OnlineView } from "../../engine/bindings";
 import { createMockEngine, MockEngine } from "../../engine/mock/engine";
-import * as hook from "../online/useOnline";
 
 /**
  * A mock computer on which Online answers is in the given state (off when `null`). The view is
  * read the way the screens read it, through `getOnline`.
  */
 export function onlineEngine(view: OnlineView | null): MockEngine {
-  const reads = (hook as { onlineReads?: { on: boolean } }).onlineReads;
-  if (reads) reads.on = true;
   const engine = createMockEngine();
   if (view) vi.spyOn(engine.online, "view").mockReturnValue(view);
   return engine;
