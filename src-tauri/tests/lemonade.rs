@@ -188,8 +188,20 @@ impl Lab {
     /// Kill the running fake engine now, as a crash would.
     fn crash(&self) {
         block_on(async {
-            let client = self.services.client().await.expect("an engine");
-            let endpoint = client.endpoint().expect("an address");
+            // Between crashes the engine is relaunching and has no address for a moment.
+            let deadline = std::time::Instant::now() + Duration::from_secs(20);
+            let endpoint = loop {
+                if let Some(client) = self.services.client().await
+                    && let Some(endpoint) = client.endpoint()
+                {
+                    break endpoint;
+                }
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "the engine came back with an address"
+                );
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            };
             let _ = reqwest::Client::new()
                 .post(format!("http://127.0.0.1:{}/fake/crash", endpoint.port))
                 .bearer_auth(&endpoint.key)
