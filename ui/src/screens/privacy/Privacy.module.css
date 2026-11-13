@@ -107,6 +107,7 @@
 .sizes {
   display: flex;
   flex-wrap: wrap;
+  gap: 0 var(--s-4);
   margin-top: var(--s-2);
   font-weight: 400;
 }

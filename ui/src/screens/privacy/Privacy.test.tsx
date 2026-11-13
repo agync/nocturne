@@ -78,7 +78,7 @@ describe("Privacy", () => {
   it("shows what is on this computer and opens that folder", async () => {
     const { platform } = await open();
     const spy = vi.spyOn(platform, "openPath");
-    expect(screen.getByText(/4\.3 GB of things you kept,/)).toBeInTheDocument();
+    expect(screen.getByText(/^4\.3 GB of things you kept$/)).toBeInTheDocument();
     expect(screen.getByText("8.4 GB for Nocturne’s mind")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Space used" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open folder" }));
@@ -154,6 +154,19 @@ describe("Privacy", () => {
     await open(engine, platform);
     await userEvent.click(screen.getByRole("button", { name: "Export to a folder…" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The export didn’t finish.");
+  });
+
+  it("promises what is true once set up, and leaves no dangling comma", async () => {
+    await open();
+    expect(
+      screen.getByText(
+        "Nocturne has no account, no analytics and no crash reports. Once set up, Nocturne works without the internet.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/unplug/)).toBeNull();
+    for (const strong of document.querySelectorAll("strong")) {
+      expect(strong.textContent).not.toMatch(/[,;:]\s*$/);
+    }
   });
 
   it("offers no lock, because nothing would enforce it", async () => {
