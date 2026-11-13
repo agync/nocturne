@@ -1194,6 +1194,16 @@ fn words_of(text: &str) -> HashSet<String> {
         .collect()
 }
 
+/// Whether `word` is in `text` on its own, not inside a longer word or number: "son" is not in
+/// "person".
+fn has_word(text: &str, word: &str) -> bool {
+    text.match_indices(word).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + word.len()..].chars().next();
+        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
+    })
+}
+
 fn answer_json(q: &Question, a: &Answer, extra: Value) -> Value {
     json!({
         "id": q.id, "kind": q.kind, "question": q.text, "phase": a.phase,
@@ -1659,8 +1669,8 @@ fn the_whole_product_works_with_real_models() {
             a.phase == "done"
                 && q.must
                     .iter()
-                    .all(|group| group.iter().any(|w| lower.contains(w)))
-                && (q.lead.is_empty() || q.lead.iter().any(|w| first.contains(w)))
+                    .all(|group| group.iter().any(|w| has_word(&lower, w)))
+                && (q.lead.is_empty() || q.lead.iter().any(|w| has_word(first, w)))
         };
         t.correct += usize::from(ok);
         let cited_items: Vec<String> = a
