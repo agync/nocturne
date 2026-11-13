@@ -4,7 +4,9 @@ use nocturne_contract::{EntityKind, EntityView, MemoryFilter, MemoryView};
 use nocturne_engine::CorrectPatch;
 use tauri::{AppHandle, Runtime};
 
-use super::{change, not_yet, read};
+#[cfg(not(feature = "engine-round2"))]
+use super::not_yet;
+use super::{change, read};
 use crate::error::CommandError;
 
 #[tauri::command]
@@ -93,37 +95,58 @@ pub async fn set_private<R: Runtime>(
     change(app, move |e| e.set_private(&id, private)).await
 }
 
-/// Item-level privacy needs `Engine::set_item_private` (engine round 2).
+/// Make an item (and what was read from it) private, or not.
 #[tauri::command]
 pub async fn set_item_private<R: Runtime>(
     app: AppHandle<R>,
     id: String,
     private: bool,
 ) -> Result<(), CommandError> {
-    let _ = (app, id, private);
-    Err(not_yet("making an item private"))
+    #[cfg(feature = "engine-round2")]
+    {
+        change(app, move |e| e.set_item_private(&id, private)).await
+    }
+    #[cfg(not(feature = "engine-round2"))]
+    {
+        let _ = (app, id, private);
+        Err(not_yet("making an item private"))
+    }
 }
 
-/// Item-level keep-forever needs `Engine::set_item_keep_forever` (engine round 2).
+/// Keep an item (and what was read from it) forever, or stop.
 #[tauri::command]
 pub async fn set_item_keep_forever<R: Runtime>(
     app: AppHandle<R>,
     id: String,
     keep_forever: bool,
 ) -> Result<(), CommandError> {
-    let _ = (app, id, keep_forever);
-    Err(not_yet("keeping an item forever"))
+    #[cfg(feature = "engine-round2")]
+    {
+        change(app, move |e| e.set_item_keep_forever(&id, keep_forever)).await
+    }
+    #[cfg(not(feature = "engine-round2"))]
+    {
+        let _ = (app, id, keep_forever);
+        Err(not_yet("keeping an item forever"))
+    }
 }
 
-/// Snoozing a memory needs `Engine::snooze` (engine round 2).
+/// Hide a memory for some days; it comes back.
 #[tauri::command]
 pub async fn snooze<R: Runtime>(
     app: AppHandle<R>,
     memory_id: String,
     days: u32,
 ) -> Result<(), CommandError> {
-    let _ = (app, memory_id, days);
-    Err(not_yet("snoozing"))
+    #[cfg(feature = "engine-round2")]
+    {
+        change(app, move |e| e.snooze(&memory_id, days)).await
+    }
+    #[cfg(not(feature = "engine-round2"))]
+    {
+        let _ = (app, memory_id, days);
+        Err(not_yet("snoozing"))
+    }
 }
 
 #[tauri::command]

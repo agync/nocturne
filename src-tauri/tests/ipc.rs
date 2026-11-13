@@ -512,6 +512,7 @@ fn retry_item_requeues_and_wakes_the_pipeline() {
     assert_eq!(h.code("read_now", json!({"id": "itm_nope"})), "notFound");
 }
 
+#[cfg(not(feature = "engine-round2"))]
 #[test]
 fn pending_engine_work_is_refused_plainly_not_faked() {
     let h = harness();
@@ -811,7 +812,10 @@ fn export_writes_a_fresh_folder_and_reports_it() {
     assert_eq!(report["memories"], 1);
     let path = std::path::PathBuf::from(report["path"].as_str().unwrap());
     assert!(path.starts_with(out.path()) && path.is_dir());
-    assert_eq!(progress.lock().unwrap().len(), 1);
+    assert!(
+        !progress.lock().unwrap().is_empty(),
+        "export progress is announced"
+    );
     assert_eq!(
         h.code("export_to", json!({"dir": "/no/such/folder"})),
         "invalid"

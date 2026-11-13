@@ -22,6 +22,9 @@ default = ["fake-mind"]
 fake-mind = ["nocturne-engine/fake"]
 # Set by `cargo tauri build`: embed the interface instead of loading the dev server.
 custom-protocol = ["tauri/custom-protocol"]
+# The engine commands that need the second round of engine work (unkeep, item flags, snooze,
+# read-now ordering, export progress). Off until that round is on the main branch.
+engine-round2 = []
 
 [build-dependencies]
 tauri-build = { workspace = true }

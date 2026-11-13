@@ -7,7 +7,9 @@ use nocturne_contract::{EVENT_ITEM, ItemFilter, ItemView, Kept, Source};
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-use super::{change, engine, not_yet, read, run};
+#[cfg(not(feature = "engine-round2"))]
+use super::not_yet;
+use super::{change, engine, read, run};
 use crate::ask;
 use crate::error::{CommandError, blocking, blocking_cmd};
 use crate::state::{AppState, refresh_status};
@@ -293,20 +295,32 @@ pub async fn retry_item<R: Runtime>(
     Ok(item)
 }
 
-/// Removing an item kept moments ago needs `Engine::unkeep` (engine round 2).
+/// Take back an item kept in the last few minutes, with everything read from it. Too late
+/// answers `tooLate`.
 #[tauri::command]
 pub async fn unkeep<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
-    let _ = (app, id);
-    Err(not_yet("undoing a keep"))
+    #[cfg(feature = "engine-round2")]
+    {
+        change(app, move |e| e.unkeep(&id)).await
+    }
+    #[cfg(not(feature = "engine-round2"))]
+    {
+        let _ = (app, id);
+        Err(not_yet("undoing a keep"))
+    }
 }
 
-/// Read an item next. The engine's queue order (`Engine::prioritize`, round 2) is not there
-/// yet; the item is checked and the pipeline woken, which is the part that already helps.
+/// Read an item next: it moves to the front of the queue and the pipeline is woken.
 #[tauri::command]
-pub async fn read_now<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
-    read(app.clone(), move |e| e.get_item(&id).map(|_| ())).await?;
+pub async fn read_now<R: Runtime>(app: AppHandle<R>, id: String) -> Result<ItemView, CommandError> {
+    let item = read(app.clone(), move |e| {
+        #[cfg(feature = "engine-round2")]
+        e.prioritize(&id)?;
+        e.get_item(&id)
+    })
+    .await?;
     app.state::<AppState>().wake_pipeline();
-    Ok(())
+    Ok(item)
 }
 
 /// Start answering a question. Returns the ask id; the answer streams as `ask-delta` events.

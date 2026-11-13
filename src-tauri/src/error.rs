@@ -71,6 +71,8 @@ impl From<nocturne_engine::Error> for CommandError {
             E::Invalid(_) => Self::new(ErrorCode::Invalid, &e),
             E::StaleToken => Self::new(ErrorCode::TokenExpired, &e),
             E::LeaseLost => Self::new(ErrorCode::Busy, &e),
+            #[cfg(feature = "engine-round2")]
+            E::TooLate => Self::new(ErrorCode::TooLate, &e),
             E::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
                 Self::new(ErrorCode::NotFound, &e)
             }

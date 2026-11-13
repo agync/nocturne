@@ -56,18 +56,33 @@ pub async fn export_to<R: Runtime>(
             return Err(CommandError::invalid("choose an existing folder"));
         }
         let e = engine(&app)?;
-        let report = blocking(move || e.export_to(&target)).await?;
-        let total = report.memories + report.pages + report.originals;
-        // The engine reports no steps yet; the interface gets the finished count.
-        if let Err(err) = app.emit(EVENT_EXPORT, ExportProgress { done: total, total }) {
-            tracing::warn!("could not emit export progress: {err}");
+        #[cfg(feature = "engine-round2")]
+        {
+            let handle = app.clone();
+            blocking(move || {
+                e.export_to_with(&target, &|done, total| {
+                    if let Err(err) = handle.emit(EVENT_EXPORT, ExportProgress { done, total }) {
+                        tracing::warn!("could not emit export progress: {err}");
+                    }
+                })
+            })
+            .await
         }
-        Ok(ExportReport {
-            path: report.path.to_string_lossy().into_owned(),
-            memories: report.memories,
-            pages: report.pages,
-            originals: report.originals,
-        })
+        #[cfg(not(feature = "engine-round2"))]
+        {
+            let report = blocking(move || e.export_to(&target)).await?;
+            let total = report.memories + report.pages + report.originals;
+            // This engine reports no steps; the interface gets the finished count.
+            if let Err(err) = app.emit(EVENT_EXPORT, ExportProgress { done: total, total }) {
+                tracing::warn!("could not emit export progress: {err}");
+            }
+            Ok(ExportReport {
+                path: report.path.to_string_lossy().into_owned(),
+                memories: report.memories,
+                pages: report.pages,
+                originals: report.originals,
+            })
+        }
     })
     .await
 }
