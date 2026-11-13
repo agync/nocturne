@@ -428,7 +428,7 @@ describe("what to do about an answer", () => {
   it("Delete this… opens the shared forget dialog for that memory", async () => {
     await open({ question: "What is Gran’s new number?" });
     await userEvent.click(await screen.findByRole("button", { name: "Delete this…" }));
-    expect(await screen.findByRole("dialog", { name: "Forget 1 memory?" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Delete 1 memory?" })).toBeVisible();
   });
 });
 

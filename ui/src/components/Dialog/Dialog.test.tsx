@@ -10,15 +10,15 @@ function Harness({ initial }: { initial?: boolean }) {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)}>
-        Forget…
+        Delete…
       </button>
       {open ? (
         <Dialog
-          title="Forget 3 things?"
+          title="Delete 3 things?"
           onClose={() => setOpen(false)}
           initialFocus={initial ? (keep as RefObject<HTMLElement | null>) : undefined}
         >
-          <button type="button">Forget</button>
+          <button type="button">Delete</button>
           <button type="button" ref={keep}>
             Keep them
           </button>
@@ -31,22 +31,22 @@ function Harness({ initial }: { initial?: boolean }) {
 describe("Dialog", () => {
   it("is a named modal dialog", async () => {
     render(<Harness />);
-    await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
-    const dialog = screen.getByRole("dialog", { name: "Forget 3 things?" });
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete 3 things?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
   });
 
   it("puts focus where the caller says, so Enter cannot forget by accident", async () => {
     render(<Harness initial />);
-    await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
     expect(screen.getByRole("button", { name: "Keep them" })).toHaveFocus();
   });
 
   it("traps focus: Tab and Shift+Tab cycle inside", async () => {
     render(<Harness />);
-    await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
     const close = screen.getByRole("button", { name: "Close" });
-    const forget = screen.getByRole("button", { name: "Forget" });
+    const forget = screen.getByRole("button", { name: "Delete" });
     const keep = screen.getByRole("button", { name: "Keep them" });
     expect(close).toHaveFocus();
     await userEvent.tab();
@@ -61,7 +61,7 @@ describe("Dialog", () => {
 
   it("closes on Escape and returns focus to the opener", async () => {
     render(<Harness />);
-    const opener = screen.getByRole("button", { name: "Forget…" });
+    const opener = screen.getByRole("button", { name: "Delete…" });
     await userEvent.click(opener);
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();

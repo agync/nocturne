@@ -39,11 +39,11 @@ describe("Not true, delete it, with the real forget dialog", () => {
     const listed = vi.spyOn(engine, "listNeedsYou");
     renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
-    await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete 1 memory?" });
+    await userEvent.click(await within(dialog).findByRole("button", { name: "Delete 1 memory" }));
 
     // The dialog says so while the screen behind it has already moved on.
-    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     expect(forget).toHaveBeenCalledOnce();
     await waitFor(() => expect(listed.mock.calls.length).toBeGreaterThan(1));
     await waitFor(() => expect(screen.getByText("Forgotten.")).toBeInTheDocument());
@@ -64,11 +64,11 @@ describe("Not true, delete it, with the real forget dialog", () => {
     const engine = new Waiting();
     renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
-    const dialog = await screen.findByRole("dialog", { name: /Forget/ });
+    const dialog = await screen.findByRole("dialog", { name: /Delete/ });
     const box = await within(dialog).findByRole("checkbox", { name: /Also delete the original/ });
     if (!(box as HTMLInputElement).checked) await userEvent.click(box);
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget \d+ thing/ }));
-    await within(dialog).findByText("Gone.");
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete \d+ thing/ }));
+    await within(dialog).findByText("Deleted.");
     const said = await screen.findByText("Forgotten.");
     expect(said).toHaveAttribute("aria-live", "polite");
     expect(document.body.textContent).not.toMatch(/original is still kept/);

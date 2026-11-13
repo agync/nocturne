@@ -11,7 +11,7 @@ const openDialog = async (page: Page) => {
   await page.getByRole("heading", { level: 1, name: "Fading & let go" }).waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.getByRole("checkbox", { name: GYM }).check({ force: true });
-  await page.getByRole("button", { name: /^(Forget 1 completely|Delete 1)…/ }).click();
+  await page.getByRole("button", { name: /^Delete 1…/ }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /^Delete 2 things/ }).waitFor();
   return dialog;
@@ -42,9 +42,7 @@ test.describe("forgetting completely", () => {
     }
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: /^(Forget 1 completely|Delete 1)…/ }),
-    ).toBeFocused();
+    await expect(page.getByRole("button", { name: /^Delete 1…/ })).toBeFocused();
   });
 
   test("the forget button works with the keyboard and the row leaves", async ({ page }) => {

@@ -83,9 +83,9 @@ describe("forgetting what an answer used", () => {
     await userEvent.click(within(chooser).getByRole("button", { name: "All of them" }));
     const dialog = await screen.findByRole("dialog");
     await userEvent.click(
-      await within(dialog).findByRole("button", { name: /^Forget 2 memories$/ }),
+      await within(dialog).findByRole("button", { name: /^Delete 2 memories$/ }),
     );
-    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     await waitFor(() => expect(announcer()).toHaveTextContent(/^$/));
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
@@ -109,8 +109,8 @@ describe("forgetting what an answer used", () => {
     const chooser = await screen.findByRole("group", { name: "Which one?" });
     await userEvent.click(within(chooser).getAllByRole("button")[0] as HTMLElement);
     const dialog = await screen.findByRole("dialog");
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 1 memory$/ }));
-    await within(dialog).findByText("Gone.");
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete 1 memory$/ }));
+    await within(dialog).findByText("Deleted.");
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     const said = await screen.findByText(/^Deleted 1 of 2 things\./, {
       selector: "p[role=status]",

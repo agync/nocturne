@@ -180,9 +180,9 @@ describe("Fading & let go", () => {
     await open();
     await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
     await userEvent.click(screen.getByRole("button", { name: "Delete 1…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
-    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "Delete 2 things?" });
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete 2 things/ }));
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(screen.queryByText("The old gym door code is 4821.")).toBeNull());
     expect(screen.getByText("The pizza place on Elm Street is good.")).toBeInTheDocument();
@@ -204,8 +204,8 @@ describe("Fading & let go", () => {
     );
     await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
     await userEvent.click(screen.getByRole("button", { name: "Delete 1…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete 2 things?" });
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete 2 things/ }));
     act(() => {
       window.location.hash = "#/today";
     });

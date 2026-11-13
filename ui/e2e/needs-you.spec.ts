@@ -84,8 +84,8 @@ test.describe("an unconfirmed web page", () => {
     await page.getByRole("button", { name: "Not true, delete it" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
-    await dialog.getByRole("button", { name: /^Forget 1 memory$/ }).click();
-    await expect(dialog.getByText("Gone.")).toBeVisible();
+    await dialog.getByRole("button", { name: /^Delete 1 memory$/ }).click();
+    await expect(dialog.getByText("Deleted.", { exact: true })).toBeVisible();
     // Behind the dialog the entry has already gone.
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
     await dialog.getByRole("button", { name: "OK" }).click();

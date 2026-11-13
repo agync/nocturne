@@ -243,17 +243,17 @@ describe("the morning page on Today", () => {
       return engine;
     };
 
-    it("opens the forget dialog and only says Forgotten once the engine has forgotten", async () => {
+    it("opens the forget dialog and only says Deleted once the engine has forgotten", async () => {
       const engine = unconfirmedGran();
       const confirm = vi.spyOn(engine, "confirmMemory");
       const forget = vi.spyOn(engine, "forget");
       await open(engine);
       await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
-      const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
+      const dialog = await screen.findByRole("dialog", { name: "Delete 1 memory?" });
       expect(screen.queryByText(/^Forgotten\./)).toBeNull();
       expect(confirm).not.toHaveBeenCalled();
-      await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
-      expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+      await userEvent.click(await within(dialog).findByRole("button", { name: "Delete 1 memory" }));
+      expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
       expect(forget).toHaveBeenCalledOnce();
       await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
       const gone = await screen.findByText("Deleted. This line is gone from the page.");
@@ -266,7 +266,7 @@ describe("the morning page on Today", () => {
       const preview = vi.spyOn(engine, "previewForget");
       await open(engine);
       await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
-      await screen.findByRole("dialog", { name: "Forget 2 memories?" });
+      await screen.findByRole("dialog", { name: "Delete 2 memories?" });
       expect(preview.mock.calls[0]?.[0]).toEqual(["mem-gran", "mem-swim"]);
     });
 

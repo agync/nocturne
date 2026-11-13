@@ -232,12 +232,12 @@ describe("acting on what is waiting", () => {
     expect(rows()[1]).toHaveAttribute("data-entry", "due:mem-trip");
   });
 
-  it("Not true, forget it opens the shared forget dialog for that memory", async () => {
+  it("Not true, delete it opens the shared forget dialog for that memory", async () => {
     const engine = new Waiting();
     engine.extra = [unconfirmed()];
     await open(engine);
     await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
-    expect(await screen.findByRole("dialog", { name: "Forget 1 memory?" })).toBeVisible();
+    expect(await screen.findByRole("dialog", { name: "Delete 1 memory?" })).toBeVisible();
   });
 
   it("an action that fails says so and keeps the entry", async () => {
