@@ -152,4 +152,35 @@ describe("KeepAskBar", () => {
     expect(start).toHaveBeenCalledOnce();
     expect(stop).toHaveBeenCalledOnce();
   });
+
+  it("marks the microphone unavailable and says why, instead of offering it", () => {
+    const start = vi.fn();
+    render(
+      <KeepAskBar
+        placement="top"
+        onKeep={vi.fn()}
+        onAsk={vi.fn()}
+        onTalk={{ start, stop: vi.fn() }}
+        talkUnavailable="This window can’t record sound."
+      />,
+    );
+    const mic = screen.getByRole("button", { name: "Hold to talk" });
+    expect(mic).toHaveAttribute("aria-disabled", "true");
+    expect(mic).toHaveAccessibleDescription("This window can’t record sound.");
+    expect(mic).toHaveAttribute("title", "This window can’t record sound.");
+  });
+
+  it("does not mark the microphone when talking works", () => {
+    render(
+      <KeepAskBar
+        placement="top"
+        onKeep={vi.fn()}
+        onAsk={vi.fn()}
+        onTalk={{ start: vi.fn(), stop: vi.fn() }}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Hold to talk" })).not.toHaveAttribute(
+      "aria-disabled",
+    );
+  });
 });

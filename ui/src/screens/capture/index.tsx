@@ -8,7 +8,7 @@ import {
 } from "react";
 import { askRequests } from "../../app/ask-request";
 import { goTo } from "../../app/query";
-import type { RecorderFailure } from "../../app/useRecorder";
+import { failureCopy, type RecorderFailure } from "../../app/useRecorder";
 import { Icon } from "../../components/Icon/Icon";
 import { defaultVerb } from "../../components/KeepAskBar/KeepAskBar";
 import { Notices } from "../../components/Notices/Notices";
@@ -91,7 +91,7 @@ export default function Capture() {
 
   const onFailed = useCallback((reason: RecorderFailure) => {
     if (reason === "denied") setMicDenied(true);
-    else setError(t(reason === "unsupported" ? "capture.mic.unsupported" : "capture.mic.failed"));
+    else setError(t(failureCopy(reason)));
   }, []);
 
   const recorder = useQuickRecorder({
@@ -235,6 +235,11 @@ export default function Capture() {
   };
 
   const startRecording = (bySpace: boolean) => {
+    if (recorder.unavailable) {
+      // Said once by the recorder; the reason stays on screen and nothing starts.
+      recorder.start();
+      return;
+    }
     setError(null);
     setMicDenied(false);
     heldBySpace.current = bySpace;
@@ -293,6 +298,7 @@ export default function Capture() {
   };
 
   // Only the microphone matters in this window; every other notice belongs to the main one.
+  const micWhy = recorder.unavailable ? t(failureCopy(recorder.unavailable)) : undefined;
   const micNotices = [
     ...(status?.notices ?? []).filter((n) => n.code === "micDenied"),
     ...(micDenied ? [MIC_DENIED] : []),
@@ -456,6 +462,8 @@ export default function Capture() {
                 className={styles.mic}
                 hidden={recorder.recording}
                 aria-label={t("capture.mic.start")}
+                aria-disabled={micWhy ? true : undefined}
+                title={micWhy}
                 onClick={() => startRecording(false)}
               >
                 <Icon name="mic" size={16} />

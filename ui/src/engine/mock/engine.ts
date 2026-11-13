@@ -33,7 +33,13 @@ import type {
   Tier,
   WhichResolved,
 } from "../bindings";
-import type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "../client";
+import type {
+  EngineClient,
+  EngineEventName,
+  EngineEvents,
+  RecordingState,
+  Unsubscribe,
+} from "../client";
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
 import { audioScript } from "./script";
@@ -689,6 +695,8 @@ export class MockEngine implements EngineClient {
   }
 
   async appReady(): Promise<void> {}
+
+  async reportRecording(_state: RecordingState): Promise<void> {}
 
   async ask(question: string): Promise<string> {
     this.counter += 1;

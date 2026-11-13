@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { canRecord, type RecorderFailure } from "../../app/useRecorder";
+import { type RecorderFailure, recordingBlock, recordingOptions } from "../../app/useRecorder";
 
 /** A press of Space shorter than this was a slip of the finger, not a voice note. */
 export const MIN_HOLD_MS = 300;
@@ -38,6 +38,8 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
   const starting = useRef(false);
   const stopWanted = useRef<null | { keep: boolean }>(null);
   const disposed = useRef(false);
+  const told = useRef(false);
+  const unavailable = recordingBlock();
   const keep = useRef(true);
   const latest = useRef({ onFinished, onFailed });
   latest.current = { onFinished, onFailed };
@@ -57,8 +59,10 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
 
   const start = useCallback(async () => {
     if (recorder.current || starting.current) return;
-    if (!canRecord()) {
-      latest.current.onFailed("unsupported");
+    const block = recordingBlock();
+    if (block) {
+      if (!told.current) latest.current.onFailed(block);
+      told.current = true;
       return;
     }
     starting.current = true;
@@ -70,7 +74,7 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
         return;
       }
       stream.current = media;
-      const rec = new MediaRecorder(media);
+      const rec = new MediaRecorder(media, recordingOptions());
       chunks.current = [];
       keep.current = true;
       rec.ondataavailable = (event) => {
@@ -153,6 +157,7 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
     levels,
     start: () => void start(),
     stop,
+    unavailable,
     starting: () => starting.current,
   };
 }

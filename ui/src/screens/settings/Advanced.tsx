@@ -1,14 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { goTo } from "../../app/query";
+import { recordingState } from "../../app/useRecorder";
 import { Button } from "../../components/Button/Button";
 import { formatBytes } from "../../copy/format";
-import { t } from "../../copy/t";
+import { type CopyId, t } from "../../copy/t";
 import type { AdvancedView, ComponentRole } from "../../engine/bindings";
+import type { RecordingState } from "../../engine/client";
 import { useEngine, useRefresh, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { DeleteEverythingDialog } from "../privacy/DeleteEverythingDialog";
 import styles from "./Settings.module.css";
+
+const RECORDING_COPY: Record<RecordingState, CopyId> = {
+  available: "advanced.recording.available",
+  "not-secure": "advanced.recording.not-secure",
+  "no-devices": "advanced.recording.no-devices",
+  "no-recorder": "advanced.recording.no-recorder",
+};
 
 function uptime(seconds: number | null): string {
   if (seconds === null) return t("advanced.engine.off");
@@ -25,7 +34,11 @@ function component(view: AdvancedView, role: ComponentRole) {
 }
 
 /** The details, row by row, in the words an engineer would use. The only place for them. */
-export function details(view: AdvancedView, voice: string): Array<[string, string]> {
+export function details(
+  view: AdvancedView,
+  voice: string,
+  recording: RecordingState = recordingState(),
+): Array<[string, string]> {
   const mind = component(view, "mind");
   const speech = component(view, "speech");
   const voiceC = component(view, "voice");
@@ -105,6 +118,7 @@ export function details(view: AdvancedView, voice: string): Array<[string, strin
         : t("advanced.tidy.none"),
     ],
     [t("advanced.row.agents"), t(view.agents ? "advanced.on" : "advanced.off")],
+    [t("advanced.row.recording"), t(RECORDING_COPY[recording])],
     [t("advanced.row.logs"), view.logDir],
   ];
 }

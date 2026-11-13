@@ -1,6 +1,6 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useRecorder } from "./useRecorder";
+import { recordingState, useRecorder } from "./useRecorder";
 
 class FakeRecorder {
   static last: FakeRecorder | null = null;
@@ -80,6 +80,59 @@ describe("useRecorder", () => {
     const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
     act(() => result.current.start());
     expect(onFailed).toHaveBeenCalledWith("unsupported");
+  });
+
+  it("says so once when recording is impossible, and then stays quiet", () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    const onFailed = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
+    expect(result.current.unavailable).toBe("unsupported");
+    act(() => result.current.start());
+    act(() => result.current.start());
+    act(() => result.current.start());
+    expect(onFailed).toHaveBeenCalledOnce();
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("tells a page that is not secure from a window that cannot record", () => {
+    vi.stubGlobal("isSecureContext", false);
+    expect(recordingState()).toBe("not-secure");
+    const onFailed = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
+    expect(result.current.unavailable).toBe("insecure");
+    act(() => result.current.start());
+    expect(onFailed).toHaveBeenCalledWith("insecure");
+  });
+
+  it("is available when the window can record", () => {
+    expect(recordingState()).toBe("available");
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed: vi.fn() }));
+    expect(result.current.unavailable).toBeNull();
+  });
+
+  it("tells missing devices from a missing recorder", () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    expect(recordingState()).toBe("no-recorder");
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+    vi.stubGlobal("MediaRecorder", FakeRecorder);
+    expect(recordingState()).toBe("no-devices");
+  });
+
+  it("records in the first sound format the browser supports", async () => {
+    const seen: unknown[] = [];
+    class Picky extends FakeRecorder {
+      static isTypeSupported = (type: string) => type === "audio/mp4";
+      constructor(stream: unknown, options?: unknown) {
+        super(stream);
+        seen.push(options);
+      }
+    }
+    vi.stubGlobal("MediaRecorder", Picky);
+    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed: vi.fn() }));
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.seconds).toBe(0));
+    expect(seen).toEqual([{ mimeType: "audio/mp4" }]);
   });
 
   it("stops at once if the button was released before the microphone opened", async () => {

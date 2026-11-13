@@ -3,7 +3,7 @@ import { useToast } from "../components/Toast/Toast";
 import { formatDuration } from "../copy/format";
 import { t } from "../copy/t";
 import { useEngine, useRefresh } from "../engine/context";
-import { useRecorder } from "./useRecorder";
+import { failureCopy, useRecorder } from "./useRecorder";
 
 /**
  * Hold to talk, then keep the voice note. If keeping fails the recording is not thrown away: the
@@ -40,16 +40,6 @@ export function useKeepRecording() {
 
   return useRecorder({
     onFinished: (bytes, mime, durationMs) => void save(bytes, mime, durationMs),
-    onFailed: (reason) =>
-      toast.show({
-        message: t(
-          reason === "unsupported"
-            ? "capture.mic.unsupported"
-            : reason === "denied"
-              ? "notice.micDenied.text"
-              : "capture.mic.failed",
-        ),
-        duration: 9000,
-      }),
+    onFailed: (reason) => toast.show({ message: t(failureCopy(reason)), duration: 9000 }),
   });
 }

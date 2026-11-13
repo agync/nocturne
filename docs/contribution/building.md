@@ -217,7 +217,9 @@ Tauri tool instead (`tauri build --config bundle/macos.json`) with the same conf
 Prove it with `scripts/check-package.sh target/package/macos/Nocturne.app` (or the `.dmg`, which it
 mounts read only): the engine matches the manifest, the property list is right, no builder path
 is in any file and the signature verifies. `scripts/smoke-launch-macos.sh` opens the app on the
-logged-in user's screen with a scratch data folder and judges the log, a second launch, a quit
+logged-in user's screen with a scratch data folder and judges the log (which includes the
+line `recording: available` or `recording: unavailable (...)` the interface writes at start, so
+whether the web view can record is known without a person), a second launch, a quit
 by `SIGTERM`, leftover processes and that `~/Library/LaunchAgents` was not touched. It cannot
 run from a session with no one logged in at the Mac.
 

@@ -7,7 +7,8 @@
 # The app is started with `open`, in the logged-in user's graphical session, so it opens a real
 # window on that screen (from ssh too, while that user is logged in at the Mac). It gets a scratch data folder and home; the person's own
 # Nocturne data is never touched. Pass means: alive at the end; the log has the engine ready on
-# 127.0.0.1, "setup is Choosing" and "window shown: interface ready", and no panic; a second
+# 127.0.0.1, "setup is Choosing", "window shown: interface ready" and the interface's one line
+# on whether its web view can record, and no panic; a second
 # launch with a text file exits 0 and the first instance keeps it; SIGTERM ends the app within
 # 10 seconds with "quit: everything stopped"; no process from the app's files is left; and
 # ~/Library/LaunchAgents and the web view's folders under ~/Library are exactly as they were. Processes are stopped by the pid found here.
@@ -44,7 +45,7 @@ sleep "$seconds"
 pid=$(app_pid)
 if [[ -n "$pid" ]]; then good "alive after ${seconds}s (pid $pid)"; else bad "exited before ${seconds}s"; fi
 
-for pattern in "the private engine .* is ready on 127\.0\.0\.1:[0-9]+" "setup is Choosing" "window shown: interface ready"; do
+for pattern in "the private engine .* is ready on 127\.0\.0\.1:[0-9]+" "setup is Choosing" "window shown: interface ready" "recording: (available|unavailable)"; do
     line=$(grep -Ehm1 "$pattern" "$logs"/*.log 2> /dev/null | sed -E 's/^[^ ]+ +//')
     if [[ -n "$line" ]]; then good "log: $line"; else bad "no '$pattern' in the log"; fi
 done

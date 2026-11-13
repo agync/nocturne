@@ -120,6 +120,12 @@
   touch-action: none;
 }
 
+.mic[aria-disabled="true"] {
+  border-style: dashed;
+  color: var(--ink2);
+  cursor: not-allowed;
+}
+
 .mic[data-recording="true"] {
   border-color: var(--ember);
   color: var(--ember);

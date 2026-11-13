@@ -18,6 +18,7 @@ import { askRequests } from "./ask-request";
 import { findRoute, routes } from "./routes";
 import styles from "./Shell.module.css";
 import { useKeepRecording } from "./useKeepRecording";
+import { failureCopy, recordingState } from "./useRecorder";
 import { useBarShortcut, useRegionCycling } from "./useRegions";
 import { useShellSize } from "./useShellSize";
 
@@ -128,6 +129,11 @@ export function Shell({ children }: ShellProps) {
 
   const recorder = useKeepRecording();
 
+  // One line in the log, so a support question about the microphone can be answered.
+  useEffect(() => {
+    void engine.reportRecording(recordingState()).catch(() => undefined);
+  }, [engine]);
+
   const today = page?.date;
   const handlers: NoticeHandlers = useMemo(
     () => ({
@@ -216,6 +222,7 @@ export function Shell({ children }: ShellProps) {
         shortcut={settings?.shortcutAvailable ? settings.shortcut : undefined}
         onTalk={{ start: recorder.start, stop: recorder.stop }}
         recordingSeconds={recorder.seconds}
+        talkUnavailable={recorder.unavailable ? t(failureCopy(recorder.unavailable)) : undefined}
         focusShortcut
       />
     </div>

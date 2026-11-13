@@ -354,6 +354,24 @@ describe("Advanced details", () => {
     expect(screen.getByText(/voice “bf_emma”/)).toBeInTheDocument();
   });
 
+  it("says whether this window can record, and why not", async () => {
+    await openAdvanced();
+    expect(screen.getByText("recording")).toBeInTheDocument();
+    expect(screen.getByText("unavailable (no media devices)")).toBeInTheDocument();
+  });
+
+  it("says recording is available when it is", async () => {
+    vi.stubGlobal("MediaRecorder", class {});
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: vi.fn() },
+    });
+    await openAdvanced();
+    expect(screen.getByText("available")).toBeInTheDocument();
+    vi.unstubAllGlobals();
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
+  });
+
   it("opens the logs, and goes back into setup", async () => {
     const platform = fakePlatform();
     const spy = vi.spyOn(platform, "openPath");

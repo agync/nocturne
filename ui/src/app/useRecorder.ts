@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { CopyId } from "../copy/t";
+import type { RecordingState } from "../engine/client";
 
-export type RecorderFailure = "denied" | "unsupported" | "other";
+/** Why a recording did not happen. Only "insecure" and "unsupported" can be known in advance. */
+export type RecorderFailure = "denied" | "unsupported" | "insecure" | "other";
 
 interface RecorderOptions {
   onFinished: (bytes: Uint8Array, mime: string, durationMs: number) => void;
@@ -14,8 +17,43 @@ const DENIED = new Set([
   "NotFoundError",
 ]);
 
-export function canRecord(): boolean {
-  return typeof MediaRecorder !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
+export function recordingState(): RecordingState {
+  // A page served over plain http from another computer is never given the microphone, whatever
+  // the person allows.
+  if (typeof window !== "undefined" && window.isSecureContext === false) return "not-secure";
+  if (!navigator.mediaDevices?.getUserMedia) return "no-devices";
+  if (typeof MediaRecorder === "undefined") return "no-recorder";
+  return "available";
+}
+
+const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
+
+/** The first sound format this browser can record: webm for Chrome and Firefox, mp4 for Safari. */
+export function recordingOptions(): MediaRecorderOptions | undefined {
+  if (typeof MediaRecorder.isTypeSupported !== "function") return undefined;
+  const mimeType = MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
+  return mimeType ? { mimeType } : undefined;
+}
+
+/** The reason recording cannot start, or null when it can. */
+export function recordingBlock(): "insecure" | "unsupported" | null {
+  const state = recordingState();
+  if (state === "available") return null;
+  return state === "not-secure" ? "insecure" : "unsupported";
+}
+
+/** The copy that explains a failure to the person. */
+export function failureCopy(reason: RecorderFailure): CopyId {
+  switch (reason) {
+    case "insecure":
+      return "capture.mic.insecure";
+    case "unsupported":
+      return "capture.mic.unsupported";
+    case "denied":
+      return "notice.micDenied.text";
+    case "other":
+      return "capture.mic.failed";
+  }
 }
 
 /** Records the microphone while a button is held. Nothing leaves the computer. */
@@ -28,6 +66,8 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const starting = useRef(false);
   const stopWanted = useRef(false);
+  const told = useRef(false);
+  const unavailable = recordingBlock();
   const latest = useRef({ onFinished, onFailed });
   latest.current = { onFinished, onFailed };
 
@@ -42,8 +82,11 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
 
   const start = useCallback(async () => {
     if (recorder.current || starting.current) return;
-    if (!canRecord()) {
-      latest.current.onFailed("unsupported");
+    const block = recordingBlock();
+    if (block) {
+      // Said once; the button stays marked as unavailable, so more presses add nothing.
+      if (!told.current) latest.current.onFailed(block);
+      told.current = true;
       return;
     }
     starting.current = true;
@@ -51,7 +94,7 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.current = media;
-      const rec = new MediaRecorder(media);
+      const rec = new MediaRecorder(media, recordingOptions());
       chunks.current = [];
       rec.ondataavailable = (event) => {
         if (event.data.size > 0) chunks.current.push(event.data);
@@ -89,5 +132,5 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
 
   useEffect(() => () => release(), [release]);
 
-  return { seconds, start: () => void start(), stop };
+  return { seconds, start: () => void start(), stop, unavailable };
 }

@@ -127,3 +127,47 @@ pub async fn app_ready<R: Runtime>(
     })
     .await
 }
+
+/// The one log line for each state the interface can report about recording. Nothing else the
+/// interface says is written to the log.
+pub fn recording_line(state: &str) -> Option<&'static str> {
+    match state {
+        "available" => Some("recording: available"),
+        "not-secure" => Some("recording: unavailable (not a secure page)"),
+        "no-devices" => Some("recording: unavailable (no media devices)"),
+        "no-recorder" => Some("recording: unavailable (no recorder)"),
+        _ => None,
+    }
+}
+
+/// The main interface says, once at start, whether its web view can record. The answer goes to
+/// the log so a failed microphone can be told apart from a denied one without asking anyone.
+#[tauri::command]
+pub async fn report_recording(state: String) -> Result<(), CommandError> {
+    let line = recording_line(&state).ok_or_else(|| CommandError::invalid("unknown state"))?;
+    tracing::info!("{line}");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::recording_line;
+
+    #[test]
+    fn each_state_has_one_plain_line() {
+        assert_eq!(recording_line("available"), Some("recording: available"));
+        assert_eq!(
+            recording_line("no-devices"),
+            Some("recording: unavailable (no media devices)")
+        );
+        assert_eq!(
+            recording_line("not-secure"),
+            Some("recording: unavailable (not a secure page)")
+        );
+        assert_eq!(
+            recording_line("no-recorder"),
+            Some("recording: unavailable (no recorder)")
+        );
+        assert_eq!(recording_line("anything else"), None);
+    }
+}

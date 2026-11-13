@@ -116,6 +116,13 @@
   color: var(--ink);
 }
 
+.mic[aria-disabled="true"],
+.mic[aria-disabled="true"]:hover {
+  border-color: transparent;
+  color: var(--ink3);
+  cursor: not-allowed;
+}
+
 .webChip {
   display: inline-flex;
   align-items: center;

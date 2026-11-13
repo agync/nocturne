@@ -69,3 +69,7 @@ you choose the folder are left alone.
 To keep a voice note, Nocturne needs permission to use the microphone. If it is switched off,
 Nocturne says so and offers to open your sound settings. You can still type, or drop a recording
 onto the window.
+
+If a window cannot record at all, Nocturne says so once and marks the microphone button as
+unavailable, with the reason, so pressing it again does nothing. Advanced details shows whether
+recording is available.

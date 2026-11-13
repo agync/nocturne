@@ -90,9 +90,7 @@ describe("useKeepRecording", () => {
     );
     vi.stubGlobal("MediaRecorder", undefined);
     act(() => result.current.start());
-    await waitFor(() =>
-      expect(document.body).toHaveTextContent("This computer can’t record sound inside Nocturne."),
-    );
+    await waitFor(() => expect(document.body).toHaveTextContent("This window can’t record sound."));
   });
 });
 

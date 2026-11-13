@@ -107,6 +107,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["quickKeepCommand", [], "quick_keep_command", []],
   ["cancelAsk", ["ask_1"], "cancel_ask", ["askId"]],
   ["appReady", [], "app_ready", []],
+  ["reportRecording", ["no-devices"], "report_recording", ["state"]],
 ];
 
 describe("TauriEngine commands", () => {

@@ -77,6 +77,9 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "needs-you-changed",
 ];
 
+/** What a window can do about recording: `available`, or why it cannot. */
+export type RecordingState = "available" | "not-secure" | "no-devices" | "no-recorder";
+
 /**
  * Everything the interface may ask of the engine. One async method per contract command; the
  * Tauri implementation invokes the snake_case command of the same name.
@@ -84,6 +87,8 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
 export interface EngineClient {
   /** The first screen has painted: the app shows its window now. */
   appReady(): Promise<void>;
+  /** Says once, in the log, whether this window can record: `available` or why not. */
+  reportRecording(state: RecordingState): Promise<void>;
   getStatus(): Promise<EngineStatus>;
   getSetup(): Promise<SetupView>;
   startSetup(tier: Tier): Promise<void>;

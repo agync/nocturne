@@ -326,6 +326,32 @@ describe("recording", () => {
   });
 });
 
+describe("a window that cannot record", () => {
+  it("says why once, marks the microphone and ignores further presses", async () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    await open();
+    const mic = screen.getByRole("button", { name: "Record a voice note" });
+    expect(mic).toHaveAttribute("aria-disabled", "true");
+    expect(mic).toHaveAccessibleDescription(/can’t record sound/);
+    await userEvent.click(mic);
+    await userEvent.click(mic);
+    await userEvent.click(mic);
+    expect(
+      screen.getAllByText(/This window can’t record sound/).filter((n) => n.tagName === "P"),
+    ).toHaveLength(1);
+    expect(getUserMedia).not.toHaveBeenCalled();
+  });
+
+  it("explains a page that is not secure in its own words", async () => {
+    vi.stubGlobal("isSecureContext", false);
+    await open();
+    await userEvent.click(screen.getByRole("button", { name: "Record a voice note" }));
+    expect(
+      await screen.findByText(/Recording only works in the Nocturne app on your computer/),
+    ).toBeInTheDocument();
+  });
+});
+
 describe("the turned-off microphone notice", () => {
   it("notice.mic_opens_sound_settings", async () => {
     const { engine } = await open();

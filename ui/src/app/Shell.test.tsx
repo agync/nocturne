@@ -34,6 +34,17 @@ const SCREENS: Array<[string, string]> = [
   ["#/print/2026-11-13", "Print"],
 ];
 
+describe("the recording report", () => {
+  it("tells the engine once, when the main window opens, whether it can record", async () => {
+    const engine = createMockEngine();
+    const spy = vi.spyOn(engine, "reportRecording");
+    renderApp({ hash: "#/today", engine });
+    await screen.findByRole("heading", { level: 1 });
+    await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    expect(spy).toHaveBeenCalledWith("no-devices");
+  });
+});
+
 describe("routes", () => {
   for (const [hash, heading] of SCREENS) {
     it(`${hash} renders its h1`, async () => {

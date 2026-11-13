@@ -27,6 +27,8 @@ interface KeepAskBarProps {
   shortcut?: string;
   /** Hold-to-talk. Press starts, release stops. */
   onTalk?: { start: () => void; stop: () => void };
+  /** Why talking is not possible here. The microphone button is marked unavailable and says why. */
+  talkUnavailable?: string;
   /** Seconds recorded so far, while the microphone is open. */
   recordingSeconds?: number | null;
   /** The page offers "/" to jump to the bar, so the bar says so to a screen reader. */
@@ -42,12 +44,14 @@ export function KeepAskBar({
   shortcut,
   onTalk,
   recordingSeconds = null,
+  talkUnavailable,
   focusShortcut = false,
   inputRef,
 }: KeepAskBarProps) {
   const [text, setText] = useState("");
   const hintId = useId();
   const slashId = useId();
+  const whyId = useId();
   const verb = defaultVerb(text);
   const hasText = text.trim().length > 0;
   const narrow = placement === "bottom";
@@ -168,10 +172,18 @@ export function KeepAskBar({
             data-recording={recordingSeconds !== null}
             aria-label={t("bar.talk")}
             aria-pressed={recordingSeconds !== null}
+            aria-disabled={talkUnavailable ? true : undefined}
+            aria-describedby={talkUnavailable ? whyId : undefined}
+            title={talkUnavailable}
             {...talk}
           >
             <Icon name="mic" size={18} />
           </button>
+        ) : null}
+        {onTalk && talkUnavailable ? (
+          <span id={whyId} className="sr-only">
+            {talkUnavailable}
+          </span>
         ) : null}
       </div>
     </search>

@@ -959,6 +959,28 @@ fn app_ready_from_quick_capture_keeps_main_hidden() {
 }
 
 #[test]
+fn report_recording_takes_the_four_states_and_refuses_the_rest() {
+    let h = harness();
+    for state in ["available", "not-secure", "no-devices", "no-recorder"] {
+        h.ok("report_recording", json!({ "state": state }));
+    }
+    assert_eq!(
+        h.code("report_recording", json!({ "state": "something else" })),
+        "invalid"
+    );
+}
+
+#[test]
+fn quick_capture_may_not_report_recording() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    assert_eq!(
+        h.code_from(&quick, "report_recording", json!({ "state": "available" })),
+        "invalid"
+    );
+}
+
+#[test]
 fn speak_page_without_a_mind_is_unavailable() {
     let h = harness();
     h.save_todays_page();
