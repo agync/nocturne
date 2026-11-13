@@ -23,7 +23,7 @@
   "page.firstNext.body": "Appointment cards, voice notes after calls, school and work messages. Anything with a date, a promise or a name.",
   "page.done.toast": "Marked as done.",
   "page.done.undo": "Undo",
-  "page.line.done": "Done. Nocturne won’t bring it up again.",
+  "page.line.done": "Marked as done.",
   "page.line.forgotten": "Deleted. This line is gone from the page.",
   "page.which.resolved": "{chosen} it is. The other is kept as history, not deleted.",
   "page.which.announce": "{subject} set to {chosen}.",

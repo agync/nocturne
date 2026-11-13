@@ -59,8 +59,7 @@ describe("the morning page on Today", () => {
     const spy = vi.spyOn(engine, "markDone");
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
     expect(spy).not.toHaveBeenCalled();
-    expect(screen.getByText("Marked as done.")).toBeInTheDocument();
-    expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toBeInTheDocument();
+    expect(screen.getAllByText("Marked as done.").length).toBeGreaterThan(0);
     expect(screen.getByText(/The Year 4 trip form is due/).closest("p")).toHaveAttribute(
       "data-done",
       "true",
@@ -78,7 +77,7 @@ describe("the morning page on Today", () => {
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeInTheDocument();
-    expect(screen.queryByText("Done. Nocturne won’t bring it up again.")).toBeNull();
+    expect(screen.queryByText("Marked as done.")).toBeNull();
     await toastEnds();
     expect(spy).not.toHaveBeenCalled();
   });

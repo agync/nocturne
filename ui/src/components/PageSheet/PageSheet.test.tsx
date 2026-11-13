@@ -129,7 +129,7 @@ describe("PageSheet, a normal day", () => {
       "data-done",
       "true",
     );
-    expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toBeInTheDocument();
+    expect(screen.getByText("Marked as done.")).toBeInTheDocument();
   });
 
   it("brings back a let-go line, but never a merged one", async () => {
@@ -346,7 +346,7 @@ describe("PageSheet, other days", () => {
         onAction={onAction}
       />,
     );
-    expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toHaveFocus();
+    expect(screen.getByText("Marked as done.")).toHaveFocus();
 
     await userEvent.click(screen.getAllByRole("button", { name: /^Bring back/ })[0] as HTMLElement);
     rerender(

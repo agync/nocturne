@@ -66,16 +66,16 @@ test.describe("the page works", () => {
     await page.getByRole("button", { name: "Mark as done" }).click();
     const line = page.getByText(/The Year 4 trip form is due/);
     await expect(line).toHaveCSS("text-decoration-line", "line-through");
-    await expect(page.getByText("Done. Nocturne won’t bring it up again.")).toBeVisible();
+    await expect(page.getByText("Marked as done.").first()).toBeVisible();
   });
 
   test("marking the form done can be undone while the toast is up", async ({ page }) => {
     await ready(page);
     await page.getByRole("button", { name: "Mark as done" }).click();
-    await expect(page.getByText("Marked as done.")).toBeVisible();
+    await expect(page.getByText("Marked as done.").first()).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(page.getByRole("button", { name: "Mark as done" })).toBeVisible();
-    await expect(page.getByText("Done. Nocturne won’t bring it up again.")).toHaveCount(0);
+    await expect(page.getByText("Marked as done.").first()).toHaveCount(0);
   });
 
   test("a let-go line comes back", async ({ page }) => {
