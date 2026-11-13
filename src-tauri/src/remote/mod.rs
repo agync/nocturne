@@ -12,7 +12,14 @@ use tauri::{AppHandle, Manager, Runtime};
 
 pub mod crypto;
 pub mod frame;
+pub mod limits;
+pub mod name;
+pub mod pairing;
 pub mod protocol;
+pub mod qr;
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub mod testing;
 
 /// Called once the app is ready. Starts nothing unless the person turned Away from home on.
 pub fn install<R: Runtime>(_app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
