@@ -192,6 +192,9 @@ describe("pairing screens", () => {
       screen.getByRole("list", { name: "Check words: harbour, maple, lantern" }),
     ).toBeInTheDocument();
     expect(
+      screen.getByText(/this phone isn’t showing three words, someone else is trying to pair/),
+    ).toBeInTheDocument();
+    expect(
       await screen.findByRole("heading", { name: "Pixel can now use Nocturne." }),
     ).toBeInTheDocument();
     await userEvent.click(button("Not now, open Nocturne"));
@@ -730,9 +733,12 @@ describe("originals", () => {
       },
     );
     render(<Original engine={engine} itemId="item-doc" quote={null} onBack={() => undefined} />);
-    const download = await screen.findByRole("link", { name: "Download" });
+    const download = await screen.findByRole("link", { name: "Save a copy on this phone" });
     expect(download).toHaveAttribute("download", "Trip letter.pdf");
     expect(download).toHaveAttribute("href", "blob:test/pdf");
+    expect(
+      screen.getByText(/Viewing it saves nothing on this phone\. Saving a copy does\./),
+    ).toBeInTheDocument();
     await userEvent.click(button("Open the document"));
     expect(open).toHaveBeenCalledWith("blob:test/pdf", "_blank");
     expect(click).toHaveBeenCalledOnce();
@@ -754,7 +760,7 @@ describe("originals", () => {
       />,
     );
     expect(await screen.findByText(/can’t be shown on this phone/)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Save a copy on this phone" })).toHaveAttribute(
       "download",
       "Year 4 trip letter.heic",
     );

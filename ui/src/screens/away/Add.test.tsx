@@ -50,6 +50,9 @@ describe("add", () => {
       screen.getByRole("img", { name: "Code to scan with your phone’s camera" }),
     ).toBeInTheDocument();
     expect(screen.getByText(/Check that three words match on both screens/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/your phone isn’t showing three words, someone else is trying to pair/),
+    ).toBeInTheDocument();
   });
 
   it("typed_code_in_four_groups: shows four groups of six and copies the whole code", async () => {
@@ -99,6 +102,9 @@ describe("add", () => {
     expect(within(dialog).getByText(/Refused by itself in \d:\d\d/)).toBeInTheDocument();
     expect(
       within(dialog).getByText(/it isn’t a phone you’re holding, don’t allow it/),
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByText(/your phone isn’t showing three words, someone else is trying/),
     ).toBeInTheDocument();
     // Tab stays inside, and nothing behind it can be reached.
     await userEvent.tab();

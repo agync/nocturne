@@ -148,6 +148,7 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
           <p className="ph-body">
             <Rich id="phone.check.body" />
           </p>
+          <p className="ph-hint ph-hint--ink2">{t("phone.check.warning")}</p>
           <p
             className="ph-status"
             role="status"

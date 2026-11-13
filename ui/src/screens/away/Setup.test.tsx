@@ -21,7 +21,7 @@ describe("setup", () => {
     expect(screen.queryByText("Trial")).toBeNull();
     expect(screen.getByText(/Nothing to sign up for/)).toBeInTheDocument();
     expect(screen.getByText(/A Tailscale account and its app on your phone/)).toBeInTheDocument();
-    expect(screen.getByText(/it hands your phone the page it opens/)).toBeInTheDocument();
+    expect(screen.getByText(/It also serves the page your phone opens/)).toBeInTheDocument();
     expect(screen.getByText("Away from home · step 1")).toBeInTheDocument();
   });
 

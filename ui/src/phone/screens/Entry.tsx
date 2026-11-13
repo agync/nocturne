@@ -207,6 +207,7 @@ export function TypedCode({
           )}
           <div className="ph-spacer" />
           <p className="ph-hint ph-hint--ink2">{t("phone.typed.next")}</p>
+          <p className="ph-hint ph-hint--ink2">{t("phone.typed.warning")}</p>
           <Button kind="primary" type="submit" disabled={!complete || busy}>
             {busy ? t("phone.typed.checking") : t("phone.typed.continue")}
           </Button>

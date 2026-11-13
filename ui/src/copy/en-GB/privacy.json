@@ -66,7 +66,8 @@
   "privacy.away.simple.see1": "When your phone connects",
   "privacy.away.simple.see2": "Your phone’s internet address, and roughly where it is",
   "privacy.away.simple.see3": "How much goes back and forth, each way",
-  "privacy.away.simple.see4": "It hands your phone the page it opens",
+  "privacy.away.simple.see4": "It serves the page your phone opens, and a change it made could stay on your phone until you add the phone again",
+  "privacy.away.simple.see5": "A stable id for each phone, and the size and timing of every message",
   "privacy.away.mostPrivate.see1": "That your phone and computer are connected, and when",
   "privacy.away.mostPrivate.see2": "Roughly where your phone is",
   "privacy.away.mostPrivate.see3": "How much goes back and forth, if a network stops them reaching each other directly",
@@ -75,5 +76,9 @@
   "privacy.away.cant3": "Your answers and pages",
   "privacy.away.never.heading": "Never on a phone",
   "privacy.away.never.body": "Things you marked private stay on this computer.",
+  "privacy.away.risks.heading": "Worth knowing",
+  "privacy.away.risks.phone": "Anyone holding an unlocked or stolen phone can read everything not marked private until you remove that phone here.",
+  "privacy.away.risks.code": "If a pairing code leaks, from a photo, a screen share or a cloud QR scanner, only comparing the three words stops it.",
+  "privacy.away.risks.local": "In Simple, anyone using this computer can see the public address. It doesn’t let them in.",
   "privacy.sent.awayOn.measured": "Nocturne can’t count what the connection part itself sends to {company}. What goes to your phones is counted here."
 }

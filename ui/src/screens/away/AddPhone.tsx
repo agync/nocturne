@@ -265,6 +265,7 @@ export function AddPhone({ view }: { view: RemoteView }) {
               </li>
             ))}
           </ol>
+          <p className={styles.muted}>{t("away.add.warning")}</p>
           <div className={styles.typed}>
             <span className={styles.label}>{t("away.add.cantScan")}</span>
             <span className={styles.sub}>

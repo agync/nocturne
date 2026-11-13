@@ -38,6 +38,7 @@ export function AwaySection({ view }: { view: PrivacyView }) {
         t("privacy.away.simple.see2"),
         t("privacy.away.simple.see3"),
         t("privacy.away.simple.see4"),
+        t("privacy.away.simple.see5"),
       ] as const)
     : ([
         t("privacy.away.mostPrivate.see1"),
@@ -79,6 +80,12 @@ export function AwaySection({ view }: { view: PrivacyView }) {
       </div>
       <h3 className={styles.awaySub}>{t("privacy.away.never.heading")}</h3>
       <p>{t("privacy.away.never.body")}</p>
+      <h3 className={styles.awaySub}>{t("privacy.away.risks.heading")}</h3>
+      <ul>
+        <li>{t("privacy.away.risks.phone")}</li>
+        <li>{t("privacy.away.risks.code")}</li>
+        {simple ? <li>{t("privacy.away.risks.local")}</li> : null}
+      </ul>
     </section>
   );
 }

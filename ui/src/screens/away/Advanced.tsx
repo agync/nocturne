@@ -100,6 +100,8 @@ function Hides({ simple }: { simple: boolean }) {
         </li>
         <li>{t("advanced.away.hides.address")}</li>
         <li>{t("advanced.away.hides.allow")}</li>
+        <li>{t("advanced.away.hides.phone")}</li>
+        {simple ? <li>{t("advanced.away.hides.local")}</li> : null}
         <li>{t("advanced.away.hides.key")}</li>
         {simple ? null : <li>{t("advanced.away.hides.account")}</li>}
       </ul>

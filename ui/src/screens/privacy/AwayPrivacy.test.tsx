@@ -28,11 +28,26 @@ describe("privacy", () => {
       within(section).getByText(/internet address, and roughly where it is/),
     ).toBeInTheDocument();
     expect(within(section).getByText("How much goes back and forth, each way")).toBeInTheDocument();
-    expect(within(section).getByText("It hands your phone the page it opens")).toBeInTheDocument();
+    expect(
+      within(section).getByText(
+        /It serves the page your phone opens, and a change it made could stay/,
+      ),
+    ).toBeInTheDocument();
     for (const line of ["What you ask", "What you keep", "Your answers and pages"]) {
       expect(within(section).getByText(line)).toBeInTheDocument();
     }
     expect(within(section).getByRole("heading", { name: "Never on a phone" })).toBeInTheDocument();
+    expect(
+      within(section).getByText(/A stable id for each phone, and the size and timing/),
+    ).toBeInTheDocument();
+    expect(within(section).getByRole("heading", { name: "Worth knowing" })).toBeInTheDocument();
+    expect(section).toHaveTextContent(
+      /unlocked or stolen phone can read everything not marked private/,
+    );
+    expect(section).toHaveTextContent(/only comparing the three words stops it/);
+    expect(section).toHaveTextContent(
+      /In Simple, anyone using this computer can see the public address/,
+    );
     expect(within(section).getByRole("button", { name: "Turn off" })).toBeInTheDocument();
     expect(within(section).getByRole("link", { name: "Away from home settings" })).toHaveAttribute(
       "href",

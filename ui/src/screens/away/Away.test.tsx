@@ -168,8 +168,16 @@ describe("away", () => {
     const region = await screen.findByRole("region", { name: "Advanced details" });
     expect(within(region).getByText("What the channel does not hide")).toBeInTheDocument();
     expect(region).toHaveTextContent(/stable id for each phone/);
-    expect(region).toHaveTextContent(/If someone broke into Cloudflare/);
-    expect(region).toHaveTextContent(/Tapping Allow without comparing the three words/);
+    expect(region).toHaveTextContent(/Cloudflare serves the phone page’s code/);
+    expect(region).toHaveTextContent(/until the phone is added again/);
+    expect(region).toHaveTextContent(/shows up in public certificate logs/);
+    expect(region).not.toHaveTextContent(/Most private avoids this/);
+    expect(region).toHaveTextContent(/look-alike site that has the typed code/);
+    expect(region).toHaveTextContent(/stopped only by comparing the three words/);
+    expect(region).toHaveTextContent(
+      /unlocked or stolen phone can read everything not marked private/,
+    );
+    expect(region).toHaveTextContent(/any person using this computer can see the public address/);
     expect(region).toHaveTextContent(/No sealed removal notice is possible/);
   });
 
