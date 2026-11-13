@@ -176,9 +176,17 @@ impl LemonadeMind {
                     last_error = invalid.join("; ");
                 }
                 Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                    if !kept.is_empty() {
+                        tracing::warn!("the retry was unreadable; keeping the first answer");
+                        return Ok(kept);
+                    }
                     return Err(MindError::Failed(format!("unusable extraction: {e}")));
                 }
-                Err(e) => last_error = e,
+                Err(e) => {
+                    // The parser's words can quote the model; the retry names none of them.
+                    tracing::warn!("an unreadable extraction: {e}");
+                    last_error = "the reply did not match the format".into();
+                }
             }
             messages.push(Message {
                 role: "assistant".into(),
