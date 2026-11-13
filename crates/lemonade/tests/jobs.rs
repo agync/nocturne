@@ -1,0 +1,282 @@
+//! Model downloads for a changed job, against the fake engine: the shared download window,
+//! pausing, cancelling, failing, the ledger, and removing a model the person no longer wants.
+
+mod common;
+
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use nocturne_contract::{ComponentRole, Tier};
+use nocturne_lemonade::jobs::{JobOptions, JobProgress, ModelJobs, OnDownload};
+use nocturne_lemonade::{Client, Setup, SetupOptions, Supervisor, SupervisorOptions, tier};
+use serde_json::Value;
+use tokio::sync::watch;
+
+type Ledger = Arc<Mutex<Vec<(String, u64)>>>;
+
+struct Rig {
+    sup: Supervisor,
+    jobs: ModelJobs,
+    ledger: Ledger,
+    _tmp: tempfile::TempDir,
+}
+
+fn opts() -> JobOptions {
+    JobOptions {
+        poll: Duration::from_millis(20),
+        retry_delay: Duration::from_millis(50),
+        give_up: Duration::from_secs(10),
+    }
+}
+
+async fn rig(mode: &str) -> Rig {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, mode);
+    let sup = Supervisor::start(
+        dirs,
+        SupervisorOptions {
+            health_interval: Duration::from_millis(200),
+            backoff_base: Duration::from_millis(100),
+            ..SupervisorOptions::default()
+        },
+    )
+    .await
+    .unwrap();
+    let jobs = ModelJobs::with_options(sup.control(), opts());
+    Rig {
+        sup,
+        jobs,
+        ledger: Ledger::default(),
+        _tmp: tmp,
+    }
+}
+
+impl Rig {
+    fn sink(&self) -> OnDownload {
+        let ledger = self.ledger.clone();
+        Arc::new(move |m: &str, b: u64| ledger.lock().unwrap().push((m.to_string(), b)))
+    }
+
+    async fn get(&self, model: &str) -> watch::Receiver<JobProgress> {
+        let hold = self.sup.control().hold_online().await.unwrap();
+        self.jobs.get(model, hold, self.sink()).await.unwrap()
+    }
+
+    async fn offline(&self) -> bool {
+        let cfg = self.sup.admin().config().await.unwrap();
+        cfg["offline"] == true
+    }
+
+    async fn wait_offline(&self, want: bool) {
+        for _ in 0..200 {
+            if self.sup.admin().config().await.is_ok() && self.offline().await == want {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("the engine never became offline={want}");
+    }
+
+    async fn present(&self, model: &str) -> bool {
+        self.sup
+            .client()
+            .models()
+            .await
+            .unwrap()
+            .iter()
+            .any(|m| m.id == model && m.present())
+    }
+
+    async fn requests(&self, path: &str) -> Vec<Value> {
+        let e = self.sup.client().endpoint().unwrap();
+        let all: Value = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{}/fake/requests", e.port))
+            .bearer_auth(e.key)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        all.as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["path"] == path)
+            .cloned()
+            .collect()
+    }
+}
+
+async fn until(
+    rx: &mut watch::Receiver<JobProgress>,
+    want: impl Fn(&JobProgress) -> bool,
+) -> JobProgress {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let p = rx.borrow_and_update().clone();
+            if want(&p) {
+                return p;
+            }
+            if rx.changed().await.is_err() {
+                return rx.borrow().clone();
+            }
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("progress never matched; last {:?}", rx.borrow().clone()))
+}
+
+#[tokio::test]
+async fn a_download_finishes_once_into_the_ledger_and_closes_the_window() {
+    let r = rig("download-ms=300").await;
+    assert!(r.offline().await);
+    let mut rx = r.get("Whisper-Tiny").await;
+    assert!(!r.offline().await, "the download window is open");
+    let done = until(&mut rx, |p| p.done).await;
+    assert!(done.total > 0);
+    assert_eq!(done.received, done.total);
+    assert!(r.present("Whisper-Tiny").await);
+    r.wait_offline(true).await;
+    let ledger = r.ledger.lock().unwrap().clone();
+    assert_eq!(ledger, [("Whisper-Tiny".to_string(), done.total)]);
+    assert_eq!(r.jobs.model(), None);
+}
+
+#[tokio::test]
+async fn catalogue_only_pull_refused_for_user_ids() {
+    let r = rig("download-ms=300").await;
+    let hold = r.sup.control().hold_online().await.unwrap();
+    assert!(
+        r.jobs
+            .get("user.Qwen3.5-9B-GGUF", hold, r.sink())
+            .await
+            .is_err()
+    );
+    r.wait_offline(true).await;
+    assert!(
+        r.requests("/v1/pull").await.is_empty(),
+        "nothing was pulled"
+    );
+}
+
+#[tokio::test]
+async fn pause_resume_cancel() {
+    let r = rig("download-ms=4000").await;
+    let mut rx = r.get("Whisper-Small").await;
+    until(&mut rx, |p| p.received > 0).await;
+    r.jobs.pause().await.unwrap();
+    assert!(rx.borrow().paused);
+    // Paused, nothing may reach the internet for it.
+    r.wait_offline(true).await;
+    let held = rx.borrow().received;
+    r.jobs.resume().await.unwrap();
+    r.wait_offline(false).await;
+    let p = until(&mut rx, |p| !p.paused && p.received > held).await;
+    assert!(p.received >= held, "carried on from what was received");
+    // Another model while one runs is refused.
+    let hold = r.sup.control().hold_online().await.unwrap();
+    assert!(r.jobs.get("Whisper-Base", hold, r.sink()).await.is_err());
+    r.jobs.cancel().await.unwrap();
+    r.wait_offline(true).await;
+    assert!(!r.present("Whisper-Small").await);
+    assert_eq!(r.jobs.model(), None);
+    // The job is gone from the engine; the partial files go with `/v1/delete`, which the
+    // relaunch that closed the window has already put out of the fake's request log.
+    let jobs = r.sup.client().downloads().await.unwrap();
+    assert!(
+        jobs.iter().all(|j| j.id != "model:Whisper-Small"),
+        "{jobs:?}"
+    );
+    assert!(r.ledger.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn failure_keeps_partial_and_window_closes() {
+    let r = rig("download-ms=300,disk-full").await;
+    let mut rx = r.get("Whisper-Small").await;
+    let p = until(&mut rx, |p| p.failed).await;
+    assert!(p.received > 0, "what was received is kept: {p:?}");
+    assert!(!r.present("Whisper-Small").await);
+    r.wait_offline(true).await;
+    assert!(
+        r.requests("/v1/delete").await.is_empty(),
+        "nothing is deleted"
+    );
+    assert!(r.ledger.lock().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn setup_and_picker_share_one_download_window() {
+    let r = rig("download-ms=3000").await;
+    let ledger = Arc::new(Mutex::new(Vec::new()));
+    let sink = ledger.clone();
+    let setup = Setup::with_options(
+        &r.sup,
+        r.sup.dirs().models(),
+        move |kind, label, bytes| sink.lock().unwrap().push((kind, label, bytes)),
+        SetupOptions {
+            poll: Duration::from_millis(20),
+            retry_delay: Duration::from_millis(50),
+            ram_bytes: Some(64 << 30),
+            components: Some(vec![tier::Component {
+                role: ComponentRole::Speech,
+                model: "Whisper-Tiny",
+                bytes: 75_000_000,
+            }]),
+            ..SetupOptions::default()
+        },
+    );
+    let mut rx = r.get("Whisper-Small").await;
+    setup.start(Tier::Tiny).await.unwrap();
+    let mut view = setup.view();
+    let phase = |v: &watch::Receiver<nocturne_contract::SetupView>| v.borrow().phase;
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while phase(&view) != nocturne_contract::SetupPhase::Downloading {
+            view.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    // Setup pausing gives its share back; the model download still holds the window.
+    setup.pause().await.unwrap();
+    assert!(!r.offline().await, "the window stays open for the model");
+    assert!(!rx.borrow().done);
+    until(&mut rx, |p| p.done).await;
+    r.wait_offline(true).await;
+    // And setup opens it again for itself, and closes it when done.
+    setup.resume().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while phase(&view) != nocturne_contract::SetupPhase::Done {
+            assert_ne!(phase(&view), nocturne_contract::SetupPhase::Failed);
+            view.changed().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+    r.wait_offline(true).await;
+}
+
+#[tokio::test]
+async fn remove_frees_the_models_bytes() {
+    let r = rig("downloaded=all").await;
+    assert!(r.present("Whisper-Base").await);
+    let freed = nocturne_lemonade::jobs::remove(&r.sup.client(), "Whisper-Base").await;
+    let deletes = r.requests("/v1/delete").await;
+    assert!(
+        deletes
+            .iter()
+            .any(|d| d["body"]["model_name"] == "Whisper-Base"),
+        "the engine is asked to delete it: {deletes:?}"
+    );
+    // The fake engine has no delete route yet; the real one answers 200.
+    if let Ok(bytes) = freed {
+        assert_eq!(bytes, 148_000_000);
+    }
+    let gone = Client::new(common::CLOSED_PORT, "k");
+    assert!(
+        nocturne_lemonade::jobs::remove(&gone, "Whisper-Base")
+            .await
+            .is_err()
+    );
+}

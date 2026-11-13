@@ -16,7 +16,8 @@ use tokio::task::JoinHandle;
 use crate::client::{Action, BackendState, Client, Download, SystemInfo};
 use crate::error::RuntimeError;
 use crate::record::{self, SetupRecord};
-use crate::supervisor::{Control, Supervisor};
+use crate::selection;
+use crate::supervisor::{Control, OnlineHold, Supervisor};
 use crate::tier::{self, Component, DISK_HEADROOM};
 
 const GIB: u64 = 1 << 30;
@@ -214,6 +215,8 @@ struct Inner {
     wake: Notify,
     /// The tier of a change that check() found unfinished and dropped, until it is taken.
     dropped: Mutex<Option<Tier>>,
+    /// Setup's share of the download window, which model changes may hold at the same time.
+    window: Mutex<Option<OnlineHold>>,
 }
 
 /// Drives setup for one engine. Dropping it stops its work; the engine's downloads carry on.
@@ -223,19 +226,15 @@ pub struct Setup {
 
 impl Drop for Setup {
     fn drop(&mut self) {
-        let running = {
+        {
             let mut ctl = self.inner.ctl();
             if let Some(handle) = ctl.handle.take() {
                 handle.abort();
             }
-            std::mem::take(&mut ctl.running)
-        };
-        if running && let Ok(rt) = tokio::runtime::Handle::try_current() {
-            let control = self.inner.control.clone();
-            rt.spawn(async move {
-                let _ = control.set_online(false).await;
-            });
+            ctl.running = false;
         }
+        // Dropping the hold gives it back; the window closes once nothing else holds it.
+        drop(lock(&self.inner.window).take());
     }
 }
 
@@ -316,6 +315,7 @@ impl Setup {
                 history: Mutex::new(vec![SetupPhase::NotStarted]),
                 wake: Notify::new(),
                 dropped: Mutex::new(None),
+                window: Mutex::new(None),
             }),
         }
     }
@@ -373,6 +373,26 @@ impl Setup {
 impl Inner {
     fn ctl(&self) -> MutexGuard<'_, Ctl> {
         lock(&self.ctl)
+    }
+
+    /// Takes setup's share of the download window, once.
+    async fn open_window(&self) -> Result<(), RuntimeError> {
+        if lock(&self.window).is_some() {
+            return Ok(());
+        }
+        let hold = self.control.hold_online().await?;
+        let spare = lock(&self.window).replace(hold);
+        drop(spare);
+        Ok(())
+    }
+
+    /// Gives setup's share back and waits until the window is closed, unless a model change
+    /// still holds it.
+    async fn close_window(&self) {
+        let hold = lock(&self.window).take();
+        if let Some(h) = hold {
+            h.release().await;
+        }
     }
 
     fn update(&self, f: impl FnOnce(&mut SetupView)) {
@@ -570,7 +590,7 @@ impl Inner {
             if let Err(fail) = result {
                 inner.fail(fail).await;
             }
-            let _ = inner.control.set_online(false).await;
+            inner.close_window().await;
             let mut ctl = inner.ctl();
             ctl.running = false;
             ctl.tier = None;
@@ -596,8 +616,9 @@ impl Inner {
             v.paused = Some(PauseReason::Person);
         });
         self.wake.notify_one();
-        // Nothing may reach the internet while the person has paused; resuming goes online again.
-        let _ = self.control.set_online(false).await;
+        // Nothing may reach the internet for setup while the person has paused; resuming opens
+        // the window again.
+        self.close_window().await;
         Ok(())
     }
 
@@ -658,7 +679,7 @@ impl Inner {
             v.error = None;
             v.needed_bytes = None;
         });
-        self.control.set_online(true).await.map_err(engine)?;
+        self.open_window().await.map_err(engine)?;
         let info = self.client.system_info().await.map_err(engine)?;
         let llama = tier::choose_backend(&info, "llamacpp");
         let whisper = tier::choose_backend(&info, "whispercpp");
@@ -713,7 +734,9 @@ impl Inner {
         rec.done = true;
         rec.completed = Some(tier);
         record::write(&self.config_dir, &rec).map_err(engine)?;
-        self.control.set_online(false).await.map_err(engine)?;
+        // The new tier's own models, keeping only the finding model the person chose.
+        selection::write(&self.config_dir, &selection::read(&self.config_dir)).map_err(engine)?;
+        self.close_window().await;
         let total = self.comps(tier).iter().map(|c| c.bytes).sum::<u64>() as f64;
         self.update(|v| {
             v.phase = SetupPhase::Done;
@@ -921,7 +944,7 @@ impl Inner {
             self.nap(self.opts.poll).await;
         }
         if waited {
-            let _ = self.control.set_online(true).await;
+            let _ = self.open_window().await;
             self.mark_downloading();
         }
         waited
@@ -980,7 +1003,7 @@ impl Inner {
             Ok(_) => Ok(Begin::Running),
             Err(RuntimeError::Offline) => {
                 if !self.ctl().paused {
-                    let _ = self.control.set_online(true).await;
+                    let _ = self.open_window().await;
                 }
                 Err(None)
             }

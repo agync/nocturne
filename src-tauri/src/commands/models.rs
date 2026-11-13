@@ -1,20 +1,33 @@
 //! Choosing the model for each job: the choices, a change and its download, a re-read of
 //! memories, and the old model. Main window only.
 
+use std::sync::Arc;
+
 use nocturne_contract::{ChangePreview, Job, ModelChoice, ModelsView};
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::error::CommandError;
+use crate::models::ModelsHub;
 use crate::state::AppState;
 
-fn not_yet() -> CommandError {
-    CommandError::unavailable("choosing models is not available yet")
+fn hub<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<ModelsHub>, CommandError> {
+    if crate::models::hub(app).is_none()
+        && let Err(e) = crate::models::install(app)
+    {
+        tracing::warn!("the models hub could not be installed: {e}");
+    }
+    crate::models::hub(app).ok_or_else(|| CommandError::unavailable("models are not ready"))
 }
 
 #[tauri::command]
 pub async fn get_models<R: Runtime>(app: AppHandle<R>) -> Result<ModelsView, CommandError> {
-    let dir = crate::models::config_dir(&app.state::<AppState>().data_dir);
-    Ok(crate::models::preset_view(&dir))
+    match crate::models::hub(&app) {
+        Some(hub) => Ok(hub.view(&app).await),
+        None => {
+            let dir = crate::models::config_dir(&app.state::<AppState>().data_dir);
+            Ok(crate::models::preset_view(&dir))
+        }
+    }
 }
 
 #[tauri::command]
@@ -22,8 +35,7 @@ pub async fn list_model_choices<R: Runtime>(
     app: AppHandle<R>,
     job: Job,
 ) -> Result<Vec<ModelChoice>, CommandError> {
-    let _ = (app, job);
-    Err(not_yet())
+    hub(&app)?.choices(&app, job).await
 }
 
 #[tauri::command]
@@ -32,8 +44,7 @@ pub async fn preview_model_change<R: Runtime>(
     job: Job,
     model: String,
 ) -> Result<ChangePreview, CommandError> {
-    let _ = (app, job, model);
-    Err(not_yet())
+    hub(&app)?.preview(&app, job, &model).await
 }
 
 /// Change the model for `job`; `allow_download` is the person's yes to fetching it.
@@ -44,56 +55,48 @@ pub async fn change_model<R: Runtime>(
     model: String,
     allow_download: bool,
 ) -> Result<ModelsView, CommandError> {
-    let _ = (app, job, model, allow_download);
-    Err(not_yet())
+    hub(&app)?.change(&app, job, &model, allow_download).await
 }
 
 #[tauri::command]
 pub async fn pause_model_download<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.pause(&app).await
 }
 
 #[tauri::command]
 pub async fn resume_model_download<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.resume(&app).await
 }
 
 #[tauri::command]
 pub async fn cancel_model_change<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.cancel_change(&app).await
 }
 
 #[tauri::command]
 pub async fn cancel_reindex<R: Runtime>(app: AppHandle<R>) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.cancel_reindex(&app).await
 }
 
 #[tauri::command]
 pub async fn keep_old_model<R: Runtime>(app: AppHandle<R>) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.keep_old(&app).await
 }
 
 #[tauri::command]
 pub async fn remove_old_model<R: Runtime>(app: AppHandle<R>) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.remove_old(&app).await
 }
 
 #[tauri::command]
 pub async fn reset_models_to_tier<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<ModelsView, CommandError> {
-    let _ = app;
-    Err(not_yet())
+    hub(&app)?.reset(&app).await
 }

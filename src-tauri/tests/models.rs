@@ -1,0 +1,511 @@
+//! Changing the model for a job in the app, against the fake engine: consent before a download,
+//! the current model working until the new one is on disk, pause, cancel, failure, a restart,
+//! the ledger, the old model, and what Delete everything and an export do with the choice.
+
+mod common;
+
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, OnceLock};
+use std::time::Duration;
+
+use common::*;
+use nocturne_app_lib::models::{self, HubOptions};
+use nocturne_app_lib::runtime::{Services, StartOptions};
+use nocturne_contract::{ComponentRole, LedgerKind, Tier};
+use nocturne_intelligence::FakeHost;
+use nocturne_lemonade::jobs::JobOptions;
+use nocturne_lemonade::record::{self, SetupRecord};
+use nocturne_lemonade::selection::{self, Pending, Selection};
+use nocturne_lemonade::{Dirs, SetupOptions, SupervisorOptions, tier};
+use serde_json::{Value, json};
+use tauri::Manager;
+use tauri::async_runtime::block_on;
+
+const GIB: u64 = 1 << 30;
+
+/// The fake engine binary, built once per run (see `tests/lemonade.rs`).
+fn fake_engine() -> PathBuf {
+    static BUILT: OnceLock<PathBuf> = OnceLock::new();
+    BUILT
+        .get_or_init(|| {
+            if let Some(path) = std::env::var_os("NOCTURNE_FAKE_LEMOND") {
+                return PathBuf::from(path);
+            }
+            let exe = std::env::current_exe().unwrap();
+            let profile_dir = exe.parent().and_then(Path::parent).unwrap();
+            let profile = profile_dir.file_name().unwrap().to_string_lossy();
+            let triple = profile_dir
+                .parent()
+                .and_then(Path::file_name)
+                .map(|n| n.to_string_lossy().into_owned())
+                .filter(|n| n.contains('-'));
+            let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+            let mut build = std::process::Command::new(cargo);
+            build
+                .args(["build", "--locked", "-p", "nocturne-lemonade"])
+                .args(["--features", "fake-server", "--bin", "fake-lemond"])
+                .args([
+                    "--profile",
+                    if profile == "debug" { "dev" } else { &profile },
+                ])
+                .arg("--message-format=json-render-diagnostics");
+            if let Some(triple) = triple {
+                build.args(["--target", &triple]);
+            }
+            let out = build
+                .stderr(std::process::Stdio::inherit())
+                .output()
+                .expect("cargo runs");
+            assert!(out.status.success(), "the fake engine is built");
+            String::from_utf8_lossy(&out.stdout)
+                .lines()
+                .filter_map(|line| serde_json::from_str::<Value>(line).ok())
+                .filter(|m| {
+                    m["reason"] == "compiler-artifact" && m["target"]["name"] == "fake-lemond"
+                })
+                .find_map(|m| m["executable"].as_str().map(PathBuf::from))
+                .expect("cargo says where the fake engine is")
+        })
+        .clone()
+}
+
+struct Lab {
+    h: Harness,
+    services: Arc<Services>,
+    config: PathBuf,
+    _bundle: tempfile::TempDir,
+}
+
+impl Drop for Lab {
+    fn drop(&mut self) {
+        self.h.state().run_exit_hooks();
+    }
+}
+
+/// Standard installed, its models on disk plus `extra`; `mode` for the fake engine; `before`
+/// may write a selection before the launch.
+fn lab(mode: &str, extra: &[&str], before: impl FnOnce(&Path)) -> Lab {
+    let h = harness();
+    let bundle = tempfile::tempdir().unwrap();
+    let link = bundle.path().join(if cfg!(windows) {
+        "lemond.exe"
+    } else {
+        "lemond"
+    });
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(fake_engine(), &link).unwrap();
+    #[cfg(not(unix))]
+    std::fs::copy(fake_engine(), &link).unwrap();
+    let root = h.dir.path().join("engine");
+    let dirs = Dirs::new(bundle.path(), &root);
+    dirs.ensure().unwrap();
+    std::fs::write(
+        dirs.config().join("config.json"),
+        json!({ "fake_mode": mode }).to_string(),
+    )
+    .unwrap();
+    record::write(
+        &dirs.config(),
+        &SetupRecord {
+            version: 1,
+            tier: Some(Tier::Standard),
+            done: true,
+            completed: Some(Tier::Standard),
+            backends: Default::default(),
+        },
+    )
+    .unwrap();
+    let mut on_disk: Vec<String> = tier::components(Tier::Standard)
+        .into_iter()
+        .map(|c| c.model.to_string())
+        .collect();
+    on_disk.extend(extra.iter().map(|s| s.to_string()));
+    std::fs::write(
+        dirs.cache().join("fake-state.json"),
+        json!({
+            "downloaded": on_disk,
+            "backends": ["llamacpp:vulkan", "whispercpp:vulkan", "kokoro:cpu"],
+            "partial": {},
+        })
+        .to_string(),
+    )
+    .unwrap();
+    before(&dirs.config());
+    h.app.manage(HubOptions {
+        jobs: JobOptions {
+            poll: Duration::from_millis(20),
+            retry_delay: Duration::from_millis(50),
+            give_up: Duration::from_secs(10),
+        },
+        ram_bytes: Some(32 * GIB),
+        ..HubOptions::default()
+    });
+    models::install(h.app.handle()).unwrap();
+    let mut opts = StartOptions::with_engine(FakeHost::new(), bundle.path());
+    opts.supervisor = SupervisorOptions {
+        health_interval: Duration::from_millis(200),
+        start_timeout: Duration::from_secs(20),
+        backoff_base: Duration::from_millis(20),
+        ..SupervisorOptions::default()
+    };
+    opts.setup = SetupOptions {
+        poll: Duration::from_millis(50),
+        ram_bytes: Some(32 * GIB),
+        ..SetupOptions::default()
+    };
+    let services = start(&h, opts);
+    let lab = Lab {
+        h,
+        services,
+        config: dirs.config(),
+        _bundle: bundle,
+    };
+    wait_for("the mind to arrive", || lab.h.state().mind.get().is_some());
+    lab
+}
+
+impl Lab {
+    fn view(&self) -> Value {
+        self.h.ok("get_models", json!({}))
+    }
+
+    fn job_model(&self, job: &str) -> String {
+        self.view()["jobs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|j| j["job"] == job)
+            .map(|j| j["model"].as_str().unwrap().to_string())
+            .unwrap()
+    }
+
+    fn change(&self, job: &str, model: &str, allow: bool) -> Result<Value, Value> {
+        self.h.call(
+            "change_model",
+            json!({"job": job, "model": model, "allowDownload": allow}),
+        )
+    }
+
+    fn selection(&self) -> Selection {
+        selection::read(&self.config)
+    }
+
+    fn requests(&self, path: &str) -> Vec<Value> {
+        block_on(async {
+            let client = self.services.client().await.expect("an engine");
+            let endpoint = client.endpoint().expect("an address");
+            reqwest::Client::new()
+                .get(format!("http://127.0.0.1:{}/fake/requests", endpoint.port))
+                .bearer_auth(&endpoint.key)
+                .send()
+                .await
+                .unwrap()
+                .json::<Vec<Value>>()
+                .await
+                .unwrap()
+        })
+        .into_iter()
+        .filter(|r| r["path"] == path)
+        .collect()
+    }
+
+    fn downloads_in_ledger(&self) -> Vec<String> {
+        self.h
+            .engine()
+            .ledger()
+            .unwrap()
+            .into_iter()
+            .filter(|e| e.kind == LedgerKind::ModelDownload)
+            .map(|e| e.label)
+            .collect()
+    }
+
+    fn phase(&self) -> Option<String> {
+        self.view()["change"]["phase"]["type"]
+            .as_str()
+            .map(str::to_string)
+    }
+}
+
+#[test]
+fn download_needs_allow() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    let refused = lab.change("recordings", "Whisper-Base", false).unwrap_err();
+    assert_eq!(refused["code"], "invalid");
+    assert!(lab.requests("/v1/pull").is_empty(), "nothing was pulled");
+    assert!(lab.selection().pending.is_none());
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+}
+
+#[test]
+fn catalogue_only_pull_refused_for_user_ids() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    for job in ["answering", "recordings", "finding"] {
+        let refused = lab.change(job, "user.Qwen3.5-9B-GGUF", true).unwrap_err();
+        assert_eq!(refused["code"], "invalid", "{job}");
+    }
+    let refused = lab
+        .h
+        .call(
+            "preview_model_change",
+            json!({"job": "answering", "model": "user.Qwen3.5-9B-GGUF"}),
+        )
+        .unwrap_err();
+    assert_eq!(refused["code"], "invalid");
+    // A model that is not for the job is refused too.
+    let refused = lab.change("answering", "Whisper-Base", true).unwrap_err();
+    assert_eq!(refused["code"], "invalid");
+    assert!(lab.requests("/v1/pull").is_empty());
+}
+
+#[test]
+fn current_keeps_working_until_present_then_switches_with_one_ledger_entry() {
+    let lab = lab("download-ms=1500", &[], |_| {});
+    let view = lab.change("recordings", "Whisper-Base", true).unwrap();
+    assert_eq!(view["change"]["model"], "Whisper-Base");
+    assert_eq!(view["change"]["from"], "Whisper-Small");
+    // While it downloads, the current model is the one in use.
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+    assert_eq!(selection::picks(&lab.selection()).speech, "Whisper-Small");
+    assert_eq!(lab.selection().pending.unwrap().model, "Whisper-Base");
+    wait_for("the switch", || {
+        lab.job_model("recordings") == "Whisper-Base"
+    });
+    let s = lab.selection();
+    assert!(s.pending.is_none());
+    assert_eq!(
+        s.custom.get(&ComponentRole::Speech).unwrap(),
+        "Whisper-Base"
+    );
+    wait_for("the ledger", || !lab.downloads_in_ledger().is_empty());
+    assert_eq!(lab.downloads_in_ledger(), ["Whisper-Base"]);
+    // The old model is kept by default and offered for removal.
+    let view = lab.view();
+    assert_eq!(view["old"]["model"], "Whisper-Small");
+    assert_eq!(view["old"]["removed"], false);
+    assert!(view["change"].is_null());
+    assert_eq!(view["custom"], true);
+}
+
+#[test]
+fn no_download_change_switches_at_once() {
+    let lab = lab("download-ms=400", &["Whisper-Tiny"], |_| {});
+    let view = lab.change("recordings", "Whisper-Tiny", false).unwrap();
+    assert!(view["change"].is_null());
+    assert_eq!(lab.job_model("recordings"), "Whisper-Tiny");
+    assert!(lab.requests("/v1/pull").is_empty());
+    assert!(lab.downloads_in_ledger().is_empty());
+    // Keeping the old model just closes the offer.
+    let kept = lab.h.ok("keep_old_model", json!({}));
+    assert!(kept["old"].is_null());
+    assert!(lab.selection().old.is_none());
+    // Reset brings the tier's own back.
+    let reset = lab.h.ok("reset_models_to_tier", json!({}));
+    assert_eq!(reset["custom"], false);
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+}
+
+#[test]
+fn old_model_kept_by_default_and_remove_asks_the_engine() {
+    let lab = lab("download-ms=400", &["Whisper-Tiny"], |_| {});
+    lab.change("recordings", "Whisper-Tiny", false).unwrap();
+    assert_eq!(lab.selection().old.unwrap().model, "Whisper-Small");
+    // A model in use is never removed.
+    lab.change("recordings", "Whisper-Small", false).unwrap();
+    let mut s = lab.selection();
+    s.old = Some(selection::OldModel {
+        role: ComponentRole::Speech,
+        model: "Whisper-Small".into(),
+    });
+    selection::write(&lab.config, &s).unwrap();
+    assert_eq!(lab.h.code("remove_old_model", json!({})), "invalid");
+    assert!(lab.requests("/v1/delete").is_empty());
+    lab.change("recordings", "Whisper-Tiny", false).unwrap();
+    let removed = lab.h.call("remove_old_model", json!({}));
+    let deletes = lab.requests("/v1/delete");
+    assert!(
+        deletes
+            .iter()
+            .any(|d| d["body"]["model_name"] == "Whisper-Small"),
+        "{deletes:?}"
+    );
+    // The fake engine has no delete route; against the real one the view shows it removed.
+    if let Ok(view) = removed {
+        assert_eq!(view["old"]["removed"], true);
+        assert_eq!(view["old"]["bytes"], 488_000_000.0);
+    }
+}
+
+#[test]
+fn pause_resume_cancel() {
+    let lab = lab("download-ms=6000", &[], |_| {});
+    lab.change("recordings", "Whisper-Base", true).unwrap();
+    wait_for("bytes to arrive", || {
+        lab.view()["change"]["phase"]["received"]
+            .as_f64()
+            .is_some_and(|b| b > 0.0)
+    });
+    let paused = lab.h.ok("pause_model_download", json!({}));
+    assert_eq!(paused["change"]["phase"]["paused"], true);
+    assert!(lab.selection().pending.unwrap().paused);
+    let resumed = lab.h.ok("resume_model_download", json!({}));
+    assert_eq!(resumed["change"]["phase"]["paused"], false);
+    assert!(!lab.selection().pending.unwrap().paused);
+    let cancelled = lab.h.ok("cancel_model_change", json!({}));
+    assert!(cancelled["change"].is_null());
+    assert!(lab.selection().pending.is_none());
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+    assert!(lab.downloads_in_ledger().is_empty());
+}
+
+#[test]
+fn resume_after_restart() {
+    let lab = lab("download-ms=600", &[], |config| {
+        let mut s = Selection::preset(Tier::Standard);
+        s.pending = Some(Pending {
+            role: ComponentRole::Speech,
+            model: "Whisper-Base".into(),
+            from: "Whisper-Small".into(),
+            paused: false,
+        });
+        selection::write(config, &s).unwrap();
+    });
+    wait_for("the interrupted change to finish", || {
+        lab.job_model("recordings") == "Whisper-Base"
+    });
+    assert!(lab.selection().pending.is_none());
+    assert_eq!(lab.downloads_in_ledger(), ["Whisper-Base"]);
+}
+
+#[test]
+fn a_paused_change_waits_after_restart() {
+    let lab = lab("download-ms=600", &[], |config| {
+        let mut s = Selection::preset(Tier::Standard);
+        s.pending = Some(Pending {
+            role: ComponentRole::Speech,
+            model: "Whisper-Base".into(),
+            from: "Whisper-Small".into(),
+            paused: true,
+        });
+        selection::write(config, &s).unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(500));
+    let view = lab.view();
+    assert_eq!(view["change"]["resumed"], true);
+    assert_eq!(view["change"]["phase"]["paused"], true);
+    assert!(
+        lab.requests("/v1/pull").is_empty(),
+        "nothing downloads by itself"
+    );
+    lab.h.ok("resume_model_download", json!({}));
+    wait_for("the change", || {
+        lab.job_model("recordings") == "Whisper-Base"
+    });
+}
+
+#[test]
+fn failure_keeps_partial_and_current() {
+    let lab = lab("download-ms=300,disk-full", &[], |_| {});
+    lab.change("recordings", "Whisper-Base", true).unwrap();
+    wait_for("the failure", || lab.phase().as_deref() == Some("failed"));
+    let view = lab.view();
+    assert_eq!(view["attention"], true);
+    assert!(view["change"]["phase"]["received"].as_f64().unwrap() > 0.0);
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+    let status = lab.h.ok("get_status", json!({}));
+    assert!(
+        status["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["code"] == "modelDownloadStopped"),
+        "{status}"
+    );
+    assert!(lab.requests("/v1/delete").is_empty(), "the partial is kept");
+    // Cancelling then clears it and the notice.
+    lab.h.ok("cancel_model_change", json!({}));
+    let status = lab.h.ok("get_status", json!({}));
+    assert!(
+        !status["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["code"] == "modelDownloadStopped")
+    );
+}
+
+#[test]
+fn quality_warning_when_smaller() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "answering", "model": "Qwen3.5-2B-GGUF"}),
+    );
+    assert_eq!(p["smaller"], true);
+    assert_eq!(p["tested"], true);
+    assert_eq!(p["from"], "Qwen3.5-9B-GGUF");
+    assert_eq!(p["downloadBytes"], 2_010_000_000.0);
+    assert!(p["memoryAfter"].as_f64().unwrap() < p["memoryNow"].as_f64().unwrap());
+    assert!(p["reindexItems"].is_null());
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "recordings", "model": "Whisper-Large-v3-Turbo"}),
+    );
+    assert_eq!(p["smaller"], false);
+    assert_eq!(p["newOnly"], true);
+    let p = lab.h.ok(
+        "preview_model_change",
+        json!({"job": "finding", "model": "Qwen3-Embedding-0.6B-GGUF"}),
+    );
+    assert_eq!(p["reindexItems"], 0);
+    assert_eq!(p["downloadBytes"], 0.0);
+    let choices = lab.h.ok("list_model_choices", json!({"job": "answering"}));
+    let list = choices.as_array().unwrap();
+    assert_eq!(list[0]["id"], "Qwen3.5-9B-GGUF");
+    assert_eq!(list[0]["current"], true);
+    assert!(
+        list.iter()
+            .all(|c| !c["id"].as_str().unwrap().starts_with("user."))
+    );
+}
+
+#[test]
+fn selection_exported_and_cleared() {
+    let lab = lab("download-ms=400", &["Whisper-Tiny"], |_| {});
+    lab.change("recordings", "Whisper-Tiny", false).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let report = lab
+        .h
+        .ok("export_to", json!({"dir": out.path().to_str().unwrap()}));
+    let exported: Selection = serde_json::from_slice(
+        &std::fs::read(Path::new(report["path"].as_str().unwrap()).join("models.json")).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        exported.custom.get(&ComponentRole::Speech).unwrap(),
+        "Whisper-Tiny"
+    );
+    lab.h.ok(
+        "delete_everything",
+        json!({"confirmPhrase": "delete everything"}),
+    );
+    assert!(!lab.config.join("selection.json").exists());
+    assert_eq!(lab.view()["custom"], false);
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+}
+
+#[test]
+fn the_view_names_each_job_and_the_memory_meter() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    let view = lab.view();
+    assert_eq!(view["preset"], "standard");
+    assert_eq!(view["jobs"].as_array().unwrap().len(), 4);
+    assert_eq!(view["ramBytes"], (32 * GIB) as f64);
+    let budget = view["budgetBytes"].as_f64().unwrap();
+    let busiest = view["busiestBytes"].as_f64().unwrap();
+    assert!(busiest > 0.0 && busiest <= budget, "{view}");
+    let answering = &view["jobs"][0];
+    assert_eq!(answering["job"], "answering");
+    assert_eq!(answering["name"], "Qwen3.5-9B");
+    assert_eq!(answering["recommended"], true);
+}

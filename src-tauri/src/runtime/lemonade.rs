@@ -12,9 +12,10 @@ use std::time::Duration;
 
 use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
 use nocturne_engine::Mind;
+use nocturne_lemonade::client::SystemInfo;
 use nocturne_lemonade::{
     Admin, Client, Control, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor,
-    bundle, residency, selection, tier,
+    bundle, fit, residency, selection, tier,
 };
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -296,23 +297,7 @@ async fn fill<R: Runtime>(
     if changed {
         super::memory_settled(&state, services);
     }
-    client.set_alone(residency::alone(tier));
-    let engine_root = Dirs::new(PathBuf::new(), state.data_dir.join("engine"));
-    let chosen = selection::Selection {
-        tier,
-        ..selection::read(&engine_root.config())
-    };
-    let picks = selection::picks(&chosen);
-    if let Ok(engine) = state.engine()
-        && !picks.recall.is_empty()
-    {
-        engine.set_recall_model(&picks.recall);
-    }
-    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, picks, tier));
-    state
-        .status
-        .set_mind_bytes(tier::components(tier).iter().map(|c| c.bytes as f64).sum());
-    set_mind(app, Some(mind)).await;
+    put_mind(app, client, tier).await;
     services.reader.retry_now();
     match previous {
         Some(from) if from != tier => super::tier_changed(app, from, tier).await,
@@ -320,6 +305,68 @@ async fn fill<R: Runtime>(
         // with it, but what could not be read in the meantime is tried again.
         _ => super::mind_recovered(app).await,
     }
+    crate::models::on_mind_ready(app);
+}
+
+/// A mind for the models chosen for each job on `tier`, in the slot, with the finding model
+/// and the models that must run alone set to match.
+async fn put_mind<R: Runtime>(app: &AppHandle<R>, client: Client, tier: Tier) {
+    let state = app.state::<AppState>();
+    let config_dir = crate::models::config_dir(&state.data_dir);
+    crate::models::repair_after_swap(app, &config_dir);
+    let chosen = selection::Selection {
+        tier,
+        ..selection::read(&config_dir)
+    };
+    let picks = selection::picks(&chosen);
+    let budget = fit::for_host(&SystemInfo::default(), fit::ram_bytes(), u64::MAX);
+    client.set_alone(residency::alone_for(&chosen, &budget));
+    let bytes: f64 = [&picks.mind, &picks.speech, &picks.voice, &picks.recall]
+        .into_iter()
+        .map(|m| model_bytes(tier, m) as f64)
+        .sum();
+    let recall = picks.recall.clone();
+    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, picks, tier));
+    state.status.set_mind_bytes(bytes);
+    set_mind(app, Some(mind)).await;
+    // Named after the mind is in: a vector the old mind was still making is then marked with
+    // the old name, and the backfill makes it again with the new one.
+    if let Ok(engine) = state.engine()
+        && !recall.is_empty()
+    {
+        engine.set_recall_model(&recall);
+    }
+}
+
+/// The download size of `model`: the tier's own figure, else the table's memory less what the
+/// engine adds, else nothing known.
+fn model_bytes(tier: Tier, model: &str) -> u64 {
+    tier::components(tier)
+        .into_iter()
+        .chain(
+            [Tier::Large, Tier::Standard, Tier::Small, Tier::Tiny]
+                .into_iter()
+                .flat_map(tier::components),
+        )
+        .find(|c| c.model == model)
+        .map_or(0, |c| c.bytes)
+}
+
+/// The person changed a model: the mind in the slot is rebuilt from the selection on disk. Does
+/// nothing while there is no mind (setup is not done, or the engine is away).
+pub async fn refill_mind<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    let Some(services) = state.services() else {
+        return;
+    };
+    let (Some(client), Some(tier)) = (services.client().await, services.tier()) else {
+        return;
+    };
+    if state.mind.get().is_none() {
+        return;
+    }
+    put_mind(app, client, tier).await;
+    services.reader.retry_now();
 }
 
 /// The engine could not be started or kept: nothing can be read, and a notice says so. Another
@@ -480,9 +527,19 @@ impl Services {
         let (Some(client), Some(tier)) = (self.client().await, self.tier()) else {
             return;
         };
-        for component in tier::components(tier) {
+        let mut models: Vec<String> = tier::components(tier)
+            .into_iter()
+            .map(|c| c.model.to_string())
+            .collect();
+        if let Some(lemonade) = self.lemonade.lock().await.as_ref() {
+            let picks = selection::picks(&selection::read(&lemonade.supervisor.dirs().config()));
+            models.extend([picks.mind, picks.speech, picks.voice, picks.recall]);
+        }
+        models.sort();
+        models.dedup();
+        for model in models.iter().filter(|m| !m.is_empty()) {
             // A model that is not loaded is not an error worth hearing about.
-            let _ = client.unload(component.model).await;
+            let _ = client.unload(model).await;
         }
     }
 }
