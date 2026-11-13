@@ -37,6 +37,20 @@ async fn a_note_goes_kept_reading_understood_and_its_memories_are_embedded() {
 }
 
 #[tokio::test]
+async fn an_understood_item_says_how_long_the_reading_took() {
+    let w = text_world("Gran lives in Leeds");
+    w.mind.set_latency(Duration::from_millis(40));
+    let id = keep(&w, "Gran lives in Leeds");
+    assert_eq!(w.engine.get_item(&id).unwrap().understood_in_ms, None);
+    w.reader.tick().await;
+    let item = w.engine.get_item(&id).unwrap();
+    assert_eq!(item.status, ItemStatus::Understood);
+    // Two calls (extract, then embed), each held for the latency.
+    let took = item.understood_in_ms.expect("the time is recorded");
+    assert!(took >= 80, "{took} ms");
+}
+
+#[tokio::test]
 async fn a_voice_note_is_transcribed_then_read() {
     let w = world(FakeMind::new());
     let (id, name) = keep_voice(&w, b"audio bytes");

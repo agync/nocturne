@@ -829,6 +829,10 @@ impl Reader {
             self.state().reread_failures.remove(id);
             self.mark_available();
             self.inner.items_read.fetch_add(1, Ordering::SeqCst);
+            let i = id.to_string();
+            if let Err(e) = self.eng(move |e| e.record_reading_time(&i, took)).await {
+                tracing::warn!("could not note how long reading took: {e}");
+            }
         }
         let i = id.to_string();
         let view: Option<ItemView> = self.eng(move |e| e.get_item(&i)).await.ok();

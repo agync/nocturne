@@ -544,6 +544,20 @@ impl Engine {
         })
     }
 
+    /// How long the reading of an item took, from picking it up to its memories being kept.
+    /// Only an item that was understood, wholly or in part, keeps a time.
+    pub fn record_reading_time(&self, item: &str, took: Duration) -> Result<()> {
+        let ms = u32::try_from(took.as_millis()).unwrap_or(u32::MAX);
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE items SET understood_in_ms = ?2 WHERE id = ?1 \
+                 AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed')",
+                params![item, ms],
+            )?;
+            Ok(())
+        })
+    }
+
     /// Mark read items to be read again at low priority (after an upgrade or a tier change).
     /// The mark survives restarts and is cleared when the item is applied again. Items that
     /// are waiting, being read or unreadable are skipped, and so are items something was
