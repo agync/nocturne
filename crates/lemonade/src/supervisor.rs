@@ -84,7 +84,7 @@ impl Stop {
 }
 
 /// How long a quitting app waits after SIGTERM before SIGKILL.
-const QUICK_AFTER_TERM: Duration = Duration::from_millis(1000);
+const QUICK_AFTER_TERM: Duration = Duration::from_millis(500);
 
 enum Cmd {
     Shutdown(oneshot::Sender<Result<(), RuntimeError>>, Stop),
@@ -254,7 +254,7 @@ impl Supervisor {
     }
 
     /// Stops the engine for a quitting app: asks, waits up to `budget`, then sends the engine's
-    /// whole process group SIGTERM and, a second later, SIGKILL.
+    /// whole process group SIGTERM and, half a second later, SIGKILL.
     pub async fn shutdown_within(self, budget: Duration) -> Result<(), RuntimeError> {
         self.stop(Stop::quick(budget)).await
     }

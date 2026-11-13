@@ -10,7 +10,8 @@
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
 //! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
 //! (the first request with a wrong key gets a 503 instead of a 401),
-//! `load-oom`, `load-error`. `POST /fake/crash` kills it on demand.
+//! `load-oom`, `load-error`, `ignore-term` (SIGTERM does nothing; only SIGKILL ends it).
+//! `POST /fake/crash` kills it on demand.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -443,6 +444,12 @@ async fn main() {
         inner: Mutex::new(inner),
     });
 
+    #[cfg(unix)]
+    if modes_has(&app, "ignore-term") {
+        let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("a SIGTERM handler");
+        tokio::spawn(async move { while term.recv().await.is_some() {} });
+    }
     if watchdog && !modes_has(&app, "no-watchdog") {
         let app = app.clone();
         std::thread::spawn(move || {

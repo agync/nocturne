@@ -860,7 +860,7 @@ fn quitting_does_not_wait_for_an_engine_that_hangs_on_shutdown() {
     let started = std::time::Instant::now();
     lab.h.state().run_exit_hooks();
     assert!(
-        started.elapsed() < Duration::from_millis(3_500),
+        started.elapsed() < Duration::from_millis(2_500),
         "quitting took {:?}",
         started.elapsed()
     );
@@ -872,6 +872,32 @@ fn quitting_does_not_wait_for_an_engine_that_hangs_on_shutdown() {
         );
         std::thread::sleep(Duration::from_millis(50));
     }
+}
+
+/// The worst engine: it ignores the request to stop, ignores SIGTERM and has no watchdog.
+/// Quitting still ends within its budget (the request's second, half a second after SIGTERM,
+/// then SIGKILL), not seconds later.
+#[cfg(target_os = "linux")]
+#[test]
+fn quitting_ends_an_engine_that_ignores_everything_but_sigkill() {
+    let lab = lab(
+        Plan::new("downloaded=all,hang-shutdown,ignore-term,no-watchdog,leak-sleeper")
+            .installed(Tier::Small),
+    );
+    wait_for("the mind to arrive", || lab.has_mind());
+    let engine_dir = lab.h.dir.path().join("engine");
+    let started = std::time::Instant::now();
+    lab.h.state().run_exit_hooks();
+    let took = started.elapsed();
+    assert!(
+        took < Duration::from_millis(1_900),
+        "quitting took {took:?}"
+    );
+    assert!(
+        engines_using(&engine_dir).is_empty(),
+        "{:?}",
+        engines_using(&engine_dir)
+    );
 }
 
 /// Quitting while the engine is still starting must not leave it running.

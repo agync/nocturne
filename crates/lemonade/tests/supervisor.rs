@@ -389,7 +389,7 @@ async fn quitting_stops_a_stuck_engine_soon_after_the_budget() {
         took >= Duration::from_secs(1),
         "the request got its budget: {took:?}"
     );
-    assert!(took < Duration::from_secs(3), "{took:?}");
+    assert!(took < Duration::from_millis(2_000), "{took:?}");
     assert_eq!(common::group_members(pgid), Vec::<u32>::new());
 }
 

@@ -28,8 +28,9 @@ pub const BUNDLE_ENV: &str = "NOCTURNE_LEMOND";
 /// The id of the notice shown when the engine keeps failing.
 pub const RESTARTS_NOTICE: &str = "restarts";
 
-/// How long past the polite budget a stop may take: SIGTERM, a second, then SIGKILL.
-const STOP_AFTER_BUDGET: Duration = Duration::from_secs(2);
+/// How long past the polite budget a stop may take: SIGTERM, half a second, then SIGKILL. With
+/// the reader's half second and the one-second budget, quitting takes at most two and a half.
+const STOP_AFTER_BUDGET: Duration = Duration::from_secs(1);
 
 /// What is known of the engine for the advanced details. Empty while there is no engine.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]

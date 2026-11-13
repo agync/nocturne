@@ -28,10 +28,11 @@ use crate::state::{AppState, refresh_status};
 pub mod lemonade;
 pub use lemonade::{EngineDetails, pause_setup, resume_setup, retry_engine, start_setup};
 
-/// How long quitting waits for the reader to give back the item it is reading.
-const STOP_TASKS: Duration = Duration::from_secs(1);
+/// How long quitting waits for the reader to give back the item it is reading. It is told to
+/// stop at once, so this only covers the write that returns its lease.
+const STOP_TASKS: Duration = Duration::from_millis(500);
 /// How long quitting waits for the private engine to stop on request. Past this its process
-/// group is sent SIGTERM, then SIGKILL a second later.
+/// group is sent SIGTERM, then SIGKILL half a second later.
 const QUIT_BUDGET: Duration = Duration::from_secs(1);
 /// How long after the engine gives up another start is tried.
 const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);
