@@ -18,8 +18,6 @@
   "notice.couldntRead.action": "Try again",
   "notice.micDenied.text": "Nocturne can’t hear you. Microphone access is turned off for it.",
   "notice.micDenied.action": "Open sound settings",
-  "notice.printFailed.text": "The printer didn’t answer, so today’s page wasn’t printed.",
-  "notice.printFailed.action": "Print now",
   "notice.catchingUp.text": "The computer was off overnight. Catching up now, {eta}.",
   "notice.catchingUp.text.unknown": "The computer was off overnight. Catching up now.",
   "notice.catchingUp.action": "Show yesterday’s page",

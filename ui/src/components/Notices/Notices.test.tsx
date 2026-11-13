@@ -31,8 +31,8 @@ const make = (code: NoticeCode, extra: Partial<Notice> = {}): Notice => ({
 });
 
 describe("Notices", () => {
-  it("has one sentence and one action in the copy deck for every code", () => {
-    for (const code of Object.keys(CODES) as NoticeCode[]) {
+  it("has one sentence and one action in the copy deck for every code that is shown", () => {
+    for (const code of (Object.keys(CODES) as NoticeCode[]).filter((c) => c !== "printFailed")) {
       expect(
         copyDeck[`notice.${code}.text`] ?? copyDeck[`notice.${code}.text.unknown`],
         code,
@@ -40,6 +40,11 @@ describe("Notices", () => {
       expect(noticeText(make(code)).length, code).toBeGreaterThan(10);
       expect(noticeAction(code).length, code).toBeGreaterThan(1);
     }
+  });
+
+  it("shows nothing for a failed print: nothing prints by itself", () => {
+    render(<Notices notices={[make("printFailed")]} />);
+    expect(screen.queryByRole("list")).toBeNull();
   });
 
   it("never shows an error code", () => {

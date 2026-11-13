@@ -66,7 +66,7 @@ test.describe("the page works", () => {
     await page.getByRole("button", { name: "Mark as done" }).click();
     const line = page.getByText(/The Year 4 trip form is due/);
     await expect(line).toHaveCSS("text-decoration-line", "line-through");
-    await expect(page.getByText("Done. Nocturne will stop reminding you.")).toBeVisible();
+    await expect(page.getByText("Done. Nocturne won’t bring it up again.")).toBeVisible();
   });
 
   test("a let-go line comes back", async ({ page }) => {

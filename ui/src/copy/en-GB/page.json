@@ -23,7 +23,7 @@
   "page.more.changed": "{count, plural, one {# smaller change} other {# smaller changes}}",
   "page.firstNext.title": "Tomorrow’s page gets better with",
   "page.firstNext.body": "Appointment cards, voice notes after calls, school and work messages. Anything with a date, a promise or a name.",
-  "page.line.done": "Done. Nocturne will stop reminding you.",
+  "page.line.done": "Done. Nocturne won’t bring it up again.",
   "page.line.doneLabel": "Done",
   "page.line.forgotten": "Forgotten. This line is gone from the page.",
   "page.which.group": "{subject}",

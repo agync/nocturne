@@ -161,8 +161,8 @@ export function Shell({ children }: ShellProps) {
       catchingUp: () => {
         if (today) navigate(`/pages/${addDays(today, -1)}`);
       },
-      printFailed: () => {
-        if (today) navigate(`/print/${today}`);
+      micDenied: () => {
+        engine.openSoundSettings().catch(() => toast.show({ message: t("notice.action.failed") }));
       },
     }),
     [engine, navigate, refresh, today, toast],

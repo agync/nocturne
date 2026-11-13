@@ -50,7 +50,7 @@ describe("the morning page on Today", () => {
     const spy = vi.spyOn(engine, "markDone");
     await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
     expect(spy).toHaveBeenCalledWith("mem-trip");
-    expect(screen.getByText("Done. Nocturne will stop reminding you.")).toBeInTheDocument();
+    expect(screen.getByText("Done. Nocturne won’t bring it up again.")).toBeInTheDocument();
     expect(screen.getByText(/The Year 4 trip form is due/).closest("p")).toHaveAttribute(
       "data-done",
       "true",

@@ -38,7 +38,8 @@ export function noticeText(notice: Notice): string {
     case "micDenied":
       return t("notice.micDenied.text");
     case "printFailed":
-      return t("notice.printFailed.text");
+      // Nothing prints by itself in this version, so this notice is never shown.
+      return "";
     case "repairNeeded":
       return t("notice.repairNeeded.text");
     case "notReady":
@@ -67,7 +68,7 @@ export function noticeAction(code: NoticeCode): string {
     case "micDenied":
       return t("notice.micDenied.action");
     case "printFailed":
-      return t("notice.printFailed.action");
+      return "";
     case "catchingUp":
       return t("notice.catchingUp.action");
     case "repairNeeded":
@@ -125,11 +126,12 @@ export function Notices({ notices, handlers = {}, dismissals = {} }: NoticesProp
         })}
       </ul>
     );
-  const urgent = notices.filter((n) => URGENT.has(n.code));
-  const calm = notices.filter((n) => !URGENT.has(n.code));
+  const shown = notices.filter((n) => n.code !== "printFailed");
+  const urgent = shown.filter((n) => URGENT.has(n.code));
+  const calm = shown.filter((n) => !URGENT.has(n.code));
   // The two live regions stay mounted even when empty, so the first notice is announced.
   return (
-    <div className={styles.notices} data-empty={notices.length === 0}>
+    <div className={styles.notices} data-empty={shown.length === 0}>
       <div role="alert">{render(urgent)}</div>
       <div role="status" aria-live="polite">
         {render(calm)}
