@@ -54,3 +54,30 @@ describe("WebPlatform file drop", () => {
     expect(onHover).not.toHaveBeenCalled();
   });
 });
+
+describe("WebPlatform shared pieces", () => {
+  it("shows a placeholder picture for any original, as a data URL the policy allows", () => {
+    const src = new WebPlatform().originalSrc("originals/item-1");
+    expect(src.startsWith("data:image/svg+xml,")).toBe(true);
+    expect(src).not.toMatch(/https?:\/\//);
+  });
+
+  it("hands a question to listeners in the same window, until they stop", async () => {
+    const platform = new WebPlatform();
+    const heard: string[] = [];
+    const off = platform.onAskHandOff((q) => heard.push(q));
+    await platform.handOffAsk("When is the dentist?");
+    off();
+    await platform.handOffAsk("ignored");
+    expect(heard).toEqual(["When is the dentist?"]);
+  });
+
+  it("closes the quick capture screen by going back to today, and picks a stand-in folder", async () => {
+    const platform = new WebPlatform();
+    window.location.hash = "#/quick-capture";
+    await platform.closeQuickCapture();
+    expect(window.location.hash).toBe("#/today");
+    await expect(platform.pickFolder()).resolves.toBe("Chosen folder");
+    await expect(platform.openPath("x")).resolves.toBeUndefined();
+  });
+});

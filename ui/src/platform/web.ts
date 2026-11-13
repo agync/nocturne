@@ -3,7 +3,19 @@ import type { Platform, SystemTheme, Unsubscribe } from "./types";
 const DARK = "(prefers-color-scheme: dark)";
 
 /** The browser: DOM drag events (paths are file names) and `matchMedia`. */
+/** A hatched square, standing in for the person's own picture when there is no disk to read. */
+const PLACEHOLDER =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">' +
+      '<rect width="320" height="240" fill="#FBFAF6"/>' +
+      '<path d="M-40 280L280-40M-20 280L300-40M0 280L320-40M20 280L340-40M40 280L360-40M60 280L380-40M80 280L400-40M-60 280L260-40M-80 280L240-40" stroke="#DAD5CA" stroke-width="2"/>' +
+      "</svg>",
+  );
+
 export class WebPlatform implements Platform {
+  private readonly askListeners = new Set<(question: string) => void>();
+
   onFileDrop(
     onDrop: (paths: string[]) => void,
     onHover: (count: number | null) => void,
@@ -57,6 +69,33 @@ export class WebPlatform implements Platform {
   async currentTheme(): Promise<SystemTheme | null> {
     if (typeof matchMedia !== "function") return null;
     return matchMedia(DARK).matches ? "dark" : "light";
+  }
+
+  async pickFolder(): Promise<string | null> {
+    return "Chosen folder";
+  }
+
+  async openPath(path: string): Promise<void> {
+    console.info(`Would open ${path}`);
+  }
+
+  originalSrc(_path: string): string {
+    return PLACEHOLDER;
+  }
+
+  async closeQuickCapture(): Promise<void> {
+    window.location.hash = "#/today";
+  }
+
+  async handOffAsk(question: string): Promise<void> {
+    for (const cb of [...this.askListeners]) cb(question);
+  }
+
+  onAskHandOff(cb: (question: string) => void): Unsubscribe {
+    this.askListeners.add(cb);
+    return () => {
+      this.askListeners.delete(cb);
+    };
   }
 
   pickFiles(): Promise<string[]> {

@@ -284,6 +284,17 @@ describe("drop anywhere", () => {
   });
 });
 
+describe("a question handed off from quick capture", () => {
+  it("opens the Ask screen with that question", async () => {
+    const platform = fakePlatform();
+    renderApp({ platform });
+    await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    act(() => platform.handOff("Where did I park?"));
+    await waitFor(() => expect(window.location.hash).toBe("#/ask"));
+    expect(askRequests.peek()?.question).toBe("Where did I park?");
+  });
+});
+
 describe("theme", () => {
   it("follows the system theme and can be forced by the setting", async () => {
     const platform = fakePlatform("dark");

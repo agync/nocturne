@@ -19,6 +19,12 @@ function fakePlatform(initial: SystemTheme | null) {
     },
     currentTheme: async () => initial,
     pickFiles: async () => [],
+    pickFolder: async () => null,
+    openPath: async () => undefined,
+    originalSrc: (path) => `file:${path}`,
+    closeQuickCapture: async () => undefined,
+    handOffAsk: async () => undefined,
+    onAskHandOff: () => () => undefined,
   };
   return { platform, change: (t: SystemTheme) => listener?.(t) };
 }

@@ -8,12 +8,14 @@ export interface FakePlatform extends Platform {
   hover(count: number | null): void;
   drop(paths: string[]): void;
   theme(theme: SystemTheme): void;
+  handOff(question: string): void;
 }
 
 export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
   let onDrop: (paths: string[]) => void = () => undefined;
   let onHover: (count: number | null) => void = () => undefined;
   let onTheme: (theme: SystemTheme) => void = () => undefined;
+  let onHandOff: (question: string) => void = () => undefined;
   return {
     onFileDrop(drop, hover) {
       onDrop = drop;
@@ -26,6 +28,15 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
     },
     currentTheme: async () => initial,
     pickFiles: async () => [],
+    pickFolder: async () => null,
+    openPath: async () => undefined,
+    originalSrc: (path) => `file:${path}`,
+    closeQuickCapture: async () => undefined,
+    handOffAsk: async () => undefined,
+    onAskHandOff: (cb) => {
+      onHandOff = cb;
+      return () => undefined;
+    },
     hover: (count) => {
       onHover(count);
     },
@@ -35,6 +46,7 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
     theme: (theme) => {
       onTheme(theme);
     },
+    handOff: (question) => onHandOff(question),
   };
 }
 

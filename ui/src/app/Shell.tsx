@@ -13,6 +13,7 @@ import { useToast } from "../components/Toast/Toast";
 import { addDays, formatDay } from "../copy/format";
 import { t } from "../copy/t";
 import { useEngine, usePage, useRefresh, useSettings, useStatus } from "../engine/context";
+import { usePlatform } from "../platform/context";
 import { askRequests } from "./ask-request";
 import { findRoute, routes } from "./routes";
 import styles from "./Shell.module.css";
@@ -40,6 +41,16 @@ export function Shell({ children }: ShellProps) {
   const { data: page } = usePage();
 
   useRegionCycling(root);
+
+  const platform = usePlatform();
+  useEffect(
+    () =>
+      platform.onAskHandOff((question) => {
+        askRequests.request(question);
+        navigate("/ask");
+      }),
+    [platform, navigate],
+  );
 
   useEffect(() => {
     document.title = route ? `${t(route.title)} · ${t("app.name")}` : t("app.name");
