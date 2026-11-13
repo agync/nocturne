@@ -15,7 +15,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::fixtures::allowed_flags_for;
 use crate::install::make_private_dir;
-use crate::supervise::{HelperCommand, Phase, SupState, SuperviseOptions, Supervisor};
+use crate::supervise::{HelperCommand, Phase, StopHandle, SupState, SuperviseOptions, Supervisor};
 use crate::util::{run_cli, run_cli_watch};
 use crate::{
     BoxFuture, HelperDirs, HelperError, HelperInfo, HelperKind, Installed, KeyCarrier, LaunchSpec,
@@ -207,6 +207,10 @@ fn with_socket(paths: &Paths, rest: &[&str]) -> Vec<String> {
     args
 }
 
+/// Refuse every inbound connection that serve does not handle. In userspace mode the helper would
+/// otherwise pass tailnet connections on to this computer's loopback ports.
+pub(crate) const SHIELDS_UP: &str = "--shields-up=true";
+
 pub(crate) fn up_args(paths: &Paths, hostname: &str) -> Vec<String> {
     let host = format!("--hostname={hostname}");
     with_socket(
@@ -217,6 +221,7 @@ pub(crate) fn up_args(paths: &Paths, hostname: &str) -> Vec<String> {
             "--accept-dns=false",
             "--accept-routes=false",
             "--ssh=false",
+            SHIELDS_UP,
             "--json",
         ],
     )
@@ -225,7 +230,7 @@ pub(crate) fn up_args(paths: &Paths, hostname: &str) -> Vec<String> {
 /// Switch off self-update and the web client where the pinned version has the flags.
 pub(crate) fn set_args(paths: &Paths) -> Option<Vec<String>> {
     let known = allowed_flags_for(HelperKind::Tailscaled, "set");
-    let flags: Vec<&str> = ["--auto-update=false", "--webclient=false"]
+    let flags: Vec<&str> = ["--auto-update=false", "--webclient=false", SHIELDS_UP]
         .into_iter()
         .filter(|f| known.contains(&f.split('=').next().unwrap_or("")))
         .collect();
@@ -526,6 +531,7 @@ impl Transport for TailscaledTransport {
             let sup_state = sup.subscribe();
             let monitor = tokio::spawn(monitor(
                 ctx.clone(),
+                sup.stop_handle(),
                 spec,
                 sup_state.clone(),
                 tx.clone(),
@@ -623,6 +629,7 @@ async fn shut(run: Run, dirs: &HelperDirs) -> Result<(), HelperError> {
 
 async fn monitor(
     ctx: Arc<Ctx>,
+    halt: StopHandle,
     spec: LaunchSpec,
     mut sup: watch::Receiver<SupState>,
     tx: Arc<watch::Sender<TransportState>>,
@@ -652,6 +659,20 @@ async fn monitor(
                     Ok(found) => found,
                     Err(HelperError::Stopped) => return,
                     Err(error) => {
+                        // Nothing stays served and nothing keeps running behind a failure.
+                        let reset = with_socket(&ctx.paths, &["serve", "reset"]);
+                        let _ =
+                            run_cli(&ctx.program, &os(&reset), &ctx.env, Duration::from_secs(10))
+                                .await;
+                        halt.stop();
+                        let _ = tokio::time::timeout(Duration::from_secs(15), async {
+                            while !matches!(sup.borrow_and_update().phase, Phase::Stopped) {
+                                if sup.changed().await.is_err() {
+                                    break;
+                                }
+                            }
+                        })
+                        .await;
                         tx.send_replace(TransportState::Failed { error });
                         return;
                     }
@@ -826,6 +847,16 @@ mod tests {
         assert!(!funnel_enabled(&none));
         let nested = serde_json::json!({"Services": {"svc:x": {"AllowFunnel": {"a": true}}}});
         assert!(funnel_enabled(&nested));
+    }
+
+    #[test]
+    fn shields_stay_up() {
+        let paths = Paths::new(&dirs());
+        assert!(up_args(&paths, "nocturne-ab12").contains(&SHIELDS_UP.to_string()));
+        assert!(set_args(&paths).unwrap().contains(&SHIELDS_UP.to_string()));
+        let known = allowed_flags_for(HelperKind::Tailscaled, "set");
+        assert!(known.contains(&"--shields-up"));
+        assert!(allowed_flags_for(HelperKind::Tailscaled, "up").contains(&"--shields-up"));
     }
 
     #[test]

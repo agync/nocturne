@@ -7,6 +7,7 @@ use std::ffi::OsString;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
@@ -79,10 +80,22 @@ struct Running {
     pgid: u32,
 }
 
+/// Asks a supervised helper to stop; the stop itself is still waited for by `Supervisor::stop`.
+#[derive(Clone)]
+pub struct StopHandle(Arc<Mutex<Option<oneshot::Sender<()>>>>);
+
+impl StopHandle {
+    pub fn stop(&self) {
+        if let Some(tx) = self.0.lock().expect("stop lock").take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
 pub struct Supervisor {
     state: watch::Receiver<SupState>,
     log: PathBuf,
-    stop: Option<oneshot::Sender<()>>,
+    stop: Arc<Mutex<Option<oneshot::Sender<()>>>>,
     task: Option<JoinHandle<Result<(), HelperError>>>,
 }
 
@@ -105,9 +118,14 @@ impl Supervisor {
         Ok(Self {
             state: rx,
             log,
-            stop: Some(stop_tx),
+            stop: Arc::new(Mutex::new(Some(stop_tx))),
             task: Some(task),
         })
+    }
+
+    /// A handle that asks the helper to stop from elsewhere (a monitor that found a failure).
+    pub fn stop_handle(&self) -> StopHandle {
+        StopHandle(self.stop.clone())
     }
 
     pub fn subscribe(&self) -> watch::Receiver<SupState> {
@@ -124,9 +142,7 @@ impl Supervisor {
 
     /// Stop the helper and return once no process of its group remains.
     pub async fn stop(mut self) -> Result<(), HelperError> {
-        if let Some(stop) = self.stop.take() {
-            let _ = stop.send(());
-        }
+        self.stop_handle().stop();
         match self.task.take() {
             Some(task) => task.await.map_err(|e| HelperError::Exited(e.to_string()))?,
             None => Ok(()),

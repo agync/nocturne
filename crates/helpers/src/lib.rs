@@ -30,7 +30,8 @@ pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
 pub use install::remove_partial;
 pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
 pub use supervise::{
-    HelperCommand, Phase, SupState, SuperviseOptions, Supervisor, members as group_members,
+    HelperCommand, Phase, StopHandle, SupState, SuperviseOptions, Supervisor,
+    members as group_members,
 };
 pub use tailscaled::{
     TailscaledOptions, TailscaledTransport, new_machine_name, valid_machine_name,

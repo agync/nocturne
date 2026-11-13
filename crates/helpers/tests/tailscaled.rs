@@ -100,6 +100,7 @@ async fn address_is_the_tailnet_name() {
         "--accept-dns=false",
         "--accept-routes=false",
         "--ssh=false",
+        "--shields-up=true",
         "--json",
     ] {
         assert!(args.contains(&want.to_string()), "{want} in {args:?}");
