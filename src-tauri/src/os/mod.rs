@@ -152,6 +152,11 @@ fn set_start_at_login<R: Runtime>(
             Some(target) => autostart::apply(want, &target)
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
+            // The launch agent needs the program's real path: without it nothing is written, and
+            // the person is told rather than shown a switch that does nothing.
+            None if want && cfg!(target_os = "macos") => {
+                Err("the path of this program could not be resolved".into())
+            }
             None => Ok(()),
         }
     }
