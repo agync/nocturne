@@ -53,14 +53,24 @@ reach it from elsewhere, put a TLS proxy in front and name its address with
 `PREVIEW_PUBLIC_ORIGIN`, the only other origin it accepts. Everything that carries data needs the
 token as a bearer header. Two things cannot send one, so they take a short ticket from
 `POST /api/ticket`: the event stream (one use, 30 seconds) and the pictures and audio of kept
-originals, which are fetched by item id, never by path.
+originals, which are fetched by item id, never by path. A media ticket lasts an hour from its last
+use. The data folder and the home folder never appear in what the browser reads: such paths in
+answers, errors, settings and events are replaced.
+
+Uploads other than recordings and files are limited to 1 MiB, two recordings or files are read at
+once, and a recording is converted to WAV with the `ffmpeg` found on the path at start, limited to
+known recording formats, local files, an hour and 512 MiB.
+
+When a Tailscale or other proxy shares the machine, give the preview a port of its own
+(`tailscale serve --https=8443 http://127.0.0.1:55066`), since an origin is shared by every
+service behind the same host name and port, and set `PREVIEW_PUBLIC_ORIGIN` to exactly that.
 
 | Setting | Meaning |
 |---|---|
 | `PREVIEW_DATA_DIR` | Its own data folder (default `target/preview-real`). It must be empty or one the tool made. |
 | `PREVIEW_PORT` | The loopback port (default 55066). |
 | `PREVIEW_PUBLIC_ORIGIN` | Where other machines reach it. |
-| `PREVIEW_MODELS_FROM` | An engine folder from a finished setup. Its models are hard-linked in, so nothing downloads; without it the first run offers the usual setup. |
+| `PREVIEW_MODELS_FROM` | An engine folder from a finished setup. Its models are copied in (a reflink copy where the filesystem allows, a full copy elsewhere, never a hard link, so nothing the preview writes can alter the source); nothing downloads; without it the first run offers the usual setup. |
 
 What a browser cannot do is reported as unavailable: folder and file dialogs, opening a folder or a
 file in the system's app, the logs folder, printing, sound settings and exporting to a folder.

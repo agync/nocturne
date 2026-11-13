@@ -8,7 +8,8 @@
 #   PREVIEW_BIN, PREVIEW_UI  a copy of the server and of the built interface to run instead of the
 #                         ones in target/ and ui/dist-preview (so a rebuild never touches a live one)
 #   PREVIEW_MODELS_FROM   the engine folder of a data folder that already finished setup: its
-#                         models and engine files are hard-linked in, so nothing downloads
+#                         models and engine files are copied in (a reflink copy where the filesystem has them), so
+#                         nothing downloads and the source is never written to
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
@@ -22,8 +23,8 @@ from=${PREVIEW_MODELS_FROM:-}
 if [[ -n "$from" && ! -e "$data/engine/models" ]]; then
     [[ -d "$from/models" ]] || { printf 'no models in %s\n' "$from" >&2; exit 2; }
     mkdir -p "$data/engine/config"
-    cp -al -- "$from/models" "$data/engine/models"
-    [[ -d "$from/cache" ]] && cp -al -- "$from/cache" "$data/engine/cache"
+    cp -a --reflink=auto -- "$from/models" "$data/engine/models"
+    [[ -d "$from/cache" ]] && cp -a --reflink=auto -- "$from/cache" "$data/engine/cache"
     # Which mind is set up. The engine's own settings are written afresh for this folder.
     [[ -f "$from/config/nocturne-setup.json" ]] \
         && cp -- "$from/config/nocturne-setup.json" "$data/engine/config/nocturne-setup.json"
