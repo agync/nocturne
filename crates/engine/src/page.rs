@@ -507,7 +507,11 @@ impl Engine {
     pub fn compose_page(&self, day: Date, edition: Edition) -> Result<nocturne_contract::PageView> {
         let now = self.clock().now();
         let tz = self.clock().tz();
-        self.read(|conn| compose(conn, now, &tz, day, edition, None))
+        self.read(|conn| {
+            let mut page = compose(conn, now, &tz, day, edition, None)?;
+            phone_only(conn, &mut page)?;
+            Ok(page)
+        })
     }
 
     /// Compose the page for `day` over the window ending at `end` instead of the page time
@@ -522,7 +526,11 @@ impl Engine {
     ) -> Result<nocturne_contract::PageView> {
         let now = self.clock().now();
         let tz = self.clock().tz();
-        self.read(|conn| compose(conn, now, &tz, day, edition, Some(end)))
+        self.read(|conn| {
+            let mut page = compose(conn, now, &tz, day, edition, Some(end))?;
+            phone_only(conn, &mut page)?;
+            Ok(page)
+        })
     }
 
     /// Save a composed page (screen edition, every line) as the snapshot for its date. Cited
@@ -1100,5 +1108,56 @@ fn edition_page(
             page.let_go_count.saturating_sub(dropped_let_go),
         );
     }
+    phone_only(conn, &mut page)?;
     Ok(Some(page))
+}
+
+/// What only the phone edition leaves out: lines and a question whose receipts name an item a
+/// phone must not see.
+fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Result<()> {
+    if page.edition != Edition::Phone {
+        return Ok(());
+    }
+    let withheld = |r: &nocturne_contract::Receipt| -> Result<bool> {
+        crate::remote::withheld_from_phones(conn, &r.item_id)
+    };
+    let mut dropped = 0u32;
+    for list in [
+        &mut page.needs_you,
+        &mut page.changed,
+        &mut page.let_go,
+        &mut page.upcoming,
+        &mut page.learned,
+    ] {
+        let mut kept = Vec::new();
+        for line in std::mem::take(list) {
+            let mut hide = false;
+            for r in line
+                .receipts
+                .iter()
+                .chain(line.choices.iter().map(|c| &c.receipt))
+            {
+                hide |= withheld(r)?;
+            }
+            if hide {
+                dropped += 1;
+            } else {
+                kept.push(line);
+            }
+        }
+        *list = kept;
+    }
+    if let Some(q) = &page.question
+        && let Some(r) = &q.receipt
+        && withheld(r)?
+    {
+        page.question = None;
+        dropped += 1;
+    }
+    if dropped > 0 {
+        page.headline = template_headline(page.date.parse()?);
+        let needs = needs_you_count(page) + page.more_needs_you;
+        page.dek = template_dek(page.kept_count, needs, page.let_go_count);
+    }
+    Ok(())
 }

@@ -167,6 +167,31 @@ fn store_state(conn: &rusqlite::Connection, s: &RemoteRow) -> Result<()> {
     Ok(())
 }
 
+/// An item a phone must not see: private itself, or a source of any memory that is private in
+/// any version, so its text and original cannot carry the private part along with a public
+/// one. An item the store does not know counts as withheld.
+pub(crate) fn withheld_from_phones(conn: &rusqlite::Connection, item_id: &str) -> Result<bool> {
+    let private: Option<bool> = conn
+        .query_row("SELECT private FROM items WHERE id = ?1", [item_id], |r| {
+            r.get(0)
+        })
+        .optional()?;
+    match private {
+        None | Some(true) => return Ok(true),
+        Some(false) => {}
+    }
+    let memories: Vec<String> = conn
+        .prepare_cached("SELECT memory_id FROM memory_sources WHERE item_id = ?1")?
+        .query_map([item_id], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for m in &memories {
+        if crate::memory::is_private_chain(conn, m)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 impl Engine {
     pub fn remote_state(&self) -> Result<RemoteRow> {
         self.read(load_state)
@@ -404,8 +429,9 @@ impl Engine {
         })
     }
 
-    /// Which of these item and memory ids must not reach a phone: private items, memories
-    /// that are private in any version, and ids the store does not know (fail closed).
+    /// Which of these item and memory ids must not reach a phone: memories that are private in
+    /// any version, items that are [`withheld_from_phones`], and ids the store does not know
+    /// (fail closed).
     pub fn private_ids(&self, ids: &[String]) -> Result<Vec<String>> {
         self.read(|conn| {
             let mut out = Vec::new();
@@ -413,11 +439,7 @@ impl Engine {
                 let private = if id.starts_with("mem_") {
                     crate::memory::is_private_chain(conn, id)?
                 } else {
-                    conn.query_row("SELECT private FROM items WHERE id = ?1", [id], |r| {
-                        r.get::<_, bool>(0)
-                    })
-                    .optional()?
-                    .unwrap_or(true)
+                    withheld_from_phones(conn, id)?
                 };
                 if private {
                     out.push(id.clone());

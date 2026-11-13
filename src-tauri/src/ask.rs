@@ -372,6 +372,29 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool)
         .into_iter()
         .filter(|h| !h.let_go && !(public_only && h.memory.private))
         .collect();
+    let hits = if public_only {
+        let e = engine.clone();
+        let safe = blocking(move || {
+            let mut out = Vec::with_capacity(hits.len());
+            for h in hits {
+                if phone_safe(&e, &h.memory)? {
+                    out.push(h);
+                }
+            }
+            Ok(out)
+        })
+        .await;
+        match safe {
+            Ok(h) => h,
+            Err(err) => {
+                tracing::error!("could not check what may go out: {:?}", err.code);
+                sink.phase(AskPhase::Unavailable);
+                return;
+            }
+        }
+    } else {
+        hits
+    };
     if hits.is_empty() {
         sink.phase(AskPhase::Nothing);
         return;
@@ -498,7 +521,7 @@ fn with_disputes(
                 break 'hits;
             }
             match engine.get_memory(other) {
-                Ok(memory) if public_only && memory.private => {}
+                Ok(memory) if public_only && !phone_safe(engine, &memory)? => {}
                 Ok(memory) => sides.push(Hit {
                     memory,
                     score: 0.0,
@@ -531,6 +554,17 @@ fn with_disputes(
         })
         .collect();
     Ok((hits, found, facts))
+}
+
+/// For a phone: the memory is public in every version and every item it cites may go out, so
+/// neither its receipts nor near matches open an item that also holds something private.
+fn phone_safe(
+    engine: &Engine,
+    memory: &nocturne_contract::MemoryView,
+) -> nocturne_engine::Result<bool> {
+    let mut ids = vec![memory.id.clone()];
+    ids.extend(memory.receipts.iter().map(|r| r.item_id.clone()));
+    Ok(engine.private_ids(&ids)?.is_empty())
 }
 
 /// Whether the bold spans in `text` can stand one for one, in order, for the `cited` memories

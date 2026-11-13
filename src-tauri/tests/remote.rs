@@ -20,7 +20,7 @@ use nocturne_contract::{
     AskPhase, ItemKind, PhoneError, RemoteAction, RemoteAnswer, RemoteCall, RemoteState, Source,
     Trust,
 };
-use nocturne_engine::{FakeMind, Mind};
+use nocturne_engine::{Candidate, FakeMind, Mind, Predicate};
 use nocturne_helpers::{HelperKind, Origin};
 use nocturne_intelligence::FakeHost;
 use serde_json::json;
@@ -1195,6 +1195,76 @@ fn private_never_reaches_a_phone() {
         Some(PhoneError::NotFound)
     );
     let _ = (open_item, open_mem);
+}
+
+#[test]
+fn an_item_with_one_private_memory_never_reaches_a_phone() {
+    let p = on();
+    let e = p.h.engine();
+    let item = match e
+        .keep_text(
+            "Dentist on Thursday. Clinic result: bad news.",
+            Source::QuickCapture,
+        )
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let lease = e.lease_item(&item, Duration::from_secs(60)).unwrap();
+    let created = e
+        .apply_candidates(
+            &item,
+            &lease.lease,
+            vec![
+                Candidate::new(
+                    "Dentist",
+                    Predicate::Prefers,
+                    "Thursday",
+                    "The dentist is on Thursday.",
+                    0.9,
+                ),
+                Candidate::new(
+                    "Clinic",
+                    Predicate::Prefers,
+                    "bad news",
+                    "The clinic result is bad news.",
+                    0.9,
+                ),
+            ],
+        )
+        .unwrap()
+        .created;
+    let (open_mem, secret_mem) = (created[0].clone(), created[1].clone());
+    e.set_private(&secret_mem, true).unwrap();
+    p.h.save_todays_page();
+    let (keys, mut c) = p.session("Pixel");
+    let deltas = ask(&mut c, "When is the dentist?");
+    let all = serde_json::to_string(&deltas.iter().map(|(_, d)| d).collect::<Vec<_>>()).unwrap();
+    assert!(
+        !all.contains(&item) && !all.to_lowercase().contains("clinic"),
+        "{all}"
+    );
+    let page = serde_json::to_string(&call(&mut c, RemoteCall::GetPage { date: None })).unwrap();
+    assert!(
+        !page.contains(&item) && !page.to_lowercase().contains("clinic"),
+        "{page}"
+    );
+    // Even named to this phone by a receipt for the public fact, it does not open.
+    p.hub.core.cite(&keys.id(), [item.clone()]);
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::GetItem { id: item.clone() })),
+        Some(PhoneError::NotFound)
+    );
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::GetOriginal { id: item.clone() })),
+        Some(PhoneError::NotFound)
+    );
+    assert_eq!(
+        e.private_ids(&[item.clone(), open_mem.clone()]).unwrap(),
+        vec![item]
+    );
 }
 
 #[test]
