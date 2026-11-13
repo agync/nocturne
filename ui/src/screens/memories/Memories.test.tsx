@@ -106,7 +106,7 @@ describe("What Nocturne remembers", () => {
       within(bar)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Correct", "Keep forever", "Mark private", "Forget…"]);
+    ).toEqual(["Correct", "Keep forever", "Mark private", "Delete…"]);
     expect(within(bar).getByText(/health, money or ID information/)).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(row).toHaveAttribute("aria-expanded", "false");
@@ -173,10 +173,10 @@ describe("What Nocturne remembers", () => {
   it("forgets a memory through the dialog and then drops it from the list", async () => {
     await openLeo();
     await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
-    await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
-    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
+    const dialog = await screen.findByRole("dialog", { name: /^Delete \d+ (memory|things)\?$/ });
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete 2 things/ }));
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     // The list behind is already right, before the dialog is closed.
     await waitFor(() => expect(screen.queryByText("Leo is allergic to nuts.")).toBeNull());
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
@@ -237,10 +237,12 @@ describe("What Nocturne remembers", () => {
 
   it("says so for something that is not there", async () => {
     renderApp({ hash: "#/memories/nobody" });
-    expect(await screen.findByRole("alert")).toHaveTextContent("Nocturne couldn’t find that.");
-    expect(
-      screen.getByRole("link", { name: "Back to what Nocturne remembers" }),
-    ).toBeInTheDocument();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nocturne couldn’t find that.");
+    expect(within(alert).getByRole("link", { name: /What Nocturne remembers/ })).toHaveAttribute(
+      "href",
+      "#/memories",
+    );
   });
 
   it("says so when the list cannot be read", async () => {

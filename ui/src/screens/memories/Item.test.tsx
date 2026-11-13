@@ -23,7 +23,10 @@ describe("an original", () => {
   it("says what it is, where it came from and how long it took to understand", async () => {
     await open("item-letter");
     expect(screen.getByRole("heading", { level: 1, name: "Letter" })).toBeVisible();
-    expect(screen.getByText("Photo · Kept Wed 11 Nov 18:12 · Dropped in")).toBeInTheDocument();
+    expect(screen.getByText("Photo · Wed 11 Nov 18:12")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("main")).getByRole("link", { name: /What Nocturne remembers/ }),
+    ).toHaveAttribute("href", "#/memories");
     expect(screen.getByText("Understood in 4 seconds")).toBeInTheDocument();
     expect(screen.getByText("What it says")).toBeInTheDocument();
     expect(screen.getByText(/A letter from Willow Primary/)).toBeInTheDocument();
@@ -173,19 +176,19 @@ describe("an original", () => {
 
   it("forgets the original and its memories, then leaves for the list", async () => {
     await open("item-gran");
-    await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete…" }));
     const dialog = await screen.findByRole("dialog");
-    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
-    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete 2 things/ }));
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     await waitFor(() => expect(window.location.hash).toBe("#/memories"));
   });
 
-  it("explains why something could not be read and offers to try again", async () => {
+  it("explains why something could not be read and offers to read it again", async () => {
     const { engine } = await open("item-counciltax");
     expect(screen.getByText(/password-locked/)).toBeInTheDocument();
     const spy = vi.spyOn(engine, "retryItem");
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await userEvent.click(screen.getByRole("button", { name: "Read it again" }));
     expect(spy).toHaveBeenCalledWith("item-counciltax");
   });
 

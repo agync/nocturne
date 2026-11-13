@@ -51,6 +51,7 @@
   "dialog.cancel": "Cancel",
   "toggle.on": "On",
   "toggle.off": "Off",
-  "forget.title": "{count, plural, one {Forget # memory?} other {Forget # memories?}}",
+  "forget.title": "{count, plural, one {Delete # memory?} other {Delete # memories?}}",
+  "forget.title.things": "{count, plural, one {Delete # thing?} other {Delete # things?}}",
   "forget.keep": "{count, plural, one {Keep it} other {Keep them}}"
 }

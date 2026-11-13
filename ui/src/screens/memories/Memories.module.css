@@ -1,13 +1,6 @@
-.frame {
-  padding: 24px 28px 0;
-}
-
 .card {
-  min-height: 36rem;
+  flex: 1;
   overflow: hidden;
-  border-radius: 10px 10px 0 0;
-  background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--rule);
 }
 
 .top {
@@ -22,7 +15,7 @@
 
 .columns {
   display: grid;
-  grid-template-columns: 15rem minmax(0, 1fr);
+  grid-template-columns: 280px minmax(0, 1fr);
   min-height: 30rem;
 }
 
@@ -70,8 +63,12 @@
   border-color: var(--ink);
 }
 
+.left [role="tablist"] {
+  flex-wrap: nowrap;
+}
+
 .left [role="tab"] {
-  padding: 0 var(--s-3);
+  padding-inline: var(--s-3);
 }
 
 .names {
@@ -159,12 +156,11 @@
 .entity {
   display: flex;
   flex-direction: column;
-  padding: var(--s-5) var(--s-5) var(--s-6);
+  padding: var(--s-6);
 }
 
 .back {
   display: none;
-  margin-bottom: var(--s-4);
 }
 
 .entityHead {
@@ -307,15 +303,6 @@
   font-size: 0.8125rem;
 }
 
-:global([data-size="narrow"]) .frame {
-  padding: 0;
-}
-
-:global([data-size="narrow"]) .card {
-  border-radius: 0;
-  box-shadow: none;
-}
-
 :global([data-size="narrow"]) .top {
   padding: var(--s-5) var(--s-4) var(--s-3);
 }
@@ -338,7 +325,7 @@
 }
 
 :global([data-size="narrow"]) .back {
-  display: inline-block;
+  display: flex;
 }
 
 :global([data-size="narrow"]) .pane,

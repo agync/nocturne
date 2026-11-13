@@ -8,8 +8,6 @@ interface StatusLabelProps {
   status: LabelStatus;
   /** For kept items: say when they will be read. */
   tonight?: boolean;
-  /** For items that could not be read: offers the retry beside the words. */
-  onRetry?: () => void;
 }
 
 const WORDS: Record<LabelStatus, Parameters<typeof t>[0]> = {
@@ -27,19 +25,8 @@ const WORDS: Record<LabelStatus, Parameters<typeof t>[0]> = {
 };
 
 /** Words, not badges. Colour never carries the meaning alone. */
-export function StatusLabel({ status, tonight = false, onRetry }: StatusLabelProps) {
+export function StatusLabel({ status, tonight = false }: StatusLabelProps) {
   const id = status === "kept" && tonight ? "item.status.keptTonight" : WORDS[status];
-  if (status === "couldntRead" && onRetry) {
-    return (
-      <span className={styles.label} data-status={status}>
-        <span>{t("item.status.couldntRead")}</span>
-        <span aria-hidden="true">·</span>
-        <button type="button" className={styles.retry} onClick={onRetry}>
-          {t("button.tryAgain")}
-        </button>
-      </span>
-    );
-  }
   return (
     <span className={styles.label} data-status={status}>
       {(status === "kept" || status === "reading") && (

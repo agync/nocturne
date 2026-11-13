@@ -98,7 +98,7 @@ export function EntityList({ kind, onKind, query, currentId, onQuery }: EntityLi
           type="search"
           className={styles.searchInput}
           aria-label={t("memories.search.label")}
-          placeholder={t("memories.search.label")}
+          placeholder={t("memories.search.placeholder")}
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {

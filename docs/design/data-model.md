@@ -108,7 +108,7 @@ easier to explain and to debug.
 
 ## Forgetting
 
-Forgetting is explicit and confirmed, and it is not undoable.
+Forgetting is explicit and confirmed, and it is not undoable. The interface calls this Delete; letting go is the reversible path.
 
 | Thing | Effect |
 |---|---|

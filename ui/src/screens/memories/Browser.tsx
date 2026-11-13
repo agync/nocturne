@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { hashHref, useQueryParam } from "../../app/query";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { t } from "../../copy/t";
 import type { EntityKind } from "../../engine/bindings";
 import { EntityList } from "./EntityList";
@@ -30,7 +31,7 @@ export function Browser({ entityId }: { entityId: string | null }) {
   );
 
   return (
-    <div className={styles.frame}>
+    <ScreenSheet flush>
       <div className={styles.card} data-entity={entityId !== null}>
         {entityId === null ? (
           <header className={styles.top}>
@@ -59,6 +60,6 @@ export function Browser({ entityId }: { entityId: string | null }) {
           </div>
         </div>
       </div>
-    </div>
+    </ScreenSheet>
   );
 }

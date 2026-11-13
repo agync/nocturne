@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
@@ -31,7 +32,7 @@ export function EntityPage({ id }: { id: string }) {
     return page(
       <div className={styles.message} role="alert">
         <h1 className="t-page-title">{t("memories.entity.missing")}</h1>
-        <a href="#/memories">{t("memories.back")}</a>
+        <BackLink to="/memories" label={t("screen.memories.title")} />
       </div>,
     );
   }
@@ -64,9 +65,9 @@ export function EntityPage({ id }: { id: string }) {
 
   return page(
     <div className={styles.entity}>
-      <a className={styles.back} href="#/memories">
-        {t("memories.back")}
-      </a>
+      <div className={styles.back}>
+        <BackLink to="/memories" label={t("screen.memories.title")} />
+      </div>
       <header className={styles.entityHead}>
         <div>
           <h1 ref={heading} tabIndex={-1} className={`t-page-title ${styles.name}`}>
@@ -78,6 +79,7 @@ export function EntityPage({ id }: { id: string }) {
         </div>
         <Button
           variant="quiet"
+          flush
           disabled={busy || toMark.length === 0}
           onClick={() => void markAllPrivate()}
         >

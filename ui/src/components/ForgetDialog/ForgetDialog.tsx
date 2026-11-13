@@ -162,16 +162,20 @@ export function ForgetDialog({
   const includes = prepared?.includeOriginals ?? wanted;
   const memoryCount = listing?.memories.length ?? memoryIds.length;
   const things = memoryCount + (includes ? removable : 0);
-  const buttonText =
-    includes && removable > 0
-      ? t("forget.button.things", { count: things })
-      : t("forget.button.memories", { count: memoryCount });
+  const withThings = includes && removable > 0;
+  const buttonText = withThings
+    ? t("forget.button.things", { count: things })
+    : t("forget.button.memories", { count: memoryCount });
   const hasOriginals = (listing?.originals.length ?? 0) > 0;
   const idle = phase === "ready";
 
   return (
     <Dialog
-      title={t("forget.title", { count: memoryCount })}
+      title={
+        withThings
+          ? t("forget.title.things", { count: things })
+          : t("forget.title", { count: memoryCount })
+      }
       initialFocus={keep}
       locked={phase === "working"}
       onClose={onClose}

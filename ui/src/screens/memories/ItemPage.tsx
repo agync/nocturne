@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { StatusLabel } from "../../components/StatusLabel/StatusLabel";
 import { useToast } from "../../components/Toast/Toast";
 import { formatDay, formatTime } from "../../copy/format";
@@ -10,7 +12,7 @@ import type { CouldntReadReason } from "../../engine/bindings";
 import { useEngine, useEngineEvent, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import styles from "./Item.module.css";
-import { kindWord, sourceWord } from "./memoryText";
+import { kindWord } from "./memoryText";
 import { Original } from "./Original";
 import { MEMORY_KEYS, useItem, useMemories } from "./queries";
 import { useForget } from "./useForget";
@@ -57,17 +59,21 @@ export function ItemPage({ id }: { id: string }) {
 
   if (item.isError || memories.isError) {
     return page(
-      <div className={styles.message} role="alert">
-        <h1 className="t-page-title">{t("item.missing")}</h1>
-        <a href="#/memories">{t("memories.back")}</a>
-      </div>,
+      <ScreenSheet>
+        <BackLink to="/memories" label={t("screen.memories.title")} />
+        <div className={styles.message} role="alert">
+          <h1 className="t-page-title">{t("item.missing")}</h1>
+        </div>
+      </ScreenSheet>,
     );
   }
   if (!item.data || !memories.data) {
     return page(
-      <p className={styles.message} role="status">
-        {t("item.loading")}
-      </p>,
+      <ScreenSheet>
+        <p className={styles.message} role="status">
+          {t("item.loading")}
+        </p>
+      </ScreenSheet>,
     );
   }
 
@@ -97,21 +103,21 @@ export function ItemPage({ id }: { id: string }) {
     it.understoodInMs === null ? null : Math.max(1, Math.round(it.understoodInMs / 1000));
 
   return page(
-    <div className={styles.frame}>
+    <ScreenSheet flush>
       <div className={styles.card}>
         <div className={styles.original}>
           <Original item={it} highlights={highlights} />
         </div>
         <div className={styles.details}>
+          <BackLink to="/memories" label={t("screen.memories.title")} />
           <p className={`t-section ${styles.meta}`}>
             {t("item.meta", {
               kind: kindWord(it.kind),
               day: formatDay(it.keptAt),
               time: formatTime(it.keptAt),
-              source: sourceWord(it.source),
             })}
           </p>
-          <h1 ref={heading} tabIndex={-1} className={`t-page-line ${styles.title}`}>
+          <h1 ref={heading} tabIndex={-1} className={`t-item-title ${styles.title}`}>
             {it.title}
           </h1>
           <div className={styles.status}>
@@ -122,18 +128,7 @@ export function ItemPage({ id }: { id: string }) {
                 {t("item.understood", { count: seconds })}
               </span>
             ) : it.status === "unconfirmed" ? null : (
-              <StatusLabel
-                status={it.status}
-                tonight={it.status === "kept"}
-                onRetry={
-                  it.status === "couldntRead"
-                    ? () =>
-                        void run(async () => {
-                          await engine.retryItem(id);
-                        }, t("item.readAgain.started"))
-                    : undefined
-                }
-              />
+              <StatusLabel status={it.status} tonight={it.status === "kept"} />
             )}
           </div>
           {it.status === "couldntRead" && it.reason ? (
@@ -201,7 +196,12 @@ export function ItemPage({ id }: { id: string }) {
             <Button
               variant="quiet"
               disabled={busy || it.status === "reading"}
-              onClick={() => void run(() => engine.readNow(id), t("item.readAgain.started"))}
+              onClick={() =>
+                void run(
+                  () => (it.status === "couldntRead" ? engine.retryItem(id) : engine.readNow(id)),
+                  t("item.readAgain.started"),
+                )
+              }
             >
               {t("item.action.readAgain")}
             </Button>
@@ -223,6 +223,6 @@ export function ItemPage({ id }: { id: string }) {
           </div>
         </div>
       </div>
-    </div>,
+    </ScreenSheet>,
   );
 }

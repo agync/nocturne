@@ -152,11 +152,11 @@ test.describe("using it", () => {
   test("forgetting a memory leaves focus on the person's name", async ({ page }) => {
     await ready(page, "#/memories/ent-leo", "Leo");
     await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
-    await page.getByRole("button", { name: "Forget…" }).click();
+    await page.getByRole("button", { name: "Delete…" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
-    await dialog.getByRole("button", { name: /^Forget 2 things/ }).click();
-    await expect(dialog.getByText("Gone.")).toBeVisible();
+    await dialog.getByRole("button", { name: /^Delete 2 things/ }).click();
+    await expect(dialog.getByText("Deleted.", { exact: true })).toBeVisible();
     await dialog.getByRole("button", { name: "OK" }).click();
     await expect(page.getByText("Leo is allergic to nuts.")).toHaveCount(0);
     await expect(page.getByRole("heading", { level: 1, name: "Leo" })).toBeFocused();

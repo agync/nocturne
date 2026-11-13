@@ -11,9 +11,9 @@ const openDialog = async (page: Page) => {
   await page.getByRole("heading", { level: 1, name: "Fading & let go" }).waitFor();
   await page.evaluate(() => document.fonts.ready);
   await page.getByRole("checkbox", { name: GYM }).check({ force: true });
-  await page.getByRole("button", { name: "Forget 1 completely…" }).click();
+  await page.getByRole("button", { name: /^(Forget 1 completely|Delete 1)…/ }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByRole("button", { name: /^Forget 2 things/ }).waitFor();
+  await dialog.getByRole("button", { name: /^Delete 2 things/ }).waitFor();
   return dialog;
 };
 
@@ -42,14 +42,16 @@ test.describe("forgetting completely", () => {
     }
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Forget 1 completely…" })).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: /^(Forget 1 completely|Delete 1)…/ }),
+    ).toBeFocused();
   });
 
   test("the forget button works with the keyboard and the row leaves", async ({ page }) => {
     const dialog = await openDialog(page);
-    await dialog.getByRole("button", { name: /^Forget 2 things/ }).focus();
+    await dialog.getByRole("button", { name: /^Delete 2 things/ }).focus();
     await page.keyboard.press("Enter");
-    await expect(dialog.getByText("Gone.")).toBeVisible();
+    await expect(dialog.getByText("Deleted.", { exact: true })).toBeVisible();
     await expect(dialog.getByRole("status")).toContainText("They won’t appear");
     await page.screenshot({ path: `${SHOTS}/forget-done-light.png` });
     await dialog.getByRole("button", { name: "OK" }).click();
@@ -62,7 +64,7 @@ test.describe("forgetting completely", () => {
     await dialog
       .getByRole("checkbox", { name: "Also delete the original" })
       .uncheck({ force: true });
-    await expect(dialog.getByRole("button", { name: "Forget 1 memory" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Delete 1 memory" })).toBeVisible();
     await expect(dialog.getByText(/so does its transcript/)).toBeVisible();
   });
 

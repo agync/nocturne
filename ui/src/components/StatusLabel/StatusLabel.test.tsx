@@ -1,6 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { ItemStatus } from "../../engine/bindings";
 import { StatusLabel } from "./StatusLabel";
 
@@ -42,11 +41,9 @@ describe("StatusLabel", () => {
     expect(screen.getByText("Kept · reads tonight")).toBeInTheDocument();
   });
 
-  it("offers a retry beside Couldn’t read", async () => {
-    const onRetry = vi.fn();
-    render(<StatusLabel status="couldntRead" onRetry={onRetry} />);
-    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(onRetry).toHaveBeenCalledOnce();
+  it("does not offer a retry beside Couldn’t read", () => {
+    render(<StatusLabel status="couldntRead" />);
     expect(screen.getByText("Couldn’t read")).toBeInTheDocument();
+    expect(screen.queryByRole("button")).toBeNull();
   });
 });

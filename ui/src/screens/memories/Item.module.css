@@ -1,15 +1,8 @@
-.frame {
-  padding: 24px 28px 0;
-}
-
 .card {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  min-height: 34rem;
+  flex: 1;
   overflow: hidden;
-  border-radius: 10px 10px 0 0;
-  background: var(--sheet);
-  box-shadow: 0 0 0 1px var(--rule);
 }
 
 .original {
@@ -33,8 +26,6 @@
 }
 
 .title {
-  font-size: 1.75rem;
-  font-weight: 400;
   outline-offset: 4px;
 }
 
@@ -132,7 +123,6 @@
   flex-direction: column;
   align-items: flex-start;
   gap: var(--s-3);
-  padding: var(--s-6) 28px;
   color: var(--ink2);
 }
 
@@ -244,21 +234,15 @@
   font-size: 0.875rem;
 }
 
-:global([data-size="narrow"]) .frame {
-  padding: 0;
-}
-
 :global([data-size="narrow"]) .card {
   grid-template-columns: minmax(0, 1fr);
-  border-radius: 0;
-  box-shadow: none;
+}
+
+:global([data-size="narrow"]) .details {
+  order: -1;
 }
 
 :global([data-size="narrow"]) .original,
 :global([data-size="narrow"]) .details {
   padding: var(--s-4);
-}
-
-:global([data-size="narrow"]) .message {
-  padding: var(--s-5) var(--s-4);
 }
