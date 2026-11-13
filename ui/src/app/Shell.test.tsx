@@ -305,9 +305,7 @@ describe("a screen asked for by the quick capture window", () => {
     renderApp({ platform });
     await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await act(async () => platform.openInMain("/items/item-letter"));
-    expect(
-      await screen.findByRole("heading", { level: 1, name: "Something you kept" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Letter" })).toBeInTheDocument();
     expect(window.location.hash).toBe("#/items/item-letter");
   });
 });
