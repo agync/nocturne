@@ -1,9 +1,9 @@
 ---
 type: Guide
 title: Building and packaging
-description: The development loop, the Linux packages, the checks that prove them, and the Windows build.
+description: The development loop, the Linux packages, the checks that prove them, and the Windows and macOS builds.
 status: draft
-tags: [contribution, build, packaging, windows]
+tags: [contribution, build, packaging, windows, macos]
 ---
 
 # Building and packaging
@@ -144,3 +144,68 @@ Behaviour to know on Windows:
 - The app does not listen for Windows resume events in v1. After sleep, the scheduler notices the
   wall-clock jump within one 30 second tick and carries on.
 - The default quick keep shortcut is Ctrl+Shift+Space.
+
+## macOS
+
+The Mac package (an app and a disk image, Apple Silicon only) is built on a Mac and v1 does not
+publish it. `src-tauri/bundle/macos.json` is the configuration. The Mac needs no Node: the app is
+assembled by `scripts/macos-app.sh` with the tools macOS ships (PlistBuddy, plutil, codesign,
+hdiutil), not by the Tauri command line tool.
+
+Prerequisites: an Apple Silicon Mac on macOS 26 or newer (the pinned engine will not run on
+older), the Command Line Tools, and Rust stable. `python3` comes with the Command Line Tools.
+
+The interface and the notices are built where Node is. On any machine with Node:
+
+```bash
+scripts/package.sh --config macos --inputs-only    # ui/dist and target/package/notices
+```
+
+Copy `ui/dist` and `target/package/notices` to the same places in the Mac's checkout (`rsync`
+does it), then on the Mac:
+
+```bash
+scripts/package.sh --config macos                  # target/package/Nocturne_<version>_aarch64.dmg
+```
+
+With Node on the Mac the script builds both inputs itself. Either way it fetches the pinned engine
+for `macos-aarch64`, checks its sha256 against `lemonade.lock`, writes the manifest, builds the
+app binary (`cargo build --release -p nocturne-app --features custom-protocol`, with the builder's
+folders remapped as on Linux) and calls `scripts/macos-app.sh`, which writes `Nocturne.app` and the
+disk image under `target/package/macos/`. The property list comes from `src-tauri/bundle/macos.json`
+(minimum system, which follows the engine's own minimum), `tauri.conf.json` (identifier) and
+`src-tauri/Info.plist` (the microphone sentence: "Nocturne listens only while you hold to talk.").
+`src-tauri/icons/icon.icns` is made from `icon.png` by `scripts/macos-icon.sh`. The engine files
+are copied byte for byte and signing leaves them alone. Someone with Node on a Mac can use the
+Tauri tool instead (`tauri build --config bundle/macos.json`) with the same configuration.
+
+Prove it with `scripts/check-package.sh target/package/macos/Nocturne.app` (or the `.dmg`, which it
+mounts read only): the engine matches the manifest, the property list is right, no builder path
+is in any file and the signature verifies. `scripts/smoke-launch-macos.sh` opens the app on the
+logged-in user's screen with a scratch data folder and judges the log, a second launch, a quit
+by `SIGTERM`, leftover processes and that `~/Library/LaunchAgents` was not touched. It cannot
+run from a session with no one logged in at the Mac.
+
+### Signing and notarisation
+
+The app is signed ad hoc (`codesign --sign -`). That runs on the Mac that built it and nowhere
+else: Gatekeeper refuses an ad hoc signed download. Handing it to anyone needs, as a decision for
+the owner:
+
+- an Apple Developer ID Application certificate (the paid Apple Developer Program);
+- signing the app and the engine's executables inside `Contents/Resources/lemonade/` with that
+  identity and the hardened runtime (the microphone entitlement is in
+  `src-tauri/macos/Entitlements.plist`), which `scripts/macos-app.sh --sign` does not do yet;
+- notarisation with `xcrun notarytool` and stapling the ticket to the disk image.
+
+### Differences to know on a Mac
+
+- Tests need more open files than the default of 256: run `ulimit -n 4096` first, or the parallel
+  integration tests fail with "Too many open files".
+- The quick keep shortcut default `CommandOrControl+Shift+Space` is Command, Shift and Space.
+- Power comes from `pmset`, idle time from `ioreg` and sleep is held with a `caffeinate` child
+  process. Resume has no listener; the scheduler's wall-clock check notices a wake, as on Windows.
+- "Start with this computer" writes `~/Library/LaunchAgents/app.nocturne.desktop.plist` itself, with
+  the program's canonical path escaped; turning it off or deleting everything removes it.
+- The web view keeps its own data under `~/Library/WebKit` and `~/Library/Caches` whatever
+  `NOCTURNE_DATA_DIR` says.

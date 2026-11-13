@@ -24,5 +24,5 @@ Nocturne is deliberately small. These are choices, not missing pieces you need t
 - It has no "Keep anyway". If you have already kept the same thing, Nocturne tells you when and
   keeps nothing new.
 - It does not open password-locked PDFs. Save an unlocked copy and drop that in instead.
-- It has no Windows installer yet, and no macOS version. Linux comes as an AppImage, an rpm and a
+- It has no Windows installer yet, and no Mac package yet. Linux comes as an AppImage, an rpm and a
   deb.

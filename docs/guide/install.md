@@ -10,7 +10,7 @@ tags: [guide, install, packages, setup]
 
 ## What your computer needs
 
-Nocturne works on a Linux desktop, on a 64-bit Intel or AMD computer. The first time it runs, it checks the memory and free
+Nocturne works on a Linux desktop, on a 64-bit Intel or AMD computer. A Mac package is not published yet. The first time it runs, it checks the memory and free
 space and offers the largest setup the computer can carry comfortably. A smaller setup only means
 slower answers and a slower overnight tidy; everything still works.
 
