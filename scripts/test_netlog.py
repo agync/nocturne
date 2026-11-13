@@ -189,6 +189,24 @@ class RemoteMode(unittest.TestCase):
         self.assertEqual(self.judge(udp_bind(200, "0.0.0.0")), [])
         self.assertEqual(self.judge(udp_bind(201, "0.0.0.0", fd=9)), [])
 
+    def test_tailnet_helper_listen_fails_in_every_mode(self):
+        tailnet = "/data/remote/helpers/tailnet/1.104.6/nocturne-tailnet"
+        lines = [execve(100, APP), clone(100, 200), execve(200, tailnet)]
+        for mode in ("remote", "off"):
+            failures = netlog.analyse(lines + ["200 listen(8, 128) = 0\n"], "/tmp/scratch", mode)["failures"]
+            failures = [f for f in failures if "executed the helper" not in f]
+            self.assertEqual(len(failures), 1, failures)
+            self.assertIn("pid 200 (helper)", failures[0])
+            self.assertIn("must never listen", failures[0])
+
+    def test_cloudflared_may_listen_for_its_metrics(self):
+        self.assertEqual(self.judge(["200 listen(8, 128) = 0\n"]), [])
+
+    def test_helper_udp_bind_on_every_interface_passes_without_a_listen(self):
+        result = netlog.analyse(processes() + udp_bind(200, "0.0.0.0"), "/tmp/scratch", "remote")
+        self.assertEqual(result["failures"], [])
+        self.assertIn("0.0.0.0:0 (UDP bind)", result["helper_traffic"])
+
     def test_helper_tcp_bind_on_every_interface_still_fails(self):
         lines = [
             "200 socket(AF_INET, SOCK_STREAM|SOCK_CLOEXEC, IPPROTO_IP) = 8\n",

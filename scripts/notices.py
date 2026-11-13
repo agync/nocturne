@@ -4,13 +4,13 @@
 Sources: the Rust crates the app links (cargo metadata, normal dependencies only, for the
 packaged platform), the production npm packages of the interface (which include the bundled
 fonts), the private Lemonade bundle, and the two connection helpers Away from home downloads on
-consent (cloudflared and tailscale, with the go-licenses report of the Go modules tailscale is
+consent (cloudflared and the tailnet helper, with the go-licenses report of the Go modules it is
 built from). Every licence must be on the allow list; anything else
 or unknown fails, naming the package.
 
 Usage:
   scripts/notices.py [--check] [--out DIR] [--lemonade DIR] [--target TRIPLE]
-                     [--tailscale-licenses FILE]
+                     [--tailnet-licenses FILE]
   scripts/notices.py --prune-libs APPDIR_LIB_DIR
   scripts/notices.py --bundled-libs APPDIR_LIB_DIR [--out DIR] [--sources FILE]
 
@@ -82,7 +82,7 @@ HELPERS = [
         "use": "the Simple connection for Away from home",
     },
     {
-        "name": "tailscale (tailscaled and the tailscale command)",
+        "name": "tailscale.com (the Go module built into nocturne-tailnet)",
         "license": "BSD-3-Clause",
         "holder": "Tailscale Inc. and AUTHORS",
         "source": "https://github.com/tailscale/tailscale",
@@ -389,13 +389,13 @@ class TextPool:
         return lines
 
 
-TAILSCALE_REPORT_MISSING = (
-    "The Go modules tailscale is built from, with their licences, are listed in the go-licenses\n"
-    "report published with the release (tailscale-licenses.txt)."
+TAILNET_REPORT_MISSING = (
+    "The Go modules nocturne-tailnet is built from, with their licences, are listed in the go-licenses\n"
+    "report published with the release (tailnet-licenses.txt)."
 )
 
 
-def build_notices(packages, lemonade_text, lemonade_version="", tailscale_report=""):
+def build_notices(packages, lemonade_text, lemonade_version="", tailnet_report=""):
     """The notices document. Fonts and Lemonade get their own named sections.
 
     A licence text that several packages ship byte for byte (Apache-2.0 above all) is printed
@@ -437,8 +437,8 @@ def build_notices(packages, lemonade_text, lemonade_version="", tailscale_report
     for work in HELPERS:
         lines += [f"{work['name']}  ({work['license']}), for {work['use']}", fallback_text(work), ""]
     lines += [
-        "Go modules built into tailscale (go-licenses report: module, licence URL, licence):",
-        tailscale_report.strip() or TAILSCALE_REPORT_MISSING,
+        "Go modules built into nocturne-tailnet (go-licenses report: module, licence URL, licence):",
+        tailnet_report.strip() or TAILNET_REPORT_MISSING,
         "",
     ]
 
@@ -522,7 +522,7 @@ def main(argv=None):
     parser.add_argument("--out", default=DEFAULT_OUT)
     parser.add_argument("--lemonade", default=None)
     parser.add_argument("--target", default=DEFAULT_TARGET)
-    parser.add_argument("--tailscale-licenses", default=None, help="the go-licenses report of tailscale's Go modules")
+    parser.add_argument("--tailnet-licenses", default=None, help="the go-licenses report of the Go modules built into nocturne-tailnet")
     parser.add_argument("--bundled-libs", default=None)
     parser.add_argument("--prune-libs", default=None, help="remove the unused modules from an AppDir lib folder")
     parser.add_argument("--sources", default=None, help="write the source packages of bundled libraries here")
@@ -558,7 +558,7 @@ def main(argv=None):
         if args.check:
             print(f"notices check ok: {len(packages)} packages, all licences allowed")
             return 0
-        report = args.tailscale_licenses or os.path.join(args.out, "tailscale-licenses.txt")
+        report = args.tailnet_licenses or os.path.join(args.out, "tailnet-licenses.txt")
         report_text = read_text(report) if os.path.isfile(report) else ""
         text = build_notices(packages, read_text(lemon_license), lemonade_version(), report_text)
         os.makedirs(args.out, exist_ok=True)

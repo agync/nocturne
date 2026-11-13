@@ -9,9 +9,9 @@
 # entry, icons, forbidden paths, host paths in text files and the builder's home folder in any
 # file (binaries too), the package version and, for deb and rpm, the declared libraries. For an
 # AppImage it also checks the bundled libraries against the copyleft policy and the SOURCES
-# manifest. For Away from home it checks that no connection helper (cloudflared, tailscaled,
-# tailscale) and no stand-in helper is inside, that the binary embeds the repository's
-# helpers.lock, and that every pinned version has its captured help text; with NOCTURNE_RELEASE=1
+# manifest. For Away from home it checks that no connection helper (cloudflared, nocturne-tailnet,
+# or the retired tailscaled and tailscale) and no stand-in helper is inside, that the binary embeds
+# the repository's helpers.lock, and that every pinned version has its captured help text; with NOCTURNE_RELEASE=1
 # it also refuses a placeholder pin, a pinned release older than 183 days and help text that was not
 # captured from the pinned binary. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
 # .dmg, mounted read-only) is checked for its Info.plist (identifier, executable, icon, version,
@@ -125,7 +125,7 @@ import sys
 import tomllib
 
 root, release = sys.argv[1], sys.argv[2] == "1"
-FORBIDDEN = {"cloudflared", "cloudflared.exe", "tailscaled", "tailscaled.exe", "tailscale", "tailscale.exe"}
+FORBIDDEN = {"cloudflared", "cloudflared.exe", "tailscaled", "tailscaled.exe", "tailscale", "tailscale.exe", "nocturne-tailnet", "nocturne-tailnet.exe"}
 FAKE_MARKER = b"nocturne-fake-helpers-marker"
 SKIP_DIRS = {"lemonade", "engine", "models"}
 failed = False

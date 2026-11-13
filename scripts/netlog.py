@@ -24,8 +24,9 @@ traces carry that through threads and forks. A helper is any executable under a 
 (`--helpers-dir`, default: any path containing `/remote/helpers/`); `lemond` is the private engine
 (`--lemond-dir`, or any program named lemond); everything else, or only `--app-exe` when given, is
 the app. In `remote` mode (Away from home on, with stand-in helpers) a helper may reach outside
-loopback and may bind a UDP socket on every interface, the way tailscaled does; the app and
-lemond may not, ever.
+loopback and may bind a UDP socket on every interface, the way the tailnet helper does; the app
+and lemond may not, ever. The tailnet helper never listens, in any mode: it serves only on the
+tailnet, inside its own process. cloudflared answers its metrics on a loopback port.
 """
 
 import argparse
@@ -183,6 +184,10 @@ def is_helper_path(path, helpers):
     return DEFAULT_HELPER_MARK in path
 
 
+def is_tailnet_helper(path):
+    return path.rsplit("/", 1)[-1].removesuffix(".exe") == "nocturne-tailnet"
+
+
 def is_wildcard(address):
     try:
         return ipaddress.ip_address(address).is_unspecified
@@ -208,7 +213,9 @@ def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None
                 failures.append(f"pid {pid}: executed the helper {m.group(1)} while Away from home is off")
             continue
         if started and started.group(1) == "listen":
-            if mode == "off" and who in ("app", "other"):
+            if who == "helper" and is_tailnet_helper(procs.exe.get(procs.group(pid), "")):
+                failures.append(f"pid {pid} (helper): listen, but the tailnet helper must never listen")
+            elif mode == "off" and who in ("app", "other"):
                 failures.append(f"pid {pid} ({who}): listen while Away from home is off")
             continue
         if not started or started.group(1) not in CALLS:

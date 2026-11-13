@@ -12,7 +12,7 @@
 #             built with the helpers crate's `fake` feature (never packaged), NET_CHECK_DIR as for
 #             prepared but with Away from home turned on in its store, and the stand-in helpers
 #             built beside it (NET_CHECK_FAKES, default target/debug: fake-cloudflared,
-#             fake-tailscaled, fake-tailscale; NET_CHECK_CONNECTION=simple|private picks which one
+#             fake-tailnet; NET_CHECK_CONNECTION=simple|private picks which one
 #             the app is expected to start, default simple). The script installs the stand-ins as
 #             the pinned helpers under the scratch data folder with a lock of their own
 #             (NOCTURNE_FAKE_HELPERS_LOCK) and asks them to try 198.51.100.1:7844 and to bind UDP on
@@ -82,19 +82,24 @@ if [[ "${1:-}" == --inner ]]; then
         fakes=${NET_CHECK_FAKES:-$repo/target/debug}
         connection=${NET_CHECK_CONNECTION:-simple}
         case "$connection" in
-            simple) kinds="cloudflared:fake-cloudflared" ;;
-            private) kinds="tailscaled:fake-tailscaled tailscaled:fake-tailscale" ;;
+            simple) kinds="cloudflared:fake-cloudflared:cloudflared" ;;
+            private) kinds="tailnet:fake-tailnet:nocturne-tailnet" ;;
             *) printf 'NET_CHECK_CONNECTION is simple or private\n' >&2; exit 2 ;;
         esac
         expected=
         for pair in $kinds; do
-            kind=${pair%%:*} fake=${pair##*:}
+            IFS=: read -r kind fake name <<< "$pair"
             [[ -x "$fakes/$fake" ]] || { printf 'missing %s/%s (cargo build -p nocturne-helpers --features fake)\n' "$fakes" "$fake" >&2; exit 2; }
             dest=$helpers_dir/$kind/fake
             mkdir -p "$dest" && chmod 700 "$helpers_dir" "$helpers_dir/$kind" "$dest"
-            name=${fake#fake-}
             cp "$fakes/$fake" "$dest/$name"
-            printf '{"edge_attempt": true, "udp_any": true}\n' > "$dest/fake-control.json"
+            # The tailnet helper serves only inside its own process, so its stand-in forwards
+            # nothing here: a listen by it fails the check.
+            if [[ "$kind" == tailnet ]]; then
+                printf '{"edge_attempt": true, "udp_any": true, "serve": false}\n' > "$dest/fake-control.json"
+            else
+                printf '{"edge_attempt": true, "udp_any": true}\n' > "$dest/fake-control.json"
+            fi
             expected+=" $dest"
         done
         python3 -I - "$scratch/fake.lock" "$helpers_dir" << 'PY'
@@ -103,20 +108,15 @@ out, helpers = sys.argv[1], sys.argv[2]
 def sha(path):
     return hashlib.sha256(open(path, "rb").read()).hexdigest()
 text = ""
-for kind, extra in (("cloudflared", None), ("tailscaled", "tailscale")):
-    main = f"{helpers}/{kind}/fake/{kind}"
+for kind, name in (("cloudflared", "cloudflared"), ("tailnet", "nocturne-tailnet")):
+    main = f"{helpers}/{kind}/fake/{name}"
     try:
         digest = sha(main)
     except OSError:
         continue
     text += f'[[helpers]]\nkind = "{kind}"\nversion = "fake"\nlicence = "Apache-2.0"\npinned_at = "2000-01-01"\nbase_url = "https://example.invalid"\n'
     for platform in ("linux-x86_64", "linux-aarch64", "macos-aarch64", "windows-x86_64"):
-        text += f'\n[helpers.assets.{platform}]\nfile = "fake"\nsha256 = "{digest}"\n'
-        if extra:
-            try:
-                text += f'extras = [{{ member = "{extra}", sha256 = "{sha(helpers + "/tailscaled/fake/" + extra)}" }}]\nmember = "{kind}"\nmember_sha256 = "{digest}"\n'
-            except OSError:
-                pass
+        text += f'\n[helpers.assets.{platform}]\nfile = "{name if kind == "tailnet" else "fake"}"\nsha256 = "{digest}"\n'
     text += "\n"
 open(out, "w").write(text)
 PY

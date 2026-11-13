@@ -156,7 +156,7 @@ class Output(unittest.TestCase):
         self.assertIn("cloudflared", out)
         self.assertIn("Cloudflare, Inc.", out)
         self.assertIn("Apache License, Version 2.0", out)
-        self.assertIn("tailscale (tailscaled and the tailscale command)", out)
+        self.assertIn("tailscale.com (the Go module built into nocturne-tailnet)", out)
         self.assertIn("Tailscale Inc. and AUTHORS", out)
         self.assertIn("Redistribution and use in source and binary forms", out)
         self.assertIn("example.com/mod,https://example.com/LICENSE,MIT", out)
@@ -165,7 +165,8 @@ class Output(unittest.TestCase):
 
     def test_without_a_report_the_notice_says_where_it_is(self):
         out = notices.build_notices([crate("bare", "MIT")], "x")
-        self.assertIn("tailscale-licenses.txt", out)
+        self.assertIn("tailnet-licenses.txt", out)
+        self.assertIn("Go modules built into nocturne-tailnet", out)
 
     def test_identical_texts_are_printed_once(self):
         tmp = tempfile.mkdtemp()
