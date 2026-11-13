@@ -102,7 +102,7 @@ function Audio({ item, highlights }: OriginalProps) {
   const [failed, setFailed] = useState(false);
   const tried = useRef(false);
   const src = item.originalPath ? platform.originalSrc(item.originalPath) : null;
-  const peaks = usePeaks(src);
+  const peaks = usePeaks(src, 72, item.durationMs);
   const bars = peaks ?? Array.from({ length: 72 }, () => 0.35);
   const times = highlights.filter((h) => h.span.type === "time");
 

@@ -1,10 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
 import { splitQuotes } from "./Original";
-import { computePeaks } from "./peaks";
+import { canDecode, computePeaks, MAX_DECODE_MS } from "./peaks";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
@@ -94,6 +94,28 @@ describe("an original", () => {
     expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 
+  it("decodes a short recording for its waveform but never a very long one", async () => {
+    const fetchSpy = vi.fn().mockRejectedValue(new Error("blocked"));
+    vi.stubGlobal("fetch", fetchSpy);
+    vi.stubGlobal("OfflineAudioContext", class {});
+    const platform = fakePlatform();
+    vi.spyOn(platform, "originalSrc").mockReturnValue("blob:recording");
+    await open("item-lake", createMockEngine(), platform);
+    await waitFor(() => expect(fetchSpy).toHaveBeenCalledWith("blob:recording"));
+    cleanup();
+    fetchSpy.mockClear();
+    const engine = createMockEngine();
+    const real = engine.getItem.bind(engine);
+    vi.spyOn(engine, "getItem").mockImplementation(async (id) => ({
+      ...(await real(id)),
+      durationMs: 4 * 3600_000,
+    }));
+    await open("item-lake", engine, platform);
+    await screen.findByRole("button", { name: "Play" });
+    expect(fetchSpy).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("says so when a recording cannot be played here", async () => {
     vi.spyOn(HTMLMediaElement.prototype, "play").mockRejectedValue(new Error("no"));
     await open("item-lake");
@@ -168,6 +190,13 @@ describe("helpers", () => {
       { text: ", please.", mark: false },
     ]);
     expect(splitQuotes("Nothing here", ["zebra"])).toEqual([{ text: "Nothing here", mark: false }]);
+  });
+
+  it("does not try to decode a very long recording for its waveform", () => {
+    expect(canDecode(42_000)).toBe(true);
+    expect(canDecode(null)).toBe(true);
+    expect(canDecode(MAX_DECODE_MS)).toBe(true);
+    expect(canDecode(MAX_DECODE_MS + 1)).toBe(false);
   });
 
   it("finds the loudest part of each slice and scales to one", () => {

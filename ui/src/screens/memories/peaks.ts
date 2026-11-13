@@ -15,23 +15,39 @@ export function computePeaks(samples: Float32Array, count: number): number[] {
   return loudest > 0 ? peaks.map((p) => p / loudest) : peaks.map(() => 0);
 }
 
+/** Longer recordings are not decoded: even at a low sample rate they cost too much memory. */
+export const MAX_DECODE_MS = 30 * 60 * 1000;
+
+/** Enough for a waveform of speech, and 3 percent of the memory of a full-rate decode. */
+const SAMPLE_RATE = 8000;
+
+/** True when a recording of this length is worth decoding for its waveform. */
+export function canDecode(durationMs: number | null): boolean {
+  return durationMs === null || durationMs <= MAX_DECODE_MS;
+}
+
 /**
  * Decodes the original in the browser to draw its waveform. Where that is not possible (no audio
  * support, a picture standing in for a file, a blocked request) it gives null and the screen
  * draws even bars: the bars then say nothing about the sound, which the screen does not claim.
  */
-export function usePeaks(src: string | null, count = 72): number[] | null {
+export function usePeaks(
+  src: string | null,
+  count = 72,
+  durationMs: number | null = null,
+): number[] | null {
   const [peaks, setPeaks] = useState<number[] | null>(null);
   useEffect(() => {
     setPeaks(null);
-    if (!src || src.startsWith("data:") || typeof AudioContext === "undefined") return;
+    if (!src || src.startsWith("data:") || !canDecode(durationMs)) return;
+    if (typeof OfflineAudioContext === "undefined") return;
     let live = true;
     (async () => {
       try {
         const bytes = await (await fetch(src)).arrayBuffer();
-        const context = new AudioContext();
+        // An offline context at a low rate: the decoder resamples, so memory stays small.
+        const context = new OfflineAudioContext(1, 1, SAMPLE_RATE);
         const audio = await context.decodeAudioData(bytes);
-        void context.close();
         if (live) setPeaks(computePeaks(audio.getChannelData(0), count));
       } catch {
         // Even bars it is.
@@ -40,6 +56,6 @@ export function usePeaks(src: string | null, count = 72): number[] | null {
     return () => {
       live = false;
     };
-  }, [src, count]);
+  }, [src, count, durationMs]);
   return peaks;
 }
