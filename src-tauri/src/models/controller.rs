@@ -278,6 +278,15 @@ impl ModelsHub {
         let judged = fit::judge(job, m, &host.catalogue, &host.info, &s, &host.budget);
         let download = if m.present() { 0 } else { fit::gb(m.size) };
         let chosen = fit::with_choice(&s, role, model);
+        let now = fit::busiest(&s, &host.catalogue, &host.budget);
+        let mut after = fit::busiest(&chosen, &host.catalogue, &host.budget);
+        if job == Job::Finding {
+            // While memories are read again, asks still find them with the old model and the
+            // re-read uses the new one. The engine keeps one finding model loaded at a time
+            // (`max_loaded_models` 1 evicts the other before a load), so the larger of the two
+            // sets is the most this needs.
+            after = after.max(now);
+        }
         let (reindex_items, reindex_eta_seconds) = if job == Job::Finding {
             let total = app
                 .state::<AppState>()
@@ -297,8 +306,8 @@ impl ModelsHub {
             download_bytes: download as f64,
             free_now: host.budget.disk_free as f64,
             free_after: host.budget.disk_free.saturating_sub(download) as f64,
-            memory_now: fit::busiest(&s, &host.catalogue, &host.budget) as f64,
-            memory_after: fit::busiest(&chosen, &host.catalogue, &host.budget) as f64,
+            memory_now: now as f64,
+            memory_after: after as f64,
             fit: judged.fit,
             smaller: judged.smaller,
             tested: judged.tested,
