@@ -13,15 +13,20 @@ afterEach(() => {
 });
 
 /** An engine that starts in one of the states of getting ready. */
-const at = (name: string) => {
+const at = (name: string, options: Parameters<typeof createMockEngine>[0] = {}) => {
   window.history.replaceState({}, "", `/?mockSetup=${name}`);
-  const engine = createMockEngine();
+  const engine = createMockEngine(options);
   window.history.replaceState({}, "", "/");
   return engine;
 };
 
-const open = async (name: string, hash = "#/setup", platform = fakePlatform()) => {
-  const engine = at(name);
+const open = async (
+  name: string,
+  hash = "#/setup",
+  platform = fakePlatform(),
+  options: Parameters<typeof createMockEngine>[0] = {},
+) => {
+  const engine = at(name, options);
   renderApp({ hash, engine, platform });
   await screen.findByRole("main", { name: "Setting up Nocturne" });
   return { engine, platform };
@@ -284,8 +289,14 @@ describe("good defaults", () => {
   });
 
   it("shows the privacy line, measured or not", async () => {
-    await open("downloading");
+    await open("downloading", "#/setup", fakePlatform(), { sentMeasured: true });
     expect(await screen.findByText("Nothing")).toBeInTheDocument();
+  });
+
+  it("says it is not measured rather than claiming nothing was sent", async () => {
+    await open("downloading");
+    expect(await screen.findByText("Not measured on this computer")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing")).toBeNull();
   });
 });
 

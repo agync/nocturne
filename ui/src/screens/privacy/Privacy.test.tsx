@@ -12,7 +12,10 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const open = async (engine = createMockEngine(), platform = fakePlatform()) => {
+const open = async (
+  engine = createMockEngine({ sentMeasured: true }),
+  platform = fakePlatform(),
+) => {
   const view = renderApp({ hash: "#/privacy", engine, platform });
   await screen.findByRole("heading", { level: 1, name: "Privacy" });
   await screen.findByText("Sent to the internet since setup");
@@ -43,7 +46,7 @@ describe("Privacy", () => {
   });
 
   it("shows an amount, not Nothing., when something was sent", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { sentToInternetBytes: 84e6 });
     await open(engine);
     expect(screen.getByText("84 MB.")).toBeInTheDocument();
@@ -51,7 +54,7 @@ describe("Privacy", () => {
   });
 
   it("says plainly when sending cannot be measured, and leans on the ledger", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { sentMeasured: false });
     await open(engine);
     expect(screen.getByText("Not measured.")).toBeInTheDocument();
@@ -89,7 +92,7 @@ describe("Privacy", () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFolder").mockResolvedValue("/chosen");
     const open_ = vi.spyOn(platform, "openPath");
-    const { engine } = await open(createMockEngine(), platform);
+    const { engine } = await open(createMockEngine({ sentMeasured: true }), platform);
     const spy = vi.spyOn(engine, "exportTo");
     await userEvent.click(screen.getByRole("button", { name: "Export to a folder…" }));
     expect(spy).toHaveBeenCalledWith("/chosen");
@@ -109,7 +112,7 @@ describe("Privacy", () => {
   it("shows words and a bar while it runs", async () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFolder").mockResolvedValue("/chosen");
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     let finish: (r: Awaited<ReturnType<typeof engine.exportTo>>) => void = () => undefined;
     vi.spyOn(engine, "exportTo").mockImplementation(
       () =>
@@ -133,13 +136,13 @@ describe("Privacy", () => {
   it("says when the folder picker fails, without an unhandled rejection", async () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFolder").mockRejectedValue(new Error("no dialog"));
-    await open(createMockEngine(), platform);
+    await open(createMockEngine({ sentMeasured: true }), platform);
     await userEvent.click(screen.getByRole("button", { name: "Export to a folder…" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The export didn’t finish.");
   });
 
   it("shows plain Watching live when it does not know when it last checked", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { checkedAt: null });
     await open(engine);
     expect(screen.getByText("Watching live")).toBeInTheDocument();
@@ -149,7 +152,7 @@ describe("Privacy", () => {
   it("says when an export fails", async () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFolder").mockResolvedValue("/chosen");
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     vi.spyOn(engine, "exportTo").mockRejectedValue(new Error("no"));
     await open(engine, platform);
     await userEvent.click(screen.getByRole("button", { name: "Export to a folder…" }));
@@ -167,7 +170,7 @@ describe("Privacy", () => {
   });
 
   it("puts the switch back and says so when locking fails", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     vi.spyOn(engine, "updateSettings").mockRejectedValue(new Error("no"));
     await open(engine);
     const toggle = screen.getByRole("switch", { name: "Lock with your computer sign-in" });
@@ -178,7 +181,7 @@ describe("Privacy", () => {
 });
 
 describe("delete everything", () => {
-  const openDialog = async (engine = createMockEngine()) => {
+  const openDialog = async (engine = createMockEngine({ sentMeasured: true })) => {
     const shown = await open(engine);
     await userEvent.click(screen.getByRole("button", { name: "Delete everything…" }));
     const dialog = await screen.findByRole("dialog", { name: "Delete everything?" });
@@ -208,7 +211,7 @@ describe("delete everything", () => {
   });
 
   it("cannot be cancelled while deleting, and setup is read again afterwards", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     let finish: () => void = () => undefined;
     vi.spyOn(engine, "deleteEverything").mockImplementation(
       () =>
@@ -241,7 +244,7 @@ describe("delete everything", () => {
   });
 
   it("says so, and stays, when it fails", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     vi.spyOn(engine, "deleteEverything").mockRejectedValue(new Error("no"));
     const { dialog } = await openDialog(engine);
     await userEvent.type(within(dialog).getByRole("textbox"), "delete everything");
@@ -264,7 +267,7 @@ describe("delete everything", () => {
 
 describe("states", () => {
   it("says so and offers to try again when it cannot be read", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     const spy = vi.spyOn(engine, "getPrivacy").mockRejectedValueOnce(new Error("no"));
     renderApp({ hash: "#/privacy", engine });
     expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t open this.");

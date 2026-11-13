@@ -229,11 +229,20 @@ describe("the answer", () => {
     expect(screen.queryByRole("button", { name: /Read aloud/ })).toBeNull();
   });
 
-  it("says how many things it answered from, and that nothing was sent", async () => {
-    await open({ question: "What is Gran’s new number?" });
+  it("says how many things it answered from, and that nothing was sent only when measured", async () => {
+    await open({
+      question: "What is Gran’s new number?",
+      engine: new Scripted({ sentMeasured: true }),
+    });
     expect(
       await screen.findByText("Answered from 1 thing you kept · nothing sent to the internet"),
     ).toBeInTheDocument();
+  });
+
+  it("claims nothing about the internet while that is not measured", async () => {
+    await open({ question: "What is Gran’s new number?" });
+    expect(await screen.findByText("Answered from 1 thing you kept")).toBeInTheDocument();
+    expect(screen.queryByText(/sent to the internet/)).toBeNull();
   });
 });
 

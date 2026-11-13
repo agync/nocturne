@@ -48,6 +48,8 @@ export interface MockOptions {
   tierOffer?: Tier;
   /** The tier of a change that did not finish, when a `tierUnfinished` notice is among the notices. */
   unfinishedTier?: Tier;
+  /** Whether what was sent to the internet is measured. The real app does not measure it yet. */
+  sentMeasured?: boolean;
   /** The first question wakes the voice that reads and says so (a `waking` step with a wait). */
   cold?: boolean;
   /** Answers mark their key phrase in bold. */
@@ -220,7 +222,7 @@ export class MockEngine implements EngineClient {
       needsYou: 0,
       waitingToRead: 0,
       sentToInternetBytes: 0,
-      sentMeasured: true,
+      sentMeasured: options.sentMeasured ?? false,
       pausedUntil: null,
       tidy: null,
       nextTidy: "01:00",

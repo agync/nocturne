@@ -7,7 +7,7 @@ const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
 const ready = async (page: Page) => {
   await page.goto("/#/privacy");
   await page.getByRole("heading", { level: 1, name: "Privacy" }).waitFor();
-  await page.getByText("Nothing.").waitFor();
+  await page.getByText("Not measured.").waitFor();
   await page.evaluate(() => document.fonts.ready);
 };
 

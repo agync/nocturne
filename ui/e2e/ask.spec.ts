@@ -50,9 +50,9 @@ test.describe("the Ask page", () => {
       "Gran’s new number ends 4471.",
     );
     await expect(page.getByRole("button", { name: /^Source: note/ })).toBeVisible();
-    await expect(
-      page.getByText("Answered from 1 thing you kept · nothing sent to the internet"),
-    ).toBeVisible();
+    // What was sent is not measured, so the line does not say that nothing was.
+    await expect(page.getByText("Answered from 1 thing you kept")).toBeVisible();
+    await expect(page.getByText(/sent to the internet/)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Read aloud" })).toHaveCount(0);
     await page.screenshot({ path: `${SHOTS}/ask-answer-light.png` });
   });

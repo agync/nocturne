@@ -30,7 +30,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/privacy", "Privacy"],
   ["#/settings", "Settings"],
   ["#/settings/advanced", "Advanced details"],
-  ["#/listen/2026-11-13", "Listen"],
+  ["#/listen/2026-11-13", "Two things need you today."],
   ["#/print/2026-11-13", "Print"],
 ];
 
@@ -106,7 +106,7 @@ describe("rail", () => {
   });
 
   it("shows the state and what was sent to the internet, from the live status", async () => {
-    renderApp();
+    renderApp({ engine: createMockEngine({ sentMeasured: true }) });
     const status = await screen.findByRole("region", { name: "Nocturne status" });
     expect(within(status).getByText("Resting")).toBeInTheDocument();
     expect(within(status).getByText("Sent to the internet")).toBeInTheDocument();
@@ -114,8 +114,15 @@ describe("rail", () => {
     expect(status.querySelector('[data-state="resting"]')).not.toBeNull();
   });
 
+  it("does not claim nothing was sent while that is not measured", async () => {
+    renderApp();
+    const status = await screen.findByRole("region", { name: "Nocturne status" });
+    expect(within(status).getByText("Not measured on this computer")).toBeInTheDocument();
+    expect(within(status).queryByText("Nothing")).toBeNull();
+  });
+
   it("shows bytes when something was sent, and says when it cannot measure", async () => {
-    const engine = createMockEngine();
+    const engine = createMockEngine({ sentMeasured: true });
     const real = engine.getStatus.bind(engine);
     engine.getStatus = async () => ({ ...(await real()), sentToInternetBytes: 84_000_000 });
     const first = renderApp({ engine });
