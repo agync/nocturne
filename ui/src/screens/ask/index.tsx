@@ -7,7 +7,6 @@ import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { useToast } from "../../components/Toast/Toast";
-import { formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { AskPhase, MemoryView, Receipt } from "../../engine/bindings";
 import { useAsk, useEngine, useStatus } from "../../engine/context";
@@ -16,7 +15,7 @@ import { Actions } from "./Actions";
 import { AnswerText } from "./AnswerText";
 import styles from "./Ask.module.css";
 import { ReceiptCard, receiptMeta } from "./ReceiptCard";
-import { topicOf } from "./topic";
+import { askSession, type Extras, type Snapshot, type Turn } from "./session";
 
 const TERMINAL: ReadonlySet<string> = new Set<AskPhase>([
   "done",
@@ -28,15 +27,6 @@ const TERMINAL: ReadonlySet<string> = new Set<AskPhase>([
 const same = (a: Receipt, b: Receipt) =>
   a.itemId === b.itemId && JSON.stringify(a.span) === JSON.stringify(b.span);
 
-/** A finished turn, kept on screen above the new question. */
-interface Turn {
-  key: number;
-  question: string;
-  text: string;
-  summary: string;
-  receipts: Receipt[];
-}
-
 const plain = (text: string) => text.split("**").join("");
 
 export default function Ask() {
@@ -47,34 +37,66 @@ export default function Ask() {
   const request = useAskRequest();
   const asking = useAsk();
   const { data: status } = useStatus();
-  const [current, setCurrent] = useState<{ question: string; time: string } | null>(null);
-  const [earlier, setEarlier] = useState<Turn[]>([]);
+  const stored = useRef(askSession.get()).current;
+  const [current, setCurrent] = useState<string | null>(stored.current?.question ?? null);
+  const [restored, setRestored] = useState<Snapshot | null>(stored.current?.snapshot ?? null);
+  const [earlier, setEarlier] = useState<Turn[]>(stored.earlier);
+  const [extras, setExtras] = useState<Extras>(
+    stored.current?.extras ?? { forgotten: null, corrected: [] },
+  );
   const [announcement, setAnnouncement] = useState("");
   const [active, setActive] = useState<string | null>(null);
   const [showOriginals, setShowOriginals] = useState(false);
   const [result, setResult] = useState("");
-  const [forgotten, setForgotten] = useState(false);
   const [keptAsNote, setKeptAsNote] = useState(false);
   const [followUp, setFollowUp] = useState("");
   const handled = useRef<number | null>(null);
   const announced = useRef<string | null>(null);
-  const turns = useRef(0);
+  const turns = useRef(stored.turns);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const focusHeading = useRef(false);
   const resultRef = useRef<HTMLParagraphElement>(null);
   const receiptsRef = useRef<HTMLDivElement>(null);
 
-  const { phase, text, receipts, near, found, deltas, error, askId } = asking;
-  const memoryIds = useMemo(
+  const { deltas, error, askId } = asking;
+  const liveMemoryIds = useMemo(
     () => [...deltas].reverse().find((d) => d.memoryIds.length > 0)?.memoryIds ?? [],
     [deltas],
   );
-  const eta = useMemo(
+  const liveEta = useMemo(
     () => [...deltas].reverse().find((d) => d.etaSeconds !== null)?.etaSeconds ?? null,
     [deltas],
   );
+  const live: Snapshot = useMemo(
+    () => ({
+      phase: asking.phase,
+      text: asking.text,
+      receipts: asking.receipts,
+      near: asking.near,
+      found: asking.found,
+      memoryIds: liveMemoryIds,
+      eta: liveEta,
+      failed: error !== null,
+    }),
+    [
+      asking.phase,
+      asking.text,
+      asking.receipts,
+      asking.near,
+      asking.found,
+      liveMemoryIds,
+      liveEta,
+      error,
+    ],
+  );
+  // Coming back to an answer shows what was there; a new question shows the live one.
+  const shown = restored ?? live;
+  const { phase, text, receipts, near, found, memoryIds, eta } = shown;
+  const forgotten = extras.forgotten !== null;
 
   const { data: memories = [] } = useQuery({
     queryKey: ["askMemories", memoryIds.join(",")],
-    enabled: memoryIds.length > 0,
+    enabled: memoryIds.length > 0 && !forgotten,
     queryFn: async (): Promise<MemoryView[]> => {
       const all = await engine.listMemories({
         entityId: null,
@@ -87,42 +109,71 @@ export default function Ask() {
     },
   });
 
-  const latest = useRef({ current, phase, text, receipts, error, forgotten });
-  latest.current = { current, phase, text, receipts, error, forgotten };
+  const latest = useRef({ current, shown, extras });
+  latest.current = { current, shown, extras };
 
-  const summaryOf = useCallback((question: string): string => {
-    const now = latest.current;
-    if (now.phase === "done") return plain(now.text);
-    if (now.phase === "notSure") return t("ask.notSure.lead", { count: 2 });
-    if (now.phase === "nothing") return t("ask.nothing.lead", { topic: topicOf(question) });
-    return t("notice.notReady.text");
-  }, []);
+  const summaryOf = (now: typeof latest.current): string => {
+    if (now.extras.forgotten) return t("ask.forget.done");
+    switch (now.shown.phase) {
+      case "done":
+        return plain(now.shown.text);
+      case "notSure":
+        return t("ask.announce.notSure", { count: now.shown.near.length });
+      case "nothing":
+        return t("ask.nothing.lead");
+      default:
+        return t("notice.notReady.text");
+    }
+  };
 
   const start = useCallback(
-    (question: string) => {
+    (question: string, moveFocus = false) => {
       const now = latest.current;
       // A finished answer steps up into Earlier; one still being written is simply replaced.
-      if (now.current && (TERMINAL.has(now.phase) || now.error)) {
+      if (now.current && (TERMINAL.has(now.shown.phase) || now.shown.failed)) {
+        const gone = now.extras.forgotten !== null;
         const turn: Turn = {
           key: ++turns.current,
-          question: now.current.question,
-          text: now.forgotten ? "" : now.text,
-          summary: now.forgotten ? t("ask.forget.done") : summaryOf(now.current.question),
-          receipts: now.forgotten ? [] : now.receipts,
+          question: now.current,
+          text: gone ? "" : now.shown.text,
+          summary: summaryOf(now),
+          receipts: gone ? [] : now.shown.receipts,
+          memoryIds: gone ? [] : now.shown.memoryIds,
         };
         setEarlier((all) => [...all, turn]);
       }
-      setCurrent({ question, time: formatTime(new Date()) });
+      focusHeading.current = moveFocus;
+      setCurrent(question);
+      setRestored(null);
+      setExtras({ forgotten: null, corrected: [] });
       setActive(null);
       setShowOriginals(false);
       setResult("");
-      setForgotten(false);
       setKeptAsNote(false);
       announced.current = null;
       void asking.ask(question);
     },
-    [asking.ask, summaryOf],
+    [asking.ask],
   );
+
+  // After a question asked from the page itself, focus follows it to the new headline.
+  useEffect(() => {
+    if (focusHeading.current && current) {
+      focusHeading.current = false;
+      heading.current?.focus({ preventScroll: true });
+    }
+  }, [current]);
+
+  // What is on screen is what comes back after a receipt is opened.
+  useEffect(() => {
+    if (!current) return;
+    const finished = TERMINAL.has(shown.phase) || shown.failed;
+    askSession.set({
+      current: finished ? { question: current, snapshot: shown, extras } : null,
+      earlier,
+      turns: turns.current,
+    });
+  }, [current, shown, extras, earlier]);
 
   useEffect(() => {
     if (!request || handled.current === request.id) return;
@@ -132,18 +183,17 @@ export default function Ask() {
   }, [request, start]);
 
   useEffect(() => {
-    if (!current) return;
-    const done = TERMINAL.has(phase) || error !== null;
+    if (!current || restored) return;
+    const done = TERMINAL.has(phase) || shown.failed;
     const id = askId ?? "error";
     if (!done || announced.current === id) return;
     announced.current = id;
     if (phase === "done") setAnnouncement(t("ask.announce.done", { answer: plain(text) }));
     else if (phase === "notSure")
       setAnnouncement(t("ask.announce.notSure", { count: near.length }));
-    else if (phase === "nothing")
-      setAnnouncement(t("ask.announce.nothing", { topic: topicOf(current.question) }));
+    else if (phase === "nothing") setAnnouncement(t("ask.nothing.lead"));
     else setAnnouncement(t("notice.notReady.text"));
-  }, [phase, error, askId, current, text, near.length]);
+  }, [phase, shown.failed, askId, current, restored, text, near.length]);
 
   const openReceipt = useCallback(
     (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
@@ -196,7 +246,7 @@ export default function Ask() {
   const keepAsNote = async () => {
     if (!current) return;
     try {
-      await engine.keepText(current.question, "quickCapture");
+      await engine.keepText(current, "quickCapture");
       setKeptAsNote(true);
       setAnnouncement(t("ask.unavailable.kept"));
     } catch {
@@ -213,11 +263,34 @@ export default function Ask() {
   };
 
   const finished = phase === "done" && !forgotten;
-  const unavailable = phase === "unavailable" || (error !== null && phase === "idle");
+  const unavailable = phase === "unavailable" || (shown.failed && phase === "idle");
   const items = new Set(receipts.map((r) => r.itemId)).size;
   const showReceipts = receipts.length > 0 && (phase !== "waking" || showOriginals) && !forgotten;
   const internet = status?.sentMeasured === true && status.sentToInternetBytes === 0;
-  const topic = current ? topicOf(current.question) : "";
+  const memoriesHref = hashHref("/memories", { q: current });
+
+  const onForgotten = (ids: string[], sentences: string[]) => {
+    const everything = ids.length >= memoryIds.length;
+    setExtras((e) => ({
+      ...e,
+      forgotten: everything
+        ? t("ask.forget.done")
+        : t("ask.forget.some", { sentences: sentences.join(" ") }),
+    }));
+    // The forgotten claim must not linger in what a screen reader holds or in earlier turns.
+    setAnnouncement("");
+    setEarlier((all) =>
+      all.map((turn) =>
+        turn.memoryIds.some((id) => ids.includes(id))
+          ? { ...turn, text: "", receipts: [], memoryIds: [], summary: t("ask.forget.done") }
+          : turn,
+      ),
+    );
+    setResult(
+      everything ? t("ask.forget.done") : t("ask.forget.some", { sentences: sentences.join(" ") }),
+    );
+    setTimeout(() => resultRef.current?.focus(), 0);
+  };
 
   return (
     <div className={styles.screen}>
@@ -238,15 +311,15 @@ export default function Ask() {
       <div className={styles.column}>
         {earlier.length > 0 ? (
           <section className={styles.earlier} aria-labelledby="ask-earlier">
-            <h2 id="ask-earlier" className={styles.eyebrow}>
+            <p id="ask-earlier" className={styles.eyebrow}>
               {t("ask.earlier")}
-            </h2>
+            </p>
             <ol className={styles.turns}>
               {earlier.map((turn) => (
                 <li key={turn.key} className={styles.turn}>
-                  <h3 className={styles.turnQuestion}>
+                  <p className={styles.turnQuestion}>
                     {t("ask.question", { question: turn.question })}
-                  </h3>
+                  </p>
                   <p className={styles.turnAnswer}>
                     {turn.text ? richText(turn.text) : turn.summary}
                   </p>
@@ -268,9 +341,11 @@ export default function Ask() {
         ) : null}
 
         {current ? (
-          <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && error === null}>
-            <p className={styles.eyebrow}>{t("ask.eyebrow", { time: current.time })}</p>
-            <h1 className={styles.question}>{t("ask.question", { question: current.question })}</h1>
+          <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && !shown.failed}>
+            <p className={styles.eyebrow}>{t("ask.eyebrow")}</p>
+            <h1 ref={heading} tabIndex={-1} className={styles.question}>
+              {t("ask.question", { question: current })}
+            </h1>
 
             <div className={styles.body}>
               {phase === "waking" ? (
@@ -327,9 +402,21 @@ export default function Ask() {
               ) : null}
 
               {(phase === "streaming" || phase === "done") && !forgotten ? (
-                <AnswerText text={text} memoryIds={memoryIds} onActive={setActive} onJump={jump} />
+                <AnswerText
+                  text={text}
+                  memoryIds={memoryIds}
+                  corrected={extras.corrected.length > 0}
+                  onActive={setActive}
+                  onJump={jump}
+                />
               ) : null}
-              {forgotten ? <p className={styles.lead}>{t("ask.forget.done")}</p> : null}
+              {!forgotten
+                ? extras.corrected.map((sentence) => (
+                    <p key={sentence} className={styles.corrected}>
+                      {t("ask.corrected", { sentence })}
+                    </p>
+                  ))
+                : null}
 
               {phase === "notSure" ? (
                 <>
@@ -348,15 +435,15 @@ export default function Ask() {
                       </li>
                     ))}
                   </ul>
-                  <a className={styles.linkAnchor} href={hashHref("/memories", { q: topic })}>
-                    {t("ask.notSure.search", { topic })}
+                  <a className={styles.linkAnchor} href={memoriesHref}>
+                    {t("ask.notSure.search")}
                   </a>
                 </>
               ) : null}
 
               {phase === "nothing" ? (
                 <>
-                  <p className={styles.lead}>{t("ask.nothing.lead", { topic })}</p>
+                  <p className={styles.lead}>{t("ask.nothing.lead")}</p>
                   <p className={styles.note}>{t("ask.nothing.body")}</p>
                   <div className={styles.buttons}>
                     <Button variant="primary" onClick={() => void keepPhoto()}>
@@ -415,19 +502,23 @@ export default function Ask() {
                 </div>
               ) : null}
 
-              {phase === "done" || forgotten ? (
+              {phase === "done" ? (
                 <Actions
                   memories={forgotten ? [] : memories}
+                  showButtons={!forgotten}
                   result={result}
                   onResult={setResult}
-                  onForgotten={() => setForgotten(true)}
+                  onCorrected={(sentence) =>
+                    setExtras((e) => ({ ...e, corrected: [...e.corrected, sentence] }))
+                  }
+                  onForgotten={onForgotten}
                   resultRef={resultRef}
                 />
               ) : null}
             </div>
           </article>
         ) : (
-          <EmptyAsk onAsk={start} />
+          <EmptyAsk onAsk={(question) => start(question, true)} />
         )}
       </div>
 

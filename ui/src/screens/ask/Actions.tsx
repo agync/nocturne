@@ -14,8 +14,12 @@ interface ActionsProps {
   /** Said once, politely, after something was done. */
   result: string;
   onResult: (message: string) => void;
-  /** The memories were forgotten: the answer no longer stands. */
-  onForgotten: () => void;
+  /** The person gave the right sentence for a memory the answer used. */
+  onCorrected: (sentence: string) => void;
+  /** These memories were forgotten: the answer that used them no longer stands. */
+  onForgotten: (ids: string[], sentences: string[]) => void;
+  /** After forgetting there is nothing left to do but read the result. */
+  showButtons: boolean;
   resultRef: RefObject<HTMLParagraphElement | null>;
 }
 
@@ -23,7 +27,15 @@ interface ActionsProps {
  * That's wrong, Keep forever, Forget this. With several memories behind the answer each opens a
  * small chooser first, so the person always says which one.
  */
-export function Actions({ memories, result, onResult, onForgotten, resultRef }: ActionsProps) {
+export function Actions({
+  memories,
+  showButtons,
+  result,
+  onResult,
+  onCorrected,
+  onForgotten,
+  resultRef,
+}: ActionsProps) {
   const engine = useEngine();
   const client = useQueryClient();
   const [chooser, setChooser] = useState<Action | null>(null);
@@ -88,6 +100,7 @@ export function Actions({ memories, result, onResult, onForgotten, resultRef }: 
       await engine.correctMemory(correcting.id, draft.trim());
       await refresh();
       setCorrecting(null);
+      onCorrected(draft.trim());
       onResult(t("ask.wrong.done"));
       resultRef.current?.focus();
     } catch {
@@ -105,31 +118,33 @@ export function Actions({ memories, result, onResult, onForgotten, resultRef }: 
   const disabled = memories.length === 0 || busy;
   return (
     <div className={styles.actionsBlock}>
-      <fieldset className={styles.actions}>
-        <legend className="sr-only">{t("ask.actions")}</legend>
-        <Button
-          variant="secondary"
-          disabled={disabled}
-          onClick={(e) => begin("wrong", e.currentTarget)}
-        >
-          {t("ask.wrong")}
-        </Button>
-        <Button
-          variant="secondary"
-          disabled={disabled || allKeptForever}
-          onClick={(e) => begin("keepForever", e.currentTarget)}
-        >
-          {allKeptForever ? t("memory.flag.keepForever") : t("ask.keepForever")}
-        </Button>
-        <button
-          type="button"
-          className={styles.quiet}
-          disabled={disabled}
-          onClick={(e) => begin("forget", e.currentTarget)}
-        >
-          {t("ask.forget")}
-        </button>
-      </fieldset>
+      {showButtons ? (
+        <fieldset className={styles.actions}>
+          <legend className="sr-only">{t("ask.actions")}</legend>
+          <Button
+            variant="secondary"
+            disabled={disabled}
+            onClick={(e) => begin("wrong", e.currentTarget)}
+          >
+            {t("ask.wrong")}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={disabled || allKeptForever}
+            onClick={(e) => begin("keepForever", e.currentTarget)}
+          >
+            {allKeptForever ? t("memory.flag.keepForever") : t("ask.keepForever")}
+          </Button>
+          <button
+            type="button"
+            className={styles.quiet}
+            disabled={disabled}
+            onClick={(e) => begin("forget", e.currentTarget)}
+          >
+            {t("ask.forget")}
+          </button>
+        </fieldset>
+      ) : null}
 
       {chooser ? (
         <fieldset
@@ -210,9 +225,12 @@ export function Actions({ memories, result, onResult, onForgotten, resultRef }: 
           memoryIds={forgetting}
           onClose={() => setForgetting(null)}
           onDone={() => {
+            const ids = forgetting;
             setForgetting(null);
-            onResult(t("ask.forget.done"));
-            onForgotten();
+            onForgotten(
+              ids,
+              memories.filter((m) => ids.includes(m.id)).map((m) => m.sentence),
+            );
             void refresh();
           }}
         />

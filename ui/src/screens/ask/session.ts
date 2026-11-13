@@ -1,0 +1,55 @@
+import type { NearMatch, Receipt } from "../../engine/bindings";
+import type { AskState } from "../../engine/context";
+
+/** Everything the screen shows about one answer, so it can be drawn again without asking again. */
+export interface Snapshot {
+  phase: AskState;
+  text: string;
+  receipts: Receipt[];
+  near: NearMatch[];
+  found: number | null;
+  memoryIds: string[];
+  eta: number | null;
+  failed: boolean;
+}
+
+/** What the person did to the answer on screen. */
+export interface Extras {
+  /** Set once the memories behind the answer were forgotten: what to say instead of the answer. */
+  forgotten: string | null;
+  corrected: string[];
+}
+
+/** A finished turn, kept on screen above the new question. */
+export interface Turn {
+  key: number;
+  question: string;
+  text: string;
+  summary: string;
+  receipts: Receipt[];
+  memoryIds: string[];
+}
+
+export interface Session {
+  current: { question: string; snapshot: Snapshot; extras: Extras } | null;
+  earlier: Turn[];
+  turns: number;
+}
+
+const empty = (): Session => ({ current: null, earlier: [], turns: 0 });
+
+let session: Session = empty();
+
+/**
+ * The conversation on the Ask page lives here, not in the page, so opening a receipt and coming
+ * back finds the answer where it was. It lasts as long as the window does.
+ */
+export const askSession = {
+  get: (): Session => session,
+  set: (next: Session): void => {
+    session = next;
+  },
+  reset: (): void => {
+    session = empty();
+  },
+};

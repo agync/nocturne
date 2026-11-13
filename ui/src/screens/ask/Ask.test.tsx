@@ -5,6 +5,7 @@ import { askRequests } from "../../app/ask-request";
 import type { AskDelta, MemoryView } from "../../engine/bindings";
 import { MockEngine } from "../../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
+import { askSession } from "./session";
 
 type Step = Partial<AskDelta> & Pick<AskDelta, "phase">;
 
@@ -87,8 +88,12 @@ async function twoMemoryAnswer(engine: Scripted, hold = Number.POSITIVE_INFINITY
   ];
 }
 
-beforeEach(() => setViewport(1280));
+beforeEach(() => {
+  askSession.reset();
+  setViewport(1280);
+});
 afterEach(() => {
+  askSession.reset();
   window.location.hash = "";
   askRequests.take();
 });
@@ -130,7 +135,7 @@ describe("a question from the bar", () => {
     expect(await heading("“What is Gran’s new number?”")).toBeInTheDocument();
     expect(engine.asked).toEqual(["What is Gran’s new number?"]);
     expect(askRequests.peek()).toBeNull();
-    expect(screen.getByText(/^You asked · \d\d:\d\d$/)).toBeInTheDocument();
+    expect(screen.getByText("You asked")).toBeInTheDocument();
   });
 
   it("a later question stacks the first under Earlier and replaces the headline", async () => {
@@ -264,13 +269,14 @@ describe("a slow first question", () => {
 });
 
 describe("not sure", () => {
-  it("shows the near matches and a link to search everything about the topic", async () => {
+  it("shows the near matches and a link to search for the whole question", async () => {
     await open({ question: "When is my appointment?" });
     expect(await screen.findByText(/I’m not sure\. Nothing says that outright/)).toBeVisible();
     expect(screen.getAllByText(/Your dentist appointment is/)).toHaveLength(2);
-    expect(
-      screen.getByRole("link", { name: "Search everything kept about appointment" }),
-    ).toHaveAttribute("href", "#/memories?q=appointment");
+    expect(screen.getByRole("link", { name: "Search everything you’ve kept" })).toHaveAttribute(
+      "href",
+      "#/memories?q=When+is+my+appointment%3F",
+    );
     await waitFor(() =>
       expect(announcer()).toHaveTextContent("I’m not sure. 2 things come close."),
     );
@@ -282,7 +288,7 @@ describe("nothing found", () => {
     const platform = fakePlatform();
     platform.pickFiles = vi.fn(async () => ["/tmp/passport.jpg"]);
     const { engine } = await open({ question: "passport", platform });
-    expect(await screen.findByText("Nothing you’ve kept mentions passport.")).toBeVisible();
+    expect(await screen.findByText("Nothing you’ve kept answers that.")).toBeVisible();
     expect(screen.getByText(/Nocturne only answers from what you keep/)).toBeVisible();
     const spy = vi.spyOn(engine, "keepFiles");
     await userEvent.click(screen.getByRole("button", { name: "Keep a photo now" }));
@@ -392,5 +398,93 @@ describe("what to do about an answer", () => {
     await open({ question: "What is Gran’s new number?" });
     await userEvent.click(await screen.findByRole("button", { name: "Forget this…" }));
     expect(await screen.findByRole("dialog", { name: "Forget 1 thing?" })).toBeVisible();
+  });
+});
+
+describe("coming back to an answer", () => {
+  it("a receipt round trip finds the answer and Earlier where they were, without asking again", async () => {
+    const { engine } = await open({ question: "What is Gran’s new number?" });
+    await screen.findByRole("button", { name: "That’s wrong" });
+    await act(async () => askRequests.request("What did we decide about half term?"));
+    await heading("“What did we decide about half term?”");
+    await screen.findByRole("button", { name: "That’s wrong" });
+    const article = document.querySelector("article") as HTMLElement;
+    await userEvent.click(await within(article).findByRole("button", { name: /^Source:/ }));
+    expect(window.location.hash).toMatch(/^#\/items\//);
+    act(() => {
+      window.location.hash = "#/ask";
+    });
+    expect(await heading("“What did we decide about half term?”")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/You decided to book the Lake District cottage/),
+    ).toBeInTheDocument();
+    const earlier = screen.getByRole("region", { name: "Earlier" });
+    expect(within(earlier).getByText("Gran’s new number ends 4471.")).toBeInTheDocument();
+    expect(engine.asked).toHaveLength(2);
+    expect(
+      within(document.querySelector("article") as HTMLElement).getByRole("button", {
+        name: /^Source:/,
+      }),
+    ).toBeInTheDocument();
+  });
+
+  it("an answer still being written is not restored", async () => {
+    const engine = new Scripted();
+    await twoMemoryAnswer(engine, 2);
+    await open({ engine, question: "When is Leo’s swimming?" });
+    await screen.findAllByRole("button", { name: /^Source:/ });
+    act(() => {
+      window.location.hash = "#/today";
+    });
+    await screen.findByRole("heading", { level: 1, name: /need/ });
+    act(() => {
+      window.location.hash = "#/ask";
+    });
+    expect(await heading("Ask about anything you’ve kept.")).toBeInTheDocument();
+  });
+});
+
+describe("the page after asking", () => {
+  it("an example moves focus to the new headline", async () => {
+    await open();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "What is Gran’s new number?" }),
+    );
+    const h1 = await heading("“What is Gran’s new number?”");
+    expect(h1).toHaveFocus();
+  });
+
+  it("Earlier has no headings, so the question is the first heading on the page", async () => {
+    await open({ question: "What is Gran’s new number?" });
+    await screen.findByRole("button", { name: "That’s wrong" });
+    await act(async () => askRequests.request("What did we decide about half term?"));
+    await heading("“What did we decide about half term?”");
+    const headings = screen.getAllByRole("heading").filter((h) => h.closest("main"));
+    expect(headings[0]).toHaveTextContent("What did we decide about half term?");
+    expect(screen.getByRole("region", { name: "Earlier" })).toBeInTheDocument();
+  });
+
+  it("an earlier not-sure answer says how many came close", async () => {
+    await open({ question: "When is my appointment?" });
+    await screen.findByText(/I’m not sure\. Nothing says/);
+    await act(async () => askRequests.request("What is Gran’s new number?"));
+    await heading("“What is Gran’s new number?”");
+    const earlier = screen.getByRole("region", { name: "Earlier" });
+    expect(within(earlier).getByText("I’m not sure. 2 things come close.")).toBeInTheDocument();
+  });
+});
+
+describe("a correction", () => {
+  it("leaves the old answer struck through with the right sentence beside it", async () => {
+    await open({ question: "What is Gran’s new number?" });
+    await userEvent.click(await screen.findByRole("button", { name: "That’s wrong" }));
+    const field = await screen.findByRole("textbox", { name: /What is right/ });
+    await userEvent.clear(field);
+    await userEvent.type(field, "Gran’s new number ends 5582.");
+    await userEvent.click(screen.getByRole("button", { name: "Save the correction" }));
+    expect(await screen.findByText("Corrected: Gran’s new number ends 5582.")).toBeVisible();
+    expect(document.querySelector("p[data-corrected='true']")).toHaveTextContent(
+      "Gran’s new number ends 4471.",
+    );
   });
 });

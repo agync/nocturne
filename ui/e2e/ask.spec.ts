@@ -101,9 +101,10 @@ test.describe("the Ask page", () => {
     await expect(
       page.locator("article").getByText(/I’m not sure\. Nothing says that outright/),
     ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Search everything kept about appointment" }),
-    ).toHaveAttribute("href", "#/memories?q=appointment");
+    await expect(page.getByRole("link", { name: "Search everything you’ve kept" })).toHaveAttribute(
+      "href",
+      "#/memories?q=When+is+my+appointment%3F",
+    );
     await page.screenshot({ path: `${SHOTS}/ask-not-sure-light.png` });
   });
 
@@ -111,7 +112,7 @@ test.describe("the Ask page", () => {
     await ready(page, "#/today");
     await ask(page, "Where is my passport?");
     await expect(
-      page.locator("article").getByText("Nothing you’ve kept mentions passport."),
+      page.locator("article").getByText("Nothing you’ve kept answers that."),
     ).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/ask-nothing-light.png` });
     await page.getByRole("button", { name: "Search let go" }).click();
@@ -153,6 +154,33 @@ test.describe("the Ask page", () => {
     await expect(forget).toBeFocused();
   });
 
+  test("opening a receipt and coming back finds the answer where it was", async ({ page }) => {
+    await ready(page, "#/today");
+    await ask(page, "What is Gran’s new number?");
+    await settled(page);
+    await ask(page, "What did we decide about half term?");
+    await settled(page);
+    await page
+      .locator("article")
+      .getByRole("button", { name: /^Source:/ })
+      .click();
+    await expect(page).toHaveURL(/#\/items\//);
+    await page.goBack();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "“What did we decide about half term?”",
+    );
+    await expect(page.locator("article p[class*=answer]")).toContainText("Lake District");
+    await expect(
+      page.getByRole("region", { name: "Earlier" }).getByText("Gran’s new number ends 4471."),
+    ).toBeVisible();
+  });
+
+  test("an example moves focus to the question", async ({ page }) => {
+    await ready(page);
+    await page.getByRole("button", { name: "What is Gran’s new number?" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toBeFocused();
+  });
+
   test("a receipt opens its original", async ({ page }) => {
     await ready(page, "#/today");
     await ask(page, "What is Gran’s new number?");
@@ -186,7 +214,7 @@ test.describe("a narrow window", () => {
     await page.screenshot({ path: `${SHOTS}/ask-not-sure-narrow.png` });
     await ask(page, "Where is my passport?");
     await expect(
-      page.locator("article").getByText("Nothing you’ve kept mentions passport."),
+      page.locator("article").getByText("Nothing you’ve kept answers that."),
     ).toBeVisible();
     expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
@@ -226,7 +254,7 @@ for (const scheme of ["light", "dark"] as const) {
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/ask-not-sure-dark.png` });
     await ask(page, "Where is my passport?");
     await expect(
-      page.locator("article").getByText("Nothing you’ve kept mentions passport."),
+      page.locator("article").getByText("Nothing you’ve kept answers that."),
     ).toBeVisible();
     expect(await axe(page), "nothing").toEqual([]);
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/ask-nothing-dark.png` });
