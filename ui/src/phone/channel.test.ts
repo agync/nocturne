@@ -85,6 +85,16 @@ describe("a session", () => {
     expect(computer.opens - before).toBe(1);
   });
 
+  it("a busy answer to a POST sends the same frames again", async () => {
+    const { computer, device } = await paired();
+    computer.busyPosts = 1;
+    const before = computer.opens;
+    const s = await open(computer, device, { preferPoll: true });
+    expect(s.linkKind).toBe("poll");
+    expect(computer.opens - before).toBe(1);
+    s.close();
+  });
+
   it("session_up_only_after_hello_opens: a Hello that does not open ends the open", async () => {
     const { computer, device } = await paired();
     computer.mutate = (frame, ctr) => {

@@ -148,6 +148,8 @@ export interface Link {
 
 /** How long to wait before polling again after a busy answer. */
 const POLL_BUSY_WAIT_MS = 1000;
+/** How many busy answers to one POST before the link gives up. */
+const POST_BUSY_TRIES = 5;
 const BUFFER_HIGH = P.MAX_FRAME * 2;
 
 class SocketLink implements Link {
@@ -293,6 +295,7 @@ class PollLink implements Link {
   private async pump(): Promise<void> {
     if (this.posting) return;
     this.posting = true;
+    let busy = 0;
     while (this.queue.length > 0 && !this.closed) {
       const batch = this.queue.splice(0, P.MAX_LONG_POLL_BATCH);
       const response = await this.exchange(
@@ -303,6 +306,19 @@ class PollLink implements Link {
         },
         this.url,
       );
+      if (response?.status === HTTP_POLL_BUSY) {
+        // The computer had no room to read this body: nothing was taken, so send it again.
+        busy += 1;
+        if (busy > POST_BUSY_TRIES) {
+          for (const b of batch) b.fail(new Error("link busy"));
+          this.end({ kind: "http", status: HTTP_POLL_BUSY });
+          break;
+        }
+        this.queue.unshift(...batch);
+        await new Promise((r) => setTimeout(r, POLL_BUSY_WAIT_MS));
+        continue;
+      }
+      busy = 0;
       if (!response || !(await this.take(response))) {
         for (const b of batch) b.fail(new Error("link ended"));
         break;

@@ -213,6 +213,8 @@ export class FakeComputer {
   holdMs = 50;
   /** Rewrites the frames the computer sends in a session: replay, reorder, drop or tamper. */
   mutate: ((frame: Bytes, ctr: number) => Bytes[]) | null = null;
+  /** How many POSTs get a busy answer (409), unread, before they are taken. */
+  busyPosts = 0;
   /** How many sockets close, unanswered, when their first frame arrives. */
   dropSocketOpens = 0;
   /** Answer every open with an unsealed refusal. */
@@ -308,6 +310,10 @@ export class FakeComputer {
     if (this.off) return new Response(null, { status: 503 });
     const url = new URL(input);
     if (url.pathname !== P.PATH_SESSION) return new Response(null, { status: 404 });
+    if (init?.method === "POST" && this.busyPosts > 0) {
+      this.busyPosts -= 1;
+      return new Response(null, { status: 409 });
+    }
     const signal = init?.signal ?? null;
     if (init?.method === "GET") {
       const sid = url.searchParams.get("sid") ?? "";
