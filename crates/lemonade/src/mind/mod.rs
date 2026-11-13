@@ -146,9 +146,11 @@ impl LemonadeMind {
             return Ok(Vec::new());
         }
         let model = self.warm_mind().await?;
+        let nonce = prompts::nonce();
+        let source = normalise(text);
         let mut messages = vec![
-            Message::system(&prompts::extraction_system()),
-            Message::user(&prompts::extraction_user(text, cx)),
+            Message::system(&prompts::extraction_system(&nonce)),
+            Message::user(&prompts::extraction_user(text, cx, &nonce)),
         ];
         let mut last_error = String::new();
         for attempt in 0..EXTRACT_ATTEMPTS {
@@ -158,7 +160,7 @@ impl LemonadeMind {
                 &prompts::extraction_schema(),
             ));
             let reply = self.chat_text(&req).await?;
-            match parse_candidates(&reply) {
+            match parse_candidates(&reply, &source) {
                 Ok((items, invalid)) if invalid.is_empty() => return Ok(items),
                 Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
                     tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
@@ -196,11 +198,12 @@ impl LemonadeMind {
             });
         }
         let model = self.warm_mind().await?;
+        let nonce = prompts::nonce();
         let mut req = ChatRequest::new(
             &model,
             vec![
-                Message::system(&prompts::answer_system()),
-                Message::user(&prompts::answer_user(question, facts)),
+                Message::system(&prompts::answer_system(&nonce)),
+                Message::user(&prompts::answer_user(question, facts, &nonce)),
             ],
         );
         req.temperature = Some(0.2);
@@ -294,7 +297,7 @@ impl LemonadeMind {
         let mut req = ChatRequest::new(
             &model,
             vec![
-                Message::system(prompts::image_system()),
+                Message::system(&prompts::image_system()),
                 Message::user_with_image("Describe and read this image.", &uri),
             ],
         );
@@ -340,11 +343,12 @@ impl LemonadeMind {
 
     async fn headline_impl(&self, page: &PageView) -> Result<(String, String), MindError> {
         let model = self.warm_mind().await?;
+        let nonce = prompts::nonce();
         let mut req = ChatRequest::new(
             &model,
             vec![
-                Message::system(prompts::headline_system()),
-                Message::user(&prompts::headline_user(page)),
+                Message::system(&prompts::headline_system(&nonce)),
+                Message::user(&prompts::headline_user(page, &nonce)),
             ],
         );
         req.temperature = Some(0.4);
@@ -493,14 +497,44 @@ struct Extraction {
     memories: Vec<Value>,
 }
 
-/// Valid candidates, and a note for each item that did not validate.
-fn parse_candidates(reply: &str) -> Result<(Vec<Candidate>, Vec<String>), String> {
+/// Lower case, with every run of non-alphanumeric characters made one space.
+fn normalise(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut gap = true;
+    for c in text.chars() {
+        if c.is_alphanumeric() {
+            out.extend(c.to_lowercase());
+            gap = false;
+        } else if !gap {
+            out.push(' ');
+            gap = true;
+        }
+    }
+    out.truncate(out.trim_end().len());
+    out
+}
+
+/// A memory must be able to point at the words it came from.
+fn grounded(c: &Candidate, source: &str) -> bool {
+    match &c.span {
+        Some(Span::Quote { text }) => {
+            let quote = normalise(text);
+            !quote.is_empty() && source.contains(&quote)
+        }
+        _ => false,
+    }
+}
+
+/// Valid candidates whose quote is really in `source` (already normalised), and a note for each
+/// item that did not validate. Items quoting words that are not there are dropped quietly.
+fn parse_candidates(reply: &str, source: &str) -> Result<(Vec<Candidate>, Vec<String>), String> {
     let parsed: Extraction = crate::client::parse_json_text(reply).map_err(|e| e.to_string())?;
     let mut items = Vec::new();
     let mut invalid = Vec::new();
     for (i, raw) in parsed.memories.iter().enumerate() {
         match candidate(raw) {
-            Ok(c) => items.push(c),
+            Ok(c) if grounded(&c, source) => items.push(c),
+            Ok(c) => tracing::warn!("dropped an ungrounded memory about {}", c.subject),
             Err(why) => invalid.push(format!("memory {}: {why}", i + 1)),
         }
     }
