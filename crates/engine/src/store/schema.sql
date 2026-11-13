@@ -20,7 +20,9 @@ CREATE TABLE memories(
   status TEXT NOT NULL, confirmed INTEGER NOT NULL DEFAULT 0, last_used TEXT, let_go_at TEXT,
   done INTEGER NOT NULL DEFAULT 0, keep_forever INTEGER NOT NULL DEFAULT 0,
   private INTEGER NOT NULL DEFAULT 0, suggest_private INTEGER NOT NULL DEFAULT 0,
-  tags TEXT NOT NULL DEFAULT '[]');
+  tags TEXT NOT NULL DEFAULT '[]',
+  -- Set while a forget is under way: the row is already invisible everywhere.
+  forgetting INTEGER NOT NULL DEFAULT 0);
 CREATE INDEX memories_current ON memories(subject_key, predicate) WHERE superseded_at IS NULL;
 CREATE INDEX memories_superseded_by ON memories(superseded_by) WHERE superseded_by IS NOT NULL;
 CREATE INDEX memories_recorded_at ON memories(recorded_at);
@@ -72,6 +74,11 @@ CREATE TABLE settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE forget_tokens(
   token TEXT PRIMARY KEY, ids TEXT NOT NULL, include_originals INTEGER NOT NULL,
   stamp TEXT NOT NULL, expires_at TEXT NOT NULL);
+
+-- A forget that has started and must finish, even across a crash.
+CREATE TABLE forget_jobs(
+  id INTEGER PRIMARY KEY, ids TEXT NOT NULL, items TEXT NOT NULL,
+  include_originals INTEGER NOT NULL);
 
 CREATE VIRTUAL TABLE items_fts USING fts5(
   title, text, summary, content='items', content_rowid='rowid');

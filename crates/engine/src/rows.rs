@@ -88,7 +88,7 @@ pub(crate) const MEM_COLS: &str = "m.id, m.subject, m.subject_key, m.entity_id, 
     m.superseded_at, m.superseded_by, m.confidence, m.status, m.confirmed, m.last_used, \
     m.let_go_at, m.done, m.keep_forever, m.private, m.suggest_private, m.tags, \
     (SELECT o.object FROM memories o WHERE o.superseded_by = m.id \
-       ORDER BY o.recorded_at DESC, o.id LIMIT 1), \
+       AND o.forgetting = 0 ORDER BY o.recorded_at DESC, o.id LIMIT 1), \
     (SELECT COUNT(*) FROM memory_sources s WHERE s.memory_id = m.id), \
     (SELECT COUNT(*) FROM memory_sources s JOIN items i ON i.id = s.item_id \
        WHERE s.memory_id = m.id AND i.trust = 'trusted')";
@@ -159,7 +159,7 @@ pub(crate) fn mem_row(r: &Row<'_>) -> rusqlite::Result<MemRow> {
 }
 
 pub(crate) fn load_mem(conn: &Connection, id: &str) -> Result<Option<MemRow>> {
-    let sql = format!("SELECT {MEM_COLS} FROM memories m WHERE m.id = ?1");
+    let sql = format!("SELECT {MEM_COLS} FROM memories m WHERE m.id = ?1 AND m.forgetting = 0");
     match conn.query_row(&sql, [id], mem_row) {
         Ok(v) => Ok(Some(v)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),

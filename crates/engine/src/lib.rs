@@ -85,6 +85,8 @@ impl Engine {
         // Items a worker was reading when the app last stopped go back in the queue.
         let now = util::fmt_ts(engine.clock().now());
         engine.write(|tx| capture::reset_expired_leases(tx, &now).map(|_| ()))?;
+        // A forget that was under way when the app stopped is finished before anything else.
+        engine.resume_forgets()?;
         Ok(engine)
     }
 

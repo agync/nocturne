@@ -505,6 +505,9 @@ impl Engine {
         let tz = self.clock().tz();
         let now = fmt_ts(self.clock().now());
         self.write(|tx| {
+            // A page composed before a forget finished may cite what is now gone or going.
+            let stripped = strip_stale(tx, page)?;
+            let page = &stripped;
             let w = window_for(tx, day, &tz)?;
             let number = page_number(tx, day)?;
             let already: HashSet<String> = {
@@ -606,13 +609,17 @@ impl Engine {
                 return Ok(Some(page));
             }
             let mut skipped = 0u32;
-            for list in [
+            let mut dropped_let_go = 0u32;
+            for (i, list) in [
                 &mut page.needs_you,
                 &mut page.changed,
                 &mut page.let_go,
                 &mut page.upcoming,
                 &mut page.learned,
-            ] {
+            ]
+            .into_iter()
+            .enumerate()
+            {
                 let mut kept = Vec::new();
                 for line in std::mem::take(list) {
                     let mut private = false;
@@ -621,6 +628,9 @@ impl Engine {
                     }
                     if private {
                         skipped += 1;
+                        if i == 2 {
+                            dropped_let_go += 1;
+                        }
                     } else {
                         kept.push(line);
                     }
@@ -632,8 +642,23 @@ impl Engine {
                 && is_private(conn, m)?
             {
                 page.question = None;
+                skipped += 1;
             }
             page.private_skipped += skipped;
+            if skipped > 0 {
+                // The stored headline and dek were written with the private content in view.
+                // Never hand them to audio or print: fall back to the template, from the
+                // counts that remain.
+                let day: Date = page.date.parse()?;
+                let needs = page.needs_you.iter().filter(|l| !l.forgotten).count() as u32
+                    + page.more_needs_you;
+                page.headline = template_headline(day);
+                page.dek = template_dek(
+                    page.kept_count,
+                    needs,
+                    page.let_go_count.saturating_sub(dropped_let_go),
+                );
+            }
             Ok(Some(page))
         })
     }
@@ -712,6 +737,61 @@ impl Engine {
             Ok(())
         })
     }
+}
+
+/// Redact lines and the question that cite memories which no longer exist or are being
+/// forgotten, and fall back to the template headline if anything was redacted.
+fn strip_stale(
+    conn: &Connection,
+    page: &nocturne_contract::PageView,
+) -> Result<nocturne_contract::PageView> {
+    let mut page = page.clone();
+    let live = |id: &str| -> Result<bool> {
+        Ok(conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?1 AND forgetting = 0)",
+            [id],
+            |r| r.get(0),
+        )?)
+    };
+    let mut changed = false;
+    for list in [
+        &mut page.needs_you,
+        &mut page.changed,
+        &mut page.let_go,
+        &mut page.upcoming,
+        &mut page.learned,
+    ] {
+        for line in list.iter_mut() {
+            if line.forgotten {
+                continue;
+            }
+            let mut gone = false;
+            for m in line
+                .memory_ids
+                .iter()
+                .chain(line.choices.iter().map(|c| &c.memory_id))
+            {
+                gone |= !live(m)?;
+            }
+            if gone {
+                crate::forget::redact_line(line);
+                changed = true;
+            }
+        }
+    }
+    if let Some(m) = page.question.as_ref().and_then(|q| q.memory_id.clone())
+        && !live(&m)?
+    {
+        page.question = None;
+        changed = true;
+    }
+    if changed {
+        let day: Date = page.date.parse()?;
+        let needs = page.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        page.headline = template_headline(day);
+        page.dek = template_dek(page.kept_count, needs, page.let_go_count);
+    }
+    Ok(page)
 }
 
 fn load_page(conn: &Connection, day: Option<Date>) -> Result<Option<nocturne_contract::PageView>> {

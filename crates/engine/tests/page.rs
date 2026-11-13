@@ -616,6 +616,7 @@ fn answering_yes_confirms_and_counts_as_use_and_no_asks_again() {
         "a",
         cand("Leo", Predicate::Prefers, "swimming", "Leo likes swimming."),
     );
+    f.clock.set_str("2026-11-13T07:30:00Z");
     let (_, b) = learn(
         &f.engine,
         "b",
@@ -775,4 +776,91 @@ fn a_dst_page_time_in_the_spring_gap_still_composes() {
     let p = compose(&f, "2026-03-29");
     assert_eq!(p.kept_count, 1);
     assert_eq!(p.date, "2026-03-29");
+}
+
+#[test]
+fn audio_and_print_never_carry_a_headline_written_with_private_content() {
+    let f = fixture();
+    let (_, secret) = learn(
+        &f.engine,
+        "s",
+        cand(
+            "Zebrafish47",
+            Predicate::Knows,
+            "a diagnosis",
+            "Zebrafish47 has a diagnosis.",
+        ),
+    );
+    learn(
+        &f.engine,
+        "o",
+        cand("Gran", Predicate::Knows, "Pip", "Gran knows Pip."),
+    );
+    let mut page = compose(&f, "2026-11-14");
+    page.headline = "News about Zebrafish47".into();
+    page.dek = "Zebrafish47 saw the doctor.".into();
+    f.engine.save_page(&page).unwrap();
+
+    // Nothing private yet: audio keeps the headline the mind wrote.
+    let audio = f
+        .engine
+        .page_for(Some(date("2026-11-14")), Edition::Audio)
+        .unwrap()
+        .unwrap();
+    assert_eq!(audio.headline, "News about Zebrafish47");
+
+    f.engine.set_private(&secret, true).unwrap();
+    for edition in [Edition::Audio, Edition::Print] {
+        let p = f
+            .engine
+            .page_for(Some(date("2026-11-14")), edition)
+            .unwrap()
+            .unwrap();
+        let json = serde_json::to_string(&p).unwrap().to_lowercase();
+        assert!(!json.contains("zebrafish47"), "{edition:?}: {json}");
+        assert_eq!(p.headline, "Saturday 14 November");
+        assert!(p.private_skipped >= 1);
+        assert!(
+            lines(&p).iter().any(|l| l.text.contains("Gran")),
+            "other content stays"
+        );
+    }
+    // The screen keeps everything, headline included.
+    let screen = f
+        .engine
+        .page_for(Some(date("2026-11-14")), Edition::Screen)
+        .unwrap()
+        .unwrap();
+    assert_eq!(screen.headline, "News about Zebrafish47");
+
+    // A private daily question drops the headline too.
+    let g = fixture();
+    let (_, q1) = learn(
+        &g.engine,
+        "q",
+        cand(
+            "Zebrafish47",
+            Predicate::Prefers,
+            "swimming",
+            "Zebrafish47 likes swimming.",
+        ),
+    );
+    g.clock.set_str("2026-11-14T06:00:00Z");
+    save_day(&g, "2026-11-14");
+    g.clock.set_str("2026-11-14T20:00:00Z");
+    let mut p2 = compose(&g, "2026-11-15");
+    assert_eq!(
+        p2.question.as_ref().unwrap().memory_id.as_deref(),
+        Some(q1.as_str())
+    );
+    p2.headline = "About Zebrafish47".into();
+    g.engine.save_page(&p2).unwrap();
+    g.engine.set_private(&q1, true).unwrap();
+    let p = g
+        .engine
+        .page_for(Some(date("2026-11-15")), Edition::Audio)
+        .unwrap()
+        .unwrap();
+    assert!(p.question.is_none());
+    assert_eq!(p.headline, "Sunday 15 November");
 }

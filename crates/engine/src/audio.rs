@@ -21,19 +21,24 @@ fn safe(s: &str) -> String {
         .collect()
 }
 
-/// The pages whose lines cite any of these memories.
+/// The pages that cite any of these memories anywhere: in a line, in a choice, or as the daily
+/// question (the saved snapshot is searched for the id, so nothing the snapshot names is missed).
 pub(crate) fn pages_citing(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
     let mut out: Vec<String> = Vec::new();
     for id in ids {
-        let mut stmt = conn.prepare_cached(
+        for sql in [
             "SELECT DISTINCT l.page_date FROM page_line_memories pm \
              JOIN page_lines l ON l.id = pm.line_id WHERE pm.memory_id = ?1",
-        )?;
-        let rows = stmt.query_map([id], |r| r.get::<_, String>(0))?;
-        for d in rows {
-            let d = d?;
-            if !out.contains(&d) {
-                out.push(d);
+            "SELECT page_date FROM questions WHERE memory_id = ?1",
+            "SELECT date FROM pages WHERE instr(body, ?1) > 0",
+        ] {
+            let mut stmt = conn.prepare_cached(sql)?;
+            let rows = stmt.query_map([id], |r| r.get::<_, String>(0))?;
+            for d in rows {
+                let d = d?;
+                if !out.contains(&d) {
+                    out.push(d);
+                }
             }
         }
     }

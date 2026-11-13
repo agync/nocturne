@@ -171,17 +171,28 @@ impl Engine {
 
     /// Carry out a previewed forget. The token is single use and expires; it is refused if
     /// anything it covers has changed since the preview.
+    ///
+    /// Phase 1 is one transaction: it spends the token, hides the memories everywhere (so no
+    /// page, search, answer or list can show them from this moment), redacts the pages that cite
+    /// them and drops their cached audio, and records a job. The job is then finished in chunks;
+    /// if the app stops in between, the next `open` finishes it.
     pub fn forget(&self, token: &str) -> Result<ForgetReport> {
+        let (job, pages_redacted) = self.forget_begin(token)?;
+        let mut report = self.finish_forget(job)?;
+        report.pages_redacted = pages_redacted;
+        Ok(report)
+    }
+
+    /// Phase 1 only, for tests that simulate stopping part way. Not for production use.
+    #[cfg(any(test, feature = "fake"))]
+    pub fn forget_begin_only(&self, token: &str) -> Result<()> {
+        self.forget_begin(token).map(|_| ())
+    }
+
+    fn forget_begin(&self, token: &str) -> Result<(i64, u32)> {
         let now = self.clock().now();
-
-        struct Plan {
-            closure: Vec<String>,
-            items: Vec<String>,
-            include_originals: bool,
-        }
-
-        // Phase 1: validate the token, spend it, redact pages and drop audio. One transaction.
-        let (plan, pages_redacted, files) = self.write(|tx| {
+        let stamp_now = fmt_ts(now);
+        let (job, pages_redacted, files) = self.write(|tx| {
             let row: Option<(String, bool, String, String)> = tx
                 .query_row(
                     "SELECT ids, include_originals, stamp, expires_at FROM forget_tokens WHERE token = ?1",
@@ -192,7 +203,6 @@ impl Engine {
             let Some((ids, include_originals, saved_stamp, expires)) = row else {
                 return Err(Error::StaleToken);
             };
-            tx.execute("DELETE FROM forget_tokens WHERE token = ?1", [token])?;
             if parse_ts(&expires)? <= now {
                 // Refused; an expired token is purged by the next preview.
                 return Err(Error::StaleToken);
@@ -202,37 +212,87 @@ impl Engine {
             if all.is_empty() || stamp(tx, &all)? != saved_stamp {
                 return Err(Error::StaleToken);
             }
+            tx.execute("DELETE FROM forget_tokens WHERE token = ?1", [token])?;
             let items = source_items(tx, &all)?;
             let pages = pages_citing(tx, &all)?;
+            tx.execute(
+                "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, ?3)",
+                params![
+                    serde_json::to_string(&all)?,
+                    serde_json::to_string(&items)?,
+                    include_originals
+                ],
+            )?;
+            let job = tx.last_insert_rowid();
+            for id in &all {
+                tx.execute(
+                    "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \
+                     WHERE id = ?1",
+                    params![id, stamp_now],
+                )?;
+            }
             redact_pages(tx, &all, &pages)?;
             let files = drop_audio_rows(tx, &pages)?;
-            Ok((
-                Plan {
-                    closure: all,
-                    items,
-                    include_originals,
-                },
-                pages.len() as u32,
-                files,
-            ))
+            Ok((job, pages.len() as u32, files))
         })?;
+        self.invalidate_vectors();
         shred_all(files);
+        Ok((job, pages_redacted))
+    }
 
-        // Phase 2: remove the memories, in chunks so capture never waits long.
-        for chunk in plan.closure.chunks(200) {
-            self.write(|tx| {
+    /// Finish forgets that were started and not completed (the app stopped part way).
+    pub(crate) fn resume_forgets(&self) -> Result<()> {
+        let jobs: Vec<i64> = self.read(|conn| {
+            let mut stmt = conn.prepare("SELECT id FROM forget_jobs ORDER BY id")?;
+            Ok(stmt
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })?;
+        for job in jobs {
+            self.finish_forget(job)?;
+        }
+        Ok(())
+    }
+
+    fn finish_forget(&self, job: i64) -> Result<ForgetReport> {
+        let (closure_ids, items, include_originals): (Vec<String>, Vec<String>, bool) =
+            self.read(|conn| {
+                let (ids, items, inc): (String, String, bool) = conn.query_row(
+                    "SELECT ids, items, include_originals FROM forget_jobs WHERE id = ?1",
+                    [job],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?;
+                Ok((
+                    serde_json::from_str(&ids)?,
+                    serde_json::from_str(&items)?,
+                    inc,
+                ))
+            })?;
+
+        // Phase 2: remove the memories in chunks, so capture never waits long. Each chunk
+        // first redacts any page that has come to cite it since phase 1.
+        for chunk in closure_ids.chunks(200) {
+            let files = self.write(|tx| {
+                let pages = pages_citing(tx, chunk)?;
+                let files = if pages.is_empty() {
+                    Vec::new()
+                } else {
+                    redact_pages(tx, &closure_ids, &pages)?;
+                    drop_audio_rows(tx, &pages)?
+                };
                 for id in chunk {
                     purge_memory(tx, id)?;
                 }
-                Ok(())
+                Ok(files)
             })?;
+            shred_all(files);
         }
 
         // Phase 3: originals nothing else depends on, when the person asked.
         let mut originals_removed = 0u32;
-        if plan.include_originals {
+        if include_originals {
             let dir = self.originals_dir();
-            for chunk in plan.items.chunks(200) {
+            for chunk in items.chunks(200) {
                 let doomed = self.write(|tx| {
                     let mut doomed = Vec::new();
                     for item in chunk {
@@ -267,13 +327,14 @@ impl Engine {
             }
         }
 
-        // Phase 4: orphaned entity names, compacted indexes, a truncated log.
+        // Phase 4: orphaned entity names, the finished job, compacted indexes, a truncated log.
         self.write(|tx| {
             tx.execute(
                 "DELETE FROM entities WHERE id NOT IN \
                  (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL)",
                 [],
             )?;
+            tx.execute("DELETE FROM forget_jobs WHERE id = ?1", [job])?;
             tx.execute(
                 "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
                 [],
@@ -285,9 +346,9 @@ impl Engine {
         self.checkpoint_truncate()?;
 
         Ok(ForgetReport {
-            memories_removed: plan.closure.len() as u32,
+            memories_removed: closure_ids.len() as u32,
             originals_removed,
-            pages_redacted,
+            pages_redacted: 0,
         })
     }
 }
@@ -304,6 +365,18 @@ fn purge_memory(tx: &Transaction<'_>, id: &str) -> Result<()> {
 
 /// Lines citing a forgotten memory are redacted in the line table and in the saved snapshot; the
 /// page keeps its shape, and its headline and dek fall back to the template (no mind call).
+/// Blank a line the way a forgotten line reads: present, empty and flagged.
+pub(crate) fn redact_line(line: &mut nocturne_contract::PageLine) {
+    line.forgotten = true;
+    line.text.clear();
+    line.memory_ids.clear();
+    line.receipts.clear();
+    line.choices.clear();
+    line.on = None;
+    line.last_used = None;
+    line.done = false;
+}
+
 fn redact_pages(tx: &Transaction<'_>, ids: &[String], pages: &[String]) -> Result<()> {
     let mut lines: BTreeSet<String> = BTreeSet::new();
     for id in ids {
@@ -336,14 +409,7 @@ fn redact_pages(tx: &Transaction<'_>, ids: &[String], pages: &[String]) -> Resul
                     || line.memory_ids.iter().any(|m| ids.contains(m))
                     || line.choices.iter().any(|c| ids.contains(&c.memory_id));
                 if hit {
-                    line.forgotten = true;
-                    line.text.clear();
-                    line.memory_ids.clear();
-                    line.receipts.clear();
-                    line.choices.clear();
-                    line.on = None;
-                    line.last_used = None;
-                    line.done = false;
+                    redact_line(line);
                 }
             }
         }

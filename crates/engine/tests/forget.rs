@@ -381,3 +381,175 @@ fn making_a_memory_private_removes_cached_audio_of_pages_citing_it() {
     assert!(audio.private_skipped >= 1);
     let _ = LineKind::Learned;
 }
+
+#[test]
+fn a_page_that_cites_a_memory_only_through_the_daily_question_is_redacted() {
+    let f = fixture();
+    let (_, m) = learn(
+        &f.engine,
+        "n",
+        cand(
+            "Zebrafish47",
+            Predicate::Prefers,
+            "swimming",
+            "Zebrafish47 likes swimming.",
+        ),
+    );
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let p1 = compose_save(&f, "2026-11-14");
+    assert!(p1.question.is_some());
+    f.clock.set_str("2026-11-14T20:00:00Z");
+    let p2 = compose_save(&f, "2026-11-15");
+    let q = p2.question.clone().unwrap();
+    assert_eq!(
+        q.memory_id.as_deref(),
+        Some(m.as_str()),
+        "the question names the memory"
+    );
+    assert!(
+        lines(&p2).iter().all(|l| !l.memory_ids.contains(&m)),
+        "no line cites it"
+    );
+    f.engine
+        .cache_audio(
+            "2026-11-15",
+            "af_heart",
+            b"spoken: Zebrafish47 likes swimming",
+        )
+        .unwrap();
+    f.engine
+        .cache_audio(
+            "2026-11-14",
+            "af_heart",
+            b"spoken: Zebrafish47 likes swimming",
+        )
+        .unwrap();
+
+    let preview = f.engine.preview_forget(&[m.clone()], true).unwrap();
+    assert_eq!(preview.pages_affected, 2, "the question page counts too");
+    f.engine.forget(&preview.token).unwrap();
+
+    let after = f.engine.page(Some(date("2026-11-15"))).unwrap().unwrap();
+    assert!(after.question.is_none(), "the question is redacted");
+    assert!(
+        !serde_json::to_string(&after)
+            .unwrap()
+            .to_lowercase()
+            .contains(SECRET)
+    );
+    assert!(
+        f.engine
+            .cached_audio("2026-11-15", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM questions WHERE memory_id IS NOT NULL"
+        ),
+        0
+    );
+    assert!(
+        grep_dir(f.dir.path()).is_empty(),
+        "{:?}",
+        grep_dir(f.dir.path())
+    );
+    for name in ["nocturne.db", "nocturne.db-wal"] {
+        let p = f.dir.path().join(name);
+        if p.exists() {
+            assert!(!contains_secret(&std::fs::read(p).unwrap()), "{name}");
+        }
+    }
+}
+
+fn compose_save(f: &Fixture, day: &str) -> nocturne_contract::PageView {
+    let p = f.engine.compose_page(date(day), Edition::Screen).unwrap();
+    f.engine.save_page(&p).unwrap();
+    p
+}
+
+fn lines(p: &nocturne_contract::PageView) -> Vec<&nocturne_contract::PageLine> {
+    p.needs_you
+        .iter()
+        .chain(&p.changed)
+        .chain(&p.learned)
+        .chain(&p.upcoming)
+        .chain(&p.let_go)
+        .collect()
+}
+
+#[test]
+fn a_forget_hides_everything_at_once_and_a_crash_between_phases_is_finished_on_open() {
+    let w = world();
+    let day = w.day;
+    let dir = w.f.dir.path().to_path_buf();
+    let e = &w.f.engine;
+    // A page composed before the forget, saved after it began.
+    let stale = e.compose_page(day, Edition::Screen).unwrap();
+    assert!(lines(&stale).iter().any(|l| l.memory_ids.contains(&w.m1)));
+
+    let preview = e.preview_forget(&[w.m1.clone()], true).unwrap();
+    e.forget_begin_only(&preview.token).unwrap();
+
+    // From this moment nothing shows the memories, though the app has "stopped" before purging.
+    let listed = e.memories(Default::default()).unwrap();
+    assert!(listed.iter().all(|m| m.id != w.m1 && m.id != w.m1_old));
+    assert!(e.get_memory(&w.m1).is_err());
+    assert!(
+        e.retrieve("zebrafish47 Wednesday", Some(&[1.0, 0.0]), 5)
+            .unwrap()
+            .iter()
+            .all(|h| h.memory.id == w.m2)
+    );
+    assert!(e.needs_you().unwrap().is_empty());
+    let composed = e.compose_page(day, Edition::Screen).unwrap();
+    assert!(
+        lines(&composed)
+            .iter()
+            .all(|l| !l.memory_ids.contains(&w.m1))
+    );
+    assert!(e.cached_audio("2026-11-14", "af_heart").unwrap().is_none());
+    let saved = e.page(Some(day)).unwrap().unwrap();
+    assert!(lines(&saved).iter().all(|l| !l.memory_ids.contains(&w.m1)));
+    // The stale page cannot bring the lines back.
+    e.save_page(&stale).unwrap();
+    let saved = e.page(Some(day)).unwrap().unwrap();
+    assert!(
+        !serde_json::to_string(&saved)
+            .unwrap()
+            .to_lowercase()
+            .contains(SECRET)
+    );
+    assert!(!saved.headline.to_lowercase().contains(SECRET));
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM forget_jobs"), 1);
+    assert_eq!(
+        sql_count(&dir, "SELECT COUNT(*) FROM memories WHERE forgetting = 1"),
+        2
+    );
+
+    // Reopening finishes the job, including the originals the person asked to remove.
+    let clock = w.f.clock.clone();
+    let Fixture {
+        dir: tmp, engine, ..
+    } = w.f;
+    drop(engine);
+    let reopened = nocturne_engine::Engine::open(tmp.path(), clock).unwrap();
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM forget_jobs"), 0);
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM memories"), 1);
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM items"), 1);
+    assert!(reopened.get_item(&w.pdf).is_ok());
+    assert!(grep_dir(&dir).is_empty(), "{:?}", grep_dir(&dir));
+    for name in ["nocturne.db", "nocturne.db-wal"] {
+        let p = dir.join(name);
+        if p.exists() {
+            assert!(!contains_secret(&std::fs::read(p).unwrap()), "{name}");
+        }
+    }
+}
