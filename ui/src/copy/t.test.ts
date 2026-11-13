@@ -13,6 +13,14 @@ describe("t()", () => {
     expect(t("page.more.changed", { count: 2 })).toBe("2 smaller changes");
   });
 
+  it("drops a count of nothing from a heading instead of writing 0", () => {
+    expect(t("needs.eyebrow", { count: 0 })).toBe("Needs you");
+    expect(t("needs.eyebrow", { count: 3 })).toBe("Needs you · 3");
+    expect(t("page.section.needsYou", { count: 0 })).toBe("Needs you");
+    expect(t("kept.heading", { count: 0 })).toBe("Kept today");
+    expect(t("kept.heading", { count: 2 })).toBe("Kept today · 2");
+  });
+
   it("throws on an unknown id under test rather than rendering the id", () => {
     // @ts-expect-error not a real id
     expect(() => t("nope.not.here")).toThrow(/Missing copy id/);

@@ -1,5 +1,5 @@
 {
-  "needs.eyebrow": "Needs you · {count}",
+  "needs.eyebrow": "Needs you{count, plural, =0 {} other { · #}}",
   "needs.title": "{count, plural, =0 {All clear} one {One thing is waiting} other {# things are waiting}}",
   "needs.keys": "J / K to move · 1 2 3 to choose",
   "needs.list": "Things waiting for you",
@@ -16,7 +16,7 @@
   "needs.unconfirmed.unused": "It has not been used anywhere.",
   "needs.unconfirmed.used": "It has been used in an answer.",
   "needs.unconfirmed.true": "It’s true",
-  "needs.unconfirmed.false": "Not true, forget it",
+  "needs.unconfirmed.false": "Not true, forget it…",
   "needs.unconfirmed.leave": "Leave unconfirmed",
   "needs.due.badge": "Due {day}",
   "needs.due.badge.unknown": "Due",
@@ -27,7 +27,7 @@
   "needs.empty.body": "Anything new will be on tomorrow’s page.",
   "needs.msg.which": "{subject} set to {chosen}. The other is kept as history.",
   "needs.msg.confirmed": "Confirmed: {sentence} Marked as sure because you said so.",
-  "needs.msg.forgotten": "Forgotten. The original is still kept; nothing from it is treated as true.",
+  "needs.msg.forgotten": "Forgotten.",
   "needs.msg.left": "Left unconfirmed. It won’t be used in answers.",
   "needs.msg.done": "{subject} done.",
   "needs.msg.failed": "That didn’t go through, so nothing was changed. Try again."

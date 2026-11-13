@@ -104,7 +104,7 @@ describe("what is waiting", () => {
       screen.getByText("Nothing else you kept says this. It has not been used anywhere."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Web page you pasted/ })).toBeInTheDocument();
-    for (const name of ["It’s true", "Not true, forget it", "Leave unconfirmed"]) {
+    for (const name of ["It’s true", "Not true, forget it…", "Leave unconfirmed"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
@@ -199,7 +199,7 @@ describe("acting on what is waiting", () => {
     const engine = new Waiting();
     engine.extra = [unconfirmed()];
     await open(engine);
-    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it" }));
+    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
     expect(await screen.findByRole("dialog", { name: "Forget 1 thing?" })).toBeVisible();
   });
 

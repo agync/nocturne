@@ -11,7 +11,7 @@
   "page.previous.hidden": "Previous page,",
   "page.eyebrow": "{date}",
   "page.eyebrow.first": "{date} · Page {number}",
-  "page.section.needsYou": "Needs you · {count}",
+  "page.section.needsYou": "Needs you{count, plural, =0 {} other { · #}}",
   "page.section.needsYou.today": "Needs you · today",
   "page.section.changed": "What changed · {count}",
   "page.section.changed.top": "What changed · top {shown} of {total}",

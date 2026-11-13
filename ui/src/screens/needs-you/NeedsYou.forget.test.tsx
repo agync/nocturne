@@ -38,7 +38,7 @@ describe("Not true, forget it, with the real forget dialog", () => {
     const forget = vi.spyOn(engine, "forget");
     const listed = vi.spyOn(engine, "listNeedsYou");
     renderApp({ hash: "#/needs-you", engine });
-    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
     const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
 
@@ -46,9 +46,8 @@ describe("Not true, forget it, with the real forget dialog", () => {
     expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
     expect(forget).toHaveBeenCalledOnce();
     await waitFor(() => expect(listed.mock.calls.length).toBeGreaterThan(1));
-    await waitFor(() =>
-      expect(screen.getByText(/Forgotten\. The original is still kept/)).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("Forgotten.")).toBeInTheDocument());
+    expect(document.body.textContent).not.toMatch(/original is still kept/);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
@@ -61,11 +60,25 @@ describe("Not true, forget it, with the real forget dialog", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("One thing is waiting");
   });
 
+  it("says only Forgotten, because whether the original went depends on what was ticked", async () => {
+    const engine = new Waiting();
+    renderApp({ hash: "#/needs-you", engine });
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
+    const dialog = await screen.findByRole("dialog", { name: /Forget/ });
+    const box = await within(dialog).findByRole("checkbox", { name: /Also delete the original/ });
+    if (!(box as HTMLInputElement).checked) await userEvent.click(box);
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget \d+ thing/ }));
+    await within(dialog).findByText("Gone.");
+    const said = await screen.findByText("Forgotten.");
+    expect(said).toHaveAttribute("aria-live", "polite");
+    expect(document.body.textContent).not.toMatch(/original is still kept/);
+  });
+
   it("Keep them leaves everything as it was", async () => {
     const engine = new Waiting();
     const forget = vi.spyOn(engine, "forget");
     renderApp({ hash: "#/needs-you", engine });
-    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
     await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
     expect(forget).not.toHaveBeenCalled();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(

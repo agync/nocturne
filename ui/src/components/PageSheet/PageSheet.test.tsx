@@ -107,6 +107,13 @@ describe("PageSheet, a normal day", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Needs you · 1" })).toBeInTheDocument();
   });
 
+  it("has no count in the Needs you heading once everything in it is done", () => {
+    const page = { ...today, needsYou: today.needsYou.map((l) => ({ ...l, done: true })) };
+    render(<PageSheet page={page} onAction={vi.fn()} />);
+    expect(heading("Needs you")).toBeInTheDocument();
+    expect(screen.queryByText(/Needs you · 0/)).toBeNull();
+  });
+
   it("strikes a line marked as done and says so", async () => {
     const onAction = vi.fn();
     const { rerender } = render(<PageSheet page={today} onAction={onAction} />);
