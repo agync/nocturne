@@ -340,7 +340,7 @@ fn compose(
     let fresh = query_mems(
         conn,
         "m.recorded_at >= ?1 AND m.recorded_at < ?2 AND m.superseded_at IS NULL \
-         AND m.status != 'unconfirmed'",
+         AND m.status NOT IN ('unconfirmed', 'letGo')",
         [&start, &end],
     )?;
     let mut changes: Vec<(u32, String, String, bool, Planned)> = Vec::new();
