@@ -34,7 +34,7 @@ fake-mind = ["nocturne-engine/fake"]
 # A development-only server that puts the real app (engine, models, commands) behind HTTP on
 # loopback, for use from a browser. Never in `default`, never built by packaging; the package
 # checks fail if it shows up. See docs/contribution/building.md.
-preview = ["tauri/test", "dep:axum", "dep:tower", "dep:tower-http", "dep:futures-util"]
+preview = ["tauri/test", "axum/json", "axum/query", "dep:tower", "dep:tower-http", "dep:futures-util"]
 # Set by `cargo tauri build`: embed the interface instead of loading the dev server.
 custom-protocol = ["tauri/custom-protocol"]
 
@@ -47,6 +47,7 @@ nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 nocturne-intelligence = { path = "../crates/intelligence" }
 nocturne-lemonade.workspace = true
+nocturne-helpers.workspace = true
 tauri = { workspace = true, features = ["tray-icon", "image-png", "protocol-asset"] }
 tauri-plugin-single-instance.workspace = true
 tauri-plugin-dialog.workspace = true
@@ -66,7 +67,17 @@ getrandom = "0.3"
 notify = "8"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 tokio-util = { version = "0.7", default-features = false }
-axum = { version = "0.8", optional = true, default-features = false, features = ["http1", "tokio", "json", "query"] }
+# Away from home: the phone listener and the sealed channel. `sha2_10` is the 0.10 line that
+# `hkdf` 0.12 needs; the workspace `sha2` is 0.11.
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
+p256 = { version = "0.13", features = ["ecdh", "pkcs8"] }
+hkdf = "0.12"
+aes-gcm = "0.10.3"
+subtle = "2"
+sha2_10 = { package = "sha2", version = "0.10" }
+qrcode = { version = "0.14", default-features = false }
+base64.workspace = true
+zeroize = "1"
 tower = { version = "0.5", optional = true, features = ["util"] }
 tower-http = { version = "0.6", optional = true, default-features = false, features = ["fs"] }
 futures-util = { version = "0.3", optional = true, default-features = false }

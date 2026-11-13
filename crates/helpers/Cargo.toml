@@ -1,0 +1,45 @@
+[package]
+name = "nocturne-helpers"
+description = "Downloads, verifies and supervises the connection helpers behind Away from home"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+# Stand-in helper binaries for tests in this crate and in crates that depend on it.
+fake = []
+
+[[bin]]
+name = "fake-cloudflared"
+path = "src/bin/fake-cloudflared.rs"
+required-features = ["fake"]
+
+[[bin]]
+name = "fake-tailscaled"
+path = "src/bin/fake-tailscaled.rs"
+required-features = ["fake"]
+
+[[bin]]
+name = "fake-tailscale"
+path = "src/bin/fake-tailscale.rs"
+required-features = ["fake"]
+
+[dependencies]
+nocturne-lemonade.workspace = true
+tokio = { workspace = true, features = ["process", "io-util", "time", "fs", "sync", "net"] }
+tokio-util = { version = "0.7", default-features = false }
+process-wrap = { version = "10", features = ["tokio1", "job-object"] }
+reqwest.workspace = true
+sha2.workspace = true
+flate2 = "1"
+tar = "0.4"
+zip = { version = "9", default-features = false, features = ["deflate"] }
+serde.workspace = true
+serde_json.workspace = true
+toml = "1"
+thiserror.workspace = true
+tracing.workspace = true
+
+[lints]
+workspace = true

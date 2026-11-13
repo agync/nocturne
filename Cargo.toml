@@ -12,6 +12,7 @@ rust-version = "1.90"
 nocturne-contract = { path = "crates/contract" }
 nocturne-engine = { path = "crates/engine" }
 nocturne-lemonade = { path = "crates/lemonade" }
+nocturne-helpers = { path = "crates/helpers" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ts-rs = { version = "12", features = ["serde-compat"] }
