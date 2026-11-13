@@ -243,7 +243,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
 }
 
 #[tokio::test]
-async fn pause_and_resume_call_the_download_controls() {
+async fn pausing_takes_the_engine_offline_and_resuming_brings_it_back_online() {
     let rig = rig("download-ms=1200", 32).await;
     let mut rx = rig.setup.view();
     rig.setup.start(Tier::Small).await.unwrap();
@@ -253,11 +253,13 @@ async fn pause_and_resume_call_the_download_controls() {
         20,
     )
     .await;
+    let cfg = rig.sup.client().config().await.unwrap();
+    assert_eq!(cfg["offline"], false, "online while it downloads");
+
     rig.setup.pause().await.unwrap();
     let paused = wait_view(&mut rx, |v| v.phase == SetupPhase::Paused, 5).await;
     assert_eq!(paused.paused, Some(PauseReason::Person));
-    let controls = requests_to(&rig.sup, "/v1/downloads/control").await;
-    assert_eq!(controls[0]["body"]["action"], "pause");
+    wait_offline(&rig.sup).await;
     let frozen = rx.borrow().downloaded_bytes;
     tokio::time::sleep(Duration::from_millis(300)).await;
     assert_eq!(
@@ -267,41 +269,26 @@ async fn pause_and_resume_call_the_download_controls() {
     );
     assert_eq!(rx.borrow().phase, SetupPhase::Paused);
 
+    // The engine reads its mode from disk when it starts again.
+    common::set_mode(&rig.dirs, "download-ms=800");
     rig.setup.resume().await.unwrap();
-    raw(
-        &rig.sup,
-        "POST",
-        "/fake/mode",
-        json!({"mode": "download-ms=150"}),
+    wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.paused.is_none(),
+        10,
     )
     .await;
-    wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 5).await;
-    let mut actions = Vec::new();
-    for _ in 0..100 {
-        actions = requests_to(&rig.sup, "/v1/downloads/control")
-            .await
-            .iter()
-            .map(|r| r["body"]["action"].as_str().unwrap().to_string())
-            .collect();
-        if actions.len() > 1 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    assert_eq!(actions[0], "pause");
-    assert!(actions.contains(&"remove".to_string()), "{actions:?}");
+    let cfg = rig.sup.client().config().await.unwrap();
+    assert_eq!(cfg["offline"], false, "online again after resuming");
     let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 40).await;
     assert!(done.paused.is_none());
+    wait_offline(&rig.sup).await;
     rig.sup.shutdown().await.unwrap();
 }
 
 #[tokio::test]
-async fn resume_waits_for_the_worker_to_stop_and_retries_a_conflict() {
-    let rig = rig(
-        "download-ms=1500,pause-lag-ms=400,conflict-first-remove",
-        32,
-    )
-    .await;
+async fn a_pause_that_lasts_does_not_lose_the_setup() {
+    let rig = rig("download-ms=1500", 32).await;
     let mut rx = rig.setup.view();
     rig.setup.start(Tier::Small).await.unwrap();
     wait_view(
@@ -312,33 +299,11 @@ async fn resume_waits_for_the_worker_to_stop_and_retries_a_conflict() {
     .await;
     rig.setup.pause().await.unwrap();
     rig.setup.resume().await.unwrap();
-    raw(
-        &rig.sup,
-        "POST",
-        "/fake/mode",
-        json!({"mode": "download-ms=100,pause-lag-ms=400,conflict-first-remove"}),
-    )
-    .await;
-    wait_view(
-        &mut rx,
-        |v| v.phase == SetupPhase::Downloading && v.paused.is_none(),
-        10,
-    )
-    .await;
-    let mut conflicts = 0;
-    for _ in 0..100 {
-        conflicts = raw(&rig.sup, "GET", "/fake/stats", json!({})).await["conflicts"]
-            .as_u64()
-            .unwrap();
-        if conflicts > 0 {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(50)).await;
-    }
-    assert_eq!(conflicts, 1, "one refusal, then the retry went through");
+    common::set_mode(&rig.dirs, "download-ms=100");
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     rig.sup.shutdown().await.unwrap();
 }
+
 #[tokio::test]
 async fn a_stalled_download_reads_as_offline_and_recovers_when_bytes_move() {
     let rig = rig("download-ms=300,no-progress", 16).await;
@@ -522,5 +487,66 @@ async fn setup_rides_out_an_engine_crash() {
     assert!(rig.sup.restarts() >= 1);
     assert_eq!(rig.setup.installed(), Some(Tier::Small));
     wait_offline(&rig.sup).await;
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn an_unfinished_change_of_tier_keeps_the_tier_that_works() {
+    let rig = rig("download-ms=100", 64).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Small).await.unwrap();
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    assert_eq!(rig.setup.installed(), Some(Tier::Small));
+
+    // The change to a bigger tier starts and is cut short.
+    common::set_mode(&rig.dirs, "download-ms=4000");
+    rig.setup.start(Tier::Standard).await.unwrap();
+    wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.chosen == Some(Tier::Standard),
+        20,
+    )
+    .await;
+    let mut record = nocturne_lemonade::record::read(&rig.dirs.config()).unwrap();
+    for _ in 0..100 {
+        if record.tier == Some(Tier::Standard) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        record = nocturne_lemonade::record::read(&rig.dirs.config()).unwrap();
+    }
+    assert_eq!(record.tier, Some(Tier::Standard));
+    assert!(!record.done);
+    assert_eq!(record.completed, Some(Tier::Small));
+    assert_eq!(
+        rig.setup.installed(),
+        Some(Tier::Small),
+        "still the working one"
+    );
+    assert_eq!(rig.setup.installed_ready().await, Some(Tier::Small));
+
+    // A later launch finds the working tier, not a paused setup.
+    let later = new_setup(&rig.sup, &rig.dirs, 64, &rig.ledger);
+    let view = later.check().await.unwrap();
+    assert_eq!(view.phase, SetupPhase::Done);
+    assert_eq!(view.chosen, Some(Tier::Small));
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn setup_for_another_tier_while_one_runs_is_refused() {
+    let rig = rig("download-ms=3000", 64).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Small).await.unwrap();
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 20).await;
+    assert_eq!(
+        rig.setup.start(Tier::Standard).await,
+        Err(nocturne_lemonade::RuntimeError::Busy)
+    );
+    assert_eq!(
+        rig.setup.start(Tier::Small).await,
+        Ok(()),
+        "asking again for the same tier is fine"
+    );
     rig.sup.shutdown().await.unwrap();
 }

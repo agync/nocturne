@@ -167,6 +167,8 @@ fn backend_estimate(recipe: &str, backend: &str) -> u64 {
 #[derive(Default)]
 struct Ctl {
     running: bool,
+    /// The tier the running setup is installing.
+    tier: Option<Tier>,
     paused: bool,
     job: Option<String>,
     handle: Option<JoinHandle<()>>,
@@ -325,11 +327,17 @@ impl Setup {
         lock(&self.inner.history).clone()
     }
 
-    /// The tier that is fully installed, when setup has finished.
+    /// The tier that is fully installed. While a change to another tier is being fetched (or
+    /// was interrupted) this is still the one that was working.
     pub fn installed(&self) -> Option<Tier> {
-        record::read(&self.inner.config_dir)
-            .filter(|r| r.done)
-            .and_then(|r| r.tier)
+        record::read(&self.inner.config_dir).and_then(|r| r.working_tier())
+    }
+
+    /// The installed tier, when every one of its components is on disk.
+    pub async fn installed_ready(&self) -> Option<Tier> {
+        let tier = self.installed()?;
+        let missing = self.inner.missing(tier).await.ok()?;
+        missing.is_empty().then_some(tier)
     }
 
     /// Looks at the machine and what is already on disk: `Choosing`, `Paused` when an earlier
@@ -431,12 +439,17 @@ impl Inner {
         let mut paused = None;
         let (mut done, mut total) = (0u64, 0u64);
         if let Some(rec) = record.as_ref().filter(|r| r.tier.is_some()) {
-            let t = rec.tier.unwrap_or(Tier::Unsupported);
+            // A change of tier that never finished does not take away the one that works.
+            let working = match rec.working_tier() {
+                Some(w) if self.missing(w).await?.is_empty() => Some(w),
+                _ => None,
+            };
+            let t = working.or(rec.tier).unwrap_or(Tier::Unsupported);
             let missing = self.missing(t).await?;
             total = self.comps(t).iter().map(|c| c.bytes).sum();
             done = total - missing.iter().map(|c| c.bytes).sum::<u64>();
             chosen = Some(t);
-            if rec.done && missing.is_empty() {
+            if working.is_some() || (rec.done && missing.is_empty()) {
                 next = SetupPhase::Done;
             } else if !rec.done {
                 next = SetupPhase::Paused;
@@ -471,8 +484,15 @@ impl Inner {
         if tier == Tier::Unsupported {
             return Err(RuntimeError::Start("this machine cannot run a tier".into()));
         }
-        if self.ctl().running {
-            return Ok(());
+        {
+            let ctl = self.ctl();
+            if ctl.running {
+                return if ctl.tier == Some(tier) {
+                    Ok(())
+                } else {
+                    Err(RuntimeError::Busy)
+                };
+            }
         }
         let (ram, free, info) = self.host().await;
         self.describe_host(ram, free);
@@ -511,6 +531,7 @@ impl Inner {
             return;
         }
         ctl.running = true;
+        ctl.tier = Some(tier);
         ctl.paused = false;
         let inner = self.clone();
         ctl.handle = Some(tokio::spawn(async move {
@@ -521,6 +542,7 @@ impl Inner {
             let _ = inner.control.set_online(false).await;
             let mut ctl = inner.ctl();
             ctl.running = false;
+            ctl.tier = None;
             ctl.job = None;
         }));
     }
@@ -542,6 +564,8 @@ impl Inner {
             v.paused = Some(PauseReason::Person);
         });
         self.wake.notify_one();
+        // Nothing may reach the internet while the person has paused; resuming goes online again.
+        let _ = self.control.set_online(false).await;
         Ok(())
     }
 
@@ -617,6 +641,7 @@ impl Inner {
             version: 1,
             tier: Some(tier),
             done: false,
+            completed: record::read(&self.config_dir).and_then(|r| r.working_tier()),
             backends: Default::default(),
         };
         for (recipe, backend) in [
@@ -652,6 +677,7 @@ impl Inner {
             }
         }
         rec.done = true;
+        rec.completed = Some(tier);
         record::write(&self.config_dir, &rec).map_err(engine)?;
         self.control.set_online(false).await.map_err(engine)?;
         let total = self.comps(tier).iter().map(|c| c.bytes).sum::<u64>() as f64;
@@ -861,6 +887,7 @@ impl Inner {
             self.nap(self.opts.poll).await;
         }
         if waited {
+            let _ = self.control.set_online(true).await;
             self.mark_downloading();
         }
         waited

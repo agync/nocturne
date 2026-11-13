@@ -40,6 +40,8 @@ pub enum RuntimeError {
         out_of_memory: bool,
         message: String,
     },
+    #[error("setup is already running for another tier")]
+    Busy,
 }
 
 impl From<std::io::Error> for RuntimeError {

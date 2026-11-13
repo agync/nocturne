@@ -8,7 +8,7 @@
 //! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
-//! `conflict-first-remove`, `load-oom`, `load-error`.
+//! `conflict-first-remove`, `load-oom`, `load-error`. `POST /fake/crash` kills it on demand.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -469,6 +469,7 @@ async fn main() {
         .route("/fake/requests", get(fake_requests))
         .route("/fake/script", post(fake_script))
         .route("/fake/mode", post(fake_mode))
+        .route("/fake/crash", post(fake_crash))
         .route("/fake/stats", get(fake_stats))
         .layer(middleware::from_fn_with_state(app.clone(), guard))
         .with_state(app);
@@ -999,6 +1000,16 @@ async fn fake_mode(State(app): State<Shared>, Json(body): Json<Value>) -> Json<V
     *app.modes.write().unwrap_or_else(|e| e.into_inner()) =
         parse_modes(body["mode"].as_str().unwrap_or(""));
     Json(json!({"status": "ok"}))
+}
+
+/// Dies at once, as if it had crashed, for tests that choose the moment.
+async fn fake_crash(State(app): State<Shared>) -> Json<Value> {
+    app.persist();
+    tokio::spawn(async {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        std::process::exit(1);
+    });
+    Json(json!({"status": "crashing"}))
 }
 
 async fn fake_stats(State(app): State<Shared>) -> Json<Value> {
