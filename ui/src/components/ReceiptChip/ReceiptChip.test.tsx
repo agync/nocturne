@@ -22,13 +22,44 @@ describe("ReceiptChip", () => {
     expect(container.querySelector('[data-kind="audio"]')).not.toBeNull();
   });
 
-  it("speaks the source the way the design writes it", () => {
+  it("is named by the words on it, then says it is a source", () => {
     render(<ReceiptChip receipt={base} onOpen={() => undefined} />);
     expect(
-      screen.getByRole("button", {
-        name: "Source: voice note, 10 seconds, Monday 10 November. Press Enter to open.",
-      }),
+      screen.getByRole("button", { name: "Voice note · 0:10 · Mon 10 Nov. Source." }),
     ).toBeInTheDocument();
+  });
+
+  it("never has an accessible name that leaves out its visible text", () => {
+    const receipts: Receipt[] = [
+      base,
+      {
+        ...base,
+        kind: "web",
+        source: "pastedWeb",
+        label: "Nut",
+        durationMs: null,
+        unconfirmed: true,
+      },
+      { ...base, kind: "image", label: "Letter", durationMs: null },
+      {
+        ...base,
+        kind: "document",
+        label: "Brief.pdf",
+        durationMs: null,
+        span: { type: "page", page: 3 },
+      },
+      { ...base, kind: "text", source: "paste", durationMs: null },
+    ];
+    for (const receipt of receipts) {
+      for (const onOpen of [() => undefined, undefined]) {
+        const { container, unmount } = render(<ReceiptChip receipt={receipt} onOpen={onOpen} />);
+        const chip = container.firstElementChild as HTMLElement;
+        const visible = (chip.textContent ?? "").trim();
+        expect(chip.getAttribute("aria-label"), visible).toContain(visible);
+        expect(chip.getAttribute("aria-label")).not.toMatch(/Press Enter/);
+        unmount();
+      }
+    }
   });
 
   it("opens the original on click and on Enter", async () => {
@@ -53,7 +84,7 @@ describe("ReceiptChip", () => {
     expect(chip).toHaveAttribute("data-unconfirmed", "true");
     expect(chip.className).toContain("unconfirmed");
     expect(chip).toHaveTextContent("Web page you pasted · Mon 10 Nov · unconfirmed");
-    expect(chip).toHaveAccessibleName(/Not confirmed yet/);
+    expect(chip).toHaveAccessibleName(/unconfirmed\. Source\.$/);
   });
 
   it("writes a photo by its label and a document by its page", () => {
@@ -73,9 +104,7 @@ describe("ReceiptChip", () => {
       />,
     );
     expect(screen.getByText("Brief.pdf · p.3")).toBeInTheDocument();
-    expect(screen.getByRole("img")).toHaveAccessibleName(
-      "Source: Brief.pdf, page 3, Monday 10 November.",
-    );
+    expect(screen.getByRole("img")).toHaveAccessibleName("Brief.pdf · p.3. Source.");
   });
 
   it("tells a pasted message from a typed note", () => {

@@ -200,6 +200,10 @@
   font: 400 0.6875rem / 1 var(--font-mono);
 }
 
+.key::after {
+  content: attr(data-key);
+}
+
 .evidence {
   display: flex;
   flex-wrap: wrap;

@@ -49,7 +49,7 @@ test.describe("the Ask page", () => {
     await expect(page.locator("article p[class*=answer]")).toHaveText(
       "Gran’s new number ends 4471.",
     );
-    await expect(page.getByRole("button", { name: /^Source: note/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Note · / })).toBeVisible();
     // What was sent is not measured, so the line does not say that nothing was.
     await expect(page.getByText("Answered from 1 thing you kept")).toBeVisible();
     await expect(page.getByText(/sent to the internet/)).toHaveCount(0);
@@ -162,7 +162,9 @@ test.describe("the Ask page", () => {
     await settled(page);
     await page
       .locator("article")
-      .getByRole("button", { name: /^Source:/ })
+      .getByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      })
       .click();
     await expect(page).toHaveURL(/#\/items\//);
     await page.goBack();
@@ -192,7 +194,7 @@ test.describe("the Ask page", () => {
     await ready(page, "#/today");
     await ask(page, "What is Gran’s new number?");
     await settled(page);
-    await page.getByRole("button", { name: /^Source: note/ }).click();
+    await page.getByRole("button", { name: /Note · / }).click();
     await expect(page).toHaveURL(/#\/items\/item-gran$/);
   });
 });
@@ -209,7 +211,11 @@ test.describe("a narrow window", () => {
     expect(await overflow(page)).toBeLessThanOrEqual(0);
     await expect(page.getByRole("textbox", { name: "Ask a follow-up" })).toBeHidden();
     await expect(bar(page)).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Source:/ })).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/ask-answer-narrow.png` });
   });
 

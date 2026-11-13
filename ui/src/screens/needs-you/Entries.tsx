@@ -112,7 +112,7 @@ export function WhichEntry({ title, options, onPick, busy, onOpen }: WhichProps)
                 onClick={() => onPick(option)}
               >
                 {t("needs.which.pick")}
-                <kbd className={styles.key}>{i + 1}</kbd>
+                <span className={styles.key} data-key={i + 1} aria-hidden="true" />
               </button>
             </div>
           </div>

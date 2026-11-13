@@ -167,7 +167,11 @@ describe("the answer", () => {
     await twoMemoryAnswer(engine, 4);
     await open({ engine, question: "When is Leo’s swimming?" });
     // Receipts are there while the answer is still being written.
-    expect(await screen.findAllByRole("button", { name: /^Source:/ })).toHaveLength(2);
+    expect(
+      await screen.findAllByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toHaveLength(2);
     await screen.findByText(/on Mondays/);
     expect(screen.queryByText(/Sam/, { selector: "p" })).toBeNull();
     // The text itself is never in a live region while it streams.
@@ -215,12 +219,16 @@ describe("the answer", () => {
       await screen.findByRole("button", { name: "Coach Sam. Show where this came from." }),
     );
     const groups = await screen.findAllByRole("list", { name: /^Where “/ });
-    expect(within(groups[1] as HTMLElement).getByRole("button", { name: /^Source/ })).toHaveFocus();
+    expect(
+      within(groups[1] as HTMLElement).getByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toHaveFocus();
   });
 
   it("a receipt opens its original", async () => {
     await open({ question: "What is Gran’s new number?" });
-    await userEvent.click(await screen.findByRole("button", { name: /^Source: note/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Note · / }));
     expect(window.location.hash).toBe("#/items/item-gran");
   });
 
@@ -271,9 +279,17 @@ describe("a slow first question", () => {
     );
     expect(await screen.findByText(/Found 2 things you kept about this/)).toBeInTheDocument();
     expect(screen.getByText(/Reading them…/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Source/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Show the 2 originals now" }));
-    expect(screen.getAllByRole("button", { name: /^Source/ })).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /originals now/ })).toBeNull();
   });
 });
@@ -419,7 +435,11 @@ describe("coming back to an answer", () => {
     await heading("“What did we decide about half term?”");
     await screen.findByRole("button", { name: "That’s wrong" });
     const article = document.querySelector("article") as HTMLElement;
-    await userEvent.click(await within(article).findByRole("button", { name: /^Source:/ }));
+    await userEvent.click(
+      await within(article).findByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    );
     expect(window.location.hash).toMatch(/^#\/items\//);
     act(() => {
       window.location.hash = "#/ask";
@@ -433,7 +453,7 @@ describe("coming back to an answer", () => {
     expect(engine.asked).toHaveLength(2);
     expect(
       within(document.querySelector("article") as HTMLElement).getByRole("button", {
-        name: /^Source:/,
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
       }),
     ).toBeInTheDocument();
   });
@@ -442,7 +462,9 @@ describe("coming back to an answer", () => {
     const engine = new Scripted();
     await twoMemoryAnswer(engine, 2);
     await open({ engine, question: "When is Leo’s swimming?" });
-    await screen.findAllByRole("button", { name: /^Source:/ });
+    await screen.findAllByRole("button", {
+      name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+    });
     act(() => {
       window.location.hash = "#/today";
     });

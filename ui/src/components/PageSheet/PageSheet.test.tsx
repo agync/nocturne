@@ -50,16 +50,18 @@ describe("PageSheet, a normal day", () => {
   it("gives every claim a receipt", () => {
     render(<PageSheet page={today} onAction={vi.fn()} />);
     const changed = within(screen.getByRole("region", { name: "What changed · 3" }));
-    expect(changed.getAllByRole("button", { name: /^Source:/ })).toHaveLength(3);
+    expect(changed.getAllByRole("button", { name: /\. Source\.$/ })).toHaveLength(3);
     const needs = within(screen.getByRole("region", { name: "Needs you · 2" }));
-    expect(needs.getAllByRole("button", { name: /^Source:/ }).length).toBeGreaterThanOrEqual(1);
+    expect(needs.getAllByRole("button", { name: /\. Source\.$/ }).length).toBeGreaterThanOrEqual(1);
     expect(needs.getByText(/Appointment card/)).toBeInTheDocument();
   });
 
   it("opens the original when a receipt is pressed", async () => {
     const onAction = vi.fn();
     render(<PageSheet page={today} onAction={onAction} />);
-    await userEvent.click(screen.getAllByRole("button", { name: /^Source:/ })[0] as HTMLElement);
+    await userEvent.click(
+      screen.getAllByRole("button", { name: /\. Source\.$/ })[0] as HTMLElement,
+    );
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: "open" }));
   });
 
@@ -150,7 +152,7 @@ describe("PageSheet, a normal day", () => {
     const onAction = vi.fn();
     render(<PageSheet page={today} onAction={onAction} />);
     const letGo = within(screen.getByRole("region", { name: "Let go · 3" }));
-    const chips = letGo.getAllByRole("button", { name: /^Source:/ });
+    const chips = letGo.getAllByRole("button", { name: /\. Source\.$/ });
     expect(chips).toHaveLength(3);
     await userEvent.click(chips[2] as HTMLElement);
     expect(onAction).toHaveBeenCalledWith(
@@ -165,7 +167,7 @@ describe("PageSheet, a normal day", () => {
     const onAction = vi.fn();
     render(<PageSheet page={today} onAction={onAction} />);
     const group = screen.getByRole("group", { name: /Dentist|appointment/i });
-    const chips = within(group).getAllByRole("button", { name: /^Source:/ });
+    const chips = within(group).getAllByRole("button", { name: /\. Source\.$/ });
     expect(chips).toHaveLength(2);
     await userEvent.click(chips[0] as HTMLElement);
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: "open" }));
@@ -273,7 +275,7 @@ describe("PageSheet, other days", () => {
     render(<PageSheet page={page} onAction={vi.fn()} />);
     expect(heading("A quiet night. Nothing needs you.", 1)).toBeInTheDocument();
     const week = within(screen.getByRole("region", { name: "This week" }));
-    expect(week.getAllByRole("button", { name: /^Source:/ })).toHaveLength(3);
+    expect(week.getAllByRole("button", { name: /\. Source\.$/ })).toHaveLength(3);
     expect(week.getByText("MON", { exact: false, ignore: "x" }) ?? null).toBeTruthy();
     expect(screen.queryByRole("heading", { level: 2, name: /Needs you/ })).toBeNull();
     expect(screen.getByText("Is Gran still at Rowan Court?")).toBeInTheDocument();
@@ -436,7 +438,7 @@ describe("PageSheet, other days", () => {
     await waitFor(() => expect(container.querySelectorAll('[data-filled="true"]')).toHaveLength(3));
     await userEvent.click(
       within(screen.getByRole("region", { name: "One question" })).getByRole("button", {
-        name: /^Source:/,
+        name: /\. Source\.$/,
       }),
     );
     expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: "open" }));

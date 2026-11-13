@@ -33,7 +33,6 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.sentence);
   const [busy, setBusy] = useState(false);
-  const sentenceId = useId();
   const barId = useId();
   const button = useRef<HTMLButtonElement>(null);
   const field = useRef<HTMLInputElement>(null);
@@ -93,12 +92,9 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
         className={styles.memoryButton}
         aria-expanded={selected}
         aria-controls={selected ? barId : undefined}
-        aria-labelledby={sentenceId}
         onClick={() => onSelect(selected ? null : m.id)}
       >
-        <span id={sentenceId} className={`t-page-line ${styles.sentence}`}>
-          {m.sentence}
-        </span>
+        <span className={`t-page-line ${styles.sentence}`}>{m.sentence}</span>
         <span className={styles.side}>
           <Certainty level={m.certainty} />
           <span className={styles.when}>{memoryWhen(m)}</span>

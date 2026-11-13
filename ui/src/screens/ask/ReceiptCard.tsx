@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { receiptLabel } from "../../components/ReceiptChip/ReceiptChip";
 import { Thumb } from "../../components/Thumb/Thumb";
 import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -126,7 +125,6 @@ export function ReceiptCard({ receipt, active = false, onOpen }: ReceiptCardProp
         type="button"
         className={styles.receiptOpen}
         data-open
-        aria-label={receiptLabel(receipt, true)}
         onClick={() => onOpen(receipt)}
       >
         <span className={styles.receiptTitle}>{receipt.label}</span>

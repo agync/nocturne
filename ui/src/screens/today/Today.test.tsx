@@ -133,9 +133,7 @@ describe("the morning page on Today", () => {
 
   it("opens an original from a receipt", async () => {
     await open();
-    await userEvent.click(
-      screen.getAllByRole("button", { name: /^Source: Letter/ })[0] as HTMLElement,
-    );
+    await userEvent.click(screen.getAllByRole("button", { name: /^Letter/ })[0] as HTMLElement);
     await waitFor(() => expect(window.location.hash).toBe("#/items/item-letter"));
   });
 

@@ -27,7 +27,7 @@ test.describe("screenshots", () => {
     test(`${name} light`, async ({ page }) => {
       await ready(page, hash, heading);
       if (name === "memories-entity") {
-        await page.getByRole("button", { name: "Leo is allergic to nuts." }).click();
+        await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
       }
       await page.screenshot({ path: `${SHOTS}/${name}-light.png` });
     });
@@ -67,7 +67,7 @@ for (const scheme of ["light", "dark"] as const) {
     for (const [, hash, heading] of SCREENS) {
       await ready(page, hash, heading);
       if (hash === "#/memories/ent-leo") {
-        await page.getByRole("button", { name: "Leo is allergic to nuts." }).click();
+        await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
         await page.getByRole("button", { name: "Correct" }).click();
       }
       const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
@@ -93,7 +93,7 @@ test.describe("keyboard", () => {
     await expect(page).toHaveURL(/#\/memories\/ent-leo$/);
     await page.getByRole("heading", { level: 1, name: "Leo" }).waitFor();
 
-    const row = page.getByRole("button", { name: "Leo is allergic to nuts." });
+    const row = page.getByRole("button", { name: /^Leo is allergic to nuts\./ });
     await row.focus();
     await page.keyboard.press("Enter");
     await expect(row).toHaveAttribute("aria-expanded", "true");
@@ -110,7 +110,7 @@ test.describe("keyboard", () => {
 
   test("Escape puts the actions away and keeps focus on the row", async ({ page }) => {
     await ready(page, "#/memories/ent-leo", "Leo");
-    const row = page.getByRole("button", { name: "Leo is allergic to nuts." });
+    const row = page.getByRole("button", { name: /^Leo is allergic to nuts\./ });
     await row.click();
     await page.getByRole("button", { name: "Keep forever" }).focus();
     await page.keyboard.press("Escape");
@@ -141,17 +141,17 @@ test.describe("using it", () => {
   test("a receipt opens the original, and a memory there opens its person", async ({ page }) => {
     await ready(page, "#/memories/ent-leo", "Leo");
     await page
-      .getByRole("button", { name: /^Source: message you pasted/ })
+      .getByRole("button", { name: /^Message you pasted/ })
       .first()
       .click();
     await expect(page).toHaveURL(/#\/items\/item-swim$/);
-    await page.getByRole("link", { name: "Leo’s swimming is on Mondays at 17:30." }).click();
+    await page.getByRole("link", { name: /^Leo’s swimming is on Mondays at 17:30\./ }).click();
     await expect(page).toHaveURL(/#\/memories\/ent-leo$/);
   });
 
   test("forgetting a memory leaves focus on the person's name", async ({ page }) => {
     await ready(page, "#/memories/ent-leo", "Leo");
-    await page.getByRole("button", { name: "Leo is allergic to nuts." }).click();
+    await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
     await page.getByRole("button", { name: "Forget…" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: "Keep them" })).toBeFocused();

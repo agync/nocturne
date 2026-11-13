@@ -73,9 +73,7 @@ describe("What Nocturne remembers", () => {
     expect(within(swim).getByText("Sure")).toBeInTheDocument();
     expect(within(swim).getByText("Changed")).toBeInTheDocument();
     expect(within(swim).getByText(/was Wednesday/)).toBeInTheDocument();
-    expect(
-      within(swim).getByRole("button", { name: /^Source: message you pasted/ }),
-    ).toBeInTheDocument();
+    expect(within(swim).getByRole("button", { name: /^Message you pasted/ })).toBeInTheDocument();
     const nut = screen.getByText("Leo is allergic to nuts.").closest("li") as HTMLElement;
     expect(within(nut).getByText("Unconfirmed")).toBeInTheDocument();
     expect(within(nut).getByText("Not sure")).toBeInTheDocument();
@@ -99,7 +97,7 @@ describe("What Nocturne remembers", () => {
 
   it("selects a memory to show its actions, and Escape puts them away", async () => {
     await openLeo();
-    const row = screen.getByRole("button", { name: "Leo is allergic to nuts." });
+    const row = screen.getByRole("button", { name: /^Leo is allergic to nuts\./ });
     expect(row).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(row);
     expect(row).toHaveAttribute("aria-expanded", "true");
@@ -118,7 +116,7 @@ describe("What Nocturne remembers", () => {
   it("corrects a memory in place", async () => {
     const { engine } = await openLeo();
     const spy = vi.spyOn(engine, "correctMemory");
-    await userEvent.click(screen.getByRole("button", { name: "Leo is allergic to nuts." }));
+    await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
     await userEvent.click(screen.getByRole("button", { name: "Correct" }));
     const field = screen.getByRole("textbox", { name: "What should it say?" });
     expect(field).toHaveFocus();
@@ -133,7 +131,7 @@ describe("What Nocturne remembers", () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "correctMemory").mockRejectedValueOnce(new Error("no"));
     await openLeo(engine);
-    await userEvent.click(screen.getByRole("button", { name: "Leo is allergic to nuts." }));
+    await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
     await userEvent.click(screen.getByRole("button", { name: "Correct" }));
     const field = screen.getByRole("textbox", { name: "What should it say?" });
     await userEvent.clear(field);
@@ -151,7 +149,7 @@ describe("What Nocturne remembers", () => {
     const keep = vi.spyOn(engine, "setKeepForever");
     const priv = vi.spyOn(engine, "setPrivate");
     await userEvent.click(
-      screen.getByRole("button", { name: "Leo’s swimming is on Mondays at 17:30." }),
+      screen.getByRole("button", { name: /^Leo’s swimming is on Mondays at 17:30\./ }),
     );
     await userEvent.click(screen.getByRole("button", { name: "Keep forever" }));
     expect(keep).toHaveBeenCalledWith("mem-swim", true);
@@ -174,7 +172,7 @@ describe("What Nocturne remembers", () => {
 
   it("forgets a memory through the dialog and then drops it from the list", async () => {
     await openLeo();
-    await userEvent.click(screen.getByRole("button", { name: "Leo is allergic to nuts." }));
+    await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
     await userEvent.click(screen.getByRole("button", { name: "Forget…" }));
     const dialog = await screen.findByRole("dialog", { name: "Forget 2 things?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));

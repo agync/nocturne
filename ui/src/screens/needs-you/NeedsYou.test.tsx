@@ -103,9 +103,7 @@ describe("what is waiting", () => {
     expect(
       screen.getByText("Nothing else you kept says this. It has not been used anywhere."),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /^Source: web page you pasted/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Web page you pasted/ })).toBeInTheDocument();
     for (const name of ["It’s true", "Not true, forget it", "Leave unconfirmed"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }

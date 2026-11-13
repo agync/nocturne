@@ -55,7 +55,7 @@ test.describe("an unconfirmed web page", () => {
     await withWebPage(page);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
     await expect(page.getByText("Unconfirmed", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: /^Source: web page you pasted/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /^Web page you pasted/ })).toBeVisible();
     for (const name of ["It’s true", "Not true, forget it", "Leave unconfirmed"]) {
       await expect(page.getByRole("button", { name })).toBeVisible();
     }

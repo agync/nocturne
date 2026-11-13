@@ -90,7 +90,11 @@ describe("forgetting what an answer used", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/);
     expect(within(earlier).getByText("Forgotten. It is no longer kept.")).toBeInTheDocument();
-    expect(within(earlier).queryByRole("button", { name: /^Source:/ })).toBeNull();
+    expect(
+      within(earlier).queryByRole("button", {
+        name: /(Note|Photo|Voice note|Document|Message you pasted|Web page you pasted) · /,
+      }),
+    ).toBeNull();
     const result = await screen.findByText("Forgotten. It is no longer kept.", {
       selector: "p[role=status]",
     });

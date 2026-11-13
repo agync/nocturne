@@ -121,7 +121,7 @@ test.describe("the page works", () => {
   test("the receipt of a claim opens its original", async ({ page }) => {
     await ready(page);
     await page
-      .getByRole("button", { name: /^Source: Letter/ })
+      .getByRole("button", { name: /^Letter/ })
       .first()
       .click();
     await expect(page).toHaveURL(/#\/items\/item-letter$/);
