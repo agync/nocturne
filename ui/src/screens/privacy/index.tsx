@@ -75,15 +75,20 @@ export default function Privacy() {
   }, [running]);
 
   const exportEverything = async () => {
-    const dir = await platform.pickFolder();
+    let dir: string | null;
+    try {
+      dir = await platform.pickFolder();
+    } catch {
+      setExporting({ state: "failed" });
+      return;
+    }
     if (dir === null) return;
     setExporting({ state: "running", progress: null });
     const off = engine.on("export-progress", (progress) =>
       setExporting({ state: "running", progress }),
     );
     try {
-      const report = await engine.exportTo(dir);
-      setExporting({ state: "done", report });
+      setExporting({ state: "done", report: await engine.exportTo(dir) });
     } catch {
       setExporting({ state: "failed" });
     } finally {
@@ -141,7 +146,7 @@ export default function Privacy() {
           {measured ? (
             <p className={styles.watching}>
               <span className={styles.dot} aria-hidden="true" />
-              {view.checkedAt ? checkedText(view.checkedAt, now) : t("privacy.sent.label")}
+              {view.checkedAt ? checkedText(view.checkedAt, now) : t("privacy.watching.now")}
             </p>
           ) : (
             <p className={styles.detail}>{t("privacy.sent.unmeasured.detail")}</p>
@@ -304,6 +309,7 @@ export default function Privacy() {
               "needsYou",
               "fading",
               "privacy",
+              "setup",
             );
             setDeleting(false);
             goTo("/setup", { step: "welcome" });

@@ -186,6 +186,7 @@ export function Advanced() {
               "fading",
               "privacy",
               "advanced",
+              "setup",
             );
             setResetting(false);
             goTo("/setup", { step: "welcome" });

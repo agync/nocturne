@@ -128,6 +128,22 @@ describe("Privacy", () => {
     );
   });
 
+  it("says when the folder picker fails, without an unhandled rejection", async () => {
+    const platform = fakePlatform();
+    vi.spyOn(platform, "pickFolder").mockRejectedValue(new Error("no dialog"));
+    await open(createMockEngine(), platform);
+    await userEvent.click(screen.getByRole("button", { name: "Export to a folder…" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("The export didn’t finish.");
+  });
+
+  it("shows plain Watching live when it does not know when it last checked", async () => {
+    const engine = createMockEngine();
+    await view(engine, { checkedAt: null });
+    await open(engine);
+    expect(screen.getByText("Watching live")).toBeInTheDocument();
+    expect(screen.getAllByText("Sent to the internet since setup")).toHaveLength(1);
+  });
+
   it("says when an export fails", async () => {
     const platform = fakePlatform();
     vi.spyOn(platform, "pickFolder").mockResolvedValue("/chosen");
@@ -180,6 +196,37 @@ describe("delete everything", () => {
     expect(spy).not.toHaveBeenCalled();
     await userEvent.type(field, " everything");
     expect(confirm).toBeEnabled();
+  });
+
+  it("wants the phrase exactly, not in other capitals", async () => {
+    const { dialog } = await openDialog();
+    const field = within(dialog).getByRole("textbox");
+    await userEvent.type(field, "Delete Everything");
+    expect(within(dialog).getByRole("button", { name: "Delete everything" })).toBeDisabled();
+  });
+
+  it("cannot be cancelled while deleting, and setup is read again afterwards", async () => {
+    const engine = createMockEngine();
+    let finish: () => void = () => undefined;
+    vi.spyOn(engine, "deleteEverything").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const getSetup = vi.spyOn(engine, "getSetup");
+    const { dialog } = await openDialog(engine);
+    await userEvent.type(within(dialog).getByRole("textbox"), "delete everything");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete everything" }));
+    expect(within(dialog).getByRole("button", { name: "Keep everything" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    const before = getSetup.mock.calls.length;
+    await act(async () => {
+      finish();
+    });
+    await waitFor(() => expect(window.location.hash).toBe("#/setup?step=welcome"));
+    await waitFor(() => expect(getSetup.mock.calls.length).toBeGreaterThan(before));
   });
 
   it("deletes with the phrase and goes back to setup", async () => {

@@ -25,7 +25,7 @@ export function DeleteEverythingDialog({ title, body, confirmLabel, onClose, onD
   const [typed, setTyped] = useState("");
   const [working, setWorking] = useState(false);
   const [failed, setFailed] = useState(false);
-  const matches = typed.trim().toLowerCase() === DELETE_PHRASE;
+  const matches = typed.trim() === DELETE_PHRASE;
 
   const go = async () => {
     if (!matches || working) return;
@@ -41,7 +41,7 @@ export function DeleteEverythingDialog({ title, body, confirmLabel, onClose, onD
   };
 
   return (
-    <Dialog title={title} initialFocus={field} onClose={onClose}>
+    <Dialog title={title} initialFocus={field} locked={working} onClose={onClose}>
       <p className={styles.dialogBody}>{body}</p>
       <TextInput
         label={t("privacy.delete.field", { phrase: DELETE_PHRASE })}
@@ -53,7 +53,7 @@ export function DeleteEverythingDialog({ title, body, confirmLabel, onClose, onD
         error={failed ? t("privacy.delete.failed") : undefined}
       />
       <div className={styles.dialogActions}>
-        <Button variant="secondary" onClick={onClose}>
+        <Button variant="secondary" disabled={working} onClick={onClose}>
           {t("privacy.delete.keep")}
         </Button>
         <Button
