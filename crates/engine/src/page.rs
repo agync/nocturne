@@ -49,6 +49,12 @@ pub(crate) fn template_dek(kept: u32, needs: u32, let_go: u32) -> String {
     )
 }
 
+/// The phone edition's dek: no kept or let-go totals, which count what stays home.
+pub(crate) fn phone_dek(needs: u32) -> String {
+    let need = if needs == 1 { "needs" } else { "need" };
+    format!("{needs} {need} you.")
+}
+
 fn bold(sentence: &str, object: &str) -> String {
     if !object.is_empty() && sentence.contains(object) {
         sentence.replacen(object, &format!("**{object}**"), 1)
@@ -1113,7 +1119,9 @@ fn edition_page(
 }
 
 /// What only the phone edition leaves out: lines and a question whose receipts name an item a
-/// phone must not see.
+/// phone must not see, and every count that would tell it how much stayed home. The headline
+/// and dek are always the templates, from the needs-you lines the phone gets, since the stored
+/// ones were written with everything in view.
 fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Result<()> {
     if page.edition != Edition::Phone {
         return Ok(());
@@ -1121,7 +1129,6 @@ fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Resu
     let withheld = |r: &nocturne_contract::Receipt| -> Result<bool> {
         crate::remote::withheld_from_phones(conn, &r.item_id)
     };
-    let mut dropped = 0u32;
     for list in [
         &mut page.needs_you,
         &mut page.changed,
@@ -1139,9 +1146,7 @@ fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Resu
             {
                 hide |= withheld(r)?;
             }
-            if hide {
-                dropped += 1;
-            } else {
+            if !hide {
                 kept.push(line);
             }
         }
@@ -1152,12 +1157,13 @@ fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Resu
         && withheld(r)?
     {
         page.question = None;
-        dropped += 1;
     }
-    if dropped > 0 {
-        page.headline = template_headline(page.date.parse()?);
-        let needs = needs_you_count(page) + page.more_needs_you;
-        page.dek = template_dek(page.kept_count, needs, page.let_go_count);
-    }
+    page.headline = template_headline(page.date.parse()?);
+    page.dek = phone_dek(needs_you_count(page));
+    page.private_skipped = 0;
+    page.kept_count = 0;
+    page.let_go_count = 0;
+    // The lines past the cap are not known line by line, so none is claimed.
+    page.more_needs_you = 0;
     Ok(())
 }

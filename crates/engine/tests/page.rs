@@ -510,7 +510,25 @@ fn audio_and_print_editions_exclude_private_memories_and_the_screen_shows_them()
         let ls = lines(&p);
         assert_eq!(ls.len(), 1, "{edition:?}");
         assert!(ls[0].text.contains("Gran"));
-        assert_eq!(p.private_skipped, 2);
+        if edition == Edition::Phone {
+            // A phone is not told how much stayed home, in a count or in the dek.
+            assert_eq!(
+                (
+                    p.private_skipped,
+                    p.kept_count,
+                    p.let_go_count,
+                    p.more_needs_you
+                ),
+                (0, 0, 0, 0)
+            );
+            assert!(screen.kept_count > 0);
+            let json = serde_json::to_string(&p).unwrap();
+            assert!(!json.contains(&screen.dek), "{json}");
+            assert!(!p.dek.contains(&screen.kept_count.to_string()), "{}", p.dek);
+            assert!(!p.dek.contains("kept") && !p.dek.contains("let go"));
+        } else {
+            assert_eq!(p.private_skipped, 2);
+        }
         assert_eq!(p.edition, edition);
     }
     assert!(
@@ -900,7 +918,7 @@ fn audio_and_print_never_carry_a_headline_written_with_private_content() {
         let json = serde_json::to_string(&p).unwrap().to_lowercase();
         assert!(!json.contains("zebrafish47"), "{edition:?}: {json}");
         assert_eq!(p.headline, "Saturday 14 November");
-        assert!(p.private_skipped >= 1);
+        assert_eq!(p.private_skipped >= 1, edition != Edition::Phone);
         assert!(
             lines(&p).iter().any(|l| l.text.contains("Gran")),
             "other content stays"
@@ -978,10 +996,11 @@ fn phone_summaries_never_count_or_headline_private_lines() {
     let screen = f.engine.pages_for(Edition::Screen).unwrap();
     assert_eq!(screen, f.engine.pages().unwrap());
     assert_eq!(screen[0].needs_you, 2);
+    let phone = f.engine.pages_for(Edition::Phone).unwrap();
+    assert_eq!(phone[0].needs_you, 2, "nothing private yet");
     assert_eq!(
-        f.engine.pages_for(Edition::Phone).unwrap(),
-        screen,
-        "nothing private yet"
+        phone[0].headline, "Saturday 14 November",
+        "a phone never gets the headline written with everything in view"
     );
 
     f.engine.set_private(&errand, true).unwrap();
