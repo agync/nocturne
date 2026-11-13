@@ -31,6 +31,10 @@ required-features = ["preview"]
 # builds even when on. Tests build their own minds from the engine's `fake` feature.
 default = []
 fake-mind = ["nocturne-engine/fake"]
+# Stand-in connection helpers (`NOCTURNE_FAKE_HELPERS_LOCK`) for the network check and the end to
+# end runs of Away from home. Development and tests only: never in `default`, never packaged; the
+# package checks look for the marker it adds to the binary.
+fake-helpers = ["nocturne-helpers/fake"]
 # A development-only server that puts the real app (engine, models, commands) behind HTTP on
 # loopback, for use from a browser. Never in `default`, never built by packaging; the package
 # checks fail if it shows up. See docs/contribution/building.md.
