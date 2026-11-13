@@ -23,6 +23,38 @@ fn closes_old_value(predicate: &str) -> bool {
     matches!(predicate, "lives_in" | "takes" | "prefers")
 }
 
+/// Two items kept closer together than this (a folder dropped at once, two notes typed in a
+/// row) cannot be put in order, so what they disagree on is asked about.
+const ORDER_GAP: jiff::SignedDuration = jiff::SignedDuration::from_mins(5);
+
+/// Which of two items was kept first, when that is clear.
+fn kept_order(new: &str, old: &str) -> Option<std::cmp::Ordering> {
+    let (Ok(new), Ok(old)) = (
+        new.parse::<jiff::Timestamp>(),
+        old.parse::<jiff::Timestamp>(),
+    ) else {
+        return None;
+    };
+    let gap = new.duration_since(old);
+    if gap >= ORDER_GAP {
+        Some(std::cmp::Ordering::Greater)
+    } else if gap <= -ORDER_GAP {
+        Some(std::cmp::Ordering::Less)
+    } else {
+        None
+    }
+}
+
+/// When the existing memory's newest source was kept.
+fn last_kept(tx: &Transaction<'_>, memory: &str) -> Result<Option<String>> {
+    Ok(tx.query_row(
+        "SELECT MAX(i.kept_at) FROM memory_sources s JOIN items i ON i.id = s.item_id \
+         WHERE s.memory_id = ?1",
+        [memory],
+        |r| r.get(0),
+    )?)
+}
+
 /// The first word of an object, casefolded: "Metformin 500mg" and "metformin 850mg" are one drug.
 fn head(s: &str) -> String {
     key_of(s)
@@ -60,6 +92,7 @@ struct ItemInfo {
     trusted: bool,
     private: bool,
     origin: Option<String>,
+    kept_at: String,
 }
 
 fn upsert_entity(
@@ -294,11 +327,11 @@ fn apply(
             ))
         })
         .collect();
-    let (trust, origin, private): (String, Option<String>, bool) = tx
+    let (trust, origin, private, kept_at): (String, Option<String>, bool, String) = tx
         .query_row(
-            "SELECT trust, origin, private FROM items WHERE id = ?1",
+            "SELECT trust, origin, private, kept_at FROM items WHERE id = ?1",
             [item_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
         )
         .optional()?
         .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
@@ -306,6 +339,7 @@ fn apply(
         trusted: trust == "trusted",
         private,
         origin,
+        kept_at,
     };
     let mut report = ApplyReport::default();
 
@@ -536,6 +570,8 @@ fn apply_one(
     };
     let id = new_id("mem");
     let mut to_close: Vec<String> = Vec::new();
+    let mut to_replace: Vec<String> = Vec::new();
+    let mut replaced_by: Option<String> = None;
     let mut in_conflict: Vec<String> = Vec::new();
     if status == MemoryStatus::Active {
         for e in &current {
@@ -555,8 +591,22 @@ fn apply_one(
                 (Some(t), Some(f)) => t > f,
                 _ => false,
             };
+            // A dated appointment kept again later with another date has moved; one with no
+            // date (a club that meets monthly) said two ways is a contradiction.
+            let moved = predicate == "scheduled"
+                && due.as_ref().or(vf.as_ref()).is_some()
+                && e.due.as_ref().or(e.valid_from.as_ref()).is_some();
+            let order = if moved {
+                last_kept(tx, &e.id)?.and_then(|old| kept_order(&item.kept_at, &old))
+            } else {
+                None
+            };
             if closes_old_value(&predicate) && later_start && still_open {
                 to_close.push(e.id.clone());
+            } else if order == Some(std::cmp::Ordering::Greater) {
+                to_replace.push(e.id.clone());
+            } else if order == Some(std::cmp::Ordering::Less) && replaced_by.is_none() {
+                replaced_by = Some(e.id.clone());
             } else if overlaps(
                 e.valid_from.as_deref(),
                 e.valid_to.as_deref(),
@@ -609,6 +659,20 @@ fn apply_one(
             "UPDATE memories SET valid_to = ?2, superseded_by = ?3 WHERE id = ?1",
             params![old, vf, id],
         )?;
+    }
+    for old in &to_replace {
+        tx.execute(
+            "UPDATE memories SET superseded_at = ?2, superseded_by = ?3 WHERE id = ?1",
+            params![old, now, id],
+        )?;
+        report.replaced.push(old.clone());
+    }
+    if let Some(newer) = &replaced_by {
+        tx.execute(
+            "UPDATE memories SET superseded_at = ?2, superseded_by = ?3 WHERE id = ?1",
+            params![id, now, newer],
+        )?;
+        report.replaced.push(id.clone());
     }
     for old in &in_conflict {
         let exists: bool = tx.query_row(
@@ -794,7 +858,8 @@ impl Engine {
             .to_string();
         let (report, files) = self.write(|tx| apply(tx, &now, &today, item, lease, candidates))?;
         crate::audio::shred_all(files);
-        if !report.removed.is_empty() || !report.reworded.is_empty() {
+        if !report.removed.is_empty() || !report.reworded.is_empty() || !report.replaced.is_empty()
+        {
             self.invalidate_vectors();
         }
         self.bump_audio();

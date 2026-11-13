@@ -176,6 +176,9 @@ pub struct ApplyReport {
     /// Memories whose sentence changed on a re-read: their old vector was dropped and they need
     /// embedding again.
     pub reworded: Vec<MemoryId>,
+    /// Memories that became history because a later item gave a new value (a moved
+    /// appointment). Search no longer finds them.
+    pub replaced: Vec<MemoryId>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]

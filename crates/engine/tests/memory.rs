@@ -288,6 +288,133 @@ fn a_real_world_change_closes_the_old_value_at_the_new_start() {
     assert_eq!(york.was.as_deref(), Some("Leeds"));
 }
 
+fn appointment(object: &str, on: &str) -> nocturne_engine::Candidate {
+    let mut c = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        object,
+        &format!("The dentist appointment is on {object}."),
+    );
+    // As a small model gives it: the day of the appointment as the start of the fact.
+    c.valid_from = Some(date(on));
+    c
+}
+
+/// A dated appointment kept again later with a new date has moved: the new one replaces the
+/// old, which stays as history and shows as `was`. Nothing waits on the person.
+#[test]
+fn a_moved_appointment_replaces_the_old_one() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, wed) = learn(
+        &f.engine,
+        "Dentist on Wednesday 18 November at 10:00",
+        appointment("Wednesday 18 November at 10:00", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "The dentist moved to Thursday 19 November at 14:30",
+    );
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![appointment("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty());
+    assert!(f.engine.needs_you().unwrap().is_empty());
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1, "the old appointment is history: {rows:?}");
+    let thu = &rows[0];
+    assert_eq!(thu.was.as_deref(), Some("Wednesday 18 November at 10:00"));
+    let history = f.engine.history(&thu.id).unwrap();
+    assert!(history.iter().any(|m| m.id == wed));
+}
+
+/// Read in the other order (the later note first), the earlier note becomes the history.
+#[test]
+fn an_older_appointment_read_late_becomes_history() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let first = keep(&f.engine, "Dentist on Wednesday 18 November at 10:00");
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let (_, thu) = learn(
+        &f.engine,
+        "The dentist moved to Thursday 19 November at 14:30",
+        appointment("Thursday 19 November at 14:30", "2026-11-19"),
+    );
+    f.clock.set_str("2026-11-12T22:00:00Z");
+    let r = f
+        .engine
+        .apply(
+            &first,
+            vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty());
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].id, thu);
+    assert_eq!(
+        rows[0].was.as_deref(),
+        Some("Wednesday 18 November at 10:00")
+    );
+}
+
+/// Two notes kept within a few minutes of each other cannot be put in order: ask.
+#[test]
+fn appointments_kept_too_close_together_to_order_ask_which_is_right() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Dentist on Wednesday 18 November at 10:00",
+        appointment("Wednesday 18 November at 10:00", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T08:07:00Z");
+    let item = keep(&f.engine, "Dentist on Thursday 19 November at 14:30");
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![appointment("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap();
+    assert_eq!(r.conflicts.len(), 1);
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// An arrangement with no date (a club that meets monthly) said two ways is a contradiction,
+/// however far apart the notes are: one of them is wrong, and only the person knows which.
+#[test]
+fn an_undated_arrangement_said_two_ways_asks_which_is_right() {
+    let f = fixture_at("2026-11-12T11:15:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Book club meets on the first Tuesday",
+        cand(
+            "Book club",
+            Predicate::Scheduled,
+            "first Tuesday of the month",
+            "Book club meets on the first Tuesday of the month.",
+        ),
+    );
+    f.clock.set_str("2026-11-12T16:10:00Z");
+    let item = keep(&f.engine, "Sam says book club is on the second Wednesday");
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![cand(
+                "Book club",
+                Predicate::Scheduled,
+                "second Wednesday of the month",
+                "Book club meets on the second Wednesday of the month.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(r.conflicts.len(), 1);
+}
+
 #[test]
 fn only_single_valued_predicates_conflict() {
     let f = fixture();
