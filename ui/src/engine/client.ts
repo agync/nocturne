@@ -93,6 +93,8 @@ export interface EngineClient {
   getTierOffer(): Promise<Tier | null>;
   /** "Not now" to that offer. It returns only after memory runs short twice more. */
   declineTierOffer(): Promise<void>;
+  /** Starts the private engine afresh now, instead of waiting for the next timed attempt. */
+  retryEngine(): Promise<void>;
   /** "Tidy anyway": the battery rule is set aside until this tidy is done. */
   tidyAnyway(): Promise<void>;
 

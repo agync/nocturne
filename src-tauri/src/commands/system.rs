@@ -42,6 +42,12 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
     run(app, |app| async move { runtime::resume_setup(&app).await }).await
 }
 
+/// "Try again" on the notice about restarts: the private engine is started afresh now.
+#[tauri::command]
+pub async fn retry_engine<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    run(app, |app| async move { runtime::retry_engine(&app).await }).await
+}
+
 /// The smaller mind on offer in the notice about memory, if the offer stands. The interface
 /// starts setup for it when the person agrees.
 #[tauri::command]

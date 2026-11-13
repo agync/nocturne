@@ -490,6 +490,7 @@ fn setup_commands_wait_for_the_runtime_lane() {
     );
     assert_eq!(h.code("pause_setup", json!({})), "unavailable");
     assert_eq!(h.code("resume_setup", json!({})), "unavailable");
+    assert_eq!(h.code("retry_engine", json!({})), "unavailable");
 }
 
 /// Commands built on the second round of engine work.

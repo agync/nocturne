@@ -331,6 +331,13 @@ export class MockEngine implements EngineClient {
     this.dropNotices("tierDropped");
   }
 
+  retryEngineCount = 0;
+
+  async retryEngine(): Promise<void> {
+    this.retryEngineCount += 1;
+    this.dropNotices("restarts");
+  }
+
   async tidyAnyway(): Promise<void> {
     this.tidyAnywayCount += 1;
     this.dropNotices("tidyPausedBattery");

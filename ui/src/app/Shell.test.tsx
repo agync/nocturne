@@ -260,8 +260,8 @@ describe("notices", () => {
     renderApp({ engine });
     const region = await screen.findByRole("list", { name: "Things to know" });
     expect(within(region).getAllByRole("listitem")).toHaveLength(2);
-    await userEvent.click(within(region).getByRole("button", { name: "Show details" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/settings/advanced"));
+    await userEvent.click(within(region).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(engine.retryEngineCount).toBe(1));
     expect(within(region).queryByRole("button", { name: "OK" })).toBeNull();
   });
 });

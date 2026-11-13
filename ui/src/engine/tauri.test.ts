@@ -56,6 +56,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["resumeSetup", [], "resume_setup", []],
   ["getTierOffer", [], "get_tier_offer", []],
   ["declineTierOffer", [], "decline_tier_offer", []],
+  ["retryEngine", [], "retry_engine", []],
   ["tidyAnyway", [], "tidy_anyway", []],
   ["keepText", ["a note", "quickCapture"], "keep_text", ["text", "source"]],
   ["keepFiles", [["a.pdf"], "drop"], "keep_files", ["paths", "source"]],

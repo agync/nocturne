@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 use crate::state::{AppState, refresh_status};
 
 pub mod lemonade;
-pub use lemonade::{pause_setup, resume_setup, start_setup};
+pub use lemonade::{pause_setup, resume_setup, retry_engine, start_setup};
 
 /// How long quitting waits for the reader to give back the item it is reading.
 const STOP_TASKS: Duration = Duration::from_secs(1);
@@ -125,6 +125,8 @@ pub struct Services {
     /// The tier of the mind in the slot, once there is one.
     tier: Mutex<Option<Tier>>,
     retry_pending: AtomicBool,
+    /// True while the engine is being replaced.
+    relaunching: AtomicBool,
     /// The smaller tier offered in the notice about memory, while the offer stands.
     offer: Mutex<Option<Tier>>,
     /// When loads last failed for want of memory (the last ten minutes).
@@ -239,6 +241,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         lemonade: tokio::sync::Mutex::new(None),
         tier: Mutex::new(None),
         retry_pending: AtomicBool::new(false),
+        relaunching: AtomicBool::new(false),
         offer: Mutex::new(None),
         out_of_memory: Mutex::new(Vec::new()),
         memory_watch: AtomicBool::new(false),

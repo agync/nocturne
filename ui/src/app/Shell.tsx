@@ -160,7 +160,12 @@ export function Shell({ children }: ShellProps) {
           .then(() => refresh("status"))
           .catch(() => toast.show({ message: t("notice.action.failed") }));
       },
-      restarts: () => navigate("/settings/advanced"),
+      restarts: () => {
+        engine
+          .retryEngine()
+          .then(() => refresh("status"))
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
       catchingUp: () => {
         if (today) navigate(`/pages/${addDays(today, -1)}`);
       },

@@ -365,6 +365,22 @@ fn an_engine_that_gives_up_empties_the_slot_and_questions_say_unavailable() {
 }
 
 #[test]
+fn try_again_starts_the_engine_now_instead_of_waiting_for_the_timer() {
+    let lab = lab(Plan {
+        restart_limit: 1,
+        ..Plan::new("downloaded=all").installed(Tier::Small)
+    });
+    wait_for("the mind to arrive", || lab.has_mind());
+    crash_until_it_gives_up(&lab);
+    wait_for("the notice", || lab.has_notice("restarts"));
+
+    lab.h.ok("retry_engine", json!({}));
+    wait_for("the mind to come back", || lab.has_mind());
+    wait_for("the notice to go", || !lab.has_notice("restarts"));
+    wait_for("setup to read done again", || lab.setup_phase() == "done");
+}
+
+#[test]
 fn a_failed_engine_is_started_again_later() {
     let lab = lab(Plan {
         retry_after: Duration::from_millis(1_500),

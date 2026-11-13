@@ -315,13 +315,34 @@ fn retry_later<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     });
 }
 
-/// Replace the engine with a fresh one.
+/// Replace the engine with a fresh one. Does nothing while another replacement is under way, so
+/// the timed retry and "Try again" cannot start two engines.
 pub(super) async fn relaunch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
+    if services
+        .relaunching
+        .swap(true, std::sync::atomic::Ordering::SeqCst)
+    {
+        return;
+    }
     let old = services.lemonade.lock().await.take();
     if let Some(old) = old {
         old.stop(services.opts.quit_budget).await;
     }
     launch(app, services).await;
+    services
+        .relaunching
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// "Try again" on the notice about restarts: start the engine afresh now instead of waiting for
+/// the next timed attempt.
+pub async fn retry_engine<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
+    let services = app
+        .state::<AppState>()
+        .services()
+        .ok_or_else(|| CommandError::unavailable("nothing is running yet"))?;
+    relaunch(app, &services).await;
+    Ok(())
 }
 
 impl Services {
