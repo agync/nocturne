@@ -282,3 +282,49 @@ async fn remove_frees_the_models_bytes() {
             .is_err()
     );
 }
+
+#[tokio::test]
+async fn downloads_follow_an_engine_started_in_place_of_one_that_gave_up() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, "download-ms=3000");
+    let sup_opts = || SupervisorOptions {
+        health_interval: Duration::from_millis(200),
+        backoff_base: Duration::from_millis(100),
+        ..SupervisorOptions::default()
+    };
+    let first = Supervisor::start(dirs.clone(), sup_opts()).await.unwrap();
+    let jobs = ModelJobs::with_options(first.control(), opts());
+    let ledger = Ledger::default();
+    let sink = ledger.clone();
+    let on: OnDownload = Arc::new(move |m: &str, b: u64| sink.lock().unwrap().push((m.into(), b)));
+    let hold = first.control().hold_online().await.unwrap();
+    let mut rx = jobs.get("Whisper-Small", hold, on).await.unwrap();
+    until(&mut rx, |p| p.received > 0).await;
+    first.shutdown().await.unwrap();
+    let second = Supervisor::start(dirs.clone(), sup_opts()).await.unwrap();
+    jobs.follow(second.control()).await.unwrap();
+    let done = until(&mut rx, |p| p.done).await;
+    assert!(done.total > 0);
+    let present = second
+        .client()
+        .models()
+        .await
+        .unwrap()
+        .iter()
+        .any(|m| m.id == "Whisper-Small" && m.present());
+    assert!(present, "fetched by the new engine");
+    assert_eq!(ledger.lock().unwrap().len(), 1);
+    for _ in 0..200 {
+        if second
+            .admin()
+            .config()
+            .await
+            .is_ok_and(|c| c["offline"] == true)
+        {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    panic!("the new engine's window was left open");
+}

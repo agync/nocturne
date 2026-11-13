@@ -735,7 +735,7 @@ impl Inner {
         rec.completed = Some(tier);
         record::write(&self.config_dir, &rec).map_err(engine)?;
         // The new tier's own models, keeping only the finding model the person chose.
-        selection::write(&self.config_dir, &selection::read(&self.config_dir)).map_err(engine)?;
+        selection::update(&self.config_dir, |_| {}).map_err(engine)?;
         self.close_window().await;
         let total = self.comps(tier).iter().map(|c| c.bytes).sum::<u64>() as f64;
         self.update(|v| {

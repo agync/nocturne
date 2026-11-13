@@ -82,24 +82,37 @@ pub fn repair_after_swap<R: Runtime>(app: &AppHandle<R>, config_dir: &Path) {
     else {
         return;
     };
-    let s = selection::read(config_dir);
-    if row.phase != nocturne_contract::ReindexPhase::Done
-        || row.model != indexed
-        || selection::picks(&s).recall == indexed
-    {
-        return;
+    let fixed = selection::update(config_dir, |s| {
+        if row.phase != nocturne_contract::ReindexPhase::Done
+            || row.model != indexed
+            || selection::picks(s).recall == indexed
+        {
+            return;
+        }
+        *s = fit::with_choice(s, ComponentRole::Recall, &indexed);
+        if s.pending
+            .as_ref()
+            .is_some_and(|p| p.role == ComponentRole::Recall)
+        {
+            s.pending = None;
+        }
+    });
+    if let Err(e) = fixed {
+        tracing::warn!("the finding model could not be repaired: {e}");
     }
-    let mut fixed = fit::with_choice(&s, ComponentRole::Recall, &indexed);
-    if fixed
-        .pending
-        .as_ref()
-        .is_some_and(|p| p.role == ComponentRole::Recall)
-    {
-        fixed.pending = None;
-    }
-    match selection::write(config_dir, &fixed) {
-        Ok(()) => tracing::info!("the finding model was brought in line with the store"),
-        Err(e) => tracing::warn!("the finding model could not be repaired: {e}"),
+}
+
+/// The memory the fit is judged against.
+pub fn ram_bytes<R: Runtime>(app: &AppHandle<R>) -> u64 {
+    hub(app).map_or_else(fit::ram_bytes, |h| h.ram())
+}
+
+/// A new engine was started in place of one that gave up: model downloads follow it.
+pub fn on_engine<R: Runtime>(app: &AppHandle<R>, control: nocturne_lemonade::Control) {
+    if let Some(hub) = hub(app) {
+        tauri::async_runtime::spawn(async move {
+            hub.follow_engine(control).await;
+        });
     }
 }
 

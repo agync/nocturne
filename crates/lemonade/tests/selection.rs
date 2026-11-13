@@ -153,6 +153,7 @@ fn selection_survives_restart() {
         model: "Whisper-Large-v3".into(),
         from: "Whisper-Small".into(),
         paused: true,
+        failed: false,
     });
     s.old = Some(OldModel {
         role: ComponentRole::Mind,
@@ -236,4 +237,31 @@ async fn mind_follows_selection() {
             .all(|l| l["body"]["model_name"] != "Qwen3.5-9B-GGUF"),
         "the tier's own mind is never loaded: {loads:?}"
     );
+}
+
+#[test]
+fn concurrent_updates_keep_every_edit() {
+    let tmp = tempfile::tempdir().unwrap();
+    installed(tmp.path(), Tier::Standard);
+    let dir = tmp.path().to_path_buf();
+    let picks = [
+        (ComponentRole::Mind, "Qwen3.5-2B-GGUF"),
+        (ComponentRole::Speech, "Whisper-Tiny"),
+        (ComponentRole::Voice, "kokoro-v2"),
+        (ComponentRole::Recall, "nomic-embed-text-v1-GGUF"),
+    ];
+    std::thread::scope(|scope| {
+        for (role, model) in picks {
+            let dir = dir.clone();
+            scope.spawn(move || {
+                for _ in 0..20 {
+                    selection::update(&dir, |s| {
+                        s.custom.insert(role, model.to_string());
+                    })
+                    .unwrap();
+                }
+            });
+        }
+    });
+    assert_eq!(selection::read(&dir).custom.len(), 4);
 }

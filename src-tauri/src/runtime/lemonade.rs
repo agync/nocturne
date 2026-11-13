@@ -164,6 +164,7 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
     ));
     let client = supervisor.client();
     let admin = supervisor.admin();
+    crate::models::on_engine(app, supervisor.control());
     let watchers = vec![
         tauri::async_runtime::spawn(watch_engine(
             app.clone(),
@@ -319,7 +320,8 @@ async fn put_mind<R: Runtime>(app: &AppHandle<R>, client: Client, tier: Tier) {
         ..selection::read(&config_dir)
     };
     let picks = selection::picks(&chosen);
-    let budget = fit::for_host(&SystemInfo::default(), fit::ram_bytes(), u64::MAX);
+    let ram = crate::models::ram_bytes(app);
+    let budget = fit::for_host(&SystemInfo::default(), ram, u64::MAX);
     client.set_alone(residency::alone_for(&chosen, &budget));
     let bytes: f64 = [&picks.mind, &picks.speech, &picks.voice, &picks.recall]
         .into_iter()

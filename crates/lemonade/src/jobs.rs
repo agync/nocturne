@@ -81,10 +81,25 @@ fn job_id(model: &str) -> String {
 }
 
 pub struct ModelJobs {
-    control: Control,
-    client: Client,
+    engine: Arc<Engine>,
     opts: JobOptions,
     run: Mutex<Option<Run>>,
+}
+
+/// The engine the downloads talk to. A replaced engine (started again after it gave up) is
+/// followed through [`ModelJobs::follow`], never cached.
+struct Engine {
+    control: Mutex<Control>,
+}
+
+impl Engine {
+    fn control(&self) -> Control {
+        lock(&self.control).clone()
+    }
+
+    fn client(&self) -> Client {
+        self.control().client()
+    }
 }
 
 impl ModelJobs {
@@ -94,11 +109,27 @@ impl ModelJobs {
 
     pub fn with_options(control: Control, opts: JobOptions) -> Self {
         ModelJobs {
-            client: control.client(),
-            control,
+            engine: Arc::new(Engine {
+                control: Mutex::new(control),
+            }),
             opts,
             run: Mutex::new(None),
         }
+    }
+
+    /// Talks to `control`'s engine from now on. A download that was running carries on there,
+    /// with a share of that engine's download window.
+    pub async fn follow(&self, control: Control) -> Result<(), RuntimeError> {
+        *lock(&self.engine.control) = control.clone();
+        if let Some((_, gate, _)) = self.running()
+            && !gate.paused()
+        {
+            let hold = control.hold_online().await?;
+            let stale = lock(&gate.hold).replace(hold);
+            drop(stale);
+            gate.wake.notify_one();
+        }
+        Ok(())
     }
 
     /// The model being fetched, while its download runs or is paused.
@@ -133,7 +164,7 @@ impl ModelJobs {
         let gate = Arc::new(Gate::default());
         *lock(&gate.hold) = Some(hold);
         let task = tokio::spawn(fetch(
-            self.client.clone(),
+            self.engine.clone(),
             self.opts,
             model.to_string(),
             tx.clone(),
@@ -157,7 +188,11 @@ impl ModelJobs {
         };
         *lock(&gate.paused) = true;
         gate.wake.notify_one();
-        let _ = self.client.control(&job_id(&model), Action::Pause).await;
+        let _ = self
+            .engine
+            .client()
+            .control(&job_id(&model), Action::Pause)
+            .await;
         tx.send_modify(|p| p.paused = true);
         gate.release().await;
         Ok(())
@@ -171,7 +206,7 @@ impl ModelJobs {
         if !gate.paused() {
             return Ok(());
         }
-        let hold = self.control.hold_online().await?;
+        let hold = self.engine.control().hold_online().await?;
         let spare = lock(&gate.hold).replace(hold);
         drop(spare);
         *lock(&gate.paused) = false;
@@ -188,19 +223,20 @@ impl ModelJobs {
         run.task.abort();
         let finished = run.tx.borrow().done;
         let id = job_id(&run.model);
-        let _ = self.client.control(&id, Action::Cancel).await;
+        let client = self.engine.client();
+        let _ = client.control(&id, Action::Cancel).await;
         // The engine wants the worker stopped before the partial files go.
         let deadline = Instant::now() + self.opts.give_up;
         while Instant::now() < deadline {
-            match self.client.downloads().await {
+            match client.downloads().await {
                 Ok(jobs) if jobs.iter().any(|j| j.id == id && j.running) => {
                     tokio::time::sleep(self.opts.poll).await;
                 }
                 _ => break,
             }
         }
-        let _ = self.client.control(&id, Action::Remove).await;
-        if !finished && let Err(e) = self.client.delete(&run.model).await {
+        let _ = client.control(&id, Action::Remove).await;
+        if !finished && let Err(e) = client.delete(&run.model).await {
             tracing::info!("the partial download of {} stays: {e}", run.model);
         }
         run.gate.release().await;
@@ -209,7 +245,7 @@ impl ModelJobs {
 
     /// Deletes a model from disk and returns the bytes freed.
     pub async fn remove(&self, model: &str) -> Result<u64, RuntimeError> {
-        remove(&self.client, model).await
+        remove(&self.engine.client(), model).await
     }
 
     fn running(&self) -> Option<(String, Arc<Gate>, Arc<watch::Sender<JobProgress>>)> {
@@ -245,14 +281,14 @@ pub async fn remove(client: &Client, model: &str) -> Result<u64, RuntimeError> {
 }
 
 async fn fetch(
-    client: Client,
+    engine: Arc<Engine>,
     opts: JobOptions,
     model: String,
     tx: Arc<watch::Sender<JobProgress>>,
     gate: Arc<Gate>,
     on_download: OnDownload,
 ) {
-    match follow(&client, opts, &model, &tx, &gate).await {
+    match follow(&engine, opts, &model, &tx, &gate).await {
         Some(last) => {
             let total = tx.borrow().total;
             let bytes = last
@@ -260,7 +296,10 @@ async fn fetch(
                 .map(|j| j.bytes().max(j.total_download_size))
                 .filter(|b| *b > 0)
                 .unwrap_or(total);
-            let _ = client.control(&job_id(&model), Action::Remove).await;
+            let _ = engine
+                .client()
+                .control(&job_id(&model), Action::Remove)
+                .await;
             on_download(&model, bytes);
             tx.send_modify(|p| {
                 p.done = true;
@@ -285,7 +324,7 @@ async fn present(client: &Client, model: &str) -> bool {
 /// Starts or rejoins the engine's job for `model` and follows it to the end: `Some` with the
 /// last snapshot when the model is on disk, `None` when the download failed.
 async fn follow(
-    client: &Client,
+    engine: &Engine,
     opts: JobOptions,
     model: &str,
     tx: &watch::Sender<JobProgress>,
@@ -300,6 +339,7 @@ async fn follow(
         since.get_or_insert_with(Instant::now).elapsed() > opts.give_up
     };
     loop {
+        let client = &engine.client();
         while gate.paused() {
             need_start = true;
             tokio::select! {

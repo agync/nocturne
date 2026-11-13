@@ -108,7 +108,8 @@ impl ModelsHub {
         app.state::<AppState>().services()?.engine_control().await
     }
 
-    pub(super) fn ram(&self) -> u64 {
+    /// The memory the fit is judged against: the machine's, unless the options say otherwise.
+    pub fn ram(&self) -> u64 {
         self.opts.ram_bytes.unwrap_or_else(fit::ram_bytes)
     }
 
@@ -169,16 +170,28 @@ impl ModelsHub {
                 resumed: c.resumed,
             })
             .or_else(|| {
-                s.pending.as_ref().map(|p| ChangeView {
-                    job: fit::job_of(p.role),
-                    model: p.model.clone(),
-                    from: p.from.clone(),
-                    phase: ChangePhase::Downloading {
-                        received: 0.0,
-                        total: size_of(&p.model).unwrap_or(0) as f64,
-                        paused: true,
-                    },
-                    resumed: true,
+                // A change from before the last launch that nothing here is fetching: one the
+                // person paused, one that stopped by itself, or one about to carry on.
+                s.pending.as_ref().map(|p| {
+                    let total = size_of(&p.model).unwrap_or(0) as f64;
+                    ChangeView {
+                        job: fit::job_of(p.role),
+                        model: p.model.clone(),
+                        from: p.from.clone(),
+                        phase: if p.failed {
+                            ChangePhase::Failed {
+                                received: 0.0,
+                                total,
+                            }
+                        } else {
+                            ChangePhase::Downloading {
+                                received: 0.0,
+                                total,
+                                paused: p.paused,
+                            }
+                        },
+                        resumed: true,
+                    }
                 })
             });
         let old = st.removed.clone().or_else(|| {
@@ -323,9 +336,7 @@ impl ModelsHub {
         app: &AppHandle<R>,
     ) -> Result<ModelsView, CommandError> {
         let dir = Self::config_dir(app);
-        let mut s = selection::read(&dir);
-        s.old = None;
-        selection::write(&dir, &s).map_err(CommandError::internal)?;
+        selection::update(&dir, |s| s.old = None).map_err(CommandError::internal)?;
         self.state().removed = None;
         Ok(self.emit(app).await)
     }
@@ -336,12 +347,19 @@ impl ModelsHub {
         app: &AppHandle<R>,
     ) -> Result<ModelsView, CommandError> {
         let dir = Self::config_dir(app);
-        let mut s = selection::read(&dir);
+        let s = selection::read(&dir);
         let Some(old) = s.old.clone() else {
             return Ok(self.view(app).await);
         };
         let pending = s.pending.as_ref().map(|p| p.model.as_str());
-        if in_use(&s, &old.model) || pending == Some(old.model.as_str()) {
+        let rereading = app
+            .state::<AppState>()
+            .engine()
+            .ok()
+            .and_then(|e| e.reindex_state().ok().flatten())
+            .filter(|r| r.phase == ReindexPhase::Running)
+            .is_some_and(|r| r.model == old.model || r.from_model == old.model);
+        if in_use(&s, &old.model) || pending == Some(old.model.as_str()) || rereading {
             return Err(CommandError::invalid("that model is in use"));
         }
         let client = Self::client(app)
@@ -350,8 +368,12 @@ impl ModelsHub {
         let bytes = nocturne_lemonade::jobs::remove(&client, &old.model)
             .await
             .map_err(CommandError::internal)?;
-        s.old = None;
-        selection::write(&dir, &s).map_err(CommandError::internal)?;
+        selection::update(&dir, |s| {
+            if s.old.as_ref().is_some_and(|o| o.model == old.model) {
+                s.old = None;
+            }
+        })
+        .map_err(CommandError::internal)?;
         self.state().removed = Some(OldModelView {
             job: fit::job_of(old.role),
             model: old.model,
@@ -383,13 +405,16 @@ impl ModelsHub {
                 "the tier's own model is no longer on this computer",
             ));
         }
-        let mut reset = Selection::preset(s.tier);
         let recall = s.custom.get(&ComponentRole::Recall).cloned();
-        if let Some(r) = &recall {
-            reset.custom.insert(ComponentRole::Recall, r.clone());
-        }
-        reset.old = s.old.clone();
-        selection::write(&dir, &reset).map_err(CommandError::internal)?;
+        selection::update(&dir, |now| {
+            let mut reset = Selection::preset(now.tier);
+            if let Some(r) = &recall {
+                reset.custom.insert(ComponentRole::Recall, r.clone());
+            }
+            reset.old = now.old.clone();
+            *now = reset;
+        })
+        .map_err(CommandError::internal)?;
         crate::runtime::lemonade::refill_mind(app).await;
         if recall.is_some() {
             self.change(app, Job::Finding, own(ComponentRole::Recall), false)

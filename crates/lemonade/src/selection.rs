@@ -14,6 +14,9 @@ use crate::tier;
 
 const FILE: &str = "selection.json";
 
+/// Held for every read-modify-write of the file in this process.
+static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// A change of model waiting for its download.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Pending {
@@ -23,6 +26,9 @@ pub struct Pending {
     /// The person paused the download; a restart does not carry it on by itself.
     #[serde(default)]
     pub paused: bool,
+    /// The download stopped by itself; it waits for the person to try again.
+    #[serde(default)]
+    pub failed: bool,
 }
 
 /// The model a job used before a change, kept until the person removes it.
@@ -101,11 +107,26 @@ pub fn read(config_dir: &Path) -> Selection {
 
 /// Removes `selection.json`: every job goes back to its tier's own model.
 pub fn clear(config_dir: &Path) -> Result<(), RuntimeError> {
+    let _held = LOCK.lock().unwrap_or_else(|e| e.into_inner());
     match std::fs::remove_file(config_dir.join(FILE)) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e.into()),
     }
+}
+
+/// Every read-modify-write of `selection.json` in this process goes through here, one at a time,
+/// so a download finishing, a setup ending and the person's own change never lose each other's
+/// edits. Returns the selection as written.
+pub fn update(
+    config_dir: &Path,
+    f: impl FnOnce(&mut Selection),
+) -> Result<Selection, RuntimeError> {
+    let _held = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let mut s = read(config_dir);
+    f(&mut s);
+    write(config_dir, &s)?;
+    Ok(s)
 }
 
 pub fn write(config_dir: &Path, s: &Selection) -> Result<(), RuntimeError> {

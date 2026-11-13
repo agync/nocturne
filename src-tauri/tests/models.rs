@@ -74,6 +74,7 @@ struct Lab {
     h: Harness,
     services: Arc<Services>,
     config: PathBuf,
+    cache: PathBuf,
     _bundle: tempfile::TempDir,
 }
 
@@ -164,6 +165,7 @@ fn lab(mode: &str, extra: &[&str], before: impl FnOnce(&Path)) -> Lab {
         h,
         services,
         config: dirs.config(),
+        cache: dirs.cache(),
         _bundle: bundle,
     };
     wait_for("the mind to arrive", || lab.h.state().mind.get().is_some());
@@ -224,6 +226,20 @@ impl Lab {
             .filter(|e| e.kind == LedgerKind::ModelDownload)
             .map(|e| e.label)
             .collect()
+    }
+
+    fn offline(&self) -> bool {
+        block_on(async {
+            let admin = self.services.admin().await.expect("an engine");
+            admin.config().await.unwrap()["offline"] == true
+        })
+    }
+
+    fn partial(&self, model: &str) -> u64 {
+        let state: Value =
+            serde_json::from_slice(&std::fs::read(self.cache.join("fake-state.json")).unwrap())
+                .unwrap();
+        state["partial"][model].as_u64().unwrap_or(0)
     }
 
     fn phase(&self) -> Option<String> {
@@ -359,17 +375,26 @@ fn pause_resume_cancel() {
             .as_f64()
             .is_some_and(|b| b > 0.0)
     });
+    assert!(!lab.offline(), "the download window is open");
     let paused = lab.h.ok("pause_model_download", json!({}));
     assert_eq!(paused["change"]["phase"]["paused"], true);
     assert!(lab.selection().pending.unwrap().paused);
+    wait_for("the window to close", || lab.offline());
     let resumed = lab.h.ok("resume_model_download", json!({}));
     assert_eq!(resumed["change"]["phase"]["paused"], false);
     assert!(!lab.selection().pending.unwrap().paused);
+    assert!(!lab.offline());
     let cancelled = lab.h.ok("cancel_model_change", json!({}));
     assert!(cancelled["change"].is_null());
     assert!(lab.selection().pending.is_none());
     assert_eq!(lab.job_model("recordings"), "Whisper-Small");
     assert!(lab.downloads_in_ledger().is_empty());
+    wait_for("the window to close", || lab.offline());
+    assert_eq!(
+        lab.partial("Whisper-Base"),
+        0,
+        "the partial download is deleted"
+    );
 }
 
 #[test]
@@ -381,6 +406,7 @@ fn resume_after_restart() {
             model: "Whisper-Base".into(),
             from: "Whisper-Small".into(),
             paused: false,
+            failed: false,
         });
         selection::write(config, &s).unwrap();
     });
@@ -400,6 +426,7 @@ fn a_paused_change_waits_after_restart() {
             model: "Whisper-Base".into(),
             from: "Whisper-Small".into(),
             paused: true,
+            failed: false,
         });
         selection::write(config, &s).unwrap();
     });
@@ -625,4 +652,73 @@ fn a_re_read_can_be_cancelled_and_the_old_way_stays() {
         nocturne_contract::ReindexPhase::Cancelled
     );
     assert!(!lab.selection().custom.contains_key(&ComponentRole::Recall));
+}
+
+#[test]
+fn two_changes_at_once_are_refused() {
+    let lab = lab("download-ms=6000", &["Whisper-Tiny"], |_| {});
+    lab.change("recordings", "Whisper-Base", true).unwrap();
+    for (job, model, allow) in [
+        ("answering", "Qwen3.5-2B-GGUF", true),
+        ("recordings", "Whisper-Tiny", false),
+        ("finding", "nomic-embed-text-v1-GGUF", true),
+    ] {
+        let refused = lab.change(job, model, allow).unwrap_err();
+        assert_eq!(refused["code"], "busy", "{job}");
+    }
+    assert_eq!(lab.selection().pending.unwrap().model, "Whisper-Base");
+    let pulls: Vec<Value> = lab.requests("/v1/pull");
+    assert!(
+        pulls
+            .iter()
+            .all(|p| p["body"]["model_name"] == "Whisper-Base"),
+        "{pulls:?}"
+    );
+    lab.h.ok("cancel_model_change", json!({}));
+}
+
+#[test]
+fn a_change_during_setup_is_refused() {
+    let lab = lab("download-ms=6000", &["Whisper-Tiny"], |_| {});
+    lab.h.ok("start_setup", json!({"tier": "small"}));
+    wait_for("setup to download", || {
+        lab.h.ok("get_setup", json!({}))["phase"] == "downloading"
+    });
+    for (job, model, allow) in [
+        ("recordings", "Whisper-Tiny", false),
+        ("recordings", "Whisper-Base", true),
+    ] {
+        let refused = lab.change(job, model, allow).unwrap_err();
+        assert_eq!(refused["code"], "busy", "{model}");
+    }
+    assert!(lab.selection().pending.is_none());
+    assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+}
+
+#[test]
+fn a_failed_change_waits_after_restart() {
+    let lab = lab("download-ms=600", &[], |config| {
+        let mut s = Selection::preset(Tier::Standard);
+        s.pending = Some(Pending {
+            role: ComponentRole::Speech,
+            model: "Whisper-Base".into(),
+            from: "Whisper-Small".into(),
+            paused: false,
+            failed: true,
+        });
+        selection::write(config, &s).unwrap();
+    });
+    std::thread::sleep(Duration::from_millis(500));
+    let view = lab.view();
+    assert_eq!(view["change"]["phase"]["type"], "failed");
+    assert_eq!(view["attention"], true);
+    assert!(
+        lab.requests("/v1/pull").is_empty(),
+        "nothing downloads by itself"
+    );
+    // Trying again is the person's yes.
+    lab.h.ok("resume_model_download", json!({}));
+    wait_for("the change", || {
+        lab.job_model("recordings") == "Whisper-Base"
+    });
 }

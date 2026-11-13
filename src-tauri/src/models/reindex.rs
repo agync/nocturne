@@ -123,24 +123,22 @@ impl ModelsHub {
         });
     }
 
-    /// The store has swapped: the selection names the new finding model, the old one is kept,
-    /// and the mind finds memories with the new one.
+    /// The store has swapped and already finds memories with the new model: the selection
+    /// names it, the old one is kept, and the mind is rebuilt around it.
     async fn finished<R: Runtime>(&self, app: &AppHandle<R>, model: &str, from: &str) {
         let dir = Self::config_dir(app);
-        let s = selection::read(&dir);
-        let mut s = fit::with_choice(&s, ComponentRole::Recall, model);
-        s.old = (!from.is_empty() && from != model && !in_use(&s, from)).then(|| OldModel {
-            role: ComponentRole::Recall,
-            model: from.to_string(),
+        let saved = selection::update(&dir, |s| {
+            *s = fit::with_choice(s, ComponentRole::Recall, model);
+            s.old = (!from.is_empty() && from != model && !in_use(s, from)).then(|| OldModel {
+                role: ComponentRole::Recall,
+                model: from.to_string(),
+            });
         });
-        if let Err(e) = selection::write(&dir, &s) {
+        if let Err(e) = saved {
             // The next launch repairs it from the store (`repair_after_swap`).
             tracing::warn!("the new finding model could not be saved: {e}");
         }
         crate::runtime::lemonade::refill_mind(app).await;
-        if let Ok(engine) = app.state::<AppState>().engine() {
-            engine.set_recall_model(model);
-        }
     }
 
     /// The person stops the re-read: what it built goes and the old way stays.
