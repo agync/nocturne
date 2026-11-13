@@ -49,7 +49,10 @@ export function printStressPage(ctx: SeedContext): PageView {
     "Two bin-day notes",
     "A coupon",
   ].map((text, i) =>
-    line(`stress-go-${i}`, "letGo", text, [], [], { subject: text, lastUsed: today }),
+    line(`stress-go-${i}`, "letGo", text, [], [receipt("item-letter")], {
+      subject: text,
+      lastUsed: today,
+    }),
   );
   return {
     date: PRINT_STRESS_DATE,

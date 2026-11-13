@@ -14,18 +14,21 @@ export interface Fitted {
   needsYouMore: number;
   changed: PageLine[];
   changedMore: number;
-  /** The names of what was let go, as many as fit. */
-  letGo: string[];
+  /** What was let go, as many lines as fit. */
+  letGo: PageLine[];
   letGoMore: number;
 }
 
 const live = (lines: PageLine[]) => lines.filter((l) => !l.forgotten);
 
+/** What a let-go line is called on paper. */
+export const letGoName = (line: PageLine): string => line.subject ?? line.text;
+
 /** What fits on one sheet, in the order that matters: needs you, the question, what changed, let go. */
 export function fit(page: PageView, size: PaperSize): Fitted {
   const needs = live(page.needsYou);
   const changed = live(page.changed);
-  const letGo = live(page.letGo).map((l) => l.subject ?? l.text);
+  const letGo = live(page.letGo);
   const cap = CHANGED_MAX[size];
   const named = LET_GO_NAMED[size];
   return {

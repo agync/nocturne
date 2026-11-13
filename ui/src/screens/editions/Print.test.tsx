@@ -6,7 +6,7 @@ import { EngineError } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
 import { PRINT_STRESS_DATE } from "../../engine/mock/seed/print";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
-import { fit } from "./fit";
+import { fit, letGoName } from "./fit";
 import { pageRule, pixelsToMm, Sheet } from "./Print";
 
 beforeEach(() => {
@@ -35,7 +35,7 @@ describe("what fits on one sheet", () => {
     const letter = fit(page, "letter");
     expect(letter.changed).toHaveLength(5);
     expect(letter.changedMore).toBe(9 - 5 + page.moreChanged);
-    expect(a4.letGo).toEqual([
+    expect(a4.letGo.map(letGoName)).toEqual([
       "The old gym door code",
       "The pizza place on Elm Street",
       "Two bin-day notes",
@@ -70,6 +70,24 @@ describe("the printed sheet", () => {
     expect(first.length).toBeGreaterThan(0);
     for (const chip of first) expect(chip.textContent?.trim()).toMatch(/^\[.+\]$/);
     expect(within(sheet()).getAllByText(/\[.+\]/).length).toBeGreaterThanOrEqual(12);
+  });
+
+  it("prints the source of everything that was let go, in brackets", async () => {
+    const page = await stress();
+    render(
+      <Sheet
+        page={page}
+        size="a4"
+        fitted={fit(page, "a4")}
+        printedAt="07:00"
+        sentNothing={false}
+      />,
+    );
+    const part = screen
+      .getByRole("heading", { name: "Let go · bring back in the app" })
+      .closest("section") as HTMLElement;
+    expect(within(part).getAllByText(/\[Letter · /)).toHaveLength(3);
+    expect(part).toHaveTextContent("The old gym door code [Letter");
   });
 
   it("prints a which-is-right line with its choices as tick circles and their sources", async () => {
@@ -138,6 +156,17 @@ describe("the printed sheet", () => {
 });
 
 describe("the print screen", () => {
+  it("is a main landmark in every state", async () => {
+    renderApp({ hash: "#/print/2026-11-13" });
+    expect(await screen.findByRole("main", { name: "Print" })).toBeInTheDocument();
+    cleanup();
+    const engine = createMockEngine();
+    vi.spyOn(engine, "getEdition").mockRejectedValue(new Error("no"));
+    renderApp({ hash: "#/print/2026-11-13", engine });
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("main", { name: "Print" })).toContainElement(screen.getByRole("alert"));
+  });
+
   const open = async (date = PRINT_STRESS_DATE) => {
     const platform = fakePlatform();
     const engine = createMockEngine();

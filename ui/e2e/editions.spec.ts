@@ -125,6 +125,34 @@ test.describe("Print", () => {
     await page.screenshot({ path: `${SHOTS}/print-receipt.png`, fullPage: true });
   });
 
+  test("the preview shrinks to fit a narrow window instead of scrolling sideways", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 400, height: 760 });
+    await ready(page);
+    for (const size of [/A4/, /Letter/, /Receipt/]) {
+      await page.getByRole("radio", { name: size }).check();
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+          ),
+        )
+        .toBeLessThanOrEqual(0);
+      const box = await page.getByRole("article", { name: "Print" }).boundingBox();
+      expect(box?.x ?? 0).toBeGreaterThanOrEqual(0);
+      expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(400);
+    }
+    await page.getByRole("radio", { name: /A4/ }).check();
+    await page.screenshot({ path: `${SHOTS}/print-narrow.png` });
+  });
+
+  test("the sheet sits inside a main landmark and passes axe", async ({ page }) => {
+    await ready(page);
+    await expect(page.getByRole("main", { name: "Print" })).toBeVisible();
+    expect(await axe(page)).toEqual([]);
+  });
+
   test("an ordinary page is one sheet too, and the toolbar does not print", async ({
     page,
     browserName,

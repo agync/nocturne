@@ -57,6 +57,17 @@
   color: var(--ink2);
 }
 
+.desk {
+  display: flex;
+  justify-content: safe center;
+  margin: 0 auto;
+}
+
+.scaled {
+  width: max-content;
+  transform-origin: top left;
+}
+
 .sheet {
   box-sizing: border-box;
   margin: 0 auto;
@@ -271,6 +282,17 @@
 
   .toolbar {
     display: none;
+  }
+
+  .desk {
+    display: block;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  .scaled {
+    width: auto;
+    transform: none !important;
   }
 
   .sheet {

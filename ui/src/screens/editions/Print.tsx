@@ -11,7 +11,7 @@ import type { PageLine, PageView, Question } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { useEngine } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
-import { type Fitted, fit, type PaperSize } from "./fit";
+import { type Fitted, fit, letGoName, type PaperSize } from "./fit";
 import styles from "./Print.module.css";
 
 const SIZE_KEY = "nocturne-print-size";
@@ -200,7 +200,13 @@ export function Sheet({ page, size, fitted, printedAt, sentNothing, sheetRef }: 
       {fitted.letGo.length > 0 ? (
         <Part title={t("print.letGo")}>
           <p className={styles.lineText}>
-            {fitted.letGo.join(" · ")}
+            {fitted.letGo.map((line, index) => (
+              <span key={line.id}>
+                {index > 0 ? " · " : ""}
+                {letGoName(line)}
+                <Sources line={line} />
+              </span>
+            ))}
             {fitted.letGoMore > 0 ? ` · ${t("print.more", { count: fitted.letGoMore })}` : ""}
           </p>
         </Part>
@@ -226,6 +232,11 @@ export function Print() {
   const [size, setSize] = useState<PaperSize>(savedSize);
   const [printedAt] = useState(() => formatTime(new Date()));
   const sheet = useRef<HTMLElement>(null);
+  const desk = useRef<HTMLDivElement>(null);
+  /** On a window narrower than the paper the preview shrinks to fit, so it never scrolls sideways. */
+  const [squeeze, setSqueeze] = useState<{ scale: number; width: number; height: number } | null>(
+    null,
+  );
   const [receiptMm, setReceiptMm] = useState<number | undefined>(undefined);
 
   const page = useQuery({
@@ -250,6 +261,34 @@ export function Print() {
     return () => watch.disconnect();
   }, [ready, size]);
 
+  useLayoutEffect(() => {
+    const frame = desk.current;
+    const el = sheet.current;
+    const holder = frame?.parentElement;
+    if (!ready || !el || !holder) return;
+    const measure = () => {
+      const style = getComputedStyle(holder);
+      const room =
+        holder.clientWidth -
+        Number.parseFloat(style.paddingLeft) -
+        Number.parseFloat(style.paddingRight);
+      const natural = el.offsetWidth;
+      if (natural === 0 || room <= 0 || room >= natural) {
+        setSqueeze(null);
+        return;
+      }
+      const scale = room / natural;
+      setSqueeze({ scale, width: natural * scale, height: el.offsetHeight * scale });
+    };
+    measure();
+    void document.fonts?.ready.then(measure);
+    if (typeof ResizeObserver === "undefined") return;
+    const watch = new ResizeObserver(measure);
+    watch.observe(holder);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, [ready, size]);
+
   useEffect(() => {
     document.title = `${t("screen.print.title")} · ${t("app.name")}`;
   }, []);
@@ -257,9 +296,9 @@ export function Print() {
   if (page.isError) {
     const missing = page.error instanceof EngineError && page.error.code === "notFound";
     return (
-      <div className={styles.message} role="alert">
+      <main className={styles.message} aria-label={t("screen.print.title")}>
         <h1 className="sr-only">{t("screen.print.title")}</h1>
-        <p>{missing ? t("print.missing") : t("print.error")}</p>
+        <p role="alert">{missing ? t("print.missing") : t("print.error")}</p>
         {missing ? null : (
           <Button variant="secondary" onClick={() => void page.refetch()}>
             {t("button.tryAgain")}
@@ -268,15 +307,15 @@ export function Print() {
         <a className={styles.back} href={`#/pages/${date}`}>
           {t("print.back")}
         </a>
-      </div>
+      </main>
     );
   }
   if (!page.data) {
     return (
-      <div className={styles.message}>
+      <main className={styles.message} aria-label={t("screen.print.title")}>
         <h1 className="sr-only">{t("screen.print.title")}</h1>
         <p role="status">{t("print.loading")}</p>
-      </div>
+      </main>
     );
   }
 
@@ -287,7 +326,7 @@ export function Print() {
   };
 
   return (
-    <div className={styles.screen}>
+    <main className={styles.screen} aria-label={t("screen.print.title")}>
       <h1 className="sr-only">{t("screen.print.title")}</h1>
       <style>{pageRule(size, receiptMm)}</style>
       <div className={styles.toolbar} role="toolbar" aria-label={t("print.toolbar")}>
@@ -312,14 +351,25 @@ export function Print() {
           {t("print.action")}
         </Button>
       </div>
-      <Sheet
-        page={page.data}
-        size={size}
-        fitted={fit(page.data, size)}
-        printedAt={printedAt}
-        sentNothing={sentNothing}
-        sheetRef={sheet}
-      />
-    </div>
+      <div
+        ref={desk}
+        className={styles.desk}
+        style={squeeze ? { width: squeeze.width, height: squeeze.height } : undefined}
+      >
+        <div
+          className={styles.scaled}
+          style={squeeze ? { transform: `scale(${squeeze.scale})` } : undefined}
+        >
+          <Sheet
+            page={page.data}
+            size={size}
+            fitted={fit(page.data, size)}
+            printedAt={printedAt}
+            sentNothing={sentNothing}
+            sheetRef={sheet}
+          />
+        </div>
+      </div>
+    </main>
   );
 }
