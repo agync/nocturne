@@ -2809,6 +2809,7 @@ dependencies = [
  "nocturne-intelligence",
  "nocturne-lemonade",
  "notify",
+ "reqwest",
  "serde",
  "serde_json",
  "sysinfo",

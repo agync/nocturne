@@ -63,6 +63,7 @@ nocturne-engine = { workspace = true, features = ["fake"] }
 nocturne-intelligence = { path = "../crates/intelligence", features = ["fake"] }
 nocturne-lemonade = { workspace = true, features = ["fake-server"] }
 tauri = { workspace = true, features = ["test"] }
+reqwest.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 
 [lints]

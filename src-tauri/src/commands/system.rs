@@ -3,8 +3,9 @@
 use nocturne_contract::{EngineStatus, SetupView, Tier};
 use tauri::{AppHandle, Manager, Runtime};
 
-use super::{not_yet, run};
+use super::run;
 use crate::error::CommandError;
+use crate::runtime;
 use crate::state::{AppState, refresh_status};
 
 #[tauri::command]
@@ -21,24 +22,24 @@ pub async fn get_setup<R: Runtime>(app: AppHandle<R>) -> Result<SetupView, Comma
     .await
 }
 
-/// Setup belongs to the runtime lane, which fills the mind slot and publishes progress with
-/// `publish_setup`. Until it is wired these say so.
+/// Install the mind for a tier. Progress arrives as `setup-progress` events. Choosing a smaller
+/// tier than the one in use, after a notice about memory, is how the person agrees to switch.
 #[tauri::command]
 pub async fn start_setup<R: Runtime>(app: AppHandle<R>, tier: Tier) -> Result<(), CommandError> {
-    let _ = (app, tier);
-    Err(not_yet("setup"))
+    run(app, move |app| async move {
+        runtime::start_setup(&app, tier).await
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn pause_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    let _ = app;
-    Err(not_yet("setup"))
+    run(app, |app| async move { runtime::pause_setup(&app).await }).await
 }
 
 #[tauri::command]
 pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
-    let _ = app;
-    Err(not_yet("setup"))
+    run(app, |app| async move { runtime::resume_setup(&app).await }).await
 }
 
 /// "Tidy anyway": the battery rule is set aside until this tidy is done. The scheduler starts the
