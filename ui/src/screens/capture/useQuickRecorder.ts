@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type RecorderFailure, recordingBlock, recordingOptions } from "../../app/useRecorder";
+import { type RecorderFailure, recordingBlock } from "../../app/useRecorder";
+import { startWavCapture, type WavCapture } from "../../app/wavCapture";
 
 /** A press of Space shorter than this was a slip of the finger, not a voice note. */
 export const MIN_HOLD_MS = 300;
@@ -29,10 +30,8 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [levels, setLevels] = useState<number[]>(quiet);
-  const recorder = useRef<MediaRecorder | null>(null);
+  const capture = useRef<WavCapture | null>(null);
   const stream = useRef<MediaStream | null>(null);
-  const audio = useRef<AudioContext | null>(null);
-  const chunks = useRef<Blob[]>([]);
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const starting = useRef(false);
@@ -40,25 +39,37 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
   const disposed = useRef(false);
   const told = useRef(false);
   const unavailable = recordingBlock();
-  const keep = useRef(true);
   const latest = useRef({ onFinished, onFailed });
   latest.current = { onFinished, onFailed };
 
   const release = useCallback(() => {
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
+    capture.current?.discard();
+    capture.current = null;
     for (const track of stream.current?.getTracks() ?? []) track.stop();
     stream.current = null;
-    void audio.current?.close().catch(() => undefined);
-    audio.current = null;
-    recorder.current = null;
     setRecording(false);
     setElapsedMs(0);
     setLevels(quiet());
   }, []);
 
+  const finish = useCallback(
+    (keepIt: boolean) => {
+      const open = capture.current;
+      if (!open) return;
+      const durationMs = Date.now() - startedAt.current;
+      const bytes = open.finish();
+      capture.current = null;
+      release();
+      if (keepIt && durationMs >= MIN_HOLD_MS && bytes)
+        latest.current.onFinished(bytes, "audio/wav", durationMs);
+    },
+    [release],
+  );
+
   const start = useCallback(async () => {
-    if (recorder.current || starting.current) return;
+    if (capture.current || starting.current) return;
     const block = recordingBlock();
     if (block) {
       if (!told.current) latest.current.onFailed(block);
@@ -74,39 +85,11 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
         return;
       }
       stream.current = media;
-      const rec = new MediaRecorder(media, recordingOptions());
-      chunks.current = [];
-      keep.current = true;
-      rec.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.current.push(event.data);
-      };
-      rec.onstop = async () => {
-        const wanted = keep.current;
-        const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
-        const durationMs = Date.now() - startedAt.current;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        release();
-        if (wanted && durationMs >= MIN_HOLD_MS && bytes.length > 0)
-          latest.current.onFinished(bytes, blob.type, durationMs);
-      };
-
-      let analyser: AnalyserNode | null = null;
-      if (typeof AudioContext !== "undefined") {
-        try {
-          const context = new AudioContext();
-          analyser = context.createAnalyser();
-          analyser.fftSize = 256;
-          context.createMediaStreamSource(media).connect(analyser);
-          audio.current = context;
-        } catch {
-          analyser = null;
-        }
-      }
+      const open = startWavCapture(media, () => finish(true));
+      capture.current = open;
+      const analyser = open.analyser;
       const samples = new Uint8Array(analyser?.fftSize ?? 0);
-
-      recorder.current = rec;
       startedAt.current = Date.now();
-      rec.start();
       setRecording(true);
       setElapsedMs(0);
       timer.current = setInterval(() => {
@@ -119,10 +102,7 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
         setLevels((previous) => [...previous.slice(1), Math.max(0.08, level)]);
       }, 80);
       const early = stopWanted.current as { keep: boolean } | null;
-      if (early) {
-        keep.current = early.keep;
-        rec.stop();
-      }
+      if (early) finish(early.keep);
     } catch (error) {
       release();
       const name = error instanceof DOMException || error instanceof Error ? error.name : "";
@@ -130,23 +110,21 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
     } finally {
       starting.current = false;
     }
-  }, [release]);
+  }, [release, finish]);
 
-  const stop = useCallback((keepIt: boolean) => {
-    stopWanted.current = { keep: keepIt };
-    keep.current = keepIt;
-    const rec = recorder.current;
-    if (rec && rec.state !== "inactive") rec.stop();
-  }, []);
+  const stop = useCallback(
+    (keepIt: boolean) => {
+      stopWanted.current = { keep: keepIt };
+      finish(keepIt);
+    },
+    [finish],
+  );
 
   useEffect(() => {
     disposed.current = false;
     return () => {
       disposed.current = true;
       stopWanted.current = { keep: false };
-      keep.current = false;
-      const rec = recorder.current;
-      if (rec && rec.state !== "inactive") rec.stop();
       release();
     };
   }, [release]);

@@ -5,25 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ToastProvider } from "../components/Toast/Toast";
 import { EngineProvider } from "../engine/context";
 import { createMockEngine } from "../engine/mock/engine";
+import { installFakeAudio, speak } from "../test/fakeAudio";
 import { useKeepRecording } from "./useKeepRecording";
 
-class FakeRecorder {
-  mimeType = "audio/webm";
-  state = "inactive";
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  start() {
-    this.state = "recording";
-  }
-  stop() {
-    this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob([new Uint8Array([9, 8, 7])]) });
-    this.onstop?.();
-  }
-}
-
 beforeEach(() => {
-  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  installFakeAudio();
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [] }) },
@@ -42,6 +28,7 @@ const wrap =
 const record = async (result: { current: ReturnType<typeof useKeepRecording> }) => {
   act(() => result.current.start());
   await waitFor(() => expect(result.current.seconds).toBe(0));
+  speak(500);
   act(() => result.current.stop());
 };
 
@@ -52,6 +39,7 @@ describe("useKeepRecording", () => {
     const { result } = renderHook(() => useKeepRecording(), { wrapper: wrap(engine) });
     await record(result);
     await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[0]?.[1]).toBe("audio/wav");
     expect(document.body).toHaveTextContent(/Voice note, 0:0\d\. Reading it now\./);
   });
 
@@ -73,8 +61,8 @@ describe("useKeepRecording", () => {
     );
     await userEvent.click(retry);
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
-    expect(Array.from(spy.mock.calls[1]?.[0] ?? [])).toEqual([9, 8, 7]);
-    expect(Array.from(spy.mock.calls[0]?.[0] ?? [])).toEqual([9, 8, 7]);
+    expect(spy.mock.calls[1]?.[0]).toEqual(spy.mock.calls[0]?.[0]);
+    expect(spy.mock.calls[0]?.[0]?.length).toBeGreaterThan(44);
   });
 
   it("explains a denied microphone and an unsupported one in different words", async () => {
@@ -88,7 +76,7 @@ describe("useKeepRecording", () => {
         "Nocturne can’t hear you. Microphone access is turned off for it.",
       ),
     );
-    vi.stubGlobal("MediaRecorder", undefined);
+    vi.stubGlobal("AudioContext", undefined);
     act(() => result.current.start());
     await waitFor(() => expect(document.body).toHaveTextContent("This window can’t record sound."));
   });

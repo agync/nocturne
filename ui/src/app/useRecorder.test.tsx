@@ -1,30 +1,12 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installFakeAudio, speak } from "../test/fakeAudio";
 import { recordingState, useRecorder } from "./useRecorder";
-
-class FakeRecorder {
-  static last: FakeRecorder | null = null;
-  state: "inactive" | "recording" = "inactive";
-  mimeType = "audio/webm";
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  constructor(public stream: unknown) {
-    FakeRecorder.last = this;
-  }
-  start() {
-    this.state = "recording";
-  }
-  stop() {
-    this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3, 4])]) });
-    this.onstop?.();
-  }
-}
 
 const track = { stop: vi.fn() };
 
 beforeEach(() => {
-  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  installFakeAudio();
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: { getUserMedia: vi.fn().mockResolvedValue({ getTracks: () => [track] }) },
@@ -36,19 +18,46 @@ afterEach(() => {
 });
 
 describe("useRecorder", () => {
-  it("records while held and hands over the bytes when released", async () => {
+  it("records while held and hands over a 16 kHz WAV when released", async () => {
     const onFinished = vi.fn();
     const { result } = renderHook(() => useRecorder({ onFinished, onFailed: vi.fn() }));
     expect(result.current.seconds).toBeNull();
     act(() => result.current.start());
     await waitFor(() => expect(result.current.seconds).toBe(0));
+    speak(1000);
     act(() => result.current.stop());
-    await waitFor(() => expect(onFinished).toHaveBeenCalled());
+    expect(onFinished).toHaveBeenCalledOnce();
     const [bytes, mime] = onFinished.mock.calls[0] as [Uint8Array, string, number];
-    expect(Array.from(bytes)).toEqual([1, 2, 3, 4]);
-    expect(mime).toBe("audio/webm");
+    expect(mime).toBe("audio/wav");
+    expect(String.fromCharCode(...bytes.subarray(0, 4))).toBe("RIFF");
+    expect(String.fromCharCode(...bytes.subarray(8, 12))).toBe("WAVE");
+    const view = new DataView(bytes.buffer, bytes.byteOffset);
+    expect(view.getUint32(24, true)).toBe(16000);
+    expect(bytes.length).toBeGreaterThan(30_000);
     expect(result.current.seconds).toBeNull();
     expect(track.stop).toHaveBeenCalled();
+  });
+
+  it("does not depend on MediaRecorder at all", async () => {
+    vi.stubGlobal("MediaRecorder", undefined);
+    const onFinished = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished, onFailed: vi.fn() }));
+    expect(result.current.unavailable).toBeNull();
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.seconds).toBe(0));
+    speak(300);
+    act(() => result.current.stop());
+    expect(onFinished).toHaveBeenCalledOnce();
+  });
+
+  it("keeps nothing when no sound arrived", async () => {
+    const onFinished = vi.fn();
+    const { result } = renderHook(() => useRecorder({ onFinished, onFailed: vi.fn() }));
+    act(() => result.current.start());
+    await waitFor(() => expect(result.current.seconds).toBe(0));
+    act(() => result.current.stop());
+    expect(onFinished).not.toHaveBeenCalled();
+    expect(result.current.seconds).toBeNull();
   });
 
   it("says so when the microphone is turned off", async () => {
@@ -74,8 +83,8 @@ describe("useRecorder", () => {
     await waitFor(() => expect(onFailed).toHaveBeenCalledWith("other"));
   });
 
-  it("says unsupported when this browser cannot record at all", async () => {
-    vi.stubGlobal("MediaRecorder", undefined);
+  it("says unsupported when this window has no way to listen", async () => {
+    vi.stubGlobal("AudioContext", undefined);
     const onFailed = vi.fn();
     const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
     act(() => result.current.start());
@@ -83,7 +92,7 @@ describe("useRecorder", () => {
   });
 
   it("says so once when recording is impossible, and then stays quiet", () => {
-    vi.stubGlobal("MediaRecorder", undefined);
+    vi.stubGlobal("AudioContext", undefined);
     const onFailed = vi.fn();
     const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed }));
     expect(result.current.unavailable).toBe("unsupported");
@@ -110,29 +119,13 @@ describe("useRecorder", () => {
     expect(result.current.unavailable).toBeNull();
   });
 
-  it("tells missing devices from a missing recorder", () => {
-    vi.stubGlobal("MediaRecorder", undefined);
+  it("tells missing devices from missing audio", () => {
+    vi.stubGlobal("AudioContext", undefined);
     expect(recordingState()).toBe("no-recorder");
     vi.unstubAllGlobals();
+    installFakeAudio();
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: undefined });
-    vi.stubGlobal("MediaRecorder", FakeRecorder);
     expect(recordingState()).toBe("no-devices");
-  });
-
-  it("records in the first sound format the browser supports", async () => {
-    const seen: unknown[] = [];
-    class Picky extends FakeRecorder {
-      static isTypeSupported = (type: string) => type === "audio/mp4";
-      constructor(stream: unknown, options?: unknown) {
-        super(stream);
-        seen.push(options);
-      }
-    }
-    vi.stubGlobal("MediaRecorder", Picky);
-    const { result } = renderHook(() => useRecorder({ onFinished: vi.fn(), onFailed: vi.fn() }));
-    act(() => result.current.start());
-    await waitFor(() => expect(result.current.seconds).toBe(0));
-    expect(seen).toEqual([{ mimeType: "audio/mp4" }]);
   });
 
   it("stops at once if the button was released before the microphone opened", async () => {
@@ -142,6 +135,8 @@ describe("useRecorder", () => {
       result.current.start();
       result.current.stop();
     });
-    await waitFor(() => expect(onFinished).toHaveBeenCalled());
+    await waitFor(() => expect(result.current.seconds).toBeNull());
+    expect(track.stop).toHaveBeenCalled();
+    expect(onFinished).not.toHaveBeenCalled();
   });
 });

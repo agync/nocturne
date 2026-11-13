@@ -399,7 +399,7 @@ fn keep_recording_takes_a_raw_body_and_a_mime_header() {
         .call_raw(
             "keep_recording",
             vec![1, 2, 3, 4, 5],
-            &[("x-nocturne-mime", "audio/webm;codecs=opus")],
+            &[("x-nocturne-mime", "audio/wav")],
         )
         .unwrap();
     assert_eq!(kept["type"], "new");
@@ -410,6 +410,30 @@ fn keep_recording_takes_a_raw_body_and_a_mime_header() {
     assert!(!tmp.exists() || std::fs::read_dir(&tmp).unwrap().next().is_none());
     // Wrong mime, empty body, and a JSON body are refused.
     let code = |r: Result<Value, Value>| r.unwrap_err()["code"].as_str().unwrap().to_string();
+    // What a web view records natively is refused up front: the speech model cannot read it.
+    for mime in [
+        "audio/webm",
+        "audio/webm;codecs=opus",
+        "audio/mp4",
+        "audio/ogg",
+    ] {
+        assert_eq!(
+            code(h.call_raw("keep_recording", vec![1, 2], &[("x-nocturne-mime", mime)])),
+            "invalid",
+            "{mime}"
+        );
+    }
+    // Nothing was kept by those.
+    assert_eq!(
+        h.ok(
+            "list_items",
+            json!({"filter": {"since": null, "status": null, "limit": null}})
+        )
+        .as_array()
+        .unwrap()
+        .len(),
+        1
+    );
     assert_eq!(
         code(h.call_raw(
             "keep_recording",
@@ -422,7 +446,7 @@ fn keep_recording_takes_a_raw_body_and_a_mime_header() {
         code(h.call_raw(
             "keep_recording",
             vec![],
-            &[("x-nocturne-mime", "audio/webm")]
+            &[("x-nocturne-mime", "audio/wav")]
         )),
         "invalid"
     );
@@ -430,7 +454,7 @@ fn keep_recording_takes_a_raw_body_and_a_mime_header() {
     assert_eq!(
         h.code(
             "keep_recording",
-            json!({"bytes": [1, 2], "mime": "audio/webm"})
+            json!({"bytes": [1, 2], "mime": "audio/wav"})
         ),
         "invalid"
     );

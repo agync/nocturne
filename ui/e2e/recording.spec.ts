@@ -41,6 +41,25 @@ test("hold to talk keeps a voice note that shows in Recent and plays on its own 
     .poll(() => audio.evaluate((el: HTMLAudioElement) => el.readyState))
     .toBeGreaterThan(0);
 
+  // The kept file is a 16 kHz mono 16-bit WAV, which the speech model can read.
+  const wav = await audio.evaluate(async (el: HTMLAudioElement) => {
+    const buffer = await (await fetch(el.src)).arrayBuffer();
+    const view = new DataView(buffer);
+    const word = (at: number) => String.fromCharCode(...new Uint8Array(buffer, at, 4));
+    return {
+      riff: word(0),
+      wave: word(8),
+      channels: view.getUint16(22, true),
+      rate: view.getUint32(24, true),
+      bits: view.getUint16(34, true),
+      declared: view.getUint32(40, true),
+      size: buffer.byteLength,
+    };
+  });
+  expect(wav).toMatchObject({ riff: "RIFF", wave: "WAVE", channels: 1, rate: 16000, bits: 16 });
+  expect(wav.declared).toBe(wav.size - 44);
+  expect(wav.size).toBeGreaterThan(32_000);
+
   // The waveform is drawn from the sound itself, not from even bars.
   await expect(page.locator('[data-measured="true"]')).toHaveCount(1);
 

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineClient } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
+import { installFakeAudio } from "../../test/fakeAudio";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
 
 /** The commands the shell lets the quick capture window call, read from the shell's own source. */
@@ -22,24 +23,9 @@ function commandOf(method: string): string | null {
   return /(?:this\.call|invoke)(?:<[^(]*>)?\(\s*"([a-z_]+)"/.exec(src.slice(at))?.[1] ?? null;
 }
 
-class FakeRecorder {
-  state: "inactive" | "recording" = "inactive";
-  mimeType = "audio/webm";
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  start() {
-    this.state = "recording";
-  }
-  stop() {
-    this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3, 4])]) });
-    this.onstop?.();
-  }
-}
-
 beforeEach(() => {
   setViewport(560);
-  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  installFakeAudio(48000, true);
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
     value: {

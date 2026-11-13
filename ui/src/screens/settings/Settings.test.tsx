@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EngineError } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
+import { installFakeAudio } from "../../test/fakeAudio";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
 import { comboFromEvent } from "./ShortcutField";
 
@@ -361,7 +362,7 @@ describe("Advanced details", () => {
   });
 
   it("says recording is available when it is", async () => {
-    vi.stubGlobal("MediaRecorder", class {});
+    installFakeAudio();
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
       value: { getUserMedia: vi.fn() },

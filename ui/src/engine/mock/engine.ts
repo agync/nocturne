@@ -645,8 +645,13 @@ export class MockEngine implements EngineClient {
   }
 
   async keepRecording(bytes: Uint8Array, mime: string): Promise<Kept> {
+    // As the app does: the speech model reads WAV, so that is all a recording may be.
+    if (mime.split(";")[0]?.trim() !== "audio/wav") {
+      throw new Error("a recording must be a WAV file");
+    }
     const item = this.newItem("audio", "Voice note", "recording", {
-      durationMs: Math.max(1000, Math.round(bytes.length / 16)),
+      // 16 kHz mono 16-bit is 32 000 bytes a second after a 44-byte header.
+      durationMs: Math.max(1000, Math.round(Math.max(0, bytes.length - 44) / 32)),
       ...heldOriginal(bytes, mime),
     });
     return { type: "new", item: clone(item) };

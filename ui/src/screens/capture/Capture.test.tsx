@@ -3,30 +3,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
+import { installFakeAudio } from "../../test/fakeAudio";
 import { type FakePlatform, fakePlatform, renderApp, setViewport } from "../../test/render";
 import { CLOSE_AFTER_MS, MIN_HOLD_MS } from "./index";
-
-class FakeRecorder {
-  state: "inactive" | "recording" = "inactive";
-  mimeType = "audio/webm";
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => void) | null = null;
-  start() {
-    this.state = "recording";
-  }
-  stop() {
-    this.state = "inactive";
-    this.ondataavailable?.({ data: new Blob([new Uint8Array([1, 2, 3, 4])]) });
-    this.onstop?.();
-  }
-}
 
 const track = { stop: vi.fn() };
 let getUserMedia: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   setViewport(560);
-  vi.stubGlobal("MediaRecorder", FakeRecorder);
+  installFakeAudio(48000, true);
   getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [track] });
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
@@ -314,6 +300,7 @@ describe("recording", () => {
     now.mockReturnValue(start + MIN_HOLD_MS + 100);
     await userEvent.click(screen.getByRole("button", { name: "Keep" }));
     await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    expect(spy.mock.calls[0]?.[1]).toBe("audio/wav");
   });
 
   it("explains a turned-off microphone with the shared notice", async () => {
@@ -328,7 +315,7 @@ describe("recording", () => {
 
 describe("a window that cannot record", () => {
   it("says why once, marks the microphone and ignores further presses", async () => {
-    vi.stubGlobal("MediaRecorder", undefined);
+    vi.stubGlobal("AudioContext", undefined);
     await open();
     const mic = screen.getByRole("button", { name: "Record a voice note" });
     expect(mic).toHaveAttribute("aria-disabled", "true");

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CopyId } from "../copy/t";
 import type { RecordingState } from "../engine/client";
+import { canCaptureSound, startWavCapture, type WavCapture } from "./wavCapture";
 
 /** Why a recording did not happen. Only "insecure" and "unsupported" can be known in advance. */
 export type RecorderFailure = "denied" | "unsupported" | "insecure" | "other";
@@ -22,17 +23,8 @@ export function recordingState(): RecordingState {
   // the person allows.
   if (typeof window !== "undefined" && window.isSecureContext === false) return "not-secure";
   if (!navigator.mediaDevices?.getUserMedia) return "no-devices";
-  if (typeof MediaRecorder === "undefined") return "no-recorder";
+  if (!canCaptureSound()) return "no-recorder";
   return "available";
-}
-
-const MIME_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
-
-/** The first sound format this browser can record: webm for Chrome and Firefox, mp4 for Safari. */
-export function recordingOptions(): MediaRecorderOptions | undefined {
-  if (typeof MediaRecorder.isTypeSupported !== "function") return undefined;
-  const mimeType = MIME_TYPES.find((type) => MediaRecorder.isTypeSupported(type));
-  return mimeType ? { mimeType } : undefined;
 }
 
 /** The reason recording cannot start, or null when it can. */
@@ -59,9 +51,8 @@ export function failureCopy(reason: RecorderFailure): CopyId {
 /** Records the microphone while a button is held. Nothing leaves the computer. */
 export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
   const [seconds, setSeconds] = useState<number | null>(null);
-  const recorder = useRef<MediaRecorder | null>(null);
+  const capture = useRef<WavCapture | null>(null);
   const stream = useRef<MediaStream | null>(null);
-  const chunks = useRef<Blob[]>([]);
   const startedAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const starting = useRef(false);
@@ -74,14 +65,25 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
   const release = useCallback(() => {
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
+    capture.current?.discard();
+    capture.current = null;
     for (const track of stream.current?.getTracks() ?? []) track.stop();
     stream.current = null;
-    recorder.current = null;
     setSeconds(null);
   }, []);
 
+  const finish = useCallback(() => {
+    const open = capture.current;
+    if (!open) return;
+    const durationMs = Date.now() - startedAt.current;
+    const bytes = open.finish();
+    capture.current = null;
+    release();
+    if (bytes) latest.current.onFinished(bytes, "audio/wav", durationMs);
+  }, [release]);
+
   const start = useCallback(async () => {
-    if (recorder.current || starting.current) return;
+    if (capture.current || starting.current) return;
     const block = recordingBlock();
     if (block) {
       // Said once; the button stays marked as unavailable, so more presses add nothing.
@@ -94,27 +96,14 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
       stream.current = media;
-      const rec = new MediaRecorder(media, recordingOptions());
-      chunks.current = [];
-      rec.ondataavailable = (event) => {
-        if (event.data.size > 0) chunks.current.push(event.data);
-      };
-      rec.onstop = async () => {
-        const blob = new Blob(chunks.current, { type: rec.mimeType || "audio/webm" });
-        const durationMs = Date.now() - startedAt.current;
-        const bytes = new Uint8Array(await blob.arrayBuffer());
-        release();
-        if (bytes.length > 0) latest.current.onFinished(bytes, blob.type, durationMs);
-      };
-      recorder.current = rec;
+      capture.current = startWavCapture(media, () => finish());
       startedAt.current = Date.now();
-      rec.start();
       setSeconds(0);
       timer.current = setInterval(
         () => setSeconds(Math.floor((Date.now() - startedAt.current) / 1000)),
         500,
       );
-      if (stopWanted.current) rec.stop();
+      if (stopWanted.current) finish();
     } catch (error) {
       release();
       const name = error instanceof DOMException || error instanceof Error ? error.name : "";
@@ -122,13 +111,12 @@ export function useRecorder({ onFinished, onFailed }: RecorderOptions) {
     } finally {
       starting.current = false;
     }
-  }, [release]);
+  }, [release, finish]);
 
   const stop = useCallback(() => {
     stopWanted.current = true;
-    const rec = recorder.current;
-    if (rec && rec.state !== "inactive") rec.stop();
-  }, []);
+    finish();
+  }, [finish]);
 
   useEffect(() => () => release(), [release]);
 

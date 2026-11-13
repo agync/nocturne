@@ -23,21 +23,33 @@ function collectAsk(engine: ReturnType<typeof createMockEngine>) {
 }
 
 describe("MockEngine capture", () => {
-  it("keeps a voice note from any browser and holds the sound to play back", async () => {
+  it("keeps a voice note as a WAV and holds the sound to play back", async () => {
     const create = vi.fn(() => "blob:held");
     const before = URL.createObjectURL;
     URL.createObjectURL = create;
     const engine = createMockEngine({ now: NOW });
-    for (const mime of ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"]) {
-      const kept = await engine.keepRecording(new Uint8Array(32_000), mime);
-      expect(kept.type).toBe("new");
-      expect(kept.item.kind).toBe("audio");
-      expect(kept.item.source).toBe("recording");
-      expect(kept.item.originalPath).toBe("blob:held");
-      expect((await engine.getItem(kept.item.id)).originalPath).toBe("blob:held");
-    }
-    expect(create).toHaveBeenCalledTimes(3);
+    const kept = await engine.keepRecording(new Uint8Array(44 + 96_000), "audio/wav");
+    expect(kept.type).toBe("new");
+    expect(kept.item.kind).toBe("audio");
+    expect(kept.item.source).toBe("recording");
+    expect(kept.item.durationMs).toBe(3000);
+    expect(kept.item.originalPath).toBe("blob:held");
+    expect((await engine.getItem(kept.item.id)).originalPath).toBe("blob:held");
     URL.createObjectURL = before;
+  });
+
+  it("refuses a recording in a form the speech model cannot read", async () => {
+    const engine = createMockEngine({ now: NOW });
+    for (const mime of ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg"]) {
+      await expect(engine.keepRecording(new Uint8Array(32_000), mime)).rejects.toThrow(/WAV/);
+    }
+    expect(await engine.listItems({ since: null, status: null, limit: null })).not.toContainEqual(
+      expect.objectContaining({
+        source: "recording",
+        title: "Voice note",
+        id: expect.stringMatching(/^new-/),
+      }),
+    );
   });
 
   it("acknowledges a kept note in under 100 ms and leaves it waiting for tonight", async () => {
@@ -82,7 +94,7 @@ describe("MockEngine capture", () => {
     URL.createObjectURL = () => "blob:held-1";
     URL.revokeObjectURL = revoke;
     const engine = createMockEngine({ now: NOW });
-    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/wav");
     await engine.unkeep(kept.item.id);
     expect(revoke).toHaveBeenCalledWith("blob:held-1");
     [URL.createObjectURL, URL.revokeObjectURL] = before as [
@@ -98,7 +110,7 @@ describe("MockEngine capture", () => {
     URL.createObjectURL = () => `blob:held-${++n}`;
     URL.revokeObjectURL = revoke;
     const engine = createMockEngine({ now: NOW });
-    await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    await engine.keepRecording(new Uint8Array(32_000), "audio/wav");
     await engine.keepBytes(new Uint8Array([1, 2]), "image/png", "paste");
     await engine.deleteEverything("delete everything");
     expect(revoke).toHaveBeenCalledWith("blob:held-1");
@@ -494,7 +506,7 @@ describe("MockEngine, shared by the screen lanes", () => {
 
   it("reads a voice note now and claims nothing, because the preview cannot hear it", async () => {
     const engine = createMockEngine({ now: NOW });
-    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/wav");
     await engine.readNow(kept.item.id);
     await vi.advanceTimersByTimeAsync(10_000);
     expect(await engine.getItem(kept.item.id)).toMatchObject({

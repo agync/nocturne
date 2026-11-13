@@ -256,14 +256,12 @@ async fn keep_raw<R: Runtime>(
             .as_deref()
             .and_then(extension_for)
             .ok_or_else(|| CommandError::invalid("this kind of content cannot be kept"))?;
-        if fixed_source == Some(Source::Recording)
-            && !matches!(
-                nocturne_engine::kind_for_ext(ext),
-                Some((nocturne_contract::ItemKind::Audio, _))
-            )
-        {
+        // The speech model reads WAV and rejects what web views record natively (WebM, MP4). The
+        // interface sends WAV; anything else is refused here, plainly, rather than kept to fail
+        // later as an item that could not be read.
+        if fixed_source == Some(Source::Recording) && ext != "wav" {
             return Err(CommandError::invalid(
-                "this kind of recording cannot be kept",
+                "a recording must be a WAV file; this kind of recording cannot be read",
             ));
         }
         if bytes.is_empty() {
