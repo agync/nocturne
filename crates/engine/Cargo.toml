@@ -19,13 +19,13 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, features = ["sync", "time"] }
 getrandom = "0.3"
 
 [dev-dependencies]
 nocturne-engine = { workspace = true, features = ["fake"] }
 tempfile.workspace = true
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 
 [lints]
 workspace = true

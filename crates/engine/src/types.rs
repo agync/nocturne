@@ -134,6 +134,29 @@ pub enum RecordOutcome {
     TooLong,
 }
 
+/// What recording a mind failure did to the item.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FailureOutcome {
+    /// The item went back to where it was; try again later.
+    Retry,
+    /// Too many failures: the item is `couldntRead` (corrupt).
+    GaveUp,
+}
+
+/// Counts for the status line, computed in the store without loading rows.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StatusCounts {
+    /// Entries waiting on the person, as `needs_you()` would list them.
+    pub needs_you: u32,
+    /// Items kept and not yet read (waiting or being read).
+    pub waiting_to_read: u32,
+    /// Items the mind could not read.
+    pub couldnt_read: u32,
+    /// Unconfirmed memories waiting on the person (part of `needs_you`).
+    pub unconfirmed: u32,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UseKind {
     Answer,

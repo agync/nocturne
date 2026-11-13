@@ -61,6 +61,9 @@ pub enum MindError {
     Language(String),
     #[error("failed: {0}")]
     Failed(String),
+    /// A model could not be loaded because memory is short. Never the item's fault.
+    #[error("not enough memory to load a model")]
+    OutOfMemory,
 }
 
 pub trait Mind: Send + Sync {
@@ -95,25 +98,69 @@ pub trait Mind: Send + Sync {
 }
 
 #[cfg(any(test, feature = "fake"))]
-pub use fake::{FAKE_DIM, FakeMind, hash_embedding};
+pub use fake::{FAKE_DIM, FakeMind, Gate, hash_embedding};
 
 #[cfg(any(test, feature = "fake"))]
 mod fake {
-    use std::collections::HashMap;
+    use std::collections::{HashMap, VecDeque};
     use std::path::Path;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     use nocturne_contract::{MemoryView, PageView};
-    use tokio::sync::mpsc;
+    use tokio::sync::{Notify, mpsc, watch};
 
     use super::{
         AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding,
     };
     use crate::types::Candidate;
 
+    /// Holds a call mid-flight. The call announces itself on `entered`, then waits for `open`.
+    pub struct Gate {
+        entered: Notify,
+        open: watch::Sender<bool>,
+    }
+
+    impl Gate {
+        fn new() -> Self {
+            Gate {
+                entered: Notify::new(),
+                open: watch::channel(false).0,
+            }
+        }
+
+        /// Wait until a gated call has started (one permit per call that entered).
+        pub async fn entered(&self) {
+            self.entered.notified().await;
+        }
+
+        /// Let held calls, and later ones, go through.
+        pub fn open(&self) {
+            self.open.send_replace(true);
+        }
+
+        /// Hold calls again.
+        pub fn close(&self) {
+            self.open.send_replace(false);
+        }
+
+        async fn pass(&self) {
+            self.entered.notify_one();
+            let mut rx = self.open.subscribe();
+            let _ = rx.wait_for(|open| *open).await;
+        }
+    }
+
     #[derive(Default)]
     struct Script {
         down: bool,
+        latency: Duration,
+        /// Errors to return once each, in order, per call name.
+        errors: HashMap<String, VecDeque<MindError>>,
+        /// Errors every call of that name returns until cleared.
+        always: HashMap<String, MindError>,
+        gates: HashMap<String, Arc<Gate>>,
+        headline: Option<(String, String)>,
         extract: HashMap<String, Vec<Candidate>>,
         embed: HashMap<String, Vec<f32>>,
         transcripts: HashMap<String, Transcript>,
@@ -187,6 +234,56 @@ mod fake {
             self
         }
 
+        /// Switch the runtime down or up while a test runs.
+        pub fn set_down(&self, down: bool) {
+            self.script().down = down;
+        }
+
+        /// Every call waits this long (tokio time, so `tokio::time::pause` controls it).
+        pub fn set_latency(&self, latency: Duration) {
+            self.script().latency = latency;
+        }
+
+        /// The next call named `call` (`"extract"`, `"embed"`, `"transcribe"`, `"read_image"`,
+        /// `"read_document"`, `"answer"`, `"write_headline"`, `"speak"`) fails with `err`.
+        /// Queue several to fail several calls in a row.
+        pub fn fail_next(&self, call: &str, err: MindError) {
+            self.script()
+                .errors
+                .entry(call.to_string())
+                .or_default()
+                .push_back(err);
+        }
+
+        /// Every call named `call` fails with `err` until `clear_failures`.
+        pub fn fail_always(&self, call: &str, err: MindError) {
+            self.script().always.insert(call.to_string(), err);
+        }
+
+        pub fn clear_failures(&self, call: &str) {
+            let mut script = self.script();
+            script.errors.remove(call);
+            script.always.remove(call);
+        }
+
+        /// A gate on calls named `call`: they stop at it until it is opened.
+        pub fn gate(&self, call: &str) -> Arc<Gate> {
+            let gate = Arc::new(Gate::new());
+            self.script().gates.insert(call.to_string(), gate.clone());
+            gate
+        }
+
+        /// The headline and dek `write_headline` returns (otherwise the page's own).
+        pub fn with_headline(self, headline: &str, dek: &str) -> Self {
+            self.script().headline = Some((headline.to_string(), dek.to_string()));
+            self
+        }
+
+        /// How many calls named `call` have been made.
+        pub fn call_count(&self, call: &str) -> usize {
+            self.calls().iter().filter(|c| *c == call).count()
+        }
+
         /// The names of the calls made so far, in order.
         pub fn calls(&self) -> Vec<String> {
             self.calls.lock().unwrap_or_else(|e| e.into_inner()).clone()
@@ -199,11 +296,30 @@ mod fake {
                 .push(call.to_string());
         }
 
-        fn check(&self) -> Result<(), MindError> {
-            if self.script().down {
-                Err(MindError::Unavailable)
-            } else {
-                Ok(())
+        /// Record the call, then hold at its gate, wait out the latency and apply the script:
+        /// down, then a queued error, then a standing one.
+        async fn check(&self, call: &str) -> Result<(), MindError> {
+            self.record(call);
+            let (gate, latency) = {
+                let script = self.script();
+                (script.gates.get(call).cloned(), script.latency)
+            };
+            if let Some(gate) = gate {
+                gate.pass().await;
+            }
+            if !latency.is_zero() {
+                tokio::time::sleep(latency).await;
+            }
+            let mut script = self.script();
+            if script.down {
+                return Err(MindError::Unavailable);
+            }
+            if let Some(err) = script.errors.get_mut(call).and_then(VecDeque::pop_front) {
+                return Err(err);
+            }
+            match script.always.get(call) {
+                Some(err) => Err(err.clone()),
+                None => Ok(()),
             }
         }
 
@@ -220,8 +336,7 @@ mod fake {
             audio: &'a Path,
         ) -> BoxFuture<'a, Result<Transcript, MindError>> {
             Box::pin(async move {
-                self.record("transcribe");
-                self.check()?;
+                self.check("transcribe").await?;
                 self.script()
                     .transcripts
                     .get(&Self::file_key(audio))
@@ -235,8 +350,7 @@ mod fake {
             image: &'a Path,
         ) -> BoxFuture<'a, Result<Understanding, MindError>> {
             Box::pin(async move {
-                self.record("read_image");
-                self.check()?;
+                self.check("read_image").await?;
                 self.script()
                     .understandings
                     .get(&Self::file_key(image))
@@ -250,8 +364,7 @@ mod fake {
             doc: &'a Path,
         ) -> BoxFuture<'a, Result<Understanding, MindError>> {
             Box::pin(async move {
-                self.record("read_document");
-                self.check()?;
+                self.check("read_document").await?;
                 self.script()
                     .understandings
                     .get(&Self::file_key(doc))
@@ -266,8 +379,7 @@ mod fake {
             _cx: &'a ExtractContext,
         ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
             Box::pin(async move {
-                self.record("extract");
-                self.check()?;
+                self.check("extract").await?;
                 Ok(self.script().extract.get(text).cloned().unwrap_or_default())
             })
         }
@@ -277,8 +389,7 @@ mod fake {
             texts: &'a [String],
         ) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
             Box::pin(async move {
-                self.record("embed");
-                self.check()?;
+                self.check("embed").await?;
                 let script = self.script();
                 Ok(texts
                     .iter()
@@ -300,8 +411,7 @@ mod fake {
             out: mpsc::Sender<String>,
         ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
             Box::pin(async move {
-                self.record("answer");
-                self.check()?;
+                self.check("answer").await?;
                 for f in facts {
                     let _ = out.send(f.sentence.clone()).await;
                 }
@@ -317,9 +427,12 @@ mod fake {
             page: &'a PageView,
         ) -> BoxFuture<'a, Result<(String, String), MindError>> {
             Box::pin(async move {
-                self.record("write_headline");
-                self.check()?;
-                Ok((page.headline.clone(), page.dek.clone()))
+                self.check("write_headline").await?;
+                Ok(self
+                    .script()
+                    .headline
+                    .clone()
+                    .unwrap_or_else(|| (page.headline.clone(), page.dek.clone())))
             })
         }
 
@@ -329,8 +442,7 @@ mod fake {
             _voice: &'a str,
         ) -> BoxFuture<'a, Result<Vec<u8>, MindError>> {
             Box::pin(async move {
-                self.record("speak");
-                self.check()?;
+                self.check("speak").await?;
                 Ok(text.as_bytes().to_vec())
             })
         }

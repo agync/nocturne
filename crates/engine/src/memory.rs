@@ -379,7 +379,8 @@ fn apply(
         "understood"
     };
     tx.execute(
-        "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL WHERE id = ?1",
+        "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL, \
+         status_before = NULL, reread = 0, failures = 0 WHERE id = ?1",
         params![item_id, status],
     )?;
     Ok((report, files))

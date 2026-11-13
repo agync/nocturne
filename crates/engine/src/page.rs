@@ -250,9 +250,13 @@ fn compose(
     tz: &TimeZone,
     day: Date,
     edition: Edition,
+    end_at: Option<Timestamp>,
 ) -> Result<nocturne_contract::PageView> {
     let settings = read_settings(conn)?;
-    let w = window_for(conn, day, tz)?;
+    let mut w = window_for(conn, day, tz)?;
+    if let Some(end) = end_at {
+        w.end = end.max(w.start);
+    }
     let (start, end) = (fmt_ts(w.start), fmt_ts(w.end));
     let number = page_number(conn, day)?;
     let screen = edition == Edition::Screen;
@@ -451,7 +455,9 @@ fn compose(
 
     let question = question_for(conn, day, number, edition, now, &settings.page_time)?;
 
-    let variant = if pending > 0 {
+    // A page composed up to an explicit end is the one to be saved: it never claims to be
+    // still being written (what is unread is counted in `pending`).
+    let variant = if pending > 0 && end_at.is_none() {
         PageVariant::BeingWritten
     } else if w.catch_up_days >= 1 {
         PageVariant::CatchUp
@@ -498,12 +504,79 @@ impl Engine {
     pub fn compose_page(&self, day: Date, edition: Edition) -> Result<nocturne_contract::PageView> {
         let now = self.clock().now();
         let tz = self.clock().tz();
-        self.read(|conn| compose(conn, now, &tz, day, edition))
+        self.read(|conn| compose(conn, now, &tz, day, edition, None))
+    }
+
+    /// Compose the page for `day` over the window ending at `end` instead of the page time
+    /// (clamped to the window's start). The tidy composes and saves with the same `end`, so
+    /// what the page counted and what it covers agree. The variant is never `beingWritten`;
+    /// unread items in the window are counted in `pending`.
+    pub fn compose_page_until(
+        &self,
+        day: Date,
+        end: Timestamp,
+        edition: Edition,
+    ) -> Result<nocturne_contract::PageView> {
+        let now = self.clock().now();
+        let tz = self.clock().tz();
+        self.read(|conn| compose(conn, now, &tz, day, edition, Some(end)))
     }
 
     /// Save a composed page (screen edition, every line) as the snapshot for its date. Cited
     /// memories count as used once; let-go lines do not, or the page would undo its own news.
     pub fn save_page(&self, page: &nocturne_contract::PageView) -> Result<()> {
+        self.save_page_inner(page, None, false).map(|_| ())
+    }
+
+    /// Like `save_page`, with the window ending at `end` (the `end` the page was composed
+    /// with by `compose_page_until`).
+    pub fn save_page_until(
+        &self,
+        page: &nocturne_contract::PageView,
+        end: Timestamp,
+    ) -> Result<()> {
+        self.save_page_inner(page, Some(end), false).map(|_| ())
+    }
+
+    /// Replace an already saved page once, when the backlog behind it has drained. Allowed only
+    /// while the person has not opened the page (`page_opened`) and it has not been re-saved
+    /// before. Returns whether it was saved.
+    pub fn resave_page(&self, page: &nocturne_contract::PageView, end: Timestamp) -> Result<bool> {
+        self.save_page_inner(page, Some(end), true)
+    }
+
+    /// The person opened the page for `day`. Only the first open is recorded. Returns true when
+    /// this was the first.
+    pub fn page_opened(&self, day: Date) -> Result<bool> {
+        let now = fmt_ts(self.clock().now());
+        self.write(|tx| {
+            Ok(tx.execute(
+                "UPDATE pages SET opened_at = ?2 WHERE date = ?1 AND opened_at IS NULL",
+                params![day.to_string(), now],
+            )? > 0)
+        })
+    }
+
+    /// Whether the saved page for `day` could still be replaced by `resave_page`.
+    pub fn can_resave_page(&self, day: Date) -> Result<bool> {
+        self.read(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT opened_at IS NULL AND resaves < 1 FROM pages WHERE date = ?1",
+                    [day.to_string()],
+                    |r| r.get::<_, bool>(0),
+                )
+                .optional()?
+                .unwrap_or(false))
+        })
+    }
+
+    fn save_page_inner(
+        &self,
+        page: &nocturne_contract::PageView,
+        until: Option<Timestamp>,
+        resave: bool,
+    ) -> Result<bool> {
         if page.edition != Edition::Screen {
             return Err(Error::invalid(
                 "only the screen edition is saved: it holds every line",
@@ -512,7 +585,20 @@ impl Engine {
         let day: Date = page.date.parse()?;
         let tz = self.clock().tz();
         let now = fmt_ts(self.clock().now());
-        let files = self.write(|tx| {
+        let saved = self.write(|tx| {
+            if resave {
+                let allowed: bool = tx
+                    .query_row(
+                        "SELECT opened_at IS NULL AND resaves < 1 FROM pages WHERE date = ?1",
+                        [&page.date],
+                        |r| r.get(0),
+                    )
+                    .optional()?
+                    .unwrap_or(false);
+                if !allowed {
+                    return Ok(None);
+                }
+            }
             // Anything that cached audio for this page is now stale.
             self.bump_audio();
             // A page composed before a forget finished may cite what is now gone or going.
@@ -521,7 +607,9 @@ impl Engine {
             let w = window_for(tx, day, &tz)?;
             // A page saved before its time ends at now, so what is kept between now and the page
             // time belongs to the next page instead of falling between two.
-            let end = w.end.min(self.clock().now()).max(w.start);
+            let end = until
+                .unwrap_or_else(|| w.end.min(self.clock().now()))
+                .max(w.start);
             let number = page_number(tx, day)?;
             let already: HashSet<String> = {
                 let mut stmt = tx.prepare(
@@ -597,10 +685,19 @@ impl Engine {
                     params![page.date, q.memory_id, enum_str(&q.kind), q.text, now],
                 )?;
             }
-            drop_audio_rows(tx, std::slice::from_ref(&page.date))
+            if resave {
+                tx.execute(
+                    "UPDATE pages SET resaves = resaves + 1 WHERE date = ?1",
+                    [&page.date],
+                )?;
+            }
+            Ok(Some(drop_audio_rows(tx, std::slice::from_ref(&page.date))?))
         })?;
+        let Some(files) = saved else {
+            return Ok(false);
+        };
         shred_all(files);
-        Ok(())
+        Ok(true)
     }
 
     /// The date of the next page to write: today until today's page is saved, then tomorrow.

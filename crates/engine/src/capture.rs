@@ -14,13 +14,15 @@ use crate::Engine;
 use crate::error::{Error, Result};
 use crate::mind::{Transcript, Understanding};
 use crate::rows::{ITEM_COLS, get_item_view, item_view};
-use crate::types::{PendingItem, RecordOutcome};
+use crate::types::{FailureOutcome, PendingItem, RecordOutcome};
 use crate::util::{enum_str, fmt_ts, hex, new_id, random_hex, sha256_hex};
 
 /// Recordings longer than this are kept but not read.
 pub const MAX_AUDIO_MS: u32 = 2 * 60 * 60 * 1000;
 /// Documents longer than this are kept but not read.
 pub const MAX_PAGES: u32 = 100;
+/// An item the mind fails on this many times is given up on.
+pub const MAX_FAILURES: u32 = 3;
 
 /// Trust follows the source (data model, "Trust by source").
 pub fn trust_for(source: Source) -> Trust {
@@ -340,7 +342,8 @@ impl Engine {
     pub fn retry_item(&self, id: &str) -> Result<()> {
         self.write(|tx| {
             let n = tx.execute(
-                "UPDATE items SET status = 'kept', reason = NULL, lease_until = NULL, attempts = 0 \
+                "UPDATE items SET status = 'kept', reason = NULL, lease_until = NULL, attempts = 0, \
+                 failures = 0 \
                  WHERE id = ?1 AND status IN ('couldntRead', 'partlyUnderstood')",
                 [id],
             )?;
@@ -427,6 +430,109 @@ impl Engine {
         })
     }
 
+    /// Give a read back: the item returns to where it was (waiting, or read before for a
+    /// re-read) and its token is void. `counted = false` gives the attempt back too (the mind
+    /// went away, or an ask pre-empted it: not the item's fault).
+    pub fn release_lease(&self, item: &str, lease: &str, counted: bool) -> Result<()> {
+        self.write(|tx| {
+            check_lease(tx, item, lease)?;
+            tx.execute(
+                "UPDATE items SET status = COALESCE(status_before, 'kept'), status_before = NULL, \
+                 lease_until = NULL, lease_token = NULL, \
+                 attempts = CASE WHEN ?2 THEN attempts ELSE MAX(attempts - 1, 0) END \
+                 WHERE id = ?1",
+                params![item, counted],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Keep a read going: the lease now ends `lease` from now.
+    pub fn renew_lease(&self, item: &str, lease: &str, extend: Duration) -> Result<()> {
+        let until = fmt_ts(lease_until(self.clock().now(), extend)?);
+        self.write(|tx| {
+            check_lease(tx, item, lease)?;
+            tx.execute(
+                "UPDATE items SET lease_until = ?2 WHERE id = ?1",
+                params![item, until],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// The mind failed on this item (`MindError::Failed`). Counts toward the item, apart from
+    /// leases taken: the third failure makes it `couldntRead` (reason `corrupt`); before that
+    /// it goes back to where it was.
+    pub fn record_failure(&self, item: &str, lease: &str) -> Result<FailureOutcome> {
+        self.write(|tx| {
+            check_lease(tx, item, lease)?;
+            tx.execute(
+                "UPDATE items SET failures = failures + 1 WHERE id = ?1",
+                [item],
+            )?;
+            let failures: u32 =
+                tx.query_row("SELECT failures FROM items WHERE id = ?1", [item], |r| {
+                    r.get(0)
+                })?;
+            if failures >= MAX_FAILURES {
+                fail(tx, item, CouldntReadReason::Corrupt, None, None)?;
+                return Ok(FailureOutcome::GaveUp);
+            }
+            tx.execute(
+                "UPDATE items SET status = COALESCE(status_before, 'kept'), status_before = NULL, \
+                 lease_until = NULL, lease_token = NULL WHERE id = ?1",
+                [item],
+            )?;
+            Ok(FailureOutcome::Retry)
+        })
+    }
+
+    /// A scanned document the mind could not read, but which has a title worth keeping: the
+    /// item is `partlyUnderstood` under that title.
+    pub fn mark_partly(&self, item: &str, lease: &str, title: &str) -> Result<()> {
+        self.write(|tx| {
+            check_lease(tx, item, lease)?;
+            tx.execute(
+                "UPDATE items SET status = 'partlyUnderstood', \
+                 title = CASE WHEN ?2 = '' THEN title ELSE ?2 END, lease_until = NULL, \
+                 lease_token = NULL, status_before = NULL, reread = 0 WHERE id = ?1",
+                params![item, title.trim()],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// Mark read items to be read again at low priority (after an upgrade or a tier change).
+    /// The mark survives restarts and is cleared when the item is applied again. Items that
+    /// are waiting, being read or unreadable are skipped. Returns how many were marked.
+    pub fn queue_reread(&self, ids: &[String]) -> Result<u32> {
+        self.write(|tx| {
+            let mut marked = 0u32;
+            for id in ids {
+                marked += tx.execute(
+                    "UPDATE items SET reread = 1 WHERE id = ?1 AND reread = 0 \
+                     AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed')",
+                    [id],
+                )? as u32;
+            }
+            Ok(marked)
+        })
+    }
+
+    /// Items marked for a re-read, most recently kept first, that nobody is reading now.
+    pub fn rereads(&self, limit: usize) -> Result<Vec<String>> {
+        self.read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM items WHERE reread = 1 \
+                 AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed') \
+                 AND NOT EXISTS (SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || items.id || '\"') > 0) \
+                 ORDER BY kept_at DESC, id LIMIT ?1",
+            )?;
+            let rows = stmt.query_map([limit.min(i64::MAX as usize) as i64], |r| r.get(0))?;
+            Ok(rows.collect::<rusqlite::Result<_>>()?)
+        })
+    }
+
     /// Store a transcript for an audio item. A recording over two hours is kept but not read
     /// (`RecordOutcome::TooLong`, status `couldntRead`).
     pub fn record_transcript(
@@ -508,7 +614,9 @@ fn take_lease(tx: &Transaction<'_>, item: &mut PendingItem, until: &str) -> Resu
     item.attempts += 1;
     item.lease = random_hex(16);
     tx.execute(
-        "UPDATE items SET status = 'reading', lease_until = ?2, lease_token = ?3, \
+        "UPDATE items SET status_before = CASE WHEN status IN ('kept', 'reading') THEN NULL \
+                                               ELSE status END, \
+         status = 'reading', lease_until = ?2, lease_token = ?3, \
          attempts = attempts + 1, priority = 0 WHERE id = ?1",
         params![item.id, until, item.lease],
     )?;
@@ -554,7 +662,7 @@ fn fail(
 ) -> Result<()> {
     let n = tx.execute(
         "UPDATE items SET status = 'couldntRead', reason = ?2, lease_until = NULL, \
-         lease_token = NULL, duration_ms = COALESCE(?3, duration_ms), \
+         lease_token = NULL, status_before = NULL, duration_ms = COALESCE(?3, duration_ms), \
          pages = COALESCE(?4, pages) WHERE id = ?1",
         params![item, enum_str(&reason), duration_ms, pages],
     )?;
@@ -566,9 +674,20 @@ fn fail(
 
 pub(crate) fn reset_expired_leases(conn: &rusqlite::Connection, now: &str) -> Result<usize> {
     Ok(conn.execute(
-        "UPDATE items SET status = 'kept', lease_until = NULL, lease_token = NULL \
+        "UPDATE items SET status = COALESCE(status_before, 'kept'), status_before = NULL, \
+         lease_until = NULL, lease_token = NULL \
          WHERE status = 'reading' AND (lease_until IS NULL OR lease_until <= ?1)",
         [now],
+    )?)
+}
+
+/// Every item being read goes back to where it was. Used when the store is opened: one
+/// instance owns it, so nobody can still be reading.
+pub(crate) fn reset_all_leases(conn: &rusqlite::Connection) -> Result<usize> {
+    Ok(conn.execute(
+        "UPDATE items SET status = COALESCE(status_before, 'kept'), status_before = NULL, \
+         lease_until = NULL, lease_token = NULL WHERE status = 'reading'",
+        [],
     )?)
 }
 

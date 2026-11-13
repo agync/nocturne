@@ -1,7 +1,7 @@
 //! Settings, stored as JSON values by key. Defaults come from here; the person's choices
 //! overlay them.
 
-use nocturne_contract::{Delivery, LettingGo, SettingsPatch, SettingsView, Theme};
+use nocturne_contract::{Delivery, LettingGo, SettingsPatch, SettingsView, Theme, TidyReport};
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value};
 
@@ -78,7 +78,32 @@ pub(crate) fn thresholds(l: LettingGo) -> (i64, i64) {
     }
 }
 
+const LAST_TIDY: &str = "_lastTidy";
+
 impl Engine {
+    /// Remember the last overnight tidy, for the advanced details.
+    pub fn record_tidy(&self, report: TidyReport) -> Result<()> {
+        self.write(|tx| {
+            tx.execute(
+                "INSERT OR REPLACE INTO settings(key, value) VALUES (?1, ?2)",
+                params![LAST_TIDY, serde_json::to_string(&report)?],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// The last tidy `record_tidy` stored.
+    pub fn last_tidy(&self) -> Result<Option<TidyReport>> {
+        self.read(|conn| {
+            let v: Option<String> = rusqlite::OptionalExtension::optional(conn.query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                [LAST_TIDY],
+                |r| r.get(0),
+            ))?;
+            Ok(v.and_then(|v| serde_json::from_str(&v).ok()))
+        })
+    }
+
     pub fn settings(&self) -> Result<SettingsView> {
         self.read(read_settings)
     }

@@ -138,3 +138,13 @@ ALTER TABLE forget_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'forget';
 -- that shape is treated the same, which only makes pages stricter about citing that item.
 UPDATE forget_jobs SET kind = 'unkeep'
  WHERE kind = 'forget' AND include_originals = 1 AND json_array_length(items) = 1;
+
+-- migration 6
+-- The intelligence layer: failures counted apart from leases taken, the status an item had
+-- before a re-read took it (so giving it back restores that status), a re-read mark that
+-- survives restarts, and whether the person has opened a saved page or it was re-saved once.
+ALTER TABLE items ADD COLUMN failures INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE items ADD COLUMN status_before TEXT;
+ALTER TABLE items ADD COLUMN reread INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE pages ADD COLUMN opened_at TEXT;
+ALTER TABLE pages ADD COLUMN resaves INTEGER NOT NULL DEFAULT 0;

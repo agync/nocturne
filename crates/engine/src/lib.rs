@@ -30,13 +30,13 @@ mod util;
 pub mod day;
 pub mod store;
 
-pub use capture::{MAX_AUDIO_MS, MAX_PAGES, kind_for_ext, trust_for};
+pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
 pub use mind::{AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding};
 #[cfg(any(test, feature = "fake"))]
-pub use mind::{FAKE_DIM, FakeMind, hash_embedding};
+pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
 pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP};
 pub use types::*;
 
@@ -96,9 +96,8 @@ impl Engine {
                 forget_gen: AtomicU64::new(0),
             }),
         };
-        // Items a worker was reading when the app last stopped go back in the queue.
-        let now = util::fmt_ts(engine.clock().now());
-        engine.write(|tx| capture::reset_expired_leases(tx, &now).map(|_| ()))?;
+        // Items a worker was reading when the app last stopped go back where they were.
+        engine.write(|tx| capture::reset_all_leases(tx).map(|_| ()))?;
         // A forget that was under way when the app stopped is finished before anything else.
         engine.resume_forgets()?;
         // Files with no row (a crash between a commit and the removal, or a half-copied
@@ -118,7 +117,8 @@ impl Engine {
         self.inner.clock.now()
     }
 
-    pub(crate) fn clock(&self) -> &dyn Clock {
+    /// The clock the engine takes its time from.
+    pub fn clock(&self) -> &dyn Clock {
         self.inner.clock.as_ref()
     }
 
