@@ -277,6 +277,7 @@ fn settings_round_trip_and_validate() {
     let f = fixture();
     let s = f.engine.settings().unwrap();
     assert_eq!(s.page_time, "07:00");
+    assert_eq!(s.voice, "bf_emma");
     let s = f
         .engine
         .update_settings(SettingsPatch {

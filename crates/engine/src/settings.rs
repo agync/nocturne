@@ -13,7 +13,7 @@ pub(crate) fn defaults() -> SettingsView {
         page_time: "07:00".to_string(),
         delivery: Delivery::Notify,
         auto_print: false,
-        voice: "af_heart".to_string(),
+        voice: "bf_emma".to_string(),
         voice_speed: 1.0,
         shortcut: "CommandOrControl+Shift+Space".to_string(),
         shortcut_available: true,
