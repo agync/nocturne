@@ -428,6 +428,45 @@ pub async fn refresh_status<R: Runtime>(app: &AppHandle<R>) -> EngineStatus {
     ev.status
 }
 
+/// Pause reading until an instant (RFC 3339), or (`None`) until the person resumes. The
+/// settings command and the tray both come here, so they cannot drift apart.
+pub async fn pause_until<R: Runtime>(
+    app: &AppHandle<R>,
+    until: Option<String>,
+) -> Result<(), CommandError> {
+    let state = app.state::<AppState>();
+    if let Some(u) = &until {
+        let at: Timestamp = u.parse().map_err(|_| {
+            CommandError::invalid("pause until a time such as 2026-11-13T09:00:00Z")
+        })?;
+        if at <= state.now() {
+            return Err(CommandError::invalid("that time has passed"));
+        }
+    }
+    let handle = app.clone();
+    crate::error::blocking_cmd(move || {
+        handle.state::<AppState>().status.pause(until);
+        Ok(())
+    })
+    .await?;
+    refresh_status(app).await;
+    Ok(())
+}
+
+/// Resume reading now, and wake the pipeline.
+pub async fn resume_now<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {
+    let state = app.state::<AppState>();
+    let handle = app.clone();
+    crate::error::blocking_cmd(move || {
+        handle.state::<AppState>().status.resume();
+        Ok(())
+    })
+    .await?;
+    state.wake_pipeline();
+    refresh_status(app).await;
+    Ok(())
+}
+
 /// Replace the setup view (the runtime lane calls this as setup moves) and tell the interface.
 pub fn publish_setup<R: Runtime>(app: &AppHandle<R>, view: SetupView) {
     let state = app.state::<AppState>();

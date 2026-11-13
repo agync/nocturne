@@ -2,7 +2,6 @@
 
 use std::path::PathBuf;
 
-use jiff::Timestamp;
 use nocturne_contract::{
     AdvancedView, EVENT_EXPORT, ExportProgress, ExportReport, PrivacyView, SettingsPatch,
     SettingsView,
@@ -116,23 +115,7 @@ pub async fn pause<R: Runtime>(
     until: Option<String>,
 ) -> Result<(), CommandError> {
     run(app, move |app| async move {
-        let state = app.state::<AppState>();
-        if let Some(u) = &until {
-            let at: Timestamp = u.parse().map_err(|_| {
-                CommandError::invalid("pause until a time such as 2026-11-13T09:00:00Z")
-            })?;
-            if at <= state.now() {
-                return Err(CommandError::invalid("that time has passed"));
-            }
-        }
-        let handle = app.clone();
-        blocking_cmd(move || {
-            handle.state::<AppState>().status.pause(until);
-            Ok(())
-        })
-        .await?;
-        refresh_status(&app).await;
-        Ok(())
+        crate::state::pause_until(&app, until).await
     })
     .await
 }
@@ -140,16 +123,7 @@ pub async fn pause<R: Runtime>(
 #[tauri::command]
 pub async fn resume<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     run(app, move |app| async move {
-        let state = app.state::<AppState>();
-        let handle = app.clone();
-        blocking_cmd(move || {
-            handle.state::<AppState>().status.resume();
-            Ok(())
-        })
-        .await?;
-        state.wake_pipeline();
-        refresh_status(&app).await;
-        Ok(())
+        crate::state::resume_now(&app).await
     })
     .await
 }

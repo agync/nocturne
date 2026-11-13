@@ -48,9 +48,11 @@ fn note_quick<R: Runtime>(app: &AppHandle<R>, webview: &tauri::Webview<R>, kept:
         return;
     }
     let state = app.state::<AppState>();
+    // Only what it made: a duplicate is an older item the window did not create.
     for k in kept {
-        let (Kept::New { item } | Kept::Duplicate { item }) = k;
-        state.note_quick_item(&item.id);
+        if let Kept::New { item } = k {
+            state.note_quick_item(&item.id);
+        }
     }
 }
 

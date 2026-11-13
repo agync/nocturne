@@ -22,8 +22,8 @@ use tauri::{AppHandle, Emitter, Listener, Manager, Runtime};
 use super::copy;
 use super::quick_capture;
 use super::state::OsState;
-use crate::error::{blocking, blocking_cmd};
-use crate::state::{AppState, refresh_status};
+use crate::error::blocking;
+use crate::state::{AppState, pause_until, refresh_status, resume_now};
 use crate::window::{self, ShowReason};
 
 pub const ID: &str = "nocturne";
@@ -548,31 +548,17 @@ async fn run<R: Runtime>(app: &AppHandle<R>, action: Action) {
                 PauseFor::Tonight => Some(until_tonight(now, &state.clock.tz())),
                 PauseFor::UntilResumed => None,
             };
-            pause(app, until.map(|t| t.to_string())).await;
+            if let Err(e) = pause_until(app, until.map(|t| t.to_string())).await {
+                tracing::warn!("the tray could not pause: {:?}", e.code);
+            }
         }
         Action::Resume => {
-            let state = app.state::<AppState>();
-            let handle = app.clone();
-            let _ = blocking_cmd(move || {
-                handle.state::<AppState>().status.resume();
-                Ok(())
-            })
-            .await;
-            state.wake_pipeline();
-            refresh_status(app).await;
+            if let Err(e) = resume_now(app).await {
+                tracing::warn!("the tray could not resume: {:?}", e.code);
+            }
         }
         Action::Quit => app.exit(0),
     }
-}
-
-async fn pause<R: Runtime>(app: &AppHandle<R>, until: Option<String>) {
-    let handle = app.clone();
-    let _ = blocking_cmd(move || {
-        handle.state::<AppState>().status.pause(until);
-        Ok(())
-    })
-    .await;
-    refresh_status(app).await;
 }
 
 /// Bring the window forward on a screen.

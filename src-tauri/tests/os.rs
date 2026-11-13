@@ -844,3 +844,64 @@ fn the_notification_count_leaves_out_a_private_item_that_needs_you() {
     assert!(body.starts_with("One thing needs you today."), "{body}");
     assert!(!body.to_lowercase().contains("clinic"), "{body}");
 }
+
+#[test]
+fn a_duplicate_kept_from_quick_capture_is_not_the_windows_to_read_or_undo() {
+    let h = harness();
+    let older = match h
+        .engine()
+        .keep_text("Gran's number ends 4471", nocturne_contract::Source::Paste)
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let quick = h.window("quick-capture");
+    let again = h
+        .call_from(
+            &quick,
+            "keep_text",
+            json!({"text": "Gran's number ends 4471", "source": "quickCapture"}),
+        )
+        .unwrap();
+    assert_eq!(again["type"], "duplicate", "{again}");
+    assert_eq!(again["item"]["id"], older.as_str());
+    assert_eq!(
+        h.code_from(&quick, "get_item", json!({"id": older})),
+        "notFound"
+    );
+    assert_eq!(
+        h.code_from(&quick, "unkeep", json!({"id": older})),
+        "notFound"
+    );
+    assert!(h.call("get_item", json!({"id": older})).is_ok());
+    assert!(h.call("unkeep", json!({"id": older})).is_ok());
+}
+
+#[test]
+fn the_tray_and_the_command_pause_and_resume_the_same_way() {
+    use nocturne_app_lib::state::{pause_until, resume_now};
+    let h = harness();
+    let app = h.app.handle().clone();
+    let run = |f: std::pin::Pin<Box<dyn std::future::Future<Output = Result<(), _>>>>| {
+        tauri::async_runtime::block_on(f)
+    };
+    let past = run(Box::pin(pause_until(
+        &app,
+        Some("2020-01-01T00:00:00Z".into()),
+    )));
+    assert_eq!(
+        past.unwrap_err().code,
+        nocturne_app_lib::error::ErrorCode::Invalid
+    );
+    let junk = run(Box::pin(pause_until(&app, Some("soon".into()))));
+    assert_eq!(
+        junk.unwrap_err().code,
+        nocturne_app_lib::error::ErrorCode::Invalid
+    );
+    run(Box::pin(pause_until(&app, None))).unwrap();
+    assert_eq!(h.ok("get_status", json!({}))["state"], "paused");
+    run(Box::pin(resume_now(&app))).unwrap();
+    assert_ne!(h.ok("get_status", json!({}))["state"], "paused");
+}
