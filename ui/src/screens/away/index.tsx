@@ -3,10 +3,12 @@ import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
 import styles from "./Away.module.css";
 import { AwayPage } from "./AwayPage";
+import { SetupFlow } from "./SetupFlow";
 import { useRemote } from "./useRemote";
 
 /** Serves #/settings/away and the pages under it. */
 export default function Away() {
+  const [setup] = useRoute("/settings/away/setup");
   const query = useRemote();
 
   if (query.isError) {
@@ -27,5 +29,6 @@ export default function Away() {
       </p>
     );
   }
+  if (setup) return <SetupFlow view={view} />;
   return <AwayPage view={view} />;
 }
