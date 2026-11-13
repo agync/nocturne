@@ -130,7 +130,10 @@ export function useEngineEvent<E extends EngineEventName>(
 export type AskState = "idle" | "asking" | AskPhase;
 
 export interface AskResult {
-  ask: (question: string) => Promise<string>;
+  /** Resolves with the ask id, or null when the engine refused or a newer question took over. */
+  ask: (question: string) => Promise<string | null>;
+  /** Set when the engine could not take the question; the screen says so in words. */
+  error: Error | null;
   askId: string | null;
   deltas: AskDelta[];
   phase: AskState;
@@ -139,6 +142,8 @@ export interface AskResult {
   near: NearMatch[];
   found: number | null;
 }
+
+const MAX_EARLY = 200;
 
 const TERMINAL: ReadonlySet<AskPhase> = new Set(["done", "notSure", "nothing", "unavailable"]);
 
@@ -153,14 +158,17 @@ export function useAsk(): AskResult {
   const [askId, setAskId] = useState<string | null>(null);
   const [deltas, setDeltas] = useState<AskDelta[]>([]);
   const [asking, setAsking] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
   const active = useRef<string | null>(null);
   const early = useRef<AskDelta[]>([]);
+  const call = useRef(0);
 
   useEffect(
     () =>
       engine.on("ask-delta", (delta) => {
         if (active.current === null) {
-          early.current.push(delta);
+          // Deltas before the id is known are kept, but never without limit.
+          if (early.current.length < MAX_EARLY) early.current.push(delta);
         } else if (delta.askId === active.current) {
           setDeltas((previous) => [...previous, delta]);
         }
@@ -170,12 +178,25 @@ export function useAsk(): AskResult {
 
   const ask = useCallback(
     async (question: string) => {
+      const mine = ++call.current;
       active.current = null;
       early.current = [];
       setAsking(true);
+      setError(null);
       setDeltas([]);
       setAskId(null);
-      const id = await engine.ask(question);
+      let id: string;
+      try {
+        id = await engine.ask(question);
+      } catch (failure) {
+        if (mine === call.current) {
+          setAsking(false);
+          setError(failure instanceof Error ? failure : new Error(String(failure)));
+        }
+        return null;
+      }
+      // A newer question has started since: this answer is no longer the one on screen.
+      if (mine !== call.current) return null;
       active.current = id;
       setAskId(id);
       setDeltas(early.current.filter((d) => d.askId === id));
@@ -206,5 +227,5 @@ export function useAsk(): AskResult {
     if (last && TERMINAL.has(last.phase)) setAsking(false);
   }, [last]);
 
-  return { ask, askId, deltas, phase, text, receipts, near, found };
+  return { ask, error, askId, deltas, phase, text, receipts, near, found };
 }

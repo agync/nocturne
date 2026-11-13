@@ -118,4 +118,101 @@ describe("useAsk", () => {
     expect(result.current.phase).toBe("nothing");
     vi.useRealTimers();
   });
+
+  it("resets and exposes the error when the engine refuses the question", async () => {
+    const engine = createMockEngine({ now: NOW });
+    engine.ask = async () => {
+      throw new Error("not ready");
+    };
+    const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
+    let id: string | null = "x";
+    await act(async () => {
+      id = await result.current.ask("Anything?");
+    });
+    expect(id).toBeNull();
+    expect(result.current.error?.message).toBe("not ready");
+    expect(result.current.phase).toBe("idle");
+  });
+
+  it("keeps two overlapping questions apart, even when the first answers last", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const emit = (engine as unknown as { emit: (n: string, p: unknown) => void }).emit.bind(engine);
+    const delta = (
+      askId: string,
+      phase: AskDelta["phase"],
+      textDelta: string | null,
+    ): AskDelta => ({
+      askId,
+      phase,
+      textDelta,
+      receipts: [],
+      memoryIds: [],
+      near: [],
+      found: null,
+      etaSeconds: null,
+    });
+    const resolvers: Record<string, (id: string) => void> = {};
+    engine.ask = (question: string) =>
+      new Promise<string>((resolve) => {
+        resolvers[question] = resolve;
+      });
+    const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
+    let first: Promise<string | null> = Promise.resolve(null);
+    let second: Promise<string | null> = Promise.resolve(null);
+    act(() => {
+      first = result.current.ask("first");
+    });
+    act(() => {
+      second = result.current.ask("second");
+    });
+    act(() => {
+      emit("ask-delta", delta("A", "streaming", "from A"));
+      emit("ask-delta", delta("B", "streaming", "from B"));
+    });
+    await act(async () => {
+      resolvers.second?.("B");
+      await second;
+    });
+    await act(async () => {
+      resolvers.first?.("A");
+      await first;
+    });
+    act(() => {
+      emit("ask-delta", delta("A", "done", " late A"));
+      emit("ask-delta", delta("B", "done", " and more B"));
+    });
+    expect(result.current.askId).toBe("B");
+    expect(result.current.text).toBe("from B and more B");
+  });
+
+  it("never buffers more than a bounded number of early deltas", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const emit = (engine as unknown as { emit: (n: string, p: unknown) => void }).emit.bind(engine);
+    let release: (id: string) => void = () => undefined;
+    engine.ask = () => new Promise<string>((r) => (release = r));
+    const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
+    let pending: Promise<string | null> = Promise.resolve(null);
+    act(() => {
+      pending = result.current.ask("flood");
+    });
+    act(() => {
+      for (let i = 0; i < 1000; i += 1) {
+        emit("ask-delta", {
+          askId: "F",
+          phase: "streaming",
+          textDelta: "x",
+          receipts: [],
+          memoryIds: [],
+          near: [],
+          found: null,
+          etaSeconds: null,
+        });
+      }
+    });
+    await act(async () => {
+      release("F");
+      await pending;
+    });
+    expect(result.current.deltas.length).toBeLessThanOrEqual(200);
+  });
 });
