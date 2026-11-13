@@ -219,7 +219,3 @@ fn parse_date(s: &str) -> Result<Date, CommandError> {
     s.parse::<Date>()
         .map_err(|_| CommandError::invalid("a date is YYYY-MM-DD"))
 }
-
-fn not_yet(what: &str) -> CommandError {
-    CommandError::unavailable(format!("{what} is not available yet"))
-}

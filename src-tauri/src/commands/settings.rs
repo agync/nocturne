@@ -88,7 +88,12 @@ pub async fn delete_everything<R: Runtime>(
 ) -> Result<(), CommandError> {
     // Nothing in flight may answer from what is about to go.
     app.state::<AppState>().asks.cancel_all();
-    change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await?;
+    // Nothing may land in the store after the wipe: the watched folder stops first.
+    crate::os::before_delete_everything(&app).await;
+    if let Err(e) = change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await {
+        crate::os::after_failed_delete(&app).await;
+        return Err(e);
+    }
     crate::os::on_delete_everything(&app);
     let state = app.state::<AppState>();
     let handle = app.clone();

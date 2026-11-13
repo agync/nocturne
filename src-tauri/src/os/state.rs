@@ -1,7 +1,8 @@
 //! What the desktop side remembers between launches, and what it holds while running.
 //!
 //! The file is `os-state.json` in the data folder, owner-only like everything else there. It
-//! holds dates and the watched folder's ledger, never anything the person kept.
+//! holds dates and the watched folder's ledger (salted hashes of paths and sizes, no names),
+//! never anything the person kept.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -9,9 +10,12 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use serde::{Deserialize, Serialize};
 
 use super::autostart::Target;
-use super::inbox::{InboxLedger, Timing};
+use super::inbox::{Handle, InboxLedger, Timing};
 use super::notify::Notifier;
 use super::shortcut::{Registrar, ShortcutSlot};
+
+/// Runs between finding stable files and keeping them.
+pub type BeforeKeep = Arc<dyn Fn(&[String]) + Send + Sync>;
 
 pub const FILE: &str = "os-state.json";
 
@@ -49,7 +53,8 @@ pub struct OsState {
     shortcut: Mutex<ShortcutSlot>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
     autostart: Mutex<Option<Target>>,
-    inbox: Mutex<Option<tauri::async_runtime::JoinHandle<()>>>,
+    inbox: Mutex<Option<Handle>>,
+    before_keep: Mutex<Option<BeforeKeep>>,
     inbox_timing: Mutex<Timing>,
     audio_attempts: Mutex<(Option<jiff::civil::Date>, u32)>,
 }
@@ -63,6 +68,7 @@ impl OsState {
             notifier: Mutex::new(None),
             autostart: Mutex::new(None),
             inbox: Mutex::new(None),
+            before_keep: Mutex::new(None),
             inbox_timing: Mutex::new(Timing::default()),
             audio_attempts: Mutex::new((None, 0)),
         }
@@ -112,15 +118,26 @@ impl OsState {
             .clone()
     }
 
-    /// Replace the running folder watcher (stopping the old one), or stop it with `None`.
-    pub fn replace_inbox(&self, task: Option<tauri::async_runtime::JoinHandle<()>>) {
-        let old = std::mem::replace(
-            &mut *self.inbox.lock().unwrap_or_else(|e| e.into_inner()),
-            task,
-        );
-        if let Some(old) = old {
-            old.abort();
-        }
+    /// Hand over the running folder watcher (to stop it), leaving none.
+    pub fn take_inbox(&self) -> Option<Handle> {
+        self.inbox.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+
+    pub fn set_inbox(&self, handle: Option<Handle>) {
+        *self.inbox.lock().unwrap_or_else(|e| e.into_inner()) = handle;
+    }
+
+    /// A hook that runs after the watcher has found stable files and before it keeps them, for
+    /// tests that change the folder in that gap.
+    pub fn set_before_keep(&self, hook: BeforeKeep) {
+        *self.before_keep.lock().unwrap_or_else(|e| e.into_inner()) = Some(hook);
+    }
+
+    pub fn before_keep(&self) -> Option<BeforeKeep> {
+        self.before_keep
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn inbox_running(&self) -> bool {

@@ -577,4 +577,157 @@ mod inbox {
         );
         wait_for("all 500", || kept(&h).len() >= 500 + kept_text);
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_swapped_for_a_link_between_the_look_and_the_keep_is_not_kept() {
+        let h = harness();
+        let folder = watching(&h);
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), "not yours to keep").unwrap();
+        let target = outside.path().join("secret.txt");
+        let swapped = folder.path().to_path_buf();
+        h.app
+            .state::<OsState>()
+            .set_before_keep(Arc::new(move |ready| {
+                for rel in ready {
+                    let path = swapped.join(rel);
+                    std::fs::remove_file(&path).unwrap();
+                    std::os::unix::fs::symlink(&target, &path).unwrap();
+                }
+            }));
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        std::fs::write(folder.path().join("new.txt"), "arrived later").unwrap();
+        std::thread::sleep(Duration::from_millis(900));
+        assert!(kept(&h).is_empty(), "a file outside the folder was kept");
+        let stored = h.dir.path().join("store").join("originals");
+        for entry in std::fs::read_dir(stored).unwrap().flatten() {
+            let bytes = std::fs::read(entry.path()).unwrap_or_default();
+            assert!(!String::from_utf8_lossy(&bytes).contains("not yours to keep"));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_that_cannot_be_read_yet_is_tried_again() {
+        use std::os::unix::fs::PermissionsExt;
+        let h = harness();
+        let folder = watching(&h);
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        let path = folder.path().join("locked.txt");
+        std::fs::write(&path, "readable soon").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        if std::fs::read(&path).is_ok() {
+            return; // running with privileges that ignore permissions
+        }
+        std::thread::sleep(Duration::from_millis(500));
+        assert!(kept(&h).is_empty());
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        wait_for("the second try", || kept(&h).len() == 1);
+    }
+
+    #[test]
+    fn the_saved_ledger_has_no_file_or_folder_names() {
+        let h = harness();
+        let folder = watching(&h);
+        std::fs::write(folder.path().join("secret-diagnosis.pdf"), "x").unwrap();
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        let saved = std::fs::read_to_string(h.dir.path().join("os-state.json")).unwrap();
+        assert!(!saved.contains("secret-diagnosis"), "{saved}");
+        let name = folder.path().file_name().unwrap().to_string_lossy();
+        assert!(!saved.contains(name.as_ref()), "{saved}");
+    }
+
+    #[test]
+    fn a_folder_that_appears_inside_the_data_folder_later_is_not_watched() {
+        let h = harness();
+        h.app.manage(OsState::new(h.dir.path()));
+        h.app.state::<OsState>().set_inbox_timing(fast());
+        let later = h.dir.path().join("appears-later");
+        let app = h.app.handle().clone();
+        let data = h.dir.path().to_path_buf();
+        let shown = later.to_string_lossy().into_owned();
+        tauri::async_runtime::block_on(nocturne_app_lib::os::resume_inbox(
+            &app,
+            &data,
+            Some(shown.as_str()),
+        ));
+        std::thread::sleep(Duration::from_millis(300));
+        std::fs::create_dir(&later).unwrap();
+        std::thread::sleep(Duration::from_millis(500));
+        std::fs::write(later.join("note.txt"), "inside the data folder").unwrap();
+        std::thread::sleep(Duration::from_millis(900));
+        assert!(kept(&h).is_empty());
+    }
+
+    const PHRASE: &str = "delete everything";
+
+    #[test]
+    fn delete_everything_stops_the_watcher_the_login_entry_and_the_shortcut() {
+        use nocturne_app_lib::os::autostart::{ENTRY, Target};
+        let h = harness();
+        let folder = watching(&h);
+        let fake = Arc::new(Fake::default());
+        let os = h.app.state::<OsState>();
+        os.set_registrar(fake.clone());
+        shortcut::install(&os, "Ctrl+Alt+K", true);
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("autostart");
+        os.set_autostart(Target {
+            dir: dir.clone(),
+            exec: "/usr/bin/nocturne".into(),
+        });
+        h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
+        assert!(dir.join(ENTRY).exists());
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+
+        h.ok("delete_everything", json!({"confirmPhrase": PHRASE}));
+        assert!(!os.inbox_running(), "the watcher is stopped");
+        assert!(!dir.join(ENTRY).exists(), "the login entry is gone");
+        assert_eq!(
+            *fake.held.lock().unwrap(),
+            vec![shortcut::parse(shortcut::DEFAULT).unwrap()],
+            "the shortcut is the default again"
+        );
+        std::fs::write(folder.path().join("late.txt"), "after the wipe").unwrap();
+        std::thread::sleep(Duration::from_millis(700));
+        assert!(
+            kept(&h).is_empty(),
+            "nothing lands in the store after the wipe"
+        );
+        assert!(os.file().inbox.is_none());
+    }
+
+    #[test]
+    fn a_wrong_phrase_leaves_the_watcher_running() {
+        let h = harness();
+        let folder = watching(&h);
+        h.ok(
+            "update_settings",
+            json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
+        );
+        wait_for("the baseline", || ledger_folder(&h).is_some());
+        assert_eq!(
+            h.code("delete_everything", json!({"confirmPhrase": "please"})),
+            "invalid"
+        );
+        std::fs::write(folder.path().join("still.txt"), "still watched").unwrap();
+        wait_for("it keeps watching", || kept(&h).len() == 1);
+    }
 }

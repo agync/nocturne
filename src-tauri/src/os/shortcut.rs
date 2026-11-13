@@ -14,6 +14,9 @@ use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use super::quick_capture;
 use super::state::OsState;
 
+/// The shortcut a fresh install has (the engine's default).
+pub const DEFAULT: &str = "CommandOrControl+Shift+Space";
+
 /// What holds the shortcut on the desktop. A fake stands in for it in tests.
 pub trait Registrar: Send + Sync {
     fn register(&self, shortcut: &Shortcut) -> Result<(), String>;

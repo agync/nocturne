@@ -11,6 +11,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use jiff::{SignedDuration, Timestamp};
@@ -18,8 +20,10 @@ use nocturne_contract::Source;
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime};
+use tokio::sync::Notify;
 
 use super::state::OsState;
+use crate::error::ErrorCode;
 
 /// The most files remembered.
 pub const LEDGER_CAP: usize = 100_000;
@@ -220,9 +224,11 @@ pub fn too_many(root: &Path, cap: usize) -> bool {
     list(root, cap).is_ok_and(|l| !l.complete && l.entries.len() >= cap)
 }
 
+/// One file dealt with: a salted hash of its path below the folder, and what it looked like.
+/// No name is stored: the ledger outlives forgetting, so it must not say what was in the folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LedgerEntry {
-    pub path: String,
+    pub h: String,
     pub size: u64,
     pub mtime: i64,
 }
@@ -230,21 +236,51 @@ pub struct LedgerEntry {
 /// The files already dealt with in a folder, kept in `os-state.json`.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InboxLedger {
+    /// Random per ledger, so the hashes mean nothing outside it.
+    pub salt: String,
+    /// The hash of the folder's path, to tell whether the ledger belongs to it.
     pub folder: String,
+    /// The newest files, at most [`LEDGER_CAP`].
     pub entries: Vec<LedgerEntry>,
 }
+
+/// FNV-1a over the salt and the text: stable across versions of Rust, which a ledger kept on
+/// disk needs, and enough to keep names out of a file that is not meant to be read.
+fn digest(salt: &str, text: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in salt.bytes().chain([0]).chain(text.bytes()) {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{h:016x}")
+}
+
+fn fresh_salt() -> String {
+    let mut bytes = [0u8; 8];
+    if getrandom::fill(&mut bytes).is_err() {
+        bytes = Timestamp::now().as_nanosecond().to_le_bytes()[..8]
+            .try_into()
+            .unwrap_or_default();
+    }
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// How many times a file that could not be kept for a reason that may pass is tried.
+pub const MAX_TRIES: u8 = 20;
 
 #[derive(Debug, Clone)]
 struct Pending {
     size: u64,
     mtime: i64,
     looked: Timestamp,
+    tries: u8,
 }
 
 /// Decides which files are new and stable. Knows nothing about disks or clocks.
 #[derive(Debug)]
 pub struct Scanner {
     folder: String,
+    salt: String,
     ledger: BTreeMap<String, (u64, i64)>,
     pending: BTreeMap<String, Pending>,
     baselined: bool,
@@ -253,20 +289,26 @@ pub struct Scanner {
 impl Scanner {
     /// A scanner for `folder`, resuming from `saved` when it is the same folder.
     pub fn new(folder: &str, saved: Option<&InboxLedger>) -> Scanner {
-        let saved = saved.filter(|l| l.folder == folder);
+        let saved = saved.filter(|l| !l.salt.is_empty() && l.folder == digest(&l.salt, folder));
+        let salt = saved.map_or_else(fresh_salt, |l| l.salt.clone());
         Scanner {
-            folder: folder.to_string(),
+            folder: digest(&salt, folder),
             ledger: saved
                 .map(|l| {
                     l.entries
                         .iter()
-                        .map(|e| (e.path.clone(), (e.size, e.mtime)))
+                        .map(|e| (e.h.clone(), (e.size, e.mtime)))
                         .collect()
                 })
                 .unwrap_or_default(),
+            salt,
             pending: BTreeMap::new(),
             baselined: saved.is_some(),
         }
+    }
+
+    fn key(&self, rel: &str) -> String {
+        digest(&self.salt, rel)
     }
 
     /// True until the files that were there at the start have been put in the ledger.
@@ -277,7 +319,7 @@ impl Scanner {
     /// Remember what is already in the folder, without keeping any of it.
     pub fn baseline(&mut self, entries: &[Entry]) {
         for e in entries {
-            self.ledger.insert(e.rel.clone(), (e.size, e.mtime));
+            self.ledger.insert(self.key(&e.rel), (e.size, e.mtime));
         }
         self.baselined = true;
     }
@@ -294,7 +336,7 @@ impl Scanner {
         self.pending.retain(|rel, _| present.contains(rel.as_str()));
         let mut ready = Vec::new();
         for e in entries {
-            if self.ledger.contains_key(&e.rel) {
+            if self.ledger.contains_key(&self.key(&e.rel)) {
                 continue;
             }
             match self.pending.get_mut(&e.rel) {
@@ -308,6 +350,7 @@ impl Scanner {
                         size: e.size,
                         mtime: e.mtime,
                         looked: now,
+                        tries: 0,
                     };
                 }
                 None => {
@@ -317,6 +360,7 @@ impl Scanner {
                             size: e.size,
                             mtime: e.mtime,
                             looked: now,
+                            tries: 0,
                         },
                     );
                 }
@@ -329,86 +373,169 @@ impl Scanner {
     /// A file has been dealt with (kept, or given up on): never look at it as new again.
     pub fn settle(&mut self, rel: &str) {
         if let Some(p) = self.pending.remove(rel) {
-            self.ledger.insert(rel.to_string(), (p.size, p.mtime));
+            self.ledger.insert(self.key(rel), (p.size, p.mtime));
         }
+    }
+
+    /// A file could not be kept for a reason that may pass (the store was busy, the disk was
+    /// full). It stays pending to be tried again; after [`MAX_TRIES`] it is given up on.
+    /// Returns true when it was given up on.
+    pub fn failed(&mut self, rel: &str) -> bool {
+        let gave_up = self.pending.get_mut(rel).is_some_and(|p| {
+            p.tries += 1;
+            p.tries >= MAX_TRIES
+        });
+        if gave_up {
+            self.settle(rel);
+        }
+        gave_up
     }
 
     /// Forget files that are no longer in the folder, so the ledger stays the size of the folder.
     pub fn prune(&mut self, entries: &[Entry]) {
-        let present: BTreeSet<&str> = entries.iter().map(|e| e.rel.as_str()).collect();
-        self.ledger.retain(|rel, _| present.contains(rel.as_str()));
+        let present: BTreeSet<String> = entries.iter().map(|e| self.key(&e.rel)).collect();
+        self.ledger.retain(|h, _| present.contains(h));
     }
 
     pub fn has_pending(&self) -> bool {
         !self.pending.is_empty()
     }
 
+    /// What to save: the newest [`LEDGER_CAP`] files, so a folder past the cap still remembers
+    /// what it saw last.
     pub fn ledger(&self) -> InboxLedger {
+        let mut entries: Vec<LedgerEntry> = self
+            .ledger
+            .iter()
+            .map(|(h, (size, mtime))| LedgerEntry {
+                h: h.clone(),
+                size: *size,
+                mtime: *mtime,
+            })
+            .collect();
+        entries.sort_by(|a, b| b.mtime.cmp(&a.mtime).then_with(|| a.h.cmp(&b.h)));
+        entries.truncate(LEDGER_CAP);
         InboxLedger {
+            salt: self.salt.clone(),
             folder: self.folder.clone(),
-            entries: self
-                .ledger
-                .iter()
-                .take(LEDGER_CAP)
-                .map(|(path, (size, mtime))| LedgerEntry {
-                    path: path.clone(),
-                    size: *size,
-                    mtime: *mtime,
-                })
-                .collect(),
+            entries,
         }
     }
 }
 
-/// Watch `root` and keep what appears there. Replaces any watcher that is running.
-pub fn start<R: Runtime>(app: &AppHandle<R>, root: PathBuf) {
+/// A running watcher, stopped by asking it to and waiting for it.
+pub struct Handle {
+    cancel: Arc<Cancel>,
+    task: tauri::async_runtime::JoinHandle<()>,
+}
+
+#[derive(Default)]
+struct Cancel {
+    flag: AtomicBool,
+    wake: Notify,
+}
+
+impl Cancel {
+    fn stop(&self) {
+        self.flag.store(true, Ordering::SeqCst);
+        self.wake.notify_waiters();
+        self.wake.notify_one();
+    }
+
+    fn stopped(&self) -> bool {
+        self.flag.load(Ordering::SeqCst)
+    }
+
+    /// Sleep, or less if asked to stop.
+    async fn sleep(&self, d: Duration) {
+        if self.stopped() {
+            return;
+        }
+        tokio::select! {
+            () = tokio::time::sleep(d) => {}
+            () = self.wake.notified() => {}
+        }
+    }
+}
+
+impl Handle {
+    /// Ask the watcher to stop and wait until it has: nothing is being kept when this returns.
+    pub async fn stop(self) {
+        self.cancel.stop();
+        let _ = self.task.await;
+    }
+}
+
+/// Watch `root` and keep what appears there. Replaces any watcher that is running, after it
+/// has stopped.
+pub async fn start<R: Runtime>(app: &AppHandle<R>, root: PathBuf) {
     let Some(os) = app.try_state::<OsState>() else {
         return;
     };
+    stop(app).await;
     let timing = os.inbox_timing();
+    let cancel = Arc::new(Cancel::default());
     let handle = app.clone();
-    let task = tauri::async_runtime::spawn(async move { run(handle, root, timing).await });
-    os.replace_inbox(Some(task));
+    let token = cancel.clone();
+    let task = tauri::async_runtime::spawn(async move { run(handle, root, timing, token).await });
+    os.set_inbox(Some(Handle { cancel, task }));
 }
 
-/// Stop watching.
-pub fn stop<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(os) = app.try_state::<OsState>() {
-        os.replace_inbox(None);
+/// Stop watching, and wait until nothing is being kept any more.
+pub async fn stop<R: Runtime>(app: &AppHandle<R>) {
+    let Some(os) = app.try_state::<OsState>() else {
+        return;
+    };
+    if let Some(handle) = os.take_inbox() {
+        handle.stop().await;
     }
 }
 
-fn wake_on_changes(
-    root: &Path,
-) -> Option<(
+type Wake = (
     notify::RecommendedWatcher,
     tokio::sync::mpsc::UnboundedReceiver<()>,
-)> {
+);
+
+/// A change watcher that does not follow links (a link could lead the watcher anywhere).
+fn wake_on_changes(root: &Path) -> Option<Wake> {
     let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
-    let mut watcher = notify::recommended_watcher(move |event: notify::Result<notify::Event>| {
-        if event.is_ok() {
-            let _ = tx.send(());
-        }
-    })
+    let mut watcher = notify::RecommendedWatcher::new(
+        move |event: notify::Result<notify::Event>| {
+            if event.is_ok() {
+                let _ = tx.send(());
+            }
+        },
+        notify::Config::default().with_follow_symlinks(false),
+    )
     .ok()?;
     watcher.watch(root, RecursiveMode::Recursive).ok()?;
     Some((watcher, rx))
 }
 
-async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing) {
+/// Setting a watch walks the folder, which can take a while: off the async threads.
+async fn watch(root: &Path) -> Option<Wake> {
+    let root = root.to_path_buf();
+    tokio::task::spawn_blocking(move || wake_on_changes(&root))
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing, cancel: Arc<Cancel>) {
     let Some(os) = app.try_state::<OsState>() else {
         return;
     };
-    let folder = root.to_string_lossy().into_owned();
-    let mut scanner = Scanner::new(&folder, os.file().inbox.as_ref());
-    let mut changes = wake_on_changes(&root);
+    let mut root = root;
+    let mut scanner = Scanner::new(&root.to_string_lossy(), os.file().inbox.as_ref());
+    let mut changes = watch(&root).await;
     if changes.is_none() {
         tracing::info!("the watched folder will be looked at on a timer only");
     }
     let stable =
         SignedDuration::try_from(timing.stable_after).unwrap_or(SignedDuration::from_secs(3));
     let mut reported_missing = false;
-    loop {
+    let mut checked = false;
+    while !cancel.stopped() {
         let looked = {
             let root = root.clone();
             tokio::task::spawn_blocking(move || list(&root, LEDGER_CAP))
@@ -419,10 +546,29 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing) {
         match looked {
             Ok(listing) => {
                 reported_missing = false;
-                if changes.is_none()
-                    && let Some(w) = wake_on_changes(&root)
-                {
-                    changes = Some(w);
+                if !checked {
+                    // A folder that was not there at start is checked when it first appears.
+                    match validate(
+                        &root.to_string_lossy(),
+                        os.data_dir(),
+                        home_dir().as_deref(),
+                    ) {
+                        Ok(real) => {
+                            if real != root {
+                                root = real;
+                                scanner =
+                                    Scanner::new(&root.to_string_lossy(), os.file().inbox.as_ref());
+                            }
+                            checked = true;
+                        }
+                        Err(e) => {
+                            tracing::warn!("the watched folder is not used: {e}");
+                            return;
+                        }
+                    }
+                }
+                if changes.is_none() {
+                    changes = watch(&root).await;
                 }
                 if scanner.needs_baseline() {
                     scanner.baseline(&listing.entries);
@@ -433,18 +579,16 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing) {
                     );
                 } else {
                     let ready = scanner.observe(&listing.entries, Timestamp::now(), stable);
+                    if !ready.is_empty()
+                        && let Some(hook) = os.before_keep()
+                    {
+                        hook(&ready);
+                    }
                     for batch in ready.chunks(BATCH) {
-                        let paths: Vec<PathBuf> = batch.iter().map(|rel| root.join(rel)).collect();
-                        if let Err(e) = crate::keep_paths(&app, paths, Source::WatchedFolder).await
-                        {
-                            tracing::warn!(
-                                "files from the watched folder were not kept: {:?}",
-                                e.code
-                            );
+                        if cancel.stopped() {
+                            return;
                         }
-                        for rel in batch {
-                            scanner.settle(rel);
-                        }
+                        keep_batch(&app, &root, batch, &mut scanner, &cancel).await;
                         os.update(|f| f.inbox = Some(scanner.ledger()));
                         tokio::time::sleep(Duration::from_millis(5)).await;
                     }
@@ -469,10 +613,10 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing) {
         match changes.as_mut() {
             Some((_, rx)) => {
                 tokio::select! {
-                    _ = tokio::time::sleep(wait) => {}
+                    () = cancel.sleep(wait) => {}
                     woke = rx.recv() => {
                         if woke.is_some() {
-                            tokio::time::sleep(timing.debounce).await;
+                            cancel.sleep(timing.debounce).await;
                             while rx.try_recv().is_ok() {}
                         } else {
                             changes = None;
@@ -480,7 +624,69 @@ async fn run<R: Runtime>(app: AppHandle<R>, root: PathBuf, timing: Timing) {
                     }
                 }
             }
-            None => tokio::time::sleep(wait).await,
+            None => cancel.sleep(wait).await,
+        }
+    }
+}
+
+/// Keep one batch of stable files. Each is checked again just before it is kept: it may have
+/// become a link since it was listed. What cannot be kept for good is given up on; what failed
+/// for a reason that may pass is tried again on the next look.
+async fn keep_batch<R: Runtime>(
+    app: &AppHandle<R>,
+    root: &Path,
+    batch: &[String],
+    scanner: &mut Scanner,
+    cancel: &Cancel,
+) {
+    let mut checked: Vec<(&String, PathBuf)> = Vec::new();
+    for rel in batch {
+        match confirm_inside(root, rel) {
+            Some(path) => checked.push((rel, path)),
+            None => {
+                tracing::debug!(
+                    "a file in the watched folder was left out: it is no longer a plain file"
+                );
+                scanner.settle(rel);
+            }
+        }
+    }
+    if checked.is_empty() || cancel.stopped() {
+        return;
+    }
+    let paths: Vec<PathBuf> = checked.iter().map(|(_, p)| p.clone()).collect();
+    match crate::keep_paths(app, paths, Source::WatchedFolder).await {
+        Ok(kept) if kept.len() == checked.len() => {
+            for (rel, _) in &checked {
+                scanner.settle(rel);
+            }
+            return;
+        }
+        _ => {}
+    }
+    // Something in the batch failed: find out which, one at a time.
+    for (rel, path) in checked {
+        if cancel.stopped() {
+            return;
+        }
+        match crate::keep_paths(app, vec![path], Source::WatchedFolder).await {
+            Ok(_) => scanner.settle(rel),
+            Err(e) if matches!(e.code, ErrorCode::NotFound | ErrorCode::Invalid) => {
+                tracing::debug!("a file in the watched folder cannot be kept: {:?}", e.code);
+                scanner.settle(rel);
+            }
+            Err(e) => {
+                let gave_up = scanner.failed(rel);
+                tracing::warn!(
+                    "a file in the watched folder was not kept ({:?}){}",
+                    e.code,
+                    if gave_up {
+                        ": given up"
+                    } else {
+                        ": trying again"
+                    }
+                );
+            }
         }
     }
 }
@@ -560,6 +766,71 @@ mod tests {
         );
         // Another folder starts from nothing.
         assert!(Scanner::new("/other", Some(&saved)).needs_baseline());
+    }
+
+    #[test]
+    fn the_ledger_holds_hashes_not_names() {
+        let mut s = Scanner::new("/mnt/someone/Inbox", None);
+        s.baseline(&[entry("diagnosis letter.pdf", 10, 1)]);
+        let saved = serde_json::to_string(&s.ledger()).unwrap();
+        assert!(!saved.contains("diagnosis"), "{saved}");
+        assert!(!saved.contains("someone"), "{saved}");
+        let again = Scanner::new("/mnt/someone/Inbox", Some(&s.ledger()));
+        assert!(!again.needs_baseline(), "the same folder resumes");
+        assert!(Scanner::new("/other", Some(&s.ledger())).needs_baseline());
+        assert_ne!(
+            Scanner::new("/f", None).ledger().salt,
+            Scanner::new("/f", None).ledger().salt,
+            "every ledger has its own salt"
+        );
+    }
+
+    #[test]
+    fn a_ledger_past_its_cap_keeps_the_newest_files() {
+        let mut s = Scanner::new("/f", None);
+        let many: Vec<Entry> = (0..(LEDGER_CAP + 50))
+            .map(|i| entry(&format!("f{i}.txt"), 1, i as i64))
+            .collect();
+        s.baseline(&many);
+        let saved = s.ledger();
+        assert_eq!(saved.entries.len(), LEDGER_CAP);
+        let mut again = Scanner::new("/f", Some(&saved));
+        let newest = [entry(
+            &format!("f{}.txt", LEDGER_CAP + 49),
+            1,
+            (LEDGER_CAP + 49) as i64,
+        )];
+        let now = at("2026-11-13T09:00:00Z");
+        assert!(again.observe(&newest, now, STABLE).is_empty());
+        assert!(
+            again
+                .observe(&newest, now + SignedDuration::from_secs(10), STABLE)
+                .is_empty(),
+            "the newest file is remembered, not looked at as new"
+        );
+    }
+
+    #[test]
+    fn a_file_that_failed_is_tried_again_and_given_up_on_after_a_while() {
+        let mut s = Scanner::new("/f", None);
+        s.baseline(&[]);
+        let e = [entry("a.pdf", 1, 1)];
+        let t0 = at("2026-11-13T09:00:00Z");
+        s.observe(&e, t0, STABLE);
+        for round in 1..MAX_TRIES {
+            let now = t0 + SignedDuration::from_secs(10 * i64::from(round));
+            assert_eq!(s.observe(&e, now, STABLE), ["a.pdf"], "round {round}");
+            assert!(!s.failed("a.pdf"));
+        }
+        assert_eq!(
+            s.observe(&e, t0 + SignedDuration::from_secs(500), STABLE),
+            ["a.pdf"]
+        );
+        assert!(s.failed("a.pdf"), "given up on");
+        assert!(
+            s.observe(&e, t0 + SignedDuration::from_secs(600), STABLE)
+                .is_empty()
+        );
     }
 
     #[test]

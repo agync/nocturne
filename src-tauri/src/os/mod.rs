@@ -72,7 +72,11 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
         }
     }
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
-        resume_inbox(app, &shell.data_dir, settings.inbox_folder.as_deref());
+        let handle = app.clone();
+        let data_dir = shell.data_dir.clone();
+        tauri::async_runtime::spawn(async move {
+            resume_inbox(&handle, &data_dir, settings.inbox_folder.as_deref()).await;
+        });
     }
     crate::editions::speech::install(app);
     tray::install(app);
@@ -107,13 +111,17 @@ pub fn window_may_call(label: &str, command: &str) -> bool {
 
 /// Watch the saved folder again. A folder that is not there yet is watched anyway: it is looked
 /// for quietly until it appears (a drive that is not mounted).
-fn resume_inbox<R: Runtime>(app: &AppHandle<R>, data_dir: &std::path::Path, folder: Option<&str>) {
+pub async fn resume_inbox<R: Runtime>(
+    app: &AppHandle<R>,
+    data_dir: &std::path::Path,
+    folder: Option<&str>,
+) {
     let Some(folder) = folder.filter(|f| !f.trim().is_empty()) else {
         return;
     };
     match inbox::validate(folder, data_dir, inbox::home_dir().as_deref()) {
-        Ok(root) => inbox::start(app, root),
-        Err(inbox::InboxError::Missing) => inbox::start(app, folder.into()),
+        Ok(root) => inbox::start(app, root).await,
+        Err(inbox::InboxError::Missing) => inbox::start(app, folder.into()).await,
         Err(e) => tracing::warn!("the watched folder is not used: {e}"),
     }
 }
@@ -211,7 +219,7 @@ async fn change_inbox<R: Runtime>(
     folder: &str,
 ) -> Result<(), CommandError> {
     if folder.trim().is_empty() {
-        inbox::stop(app);
+        inbox::stop(app).await;
         os.update(|f| f.inbox = None);
         return Ok(());
     }
@@ -227,16 +235,44 @@ async fn change_inbox<R: Runtime>(
     .await
     .map_err(CommandError::internal)?
     .map_err(CommandError::invalid)?;
+    inbox::stop(app).await;
     os.update(|f| f.inbox = None);
-    inbox::start(app, root);
+    inbox::start(app, root).await;
     Ok(())
 }
 
-/// Everything was deleted: drop what the desktop side remembers.
+/// Everything is about to be deleted: stop keeping files from the watched folder, and wait
+/// until nothing is being kept, so nothing lands in the store after the wipe.
+pub async fn before_delete_everything<R: Runtime>(app: &AppHandle<R>) {
+    inbox::stop(app).await;
+}
+
+/// The deletion did not happen (a wrong phrase): watch the folder again.
+pub async fn after_failed_delete<R: Runtime>(app: &AppHandle<R>) {
+    let Some(shell) = app.try_state::<AppState>() else {
+        return;
+    };
+    if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
+        resume_inbox(app, &shell.data_dir, settings.inbox_folder.as_deref()).await;
+    }
+}
+
+/// Everything was deleted: drop what the desktop side remembers, and undo what it set up. The
+/// settings are back to their defaults, so the start-at-login entry goes and the shortcut is the
+/// default one again.
 pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(os) = app.try_state::<OsState>() {
-        os.replace_inbox(None);
-        os.forget_all();
+    let Some(os) = app.try_state::<OsState>() else {
+        return;
+    };
+    os.forget_all();
+    if let Err(e) = set_start_at_login(app, &os, false) {
+        tracing::warn!("start with this computer could not be switched off: {e}");
+    }
+    if let Err(e) = shortcut::change(&os, shortcut::DEFAULT) {
+        tracing::warn!(
+            "the shortcut could not be put back to its default: {:?}",
+            e.code
+        );
     }
 }
 
