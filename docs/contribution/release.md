@@ -30,6 +30,7 @@ Keep the real output of each step with the release notes.
    and `rpm`, then `scripts/net-check.sh prepared appimage` with `NET_CHECK_DIR` set to a data
    folder where setup finished. Record the output in the release notes: it is the release-time proof
    behind the claim that Nocturne goes online only to download what the person agrees to.
+   For Away from home also run `make netcheck-remote` (see Away from home checks below).
 8. **Check the licences.** `scripts/notices.py --check` passes. The copyleft policy for the
    AppImage's bundled libraries is enforced by step 5.
 9. **Check the desktop** (below) on a GNOME Wayland session and on one X11 session.
@@ -43,6 +44,36 @@ Keep the real output of each step with the release notes.
 > Owner decision needed: the wording of the written offer of corresponding source for the LGPL
 > libraries inside the AppImage. `SOURCES.txt` names the source package of each one; the offer that
 > accompanies it (where and for how long) is not written yet. TODO(owner).
+
+## Away from home checks
+
+Away from home adds helpers that are never part of a package. These checks use fake helpers; none
+touches the real internet.
+
+- **Net check modes.** The existing modes also fail on any listen or bind by the app, any run of a
+  helper, and any file under the data folder's helper directory when no download was agreed to
+  (off means off). The `remote` mode (`make netcheck-remote`) runs a build with fake helpers and a
+  scripted phone with Away from home on. Non-loopback attempts and the any-interface UDP bind pass
+  only for helper processes, never for the app or the engine. Calls are mapped to processes and
+  processes to executables.
+- **Package check.** No helper binary and no fake marker in a package; the embedded `helpers.lock`
+  equals the repository file; every pinned version has help fixtures; for a release, no pin is older
+  than 183 days.
+- **Pins and help fixtures.** `scripts/helpers-pin.sh` is run by a maintainer, never by
+  `make check`. It fetches each pinned artefact with GET only, prints its sha256 and records each
+  used subcommand's help text under `crates/helpers/fixtures/help/`. Helpers use only flags found
+  there. Refresh `helpers.lock` and the fixtures at least every six months and whenever a helper
+  has a security fix.
+- **tailscaled builds.** The macOS and Windows daemons are built in release CI by
+  `scripts/build-tailscaled.sh` from a pinned tag and toolchain, reproduced by a second independent
+  build before the hash is pinned, signed (and notarised on macOS), with a licence report. They are
+  not built on a laptop.
+- **Reference vectors.** `scripts/remote_vectors.py` regenerates the channel's reference vectors
+  from an independent implementation; both the Rust and browser tests read the committed file. A
+  change to the channel changes the script first.
+- **Real-network trial.** Whether helpers behave on the real internet, including tunnel stability,
+  helper memory and the phone checks, is established only by trials the owner approves. Until then
+  release notes do not claim it.
 
 ## Desktop checks
 

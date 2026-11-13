@@ -14,7 +14,7 @@ decide every trade-off between capability and clarity.
 | Principle | In practice |
 |---|---|
 | Useful in the first minute | Capture works before the first model download finishes; understanding queues |
-| No jargon | The interface never says model, inference, token, NPU, GPU, embedding or graph outside an advanced details view |
+| No jargon | The interface never says model, inference, token, NPU, GPU, embedding or graph outside an advanced details view. Away from home also avoids tunnel, VPN, node, tailnet, port, certificate, endpoint, remote, encryption, "encryption key", "private key", "public key" and "security key" |
 | Show the receipts | Every answer and every line on the page links to the original photo, recording or note |
 | Honest about uncertainty | Say "I am not sure" and ask, rather than guess with confidence |
 | Forgetting is gentle and reversible | Fading and letting go are visible, undoable and explained; hard deletion is explicit and confirmed |
