@@ -1,0 +1,399 @@
+//! The development-only preview server: what it admits, what it forwards and what it shows.
+//! Requests go straight to the router, without a socket.
+
+mod common;
+
+use std::sync::Arc;
+use std::time::Duration;
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Method, Request, Response, StatusCode};
+use common::*;
+use http_body_util::BodyExt;
+use nocturne_app_lib::preview::{self, Options, Preview};
+use serde_json::{Value, json};
+use tower::ServiceExt;
+
+const TOKEN: &str = "t0ken-for-tests";
+const PORT: u16 = 55099;
+const PUBLIC: &str = "https://preview.example.test:8443";
+
+struct Rig {
+    h: Harness,
+    router: Router,
+}
+
+fn rig_with(ui: Option<std::path::PathBuf>) -> Rig {
+    let h = harness();
+    let opts = Options {
+        token: TOKEN.into(),
+        port: PORT,
+        public_origin: Some(PUBLIC.into()),
+        ui_dir: ui,
+    };
+    let server: Arc<Preview> = Preview::new(
+        h.app.handle().clone(),
+        h.webview.clone(),
+        h.dir.path(),
+        opts,
+    );
+    Rig {
+        router: preview::router(server),
+        h,
+    }
+}
+
+fn rig() -> Rig {
+    rig_with(None)
+}
+
+fn req(method: Method, uri: &str) -> axum::http::request::Builder {
+    Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", format!("127.0.0.1:{PORT}"))
+}
+
+fn authed(method: Method, uri: &str) -> axum::http::request::Builder {
+    req(method, uri).header("authorization", format!("Bearer {TOKEN}"))
+}
+
+async fn send(rig: &Rig, request: Request<Body>) -> Response<Body> {
+    rig.router.clone().oneshot(request).await.unwrap()
+}
+
+async fn json_of(response: Response<Body>) -> Value {
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+}
+
+async fn invoke(rig: &Rig, command: &str, args: Value) -> (StatusCode, Value) {
+    let request = authed(Method::POST, &format!("/api/invoke/{command}"))
+        .header("content-type", "application/json")
+        .body(Body::from(args.to_string()))
+        .unwrap();
+    let response = send(rig, request).await;
+    (response.status(), json_of(response).await)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn nothing_with_data_is_served_without_the_token() {
+    let r = rig();
+    for (method, uri) in [
+        (Method::POST, "/api/invoke/get_status"),
+        (Method::POST, "/api/ticket"),
+        (Method::GET, "/api/events"),
+        (Method::GET, "/originals/abc"),
+        (Method::GET, "/audio/abc.wav"),
+        (Method::GET, "/api/nothing"),
+    ] {
+        let response = send(&r, req(method, uri).body(Body::empty()).unwrap()).await;
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{uri}");
+    }
+    let wrong = req(Method::POST, "/api/invoke/get_status")
+        .header("authorization", "Bearer nope")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, wrong).await.status(), StatusCode::UNAUTHORIZED);
+    let not_bearer = req(Method::POST, "/api/invoke/get_status")
+        .header("authorization", TOKEN)
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(
+        send(&r, not_bearer).await.status(),
+        StatusCode::UNAUTHORIZED
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wrong_origin_or_host_is_refused_even_with_the_token() {
+    let r = rig();
+    let evil = authed(Method::POST, "/api/invoke/get_status")
+        .header("origin", "https://evil.example.test")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, evil).await.status(), StatusCode::FORBIDDEN);
+    let null = authed(Method::POST, "/api/invoke/get_status")
+        .header("origin", "null")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, null).await.status(), StatusCode::FORBIDDEN);
+    let host = Request::builder()
+        .method(Method::POST)
+        .uri("/api/invoke/get_status")
+        .header("host", "rebind.example.test")
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, host).await.status(), StatusCode::FORBIDDEN);
+
+    let loopback = authed(Method::POST, "/api/invoke/get_status")
+        .header("origin", format!("http://127.0.0.1:{PORT}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, loopback).await.status(), StatusCode::OK);
+    let public = Request::builder()
+        .method(Method::POST)
+        .uri("/api/invoke/get_status")
+        .header("host", "preview.example.test:8443")
+        .header("origin", PUBLIC)
+        .header("authorization", format!("Bearer {TOKEN}"))
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, public).await.status(), StatusCode::OK);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_note_kept_over_http_is_listed() {
+    let r = rig();
+    let (status, kept) = invoke(
+        &r,
+        "keep_text",
+        json!({ "text": "Dentist on Thursday at 14:30", "source": "quickCapture" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{kept}");
+    let id = id_of(&kept);
+    let (status, items) = invoke(&r, "list_items", json!({ "filter": {} })).await;
+    assert_eq!(status, StatusCode::OK, "{items}");
+    assert!(items.as_array().unwrap().iter().any(|i| i["id"] == id));
+    // The same app as the one the harness drives directly.
+    assert_eq!(r.h.engine().items(Default::default()).unwrap().len(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn failures_carry_a_code_and_the_desktop_commands_are_unavailable() {
+    let r = rig();
+    let (status, body) = invoke(&r, "get_item", json!({ "id": "missing" })).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "notFound");
+    let (status, body) = invoke(&r, "keep_text", json!({})).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["code"], "invalid");
+    let (status, body) = invoke(&r, "no_such_command", json!({})).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["code"], "notFound");
+    for command in [
+        "pick_folder",
+        "pick_files",
+        "open_original",
+        "open_logs",
+        "open_sound_settings",
+        "print_page",
+        "export_to",
+    ] {
+        let (status, body) = invoke(&r, command, json!({})).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");
+        assert_eq!(body["code"], "unavailable", "{command}");
+    }
+    let (status, body) = invoke(
+        &r,
+        "update_settings",
+        json!({ "patch": { "inboxFolder": "/some/folder" } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(body["code"], "unavailable");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_recording_is_kept_from_the_raw_body() {
+    let r = rig();
+    let raw = |mime: Option<&str>| {
+        let mut b = authed(Method::POST, "/api/invoke/keep_recording")
+            .header("content-type", "application/octet-stream");
+        if let Some(m) = mime {
+            b = b.header("x-nocturne-mime", m);
+        }
+        b.body(Body::from(vec![1u8, 2, 3, 4, 5, 6, 7, 8])).unwrap()
+    };
+    let response = send(&r, raw(Some("audio/webm;codecs=opus"))).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let kept = json_of(response).await;
+    assert_eq!(kept["item"]["kind"], "audio", "{kept}");
+    let response = send(&r, raw(None)).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+async fn read_event(body: &mut Body, name: &str) -> String {
+    let mut seen = String::new();
+    let wait = async {
+        while let Some(frame) = body.frame().await {
+            let frame = frame.unwrap();
+            if let Some(data) = frame.data_ref() {
+                seen.push_str(&String::from_utf8_lossy(data));
+                if let Some(at) = seen.find(&format!("event: {name}"))
+                    && seen[at..].contains("\n\n")
+                {
+                    return;
+                }
+            }
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(10), wait)
+        .await
+        .unwrap_or_else(|_| panic!("no {name} event; heard {seen:?}"));
+    seen
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_event_stream_delivers_what_the_app_emits() {
+    let r = rig();
+    let (_, issued) = {
+        let response = send(
+            &r,
+            authed(Method::POST, "/api/ticket")
+                .body(Body::from(json!({ "kind": "events" }).to_string()))
+                .unwrap(),
+        )
+        .await;
+        (response.status(), json_of(response).await)
+    };
+    let ticket = issued["ticket"].as_str().unwrap().to_string();
+    let uri = format!("/api/events?ticket={ticket}");
+    let response = send(&r, req(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response.headers()["content-type"],
+        "text/event-stream",
+        "an event stream"
+    );
+    let mut body = response.into_body();
+    // A new stream starts with the status.
+    read_event(&mut body, "status-changed").await;
+    // A ticket works once.
+    let again = send(&r, req(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(again.status(), StatusCode::UNAUTHORIZED);
+
+    let (status, kept) = invoke(
+        &r,
+        "keep_text",
+        json!({ "text": "Gran moved to York", "source": "quickCapture" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let heard = read_event(&mut body, "item-changed").await;
+    assert!(heard.contains(&id_of(&kept)), "{heard}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn originals_are_shown_by_id_and_never_by_path() {
+    let r = rig();
+    let png = [0x89u8, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4];
+    let response = send(
+        &r,
+        authed(Method::POST, "/api/invoke/keep_bytes")
+            .header("x-nocturne-mime", "image/png")
+            .header("x-nocturne-source", "paste")
+            .body(Body::from(png.to_vec()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let id = id_of(&json_of(response).await);
+
+    // What the browser reads names a link, not a place on this machine.
+    let (_, item) = invoke(&r, "get_item", json!({ "id": id })).await;
+    assert_eq!(item["originalPath"], format!("/originals/{id}"));
+    let (_, items) = invoke(&r, "list_items", json!({ "filter": {} })).await;
+    assert!(!items.to_string().contains("/store/"));
+    assert!(
+        !items
+            .to_string()
+            .contains(&*r.h.dir.path().to_string_lossy())
+    );
+
+    let shown = send(
+        &r,
+        authed(Method::GET, &format!("/originals/{id}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(shown.status(), StatusCode::OK);
+    assert_eq!(shown.headers()["content-type"], "image/png");
+    assert_eq!(shown.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(
+        shown
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .as_ref(),
+        png
+    );
+
+    // A media ticket opens originals and nothing else.
+    let media = send(
+        &r,
+        authed(Method::POST, "/api/ticket")
+            .body(Body::from(json!({ "kind": "media" }).to_string()))
+            .unwrap(),
+    )
+    .await;
+    let ticket = json_of(media).await["ticket"].as_str().unwrap().to_string();
+    for _ in 0..2 {
+        let by_ticket = send(
+            &r,
+            req(Method::GET, &format!("/originals/{id}?t={ticket}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await;
+        assert_eq!(by_ticket.status(), StatusCode::OK);
+    }
+    let elsewhere = send(
+        &r,
+        req(Method::POST, &format!("/api/invoke/get_status?t={ticket}"))
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(elsewhere.status(), StatusCode::UNAUTHORIZED);
+
+    // Unknown ids, and anything shaped like a path, are not found.
+    let stray = r.h.dir.path().join("stray.txt");
+    std::fs::write(&stray, b"secret").unwrap();
+    for uri in [
+        "/originals/nothing".to_string(),
+        "/originals/..%2F..%2Fstray.txt".to_string(),
+        "/originals/%2e%2e".to_string(),
+        "/originals/..".to_string(),
+        "/originals/a/b".to_string(),
+        format!("/originals/{}", stray.display()),
+        format!("/originals/{id}/../{id}"),
+        "/audio/..%2Fstray.txt".to_string(),
+        "/audio/.hidden".to_string(),
+        "/audio/missing.wav".to_string(),
+    ] {
+        let response = send(&r, authed(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{uri}");
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_interface_is_served_without_the_token_but_not_to_a_wrong_host() {
+    let ui = tempfile::tempdir().unwrap();
+    std::fs::write(
+        ui.path().join("index.html"),
+        "<!doctype html><title>x</title>",
+    )
+    .unwrap();
+    let r = rig_with(Some(ui.path().to_path_buf()));
+    let page = send(&r, req(Method::GET, "/").body(Body::empty()).unwrap()).await;
+    assert_eq!(page.status(), StatusCode::OK);
+    assert!(
+        page.headers()["content-security-policy"]
+            .to_str()
+            .unwrap()
+            .contains("default-src 'self'")
+    );
+    let wrong = Request::builder()
+        .uri("/")
+        .header("host", "rebind.example.test")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, wrong).await.status(), StatusCode::FORBIDDEN);
+}

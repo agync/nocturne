@@ -18,6 +18,8 @@ pub mod error;
 pub mod fsutil;
 pub mod logging;
 pub mod os;
+#[cfg(feature = "preview")]
+pub mod preview;
 pub mod runtime;
 pub mod state;
 pub mod status;
