@@ -565,26 +565,28 @@ async fn scanned_long_and_unknown_documents_are_refused() {
     ));
 }
 
-fn wav_header(seconds: u32) -> Vec<u8> {
-    let rate = 16_000u32;
-    let data = seconds * rate * 2;
+/// A whole WAV of silence, at a low rate (1 kHz, 8 bits) so that hours stay a few megabytes.
+fn wav_file(seconds: u32) -> Vec<u8> {
+    let rate = 1_000u32;
+    let data = seconds * rate;
     let mut v = b"RIFF".to_vec();
     v.extend((36 + data).to_le_bytes());
     v.extend(b"WAVEfmt ");
     v.extend(16u32.to_le_bytes());
     v.extend([1, 0, 1, 0]);
     v.extend(rate.to_le_bytes());
-    v.extend((rate * 2).to_le_bytes());
-    v.extend([2, 0, 16, 0]);
+    v.extend(rate.to_le_bytes());
+    v.extend([1, 0, 8, 0]);
     v.extend(b"data");
     v.extend(data.to_le_bytes());
+    v.resize(v.len() + data as usize, 0x80);
     v
 }
 
 #[tokio::test]
 async fn transcribe_maps_segments_and_refuses_long_audio() {
     let r = rig_with("downloaded=all", Tier::Small).await;
-    let short = put(&r.dirs.root, "note.wav", &wav_header(3));
+    let short = put(&r.dirs.root, "note.wav", &wav_file(3));
     let t = r.mind.transcribe(&short).await.unwrap();
     assert_eq!(t.text, "hello world");
     assert_eq!(t.language.as_deref(), Some("en"));
@@ -605,12 +607,12 @@ async fn transcribe_maps_segments_and_refuses_long_audio() {
         .unwrap();
     assert_eq!(multipart["fields"]["model"], "Whisper-Base");
 
-    let long = put(&r.dirs.root, "long.wav", &wav_header(2 * 3600 + 1));
+    let long = put(&r.dirs.root, "long.wav", &wav_file(2 * 3600 + 1));
     assert_eq!(
         r.mind.transcribe(&long).await.unwrap_err(),
         MindError::TooLong
     );
-    let exactly = put(&r.dirs.root, "two.wav", &wav_header(2 * 3600));
+    let exactly = put(&r.dirs.root, "two.wav", &wav_file(2 * 3600));
     assert!(r.mind.transcribe(&exactly).await.is_ok());
     assert_eq!(
         r.seen("/v1/audio/transcriptions").await.len(),
@@ -681,7 +683,7 @@ async fn write_headline_returns_the_pair() {
 #[tokio::test]
 async fn a_model_that_is_not_downloaded_reads_as_unavailable_and_is_never_fetched() {
     let r = rig_with("", Tier::Standard).await;
-    let wav = put(&r.dirs.root, "n.wav", &wav_header(2));
+    let wav = put(&r.dirs.root, "n.wav", &wav_file(2));
     let unavailable = MindError::Unavailable;
     assert_eq!(
         r.mind

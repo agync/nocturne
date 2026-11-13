@@ -18,7 +18,7 @@ fn probe(path: &Path, size: u64) -> Option<f64> {
     let n = file.read(&mut head).ok()?;
     head.truncate(n);
     if head.starts_with(b"RIFF") && head.get(8..12) == Some(b"WAVE") {
-        return wav(&head);
+        return wav(&head, size);
     }
     if head.starts_with(b"fLaC") {
         return flac(&head);
@@ -43,7 +43,9 @@ fn le16(b: &[u8], at: usize) -> Option<u32> {
     )))
 }
 
-fn wav(head: &[u8]) -> Option<f64> {
+/// The data size in the header is trusted only as far as the file goes: a WAV written as a
+/// stream (sizes 0xFFFFFFFF) or cut short runs to the end of the file.
+fn wav(head: &[u8], file_len: u64) -> Option<f64> {
     let mut pos = 12;
     let (mut rate, mut channels, mut bits) = (0u32, 0u32, 0u32);
     while pos + 8 <= head.len() {
@@ -56,7 +58,8 @@ fn wav(head: &[u8]) -> Option<f64> {
         }
         if id == b"data" {
             let per_second = f64::from(rate) * f64::from(channels) * f64::from(bits) / 8.0;
-            return (per_second > 0.0).then(|| f64::from(size) / per_second);
+            let bytes = u64::from(size).min(file_len.saturating_sub(pos as u64 + 8));
+            return (per_second > 0.0).then(|| bytes as f64 / per_second);
         }
         pos += 8 + size as usize + (size as usize & 1);
     }
@@ -144,7 +147,9 @@ mod tests {
 
     #[test]
     fn reads_wav_flac_and_ogg_headers() {
-        let (_d, p) = write("a.wav", &wav_bytes(90));
+        let mut whole = wav_bytes(90);
+        whole.resize(whole.len() + 90 * 16_000 * 2, 0);
+        let (_d, p) = write("a.wav", &whole);
         assert!((estimate_seconds(&p) - 90.0).abs() < 1e-6);
         let (_d, p) = write("a.flac", &flac_bytes(44_100, 44_100 * 3600));
         assert!((estimate_seconds(&p) - 3600.0).abs() < 1e-6);
@@ -156,6 +161,35 @@ mod tests {
         vorbis.extend(ogg_page(44_100 * 100, b"audio"));
         let (_d, p) = write("a.ogg", &vorbis);
         assert!((estimate_seconds(&p) - 100.0).abs() < 1e-6);
+    }
+
+    /// The bundled voice streams its WAV: 32-bit float at 24 kHz, with both sizes 0xFFFFFFFF
+    /// because it does not know the length when it writes the header.
+    fn streamed_wav(seconds: u32) -> Vec<u8> {
+        let rate = 24_000u32;
+        let mut v = b"RIFF".to_vec();
+        v.extend(u32::MAX.to_le_bytes());
+        v.extend(b"WAVEfmt ");
+        v.extend(16u32.to_le_bytes());
+        v.extend([3, 0, 1, 0]);
+        v.extend(rate.to_le_bytes());
+        v.extend((rate * 4).to_le_bytes());
+        v.extend([4, 0, 32, 0]);
+        v.extend(b"data");
+        v.extend(u32::MAX.to_le_bytes());
+        v.extend(vec![0u8; (seconds * rate * 4) as usize]);
+        v
+    }
+
+    #[test]
+    fn a_streamed_wav_is_as_long_as_its_file() {
+        let (_d, p) = write("voice.wav", &streamed_wav(9));
+        assert!((estimate_seconds(&p) - 9.0).abs() < 1e-6);
+        // A header that claims more than the file holds is held to the file too.
+        let mut short = wav_bytes(3600);
+        short.extend(vec![0u8; 16_000 * 2 * 5]);
+        let (_d, p) = write("cut.wav", &short);
+        assert!((estimate_seconds(&p) - 5.0).abs() < 1e-6);
     }
 
     #[test]
