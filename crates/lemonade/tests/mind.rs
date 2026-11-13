@@ -1020,3 +1020,72 @@ async fn quotes_match_through_case_spacing_and_punctuation() {
         .unwrap();
     assert_eq!(got.len(), 1);
 }
+
+#[tokio::test]
+async fn every_call_has_a_token_ceiling_and_json_calls_a_long_limit() {
+    let r = rig().await;
+    r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    r.mind.write_headline(&page()).await.unwrap();
+    let image = put(&r.dirs.root, "i.png", &png(8, 8));
+    r.mind.read_image(&image).await.unwrap();
+    r.script(json!([{"deltas": ["Monday [m1]."]}])).await;
+    answer(&r, &[memory("a", "Dentist on Monday.")])
+        .await
+        .0
+        .unwrap();
+    let ceilings: Vec<Value> = r
+        .seen("/v1/chat/completions")
+        .await
+        .iter()
+        .map(|c| c["body"]["max_tokens"].clone())
+        .collect();
+    assert_eq!(
+        ceilings,
+        [json!(2048), json!(200), json!(1024), json!(1024)]
+    );
+}
+
+#[tokio::test]
+async fn the_context_size_is_saved_with_the_load() {
+    let r = rig().await;
+    r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert_eq!(r.seen("/v1/load").await[0]["body"]["save_options"], true);
+}
+
+#[tokio::test]
+async fn an_answer_with_no_valid_citation_is_not_sure() {
+    let r = rig().await;
+    let facts = [memory("a", "Dentist on Monday.")];
+    for deltas in [json!(["It is Monday."]), json!(["It is Monday [m9]."])] {
+        r.script(json!([{ "deltas": deltas }])).await;
+        let (meta, text) = answer(&r, &facts).await;
+        let meta = meta.unwrap();
+        assert!(meta.not_sure && meta.cited.is_empty(), "{meta:?}");
+        assert!(
+            text.contains("Monday"),
+            "what was said is still shown: {text:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_load_that_runs_out_of_memory_is_a_failure_not_an_absence() {
+    let r = rig_with("downloaded=all,load-oom", Tier::Standard).await;
+    assert_eq!(
+        r.mind
+            .extract("Sam likes tea", &context())
+            .await
+            .unwrap_err(),
+        MindError::Failed("load: out of memory".into())
+    );
+    let r = rig_with("downloaded=all,load-error", Tier::Standard).await;
+    let err = r
+        .mind
+        .extract("Sam likes tea", &context())
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(&err, MindError::Failed(m) if m.contains("backend did not start")),
+        "{err:?}"
+    );
+}

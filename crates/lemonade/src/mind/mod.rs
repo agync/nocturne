@@ -156,6 +156,8 @@ impl LemonadeMind {
         for attempt in 0..EXTRACT_ATTEMPTS {
             let mut req = ChatRequest::new(&model, messages.clone());
             req.temperature = Some(0.0);
+            req.max_tokens = Some(2048);
+            req.timeout = Some(self.client.timeouts().json);
             req.response_format = Some(crate::client::json_schema_format(
                 &prompts::extraction_schema(),
             ));
@@ -207,6 +209,7 @@ impl LemonadeMind {
             ],
         );
         req.temperature = Some(0.2);
+        req.max_tokens = Some(1024);
         let mut stream = match self.client.chat(&req).await {
             Ok(s) => s,
             Err(e) => {
@@ -282,9 +285,10 @@ impl LemonadeMind {
                 .map(|f| f.id.clone())
                 .collect()
         };
+        let cited_none = cited.is_empty();
         Ok(AnswerMeta {
             cited,
-            not_sure: not_sure || !sent_any,
+            not_sure: not_sure || !sent_any || cited_none,
         })
     }
 
@@ -302,6 +306,7 @@ impl LemonadeMind {
             ],
         );
         req.temperature = Some(0.0);
+        req.max_tokens = Some(1024);
         #[derive(Deserialize)]
         struct Reading {
             #[serde(default)]
@@ -352,6 +357,7 @@ impl LemonadeMind {
             ],
         );
         req.temperature = Some(0.4);
+        req.max_tokens = Some(200);
         #[derive(Deserialize)]
         struct Headline {
             headline: String,

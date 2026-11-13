@@ -8,7 +8,7 @@
 //! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
-//! `conflict-first-remove`.
+//! `conflict-first-remove`, `load-oom`, `load-error`.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -719,6 +719,16 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
 
 async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     let name = body["model_name"].as_str().unwrap_or("").to_string();
+    if app.flag("load-oom") {
+        return err(
+            500,
+            "model_load_error",
+            "llama-server exited: failed to allocate buffer (out of memory)",
+        );
+    }
+    if app.flag("load-error") {
+        return err(500, "model_load_error", "backend did not start");
+    }
     let mut inner = app.inner();
     app.tick(&mut inner);
     if !CATALOG.iter().any(|m| m.0 == name) {

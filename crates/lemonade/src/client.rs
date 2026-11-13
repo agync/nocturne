@@ -38,8 +38,12 @@ impl std::fmt::Debug for Endpoint {
 pub struct Timeouts {
     pub connect: Duration,
     pub request: Duration,
-    /// Longest silence tolerated inside a streamed answer.
+    /// Longest silence between the words of a streamed answer.
     pub idle: Duration,
+    /// Longest wait for the first word, while the engine reads the prompt.
+    pub first_token: Duration,
+    /// Overall limit for a call that returns structured JSON in one piece.
+    pub json: Duration,
 }
 
 impl Default for Timeouts {
@@ -48,6 +52,8 @@ impl Default for Timeouts {
             connect: Duration::from_secs(2),
             request: Duration::from_secs(120),
             idle: Duration::from_secs(30),
+            first_token: Duration::from_secs(120),
+            json: Duration::from_secs(300),
         }
     }
 }
@@ -122,7 +128,6 @@ impl Client {
             .expect("http client");
         let stream_http = reqwest::Client::builder()
             .connect_timeout(timeouts.connect)
-            .read_timeout(timeouts.idle)
             .no_proxy()
             .build()
             .expect("http client");
@@ -474,6 +479,9 @@ pub struct ChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ctx_size: Option<u32>,
     pub stream: bool,
+    /// Overall limit for this call, instead of the client's default.
+    #[serde(skip)]
+    pub timeout: Option<Duration>,
 }
 
 impl ChatRequest {
@@ -487,6 +495,7 @@ impl ChatRequest {
             enable_thinking: Some(false),
             ctx_size: None,
             stream: false,
+            timeout: None,
         }
     }
 }
@@ -583,6 +592,8 @@ impl Client {
         let mut body = json!({"model_name": model});
         if let Some(n) = options.ctx_size {
             body["ctx_size"] = json!(n);
+            // So that an automatic reload after eviction keeps the context size.
+            body["save_options"] = json!(true);
         }
         if let Some(b) = &options.llamacpp_backend {
             body["llamacpp_backend"] = json!(b);
@@ -594,7 +605,12 @@ impl Client {
             .request(Method::POST, "/v1/load")?
             .timeout(LOAD_TIMEOUT)
             .json(&body);
-        let _: Value = Self::json(rb).await?;
+        let response = rb.send().await.map_err(map_transport)?;
+        if !response.status().is_success() {
+            let status = response.status().as_u16();
+            let text = response.text().await.unwrap_or_default();
+            return Err(classify_load_failure(status, &text));
+        }
         Ok(())
     }
 
@@ -609,7 +625,13 @@ impl Client {
     pub async fn chat_complete(&self, req: &ChatRequest) -> Result<String, RuntimeError> {
         let mut req = req.clone();
         req.stream = false;
-        let v: Value = self.post_json("/v1/chat/completions", &json!(req)).await?;
+        let mut rb = self
+            .request(Method::POST, "/v1/chat/completions")?
+            .json(&req);
+        if let Some(limit) = req.timeout {
+            rb = rb.timeout(limit);
+        }
+        let v: Value = Self::json(rb).await?;
         v["choices"][0]["message"]["content"]
             .as_str()
             .map(str::to_string)
@@ -624,6 +646,7 @@ impl Client {
     ) -> Result<T, RuntimeError> {
         let mut req = req.clone();
         req.response_format = Some(json_schema_format(schema));
+        req.timeout.get_or_insert(self.shared.timeouts.json);
         let text = self.chat_complete(&req).await?;
         parse_json_text(&text)
     }
@@ -640,8 +663,11 @@ impl Client {
                 true,
             )?
             .json(&req);
-        let response = Self::send(rb).await?;
-        Ok(sse_deltas(response))
+        let first = self.shared.timeouts.first_token;
+        let response = tokio::time::timeout(first, Self::send(rb))
+            .await
+            .map_err(|_| RuntimeError::Timeout)??;
+        Ok(sse_deltas(response, first, self.shared.timeouts.idle))
     }
 
     pub async fn transcribe(
@@ -755,15 +781,21 @@ struct SseState {
     ready: VecDeque<Result<String, RuntimeError>>,
     finished: bool,
     complete: bool,
+    started: bool,
+    first: Duration,
+    idle: Duration,
 }
 
-fn sse_deltas(response: Response) -> ChatStream {
+fn sse_deltas(response: Response, first: Duration, idle: Duration) -> ChatStream {
     let state = SseState {
         body: response.bytes_stream().boxed(),
         buf: Vec::new(),
         ready: VecDeque::new(),
         finished: false,
         complete: false,
+        started: false,
+        first,
+        idle,
     };
     futures_util::stream::unfold(state, |mut st| async move {
         loop {
@@ -773,7 +805,12 @@ fn sse_deltas(response: Response) -> ChatStream {
             if st.finished {
                 return None;
             }
-            match st.body.next().await {
+            let patience = if st.started { st.idle } else { st.first };
+            let next = match tokio::time::timeout(patience, st.body.next()).await {
+                Ok(item) => item.map(|r| r.map_err(|_| ())),
+                Err(_) => Some(Err(())),
+            };
+            match next {
                 Some(Ok(chunk)) => {
                     st.buf.extend_from_slice(&chunk);
                     while let Some(pos) = st.buf.iter().position(|b| *b == b'\n') {
@@ -803,6 +840,7 @@ fn sse_deltas(response: Response) -> ChatStream {
                         if let Some(text) = choice["delta"]["content"].as_str()
                             && !text.is_empty()
                         {
+                            st.started = true;
                             st.ready.push_back(Ok(text.to_string()));
                         }
                         if !choice["finish_reason"].is_null() {
@@ -859,6 +897,41 @@ fn parse_error(text: &str) -> (String, String) {
     }
 }
 
+/// What a failed `/v1/load` means: a model that would not load (and whether it ran out of
+/// memory) is told apart from the ordinary request errors.
+pub(crate) fn classify_load_failure(status: u16, body: &str) -> RuntimeError {
+    let (code, message) = parse_error(body);
+    let load_failed = status >= 500 || code == "model_load_error" || code == "model_load_refused";
+    if !load_failed {
+        return map_status(status, body);
+    }
+    RuntimeError::LoadFailed {
+        out_of_memory: mentions_out_of_memory(&message),
+        message,
+    }
+}
+
+fn mentions_out_of_memory(message: &str) -> bool {
+    let m = message.to_lowercase();
+    [
+        "out of memory",
+        "outofmemory",
+        "out_of_device_memory",
+        "out_of_host_memory",
+        "outofdevicememory",
+        "outofhostmemory",
+        "bad_alloc",
+        "failed to allocate",
+        "cannot allocate",
+        "insufficient memory",
+        "not enough memory",
+        "oom-kill",
+    ]
+    .iter()
+    .any(|k| m.contains(k))
+        || m.split(|c: char| !c.is_alphanumeric()).any(|w| w == "oom")
+}
+
 pub(crate) fn map_status(status: u16, body: &str) -> RuntimeError {
     let (code, message) = parse_error(body);
     match status {
@@ -871,5 +944,76 @@ pub(crate) fn map_status(status: u16, body: &str) -> RuntimeError {
             message,
         },
         _ => RuntimeError::Server { status, message },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn body(code: &str, message: &str) -> String {
+        json!({"error": {"code": code, "message": message}}).to_string()
+    }
+
+    #[test]
+    fn load_failures_are_told_apart() {
+        let oom = |msg: &str| classify_load_failure(500, &body("model_load_error", msg));
+        for msg in [
+            "llama-server: failed to allocate buffer of size 9 GiB",
+            "ggml_vulkan: vk::Result::eErrorOutOfDeviceMemory",
+            "CUDA error: out of memory",
+            "process killed by OOM killer",
+            "std::bad_alloc",
+        ] {
+            assert!(
+                matches!(
+                    oom(msg),
+                    RuntimeError::LoadFailed {
+                        out_of_memory: true,
+                        ..
+                    }
+                ),
+                "{msg}"
+            );
+        }
+        for msg in [
+            "bad gguf magic",
+            "the room is full",
+            "backend did not start",
+        ] {
+            assert!(
+                matches!(
+                    oom(msg),
+                    RuntimeError::LoadFailed {
+                        out_of_memory: false,
+                        ..
+                    }
+                ),
+                "{msg}"
+            );
+        }
+        assert!(matches!(
+            classify_load_failure(400, &body("model_load_refused", "unsupported gguf type")),
+            RuntimeError::LoadFailed {
+                out_of_memory: false,
+                ..
+            }
+        ));
+        assert!(matches!(
+            classify_load_failure(502, "out of memory"),
+            RuntimeError::LoadFailed {
+                out_of_memory: true,
+                ..
+            }
+        ));
+        assert_eq!(classify_load_failure(401, ""), RuntimeError::Unauthorized);
+        assert!(matches!(
+            classify_load_failure(404, &body("model_not_found", "no such model")),
+            RuntimeError::NotFound(_)
+        ));
+        assert!(matches!(
+            classify_load_failure(409, &body("slots_pinned_error", "pinned")),
+            RuntimeError::Rejected { status: 409, .. }
+        ));
     }
 }

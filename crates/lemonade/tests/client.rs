@@ -78,7 +78,7 @@ async fn each_call_sends_the_right_method_path_body_and_key() {
     let r = only(fake.seen("/v1/load").await);
     assert_eq!(
         r["body"],
-        json!({"model_name": "Qwen3.5-9B-GGUF", "ctx_size": 8192, "llamacpp_backend": "vulkan"})
+        json!({"model_name": "Qwen3.5-9B-GGUF", "ctx_size": 8192, "save_options": true, "llamacpp_backend": "vulkan"})
     );
     assert_eq!(
         c.health().await.unwrap().model_loaded.as_deref(),
@@ -305,6 +305,7 @@ async fn a_silent_server_times_out() {
             connect: Duration::from_millis(200),
             request: Duration::from_millis(300),
             idle: Duration::from_millis(300),
+            ..Timeouts::default()
         },
     );
     assert_eq!(client.health().await.unwrap_err(), RuntimeError::Timeout);
@@ -323,6 +324,7 @@ async fn a_stalled_stream_is_cut_after_the_idle_limit() {
             connect: Duration::from_secs(2),
             request: Duration::from_secs(120),
             idle: Duration::from_millis(200),
+            ..Timeouts::default()
         },
     );
     let outcome = match client.chat(&request("m", "x")).await {
@@ -346,4 +348,83 @@ async fn shutdown_stops_the_engine() {
     let mut fake = Fake::started(None).await;
     fake.client.shutdown().await.unwrap();
     assert!(fake.wait_exit(Duration::from_secs(5)).is_some());
+}
+
+#[tokio::test]
+async fn json_calls_get_their_own_overall_limit() {
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let client = Client::with_timeouts(
+        port,
+        "k",
+        Timeouts {
+            request: Duration::from_secs(30),
+            json: Duration::from_millis(300),
+            ..Timeouts::default()
+        },
+    );
+    let started = std::time::Instant::now();
+    let err = client
+        .chat_json::<Value>(&request("m", "x"), &json!({"type": "object"}))
+        .await
+        .unwrap_err();
+    assert_eq!(err, RuntimeError::Timeout);
+    assert!(
+        started.elapsed() < Duration::from_secs(5),
+        "{:?}",
+        started.elapsed()
+    );
+    drop(listener);
+}
+
+#[tokio::test]
+async fn the_first_word_gets_longer_than_the_words_after_it() {
+    let fake = Fake::started(None).await;
+    fake.script(
+        json!([{"deltas": ["a", "b"], "delay_ms": 500}, {"deltas": ["a", "b"], "delay_ms": 500}]),
+    )
+    .await;
+    let patient_start = Client::with_timeouts(
+        fake.port,
+        "k3y",
+        Timeouts {
+            first_token: Duration::from_secs(5),
+            idle: Duration::from_secs(2),
+            ..Timeouts::default()
+        },
+    );
+    let mut stream = patient_start.chat(&request("m", "x")).await.unwrap();
+    let mut words = Vec::new();
+    while let Some(item) = stream.next().await {
+        words.push(item.unwrap());
+    }
+    assert_eq!(
+        words,
+        ["a", "b"],
+        "500 ms gaps are fine when the limits are 5 s and 2 s"
+    );
+
+    let impatient_start = Client::with_timeouts(
+        fake.port,
+        "k3y",
+        Timeouts {
+            first_token: Duration::from_millis(150),
+            idle: Duration::from_secs(2),
+            ..Timeouts::default()
+        },
+    );
+    let outcome = match impatient_start.chat(&request("m", "x")).await {
+        Err(e) => e,
+        Ok(mut stream) => loop {
+            match stream.next().await {
+                Some(Err(e)) => break e,
+                Some(Ok(_)) => {}
+                None => panic!("the slow start went unnoticed"),
+            }
+        },
+    };
+    assert!(
+        matches!(outcome, RuntimeError::Timeout | RuntimeError::StreamCut),
+        "{outcome:?}"
+    );
 }

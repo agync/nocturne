@@ -35,6 +35,11 @@ pub enum RuntimeError {
     Offline,
     #[error("{0} is not on this machine")]
     NotInstalled(String),
+    #[error("the model would not load: {message}")]
+    LoadFailed {
+        out_of_memory: bool,
+        message: String,
+    },
 }
 
 impl From<std::io::Error> for RuntimeError {
@@ -43,12 +48,12 @@ impl From<std::io::Error> for RuntimeError {
     }
 }
 
+/// The one place a runtime problem becomes what the engine crate understands.
 impl From<RuntimeError> for MindError {
     fn from(e: RuntimeError) -> Self {
         match e {
             RuntimeError::Unavailable
             | RuntimeError::Unauthorized
-            | RuntimeError::Timeout
             | RuntimeError::StreamCut
             | RuntimeError::Io(_)
             | RuntimeError::Start(_)
@@ -58,7 +63,52 @@ impl From<RuntimeError> for MindError {
             | RuntimeError::NotInstalled(_)
             | RuntimeError::Offline => MindError::Unavailable,
             RuntimeError::Rejected { status: 409, .. } => MindError::Busy,
+            RuntimeError::LoadFailed {
+                out_of_memory: true,
+                ..
+            } => MindError::Failed("load: out of memory".into()),
+            RuntimeError::Timeout => MindError::Failed("the engine took too long".into()),
             other => MindError::Failed(other.to_string()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn runtime_errors_map_to_mind_errors() {
+        let m = |e: RuntimeError| MindError::from(e);
+        assert_eq!(m(RuntimeError::Unavailable), MindError::Unavailable);
+        assert_eq!(m(RuntimeError::StreamCut), MindError::Unavailable);
+        assert_eq!(
+            m(RuntimeError::NotInstalled("x".into())),
+            MindError::Unavailable
+        );
+        assert_eq!(
+            m(RuntimeError::Timeout),
+            MindError::Failed("the engine took too long".into()),
+            "a slow engine is not a missing one"
+        );
+        assert_eq!(
+            m(RuntimeError::LoadFailed {
+                out_of_memory: true,
+                message: "x".into()
+            }),
+            MindError::Failed("load: out of memory".into())
+        );
+        assert!(matches!(
+            m(RuntimeError::LoadFailed { out_of_memory: false, message: "bad file".into() }),
+            MindError::Failed(msg) if msg.contains("bad file")
+        ));
+        assert_eq!(
+            m(RuntimeError::Rejected {
+                status: 409,
+                code: String::new(),
+                message: String::new()
+            }),
+            MindError::Busy
+        );
     }
 }
