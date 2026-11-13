@@ -129,4 +129,27 @@ describe("mock.online.events", () => {
     await engine.turnOffOnline(false);
     expect(seen).toEqual(["checking", "off", "on", "off"]);
   });
+
+  it("record: keeps the real question and sentences, and says what an empty or unsure send was", async () => {
+    const online = sim("on");
+    const a = online.record("When is the dentist?", "done", ["The dentist is on Friday."]);
+    const b = online.record("Anything on Sunday?", "notSure", ["Maybe church."]);
+    const c = online.record("Private thing?", "done", []);
+    const [sa, sb, sc] = await Promise.all(
+      [a, b, c].map(async (id) => (await online.sends(10, id + 1)).find((x) => x.id === id)),
+    );
+    expect(sa?.question).toBe("When is the dentist?");
+    expect(sa?.lines).toContainEqual({
+      type: "memory",
+      n: 1,
+      text: "The dentist is on Friday.",
+      state: "same",
+    });
+    expect(sa?.lines).toContainEqual({ type: "text", text: "Question: When is the dentist?" });
+    expect(sa?.result).toEqual({ type: "answered", receipts: 1 });
+    expect(sb?.result).toEqual({ type: "notSure" });
+    expect(sc?.result).toEqual({ type: "notSent", reason: "keptHere" });
+    expect(sc?.lines).toEqual([]);
+    expect(sc?.bytesUp).toBe(0);
+  });
 });

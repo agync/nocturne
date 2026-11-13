@@ -31,7 +31,7 @@
   "sent.field.size": "Size",
   "sent.field.cost": "Cost",
   "sent.field.result": "Result",
-  "sent.to": "Your provider ({host}), by Nocturne’s engine",
+  "sent.to": "By Nocturne’s engine, to your provider ({host})",
   "sent.size": "{up} sent, {down} back",
   "sent.size.none": "Nothing left this computer",
   "sent.cost.none": "Not told by your provider",
@@ -44,7 +44,7 @@
   "sent.exact": "Exactly what was sent",
   "sent.memory.deleted": "A memory you have since deleted. Nocturne no longer has its words.",
   "sent.memory.changed": "A memory you have since changed. Nocturne no longer shows its old words.",
-  "sent.memory.note": "Your provider was sent the memory’s words at the time. Nocturne can’t take them back from it.",
+  "sent.memory.note": "The memory’s words were sent to your provider at the time. Nocturne can’t take them back from it.",
   "sent.instructions.show": "Show Nocturne’s standard instructions, the same for every question",
   "sent.instructions.hide": "Hide the standard instructions",
   "sent.notSent.note": "Nocturne lists questions that didn’t go too, so the list shows every time it tried.",
@@ -53,5 +53,6 @@
   "sent.more": "Show earlier",
   "sent.back": "Online answers",
   "sent.when": "{day}, {time}",
-  "sent.more.failed": "Nocturne couldn’t read earlier entries. Try again."
+  "sent.more.failed": "Nocturne couldn’t read earlier entries. Try again.",
+  "sent.gone": "That entry is no longer in the list. Entries older than 90 days are removed by themselves."
 }

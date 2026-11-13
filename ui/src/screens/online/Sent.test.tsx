@@ -83,7 +83,7 @@ describe("what was sent", () => {
     await open([send({ id: 1 })]);
     const entry = await screen.findByRole("region", { name: "Entry" });
     expect(
-      within(entry).getByText("Your provider (api.example.com), by Nocturne’s engine"),
+      within(entry).getByText("By Nocturne’s engine, to your provider (api.example.com)"),
     ).toBeVisible();
     expect(within(entry).getByText("1.4 kB sent, 600 B back")).toBeVisible();
     expect(within(entry).getByText("Not told by your provider")).toBeVisible();
@@ -117,7 +117,7 @@ describe("what was sent", () => {
     ).toBeVisible();
     expect(
       screen.getByText(
-        "Your provider was sent the memory’s words at the time. Nocturne can’t take them back from it.",
+        "The memory’s words were sent to your provider at the time. Nocturne can’t take them back from it.",
       ),
     ).toBeVisible();
   });
@@ -157,6 +157,49 @@ describe("what was sent", () => {
     expect(within(entry).queryByText("Cost")).toBeNull();
     expect(within(entry).getByText(/lists questions that didn’t go too/)).toBeVisible();
     expect(screen.getByText(/not sent, no internet/)).toBeVisible();
+  });
+
+  it("says nothing left when a try failed before a byte went", async () => {
+    await open([
+      send({
+        id: 1,
+        lines: facts({ type: "memory", n: 1, text: "Secret words.", state: "same" }),
+        bytesUp: 0,
+        bytesDown: 0,
+        result: { type: "failed", reason: "couldntReach" },
+      }),
+    ]);
+    const entry = await screen.findByRole("region", { name: "Entry" });
+    expect(within(entry).queryByText("Sent")).toBeNull();
+    expect(
+      within(entry).getByText("Not sent: couldn’t reach your provider. Answered on this computer."),
+    ).toBeVisible();
+    expect(within(entry).getByText("Nothing left this computer")).toBeVisible();
+    expect(within(entry).queryByText("Exactly what was sent")).toBeNull();
+    expect(within(entry).queryByText(/Secret words/)).toBeNull();
+  });
+
+  it("keeps saying sent when a try failed after bytes went", async () => {
+    await open([send({ id: 1, result: { type: "failed", reason: "slow" } })]);
+    const entry = await screen.findByRole("region", { name: "Entry" });
+    expect(within(entry).getByText("Sent")).toBeVisible();
+    expect(within(entry).getByText("Exactly what was sent")).toBeVisible();
+  });
+
+  it("finds a linked entry on a later page, and never opens another when it is gone", async () => {
+    const many = Array.from({ length: 120 }, (_, i) =>
+      send({ id: 200 - i, at: today(1 + i / 100), question: `Question ${200 - i}` }),
+    );
+    await open(many, "#/settings/online/sent?send=85");
+    const entry = await screen.findByRole("region", { name: "Entry" });
+    expect(within(entry).getByRole("heading", { level: 2, name: "Question 85" })).toBeVisible();
+  });
+
+  it("says a linked entry is gone, without opening a different one", async () => {
+    await open([send({ id: 5, question: "Newest?" })], "#/settings/online/sent?send=2");
+    expect(await screen.findByText(/That entry is no longer in the list/)).toBeVisible();
+    expect(screen.queryByRole("region", { name: "Entry" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Newest?" })).toBeNull();
   });
 
   it("names a connection check as one, and says it worked", async () => {

@@ -819,7 +819,24 @@ export class MockEngine implements EngineClient {
         this.emit("ask-delta", d);
         return;
       }
-      const sendId = by.type === "online" ? this.online.record(question, d.memoryIds.length) : null;
+      if (by.type !== "online") {
+        this.emit("ask-delta", { ...d, answeredBy: by, sendId: null });
+        return;
+      }
+      // Nothing to send means nothing goes: the question is noted as not sent, kept here.
+      const facts = (d.phase === "done" ? active : d.phase === "notSure" ? unconfirmed : []).map(
+        (x) => x.m.sentence,
+      );
+      if (facts.length === 0) {
+        this.online.record(question, d.phase, facts);
+        this.emit("ask-delta", {
+          ...d,
+          answeredBy: { type: "computer", reason: "keptHere" },
+          sendId: null,
+        });
+        return;
+      }
+      const sendId = this.online.record(question, d.phase, facts);
       this.emit("ask-delta", { ...d, answeredBy: by, sendId });
     };
     const tokens = contentTokens(question);

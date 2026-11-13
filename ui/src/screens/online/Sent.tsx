@@ -44,7 +44,9 @@ function reasonOf(reason: LocalReason): string {
   }
 }
 
-const isSent = (send: OnlineSend) => send.result.type !== "notSent";
+/** Whether anything left this computer: a failed try that never sent a byte did not go. */
+const isSent = (send: OnlineSend) =>
+  send.result.type !== "notSent" && !(send.result.type === "failed" && send.bytesUp === 0);
 
 function rowMeta(send: OnlineSend): string {
   const time = formatTime(send.at);
@@ -55,6 +57,8 @@ function rowMeta(send: OnlineSend): string {
     case "notSure":
       return t("sent.row.notSure", { time, size });
     case "failed":
+      if (!isSent(send))
+        return t("sent.row.notSent", { time, reason: reasonOf(send.result.reason) });
       return t("sent.row.failed", { time, size, reason: reasonOf(send.result.reason) });
     case "notSent":
       return t("sent.row.notSent", { time, reason: reasonOf(send.result.reason) });
@@ -70,7 +74,9 @@ function resultText(send: OnlineSend): string {
     case "notSure":
       return t("sent.result.notSure");
     case "failed":
-      return t("sent.result.failed", { reason: reasonOf(send.result.reason) });
+      return t(isSent(send) ? "sent.result.failed" : "sent.result.notSent", {
+        reason: reasonOf(send.result.reason),
+      });
     case "notSent":
       return t("sent.result.notSent", { reason: reasonOf(send.result.reason) });
   }
@@ -147,7 +153,7 @@ function Entry({ send, today }: { send: OnlineSend; today: string }) {
           <dd>{resultText(send)}</dd>
         </div>
       </dl>
-      {send.lines.length > 0 ? (
+      {sent && send.lines.length > 0 ? (
         <>
           <span className={styles.label}>{t("sent.exact")}</span>
           <p className={styles.sent}>
@@ -193,11 +199,11 @@ export default function Sent() {
   const [chosen, setChosen] = useState<number | null>(null);
 
   const sends = useMemo(() => [...(first.data ?? []), ...older], [first.data, older]);
+  const linked = wanted === null ? null : (sends.find((s) => String(s.id) === wanted) ?? null);
+  // An entry that was asked for and is not there is never swapped for another.
   const selected =
-    sends.find((s) => s.id === chosen) ??
-    sends.find((s) => String(s.id) === wanted) ??
-    sends[0] ??
-    null;
+    sends.find((s) => s.id === chosen) ?? linked ?? (wanted ? null : (sends[0] ?? null));
+  const missing = wanted !== null && chosen === null && linked === null;
   useEffect(() => {
     if (first.data && first.data.length < PAGE) setExhausted(true);
   }, [first.data]);
@@ -214,18 +220,25 @@ export default function Sent() {
     return out;
   }, [sends]);
 
+  const [loadingMore, setLoadingMore] = useState(false);
   const showEarlier = async () => {
     const last = sends.at(-1);
-    if (!last) return;
+    if (!last || loadingMore) return;
     setMoreFailed(false);
+    setLoadingMore(true);
     try {
       const page = await engine.listOnlineSends(PAGE, last.id);
       setOlder((all) => [...all, ...page]);
       if (page.length < PAGE) setExhausted(true);
     } catch {
       setMoreFailed(true);
+    } finally {
+      setLoadingMore(false);
     }
   };
+  useEffect(() => {
+    if (missing && first.data && !exhausted && !loadingMore && !moreFailed) void showEarlier();
+  });
 
   const heading = (
     <>
@@ -258,7 +271,7 @@ export default function Sent() {
       </ScreenSheet>
     );
   }
-  if (sends.length === 0 || !selected) {
+  if (sends.length === 0) {
     return (
       <ScreenSheet>
         {heading}
@@ -284,7 +297,7 @@ export default function Sent() {
                     <button
                       type="button"
                       className={styles.row}
-                      aria-current={send.id === selected.id ? "true" : undefined}
+                      aria-current={send.id === selected?.id ? "true" : undefined}
                       onClick={() => setChosen(send.id)}
                     >
                       <span className={styles.rowTitle}>{title(send)}</span>
@@ -311,7 +324,13 @@ export default function Sent() {
               : t("sent.footer")}
           </p>
         </nav>
-        <Entry key={selected.id} send={selected} today={today} />
+        {selected ? (
+          <Entry key={selected.id} send={selected} today={today} />
+        ) : (
+          <p className={styles.body} role="status">
+            {missing && !exhausted && !moreFailed ? t("sent.loading") : t("sent.gone")}
+          </p>
+        )}
       </div>
     </ScreenSheet>
   );

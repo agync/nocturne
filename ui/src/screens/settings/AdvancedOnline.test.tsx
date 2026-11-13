@@ -31,8 +31,18 @@ const advanced = (over: Partial<OnlineAdvanced> = {}): OnlineAdvanced => ({
   ...over,
 });
 
-async function open(online: OnlineAdvanced | null) {
+async function open(online: OnlineAdvanced | null, seedKey = false) {
   const engine = createMockEngine();
+  if (seedKey) {
+    // The key goes in through the form, as a person would enter it.
+    const form = { baseUrl: "https://api.example.com/v1", key: SECRET, model: "m" };
+    await engine.checkOnline(form);
+    await engine.turnOnOnline({
+      phones: false,
+      sendSensitive: false,
+      limit: { kind: "questions", questions: 200, usd: null },
+    });
+  }
   const real = engine.getAdvanced.bind(engine);
   vi.spyOn(engine, "getAdvanced").mockImplementation(async () => ({ ...(await real()), online }));
   renderApp({ hash: "#/settings/advanced", engine });
@@ -47,7 +57,7 @@ describe("the online block of the advanced details", () => {
   });
 
   it("advanced.online_block_has_no_key: shows the route, the limits and where the key lives, never the key", async () => {
-    await open(advanced());
+    await open(advanced(), true);
     const block = await screen.findByRole("region", { name: "Online answers" });
     const rows = new Map(
       within(block)

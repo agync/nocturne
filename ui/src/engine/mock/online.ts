@@ -8,6 +8,7 @@ import type {
   OnlineState,
   OnlineView,
   PrivacyView,
+  SentLine,
 } from "../bindings";
 import { EngineError } from "../client";
 
@@ -241,9 +242,13 @@ export class OnlineSim {
     };
   }
 
-  /** Notes one question that went online, for the sent log. Returns its id. */
-  record(question: string, used: number): number {
+  /**
+   * Notes one question for the sent log, with the sentences it really carried. A question with
+   * nothing to send is noted as not sent. Returns the entry's id.
+   */
+  record(question: string, ending: string, facts: string[]): number {
     const id = this.log.length + 1;
+    const sent = facts.length > 0;
     this.log.unshift({
       id,
       at: new Date(this.now()).toISOString(),
@@ -251,16 +256,24 @@ export class OnlineSim {
       host: this.current.host ?? HOST,
       model: this.current.model ?? MODEL,
       question,
-      lines: [
-        { type: "text", text: "Facts:" },
-        { type: "memory", n: 1, text: "Gran’s new number ends 4471.", state: "same" },
-        { type: "text", text: `Question: ${question}` },
-      ],
-      instructions: "Answer only from the facts.",
-      bytesUp: 1400,
-      bytesDown: 600,
+      lines: sent
+        ? [
+            { type: "text", text: "Facts:" },
+            ...facts.map(
+              (text, i): SentLine => ({ type: "memory", n: i + 1, text, state: "same" }),
+            ),
+            { type: "text", text: `Question: ${question}` },
+          ]
+        : [],
+      instructions: sent ? "Answer only from the facts." : "",
+      bytesUp: sent ? 1400 : 0,
+      bytesDown: sent ? 600 : 0,
       costUsd: null,
-      result: { type: "answered", receipts: used },
+      result: !sent
+        ? { type: "notSent", reason: "keptHere" }
+        : ending === "notSure"
+          ? { type: "notSure" }
+          : { type: "answered", receipts: facts.length },
     });
     return id;
   }
