@@ -22,6 +22,15 @@ test.describe("wide window", () => {
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
   });
 
+  test("the kept-today column is only on Today and Recent", async ({ page }) => {
+    const kept = page.getByRole("complementary", { name: "Recently kept" });
+    await ready(page);
+    await expect(kept).toBeVisible();
+    await page.goto("/#/ask");
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(kept).toHaveCount(0);
+  });
+
   test("F6 cycles the bar, the page and the rail", async ({ page }) => {
     await ready(page);
     await page.keyboard.press("F6");

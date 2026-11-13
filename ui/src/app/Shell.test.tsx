@@ -249,6 +249,26 @@ describe("wide window", () => {
     expect(await screen.findByRole("complementary", { name: "Recently kept" })).toBeInTheDocument();
   });
 
+  it.each([
+    ["#/today", true],
+    ["#/recent", true],
+    ["#/ask", false],
+    ["#/needs-you", false],
+    ["#/memories", false],
+    ["#/pages", false],
+    ["#/settings", false],
+  ])("shows the kept-today column on %s: %s", async (hash, shown) => {
+    renderApp({ hash });
+    await screen.findByRole("heading", { level: 1 });
+    if (shown) {
+      expect(
+        await screen.findByRole("complementary", { name: "Recently kept" }),
+      ).toBeInTheDocument();
+    } else {
+      expect(screen.queryByRole("complementary", { name: "Recently kept" })).toBeNull();
+    }
+  });
+
   it("takes no focus when the window opens, so no field shows a ring", async () => {
     renderApp();
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });

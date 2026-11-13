@@ -24,6 +24,9 @@ import { failureCopy, recordingState } from "./useRecorder";
 import { useBarShortcut, useRegionCycling } from "./useRegions";
 import { useShellSize } from "./useShellSize";
 
+/** The only screens that carry the kept-today column; the rest take the full width. */
+const KEPT_TODAY_PATHS = ["/today", "/recent"];
+
 interface ShellProps {
   children?: ReactNode;
 }
@@ -292,7 +295,7 @@ export function Shell({ children }: ShellProps) {
               </Suspense>
             </ErrorBoundary>
           </main>
-          {!narrow ? (
+          {!narrow && KEPT_TODAY_PATHS.includes(location) ? (
             <div className={styles.aside}>
               <KeptToday />
             </div>
