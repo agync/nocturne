@@ -27,7 +27,9 @@
     "vite.phone.config.ts",
     "vitest.interop.config.ts",
     "playwright.config.ts",
-    "playwright.away.config.ts"
+    "playwright.away.config.ts",
+    "e2e-trials",
+    "playwright.trials.config.ts"
   ],
   "exclude": ["src/engine/bindings"]
 }

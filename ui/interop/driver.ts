@@ -77,24 +77,28 @@ export class Driver {
     this.exited = new Promise((done) => child.on("exit", (code) => done(code)));
   }
 
-  static async start(env: Record<string, string> = {}): Promise<Driver> {
+  /**
+   * `env.AWAY_REAL` starts the real helper instead of the stand-in (the owner-approved trials in
+   * `e2e-trials`); `wrap` runs the driver under another program (strace for a network trace);
+   * `on: false` leaves Away from home off until the caller says "on".
+   */
+  static async start(
+    env: Record<string, string> = {},
+    opts: { wrap?: string[]; on?: boolean } = {},
+  ): Promise<Driver> {
     const scratch = mkdtempSync(join(tmpdir(), "away-"));
+    const real = env.AWAY_REAL !== undefined;
     const binary = fakeCloudflared();
-    const lock = writeLock(scratch, binary);
-    const child = spawn(
-      builtTest("away_driver"),
-      ["--ignored", "--nocapture", "--exact", "drive", "--test-threads=1"],
-      {
-        cwd: join(repo, "src-tauri"),
-        env: {
-          ...process.env,
-          AWAY_FAKE_CLOUDFLARED: binary,
-          NOCTURNE_FAKE_HELPERS_LOCK: lock,
-          ...env,
-        },
-        stdio: ["pipe", "pipe", "pipe"],
-      },
-    );
+    const stand: Record<string, string> = real
+      ? {}
+      : { AWAY_FAKE_CLOUDFLARED: binary, NOCTURNE_FAKE_HELPERS_LOCK: writeLock(scratch, binary) };
+    const args = ["--ignored", "--nocapture", "--exact", "drive", "--test-threads=1"];
+    const [program, ...before] = [...(opts.wrap ?? []), builtTest("away_driver")];
+    const child = spawn(program ?? "", [...before, ...args], {
+      cwd: join(repo, "src-tauri"),
+      env: { ...process.env, ...stand, ...env },
+      stdio: ["pipe", "pipe", "pipe"],
+    });
     const log = createWriteStream(join(scratch, "driver.log"));
     child.stderr.pipe(log);
     const d = new Driver(child);
@@ -104,7 +108,7 @@ export class Driver {
     });
     const first = await ready;
     d.relay = String((first.ok as { relay: string }).relay);
-    await d.call("on");
+    if (opts.on !== false) await d.call("on");
     d.info = (await d.call("hello")) as typeof d.info;
     return d;
   }
