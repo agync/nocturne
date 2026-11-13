@@ -1,6 +1,14 @@
 .bar {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
   min-width: 0;
+}
+
+/* Before the field in the tab order, below it on screen. */
+.where {
+  order: 2;
+  padding-left: 2px;
 }
 
 .field {

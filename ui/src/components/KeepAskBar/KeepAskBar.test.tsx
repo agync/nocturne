@@ -1,17 +1,33 @@
 import { readFileSync } from "node:fs";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { OnlineView } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
+import { EngineProvider } from "../../engine/context";
+import { onlineViewOn } from "../../engine/mock/onlineAsk";
 import { PlatformProvider } from "../../platform/context";
 import type { Platform } from "../../platform/types";
+import { onlineEngine } from "../../screens/ask/testing";
 import { ToastProvider } from "../Toast/Toast";
+import { askPlace } from "./askPlace";
 import { defaultVerb, KeepAskBar } from "./KeepAskBar";
 
-function setup(props: Partial<Parameters<typeof KeepAskBar>[0]> = {}) {
+beforeEach(() => {
+  askPlace.take();
+});
+
+function setup(
+  props: Partial<Parameters<typeof KeepAskBar>[0]> = {},
+  view: OnlineView | null = null,
+) {
   const onKeep = vi.fn();
   const onAsk = vi.fn();
-  render(<KeepAskBar placement="top" onKeep={onKeep} onAsk={onAsk} {...props} />);
+  render(
+    <EngineProvider engine={onlineEngine(view)}>
+      <KeepAskBar placement="top" onKeep={onKeep} onAsk={onAsk} {...props} />
+    </EngineProvider>,
+  );
   return { onKeep, onAsk, input: screen.getByRole("textbox", { name: "Keep something, or ask" }) };
 }
 
@@ -94,8 +110,7 @@ describe("KeepAskBar", () => {
 
   it("gives the words back when keeping failed", async () => {
     const onKeep = vi.fn().mockRejectedValue(new Error("no"));
-    render(<KeepAskBar placement="top" onKeep={onKeep} onAsk={vi.fn()} />);
-    const input = screen.getByRole("textbox", { name: "Keep something, or ask" });
+    const { input } = setup({ onKeep });
     await userEvent.type(input, "A note I must not lose{Enter}");
     expect(onKeep).toHaveBeenCalled();
     expect(input).toHaveValue("A note I must not lose");
@@ -249,5 +264,74 @@ describe("KeepAskBar add a photo or file", () => {
     withPicker(["k1"], { onFiles });
     await userEvent.click(screen.getByRole("button", { name: "Add a photo or file" }));
     expect(screen.queryByText(/can’t keep that kind of file yet/)).toBeNull();
+  });
+});
+
+describe("Answer this", () => {
+  const typeQuestion = (input: HTMLElement) => userEvent.type(input, "When is the dentist");
+  const group = () => screen.findByRole("radiogroup", { name: "Answer this" });
+
+  it("is not there while Online answers is off or was never set up", async () => {
+    const { input } = setup();
+    await typeQuestion(input);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("offers online and this computer once there is something to ask, online chosen", async () => {
+    const { input } = setup({}, onlineViewOn());
+    await typeQuestion(input);
+    const where = await group();
+    expect(within(where).getByRole("radio", { name: "Online · api.example.com" })).toBeChecked();
+    expect(within(where).getByRole("radio", { name: "This computer" })).not.toBeChecked();
+    expect(screen.getByText(/go to your provider/)).toBeVisible();
+  });
+
+  it("shows nothing before there is text", async () => {
+    setup({}, onlineViewOn());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("is reached before the Ask button, so it can be set before submitting", async () => {
+    const { input } = setup({}, onlineViewOn());
+    await typeQuestion(input);
+    await group();
+    const radio = screen.getByRole("radio", { name: "Online · api.example.com" });
+    const ask = screen.getByRole("button", { name: /^Ask/ });
+    expect(radio.compareDocumentPosition(ask) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(radio.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("passes this computer for one question and goes back to online after it", async () => {
+    const { onAsk, input } = setup({}, onlineViewOn());
+    await typeQuestion(input);
+    await group();
+    await userEvent.click(screen.getByRole("radio", { name: "This computer" }));
+    expect(screen.getByText(/Nothing leaves this computer/)).toBeVisible();
+    await userEvent.click(input);
+    await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+    expect(onAsk).toHaveBeenCalledWith("When is the dentist");
+    expect(askPlace.take()).toBe("thisComputer");
+    await typeQuestion(input);
+    expect(screen.getByRole("radio", { name: "Online · api.example.com" })).toBeChecked();
+    await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+    expect(askPlace.take()).toBe("auto");
+  });
+
+  it("says why online is not available while paused and offers the way to change it", async () => {
+    const { input } = setup(
+      {},
+      onlineViewOn({ state: { type: "paused", pause: { type: "limit", until: "2026-12-01" } } }),
+    );
+    await typeQuestion(input);
+    await group();
+    expect(screen.getByRole("radio", { name: "Online · paused" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "This computer" })).toBeChecked();
+    expect(screen.getByText(/paused until Tuesday 1 December/)).toBeVisible();
+    expect(screen.getByRole("link", { name: "Change limit" })).toHaveAttribute(
+      "href",
+      "#/settings/online",
+    );
   });
 });

@@ -5,15 +5,20 @@ import { askRequests, useAskRequest } from "../../app/ask-request";
 import { hashHref } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { AnswerWhere } from "../../components/KeepAskBar/AnswerWhere";
+import { askPlace } from "../../components/KeepAskBar/askPlace";
+import { PlaceIcon } from "../../components/KeepAskBar/PlaceIcon";
 import { richText } from "../../components/PageLine/richText";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
-import type { AskPhase, MemoryView, Receipt } from "../../engine/bindings";
+import type { AskPhase, AskPlace, MemoryView, Receipt } from "../../engine/bindings";
 import { useAsk, useEngine, useStatus } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { useOnline } from "../online/useOnline";
 import { Actions } from "./Actions";
+import { AnswerMark, hasMark, spokenMark } from "./AnswerMark";
 import { AnswerText } from "./AnswerText";
 import styles from "./Ask.module.css";
 import { ReceiptCard, receiptMeta } from "./ReceiptCard";
@@ -56,6 +61,8 @@ export default function Ask() {
   const request = useAskRequest();
   const asking = useAsk();
   const { data: status } = useStatus();
+  const { data: online } = useOnline();
+  const host = online?.host ?? null;
   const stored = useRef(askSession.get()).current;
   const toCheck = useRef(
     new Set([
@@ -80,6 +87,7 @@ export default function Ask() {
   const [result, setResult] = useState("");
   const [keptAsNote, setKeptAsNote] = useState(false);
   const [followUp, setFollowUp] = useState("");
+  const [followPlace, setFollowPlace] = useState<AskPlace>("auto");
   const handled = useRef<number | null>(null);
   const announced = useRef<string | null>(null);
   const turns = useRef(stored.turns);
@@ -97,6 +105,20 @@ export default function Ask() {
     () => [...deltas].reverse().find((d) => d.etaSeconds !== null)?.etaSeconds ?? null,
     [deltas],
   );
+  const liveBy = useMemo(
+    () => [...deltas].reverse().find((d) => d.answeredBy)?.answeredBy ?? null,
+    [deltas],
+  );
+  const liveLeftOut = useMemo(
+    () => [...deltas].reverse().find((d) => d.leftOut)?.leftOut ?? null,
+    [deltas],
+  );
+  const liveSendId = useMemo(
+    () =>
+      [...deltas].reverse().find((d) => d.sendId !== undefined && d.sendId !== null)?.sendId ??
+      null,
+    [deltas],
+  );
   const live: Snapshot = useMemo(
     () => ({
       phase: asking.phase,
@@ -107,6 +129,9 @@ export default function Ask() {
       memoryIds: liveMemoryIds,
       eta: liveEta,
       failed: error !== null,
+      answeredBy: liveBy,
+      leftOut: liveLeftOut,
+      sendId: liveSendId,
     }),
     [
       asking.phase,
@@ -117,11 +142,17 @@ export default function Ask() {
       liveMemoryIds,
       liveEta,
       error,
+      liveBy,
+      liveLeftOut,
+      liveSendId,
     ],
   );
   // Coming back to an answer shows what was there; a new question shows the live one.
   const shown = restored ?? live;
   const { phase, text, receipts, near, found, memoryIds, eta } = shown;
+  const answeredBy = shown.answeredBy ?? null;
+  const leftOut = shown.leftOut ?? null;
+  const sendId = shown.sendId ?? null;
   const forgotten = extras.forgotten !== null;
 
   const { data: memories = [] } = useQuery({
@@ -157,10 +188,11 @@ export default function Ask() {
   };
 
   const start = useCallback(
-    (question: string, moveFocus = false) => {
+    (question: string, moveFocus = false, place: AskPlace = "auto", replace = false) => {
       const now = latest.current;
-      // A finished answer steps up into Earlier; one still being written is simply replaced.
-      if (now.current && (TERMINAL.has(now.shown.phase) || now.shown.failed)) {
+      // A finished answer steps up into Earlier; one still being written is simply replaced, and
+      // so is one asked again on this computer.
+      if (!replace && now.current && (TERMINAL.has(now.shown.phase) || now.shown.failed)) {
         const gone = now.extras.forgotten !== null;
         const turn: Turn = {
           key: ++turns.current,
@@ -182,7 +214,7 @@ export default function Ask() {
       setResult("");
       setKeptAsNote(false);
       announced.current = null;
-      void asking.ask(question);
+      void asking.ask(question, place);
     },
     [asking.ask],
   );
@@ -251,7 +283,8 @@ export default function Ask() {
     if (!request || handled.current === request.id) return;
     handled.current = request.id;
     const question = askRequests.take();
-    if (question) start(question);
+    const place = askPlace.take();
+    if (question) start(question, false, place);
   }, [request, start]);
 
   useEffect(() => {
@@ -260,12 +293,27 @@ export default function Ask() {
     const id = askId ?? "error";
     if (!done || announced.current === id) return;
     announced.current = id;
-    if (phase === "done") setAnnouncement(t("ask.announce.done", { answer: plain(text) }));
-    else if (phase === "notSure")
-      setAnnouncement(t("ask.announce.notSure", { count: near.length }));
+    const marked = hasMark(answeredBy);
+    if (phase === "done") {
+      setAnnouncement(
+        !marked
+          ? t("ask.announce.done", { answer: plain(text) })
+          : answeredBy.type === "online"
+            ? t("ask.announce.done.online", { host: answeredBy.host, answer: plain(text) })
+            : t("ask.announce.done.local", {
+                reason: spokenMark(answeredBy, host),
+                answer: plain(text),
+              }),
+      );
+    } else if (phase === "notSure")
+      setAnnouncement(
+        marked && answeredBy.type === "online"
+          ? t("ask.announce.notSure.online", { host: answeredBy.host, count: near.length })
+          : t("ask.announce.notSure", { count: near.length }),
+      );
     else if (phase === "nothing") setAnnouncement(t("ask.nothing.lead"));
     else setAnnouncement(t("notice.notReady.text"));
-  }, [phase, shown.failed, askId, current, restored, text, near.length]);
+  }, [phase, shown.failed, askId, current, restored, text, near.length, answeredBy, host]);
 
   const openReceipt = useCallback(
     (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
@@ -331,7 +379,9 @@ export default function Ask() {
     const question = followUp.trim();
     if (!question) return;
     setFollowUp("");
-    start(question);
+    const place = followPlace;
+    setFollowPlace("auto");
+    start(question, false, place);
   };
 
   const finished = phase === "done" && !forgotten;
@@ -339,6 +389,15 @@ export default function Ask() {
   const items = new Set(receipts.map((r) => r.itemId)).size;
   const showReceipts = receipts.length > 0 && (phase !== "waking" || showOriginals) && !forgotten;
   const internet = status?.sentMeasured === true && status.sentToInternetBytes === 0;
+  const marked = hasMark(answeredBy);
+  const markPhase = phase === "done" ? "done" : phase === "notSure" ? "notSure" : null;
+  const onlineNow =
+    phase === "askingOnline" || phase === "waitingOnline" || phase === "switchingToComputer";
+  const answeredOnline = marked && answeredBy.type === "online";
+  const markedCount = items > 0 ? items : memoryIds.length;
+  const askHere = () => {
+    if (current) start(current, false, "thisComputer", true);
+  };
   const memoriesHref = hashHref("/memories", { q: current });
 
   const onForgotten = (ids: string[]) => {
@@ -354,7 +413,7 @@ export default function Ask() {
     <ScreenSheet>
       <BackLink to="/today" label={t("screen.today.title")} />
       <div className={styles.column}>
-        {finished && items > 0 ? (
+        {finished && items > 0 && !marked ? (
           <p className={styles.provenance}>
             {t(internet ? "ask.provenance" : "ask.provenance.plain", { count: items })}
           </p>
@@ -392,6 +451,15 @@ export default function Ask() {
 
         {current ? (
           <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && !shown.failed}>
+            {marked && markPhase && !forgotten ? (
+              <AnswerMark
+                by={answeredBy}
+                phase={markPhase}
+                count={markedCount}
+                host={host}
+                sendId={sendId}
+              />
+            ) : null}
             <p className={styles.eyebrow}>{t("ask.eyebrow")}</p>
             <h1 ref={heading} tabIndex={-1} className={`t-page-title ${styles.question}`}>
               {t("ask.question", { question: current })}
@@ -431,11 +499,62 @@ export default function Ask() {
                 </div>
               ) : null}
 
-              {phase === "asking" ||
-              phase === "searching" ||
-              phase === "askingOnline" ||
-              phase === "waitingOnline" ||
-              phase === "switchingToComputer" ? (
+              {onlineNow ? (
+                <>
+                  <ul className={styles.phases} role="status">
+                    <li>
+                      <span aria-hidden="true" className={styles.phaseGlyph}>
+                        ✓
+                      </span>
+                      {t("ask.online.looked")}
+                    </li>
+                    {found !== null ? (
+                      <li>
+                        <span aria-hidden="true" className={styles.phaseGlyph}>
+                          ✓
+                        </span>
+                        {t("ask.online.found", { count: found })}
+                      </li>
+                    ) : null}
+                    {phase === "switchingToComputer" ? (
+                      <>
+                        <li>
+                          <span aria-hidden="true" className={styles.phaseGlyph}>
+                            –
+                          </span>
+                          {t("ask.online.slow")}
+                        </li>
+                        <li data-now="true">
+                          <span aria-hidden="true" className={styles.phaseGlyph}>
+                            <span className={styles.dot} />
+                          </span>
+                          {t("ask.online.switching")}
+                        </li>
+                      </>
+                    ) : (
+                      <li data-now="true">
+                        <span aria-hidden="true" className={styles.phaseGlyph}>
+                          <span className={styles.dot} />
+                        </span>
+                        {host ? t("ask.online.asking", { host }) : t("ask.online.asking.unknown")}
+                      </li>
+                    )}
+                  </ul>
+                  {phase === "waitingOnline" ? (
+                    <div className={styles.waitNote}>
+                      <span className={styles.waitText}>
+                        <span className={styles.waitTitle}>{t("ask.online.waiting.title")}</span>
+                        <span className={styles.waitHint}>{t("ask.online.waiting.body")}</span>
+                      </span>
+                      <Button variant="primary" onClick={askHere}>
+                        {t("ask.online.waiting.button")}
+                      </Button>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
+
+              {phase === "asking" || phase === "searching" ? (
                 <p className={styles.searching}>
                   <span className={styles.dot} aria-hidden="true" />
                   {t("ask.searching")}
@@ -474,7 +593,11 @@ export default function Ask() {
 
               {phase === "notSure" ? (
                 <>
-                  <p className={styles.lead}>{t("ask.notSure.lead", { count: near.length })}</p>
+                  <p className={styles.lead}>
+                    {answeredOnline
+                      ? t("ask.notSure.online.lead", { count: near.length })
+                      : t("ask.notSure.lead", { count: near.length })}
+                  </p>
                   <ul className={styles.near}>
                     {near.map((match) => (
                       <li key={`${match.receipt.itemId}-${match.text}`}>
@@ -489,9 +612,25 @@ export default function Ask() {
                       </li>
                     ))}
                   </ul>
-                  <a className={styles.linkAnchor} href={memoriesHref}>
-                    {t("ask.notSure.search")}
-                  </a>
+                  {answeredOnline ? (
+                    <div className={styles.buttons}>
+                      <Button variant="primary" onClick={askHere}>
+                        {t("ask.leftOut.button")}
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          window.location.hash = memoriesHref;
+                        }}
+                      >
+                        {t("ask.notSure.search")}
+                      </Button>
+                    </div>
+                  ) : (
+                    <a className={styles.linkAnchor} href={memoriesHref}>
+                      {t("ask.notSure.search")}
+                    </a>
+                  )}
                 </>
               ) : null}
 
@@ -556,6 +695,26 @@ export default function Ask() {
                 </div>
               ) : null}
 
+              {leftOut && (phase === "done" || phase === "notSure") && !forgotten ? (
+                <div className={styles.leftOut}>
+                  <span className={styles.leftOutText}>
+                    <PlaceIcon place="computer" size={16} />
+                    {t(
+                      leftOut === "private"
+                        ? "ask.leftOut.private"
+                        : leftOut === "sensitive"
+                          ? "ask.leftOut.sensitive"
+                          : "ask.leftOut.both",
+                    )}
+                  </span>
+                  {phase === "done" ? (
+                    <Button variant="secondary" onClick={askHere}>
+                      {t("ask.leftOut.button")}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
               {phase === "done" ? (
                 <Actions
                   memories={forgotten ? [] : memories}
@@ -581,6 +740,7 @@ export default function Ask() {
       </div>
 
       <form className={styles.followUp} onSubmit={submitFollowUp}>
+        <AnswerWhere place={followPlace} onPlace={setFollowPlace} className={styles.followWhere} />
         <div className={styles.followField}>
           <input
             className={styles.followInput}

@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AskDelta, AskPhase, ItemFilter, NearMatch, Receipt } from "./bindings";
+import type { AskDelta, AskPhase, AskPlace, ItemFilter, NearMatch, Receipt } from "./bindings";
 import type { EngineClient, EngineEventName, EngineEvents } from "./client";
 
 /** Which cached queries an engine event makes stale. */
@@ -157,7 +157,7 @@ export type AskState = "idle" | "asking" | AskPhase;
 
 export interface AskResult {
   /** Resolves with the ask id, or null when the engine refused or a newer question took over. */
-  ask: (question: string) => Promise<string | null>;
+  ask: (question: string, place?: AskPlace) => Promise<string | null>;
   /** Set when the engine could not take the question; the screen says so in words. */
   error: Error | null;
   askId: string | null;
@@ -203,7 +203,7 @@ export function useAsk(): AskResult {
   );
 
   const ask = useCallback(
-    async (question: string) => {
+    async (question: string, place?: AskPlace) => {
       const mine = ++call.current;
       // One question at a time: the one on screen is stopped before the next starts.
       const previous = active.current;
@@ -216,7 +216,7 @@ export function useAsk(): AskResult {
       setAskId(null);
       let id: string;
       try {
-        id = await engine.ask(question);
+        id = await engine.ask(question, place);
       } catch (failure) {
         if (mine === call.current) {
           setAsking(false);

@@ -1,9 +1,12 @@
 import { type KeyboardEvent, type Ref, useId, useState } from "react";
 import { t } from "../../copy/t";
+import type { AskPlace } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { usePlatform } from "../../platform/context";
 import { Icon } from "../Icon/Icon";
 import { useToast } from "../Toast/Toast";
+import { AnswerWhere } from "./AnswerWhere";
+import { askPlace } from "./askPlace";
 import styles from "./KeepAskBar.module.css";
 
 export type Verb = "keep" | "ask";
@@ -59,6 +62,7 @@ export function KeepAskBar({
   inputRef,
 }: KeepAskBarProps) {
   const [text, setText] = useState("");
+  const [place, setPlace] = useState<AskPlace>("auto");
   const hintId = useId();
   const slashId = useId();
   const whyId = useId();
@@ -70,10 +74,15 @@ export function KeepAskBar({
     const value = text.trim();
     if (!value) return;
     setText("");
+    if (as === "ask") {
+      askPlace.set(place);
+      setPlace("auto");
+    }
     try {
       await (as === "keep" ? onKeep(value) : onAsk(value));
     } catch {
       // Nothing is lost: what was typed comes back unless the person has already started again.
+      askPlace.take();
       setText((current) => (current === "" ? value : current));
     }
   };
@@ -118,6 +127,7 @@ export function KeepAskBar({
       data-placement={placement}
       data-verb={verb}
     >
+      {hasText ? <AnswerWhere place={place} onPlace={setPlace} className={styles.where} /> : null}
       <div className={styles.field}>
         <textarea
           ref={inputRef}

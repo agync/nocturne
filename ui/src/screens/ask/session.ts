@@ -1,4 +1,4 @@
-import type { NearMatch, Receipt } from "../../engine/bindings";
+import type { AnsweredBy, LeftOut, NearMatch, Receipt } from "../../engine/bindings";
 import type { AskState } from "../../engine/context";
 
 /** Everything the screen shows about one answer, so it can be drawn again without asking again. */
@@ -11,6 +11,12 @@ export interface Snapshot {
   memoryIds: string[];
   eta: number | null;
   failed: boolean;
+  /** Where the answer was written, once the engine says. Absent when Online answers is off. */
+  answeredBy?: AnsweredBy | null;
+  /** What was kept back from an online question. */
+  leftOut?: LeftOut | null;
+  /** The sent log entry for an online question. */
+  sendId?: number | null;
 }
 
 /** What the person did to the answer on screen. */

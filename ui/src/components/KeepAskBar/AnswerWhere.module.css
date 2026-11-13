@@ -1,0 +1,57 @@
+.where {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2) var(--s-3);
+  min-width: 0;
+}
+
+.label,
+.hint {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.38 var(--font-sans);
+}
+
+.hint a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.group {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--raised);
+}
+
+.option {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink2);
+  font: 500 0.8125rem / 1 var(--font-sans);
+  cursor: pointer;
+}
+
+.option[data-checked="true"] {
+  background: var(--ink);
+  color: var(--sheet);
+}
+
+.option[data-off="true"] {
+  color: var(--ink3);
+  cursor: default;
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
