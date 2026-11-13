@@ -3,6 +3,9 @@
 //! Active, fading and unconfirmed memories come first; let-go memories only fill what is left,
 //! flagged. Unconfirmed hits carry `status: unconfirmed` so the answer layer never states them
 //! as true. Only current memories are searched. Searching does not count as use.
+//!
+//! A question about who someone is ("Who is Leo?") brings the memories that say how that person
+//! is related to the person asking to the front, whatever the ranking found.
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -12,9 +15,9 @@ use rusqlite::Connection;
 
 use crate::Engine;
 use crate::error::Result;
-use crate::rows::{load_mem, mem_view};
+use crate::rows::{load_mem, mem_view, query_mems};
 use crate::types::Hit;
-use crate::util::fts_or;
+use crate::util::{fts_or, key_of};
 
 /// Reciprocal rank fusion constant.
 const RRF_K: f32 = 60.0;
@@ -22,6 +25,19 @@ const RRF_K: f32 = 60.0;
 const POOL: usize = 60;
 /// Vectors less similar than this to the query are not hits at all.
 const MIN_COSINE: f32 = 0.25;
+/// Predicates that say how someone is related to the person or to someone else: `knows`, and
+/// the words a mind writes when it reaches for one of its own.
+const RELATION_PREDICATES: [&str; 5] = ["knows", "relationship", "relation", "related_to", "is"];
+/// How a question about who someone is can start.
+const WHO_IS: [&str; 4] = ["who is ", "who's ", "who was ", "who are "];
+
+/// The name in a question about who someone is, as a subject key: "Who is Leo?" gives "leo".
+fn who_is(query: &str) -> Option<String> {
+    let q = query.trim().to_lowercase();
+    let rest = WHO_IS.iter().find_map(|p| q.strip_prefix(p))?;
+    let name = key_of(rest.trim_end_matches(['?', '.', '!', ' ']));
+    (!name.is_empty() && name != "me").then_some(name)
+}
 
 /// All current vectors, normalised, held in memory so a search is one pass over them.
 pub(crate) struct VecIndex {
@@ -164,10 +180,50 @@ impl Engine {
                     break;
                 }
             }
+            if let Some(name) = who_is(query) {
+                let marks = vec!["?"; RELATION_PREDICATES.len()].join(", ");
+                let mut params: Vec<&str> = vec![&name];
+                params.extend(RELATION_PREDICATES);
+                let related = query_mems(
+                    conn,
+                    &format!(
+                        "m.subject_key = ?1 AND m.predicate IN ({marks}) \
+                         AND m.superseded_at IS NULL AND m.forgetting = 0 \
+                         AND m.status != 'letGo' ORDER BY m.recorded_at DESC, m.id"
+                    ),
+                    rusqlite::params_from_iter(params),
+                )?;
+                for (at, row) in related.iter().enumerate() {
+                    let found = live.iter().position(|h| h.memory.id == row.id);
+                    let hit = match found {
+                        Some(i) => live.remove(i),
+                        None => Hit {
+                            memory: mem_view(conn, row)?,
+                            score: 0.0,
+                            let_go: false,
+                        },
+                    };
+                    live.insert(at, hit);
+                }
+            }
             live.truncate(k);
             let room = k - live.len();
             live.extend(let_go.into_iter().take(room));
             Ok(live)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::who_is;
+
+    #[test]
+    fn a_question_about_who_someone_is_names_them() {
+        assert_eq!(who_is("Who is Leo?").as_deref(), Some("leo"));
+        assert_eq!(who_is("  who's Mrs Carver ").as_deref(), Some("mrs carver"));
+        assert_eq!(who_is("Who was the plumber?").as_deref(), Some("plumber"));
+        assert_eq!(who_is("When is Leo's trip?"), None);
+        assert_eq!(who_is("Who is?"), None);
     }
 }

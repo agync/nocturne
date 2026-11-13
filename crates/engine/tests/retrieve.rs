@@ -356,3 +356,53 @@ fn hash_embedding_384(text: &str) -> Vec<f32> {
     v.iter_mut().for_each(|x| *x /= n.max(1e-6));
     v
 }
+
+#[test]
+fn who_someone_is_comes_first_when_asked_who_they_are() {
+    let f = fixture();
+    // Memories that say Leo more often outrank the one that says who he is.
+    for (i, (object, sentence)) in [
+        (
+            "swimming",
+            "Leo swims; Leo likes it and Leo's coach is Dee.",
+        ),
+        ("trip", "Leo's trip: Leo needs a packed lunch, Leo says."),
+        ("piano", "Leo plays piano and Leo practises when Leo can."),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        learn(
+            &f.engine,
+            &format!("leo note {i}"),
+            cand("Leo", Predicate::Prefers, object, sentence),
+        );
+    }
+    let (_, son) = learn(
+        &f.engine,
+        "Leo is my son",
+        cand("Leo", Predicate::Knows, "my son", "Leo is my son."),
+    );
+    let (_, teacher) = learn(
+        &f.engine,
+        "Mrs Carver is Leo's teacher",
+        cand(
+            "Mrs Carver",
+            Predicate::Knows,
+            "Leo's teacher",
+            "Mrs Carver is Leo's teacher.",
+        ),
+    );
+
+    let hits = f.engine.retrieve("Who is Leo?", None, 2).unwrap();
+    assert_eq!(hits.len(), 2);
+    assert_eq!(hits[0].memory.id, son, "the relationship leads");
+    assert!(hits.iter().all(|h| h.memory.id != teacher));
+
+    let hits = f.engine.retrieve("who's mrs carver", None, 3).unwrap();
+    assert_eq!(hits[0].memory.id, teacher);
+
+    // Any other question about Leo is ranked as before.
+    let hits = f.engine.retrieve("What does Leo need?", None, 1).unwrap();
+    assert_ne!(hits[0].memory.id, son);
+}
