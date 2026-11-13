@@ -680,7 +680,7 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         return err(404, "model_not_found", "model is not registered");
     }
     if !inner.downloaded.contains(&name) {
-        return err(400, "lemond_offline", "model is not downloaded");
+        return err(400, "model_not_downloaded", "model is not downloaded");
     }
     inner.loaded = Some(name.clone());
     Json(json!({"status": "success", "model_name": name})).into_response()
@@ -741,7 +741,10 @@ async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         .into_response();
     }
     let cut = spec["cut"] == true;
-    let delay = Duration::from_millis(spec["delay_ms"].as_u64().unwrap_or(0));
+    let mut delay = Duration::from_millis(spec["delay_ms"].as_u64().unwrap_or(0));
+    if cut {
+        delay = delay.max(Duration::from_millis(30));
+    }
     let reasoning = spec["reasoning"].as_str().map(String::from);
     let stream = paced(sse_items(deltas, cut, reasoning), delay);
     let mut resp = Response::new(Body::from_stream(stream));

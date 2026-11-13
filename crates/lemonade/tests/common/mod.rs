@@ -113,3 +113,118 @@ pub fn processes_mentioning(needle: &str) -> Vec<u32> {
     }
     out
 }
+
+/// A fake engine run directly, without a supervisor, with the key `k3y`.
+pub struct Fake {
+    pub child: std::process::Child,
+    pub port: u16,
+    pub http: reqwest::Client,
+    pub dirs: Dirs,
+    pub client: nocturne_lemonade::Client,
+    _tmp: tempfile::TempDir,
+}
+
+impl Fake {
+    pub fn start(mode: Option<&str>) -> Fake {
+        let tmp = tempfile::tempdir().unwrap();
+        let dirs = dirs(tmp.path());
+        if let Some(m) = mode {
+            set_mode(&dirs, m);
+        }
+        let port = free_port();
+        let child = std::process::Command::new(FAKE)
+            .arg(dirs.cache())
+            .arg(dirs.config())
+            .args(["--port", &port.to_string(), "--host", "127.0.0.1"])
+            .args(["--no-broadcast", "--watchdog-fd", "0"])
+            .env_clear()
+            .env("LEMONADE_API_KEY", "k3y")
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        Fake {
+            child,
+            port,
+            http: reqwest::Client::new(),
+            dirs,
+            client: nocturne_lemonade::Client::new(port, "k3y"),
+            _tmp: tmp,
+        }
+    }
+
+    pub fn url(&self, path: &str) -> String {
+        format!("http://127.0.0.1:{}{path}", self.port)
+    }
+
+    pub async fn wait_live(&self) {
+        for _ in 0..100 {
+            if let Ok(r) = self.http.get(self.url("/live")).send().await
+                && r.status().is_success()
+            {
+                return;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!("fake did not come up");
+    }
+
+    pub async fn started(mode: Option<&str>) -> Fake {
+        let fake = Fake::start(mode);
+        fake.wait_live().await;
+        fake
+    }
+
+    pub fn wait_exit(&mut self, within: Duration) -> Option<std::process::ExitStatus> {
+        let start = Instant::now();
+        while start.elapsed() < within {
+            if let Some(s) = self.child.try_wait().unwrap() {
+                return Some(s);
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        None
+    }
+
+    /// Authenticated GET of a `/fake/*` path, as JSON.
+    pub async fn peek(&self, path: &str) -> serde_json::Value {
+        self.http
+            .get(self.url(path))
+            .bearer_auth("k3y")
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap()
+    }
+
+    /// Queues what the fake's next chat calls answer.
+    pub async fn script(&self, chat: serde_json::Value) {
+        self.http
+            .post(self.url("/fake/script"))
+            .bearer_auth("k3y")
+            .json(&serde_json::json!({ "chat": chat }))
+            .send()
+            .await
+            .unwrap();
+    }
+
+    /// Requests the fake has seen on `path`, oldest first.
+    pub async fn seen(&self, path: &str) -> Vec<serde_json::Value> {
+        self.peek("/fake/requests")
+            .await
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|r| r["path"] == path)
+            .cloned()
+            .collect()
+    }
+}
+
+impl Drop for Fake {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
