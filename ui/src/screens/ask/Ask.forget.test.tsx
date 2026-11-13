@@ -107,12 +107,55 @@ describe("forgetting what an answer used", () => {
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 1 memory$/ }));
     await within(dialog).findByText("Gone.");
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
-    const said = await screen.findByText(/^Forgotten: Leo’s swimming is on Mondays/, {
+    const said = await screen.findByText(/^Forgotten 1 of 2 things\./, {
       selector: "p[role=status]",
     });
     expect(said).toHaveTextContent("The answer that used it is hidden. Ask again for a fresh one.");
     expect(document.body).not.toHaveTextContent(/Leo swims on Mondays with/);
+    expect(document.body).not.toHaveTextContent(/Leo’s swimming is on Mondays/);
+    expect(JSON.stringify(askSession.get())).not.toMatch(/Leo’s swimming is on Mondays/);
+    expect(JSON.stringify(askSession.get())).not.toMatch(/Leo swims/);
     const earlier = screen.getByRole("region", { name: "Earlier" });
-    expect(within(earlier).getByText("Forgotten. It is no longer kept.")).toBeInTheDocument();
+    expect(within(earlier).getByText(/^Forgotten 1 of 2 things\./)).toBeInTheDocument();
+  });
+
+  it("a restored conversation drops turns whose memories were forgotten elsewhere", async () => {
+    const engine = new TwoMemories();
+    const swim = (await engine.listMemories(filter)).find((m) => m.id === "mem-swim");
+    if (!swim) throw new Error("seed");
+    const snapshot = {
+      phase: "done" as const,
+      text: "Leo swims **on Mondays**.",
+      receipts: swim.receipts,
+      near: [],
+      found: 1,
+      memoryIds: ["mem-gone"],
+      eta: null,
+      failed: false,
+    };
+    askSession.set({
+      current: {
+        question: "When is Leo’s swimming?",
+        snapshot,
+        extras: { forgotten: null, corrected: [] },
+      },
+      earlier: [
+        {
+          key: 1,
+          question: "Who coaches?",
+          text: "Coach Sam coaches Leo.",
+          summary: "Coach Sam coaches Leo.",
+          receipts: swim.receipts,
+          memoryIds: ["mem-gone", "mem-coach"],
+        },
+      ],
+      turns: 1,
+    });
+    renderApp({ hash: "#/ask", engine });
+    const earlier = await screen.findByRole("region", { name: "Earlier" });
+    await waitFor(() => expect(earlier).not.toHaveTextContent(/Coach Sam coaches/));
+    expect(earlier).toHaveTextContent(/Forgotten 1 of 2 things/);
+    await waitFor(() => expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/));
+    expect(JSON.stringify(askSession.get())).not.toMatch(/Leo swims|Coach Sam coaches/);
   });
 });

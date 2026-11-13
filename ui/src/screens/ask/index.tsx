@@ -29,6 +29,23 @@ const same = (a: Receipt, b: Receipt) =>
 
 const plain = (text: string) => text.split("**").join("");
 
+/** What stands in for an answer after some of what it used was forgotten: counts, never the words. */
+const forgetNote = (gone: number, total: number) =>
+  gone >= total ? t("ask.forget.done") : t("ask.forget.some", { gone, total });
+
+/** A turn that used something now forgotten keeps its question and loses its answer. */
+const scrubbed = (turn: Turn, gone: Set<string>): Turn => {
+  const hit = turn.memoryIds.filter((id) => gone.has(id)).length;
+  if (hit === 0) return turn;
+  return {
+    ...turn,
+    text: "",
+    receipts: [],
+    memoryIds: [],
+    summary: forgetNote(hit, turn.memoryIds.length),
+  };
+};
+
 export default function Ask() {
   const engine = useEngine();
   const platform = usePlatform();
@@ -113,7 +130,7 @@ export default function Ask() {
   latest.current = { current, shown, extras };
 
   const summaryOf = (now: typeof latest.current): string => {
-    if (now.extras.forgotten) return t("ask.forget.done");
+    if (now.extras.forgotten) return now.extras.forgotten;
     switch (now.shown.phase) {
       case "done":
         return plain(now.shown.text);
@@ -164,12 +181,42 @@ export default function Ask() {
     }
   }, [current]);
 
+  // Something forgotten on another screen must not come back with a restored conversation.
+  useEffect(() => {
+    const ids = new Set([
+      ...stored.earlier.flatMap((turn) => turn.memoryIds),
+      ...(stored.current && stored.current.extras.forgotten === null
+        ? stored.current.snapshot.memoryIds
+        : []),
+    ]);
+    if (ids.size === 0) return;
+    let cancelled = false;
+    engine
+      .listMemories({ entityId: null, itemId: null, status: null, query: null, limit: null })
+      .then((all) => {
+        const present = new Set(all.map((m) => m.id));
+        const gone = new Set([...ids].filter((id) => !present.has(id)));
+        if (cancelled || gone.size === 0) return;
+        setEarlier((turns) => turns.map((turn) => scrubbed(turn, gone)));
+        const own = stored.current?.snapshot.memoryIds ?? [];
+        const hit = own.filter((id) => gone.has(id)).length;
+        if (hit > 0) setExtras((e) => ({ ...e, forgotten: forgetNote(hit, own.length) }));
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, stored]);
+
   // What is on screen is what comes back after a receipt is opened.
   useEffect(() => {
     if (!current) return;
     const finished = TERMINAL.has(shown.phase) || shown.failed;
+    // Once something it used is forgotten, the answer itself is not kept.
+    const kept: Snapshot =
+      extras.forgotten === null ? shown : { ...shown, text: "", receipts: [], memoryIds: [] };
     askSession.set({
-      current: finished ? { question: current, snapshot: shown, extras } : null,
+      current: finished ? { question: current, snapshot: kept, extras } : null,
       earlier,
       turns: turns.current,
     });
@@ -269,26 +316,13 @@ export default function Ask() {
   const internet = status?.sentMeasured === true && status.sentToInternetBytes === 0;
   const memoriesHref = hashHref("/memories", { q: current });
 
-  const onForgotten = (ids: string[], sentences: string[]) => {
-    const everything = ids.length >= memoryIds.length;
-    setExtras((e) => ({
-      ...e,
-      forgotten: everything
-        ? t("ask.forget.done")
-        : t("ask.forget.some", { sentences: sentences.join(" ") }),
-    }));
+  const onForgotten = (ids: string[]) => {
+    const note = forgetNote(memoryIds.filter((id) => ids.includes(id)).length, memoryIds.length);
+    setExtras((e) => ({ ...e, forgotten: note }));
     // The forgotten claim must not linger in what a screen reader holds or in earlier turns.
     setAnnouncement("");
-    setEarlier((all) =>
-      all.map((turn) =>
-        turn.memoryIds.some((id) => ids.includes(id))
-          ? { ...turn, text: "", receipts: [], memoryIds: [], summary: t("ask.forget.done") }
-          : turn,
-      ),
-    );
-    setResult(
-      everything ? t("ask.forget.done") : t("ask.forget.some", { sentences: sentences.join(" ") }),
-    );
+    setEarlier((all) => all.map((turn) => scrubbed(turn, new Set(ids))));
+    setResult(note);
   };
 
   return (

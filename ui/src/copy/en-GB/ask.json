@@ -48,6 +48,6 @@
   "ask.example.1": "When is the dentist?",
   "ask.example.2": "What did we decide about half term?",
   "ask.example.3": "What is Gran’s new number?",
-  "ask.forget.some": "Forgotten: {sentences} The answer that used it is hidden. Ask again for a fresh one.",
+  "ask.forget.some": "Forgotten {gone} of {total} things. The answer that used {gone, plural, one {it} other {them}} is hidden. Ask again for a fresh one.",
   "ask.corrected": "Corrected: {sentence}"
 }

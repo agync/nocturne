@@ -17,7 +17,7 @@ interface ActionsProps {
   /** The person gave the right sentence for a memory the answer used. */
   onCorrected: (sentence: string) => void;
   /** These memories were forgotten: the answer that used them no longer stands. */
-  onForgotten: (ids: string[], sentences: string[]) => void;
+  onForgotten: (ids: string[]) => void;
   /** After forgetting there is nothing left to do but read the result. */
   showButtons: boolean;
   resultRef: RefObject<HTMLParagraphElement | null>;
@@ -233,10 +233,7 @@ export function Actions({
             // Called once, as soon as the engine has forgotten; the dialog says so until closed.
             forgotten.current = true;
             const ids = forgetting;
-            onForgotten(
-              ids,
-              memories.filter((m) => ids.includes(m.id)).map((m) => m.sentence),
-            );
+            onForgotten(ids);
             for (const key of ["askMemories", "needsYou", "status", "page", "pages", "items"]) {
               void client.invalidateQueries({ queryKey: [key] });
             }
