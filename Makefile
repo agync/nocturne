@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -65,6 +65,11 @@ ui/fmt: ui/node_modules ## Format the interface
 
 scripts/test: ui/node_modules ## Unit-test the packaging scripts
 	python3 -I -m unittest discover -s scripts -p 'test_*.py'
+
+##@ Packaging
+
+package: ui/node_modules ## Build the Linux packages (AppImage, deb, rpm) with the private engine
+	scripts/package.sh
 
 ##@ Lemonade
 

@@ -1,0 +1,38 @@
+{
+  "mainBinaryName": "nocturne",
+  "bundle": {
+    "active": true,
+    "targets": [
+      "appimage",
+      "deb",
+      "rpm"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Remembers your day and hands you one page each morning.",
+    "longDescription": "Nocturne is a private desktop app that remembers your day, tidies its memory overnight, and hands you one page each morning. Everything stays on this computer.",
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../target/package/lemonade/linux-x86_64/": "lemonade/",
+      "../target/package/notices/": "notices/",
+      "../LICENSE": "LICENSE"
+    },
+    "linux": {
+      "deb": {
+        "depends": [
+          "libayatana-appindicator3-1",
+          "libssl3",
+          "libzstd1",
+          "libdrm-amdgpu1"
+        ]
+      },
+      "rpm": {
+        "depends": [
+          "libayatana-appindicator-gtk3",
+          "openssl-libs",
+          "libzstd",
+          "libdrm"
+        ]
+      }
+    }
+  }
+}
