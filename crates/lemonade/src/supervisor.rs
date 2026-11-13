@@ -503,6 +503,12 @@ impl Actor {
                 return Err(Launch::Retry(format!("exited early with {status}")));
             }
             if probe.live().await.is_ok() {
+                // The key check comes first so that the request carrying the right key, which an
+                // engine takes as the sign it is in use, is the last one made here.
+                let wrong = Client::new(port, "not-the-key");
+                if wrong.health().await != Err(RuntimeError::Unauthorized) {
+                    return Err(Launch::Retry("the engine does not enforce its key".into()));
+                }
                 match probe.health().await {
                     Ok(h) => {
                         if h.websocket_port != Some(ws_port) {
@@ -510,12 +516,6 @@ impl Actor {
                                 "the engine reports websocket port {:?}, not {ws_port}",
                                 h.websocket_port
                             )));
-                        }
-                        let wrong = Client::new(port, "not-the-key");
-                        if wrong.health().await != Err(RuntimeError::Unauthorized) {
-                            return Err(Launch::Retry(
-                                "the engine does not enforce its key".into(),
-                            ));
                         }
                         return Ok(h.version);
                     }

@@ -255,6 +255,19 @@ pub fn launch_count(dirs: &Dirs) -> u64 {
     panic!("no launch count");
 }
 
+/// When the fake launched and crashed, in order, as wall-clock milliseconds. Written by the engine
+/// itself, so how long a restart took does not depend on when a test got to look.
+pub fn timeline(dirs: &Dirs) -> Vec<(String, u128)> {
+    std::fs::read_to_string(dirs.cache().join("fake-timeline"))
+        .unwrap_or_default()
+        .lines()
+        .filter_map(|l| {
+            let (what, ms) = l.split_once(' ')?;
+            Some((what.to_string(), ms.parse().ok()?))
+        })
+        .collect()
+}
+
 /// The launch count once it has held still for a while.
 pub fn settled_launch_count(dirs: &Dirs) -> u64 {
     let mut last = launch_count(dirs);

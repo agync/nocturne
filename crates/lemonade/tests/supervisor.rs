@@ -184,34 +184,46 @@ async fn a_crash_loop_backs_off_then_fails_after_three_restarts() {
     let begun = Instant::now();
     let sup = start(&dirs, Some("crash-after-ms=150")).await;
     let mut rx = sup.state();
-    let mut gaps = Vec::new();
-    let mut restarting_at: Option<Instant> = None;
-    let failed = loop {
-        let state = rx.borrow_and_update().clone();
-        match state {
-            RuntimeState::Restarting { .. } => restarting_at = Some(Instant::now()),
-            RuntimeState::Ready { .. } => {
-                if let Some(t) = restarting_at.take() {
-                    gaps.push(t.elapsed());
-                }
-            }
-            RuntimeState::Failed { reason } => break reason,
-            _ => {}
-        }
-        tokio::time::timeout(Duration::from_secs(10), rx.changed())
-            .await
-            .expect("no progress")
-            .unwrap();
+    let failed = match wait_state(
+        &mut rx,
+        |s| matches!(s, RuntimeState::Failed { .. }),
+        Duration::from_secs(60),
+    )
+    .await
+    {
+        RuntimeState::Failed { reason } => reason,
+        other => panic!("{other:?}"),
     };
     assert!(failed.contains("4 times"), "{failed}");
     assert_eq!(sup.restarts(), 3);
-    assert_eq!(gaps.len(), 3, "{gaps:?}");
-    for (i, gap) in gaps.iter().enumerate() {
-        let floor = Duration::from_millis(100 * 2u64.pow(i as u32));
+    // How long each restart waited is read from the engine's own record of when it died and when
+    // the next one began: states seen from here can be missed or late on a busy machine.
+    let events = common::timeline(&dirs);
+    let kinds: Vec<&str> = events.iter().map(|(k, _)| k.as_str()).collect();
+    assert_eq!(
+        kinds,
+        [
+            "launch", "crash", "launch", "crash", "launch", "crash", "launch", "crash"
+        ],
+        "{events:?}"
+    );
+    let at = |kind: &str| -> Vec<u128> {
+        events
+            .iter()
+            .filter(|(k, _)| k == kind)
+            .map(|(_, ms)| *ms)
+            .collect()
+    };
+    let (launches, crashes) = (at("launch"), at("crash"));
+    for i in 0..3 {
+        let died = crashes[i];
+        let relaunched = launches[i + 1];
+        let floor = 100 * 2u128.pow(i as u32);
         assert!(
-            *gap >= floor,
-            "restart {} came after {gap:?}, wanted {floor:?}",
-            i + 1
+            relaunched >= died + floor,
+            "restart {} came {} ms after the crash, wanted {floor}",
+            i + 1,
+            relaunched.saturating_sub(died)
         );
     }
     assert!(begun.elapsed() >= Duration::from_millis(700));

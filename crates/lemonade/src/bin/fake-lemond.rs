@@ -365,6 +365,8 @@ async fn main() {
         let _ = std::fs::rename(&staged, &counter_path);
     }
 
+    note_time(&cache, "launch");
+
     if let Some(ms) = modes
         .get("slow-start-ms")
         .and_then(|v| v.parse::<u64>().ok())
@@ -534,6 +536,22 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
         .await
 }
 
+/// Appends `what` and the wall-clock time in milliseconds to `fake-timeline`, so a test can tell
+/// how long a restart took without watching it from outside.
+fn note_time(cache: &Path, what: &str) {
+    use std::io::Write;
+    let ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis());
+    if let Ok(mut file) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(cache.join("fake-timeline"))
+    {
+        let _ = writeln!(file, "{what} {ms}");
+    }
+}
+
 async fn health(State(app): State<Shared>) -> Json<Value> {
     let crash = app
         .crash_ms
@@ -545,6 +563,7 @@ async fn health(State(app): State<Shared>) -> Json<Value> {
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(ms)).await;
             app.persist();
+            note_time(&app.cache, "crash");
             std::process::exit(1);
         });
     }
