@@ -264,9 +264,13 @@ fn apply_one(
     let same_date = |e: &MemRow| {
         matches!(predicate.as_str(), "due" | "scheduled") && due.is_some() && e.due == due
     };
-    let matched = current
-        .iter()
-        .find(|e| e.object_key == object_key || same_date(e));
+    // A date-only match (same due date, different words) is a convenience for trusted items
+    // agreeing with settled memories. It never matches an unconfirmed memory, so it can never
+    // promote one: promotion needs the same object from a trusted independent item.
+    let matched = current.iter().find(|e| {
+        e.object_key == object_key
+            || (item.trusted && e.status != MemoryStatus::Unconfirmed && same_date(e))
+    });
 
     if let Some(m) = matched {
         tx.execute(
@@ -275,8 +279,13 @@ fn apply_one(
         )?;
         touched.insert(m.id.clone());
         if relinked.contains(m.id.as_str()) {
-            // The same item read again: refresh, do not count it as a second voice.
-            if !m.confirmed {
+            // The same item read again: refresh, do not count it as a second voice. An untrusted
+            // re-read never rewrites a memory that trusted sources support; it may only refine
+            // an unconfirmed memory it alone supports. (`m.sources` was counted after this
+            // item's link was removed, so 0 means this item is the only source.)
+            let may_refresh =
+                item.trusted || (m.status == MemoryStatus::Unconfirmed && m.sources == 0);
+            if !m.confirmed && may_refresh {
                 tx.execute(
                     "UPDATE memories SET sentence = ?2, confidence = ?3, valid_from = ?4, \
                      valid_to = ?5, due = ?6 WHERE id = ?1",
@@ -422,6 +431,122 @@ fn apply_one(
     Ok(())
 }
 
+/// The entries waiting on the person, as of `today` (local).
+pub(crate) fn needs_you_on(
+    conn: &rusqlite::Connection,
+    today: jiff::civil::Date,
+) -> Result<Vec<NeedsYouEntry>> {
+    let horizon = today
+        .checked_add(jiff::Span::new().days(14))
+        .map_err(Error::from)?
+        .to_string();
+    let mut out: Vec<NeedsYouEntry> = Vec::new();
+
+    let dated = query_mems(
+        conn,
+        "m.predicate = 'due' AND m.superseded_at IS NULL AND m.done = 0 \
+         AND m.status IN ('active', 'fading') \
+         AND COALESCE(m.due, m.valid_from) IS NOT NULL \
+         AND COALESCE(m.due, m.valid_from) <= ?1 \
+         ORDER BY COALESCE(m.due, m.valid_from), m.id",
+        [&horizon],
+    )?;
+    for m in dated {
+        let due = m
+            .due
+            .clone()
+            .or_else(|| m.valid_from.clone())
+            .unwrap_or_default();
+        out.push(NeedsYouEntry::Due {
+            memory: mem_view(conn, &m)?,
+            due,
+            done: false,
+        });
+    }
+
+    let promises = query_mems(
+        conn,
+        "m.predicate = 'promised' AND m.superseded_at IS NULL AND m.done = 0 \
+         AND m.status IN ('active', 'fading') \
+         AND (COALESCE(m.due, m.valid_from) IS NULL OR COALESCE(m.due, m.valid_from) <= ?1) \
+         ORDER BY COALESCE(m.due, m.valid_from) IS NULL, COALESCE(m.due, m.valid_from), \
+         m.recorded_at, m.id",
+        [&horizon],
+    )?;
+    for m in promises {
+        out.push(NeedsYouEntry::Promise {
+            memory: mem_view(conn, &m)?,
+            done: false,
+        });
+    }
+
+    let mut stmt = conn.prepare(
+        "SELECT id, a, b FROM conflicts WHERE resolved_at IS NULL ORDER BY created_at, id",
+    )?;
+    let conflicts: Vec<(String, String, String)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (cid, a, b) in conflicts {
+        let (Some(ma), Some(mb)) = (load_mem(conn, &a)?, load_mem(conn, &b)?) else {
+            continue;
+        };
+        if ma.superseded_at.is_some() || mb.superseded_at.is_some() {
+            continue;
+        }
+        let mut options = Vec::new();
+        for m in [&ma, &mb] {
+            let Some(receipt) = receipts_for(conn, &m.id)?.into_iter().next() else {
+                continue;
+            };
+            options.push(WhichOption {
+                memory_id: m.id.clone(),
+                text: m.sentence.clone(),
+                receipt,
+            });
+        }
+        if options.len() == 2 {
+            out.push(NeedsYouEntry::Which {
+                conflict_id: cid,
+                title: ma.subject.clone(),
+                options,
+            });
+        }
+    }
+
+    let unconfirmed = query_mems(
+        conn,
+        "m.status = 'unconfirmed' AND m.superseded_at IS NULL \
+         ORDER BY m.recorded_at DESC, m.id",
+        [],
+    )?;
+    for m in unconfirmed {
+        out.push(NeedsYouEntry::Unconfirmed {
+            agreeing_sources: m.sources,
+            used: m.last_used.is_some(),
+            memory: mem_view(conn, &m)?,
+        });
+    }
+    Ok(out)
+}
+
+pub(crate) fn confirm_tx(tx: &Transaction<'_>, id: &str, is_true: bool, now: &str) -> Result<()> {
+    let m = load_mem(tx, id)?.ok_or_else(|| Error::not_found(format!("memory {id}")))?;
+    if is_true {
+        tx.execute(
+            "UPDATE memories SET confirmed = 1, status = 'active', last_used = ?2, \
+             let_go_at = NULL WHERE id = ?1",
+            params![m.id, now],
+        )?;
+    } else {
+        tx.execute(
+            "UPDATE memories SET confirmed = 0, status = 'unconfirmed', let_go_at = NULL \
+             WHERE id = ?1",
+            [&m.id],
+        )?;
+    }
+    Ok(())
+}
+
 pub(crate) fn mem_views(conn: &rusqlite::Connection, rows: &[MemRow]) -> Result<Vec<MemoryView>> {
     rows.iter().map(|r| mem_view(conn, r)).collect()
 }
@@ -523,118 +648,14 @@ impl Engine {
     pub fn needs_you(&self) -> Result<Vec<NeedsYouEntry>> {
         let tz = self.clock().tz();
         let today = self.clock().now().to_zoned(tz).date();
-        let horizon = today
-            .checked_add(jiff::Span::new().days(14))
-            .map_err(Error::from)?
-            .to_string();
-        self.read(|conn| {
-            let mut out: Vec<NeedsYouEntry> = Vec::new();
-
-            let dated = query_mems(
-                conn,
-                "m.predicate = 'due' AND m.superseded_at IS NULL AND m.done = 0 \
-                 AND m.status IN ('active', 'fading') \
-                 AND COALESCE(m.due, m.valid_from) IS NOT NULL \
-                 AND COALESCE(m.due, m.valid_from) <= ?1 \
-                 ORDER BY COALESCE(m.due, m.valid_from), m.id",
-                [&horizon],
-            )?;
-            for m in dated {
-                let due = m.due.clone().or_else(|| m.valid_from.clone()).unwrap_or_default();
-                out.push(NeedsYouEntry::Due {
-                    memory: mem_view(conn, &m)?,
-                    due,
-                    done: false,
-                });
-            }
-
-            let promises = query_mems(
-                conn,
-                "m.predicate = 'promised' AND m.superseded_at IS NULL AND m.done = 0 \
-                 AND m.status IN ('active', 'fading') \
-                 AND (COALESCE(m.due, m.valid_from) IS NULL OR COALESCE(m.due, m.valid_from) <= ?1) \
-                 ORDER BY COALESCE(m.due, m.valid_from) IS NULL, COALESCE(m.due, m.valid_from), \
-                 m.recorded_at, m.id",
-                [&horizon],
-            )?;
-            for m in promises {
-                out.push(NeedsYouEntry::Promise {
-                    memory: mem_view(conn, &m)?,
-                    done: false,
-                });
-            }
-
-            let mut stmt = conn.prepare(
-                "SELECT id, a, b FROM conflicts WHERE resolved_at IS NULL ORDER BY created_at, id",
-            )?;
-            let conflicts: Vec<(String, String, String)> = stmt
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
-                .collect::<rusqlite::Result<_>>()?;
-            for (cid, a, b) in conflicts {
-                let (Some(ma), Some(mb)) = (load_mem(conn, &a)?, load_mem(conn, &b)?) else {
-                    continue;
-                };
-                if ma.superseded_at.is_some() || mb.superseded_at.is_some() {
-                    continue;
-                }
-                let mut options = Vec::new();
-                for m in [&ma, &mb] {
-                    let Some(receipt) = receipts_for(conn, &m.id)?.into_iter().next() else {
-                        continue;
-                    };
-                    options.push(WhichOption {
-                        memory_id: m.id.clone(),
-                        text: m.sentence.clone(),
-                        receipt,
-                    });
-                }
-                if options.len() == 2 {
-                    out.push(NeedsYouEntry::Which {
-                        conflict_id: cid,
-                        title: ma.subject.clone(),
-                        options,
-                    });
-                }
-            }
-
-            let unconfirmed = query_mems(
-                conn,
-                "m.status = 'unconfirmed' AND m.superseded_at IS NULL \
-                 ORDER BY m.recorded_at DESC, m.id",
-                [],
-            )?;
-            for m in unconfirmed {
-                out.push(NeedsYouEntry::Unconfirmed {
-                    agreeing_sources: m.sources,
-                    used: m.last_used.is_some(),
-                    memory: mem_view(conn, &m)?,
-                });
-            }
-            Ok(out)
-        })
+        self.read(|conn| needs_you_on(conn, today))
     }
 
     /// The person says it is true (or not). True confirms and counts as use; false makes it
     /// unconfirmed again and asks again.
     pub fn confirm(&self, id: &str, is_true: bool) -> Result<()> {
         let now = fmt_ts(self.clock().now());
-        self.write(|tx| {
-            let m = load_mem(tx, id)?.ok_or_else(|| Error::not_found(format!("memory {id}")))?;
-            if is_true {
-                tx.execute(
-                    "UPDATE memories SET confirmed = 1, status = 'active', last_used = ?2, \
-                     let_go_at = NULL WHERE id = ?1",
-                    params![m.id, now],
-                )?;
-            } else {
-                tx.execute(
-                    "UPDATE memories SET confirmed = 0, status = 'unconfirmed', let_go_at = NULL \
-                     WHERE id = ?1",
-                    [&m.id],
-                )?;
-            }
-            Ok(())
-        })
+        self.write(|tx| confirm_tx(tx, id, is_true, &now))
     }
 
     /// Choose which of two conflicting memories is right. The other stays as history.

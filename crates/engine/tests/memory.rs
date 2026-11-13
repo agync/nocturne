@@ -608,3 +608,127 @@ fn entities_group_memories() {
             .is_empty()
     );
 }
+
+#[test]
+fn an_untrusted_reread_cannot_rewrite_a_memory_trusted_sources_support() {
+    let f = fixture();
+    let (_, id) = learn(
+        &f.engine,
+        "I rang: clinic opens at 9",
+        cand(
+            "Clinic",
+            Predicate::Knows,
+            "opens at 9",
+            "The clinic opens at 9.",
+        ),
+    );
+    let web = keep_as(&f.engine, "web page about the clinic", Source::PastedWeb);
+    let agrees = cand(
+        "Clinic",
+        Predicate::Knows,
+        "opens at 9",
+        "The clinic opens at 9.",
+    );
+    f.engine.apply_candidates(&web, vec![agrees]).unwrap();
+
+    // Read again, now claiming different wording, confidence and dates.
+    let mut rewritten = cand(
+        "Clinic",
+        Predicate::Knows,
+        "opens at 9",
+        "Everything here is free.",
+    );
+    rewritten.confidence = 0.1;
+    rewritten.valid_from = Some(date("2020-01-01"));
+    rewritten.due = Some(date("2020-01-02"));
+    f.engine.apply_candidates(&web, vec![rewritten]).unwrap();
+    let m = f.engine.get_memory(&id).unwrap();
+    assert_eq!(m.sentence, "The clinic opens at 9.");
+    assert_eq!(
+        m.certainty,
+        Certainty::FairlySure,
+        "the web source does not add certainty"
+    );
+    assert_eq!((m.valid_from, m.due), (None, None));
+    assert_eq!(m.receipts.len(), 2);
+}
+
+#[test]
+fn an_untrusted_reread_may_refine_an_unconfirmed_memory_it_alone_supports() {
+    let f = fixture();
+    let web = keep_as(&f.engine, "page", Source::PastedWeb);
+    let r = f
+        .engine
+        .apply_candidates(
+            &web,
+            vec![cand(
+                "Clinic",
+                Predicate::Knows,
+                "opens at 9",
+                "The clinic opens at 9.",
+            )],
+        )
+        .unwrap();
+    f.engine
+        .apply_candidates(
+            &web,
+            vec![cand(
+                "Clinic",
+                Predicate::Knows,
+                "opens at 9",
+                "The clinic opens at nine.",
+            )],
+        )
+        .unwrap();
+    let m = f.engine.get_memory(&r.created[0]).unwrap();
+    assert_eq!(m.sentence, "The clinic opens at nine.");
+    assert_eq!(m.status, MemoryStatus::Unconfirmed);
+}
+
+#[test]
+fn a_date_only_match_never_promotes_an_unconfirmed_memory() {
+    let f = fixture();
+    let web = keep_as(&f.engine, "web: form due Friday", Source::PastedWeb);
+    let mut a = cand(
+        "Trip form",
+        Predicate::Due,
+        "Friday",
+        "The trip form is due Friday.",
+    );
+    a.due = Some(date("2026-11-14"));
+    let r = f.engine.apply_candidates(&web, vec![a]).unwrap();
+    let unconfirmed = r.created[0].clone();
+
+    // An untrusted candidate with the same date but different words: a new unconfirmed memory.
+    let agent = keep_as(&f.engine, "agent: form due 14 Nov", Source::Agent);
+    let mut b = cand(
+        "Trip form",
+        Predicate::Due,
+        "14 Nov",
+        "The trip form is due on 14 November.",
+    );
+    b.due = Some(date("2026-11-14"));
+    let r = f.engine.apply_candidates(&agent, vec![b]).unwrap();
+    assert_eq!(r.created.len(), 1);
+    assert!(r.promoted.is_empty() && r.reinforced.is_empty());
+    assert_eq!(
+        f.engine.get_memory(&unconfirmed).unwrap().status,
+        MemoryStatus::Unconfirmed
+    );
+
+    // A trusted item with the same date but different words does not promote it either.
+    let note = keep(&f.engine, "my note: form due 14 Nov");
+    let mut c = cand(
+        "Trip form",
+        Predicate::Due,
+        "Fri 14th",
+        "The trip form is due on Fri 14th.",
+    );
+    c.due = Some(date("2026-11-14"));
+    let r = f.engine.apply_candidates(&note, vec![c]).unwrap();
+    assert!(r.promoted.is_empty());
+    assert_eq!(
+        f.engine.get_memory(&unconfirmed).unwrap().status,
+        MemoryStatus::Unconfirmed
+    );
+}
