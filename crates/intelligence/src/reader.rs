@@ -529,13 +529,11 @@ impl Reader {
                 return Step::Idle;
             }
         };
-        let (class, pending) = picked;
+        let (class, pending, reread) = picked;
         let id = pending.id.clone();
         self.announce(&id).await;
         let started = tokio::time::Instant::now();
-        let outcome = self
-            .run_item(&mind, pending, class == CLASS_REREAD, &mut preempt)
-            .await;
+        let outcome = self.run_item(&mind, pending, reread, &mut preempt).await;
         let took = started.elapsed();
         self.settle(&id, outcome, took, class).await;
         Step::Read { item: id, outcome }
@@ -555,7 +553,7 @@ impl Reader {
         &self,
         on_ac: bool,
         now: Timestamp,
-    ) -> Result<Option<(u8, PendingItem)>, EngineError> {
+    ) -> Result<Option<(u8, PendingItem, bool)>, EngineError> {
         let (read_now, read_all, drain, cooldown) = {
             let mut st = self.state();
             st.cooldown.retain(|_, until| *until > now);
@@ -568,7 +566,10 @@ impl Reader {
         };
         self.eng(move |e| {
             let mut best: Option<(u8, PendingItem)> = None;
-            for p in e.pending_items(PEEK)? {
+            let mut requested = false;
+            let waiting = e.pending_items(PEEK)?;
+            let waiting_ids: HashSet<String> = waiting.iter().map(|p| p.id.clone()).collect();
+            for p in waiting {
                 if cooldown.contains_key(&p.id) {
                     continue;
                 }
@@ -583,6 +584,35 @@ impl Reader {
                 };
                 if best.as_ref().is_none_or(|(c, _)| class < *c) {
                     best = Some((class, p));
+                }
+            }
+            // "Read it again" on an item that was read before: the person's own request, so it
+            // is allowed even after something was forgotten from it.
+            if best.as_ref().is_none_or(|(c, _)| *c > CLASS_NOW) {
+                for id in &read_now {
+                    if waiting_ids.contains(id) || cooldown.contains_key(id) {
+                        continue;
+                    }
+                    let readable = e.get_item(id).is_ok_and(|v| {
+                        matches!(
+                            v.status,
+                            ItemStatus::Understood
+                                | ItemStatus::PartlyUnderstood
+                                | ItemStatus::NeedsYou
+                                | ItemStatus::Unconfirmed
+                        )
+                    });
+                    if readable {
+                        best = Some((
+                            CLASS_NOW,
+                            PendingItem {
+                                id: id.clone(),
+                                ..empty_pending()
+                            },
+                        ));
+                        requested = true;
+                        break;
+                    }
                 }
             }
             if best.is_none() && on_ac {
@@ -603,8 +633,13 @@ impl Reader {
             let Some((class, p)) = best else {
                 return Ok(None);
             };
-            match e.lease_item(&p.id, LEASE) {
-                Ok(leased) => Ok(Some((class, leased))),
+            let leased = if requested {
+                e.lease_item_by_request(&p.id, LEASE)
+            } else {
+                e.lease_item(&p.id, LEASE)
+            };
+            match leased {
+                Ok(leased) => Ok(Some((class, leased, requested || class == CLASS_REREAD))),
                 // Taken by someone else or gone: try again on the next tick.
                 Err(EngineError::LeaseLost | EngineError::NotFound(_)) => Ok(None),
                 Err(e) => Err(e),

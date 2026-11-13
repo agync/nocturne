@@ -57,7 +57,7 @@ impl Predicate {
             "promised" => Predicate::Promised,
             "scheduled" => Predicate::Scheduled,
             "takes" => Predicate::Takes,
-            other => Predicate::Other(other.to_string()),
+            other => Predicate::Other(other.trim().to_lowercase()),
         }
     }
 

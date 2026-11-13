@@ -612,7 +612,7 @@ async fn a_forget_during_a_re_read_does_not_bring_the_memory_back() {
 }
 
 #[tokio::test]
-async fn a_later_re_read_does_not_say_the_forgotten_thing_again() {
+async fn a_forgotten_item_is_not_re_read_automatically_but_the_person_can_ask() {
     let w = text_world("Gran lives in Leeds");
     let id = keep(&w, "Gran lives in Leeds");
     w.reader.tick().await;
@@ -622,7 +622,11 @@ async fn a_later_re_read_does_not_say_the_forgotten_thing_again() {
         .preview_forget(std::slice::from_ref(&mem), false)
         .unwrap();
     w.engine.forget(&preview.token).unwrap();
-    w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
+    // A mind upgrade queues re-reads: this item is left out.
+    assert_eq!(w.engine.queue_reread(std::slice::from_ref(&id)).unwrap(), 0);
+    assert_eq!(w.reader.tick().await, Step::Idle);
+    // "Read it again" is the person's own choice, and still cannot bring the claim back.
+    w.reader.read_now(Some(&id)).await;
     let step = w.reader.tick().await;
     assert!(
         matches!(
@@ -634,7 +638,31 @@ async fn a_later_re_read_does_not_say_the_forgotten_thing_again() {
         ),
         "{step:?}"
     );
+    assert_eq!(w.mind.call_count("extract"), 2);
     assert!(w.engine.memories(Default::default()).unwrap().is_empty());
+    assert_eq!(w.reader.tick().await, Step::Idle, "the request is spent");
+}
+
+#[tokio::test]
+async fn a_forget_that_lands_between_listing_and_leasing_a_re_read_is_refused() {
+    let w = text_world("Gran lives in Leeds");
+    let id = keep(&w, "Gran lives in Leeds");
+    w.reader.tick().await;
+    let mem = w.engine.memories(Default::default()).unwrap()[0].id.clone();
+    w.engine.queue_reread(std::slice::from_ref(&id)).unwrap();
+    // The re-read is listed; then the forget lands before the reader leases it.
+    assert_eq!(w.engine.rereads(10).unwrap(), [id.clone()]);
+    let preview = w
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    w.engine.forget(&preview.token).unwrap();
+    assert_eq!(w.reader.tick().await, Step::Idle);
+    assert_eq!(
+        w.mind.call_count("extract"),
+        1,
+        "the mind was not asked again"
+    );
 }
 
 #[tokio::test]

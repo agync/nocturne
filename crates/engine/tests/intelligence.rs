@@ -486,7 +486,37 @@ fn a_forget_during_an_in_flight_reread_stops_the_result_from_bringing_the_memory
 }
 
 #[test]
-fn a_later_reread_does_not_say_the_forgotten_thing_again() {
+fn an_item_something_was_forgotten_from_is_never_re_read_automatically() {
+    let f = fixture();
+    let (item, mem) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    let other = learn(
+        &f.engine,
+        "Gran lives in Leeds",
+        cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds."),
+    )
+    .0;
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    // Not queued, and an item that is not tombstoned still is.
+    assert_eq!(
+        f.engine
+            .queue_reread(&[item.clone(), other.clone()])
+            .unwrap(),
+        1
+    );
+    assert_eq!(f.engine.rereads(10).unwrap(), [other]);
+    // Even if a reader raced between listing and leasing, the lease is refused.
+    assert!(matches!(
+        f.engine.lease_item(&item, MIN),
+        Err(nocturne_engine::Error::LeaseLost)
+    ));
+}
+
+#[test]
+fn a_re_read_the_person_asked_for_still_cannot_say_the_forgotten_thing_again() {
     let f = fixture();
     let (item, mem) = learn(&f.engine, "I know about Zebrafish47", zebra());
     let other = cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds.");
@@ -496,11 +526,7 @@ fn a_later_reread_does_not_say_the_forgotten_thing_again() {
         .preview_forget(std::slice::from_ref(&mem), false)
         .unwrap();
     f.engine.forget(&preview.token).unwrap();
-    assert_eq!(
-        f.engine.queue_reread(std::slice::from_ref(&item)).unwrap(),
-        1
-    );
-    let p = f.engine.lease_item(&item, MIN).unwrap();
+    let p = f.engine.lease_item_by_request(&item, MIN).unwrap();
     f.engine
         .apply_candidates(&item, &p.lease, vec![zebra(), other])
         .unwrap();
@@ -515,6 +541,58 @@ fn a_later_reread_does_not_say_the_forgotten_thing_again() {
     // The store keeps the item's own text, but no trace of the forgotten claim's wording.
     let db = std::fs::read(f.dir.path().join("nocturne.db")).unwrap();
     assert!(!String::from_utf8_lossy(&db).contains("You know about Zebrafish47"));
+}
+
+#[test]
+fn a_forgotten_claim_is_recognised_in_other_words() {
+    let f = fixture();
+    let (item, mem) = learn(
+        &f.engine,
+        "My cat is called Biscuit",
+        cand(
+            "Me",
+            Predicate::Other("Owns".into()),
+            "a cat called Biscuit",
+            "You have a cat called Biscuit.",
+        ),
+    );
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    let p = f.engine.lease_item_by_request(&item, MIN).unwrap();
+    // "I" for "Me", a different case in the relation, trailing punctuation and a leading "the".
+    let again = cand(
+        "I",
+        Predicate::Other("owns".into()),
+        "The cat called Biscuit.",
+        "You own a cat called Biscuit.",
+    );
+    f.engine
+        .apply_candidates(&item, &p.lease, vec![again])
+        .unwrap();
+    assert!(f.engine.memories(Default::default()).unwrap().is_empty());
+}
+
+#[test]
+fn giving_a_lease_back_works_while_a_forget_is_under_way() {
+    let f = fixture();
+    let (item, mem) = learn(&f.engine, "I know about Zebrafish47", zebra());
+    f.engine.queue_reread(std::slice::from_ref(&item)).unwrap();
+    let p = f.engine.lease_item(&item, MIN).unwrap();
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&mem), false)
+        .unwrap();
+    // The forget has started and its job row is still there.
+    f.engine.forget_begin_only(&preview.token).unwrap();
+    assert!(matches!(
+        f.engine.apply_candidates(&item, &p.lease, vec![zebra()]),
+        Err(nocturne_engine::Error::LeaseLost)
+    ));
+    f.engine.release_lease(&item, &p.lease, false).unwrap();
+    assert_eq!(status(&f.engine, &item), ItemStatus::Understood);
 }
 
 #[test]

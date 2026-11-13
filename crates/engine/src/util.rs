@@ -51,19 +51,48 @@ pub(crate) fn parse_date(s: &str) -> Result<Date> {
     s.parse::<Date>().map_err(Error::from)
 }
 
-/// Casefold, trim, strip a leading "the", "a", "an" or "my", collapse spaces.
+/// The key two sayings of the same thing share: casefolded, with spaces collapsed, edge
+/// punctuation and a leading "the", "a", "an" or "my" removed, and "I", "me" and "myself" as one.
+/// The store dedupes with it and forgotten claims are matched with it, so they stay in step.
 pub(crate) fn key_of(s: &str) -> String {
     let lower = s.to_lowercase();
-    let mut words: Vec<&str> = lower.split_whitespace().collect();
+    let mut words: Vec<&str> = lower
+        .split_whitespace()
+        .map(|w| w.trim_matches(is_edge_punctuation))
+        .filter(|w| !w.is_empty())
+        .collect();
     while words.len() > 1 && matches!(words[0], "the" | "a" | "an" | "my") {
         words.remove(0);
     }
+    if matches!(words.as_slice(), ["i"] | ["me"] | ["myself"]) {
+        return "me".to_string();
+    }
     words.join(" ")
+}
+
+fn is_edge_punctuation(c: char) -> bool {
+    matches!(
+        c,
+        '.' | ','
+            | ';'
+            | ':'
+            | '!'
+            | '?'
+            | '"'
+            | '\''
+            | '('
+            | ')'
+            | '\u{2018}'
+            | '\u{2019}'
+            | '\u{201c}'
+            | '\u{201d}'
+    )
 }
 
 /// What a claim is, without its words: a hash of the keys of its subject, predicate and object.
 /// Callers pass already-keyed subject and object (`key_of`).
 pub(crate) fn claim_hash(subject_key: &str, predicate: &str, object_key: &str) -> String {
+    let predicate = predicate.trim().to_lowercase();
     sha256_hex(format!("{subject_key}\u{1}{predicate}\u{1}{object_key}").as_bytes())
 }
 

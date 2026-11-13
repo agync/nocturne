@@ -405,6 +405,17 @@ impl Engine {
     /// Refused for an item that cannot be read, that someone else is reading, or that is part of
     /// a forget.
     pub fn lease_item(&self, id: &str, lease: Duration) -> Result<PendingItem> {
+        self.lease_one(id, lease, false)
+    }
+
+    /// Like `lease_item`, for a read the person asked for ("Read it again"). An item something
+    /// was forgotten from can be read again this way (the forgotten claims are still filtered
+    /// out when the result is applied); automatic re-reads never are.
+    pub fn lease_item_by_request(&self, id: &str, lease: Duration) -> Result<PendingItem> {
+        self.lease_one(id, lease, true)
+    }
+
+    fn lease_one(&self, id: &str, lease: Duration, requested: bool) -> Result<PendingItem> {
         let now = self.clock().now();
         let until = lease_until(now, lease)?;
         let dir = self.originals_dir();
@@ -416,7 +427,19 @@ impl Engine {
             match status.as_deref() {
                 None => return Err(Error::not_found(format!("item {id}"))),
                 Some("reading") | Some("couldntRead") => return Err(Error::LeaseLost),
-                _ => {}
+                Some("kept") => {}
+                // Reading an item again: refused after a forget unless the person asked.
+                Some(_) if !requested => {
+                    let forgotten: bool = tx.query_row(
+                        "SELECT EXISTS(SELECT 1 FROM forgotten_claims WHERE item_id = ?1)",
+                        [id],
+                        |r| r.get(0),
+                    )?;
+                    if forgotten {
+                        return Err(Error::LeaseLost);
+                    }
+                }
+                Some(_) => {}
             }
             if in_forget_job(tx, id)? {
                 return Err(Error::LeaseLost);
@@ -435,7 +458,26 @@ impl Engine {
     /// went away, or an ask pre-empted it: not the item's fault).
     pub fn release_lease(&self, item: &str, lease: &str, counted: bool) -> Result<()> {
         self.write(|tx| {
-            check_lease(tx, item, lease)?;
+            // Whoever holds the token may give it back, even when a forget has since taken the
+            // item: it must not stay "being read" until the lease runs out.
+            let held: Option<(String, Option<String>)> = tx
+                .query_row(
+                    "SELECT status, lease_token FROM items WHERE id = ?1",
+                    [item],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            match held {
+                None => return Err(Error::not_found(format!("item {item}"))),
+                Some((status, token))
+                    if status != "reading"
+                        || lease.is_empty()
+                        || token.as_deref() != Some(lease) =>
+                {
+                    return Err(Error::LeaseLost);
+                }
+                Some(_) => {}
+            }
             tx.execute(
                 "UPDATE items SET status = COALESCE(status_before, 'kept'), status_before = NULL, \
                  lease_until = NULL, lease_token = NULL, \
@@ -504,14 +546,17 @@ impl Engine {
 
     /// Mark read items to be read again at low priority (after an upgrade or a tier change).
     /// The mark survives restarts and is cleared when the item is applied again. Items that
-    /// are waiting, being read or unreadable are skipped. Returns how many were marked.
+    /// are waiting, being read or unreadable are skipped, and so are items something was
+    /// forgotten from: a better mind must not get a second chance to say it. Returns how many
+    /// were marked.
     pub fn queue_reread(&self, ids: &[String]) -> Result<u32> {
         self.write(|tx| {
             let mut marked = 0u32;
             for id in ids {
                 marked += tx.execute(
                     "UPDATE items SET reread = 1 WHERE id = ?1 AND reread = 0 \
-                     AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed')",
+                     AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed') \
+                     AND NOT EXISTS (SELECT 1 FROM forgotten_claims WHERE item_id = items.id)",
                     [id],
                 )? as u32;
             }
@@ -529,12 +574,14 @@ impl Engine {
         })
     }
 
-    /// Items marked for a re-read, most recently kept first, that nobody is reading now.
+    /// Items marked for a re-read, most recently kept first, that nobody is reading now. An
+    /// item the person has forgotten something from is never re-read automatically.
     pub fn rereads(&self, limit: usize) -> Result<Vec<String>> {
         self.read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id FROM items WHERE reread = 1 \
                  AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed') \
+                 AND NOT EXISTS (SELECT 1 FROM forgotten_claims WHERE item_id = items.id) \
                  AND NOT EXISTS (SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || items.id || '\"') > 0) \
                  ORDER BY kept_at DESC, id LIMIT ?1",
             )?;

@@ -429,7 +429,7 @@ fn apply_one(
     }
     let subject_key = key_of(&c.subject);
     let object_key = key_of(&c.object);
-    let predicate = c.predicate.as_str().to_string();
+    let predicate = c.predicate.as_str().trim().to_lowercase();
     let confidence = f64::from(c.confidence.clamp(0.0, 1.0));
     let (vf, vt, due) = (
         date_str(c.valid_from),
