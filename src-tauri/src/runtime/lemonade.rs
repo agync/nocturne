@@ -187,6 +187,10 @@ async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervi
         Ok(view) => publish_setup(app, view),
         Err(e) => tracing::warn!("could not look at what is installed: {e}"),
     }
+    if let Some(tier) = setup.take_dropped() {
+        super::change_unfinished(app, services, tier);
+        refresh_status(app).await;
+    }
 }
 
 /// Follow the engine's state: starting and restarting show as "starting", a recovered engine
@@ -429,7 +433,15 @@ impl Services {
 /// Begin setup for `tier` (the person chose it, or agreed to the smaller one).
 pub async fn start_setup<R: Runtime>(app: &AppHandle<R>, tier: Tier) -> Result<(), CommandError> {
     let setup = setup_of(app).await?;
-    setup.start(tier).await.map_err(runtime_error)
+    setup.start(tier).await.map_err(runtime_error)?;
+    let state = app.state::<AppState>();
+    if let Some(services) = state.services()
+        && services.tier_unfinished() == Some(tier)
+    {
+        super::unfinished_settled(&state, &services);
+        refresh_status(app).await;
+    }
+    Ok(())
 }
 
 pub async fn pause_setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), CommandError> {

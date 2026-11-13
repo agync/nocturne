@@ -50,6 +50,7 @@ pub enum NoticeCode {
     DownloadStalled,
     DiskFull,
     TierDropped,
+    TierUnfinished,
     Restarts,
     CouldntRead,
     MicDenied,

@@ -31,6 +31,10 @@ export function noticeText(notice: Notice): string {
       return notice.bytes !== null
         ? t("notice.tierDropped.text", { size: formatBytes(notice.bytes) })
         : t("notice.tierDropped.text.unknown");
+    case "tierUnfinished":
+      return notice.bytes !== null
+        ? t("notice.tierUnfinished.text", { size: formatBytes(notice.bytes) })
+        : t("notice.tierUnfinished.text.unknown");
     case "restarts":
       return t("notice.restarts.text");
     case "couldntRead":
@@ -61,6 +65,8 @@ export function noticeAction(code: NoticeCode): string {
       return t("notice.diskFull.action");
     case "tierDropped":
       return t("notice.tierDropped.action");
+    case "tierUnfinished":
+      return t("notice.tierUnfinished.action");
     case "restarts":
       return t("notice.restarts.action");
     case "couldntRead":
@@ -86,7 +92,9 @@ export function noticeAction(code: NoticeCode): string {
 
 /** The label of the way to turn an offer down, for the notices that make one. */
 export function noticeDismiss(code: NoticeCode): string | null {
-  return code === "tierDropped" ? t("notice.tierDropped.dismiss") : null;
+  if (code === "tierDropped") return t("notice.tierDropped.dismiss");
+  if (code === "tierUnfinished") return t("notice.tierUnfinished.dismiss");
+  return null;
 }
 
 /** Problems that stop something working are announced at once; the rest wait their turn. */

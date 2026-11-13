@@ -154,6 +154,18 @@ export function Shell({ children }: ShellProps) {
           })
           .catch(() => toast.show({ message: t("notice.action.failed") }));
       },
+      tierUnfinished: () => {
+        engine
+          .getUnfinishedTier()
+          .then(async (tier) => {
+            if (tier) {
+              await engine.startSetup(tier);
+              toast.show({ message: t("notice.tierUnfinished.started") });
+            }
+            refresh("status");
+          })
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
       tidyPausedBattery: () => {
         engine
           .tidyAnyway()
@@ -181,6 +193,12 @@ export function Shell({ children }: ShellProps) {
       tierDropped: () => {
         engine
           .declineTierOffer()
+          .then(() => refresh("status"))
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
+      tierUnfinished: () => {
+        engine
+          .declineUnfinishedTier()
           .then(() => refresh("status"))
           .catch(() => toast.show({ message: t("notice.action.failed") }));
       },

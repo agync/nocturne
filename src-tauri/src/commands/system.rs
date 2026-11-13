@@ -42,6 +42,31 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
     run(app, |app| async move { runtime::resume_setup(&app).await }).await
 }
 
+/// The tier of a change the person asked for that did not finish, while its notice stands. The
+/// interface starts setup for it when the person agrees.
+#[tauri::command]
+pub async fn get_unfinished_tier<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<Tier>, CommandError> {
+    run(app, |app| async move {
+        Ok(app
+            .state::<AppState>()
+            .services()
+            .and_then(|s| s.tier_unfinished()))
+    })
+    .await
+}
+
+/// "Not now" to the notice about an unfinished change.
+#[tauri::command]
+pub async fn decline_unfinished_tier<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    run(app, |app| async move {
+        runtime::decline_unfinished_tier(&app).await;
+        Ok(())
+    })
+    .await
+}
+
 /// "Try again" on the notice about restarts: the private engine is started afresh now.
 #[tauri::command]
 pub async fn retry_engine<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {

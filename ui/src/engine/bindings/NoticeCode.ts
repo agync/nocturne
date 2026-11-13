@@ -3,4 +3,4 @@
 /**
  * A problem or event the interface explains in one sentence and one button.
  */
-export type NoticeCode = "downloadStalled" | "diskFull" | "tierDropped" | "restarts" | "couldntRead" | "micDenied" | "printFailed" | "catchingUp" | "repairNeeded" | "notReady" | "tidyPausedBattery" | "updateRolledBack" | "reReading";
+export type NoticeCode = "downloadStalled" | "diskFull" | "tierDropped" | "tierUnfinished" | "restarts" | "couldntRead" | "micDenied" | "printFailed" | "catchingUp" | "repairNeeded" | "notReady" | "tidyPausedBattery" | "updateRolledBack" | "reReading";

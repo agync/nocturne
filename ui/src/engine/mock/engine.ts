@@ -46,6 +46,8 @@ export interface MockOptions {
   notices?: Notice[];
   /** The smaller mind on offer, when a `tierDropped` notice is among the notices. */
   tierOffer?: Tier;
+  /** The tier of a change that did not finish, when a `tierUnfinished` notice is among the notices. */
+  unfinishedTier?: Tier;
   /** The first question wakes the voice that reads and says so (a `waking` step with a wait). */
   cold?: boolean;
   /** Answers mark their key phrase in bold. */
@@ -197,6 +199,7 @@ export class MockEngine implements EngineClient {
   soundSettingsOpened = 0;
   private readonly snoozed = new Set<string>();
   private tierOffer: Tier | null;
+  private unfinishedTier: Tier | null;
   /** How many times "Tidy anyway" was pressed. */
   tidyAnywayCount = 0;
 
@@ -224,6 +227,7 @@ export class MockEngine implements EngineClient {
       notices: options.notices ?? [],
     };
     this.tierOffer = options.tierOffer ?? null;
+    this.unfinishedTier = options.unfinishedTier ?? null;
     this.setup = seed.setup;
     this.refreshStatus();
   }
@@ -318,6 +322,10 @@ export class MockEngine implements EngineClient {
       this.tierOffer = null;
       this.dropNotices("tierDropped");
     }
+    if (tier === this.unfinishedTier) {
+      this.unfinishedTier = null;
+      this.dropNotices("tierUnfinished");
+    }
     this.setup = { ...this.setup, phase: "downloading", chosen: tier, paused: null };
     this.emit("setup-progress", this.setup);
   }
@@ -329,6 +337,15 @@ export class MockEngine implements EngineClient {
   async declineTierOffer(): Promise<void> {
     this.tierOffer = null;
     this.dropNotices("tierDropped");
+  }
+
+  async getUnfinishedTier(): Promise<Tier | null> {
+    return this.unfinishedTier;
+  }
+
+  async declineUnfinishedTier(): Promise<void> {
+    this.unfinishedTier = null;
+    this.dropNotices("tierUnfinished");
   }
 
   retryEngineCount = 0;

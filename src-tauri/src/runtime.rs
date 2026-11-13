@@ -40,6 +40,8 @@ const OOM_WINDOW: jiff::SignedDuration = jiff::SignedDuration::from_secs(10 * 60
 const GIB: u64 = 1 << 30;
 /// The id of the notice that offers the smaller mind.
 pub const TIER_DROPPED_NOTICE: &str = "tierDropped";
+/// The id of the notice that says a change of mind the person asked for did not finish.
+pub const TIER_UNFINISHED_NOTICE: &str = "tierUnfinished";
 /// How often memory is looked at while an offer of the smaller mind stands.
 const MEMORY_POLL: Duration = Duration::from_secs(30);
 /// Items kept this recently are read again after an upgrade.
@@ -129,6 +131,8 @@ pub struct Services {
     relaunching: AtomicBool,
     /// The smaller tier offered in the notice about memory, while the offer stands.
     offer: Mutex<Option<Tier>>,
+    /// The tier of a change the person asked for that did not finish, until they decide.
+    unfinished: Mutex<Option<Tier>>,
     /// When loads last failed for want of memory (the last ten minutes).
     out_of_memory: Mutex<Vec<Timestamp>>,
     /// True while a task is waiting for memory to recover.
@@ -156,6 +160,11 @@ impl Services {
             Some(probe) => probe(),
             None => available_memory(),
         }
+    }
+
+    /// The tier of the change that did not finish, while the notice about it stands.
+    pub fn tier_unfinished(&self) -> Option<Tier> {
+        *self.unfinished.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Remember the tier of the mind now in the slot; returns the one before it.
@@ -243,6 +252,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         retry_pending: AtomicBool::new(false),
         relaunching: AtomicBool::new(false),
         offer: Mutex::new(None),
+        unfinished: Mutex::new(None),
         out_of_memory: Mutex::new(Vec::new()),
         memory_watch: AtomicBool::new(false),
     });
@@ -375,6 +385,42 @@ fn memory_settled(state: &AppState, services: &Services) {
         .clear();
     *services.offer.lock().unwrap_or_else(|e| e.into_inner()) = None;
     state.status.clear_notices_of(NoticeCode::TierDropped);
+}
+
+/// A change to `tier` was started and never finished, and the next launch dropped it. It is not
+/// resumed by itself (nothing downloads without a click); a notice offers to download it again.
+pub fn change_unfinished<R: Runtime>(app: &AppHandle<R>, services: &Services, tier: Tier) {
+    let state = app.state::<AppState>();
+    *services
+        .unfinished
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = Some(tier);
+    let held = services.tier().unwrap_or(Tier::Unsupported);
+    state.status.add_notice(Notice {
+        id: TIER_UNFINISHED_NOTICE.to_string(),
+        code: NoticeCode::TierUnfinished,
+        item_id: None,
+        eta_seconds: None,
+        bytes: Some(nocturne_lemonade::tier::missing_bytes(tier, held) as f64),
+    });
+}
+
+/// The person started the download again, or said not now.
+pub(crate) fn unfinished_settled(state: &AppState, services: &Services) {
+    *services
+        .unfinished
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = None;
+    state.status.clear_notices_of(NoticeCode::TierUnfinished);
+}
+
+/// "Not now" to the notice about an unfinished change.
+pub async fn decline_unfinished_tier<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    if let Some(services) = state.services() {
+        unfinished_settled(&state, &services);
+    }
+    refresh_status(app).await;
 }
 
 /// "Not now" to the offer of the smaller mind.

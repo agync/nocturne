@@ -266,6 +266,50 @@ describe("notices", () => {
   });
 });
 
+describe("a change of mind that did not finish", () => {
+  const unfinished = {
+    id: "n-unfinished",
+    code: "tierUnfinished" as const,
+    itemId: null,
+    etaSeconds: null,
+    bytes: 3_808_000_000,
+  };
+
+  it("says so, and starts the download again only when asked", async () => {
+    const engine = createMockEngine({ notices: [unfinished], unfinishedTier: "small" });
+    const started: string[] = [];
+    const real = engine.startSetup.bind(engine);
+    engine.startSetup = async (tier) => {
+      started.push(tier);
+      return real(tier);
+    };
+    renderApp({ engine });
+    const region = await screen.findByRole("list", { name: "Things to know" });
+    expect(
+      within(region).getByText(
+        /The mind you chose didn’t finish downloading\. It still needs 3\.8 GB/,
+      ),
+    ).toBeInTheDocument();
+    expect(started).toEqual([]);
+    await userEvent.click(within(region).getByRole("button", { name: "Download it" }));
+    await waitFor(() => expect(started).toEqual(["small"]));
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Things to know" })).toBeNull());
+  });
+
+  it("lets it go on Not now", async () => {
+    const engine = createMockEngine({ notices: [unfinished], unfinishedTier: "small" });
+    const started: string[] = [];
+    engine.startSetup = async (tier) => {
+      started.push(tier);
+    };
+    renderApp({ engine });
+    const region = await screen.findByRole("list", { name: "Things to know" });
+    await userEvent.click(within(region).getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByRole("list", { name: "Things to know" })).toBeNull());
+    expect(started).toEqual([]);
+  });
+});
+
 describe("notices that offer something", () => {
   const offer = {
     id: "n-tier",

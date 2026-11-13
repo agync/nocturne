@@ -597,6 +597,12 @@ async fn an_unfinished_change_of_tier_is_dropped_so_resume_does_not_aim_at_it() 
     assert_eq!(record.tier, Some(Tier::Small), "nothing is left pending");
     assert!(record.done);
     assert_eq!(record.completed, Some(Tier::Small));
+    assert_eq!(
+        rig.setup.take_dropped(),
+        Some(Tier::Standard),
+        "what was dropped is handed over so the person can be told"
+    );
+    assert_eq!(rig.setup.take_dropped(), None, "and only once");
     rig.sup.shutdown().await.unwrap();
 }
 

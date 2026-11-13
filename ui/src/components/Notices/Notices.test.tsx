@@ -9,6 +9,7 @@ const CODES: Record<NoticeCode, true> = {
   downloadStalled: true,
   diskFull: true,
   tierDropped: true,
+  tierUnfinished: true,
   restarts: true,
   couldntRead: true,
   micDenied: true,

@@ -212,6 +212,8 @@ struct Inner {
     progress: Mutex<Progress>,
     history: Mutex<Vec<SetupPhase>>,
     wake: Notify,
+    /// The tier of a change that check() found unfinished and dropped, until it is taken.
+    dropped: Mutex<Option<Tier>>,
 }
 
 /// Drives setup for one engine. Dropping it stops its work; the engine's downloads carry on.
@@ -313,6 +315,7 @@ impl Setup {
                 progress: Mutex::new(Progress::default()),
                 history: Mutex::new(vec![SetupPhase::NotStarted]),
                 wake: Notify::new(),
+                dropped: Mutex::new(None),
             }),
         }
     }
@@ -349,6 +352,12 @@ impl Setup {
     /// Begins installing `tier`. Progress arrives through [`Setup::view`].
     pub async fn start(&self, tier: Tier) -> Result<(), RuntimeError> {
         self.inner.start(tier).await
+    }
+
+    /// The tier of an unfinished change that `check` dropped, once: the person asked for it and
+    /// has to be told it did not finish.
+    pub fn take_dropped(&self) -> Option<Tier> {
+        lock(&self.inner.dropped).take()
     }
 
     pub async fn pause(&self) -> Result<(), RuntimeError> {
@@ -457,8 +466,9 @@ impl Inner {
                     completed: Some(w),
                     ..rec.clone()
                 };
-                if let Err(e) = record::write(&self.config_dir, &settled) {
-                    tracing::warn!("could not settle the unfinished change of tier: {e}");
+                match record::write(&self.config_dir, &settled) {
+                    Ok(()) => *lock(&self.dropped) = rec.tier,
+                    Err(e) => tracing::warn!("could not settle the unfinished change of tier: {e}"),
                 }
             }
             let t = working.or(rec.tier).unwrap_or(Tier::Unsupported);
