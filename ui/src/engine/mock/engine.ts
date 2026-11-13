@@ -640,13 +640,20 @@ export class MockEngine implements EngineClient {
           .map((x) => (this.emphasis ? emphasise(x.m.sentence, x.m.object) : x.m.sentence))
           .join(" ");
         const pieces = text.split(/(?<=\s)/);
-        pieces.forEach((piece, i) => {
-          setTimeout(() => send(delta({ phase: "streaming", textDelta: piece })), 30 * (i + 1));
-        });
-        setTimeout(
-          () => send(delta({ phase: "done", memoryIds: active.map((x) => x.m.id) })),
-          30 * (pieces.length + 1),
-        );
+        const steps = [
+          ...pieces.map((piece) => delta({ phase: "streaming", textDelta: piece })),
+          delta({ phase: "done", memoryIds: active.map((x) => x.m.id) }),
+        ];
+        // One timer at a time, so a busy machine can delay a piece but never reorder two.
+        const next = (i: number): void => {
+          const step = steps[i];
+          if (!step) return;
+          setTimeout(() => {
+            send(step);
+            next(i + 1);
+          }, 30);
+        };
+        next(0);
       } else if (unconfirmed.length > 0) {
         send(
           delta({
