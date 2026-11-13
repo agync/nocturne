@@ -124,10 +124,13 @@ pub(crate) const MEM_COLS: &str = "m.id, m.subject, m.subject_key, m.entity_id, 
     m.let_go_at, m.done, m.keep_forever, m.private, m.suggest_private, m.tags, \
     (SELECT CASE WHEN m.sentence = m.object THEN o.sentence ELSE o.object END \
        FROM memories o WHERE o.superseded_by = m.id \
+       AND NOT (o.subject_key = m.subject_key AND o.predicate = m.predicate \
+                AND o.object_key = m.object_key) \
        AND o.forgetting = 0 ORDER BY o.recorded_at DESC, o.id LIMIT 1), \
     (SELECT COUNT(*) FROM memory_sources s WHERE s.memory_id = m.id), \
     (SELECT COUNT(*) FROM memory_sources s JOIN items i ON i.id = s.item_id \
-       WHERE s.memory_id = m.id AND i.trust = 'trusted')";
+       WHERE s.memory_id = m.id AND i.trust = 'trusted'), \
+    m.moved_from";
 
 /// A memory row as stored, plus its previous value and source counts.
 #[derive(Debug, Clone)]
@@ -159,6 +162,7 @@ pub(crate) struct MemRow {
     pub was: Option<String>,
     pub sources: u32,
     pub trusted_sources: u32,
+    pub moved_from: Option<String>,
 }
 
 pub(crate) fn mem_row(r: &Row<'_>) -> rusqlite::Result<MemRow> {
@@ -191,6 +195,7 @@ pub(crate) fn mem_row(r: &Row<'_>) -> rusqlite::Result<MemRow> {
         was: r.get(24)?,
         sources: r.get(25)?,
         trusted_sources: r.get(26)?,
+        moved_from: r.get(27)?,
     })
 }
 
@@ -249,6 +254,7 @@ impl MemRow {
             private: self.private,
             suggest_private: self.suggest_private,
             was: self.was.clone(),
+            moved_from: self.moved_from.clone(),
             receipts,
         }
     }

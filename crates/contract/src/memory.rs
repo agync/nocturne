@@ -56,6 +56,9 @@ pub struct MemoryView {
     pub suggest_private: bool,
     /// The previous value when this memory replaced an older one ("was Wed").
     pub was: Option<String>,
+    /// What the memory was first filed under, when the person moved it to another person,
+    /// place or thing.
+    pub moved_from: Option<String>,
     pub receipts: Vec<Receipt>,
 }
 
@@ -70,6 +73,86 @@ pub struct EntityView {
     pub role: Option<String>,
     pub memory_count: u32,
     pub item_count: u32,
+    /// Names it had before the person renamed it, newest first.
+    #[serde(default)]
+    pub former_names: Vec<String>,
+    /// The latest rename or merge that can still be taken back.
+    #[serde(default)]
+    pub last_change: Option<EntityChange>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum ChangeKind {
+    Rename,
+    Merge,
+    Refile,
+}
+
+/// A change the person made to how things are filed, which can be taken back.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct EntityChange {
+    pub id: String,
+    pub kind: ChangeKind,
+    /// The name it had before a rename, or the name of what was merged in.
+    pub from: String,
+    pub at: String,
+}
+
+/// What a rename did. A name that another thing already has changes nothing and is offered as
+/// a merge instead.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum RenameOutcome {
+    Renamed {
+        entity: EntityView,
+        /// Absent when the name did not change.
+        change_id: Option<String>,
+    },
+    Exists {
+        entity: EntityView,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MergeOutcome {
+    /// The one that remains.
+    pub entity: EntityView,
+    pub change_id: String,
+    /// Memories that moved across.
+    pub moved: u32,
+}
+
+/// Where one memory is to be filed.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum RefileTarget {
+    Existing { entity_id: String },
+    New { name: String, kind: EntityKind },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Refiled {
+    pub memory: MemoryView,
+    pub entity: EntityView,
+    pub change_id: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]

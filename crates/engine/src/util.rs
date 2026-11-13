@@ -5,6 +5,7 @@ use jiff::civil::Date;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha256};
+use unicode_normalization::UnicodeNormalization;
 
 use crate::error::{Error, Result};
 
@@ -55,7 +56,7 @@ pub(crate) fn parse_date(s: &str) -> Result<Date> {
 /// punctuation and a leading "the", "a", "an" or "my" removed, and "I", "me" and "myself" as one.
 /// The store dedupes with it and forgotten claims are matched with it, so they stay in step.
 pub(crate) fn key_of(s: &str) -> String {
-    let lower = s.to_lowercase();
+    let lower = s.nfc().collect::<String>().to_lowercase();
     let mut words: Vec<&str> = lower
         .split_whitespace()
         .map(|w| w.trim_matches(is_edge_punctuation))

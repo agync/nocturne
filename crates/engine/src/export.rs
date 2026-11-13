@@ -134,7 +134,7 @@ fn memory_json(conn: &Connection, m: &MemRow) -> Result<Value> {
         "supersededBy": m.superseded_by, "confidence": m.confidence, "status": m.status,
         "confirmed": m.confirmed, "lastUsed": m.last_used, "letGoAt": m.let_go_at,
         "done": m.done, "keepForever": m.keep_forever, "private": m.private,
-        "tags": m.tags, "entityId": m.entity_id, "sources": sources,
+        "tags": m.tags, "entityId": m.entity_id, "movedFrom": m.moved_from, "sources": sources,
     }))
 }
 
@@ -381,13 +381,22 @@ impl Engine {
 
             let memories_json: Vec<Value> =
                 all.iter().map(|m| memory_json(conn, m)).collect::<Result<_>>()?;
+            // Things merged into another are not listed: what was filed under them is under
+            // the one that remains, which is also known by their names.
             let entities: Vec<Value> = {
-                let mut stmt = conn.prepare("SELECT id, kind, name, role FROM entities ORDER BY id")?;
-                stmt.query_map([], |r| {
-                    Ok(json!({"id": r.get::<_, String>(0)?, "kind": r.get::<_, String>(1)?,
-                              "name": r.get::<_, String>(2)?, "role": r.get::<_, Option<String>>(3)?}))
-                })?
-                .collect::<rusqlite::Result<_>>()?
+                let mut stmt = conn.prepare(
+                    "SELECT id, kind, name, role FROM entities WHERE merged_into IS NULL ORDER BY id",
+                )?;
+                let rows: Vec<(String, String, String, Option<String>)> = stmt
+                    .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                    .collect::<rusqlite::Result<_>>()?;
+                let mut out = Vec::new();
+                for (id, kind, name, role) in rows {
+                    let former = crate::entity::former_names(conn, &id, &name)?;
+                    out.push(json!({"id": id, "kind": kind, "name": name, "role": role,
+                                    "formerNames": former}));
+                }
+                out
             };
             let conflicts: Vec<Value> = {
                 let mut stmt = conn.prepare(
@@ -460,6 +469,8 @@ impl Engine {
                 "embeddings",
                 "memory_sources",
                 "memories",
+                "entity_names",
+                "entity_changes",
                 "entities",
                 "items",
                 "ledger",

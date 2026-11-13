@@ -13,6 +13,7 @@ mod admin;
 mod audio;
 mod capture;
 mod clock;
+mod entity;
 mod error;
 mod export;
 mod forget;

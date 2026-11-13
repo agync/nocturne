@@ -12,6 +12,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use crate::Engine;
 use crate::audio::pages_citing;
 use crate::capture::check_lease;
+use crate::entity::{Alias, entity_views, find_by_key, note_rewrite, replace_name, resolve_alias};
 use std::path::PathBuf;
 
 use crate::error::{Error, Result};
@@ -266,47 +267,32 @@ struct ItemInfo {
     kept_on: String,
 }
 
+/// The thing a subject is filed under: the live one with that name key, whatever its kind
+/// (memories match their subject by key alone). With several, the one of the requested kind
+/// wins, then by id. A subject nothing carries yet gets a new one when its kind is known.
 fn upsert_entity(
     tx: &Transaction<'_>,
     subject: &str,
     subject_key: &str,
     kind: Option<EntityKind>,
 ) -> Result<Option<String>> {
-    let find = |k: EntityKind| -> Result<Option<String>> {
-        Ok(tx
-            .query_row(
-                "SELECT id FROM entities WHERE key = ?1",
-                [format!("{}:{subject_key}", enum_str(&k))],
-                |r| r.get(0),
-            )
-            .optional()?)
-    };
-    match kind {
-        Some(k) => {
-            if let Some(id) = find(k)? {
-                return Ok(Some(id));
-            }
-            let id = new_id("ent");
-            tx.execute(
-                "INSERT INTO entities(id, kind, name, key) VALUES (?1, ?2, ?3, ?4)",
-                params![
-                    id,
-                    enum_str(&k),
-                    subject,
-                    format!("{}:{subject_key}", enum_str(&k))
-                ],
-            )?;
-            Ok(Some(id))
-        }
-        None => {
-            for k in [EntityKind::Person, EntityKind::Place, EntityKind::Thing] {
-                if let Some(id) = find(k)? {
-                    return Ok(Some(id));
-                }
-            }
-            Ok(None)
-        }
+    if let Some(id) = find_by_key(tx, subject_key, kind)? {
+        return Ok(Some(id));
     }
+    let Some(k) = kind else {
+        return Ok(None);
+    };
+    let id = new_id("ent");
+    tx.execute(
+        "INSERT INTO entities(id, kind, name, key) VALUES (?1, ?2, ?3, ?4)",
+        params![
+            id,
+            enum_str(&k),
+            subject,
+            format!("{}:{subject_key}", enum_str(&k))
+        ],
+    )?;
+    Ok(Some(id))
 }
 
 /// Rows this memory closed or superseded come back: the change that ended them is gone. Rows it
@@ -700,6 +686,23 @@ fn apply_one(
             "a candidate needs a subject, an object and a sentence",
         ));
     }
+    // A name the person changed is the name that counts: a claim read about the old one is
+    // filed under the new one, in its words too. What that writes is noted against the change,
+    // so taking the change back takes it back too.
+    let renamed;
+    let mut alias_change: Option<String> = None;
+    let c = match resolve_alias(tx, &key_of(&c.subject))? {
+        Some(Alias { name, change_id }) => {
+            alias_change = change_id;
+            renamed = Candidate {
+                sentence: replace_name(&c.sentence, c.subject.trim(), &name),
+                subject: name,
+                ..c.clone()
+            };
+            &renamed
+        }
+        None => c,
+    };
     let subject_key = key_of(&c.subject);
     let object_key = key_of(&c.object);
     let predicate = c.predicate.as_str().trim().to_lowercase();
@@ -711,24 +714,37 @@ fn apply_one(
     );
     let span = span_json(c);
 
-    // The person already corrected this claim away; do not bring it back.
-    let known_wrong: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM memories w JOIN memories s ON s.id = w.superseded_by \
-         WHERE w.subject_key = ?1 AND w.predicate = ?2 AND w.object_key = ?3 \
-           AND w.superseded_at IS NOT NULL AND s.confirmed = 1 AND s.superseded_at IS NULL)",
-        params![subject_key, predicate, object_key],
-        |r| r.get(0),
-    )?;
+    // The person already corrected this claim away; do not bring it back. A row the person
+    // moved answers to its first subject only for the item that said it.
+    let known_wrong: bool = {
+        let mut stmt = tx.prepare(
+            "SELECT w.id, w.subject_key = ?1 FROM memories w JOIN memories s ON s.id = w.superseded_by \
+             WHERE (w.subject_key = ?1 OR w.moved_from_key = ?1) AND w.predicate = ?2 \
+               AND w.object_key = ?3 \
+               AND w.superseded_at IS NOT NULL AND s.confirmed = 1 AND s.superseded_at IS NULL",
+        )?;
+        let rows: Vec<(String, bool)> = stmt
+            .query_map(params![subject_key, predicate, object_key], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        rows.iter()
+            .any(|(id, direct)| *direct || relinked.contains(id.as_str()))
+    };
     if known_wrong {
         return Ok(());
     }
 
-    let current = query_mems(
+    // Memories filed under this subject. One the person moved elsewhere still answers to the
+    // subject it was first filed under, but only for the item that said it: any other item
+    // saying the same words about that subject is about that subject.
+    let mut current = query_mems(
         tx,
-        "m.subject_key = ?1 AND m.predicate = ?2 AND m.superseded_at IS NULL \
-         ORDER BY m.recorded_at, m.id",
+        "(m.subject_key = ?1 OR m.moved_from_key = ?1) AND m.predicate = ?2 \
+         AND m.superseded_at IS NULL ORDER BY m.recorded_at, m.id",
         params![subject_key, predicate],
     )?;
+    current.retain(|m| m.subject_key == subject_key || relinked.contains(m.id.as_str()));
     let same_date = |e: &MemRow| {
         matches!(predicate.as_str(), "due" | "scheduled") && due.is_some() && e.due == due
     };
@@ -763,6 +779,7 @@ fn apply_one(
                     // The old vector described the old words.
                     tx.execute("DELETE FROM embeddings WHERE memory_id = ?1", [&m.id])?;
                     report.reworded.push(m.id.clone());
+                    note_rewrite(tx, alias_change.as_deref(), &m.id)?;
                 }
             }
             return Ok(());
@@ -803,16 +820,23 @@ fn apply_one(
 
     // The same item read again, saying what a later item has since replaced: the old row is
     // linked again as history, not made a second time.
-    let history: Option<String> = tx
-        .query_row(
-            "SELECT m.id FROM memories m WHERE m.subject_key = ?1 AND m.predicate = ?2 \
-             AND m.object_key = ?3 AND m.superseded_at IS NOT NULL \
-             ORDER BY m.recorded_at DESC, m.id LIMIT 1",
-            params![subject_key, predicate, object_key],
-            |r| r.get(0),
-        )
-        .optional()?
-        .filter(|id: &String| relinked.contains(id.as_str()));
+    let history: Option<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT m.id, m.subject_key = ?1 FROM memories m \
+             WHERE (m.subject_key = ?1 OR m.moved_from_key = ?1) \
+             AND m.predicate = ?2 AND m.object_key = ?3 AND m.superseded_at IS NOT NULL \
+             ORDER BY m.recorded_at DESC, m.id",
+        )?;
+        let rows: Vec<(String, bool)> = stmt
+            .query_map(params![subject_key, predicate, object_key], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        rows.into_iter()
+            .find(|(id, direct)| *direct || relinked.contains(id.as_str()))
+            .map(|(id, _)| id)
+            .filter(|id| relinked.contains(id.as_str()))
+    };
     if let Some(old) = history {
         tx.execute(
             "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
@@ -944,6 +968,7 @@ fn apply_one(
             report.conflicts.push(cid);
         }
     }
+    note_rewrite(tx, alias_change.as_deref(), &id)?;
     touched.insert(id.clone());
     if status == MemoryStatus::Unconfirmed {
         report.unconfirmed.push(id.clone());
@@ -1513,36 +1538,13 @@ impl Engine {
         let needle = query
             .map(|q| q.trim().to_lowercase())
             .filter(|q| !q.is_empty());
-        let mut out: Vec<EntityView> = self.read(|conn| {
-            let mut sql = String::from(
-                "SELECT e.id, e.kind, e.name, e.role, \
-                 (SELECT COUNT(*) FROM memories m WHERE m.entity_id = e.id AND m.superseded_at IS NULL \
-                  AND m.forgetting = 0), \
-                 (SELECT COUNT(DISTINCT s.item_id) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-                  WHERE m.entity_id = e.id AND m.superseded_at IS NULL AND m.forgetting = 0) \
-                 FROM entities e",
-            );
-            let mut args = Vec::new();
-            if let Some(k) = kind {
-                args.push(enum_str(&k));
-                sql.push_str(" WHERE e.kind = ?1");
-            }
-            let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(rusqlite::params_from_iter(args.iter()), |r| {
-                Ok(EntityView {
-                    id: r.get(0)?,
-                    kind: crate::rows::de(r.get(1)?)?,
-                    name: r.get(2)?,
-                    role: r.get(3)?,
-                    memory_count: r.get(4)?,
-                    item_count: r.get(5)?,
-                })
-            })?;
-            Ok(rows.collect::<rusqlite::Result<_>>()?)
-        })?;
+        let mut out: Vec<EntityView> = self.read(|conn| entity_views(conn, kind, None))?;
         if let Some(n) = &needle {
             out.retain(|e| {
                 e.name.to_lowercase().contains(n.as_str())
+                    || e.former_names
+                        .iter()
+                        .any(|f| f.to_lowercase().contains(n.as_str()))
                     || e.role
                         .as_ref()
                         .is_some_and(|r| r.to_lowercase().contains(n.as_str()))
@@ -1555,19 +1557,6 @@ impl Engine {
                 .then_with(|| a.id.cmp(&b.id))
         });
         Ok(out)
-    }
-
-    pub fn entity(&self, id: &str) -> Result<(EntityView, Vec<MemoryView>)> {
-        let view = self
-            .entities(None)?
-            .into_iter()
-            .find(|e| e.id == id)
-            .ok_or_else(|| Error::not_found(format!("entity {id}")))?;
-        let memories = self.memories(MemoryFilter {
-            entity_id: Some(id.to_string()),
-            ..Default::default()
-        })?;
-        Ok((view, memories))
     }
 }
 

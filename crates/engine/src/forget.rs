@@ -106,11 +106,26 @@ fn stamp_sources(tx: &Transaction<'_>, memories: &[String], items: &[String]) ->
         let Some((subject, predicate, object)) = claim else {
             continue;
         };
-        tx.execute(
-            "INSERT OR IGNORE INTO forgotten_claims(item_id, claim) \
-             SELECT item_id, ?2 FROM memory_sources WHERE memory_id = ?1",
-            params![id, claim_hash(&subject, &predicate, &object)],
+        // The claim may be read again under any name it was filed under before the person
+        // renamed it or moved it.
+        let mut subjects = vec![subject];
+        let mut stmt = tx.prepare(
+            "SELECT moved_from_key FROM memories WHERE id = ?1 AND moved_from_key IS NOT NULL \
+             UNION SELECT n.key FROM entity_names n JOIN memories m ON m.entity_id = n.entity_id \
+             WHERE m.id = ?1",
         )?;
+        for key in stmt.query_map([id], |r| r.get::<_, String>(0))? {
+            subjects.push(key?);
+        }
+        subjects.sort();
+        subjects.dedup();
+        for subject in subjects {
+            tx.execute(
+                "INSERT OR IGNORE INTO forgotten_claims(item_id, claim) \
+                 SELECT item_id, ?2 FROM memory_sources WHERE memory_id = ?1",
+                params![id, claim_hash(&subject, &predicate, &object)],
+            )?;
+        }
     }
     for item in items {
         tx.execute(
@@ -534,9 +549,23 @@ impl Engine {
         })?;
         shred_all(recorded);
         self.write(|tx| {
+            // Nothing filed under a thing, nothing left of it. One merged into another stays
+            // for as long as the one it was merged into does, so the merge can be taken back.
             tx.execute(
-                "DELETE FROM entities WHERE id NOT IN \
-                 (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL)",
+                "WITH RECURSIVE keep(id) AS ( \
+                   SELECT id FROM entities WHERE merged_into IS NULL \
+                     AND id IN (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL) \
+                   UNION SELECT e.id FROM entities e JOIN keep k ON e.merged_into = k.id) \
+                 DELETE FROM entities WHERE id NOT IN (SELECT id FROM keep)",
+                [],
+            )?;
+            // A change that named a thing no longer there cannot be taken back, and keeps no
+            // trace of it.
+            tx.execute(
+                "DELETE FROM entity_changes WHERE NOT EXISTS \
+                 (SELECT 1 FROM entities e WHERE e.id = json_extract(entity_changes.detail, '$.entity')) \
+                 OR (kind = 'merge' AND NOT EXISTS \
+                 (SELECT 1 FROM entities e WHERE e.id = json_extract(entity_changes.detail, '$.from')))",
                 [],
             )?;
             tx.execute("DELETE FROM forget_jobs WHERE id = ?1", [job])?;

@@ -186,3 +186,20 @@ INSERT INTO remote_state(id) VALUES (1);
 -- What each paired phone kept today, in bytes, so its daily limit holds across a restart.
 ALTER TABLE remote_devices ADD COLUMN day TEXT;
 ALTER TABLE remote_devices ADD COLUMN day_bytes INTEGER NOT NULL DEFAULT 0;
+
+-- migration 9
+-- Renaming, merging and re-filing. A name the person set is kept with the names it replaced, so
+-- a re-read files claims under the name they chose. A merged thing keeps its row (hidden) and
+-- every change is logged, so each can be taken back. A memory the person moved remembers what
+-- it was first filed under, so a re-read finds it instead of making it again.
+ALTER TABLE entities ADD COLUMN merged_into TEXT REFERENCES entities(id);
+ALTER TABLE memories ADD COLUMN moved_from TEXT;
+ALTER TABLE memories ADD COLUMN moved_from_key TEXT;
+CREATE INDEX memories_moved_from ON memories(moved_from_key) WHERE moved_from_key IS NOT NULL;
+CREATE TABLE entity_names(
+  id INTEGER PRIMARY KEY, entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, key TEXT NOT NULL, change_id TEXT, at TEXT NOT NULL);
+CREATE INDEX entity_names_key ON entity_names(key);
+CREATE INDEX entity_names_entity ON entity_names(entity_id);
+CREATE TABLE entity_changes(
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, at TEXT NOT NULL, undone_at TEXT, detail TEXT NOT NULL);

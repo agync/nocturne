@@ -14,4 +14,9 @@ suggestPrivate: boolean,
 /**
  * The previous value when this memory replaced an older one ("was Wed").
  */
-was: string | null, receipts: Array<Receipt>, };
+was: string | null, 
+/**
+ * What the memory was first filed under, when the person moved it to another person,
+ * place or thing.
+ */
+movedFrom: string | null, receipts: Array<Receipt>, };

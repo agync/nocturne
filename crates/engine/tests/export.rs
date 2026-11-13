@@ -473,3 +473,70 @@ fn an_export_that_ran_across_a_finishing_forget_is_discarded() {
     assert!(matches!(err, nocturne_engine::Error::Busy), "{err:?}");
     assert_eq!(std::fs::read_dir(out.path()).unwrap().count(), 0);
 }
+
+/// What was renamed and moved is exported as it stands: former names and where a memory was
+/// first filed are there, and a thing merged into another is not listed on its own.
+#[test]
+fn the_export_has_former_names_and_moves_and_leaves_out_merged_in_things() {
+    use nocturne_contract::{EntityKind, RefileTarget};
+    let f = fixture();
+    let claim = |subject: &str, object: &str| nocturne_engine::Candidate {
+        subject_kind: Some(EntityKind::Thing),
+        ..cand(
+            subject,
+            Predicate::Knows,
+            object,
+            &format!("{subject}: {object}."),
+        )
+    };
+    let (_, a) = learn(
+        &f.engine,
+        "Trinks are 5 pounds",
+        claim("Trinks", "5 pounds"),
+    );
+    let (_, b) = learn(&f.engine, "Drinks are cold", claim("Drinks", "cold"));
+    let (_, c) = learn(&f.engine, "Pops are red", claim("Pops", "red"));
+    let ent = |m: &str| f.engine.get_memory(m).unwrap().entity_id.unwrap();
+    let (ea, eb) = (ent(&a), ent(&b));
+    f.engine.rename_entity(&eb, "Cold drinks").unwrap();
+    f.engine.merge_entities(&ea, &eb).unwrap();
+    f.engine
+        .refile_memory(
+            &c,
+            RefileTarget::Existing {
+                entity_id: eb.clone(),
+            },
+        )
+        .unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    let root = std::path::PathBuf::from(f.engine.export_to(out.path()).unwrap().path);
+    let data: Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("nocturne.json")).unwrap())
+            .unwrap();
+    let entities = data["entities"].as_array().unwrap();
+    assert!(
+        entities.iter().all(|e| e["id"] != ea),
+        "merged in: {entities:?}"
+    );
+    let kept = entities.iter().find(|e| e["id"] == eb).unwrap();
+    assert_eq!(kept["name"], "Cold drinks");
+    let former: Vec<&str> = kept["formerNames"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|n| n.as_str().unwrap())
+        .collect();
+    assert!(
+        former.contains(&"Drinks") && former.contains(&"Trinks"),
+        "{former:?}"
+    );
+    let moved = data["memories"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|m| m["id"] == c)
+        .unwrap();
+    assert_eq!(moved["movedFrom"], "Pops");
+    assert_eq!(moved["entityId"], eb);
+}

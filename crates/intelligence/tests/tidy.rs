@@ -711,3 +711,72 @@ async fn a_slow_mind_filling_in_vectors_does_not_freeze_pause_or_status() {
     );
     assert!(w.engine.memories_without_embedding(10).unwrap().is_empty());
 }
+
+fn drinks_claim(text: &str, subject: &str, object: &str) -> nocturne_engine::Candidate {
+    nocturne_engine::Candidate {
+        subject_kind: Some(nocturne_contract::EntityKind::Thing),
+        ..nocturne_engine::Candidate::new(
+            subject,
+            nocturne_engine::Predicate::Knows,
+            object,
+            text,
+            0.8,
+        )
+    }
+}
+
+/// A voice note said "Trinks" for "Drinks". The person renamed the thing; the tidy then reads
+/// a note still unread that says "Trinks", and reads the first note again. Neither may bring
+/// the old name back.
+#[tokio::test]
+async fn the_tidy_keeps_a_name_the_person_chose() {
+    let first = "Trinks are 5 pounds";
+    let second = "Trinks run out on Sunday";
+    let mind = FakeMind::new()
+        .with_extract(
+            first,
+            vec![drinks_claim("Trinks are 5 pounds.", "Trinks", "5 pounds")],
+        )
+        .with_extract(
+            second,
+            vec![drinks_claim(
+                "Trinks run out on Sunday.",
+                "Trinks",
+                "run out on Sunday",
+            )],
+        )
+        .with_headline("A quiet night", "Two things kept.");
+    let w = world_at("2026-11-12T20:00:00Z", mind);
+    let note = keep(&w, first);
+    read_all(&w).await;
+    let entity = w.engine.entities(None).unwrap().remove(0).id;
+    w.engine.rename_entity(&entity, "Drinks").unwrap();
+    keep(&w, second);
+    w.engine.queue_reread(std::slice::from_ref(&note)).unwrap();
+
+    at(&w, "2026-11-13T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    read_all(&w).await;
+    assert!(w.engine.rereads(10).unwrap().is_empty(), "read again");
+
+    let things = w.engine.entities(None).unwrap();
+    assert_eq!(things.len(), 1, "{things:?}");
+    assert_eq!(things[0].name, "Drinks");
+    assert_eq!(things[0].memory_count, 2);
+    let sentences: Vec<String> = w
+        .engine
+        .memories(nocturne_contract::MemoryFilter::default())
+        .unwrap()
+        .into_iter()
+        .map(|m| m.sentence)
+        .collect();
+    assert!(
+        sentences.iter().all(|s| s.starts_with("Drinks ")),
+        "{sentences:?}"
+    );
+}
