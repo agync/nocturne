@@ -791,13 +791,17 @@ impl Engine {
         let today = self.today();
         let date = day.to_string();
         self.write(|tx| {
-            let row: Option<(Option<String>, String, Option<String>)> = tx
+            let row: Option<QuestionRow> = tx
                 .query_row(
                     "SELECT memory_id, kind, answer FROM questions WHERE page_date = ?1",
                     [&date],
                     |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
                 )
                 .optional()?;
+            let row = match row {
+                Some(row) => Some(row),
+                None => first_page_time_question(tx, day, &today, &now)?,
+            };
             let (memory_id, kind, answer) =
                 row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
             if answer.is_some() {
@@ -839,6 +843,47 @@ impl Engine {
         self.bump_audio();
         Ok(())
     }
+}
+
+/// A saved question: its memory, kind and answer.
+type QuestionRow = (Option<String>, String, Option<String>);
+
+/// The page-time question of the first page, recorded when it is answered before the page is
+/// saved. That page is composed on the spot until the tidy saves it, so its question has no row
+/// yet. The row is the one `save_page` would write (and that write leaves it alone), so the
+/// answer survives the save. Any other day without a saved question has nothing to answer.
+fn first_page_time_question(
+    tx: &Connection,
+    day: Date,
+    today: &str,
+    now: &str,
+) -> Result<Option<QuestionRow>> {
+    let exists = |d: &str| -> Result<bool> {
+        Ok(tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pages WHERE date = ?1)",
+            [d],
+            |r| r.get(0),
+        )?)
+    };
+    let next = if exists(today)? {
+        today.parse::<Date>()?.tomorrow()?
+    } else {
+        today.parse::<Date>()?
+    };
+    if day != next || page_number(tx, day)? != 1 {
+        return Ok(None);
+    }
+    tx.execute(
+        "INSERT INTO questions(page_date, memory_id, kind, text, asked_at) \
+         VALUES (?1, NULL, ?2, ?3, ?4)",
+        params![
+            day.to_string(),
+            enum_str(&QuestionKind::PageTime),
+            read_settings(tx)?.page_time,
+            now
+        ],
+    )?;
+    Ok(Some((None, enum_str(&QuestionKind::PageTime), None)))
 }
 
 /// Redact lines and the question that cite memories which no longer exist or are being

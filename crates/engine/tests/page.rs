@@ -527,6 +527,47 @@ fn audio_and_print_editions_exclude_private_memories_and_the_screen_shows_them()
 // ---- the question -----------------------------------------------------------------------------
 
 #[test]
+fn the_unsaved_first_page_question_can_be_answered_with_each_choice() {
+    for (choice, want) in [
+        (QuestionChoice::Earlier, "06:30"),
+        (QuestionChoice::Later, "07:30"),
+        (QuestionChoice::Right, "07:00"),
+    ] {
+        let f = fixture();
+        let day = date("2026-11-13");
+        let shown = compose(&f, "2026-11-13");
+        assert_eq!(shown.variant, PageVariant::First);
+        assert_eq!(
+            shown.question.as_ref().unwrap().kind,
+            QuestionKind::PageTime
+        );
+        assert!(f.engine.page(Some(day)).unwrap().is_none(), "never saved");
+
+        f.engine.answer_question(day, choice).unwrap();
+        assert_eq!(f.engine.settings().unwrap().page_time, want);
+        let after = compose(&f, "2026-11-13");
+        assert_eq!(after.question.as_ref().unwrap().answered, Some(choice));
+        assert!(f.engine.answer_question(day, choice).is_err(), "once");
+
+        f.engine.save_page(&after).unwrap();
+        let saved = f.engine.page(Some(day)).unwrap().unwrap();
+        assert_eq!(saved.question.unwrap().answered, Some(choice));
+    }
+}
+
+#[test]
+fn a_day_that_is_not_the_next_page_has_no_question_to_answer() {
+    let f = fixture();
+    for day in ["2026-11-12", "2026-11-14"] {
+        assert!(
+            f.engine
+                .answer_question(date(day), QuestionChoice::Right)
+                .is_err()
+        );
+    }
+}
+
+#[test]
 fn page_one_asks_for_the_page_time_and_earlier_or_later_moves_it() {
     let f = fixture();
     let p = save_day(&f, "2026-11-14");
