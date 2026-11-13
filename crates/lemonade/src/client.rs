@@ -5,7 +5,7 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::StreamExt;
 use futures_util::stream::BoxStream;
@@ -64,7 +64,36 @@ struct Shared {
     timeouts: Timeouts,
     endpoint: RwLock<Option<Endpoint>>,
     generation: AtomicU64,
+    activity: std::sync::Mutex<HashMap<String, Activity>>,
+    alone: RwLock<Vec<String>>,
     saved: RwLock<HashMap<String, serde_json::Map<String, Value>>>,
+}
+
+/// When a model was last asked for something, and how many requests it is serving now.
+#[derive(Debug, Clone, Copy)]
+pub struct Activity {
+    pub last: Instant,
+    pub busy: u32,
+}
+
+/// Marks a model busy for as long as it lives.
+struct Busy {
+    shared: Arc<Shared>,
+    model: String,
+}
+
+impl Drop for Busy {
+    fn drop(&mut self) {
+        let mut map = self
+            .shared
+            .activity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if let Some(a) = map.get_mut(&self.model) {
+            a.busy = a.busy.saturating_sub(1);
+            a.last = Instant::now();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -139,6 +168,8 @@ impl Client {
                 timeouts,
                 endpoint: RwLock::new(None),
                 generation: AtomicU64::new(0),
+                activity: std::sync::Mutex::new(HashMap::new()),
+                alone: RwLock::new(Vec::new()),
                 saved: RwLock::new(HashMap::new()),
             }),
         }
@@ -159,6 +190,24 @@ impl Client {
             .unwrap_or_else(|e| e.into_inner()) = endpoint;
     }
 
+    fn busy(&self, model: &str) -> Busy {
+        let mut map = self
+            .shared
+            .activity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let a = map.entry(model.to_string()).or_insert(Activity {
+            last: Instant::now(),
+            busy: 0,
+        });
+        a.busy += 1;
+        a.last = Instant::now();
+        Busy {
+            shared: self.shared.clone(),
+            model: model.to_string(),
+        }
+    }
+
     /// The load options saved for each model in the engine's `recipe_options.json`. A load that
     /// saves its own options sends these too, so that saving does not drop them.
     pub fn set_saved_options(&self, options: Vec<(&str, serde_json::Map<String, Value>)>) {
@@ -166,6 +215,48 @@ impl Client {
             .into_iter()
             .map(|(m, o)| (m.to_string(), o))
             .collect();
+    }
+
+    /// Models that must run with nothing else loaded: before one of them is used, every other
+    /// model that is not busy is unloaded. For computers with little memory.
+    pub fn set_alone(&self, models: Vec<String>) {
+        *self.shared.alone.write().unwrap_or_else(|e| e.into_inner()) = models;
+    }
+
+    /// Unloads every other model that is not busy, when `model` must run alone. True when
+    /// anything was unloaded.
+    pub async fn make_room(&self, model: &str) -> bool {
+        let alone = self
+            .shared
+            .alone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .any(|m| m == model);
+        if !alone {
+            return false;
+        }
+        let Ok(health) = self.health().await else {
+            return false;
+        };
+        let mut unloaded = false;
+        for other in health.all_models_loaded {
+            let busy = self.activity(&other.model_name).is_some_and(|a| a.busy > 0);
+            if other.model_name != model && !busy {
+                unloaded |= self.unload(&other.model_name).await.is_ok();
+            }
+        }
+        unloaded
+    }
+
+    /// What this client last did with `model`, if anything since it was made.
+    pub fn activity(&self, model: &str) -> Option<Activity> {
+        self.shared
+            .activity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(model)
+            .copied()
     }
 
     pub fn endpoint(&self) -> Option<Endpoint> {
@@ -604,6 +695,7 @@ impl Client {
     }
 
     pub async fn load(&self, model: &str, options: &LoadOptions) -> Result<(), RuntimeError> {
+        let _busy = self.busy(model);
         let mut body = json!({"model_name": model});
         if let Some(n) = options.ctx_size {
             body["ctx_size"] = json!(n);
@@ -652,6 +744,7 @@ impl Client {
 
     /// The whole answer at once.
     pub async fn chat_complete(&self, req: &ChatRequest) -> Result<String, RuntimeError> {
+        let _busy = self.busy(&req.model);
         let mut req = req.clone();
         req.stream = false;
         let mut rb = self
@@ -682,6 +775,7 @@ impl Client {
 
     /// The answer as a stream of text deltas, reasoning left out.
     pub async fn chat(&self, req: &ChatRequest) -> Result<ChatStream, RuntimeError> {
+        let busy = self.busy(&req.model);
         let mut req = req.clone();
         req.stream = true;
         let rb = self
@@ -696,7 +790,12 @@ impl Client {
         let response = tokio::time::timeout(first, Self::send(rb))
             .await
             .map_err(|_| RuntimeError::Timeout)??;
-        Ok(sse_deltas(response, first, self.shared.timeouts.idle))
+        let deltas = sse_deltas(response, first, self.shared.timeouts.idle);
+        // The model stays busy until the answer is read or dropped.
+        Ok(Box::pin(deltas.map(move |d| {
+            let _ = &busy;
+            d
+        })))
     }
 
     pub async fn transcribe(
@@ -705,6 +804,7 @@ impl Client {
         model: &str,
         language: Option<&str>,
     ) -> Result<Transcription, RuntimeError> {
+        let _busy = self.busy(model);
         let bytes = tokio::fs::read(audio).await?;
         let name = audio
             .file_name()
@@ -751,6 +851,7 @@ impl Client {
         struct List {
             data: Vec<Item>,
         }
+        let _busy = self.busy(model);
         let list: List = self
             .post_json("/v1/embeddings", &json!({"model": model, "input": texts}))
             .await?;
@@ -773,6 +874,7 @@ impl Client {
         voice: &str,
         text: &str,
     ) -> Result<Vec<u8>, RuntimeError> {
+        let _busy = self.busy(model);
         let rb = self
             .request(Method::POST, "/v1/audio/speech")?
             .timeout(AUDIO_TIMEOUT)

@@ -8,6 +8,10 @@
 //! than the engine's, and saves every model's context so that a load the engine makes by itself
 //! never sizes it to fill the free memory. The next request loads a model again with them. On a
 //! Mac the engine has no memory-pressure eviction, so these timers are what frees the memory.
+//!
+//! What the engine cannot be told is that two models must not share a computer with little
+//! memory. On the tiny and small tiers the voice runs alone: [`alone`] names it, and the client
+//! unloads every other model that is not busy before the voice is used.
 
 use nocturne_contract::{ComponentRole, Tier};
 use serde_json::{Map, Value, json};
@@ -62,6 +66,17 @@ pub fn saved_options() -> Vec<(&'static str, Map<String, Value>)> {
     out
 }
 
+/// Models that run with nothing else loaded on `tier`. On the tiny and small tiers the voice,
+/// the largest in memory while it speaks, never shares the computer with the mind.
+pub fn alone(tier: Tier) -> Vec<String> {
+    match tier {
+        Tier::Tiny | Tier::Small => tier::model_for(tier, ComponentRole::Voice)
+            .map(|m| vec![m.to_string()])
+            .unwrap_or_default(),
+        _ => Vec::new(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +123,13 @@ mod tests {
         assert_eq!(recall.len(), 1);
         assert_eq!(recall[0].1["ctx_size"], tier::RECALL_CONTEXT);
         assert!(!recall[0].1.contains_key("evict_idle_timeout"));
+    }
+
+    #[test]
+    fn the_voice_runs_alone_on_the_tiny_and_small_tiers() {
+        assert_eq!(alone(Tier::Tiny), ["kokoro-v1"]);
+        assert_eq!(alone(Tier::Small), ["kokoro-v1"]);
+        assert!(alone(Tier::Standard).is_empty());
+        assert!(alone(Tier::Unsupported).is_empty());
     }
 }

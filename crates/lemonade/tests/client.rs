@@ -430,6 +430,28 @@ async fn the_first_word_gets_longer_than_the_words_after_it() {
 }
 
 #[tokio::test]
+async fn a_model_is_busy_while_it_answers_and_idle_after() {
+    let fake = Fake::started(Some("downloaded=all")).await;
+    let c = &fake.client;
+    let model = "Qwen3.5-9B-GGUF";
+    assert!(c.activity(model).is_none());
+    let req = ChatRequest::new(model, vec![Message::user("hello")]);
+    let mut stream = c.chat(&req).await.unwrap();
+    assert_eq!(c.activity(model).unwrap().busy, 1);
+    while stream.next().await.is_some() {}
+    drop(stream);
+    let after = c.activity(model).unwrap();
+    assert_eq!(after.busy, 0);
+    c.embeddings("Qwen3-Embedding-0.6B-GGUF", &["a".into()])
+        .await
+        .unwrap();
+    assert_eq!(c.activity("Qwen3-Embedding-0.6B-GGUF").unwrap().busy, 0);
+    assert!(
+        c.activity(model).unwrap().last <= c.activity("Qwen3-Embedding-0.6B-GGUF").unwrap().last
+    );
+}
+
+#[tokio::test]
 async fn a_saving_load_keeps_the_other_saved_options() {
     let fake = Fake::started(Some("downloaded=all")).await;
     let c = &fake.client;
@@ -445,5 +467,30 @@ async fn a_saving_load_keeps_the_other_saved_options() {
     assert_eq!(
         only(fake.seen("/v1/load").await)["body"],
         json!({"model_name": "Qwen3.5-2B-GGUF", "ctx_size": 8192, "save_options": true, "evict_idle_timeout": 180})
+    );
+}
+
+#[tokio::test]
+async fn a_model_that_runs_alone_unloads_the_others_first() {
+    let fake = Fake::started(Some("downloaded=all")).await;
+    let c = &fake.client;
+    c.load("Qwen3.5-2B-GGUF", &LoadOptions::default())
+        .await
+        .unwrap();
+    let _ = c.speech("kokoro-v1", "bf_emma", "Hello.").await;
+    assert!(
+        fake.seen("/v1/unload").await.is_empty(),
+        "speaking alone makes no room: the caller asks once per page"
+    );
+    assert!(
+        !c.make_room("kokoro-v1").await,
+        "nothing has to run alone yet"
+    );
+    c.set_alone(vec!["kokoro-v1".into()]);
+    assert!(c.make_room("kokoro-v1").await);
+    let unloaded = fake.seen("/v1/unload").await;
+    assert_eq!(
+        only(unloaded)["body"],
+        json!({"model_name": "Qwen3.5-2B-GGUF"})
     );
 }

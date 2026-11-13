@@ -678,6 +678,16 @@ impl Mind for LemonadeMind {
             Ok(self.client.speech(&model, voice, text).await?)
         })
     }
+
+    fn ready_to_speak(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async move {
+            if let Ok(model) = self.model(ComponentRole::Voice)
+                && self.client.make_room(&model).await
+            {
+                self.forget_loaded().await;
+            }
+        })
+    }
 }
 
 #[cfg(test)]

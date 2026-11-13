@@ -122,6 +122,7 @@ async fn make<R: Runtime>(
             .mind
             .get()
             .ok_or_else(|| CommandError::unavailable("the voice is not ready"))?;
+        mind.ready_to_speak().await;
         let mut parts = Vec::with_capacity(script.len());
         for section in &script {
             let bytes = mind

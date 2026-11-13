@@ -13,7 +13,8 @@ use std::time::Duration;
 use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
 use nocturne_engine::Mind;
 use nocturne_lemonade::{
-    Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle, tier,
+    Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle, residency,
+    tier,
 };
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -277,6 +278,7 @@ async fn fill<R: Runtime>(
     if changed {
         super::memory_settled(&state, services);
     }
+    client.set_alone(residency::alone(tier));
     let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, tier));
     state
         .status

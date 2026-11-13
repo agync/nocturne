@@ -116,6 +116,11 @@ pub trait Mind: Send + Sync {
         text: &'a str,
         voice: &'a str,
     ) -> BoxFuture<'a, Result<Vec<u8>, MindError>>;
+    /// Called once before a run of `speak` calls, such as a page read aloud, so a mind that
+    /// must free memory for its voice does it once rather than for every part.
+    fn ready_to_speak(&self) -> BoxFuture<'_, ()> {
+        Box::pin(async {})
+    }
 }
 
 #[cfg(any(test, feature = "fake"))]
