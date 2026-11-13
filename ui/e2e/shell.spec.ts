@@ -16,7 +16,7 @@ test.describe("wide window", () => {
     await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
     await expect(page.getByRole("complementary", { name: "Recently kept" })).toBeVisible();
     const bar = page.getByRole("textbox", { name: "Keep something, or ask" });
-    await expect(bar).toBeFocused();
+    await expect(bar).not.toBeFocused();
     const box = await bar.boundingBox();
     expect(box?.y ?? 999).toBeLessThan(120);
     expect(await horizontalOverflow(page)).toBeLessThanOrEqual(0);
@@ -24,12 +24,20 @@ test.describe("wide window", () => {
 
   test("F6 cycles the bar, the page and the rail", async ({ page }) => {
     await ready(page);
+    await page.keyboard.press("F6");
     await expect(page.getByRole("textbox", { name: "Keep something, or ask" })).toBeFocused();
     await page.keyboard.press("F6");
     await expect(page.getByRole("main")).toBeFocused();
     await page.keyboard.press("F6");
     await expect(page.getByRole("link", { name: /^Today/ })).toBeFocused();
     await page.keyboard.press("F6");
+    await expect(page.getByRole("textbox", { name: "Keep something, or ask" })).toBeFocused();
+  });
+
+  test("nothing has focus on load, and / jumps to the bar", async ({ page }) => {
+    await ready(page);
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+    await page.keyboard.press("/");
     await expect(page.getByRole("textbox", { name: "Keep something, or ask" })).toBeFocused();
   });
 
@@ -201,3 +209,13 @@ for (const scheme of ["light", "dark"] as const) {
     await context.close();
   });
 }
+
+test.describe("first load on a phone", () => {
+  test.use({ viewport: { width: 400, height: 800 }, colorScheme: "dark" });
+
+  test("shows no focus ring and does not raise the keyboard", async ({ page }) => {
+    await ready(page);
+    expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+    await page.screenshot({ path: "test-results/screens/first-load-dark-400.png" });
+  });
+});

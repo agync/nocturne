@@ -206,10 +206,56 @@ describe("wide window", () => {
     expect(await screen.findByRole("complementary", { name: "Recently kept" })).toBeInTheDocument();
   });
 
-  it("autofocuses the bar when the window opens", async () => {
+  it("takes no focus when the window opens, so no field shows a ring", async () => {
     renderApp();
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    await screen.findByRole("heading", { level: 1 });
+    expect(bar).not.toHaveFocus();
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("takes no focus on a narrow window either", async () => {
+    setViewport(400);
+    renderApp();
+    await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    await screen.findByRole("heading", { level: 1 });
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("jumps to the bar on /, and says so to a screen reader", async () => {
+    renderApp();
+    const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    expect(bar).toHaveAccessibleDescription(/Press \/ from anywhere on the page/);
+    await userEvent.keyboard("/");
     expect(bar).toHaveFocus();
+    expect(bar).toHaveValue("");
+  });
+
+  it("leaves / alone while typing in a field, and with a dialog open", async () => {
+    renderApp({ hash: "#/memories" });
+    const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    const search = await screen.findByRole("searchbox", { name: "Search everything kept" });
+    await userEvent.click(search);
+    await userEvent.keyboard("a/b");
+    expect(search).toHaveValue("a/b");
+    expect(bar).not.toHaveFocus();
+    await userEvent.type(bar, "1/2");
+    expect(bar).toHaveValue("1/2");
+  });
+
+  it("does not steal / from a dialog", async () => {
+    renderApp();
+    const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const button = document.createElement("button");
+    dialog.append(button);
+    document.body.append(dialog);
+    button.focus();
+    await userEvent.keyboard("/");
+    expect(bar).not.toHaveFocus();
+    dialog.remove();
   });
 
   it("keeps the design's focus order: the bar, the page, then the rail", async () => {
@@ -224,6 +270,7 @@ describe("wide window", () => {
   it("cycles focus with F6: bar, page, rail, bar", async () => {
     renderApp();
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    await userEvent.keyboard("{F6}");
     expect(bar).toHaveFocus();
     await userEvent.keyboard("{F6}");
     expect(screen.getByRole("main")).toHaveFocus();

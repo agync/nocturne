@@ -18,7 +18,7 @@ import { askRequests } from "./ask-request";
 import { findRoute, routes } from "./routes";
 import styles from "./Shell.module.css";
 import { useKeepRecording } from "./useKeepRecording";
-import { useRegionCycling } from "./useRegions";
+import { useBarShortcut, useRegionCycling } from "./useRegions";
 import { useShellSize } from "./useShellSize";
 
 interface ShellProps {
@@ -41,6 +41,7 @@ export function Shell({ children }: ShellProps) {
   const { data: page } = usePage();
 
   useRegionCycling(root);
+  useBarShortcut(root);
 
   const platform = usePlatform();
   useEffect(
@@ -215,7 +216,7 @@ export function Shell({ children }: ShellProps) {
         shortcut={settings?.shortcutAvailable ? settings.shortcut : undefined}
         onTalk={{ start: recorder.start, stop: recorder.stop }}
         recordingSeconds={recorder.seconds}
-        autoFocus
+        focusShortcut
       />
     </div>
   );

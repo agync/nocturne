@@ -36,3 +36,24 @@ export function useRegionCycling(root: RefObject<HTMLElement | null>): void {
     return () => window.removeEventListener("keydown", onKey);
   }, [root]);
 }
+
+const TEXT_FIELDS = "input, textarea, select, [contenteditable=''], [contenteditable='true']";
+
+/** "/" jumps to the keep or ask bar, unless a field is being typed in or a dialog is open. */
+export function useBarShortcut(root: RefObject<HTMLElement | null>): void {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.defaultPrevented || event.isComposing) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || !root.current) return;
+      const active = document.activeElement;
+      if (active?.matches(TEXT_FIELDS)) return;
+      if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
+      const bar = root.current.querySelector<HTMLElement>('[data-region="keep"] textarea');
+      if (!bar) return;
+      event.preventDefault();
+      bar.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [root]);
+}

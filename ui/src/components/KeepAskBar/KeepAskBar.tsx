@@ -29,7 +29,8 @@ interface KeepAskBarProps {
   onTalk?: { start: () => void; stop: () => void };
   /** Seconds recorded so far, while the microphone is open. */
   recordingSeconds?: number | null;
-  autoFocus?: boolean;
+  /** The page offers "/" to jump to the bar, so the bar says so to a screen reader. */
+  focusShortcut?: boolean;
   inputRef?: Ref<HTMLTextAreaElement>;
 }
 
@@ -41,11 +42,12 @@ export function KeepAskBar({
   shortcut,
   onTalk,
   recordingSeconds = null,
-  autoFocus = false,
+  focusShortcut = false,
   inputRef,
 }: KeepAskBarProps) {
   const [text, setText] = useState("");
   const hintId = useId();
+  const slashId = useId();
   const verb = defaultVerb(text);
   const hasText = text.trim().length > 0;
   const narrow = placement === "bottom";
@@ -109,17 +111,22 @@ export function KeepAskBar({
           rows={1}
           value={text}
           aria-label={t("bar.label")}
-          aria-describedby={hintId}
-          aria-keyshortcuts="Control+Enter Alt+Enter"
+          aria-describedby={focusShortcut ? `${hintId} ${slashId}` : hintId}
+          aria-keyshortcuts={
+            focusShortcut ? "Control+Enter Alt+Enter /" : "Control+Enter Alt+Enter"
+          }
           placeholder={narrow ? t("bar.placeholder.narrow") : t("bar.placeholder")}
-          // biome-ignore lint/a11y/noAutofocus: the bar takes focus when the app opens, by design
-          autoFocus={autoFocus}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={onKeyDown}
         />
         <span id={hintId} className="sr-only">
           {t(verb === "ask" ? "bar.default.ask" : "bar.default.keep")}
         </span>
+        {focusShortcut ? (
+          <span id={slashId} className="sr-only">
+            {t("bar.hint.slash")}
+          </span>
+        ) : null}
         {hasText ? (
           <div className={styles.verbs}>
             <button

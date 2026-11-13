@@ -43,6 +43,7 @@
   "bar.listening": "Listening {time}",
   "bar.default.keep": "Enter keeps. Alt Enter asks.",
   "bar.default.ask": "Enter asks. Ctrl Enter keeps.",
+  "bar.hint.slash": "Press / from anywhere on the page to come back here.",
   "bar.shortcut.label": "Shortcut: {keys}",
   "bar.kept.error": "Nocturne couldn’t keep that just now. Nothing is lost; try again.",
   "kept.heading": "Kept today{count, plural, =0 {} other { · #}}",
