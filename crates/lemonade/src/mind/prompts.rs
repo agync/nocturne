@@ -64,13 +64,13 @@ pub fn extraction_schema() -> Value {
                         "due": date,
                         "confidence": {"type": "number"},
                         "span": {
-                            "type": ["object", "null"],
-                            "properties": {"quote": {"type": "string"}},
+                            "type": "object",
+                            "properties": {"quote": {"type": "string", "minLength": 1}},
                             "required": ["quote"]
                         },
                         "tags": {"type": "array", "items": {"type": "string"}}
                     },
-                    "required": ["sentence", "subject", "predicate", "object", "confidence"]
+                    "required": ["sentence", "subject", "predicate", "object", "confidence", "span"]
                 }
             }
         },

@@ -172,6 +172,29 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
     );
 }
 
+/// A memory without a quote is thrown away, so the schema the model must fill makes the quote
+/// part of every memory rather than something it may leave out.
+#[tokio::test]
+async fn the_extraction_schema_requires_a_quote_for_every_memory() {
+    let r = rig().await;
+    r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    let req = &r.seen("/v1/chat/completions").await[0]["body"];
+    let item = &req["response_format"]["json_schema"]["schema"]["properties"]["memories"]["items"];
+    let required: Vec<&str> = item["required"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(required.contains(&"span"), "{required:?}");
+    assert_eq!(item["properties"]["span"]["type"], "object");
+    assert_eq!(item["properties"]["span"]["required"], json!(["quote"]));
+    assert_eq!(
+        item["properties"]["span"]["properties"]["quote"]["minLength"],
+        1
+    );
+}
+
 #[tokio::test]
 async fn the_large_tier_asks_for_a_bigger_context() {
     let r = rig_with("downloaded=all", Tier::Large).await;
