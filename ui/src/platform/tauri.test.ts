@@ -54,6 +54,35 @@ describe("TauriPlatform shared pieces", () => {
     expect(new TauriPlatform().inQuickCapture()).toBe(true);
   });
 
+  it("hears files dropped on quick capture by asking the app, not by listening", async () => {
+    vi.useFakeTimers();
+    try {
+      mockWindows("quick-capture");
+      let held: string[] = [];
+      mockIPC((cmd) => {
+        calls.push({ cmd, args: {} });
+        if (cmd !== "take_quick_drop") return null;
+        const out = held;
+        held = [];
+        return out;
+      });
+      const dropped = vi.fn();
+      const off = new TauriPlatform().onFileDrop(dropped, vi.fn());
+      await vi.advanceTimersByTimeAsync(500);
+      expect(dropped).not.toHaveBeenCalled();
+      held = ["/files/note.txt"];
+      await vi.advanceTimersByTimeAsync(500);
+      expect(dropped).toHaveBeenCalledExactlyOnceWith(["/files/note.txt"]);
+      expect(calls.some((c) => c.cmd.startsWith("plugin:event"))).toBe(false);
+      off();
+      const asked = calls.length;
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(calls).toHaveLength(asked);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("turns a file path into a URL the page may show", () => {
     expect(new TauriPlatform().originalSrc("/data/originals/a.jpg")).toContain("asset");
   });

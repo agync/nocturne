@@ -118,6 +118,9 @@ pub struct AppState {
     /// Items the quick capture window kept in this session: the only ones it may read or take
     /// back.
     quick_items: Mutex<HashSet<String>>,
+    /// Files dropped on the quick capture window, until it asks for them. That window may not
+    /// listen to events, so it asks.
+    quick_drop: Mutex<Vec<PathBuf>>,
     /// Folders made by an export in this session: the only ones `open_export` opens.
     exports: Mutex<HashSet<PathBuf>>,
     opener: Mutex<Option<OpenFn>>,
@@ -203,6 +206,7 @@ impl AppState {
             work: Notify::new(),
             chosen_paths: Mutex::new(HashSet::new()),
             quick_items: Mutex::new(HashSet::new()),
+            quick_drop: Mutex::new(Vec::new()),
             exports: Mutex::new(HashSet::new()),
             opener: Mutex::new(None),
             window_shown: AtomicBool::new(false),
@@ -238,6 +242,20 @@ impl AppState {
             .contains(id)
     }
 
+    /// Files were dropped on the quick capture window: hold them for it.
+    pub fn note_quick_drop(&self, paths: &[PathBuf]) {
+        let mut held = self.quick_drop.lock().unwrap_or_else(|e| e.into_inner());
+        if held.len() >= MAX_CHOSEN {
+            held.clear();
+        }
+        held.extend(paths.iter().cloned());
+    }
+
+    /// What was dropped on the quick capture window since it last asked.
+    pub fn take_quick_drop(&self) -> Vec<PathBuf> {
+        std::mem::take(&mut *self.quick_drop.lock().unwrap_or_else(|e| e.into_inner()))
+    }
+
     /// Remember files the person dropped or picked.
     pub fn allow_paths(&self, paths: impl IntoIterator<Item = PathBuf>) {
         let mut set = self.chosen_paths.lock().unwrap_or_else(|e| e.into_inner());
@@ -270,6 +288,10 @@ impl AppState {
 
     pub fn forget_session(&self) {
         self.quick_items
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.quick_drop
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();

@@ -97,6 +97,9 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
         && let Some(state) = window.app_handle().try_state::<AppState>()
     {
         state.allow_paths(paths.iter().cloned());
+        if window.label() == crate::os::quick_capture::LABEL {
+            state.note_quick_drop(paths);
+        }
     }
     if let WindowEvent::Focused(true) = event
         && window.label() == MAIN

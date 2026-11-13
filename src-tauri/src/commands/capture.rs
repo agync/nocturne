@@ -161,6 +161,21 @@ pub async fn keep_files<R: Runtime>(
     .await
 }
 
+/// The files dropped on the quick capture window since it last asked. The window cannot hear
+/// the drop itself, so it asks; what it gets may then be kept with `keep_files`.
+#[tauri::command]
+pub async fn take_quick_drop<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, CommandError> {
+    run(app, |app| async move {
+        Ok(app
+            .state::<AppState>()
+            .take_quick_drop()
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect())
+    })
+    .await
+}
+
 /// The file extension for a mime type (parameters such as `;codecs=opus` ignored).
 fn extension_for(mime: &str) -> Option<&'static str> {
     let essence = mime.split(';').next()?.trim().to_ascii_lowercase();

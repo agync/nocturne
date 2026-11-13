@@ -37,6 +37,7 @@ const QUICK_CAPTURE_COMMANDS: &[&str] = &[
     "get_settings",
     "keep_text",
     "keep_files",
+    "take_quick_drop",
     "keep_bytes",
     "keep_recording",
     "unkeep",

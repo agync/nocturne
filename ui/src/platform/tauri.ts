@@ -19,15 +19,36 @@ function lazyUnlisten(pending: Promise<() => void>): Unsubscribe {
   };
 }
 
+/** Asks the app for files dropped on the quick capture window until unsubscribed. */
+function pollQuickDrop(onDrop: (paths: string[]) => void): Unsubscribe {
+  let stopped = false;
+  const timer = setInterval(() => {
+    invoke<string[]>("take_quick_drop")
+      .then((paths) => {
+        if (!stopped && paths.length > 0) onDrop(paths);
+      })
+      .catch(() => undefined);
+  }, QUICK_DROP_POLL_MS);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
+}
+
 /** The event the quick-capture window sends to the main window with a question. */
 const ASK_HANDOFF = "ask-handoff";
 const OPEN_IN_MAIN = "open-in-main";
+/** How often the quick capture window asks the app what was dropped on it. */
+const QUICK_DROP_POLL_MS = 400;
 
 export class TauriPlatform implements Platform {
   onFileDrop(
     onDrop: (paths: string[]) => void,
     onHover: (count: number | null) => void,
   ): Unsubscribe {
+    // The quick capture window may not listen to events, so the drop is not delivered to it:
+    // the app holds the paths and this window asks for them.
+    if (this.inQuickCapture()) return pollQuickDrop(onDrop);
     return lazyUnlisten(
       getCurrentWebview().onDragDropEvent((event) => {
         const payload = event.payload;

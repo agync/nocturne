@@ -1255,6 +1255,51 @@ fn files_dropped_on_the_window_may_then_be_kept() {
     );
 }
 
+#[test]
+fn files_dropped_on_quick_capture_are_held_for_it_to_ask_for() {
+    use tauri::{DragDropEvent, WindowEvent};
+    let h = harness();
+    let src = tempfile::tempdir().unwrap();
+    let f = write_file(src.path(), "dropped.txt", b"dropped on quick capture");
+    let drop = |window: &tauri::Window<tauri::test::MockRuntime>| {
+        nocturne_app_lib::window::on_window_event(
+            window,
+            &WindowEvent::DragDrop(DragDropEvent::Drop {
+                paths: vec![f.clone()],
+                position: tauri::PhysicalPosition::new(0.0, 0.0),
+            }),
+        );
+    };
+    let quick = h.window("quick-capture");
+
+    drop(&h.webview.as_ref().window());
+    assert_eq!(
+        h.call_from(&quick, "take_quick_drop", json!({})).unwrap(),
+        json!([]),
+        "a drop on the main window is not for quick capture"
+    );
+
+    drop(&quick.as_ref().window());
+    let taken = h.call_from(&quick, "take_quick_drop", json!({})).unwrap();
+    assert_eq!(taken, json!([f.to_str().unwrap()]));
+    assert_eq!(
+        h.call_from(&quick, "take_quick_drop", json!({})).unwrap(),
+        json!([]),
+        "what was handed over is not handed over twice"
+    );
+
+    let kept = h
+        .call_from(
+            &quick,
+            "keep_files",
+            json!({"paths": taken, "source": "drop"}),
+        )
+        .unwrap();
+    let id = kept[0]["item"]["id"].as_str().unwrap();
+    h.call_from(&quick, "get_item", json!({"id": id}))
+        .expect("quick capture may read what it kept from the drop");
+}
+
 // ---- opening and choosing: the shell does it, within bounds ----
 
 #[test]
