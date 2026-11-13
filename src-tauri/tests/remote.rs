@@ -340,12 +340,7 @@ fn failed_opens_have_their_own_bucket() {
     assert!(!p.hub.core.limits.has(Bucket::FailedOpen, ""));
     assert!(p.hub.core.limits.has(Bucket::PairingFrames, ""));
     assert!(p.hub.core.limits.has(Bucket::Static, ""));
-    // While the bucket is empty every open is refused before any work, even a good one.
-    assert!(matches!(
-        block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)),
-        Opened::Refused
-    ));
-    p.mono.advance(Duration::from_secs(60));
+    // Outsiders used up the shared bucket: a paired phone still opens a session.
     let mut c = p.open(&keys, Mode::WebSocket);
     assert!(matches!(
         call(&mut c, RemoteCall::GetStatus),

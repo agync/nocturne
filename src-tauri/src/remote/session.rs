@@ -522,9 +522,21 @@ impl Core {
         let (Some(computer), Some(engine)) = (self.computer(), self.shell.engine()) else {
             return Inbound::Close;
         };
-        // Too many opens failed this minute: refuse before any work, the same way.
-        if !self.limits.has(Bucket::FailedOpen, "") {
-            return self.refuse(conv);
+        // A paired phone is limited by its own bucket and never by the shared one, so failing
+        // opens from outside cannot lock it out. Only an open naming no paired phone meets the
+        // shared gate, before any work is done on it.
+        let named = frame
+            .get(HEADER_LEN..HEADER_LEN + DEVICE_ID_LEN)
+            .map(crypto::b64)
+            .and_then(|id| engine.device(&id).ok().flatten())
+            .filter(|d| d.revoked_at.is_none() && !self.removed(&d.id));
+        match &named {
+            Some(d) if !self.limits.take(Bucket::SessionOpens, &d.id) => {
+                return self.refuse(conv);
+            }
+            Some(_) => {}
+            None if !self.limits.has(Bucket::FailedOpen, "") => return self.refuse(conv),
+            None => {}
         }
         let lookup = |id: &crypto::DeviceId| {
             let row = engine.device(&crypto::b64(id)).ok().flatten()?;
@@ -542,9 +554,6 @@ impl Core {
             conv.push(crypto::revoked(&open.kd, &open.device_id, &open.on));
             *conv.role() = Role::Closed;
             return Inbound::Close;
-        }
-        if !self.limits.take(Bucket::SessionOpens, &device.id) {
-            return self.refuse(conv);
         }
         let connection = self.connection().unwrap_or(RemoteConnection::Simple);
         let f = crypto::new_secret();
