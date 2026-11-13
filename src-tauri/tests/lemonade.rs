@@ -365,6 +365,30 @@ fn an_engine_that_gives_up_empties_the_slot_and_questions_say_unavailable() {
 }
 
 #[test]
+fn the_advanced_details_say_what_the_engine_and_the_tier_are() {
+    let lab = lab(Plan::new("downloaded=all").installed(Tier::Small));
+    wait_for("the mind to arrive", || lab.has_mind());
+    let details = lab.h.ok("get_advanced", json!({}));
+    assert_eq!(details["tier"], "small");
+    assert_eq!(details["engineVersion"], "fake-1.0");
+    let port = block_on(lab.services.client())
+        .and_then(|c| c.endpoint())
+        .map(|e| e.port);
+    assert_eq!(details["enginePort"].as_u64().map(|p| p as u16), port);
+    assert!(details["engineUptimeSeconds"].is_u64(), "{details}");
+    assert_eq!(details["restarts"], 0);
+
+    let before = lab.engine_generation();
+    lab.crash();
+    wait_for("the engine to come back", || {
+        lab.engine_generation() != before && lab.engine_answers()
+    });
+    wait_for("the restart to be counted", || {
+        lab.h.ok("get_advanced", json!({}))["restarts"] == 1
+    });
+}
+
+#[test]
 fn try_again_starts_the_engine_now_instead_of_waiting_for_the_timer() {
     let lab = lab(Plan {
         restart_limit: 1,

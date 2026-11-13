@@ -28,6 +28,15 @@ pub const BUNDLE_ENV: &str = "NOCTURNE_LEMOND";
 /// The id of the notice shown when the engine keeps failing.
 pub const RESTARTS_NOTICE: &str = "restarts";
 
+/// What is known of the engine for the advanced details. Empty while there is no engine.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct EngineDetails {
+    pub version: Option<String>,
+    pub port: Option<u16>,
+    pub uptime_seconds: Option<u32>,
+    pub restarts: u32,
+}
+
 /// One running engine, with the setup that drives it and the tasks that watch both.
 pub(super) struct Lemonade {
     supervisor: Supervisor,
@@ -354,6 +363,27 @@ impl Services {
     /// The process id of the private engine, when it is running.
     pub async fn engine_pid(&self) -> Option<u32> {
         self.lemonade.lock().await.as_ref()?.supervisor.pid()
+    }
+
+    /// What the advanced details say about the private engine.
+    pub async fn engine_details(&self) -> EngineDetails {
+        let slot = self.lemonade.lock().await;
+        let Some(engine) = slot.as_ref() else {
+            return EngineDetails::default();
+        };
+        let (version, port) = match &*engine.supervisor.state().borrow() {
+            RuntimeState::Ready { port, version } => (Some(version.clone()), Some(*port)),
+            _ => (None, None),
+        };
+        EngineDetails {
+            version,
+            port,
+            uptime_seconds: engine
+                .supervisor
+                .uptime()
+                .map(|d| u32::try_from(d.as_secs()).unwrap_or(u32::MAX)),
+            restarts: engine.supervisor.restarts(),
+        }
     }
 
     pub(super) async fn setup(&self) -> Option<Arc<Setup>> {

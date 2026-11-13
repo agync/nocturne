@@ -26,7 +26,7 @@ use tokio_util::sync::CancellationToken;
 use crate::state::{AppState, refresh_status};
 
 pub mod lemonade;
-pub use lemonade::{pause_setup, resume_setup, retry_engine, start_setup};
+pub use lemonade::{EngineDetails, pause_setup, resume_setup, retry_engine, start_setup};
 
 /// How long quitting waits for the reader to give back the item it is reading.
 const STOP_TASKS: Duration = Duration::from_secs(1);

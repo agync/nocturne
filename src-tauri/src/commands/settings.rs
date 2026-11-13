@@ -10,6 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::{change, engine, read, run};
 use crate::error::{CommandError, blocking, blocking_cmd};
+use crate::runtime::EngineDetails;
 use crate::state::{AppState, refresh_status};
 
 #[tauri::command]
@@ -128,24 +129,28 @@ pub async fn resume<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     .await
 }
 
-/// The technical details. What the shell does not know yet (the private engine's version, port,
-/// components) is empty until the runtime lane fills it in.
+/// The technical details. The private engine's version, port, uptime, restarts and the tier come
+/// from the running services; the hardware and the components are still empty.
 #[tauri::command]
 pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView, CommandError> {
     run(app, move |app| async move {
         let state = app.state::<AppState>();
         let e = engine(&app)?;
         let (stats, agents) = blocking(move || Ok((e.stats()?, e.settings()?.agents))).await?;
+        let (tier, engine) = match state.services() {
+            Some(services) => (services.tier(), services.engine_details().await),
+            None => (None, EngineDetails::default()),
+        };
         Ok(AdvancedView {
-            tier: None,
+            tier,
             ram_gib: 0,
             gpu: None,
             npu: false,
             components: Vec::new(),
-            engine_version: None,
-            engine_port: None,
-            engine_uptime_seconds: None,
-            restarts: 0,
+            engine_version: engine.version,
+            engine_port: engine.port,
+            engine_uptime_seconds: engine.uptime_seconds,
+            restarts: engine.restarts,
             store_version: stats.store_version,
             memory_count: stats.memory_count,
             item_count: stats.item_count,
