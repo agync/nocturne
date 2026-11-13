@@ -18,6 +18,7 @@ pub mod shortcut;
 pub mod sound;
 pub mod state;
 pub mod tray;
+pub mod webview;
 
 use std::sync::Arc;
 
@@ -58,6 +59,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     app.manage(OsState::new(&shell.data_dir));
     let os = app.state::<OsState>();
 
+    os.set_webview_dirs(webview::default_dirs(&app.config().identifier));
     os.set_registrar(Arc::new(shortcut::PluginRegistrar(app.clone())));
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
@@ -270,12 +272,13 @@ pub async fn after_failed_delete<R: Runtime>(app: &AppHandle<R>) {
 
 /// Everything was deleted: drop what the desktop side remembers, and undo what it set up. The
 /// settings are back to their defaults, so the start-at-login entry goes and the shortcut is the
-/// default one again.
+/// default one again. The web view's own storage and cache go too.
 pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     let Some(os) = app.try_state::<OsState>() else {
         return;
     };
     os.forget_all();
+    webview::remove(&os.webview_dirs());
     if let Err(e) = set_start_at_login(app, &os, false) {
         tracing::warn!("start with this computer could not be switched off: {e}");
     }

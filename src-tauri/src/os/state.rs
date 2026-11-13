@@ -53,6 +53,7 @@ pub struct OsState {
     shortcut: Mutex<ShortcutSlot>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
     autostart: Mutex<Option<Target>>,
+    webview_dirs: Mutex<Vec<PathBuf>>,
     inbox: Mutex<Option<Handle>>,
     before_keep: Mutex<Option<BeforeKeep>>,
     inbox_timing: Mutex<Timing>,
@@ -67,6 +68,7 @@ impl OsState {
             shortcut: Mutex::new(ShortcutSlot::default()),
             notifier: Mutex::new(None),
             autostart: Mutex::new(None),
+            webview_dirs: Mutex::new(Vec::new()),
             inbox: Mutex::new(None),
             before_keep: Mutex::new(None),
             inbox_timing: Mutex::new(Timing::default()),
@@ -113,6 +115,19 @@ impl OsState {
 
     pub fn autostart(&self) -> Option<Target> {
         self.autostart
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// The web view's own folders, removed by "Delete everything". Empty until [`super::install`]
+    /// sets them from the real home folder, so tests never reach one.
+    pub fn set_webview_dirs(&self, dirs: Vec<PathBuf>) {
+        *self.webview_dirs.lock().unwrap_or_else(|e| e.into_inner()) = dirs;
+    }
+
+    pub fn webview_dirs(&self) -> Vec<PathBuf> {
+        self.webview_dirs
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()

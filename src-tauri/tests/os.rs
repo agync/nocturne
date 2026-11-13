@@ -435,6 +435,27 @@ fn from_a_mounted_disk_start_at_login_is_refused_and_says_why() {
     assert!(!h.engine().settings().unwrap().start_at_login);
 }
 
+#[test]
+fn delete_everything_removes_the_web_views_own_folders_and_nothing_else() {
+    use nocturne_app_lib::os::webview;
+    let h = harness();
+    let root = tempfile::tempdir().unwrap();
+    let dirs = webview::macos_dirs(root.path(), "app.nocturne.desktop");
+    for d in &dirs {
+        std::fs::create_dir_all(d.join("data")).unwrap();
+    }
+    let other = root.path().join("Library/WebKit/some.other.app");
+    std::fs::create_dir_all(&other).unwrap();
+    h.app.manage(OsState::new(h.dir.path()));
+    h.app.state::<OsState>().set_webview_dirs(dirs.clone());
+    h.ok(
+        "delete_everything",
+        json!({"confirmPhrase": "delete everything"}),
+    );
+    assert!(dirs.iter().all(|d| !d.exists()), "{dirs:?}");
+    assert!(other.exists(), "another app's folder stays");
+}
+
 mod inbox {
     use std::path::Path;
     use std::time::{Duration, Instant};
