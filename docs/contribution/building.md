@@ -13,7 +13,7 @@ Everything here runs on your own machine. Nothing is pushed, uploaded or publish
 ## The development loop
 
 ```bash
-make setup          # git hooks, the scratch area and the interface dependencies
+make setup          # git hooks and the interface dependencies
 make dev            # the desktop app with a scripted mind and a scratch data folder
 make check          # lint, drift checks and every test: the gate for every change
 make help           # every target
@@ -28,6 +28,7 @@ scripted mind:
 
 ```bash
 make lemonade/fetch   # downloads the pinned embeddable bundle into vendor/lemonade/
+cd src-tauri && NOCTURNE_DATA_DIR=<scratch> ../ui/node_modules/.bin/tauri dev
 ```
 
 A debug build finds the bundle there. A release build finds it among its own resources, and

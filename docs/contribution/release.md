@@ -29,7 +29,7 @@ Keep the real output of each step with the release notes.
 7. **Prove it stays local.** `scripts/net-check.sh launch <variant>` for `binary`, `appimage`, `deb`
    and `rpm`, then `scripts/net-check.sh prepared appimage` with `NET_CHECK_DIR` set to a data
    folder where setup finished. Record the output in the release notes: it is the release-time proof
-   behind "Sent to the internet: nothing".
+   behind the claim that Nocturne goes online only to download what the person agrees to.
 8. **Check the licences.** `scripts/notices.py --check` passes. The copyleft policy for the
    AppImage's bundled libraries is enforced by step 5.
 9. **Check the desktop** (below) on a GNOME Wayland session and on one X11 session.
@@ -65,5 +65,5 @@ files. Tick them off in the release notes.
 
 ## When a step fails
 
-A failure is a fix in the lane that owns the code, or a row in the backlog. Do not tag around it.
+A failure is fixed in the code, or recorded as an issue. Do not tag around it.
 Re-run the whole checklist after the fix, not only the failed step.
