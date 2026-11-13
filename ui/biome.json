@@ -1,0 +1,19 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.6.7/schema.json",
+  "files": {
+    "includes": [
+      "**",
+      "!dist",
+      "!test-results",
+      "!playwright-report",
+      "!node_modules",
+      "!src/engine/bindings",
+      "!src/design/tokens.css"
+    ]
+  },
+  "formatter": { "indentStyle": "space", "indentWidth": 2, "lineWidth": 100 },
+  "javascript": { "formatter": { "quoteStyle": "double" } },
+  "css": { "parser": { "cssModules": true } },
+  "linter": { "enabled": true },
+  "assist": { "enabled": true, "actions": { "source": { "organizeImports": "on" } } }
+}
