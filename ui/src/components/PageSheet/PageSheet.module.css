@@ -213,3 +213,19 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.bars {
+  display: inline-flex;
+  gap: 3px;
+}
+
+.bar {
+  width: 18px;
+  height: 4px;
+  background: var(--rule);
+  transition: background var(--m-rest-duration) var(--m-rest-easing);
+}
+
+.bar[data-filled="true"] {
+  background: var(--ink);
+}

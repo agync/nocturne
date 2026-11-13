@@ -33,9 +33,9 @@ describe("the morning page on Today", () => {
     await userEvent.click(screen.getByRole("button", { name: new RegExp(thursday) }));
     expect(spy).toHaveBeenCalledWith("conflict-dentist", "mem-dentist-thu");
     const status = (await screen.findAllByRole("status")).find((s) =>
-      s.textContent?.includes("The other is kept as history"),
+      s.textContent?.includes("set to"),
     );
-    expect(status).toHaveTextContent(`Set to ${thursday}.`);
+    expect(status).toHaveTextContent(`Dentist set to ${thursday}.`);
     expect(
       await screen.findByRole("heading", { level: 1, name: "One thing needs you today." }),
     ).toBeInTheDocument();
@@ -165,5 +165,29 @@ describe("the morning page on Today", () => {
       await screen.findByText("Forgotten. This line is gone from the page."),
     ).toBeInTheDocument();
     expect(document.body.textContent).not.toContain("4471");
+  });
+
+  it("gives way to fresh data once it has arrived instead of keeping its own guess", async () => {
+    const { engine } = await open();
+    // The engine accepts the change but its page still says the line is open.
+    vi.spyOn(engine, "markDone").mockResolvedValue(undefined);
+    await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    expect(await screen.findByRole("button", { name: "Mark as done" })).toBeInTheDocument();
+  });
+
+  it("says a past page was still being written, with no live progress", async () => {
+    renderApp({ hash: "#/pages/2026-11-06" });
+    expect(await screen.findByText(/This page was still being written\./)).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("does not let a line with nothing behind it pretend to succeed", async () => {
+    renderApp({ hash: "#/pages/2026-11-04" });
+    await screen.findByRole("heading", {
+      level: 1,
+      name: "Seven things need you. Three are today.",
+    });
+    const buttons = screen.getAllByRole("button", { name: "Mark as done" });
+    expect(buttons.some((b) => (b as HTMLButtonElement).disabled)).toBe(true);
   });
 });

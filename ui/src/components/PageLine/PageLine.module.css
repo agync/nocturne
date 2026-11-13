@@ -51,7 +51,7 @@
   padding: 0;
   border: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   gap: var(--s-2);
 }
 
@@ -155,4 +155,10 @@
 .upcomingText {
   font: 400 1.125rem / 1.4 var(--font-serif);
   font-variant-numeric: oldstyle-nums;
+}
+
+.status:focus-visible,
+.why:focus-visible,
+.result:focus-visible {
+  outline-offset: 4px;
 }

@@ -75,7 +75,7 @@ export function receiptLabel(receipt: Receipt, interactive: boolean): string {
   if (receipt.kind === "document" && p !== null) detail = t("receipt.aria.page", { page: p });
   const action = [
     receipt.unconfirmed ? t("receipt.aria.unconfirmed") : "",
-    interactive ? (receipt.kind === "audio" ? t("receipt.aria.play") : t("receipt.aria.open")) : "",
+    interactive ? t("receipt.aria.open") : "",
   ].join("");
   return t("receipt.aria", {
     kind: spokenKind(receipt),

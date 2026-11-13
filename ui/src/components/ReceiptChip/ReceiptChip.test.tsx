@@ -26,7 +26,7 @@ describe("ReceiptChip", () => {
     render(<ReceiptChip receipt={base} onOpen={() => undefined} />);
     expect(
       screen.getByRole("button", {
-        name: "Source: voice note, 10 seconds, Monday 10 November. Press Enter to play.",
+        name: "Source: voice note, 10 seconds, Monday 10 November. Press Enter to open.",
       }),
     ).toBeInTheDocument();
   });

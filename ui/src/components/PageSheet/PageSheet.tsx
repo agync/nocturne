@@ -1,7 +1,13 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { formatEta, formatLongDay, formatTime, formatWeekday } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { Edition, PageLine as Line, PageView, QuestionChoice } from "../../engine/bindings";
+import type {
+  Edition,
+  PageLine as Line,
+  PageView,
+  QuestionChoice,
+  WhichResolved,
+} from "../../engine/bindings";
 import { Button } from "../Button/Button";
 import { EditionTabs } from "../EditionTabs/EditionTabs";
 import { type LineAction, PageLine } from "../PageLine/PageLine";
@@ -33,6 +39,10 @@ interface PageSheetProps {
   sentToInternet?: string;
   /** How far the overnight tidy has got, while a page is still being written. */
   progress?: WritingProgress | null;
+  /** False for a page from an earlier day: nothing is being written for it any more. */
+  live?: boolean;
+  /** What the engine said it settled for each which-is-right line, by line id. */
+  resolved?: Record<string, WhichResolved>;
 }
 
 function openCount(lines: Line[]): number {
@@ -66,6 +76,23 @@ const ANSWERS = {
   notSure: ["page.question.answered.notSure", "page.question.answered.notSure.body"],
 } as const;
 
+/** Three bars that settle as the answer lands: all three for yes, two otherwise. */
+function AnswerBars({ choice }: { choice: QuestionChoice }) {
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setSettled(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const third = choice === "yes" && settled;
+  return (
+    <span className={styles.bars} aria-hidden="true">
+      <span className={styles.bar} data-filled="true" />
+      <span className={styles.bar} data-filled="true" />
+      <span className={styles.bar} data-filled={third} />
+    </span>
+  );
+}
+
 export function PageSheet({
   page,
   onAction,
@@ -73,6 +100,8 @@ export function PageSheet({
   pageTime = "07:00",
   sentToInternet,
   progress = null,
+  live = true,
+  resolved = {},
 }: PageSheetProps) {
   const base = useId();
   const [changing, setChanging] = useState(false);
@@ -94,7 +123,18 @@ export function PageSheet({
     return { title: t(title), body: t(body) };
   };
 
+  const change = useRef<HTMLButtonElement>(null);
+  const asked = useRef(false);
+  useEffect(() => {
+    // The answer buttons are gone once answered, so focus moves to what replaced them.
+    if (answered && asked.current) {
+      asked.current = false;
+      change.current?.focus();
+    }
+  }, [answered]);
+
   const choose = (choice: QuestionChoice) => {
+    asked.current = true;
     setChanging(false);
     onAction({ type: "answer", choice });
   };
@@ -147,7 +187,13 @@ export function PageSheet({
             </p>
           </header>
 
-          {page.variant === "beingWritten" ? (
+          {page.variant === "beingWritten" && !live ? (
+            <p className={styles.writingBody} role="note">
+              {t("page.writing.past")}
+            </p>
+          ) : null}
+
+          {page.variant === "beingWritten" && live ? (
             <div className={styles.writing}>
               <Progress
                 value={progress?.done ?? 0}
@@ -198,7 +244,12 @@ export function PageSheet({
               }
             >
               {page.needsYou.map((line) => (
-                <PageLine key={line.id} line={line} onAction={onAction} />
+                <PageLine
+                  key={line.id}
+                  line={line}
+                  onAction={onAction}
+                  resolved={resolved[line.id]}
+                />
               ))}
               {page.moreNeedsYou > 0 ? (
                 <a className={styles.more} href="#/needs-you">
@@ -258,7 +309,10 @@ export function PageSheet({
               <p className={styles.questionText}>{question.text}</p>
               {question.receipt ? (
                 <span className={styles.questionSource}>
-                  <ReceiptChip receipt={question.receipt} />
+                  <ReceiptChip
+                    receipt={question.receipt}
+                    onOpen={(r) => onAction({ type: "open", receipt: r })}
+                  />
                   <span className={styles.lastAsked}>
                     {question.lastAsked
                       ? t("page.question.lastAsked", { when: formatLongDay(question.lastAsked) })
@@ -298,14 +352,19 @@ export function PageSheet({
               <div className={styles.thanks} role="status" aria-live="polite">
                 {answered ? (
                   <>
+                    {question.kind === "yesNo" ? <AnswerBars choice={answered} /> : null}
                     <span className={styles.thanksTitle}>{answerText(answered).title}</span>
                     {answerText(answered).body ? (
                       <span className={styles.thanksBody}>{answerText(answered).body}</span>
                     ) : null}
                     <button
+                      ref={change}
                       type="button"
                       className={styles.change}
-                      onClick={() => setChanging(true)}
+                      onClick={() => {
+                        asked.current = false;
+                        setChanging(true);
+                      }}
                     >
                       {t("button.changeAnswer")}
                     </button>

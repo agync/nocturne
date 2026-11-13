@@ -1,9 +1,11 @@
-import { useCallback, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { PageSheet, type SheetAction } from "../../components/PageSheet/PageSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, isDay } from "../../copy/format";
 import { t } from "../../copy/t";
+import type { WhichResolved } from "../../engine/bindings";
 import {
   useEngine,
   usePage,
@@ -34,7 +36,11 @@ function TodayPage({ date }: { date: string | undefined }) {
   const { data: pages } = usePages();
   const { data: settings } = useSettings();
   const { data: status } = useStatus();
+  const todayQuery = usePage();
+  const client = useQueryClient();
   const [overrides, setOverrides] = useState<Overrides>(NO_OVERRIDES);
+  const [resolved, setResolved] = useState<Record<string, WhichResolved>>({});
+  const inflight = useRef(0);
 
   const page = useMemo(
     () => (pageQuery.data ? applyOverrides(pageQuery.data, overrides) : undefined),
@@ -52,15 +58,26 @@ function TodayPage({ date }: { date: string | undefined }) {
     );
   }, [page, pages]);
 
-  const settle = useCallback(() => refresh("page", "pages", "status", "needsYou"), [refresh]);
+  // Just-now changes stay on screen until fresh data has arrived, then give way to it.
+  const settle = useCallback(async () => {
+    await Promise.all(
+      ["page", "pages", "status", "needsYou"].map((key) =>
+        client.invalidateQueries({ queryKey: [key] }),
+      ),
+    );
+    if (inflight.current === 0) setOverrides(NO_OVERRIDES);
+  }, [client]);
 
   const run = useCallback(
     async (apply: () => void, revert: () => void, work: () => Promise<unknown>) => {
       apply();
+      inflight.current += 1;
       try {
         await work();
-        settle();
+        inflight.current -= 1;
+        await settle();
       } catch {
+        inflight.current -= 1;
         revert();
         toast.show({ message: t("page.action.failed") });
       }
@@ -79,7 +96,10 @@ function TodayPage({ date }: { date: string | undefined }) {
           void run(
             () => set((o) => ({ ...o, done: [...o.done, id] })),
             () => set((o) => ({ ...o, done: o.done.filter((x) => x !== id) })),
-            () => (memoryId ? engine.markDone(memoryId) : Promise.resolve()),
+            async () => {
+              if (!memoryId) throw new Error("This line has nothing to mark");
+              await engine.markDone(memoryId);
+            },
           );
           break;
         }
@@ -93,10 +113,11 @@ function TodayPage({ date }: { date: string | undefined }) {
                 const { [id]: _removed, ...rest } = o.chosen;
                 return { ...o, chosen: rest };
               }),
-            () =>
-              conflictId
-                ? engine.resolveWhich(conflictId, action.choice.memoryId)
-                : Promise.resolve(),
+            async () => {
+              if (!conflictId) throw new Error("This line cannot be resolved");
+              const result = await engine.resolveWhich(conflictId, action.choice.memoryId);
+              setResolved((r) => ({ ...r, [id]: result }));
+            },
           );
           break;
         }
@@ -106,7 +127,10 @@ function TodayPage({ date }: { date: string | undefined }) {
           void run(
             () => set((o) => ({ ...o, done: [...o.done, id] })),
             () => set((o) => ({ ...o, done: o.done.filter((x) => x !== id) })),
-            () => (memoryId ? engine.confirmMemory(memoryId, action.confirmed) : Promise.resolve()),
+            async () => {
+              if (!memoryId) throw new Error("This line has nothing to confirm");
+              await engine.confirmMemory(memoryId, action.confirmed);
+            },
           );
           break;
         }
@@ -175,6 +199,8 @@ function TodayPage({ date }: { date: string | undefined }) {
           pageTime={settings?.pageTime}
           sentToInternet={sent}
           progress={status?.tidy ?? null}
+          live={!date || date === todayQuery.data?.date}
+          resolved={resolved}
         />
       </div>
     </div>

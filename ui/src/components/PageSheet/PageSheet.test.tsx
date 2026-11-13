@@ -1,7 +1,7 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import type { PageView } from "../../engine/bindings";
+import type { PageLine as Line, PageView } from "../../engine/bindings";
 import { createMockEngine } from "../../engine/mock/engine";
 import { PageSheet } from "./PageSheet";
 
@@ -89,14 +89,19 @@ describe("PageSheet, a normal day", () => {
         l.kind === "which" ? { ...l, done: true, memoryIds: ["mem-dentist-thu"] } : l,
       ),
     };
-    rerender(<PageSheet page={done} onAction={onAction} />);
-    const status = screen
-      .getAllByRole("status")
-      .find((s) => s.textContent?.includes("The other is kept as history, not deleted."));
-    expect(status).toHaveTextContent(
-      `Set to ${thursday?.text}. The other is kept as history, not deleted.`,
-    );
+    const resolved = {
+      "line-dentist": {
+        subject: "Dentist",
+        chosen: thursday?.text ?? "",
+        memoryId: "mem-dentist-thu",
+      },
+    };
+    rerender(<PageSheet page={done} onAction={onAction} resolved={resolved} />);
+    const status = screen.getAllByRole("status").find((s) => s.textContent?.includes("set to"));
+    expect(status).toHaveTextContent(`Dentist set to ${thursday?.text}.`);
     expect(status).toHaveAttribute("aria-live", "polite");
+    const visible = screen.getByText(/it is\. The other is kept as history, not deleted\./);
+    expect(visible.querySelector("strong")).toHaveTextContent(thursday?.text ?? "");
     expect(screen.getByRole("heading", { level: 2, name: "Needs you · 1" })).toBeInTheDocument();
   });
 
@@ -256,5 +261,127 @@ describe("PageSheet, other days", () => {
     const page = byDate.catchUp as PageView;
     render(<PageSheet page={page} onAction={vi.fn()} />);
     expect(heading("Two nights in one page.", 1)).toBeInTheDocument();
+  });
+
+  it("moves focus to the result after each action, never to the page body", async () => {
+    const act = (page: PageView) => page;
+    void act;
+    const onAction = vi.fn();
+    const { rerender } = render(<PageSheet page={today} onAction={onAction} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Mark as done" }));
+    rerender(
+      <PageSheet
+        page={{
+          ...today,
+          needsYou: today.needsYou.map((l) => (l.kind === "due" ? { ...l, done: true } : l)),
+        }}
+        onAction={onAction}
+      />,
+    );
+    expect(screen.getByText("Done. Nocturne will stop reminding you.")).toHaveFocus();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Bring back" })[0] as HTMLElement);
+    rerender(
+      <PageSheet
+        page={{
+          ...today,
+          letGo: today.letGo.map((l) => (l.id === "line-gym" ? { ...l, done: true } : l)),
+        }}
+        onAction={onAction}
+      />,
+    );
+    expect(screen.getByText("Brought back. It will not fade for 30 days.")).toHaveFocus();
+
+    const thursday = today.needsYou.find((l) => l.kind === "which")?.choices[1]?.text ?? "";
+    await userEvent.click(screen.getByRole("button", { name: new RegExp(thursday) }));
+    rerender(
+      <PageSheet
+        page={{
+          ...today,
+          needsYou: today.needsYou.map((l) =>
+            l.kind === "which" ? { ...l, done: true, memoryIds: ["mem-dentist-thu"] } : l,
+          ),
+        }}
+        onAction={onAction}
+      />,
+    );
+    expect(screen.getByText(/it is\. The other is kept/).closest("p")).toHaveFocus();
+
+    await userEvent.click(screen.getByRole("button", { name: "Yes" }));
+    rerender(
+      <PageSheet
+        page={{ ...today, question: today.question && { ...today.question, answered: "yes" } }}
+        onAction={onAction}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "Change answer" })).toHaveFocus();
+  });
+
+  it("keeps focus inside the line when an unconfirmed claim is settled, and says which way", async () => {
+    const line: Line = {
+      ...(today.needsYou[0] as Line),
+      id: "line-nut",
+      kind: "unconfirmed",
+      memoryIds: ["mem-nut"],
+    };
+    const page = { ...today, needsYou: [line] };
+    const onAction = vi.fn();
+    const { rerender } = render(<PageSheet page={page} onAction={onAction} />);
+    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it" }));
+    rerender(
+      <PageSheet page={{ ...page, needsYou: [{ ...line, done: true }] }} onAction={onAction} />,
+    );
+    const status = screen.getByText(/^Forgotten\. The original is still kept/);
+    expect(status).toHaveFocus();
+    expect(status).toHaveAttribute("role", "status");
+  });
+
+  it("keeps its live regions mounted so the first change is announced", () => {
+    render(<PageSheet page={today} onAction={vi.fn()} />);
+    const regions = screen.getAllByRole("status");
+    expect(regions.length).toBeGreaterThanOrEqual(4);
+    for (const region of regions) expect(region).toHaveAttribute("aria-live", "polite");
+  });
+
+  it("offers nothing to pretend with when a line has no memory behind it", () => {
+    const page = {
+      ...today,
+      needsYou: today.needsYou.map((l) => (l.kind === "due" ? { ...l, memoryIds: [] } : l)),
+      letGo: today.letGo.map((l) => (l.id === "line-gym" ? { ...l, memoryIds: [] } : l)),
+    };
+    render(<PageSheet page={page} onAction={vi.fn()} />);
+    expect(screen.getByRole("button", { name: "Mark as done" })).toBeDisabled();
+    expect(screen.getAllByRole("button", { name: "Bring back" })[0]).toBeDisabled();
+  });
+
+  it("shows the answer bars filling for yes, and opens the question's own receipt", async () => {
+    const onAction = vi.fn();
+    const answered = {
+      ...today,
+      question: today.question && { ...today.question, answered: "yes" as const },
+    };
+    const { container } = render(<PageSheet page={answered} onAction={onAction} />);
+    await waitFor(() => expect(container.querySelectorAll('[data-filled="true"]')).toHaveLength(3));
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "One question" })).getByRole("button", {
+        name: /^Source:/,
+      }),
+    );
+    expect(onAction).toHaveBeenCalledWith(expect.objectContaining({ type: "open" }));
+  });
+
+  it("says a past page was still being written, with no live progress", () => {
+    const page = byDate.writing as PageView;
+    render(
+      <PageSheet
+        page={page}
+        onAction={vi.fn()}
+        live={false}
+        progress={{ done: 3, total: 9, etaSeconds: 60 }}
+      />,
+    );
+    expect(screen.getByText(/This page was still being written\./)).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).toBeNull();
   });
 });
