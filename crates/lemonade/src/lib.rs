@@ -6,9 +6,13 @@ pub mod client;
 pub mod config;
 mod error;
 pub mod record;
+pub mod setup;
 pub mod supervisor;
+pub mod tier;
 
 pub use bundle::Dirs;
 pub use client::Client;
 pub use error::RuntimeError;
-pub use supervisor::{RuntimeState, Supervisor, SupervisorOptions};
+pub use setup::{Setup, SetupOptions};
+pub use supervisor::{Control, RuntimeState, Supervisor, SupervisorOptions};
+pub use tier::{Component, components, detect, tier_options};

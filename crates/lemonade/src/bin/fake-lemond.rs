@@ -10,7 +10,7 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant};
 
 use axum::body::Body;
@@ -77,7 +77,7 @@ struct App {
     key: String,
     port: u16,
     ws_port: u16,
-    modes: HashMap<String, String>,
+    modes: RwLock<HashMap<String, String>>,
     cache: PathBuf,
     models_dir: String,
     sleeper: Mutex<Option<std::process::Child>>,
@@ -92,12 +92,20 @@ impl App {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    fn mode(&self, key: &str) -> Option<String> {
+        self.modes
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+            .cloned()
+    }
+
     fn mode_u64(&self, key: &str) -> Option<u64> {
-        self.modes.get(key).and_then(|v| v.parse().ok())
+        self.mode(key).and_then(|v| v.parse().ok())
     }
 
     fn flag(&self, key: &str) -> bool {
-        self.modes.contains_key(key)
+        self.mode(key).is_some()
     }
 
     fn download_ms(&self) -> f64 {
@@ -134,9 +142,9 @@ impl App {
             if job.status == Status::Downloading {
                 let bytes = self.job_bytes(&job);
                 if bytes >= job.total {
+                    inner.partial.remove(&job.name);
                     match job.kind {
                         "model" => {
-                            inner.partial.remove(&job.name);
                             if !inner.downloaded.contains(&job.name) {
                                 inner.downloaded.push(job.name.clone());
                             }
@@ -162,9 +170,7 @@ impl App {
     fn persist_locked(&self, inner: &mut Inner) {
         let mut partial = inner.partial.clone();
         for job in &inner.jobs {
-            if job.kind == "model" {
-                partial.insert(job.name.clone(), self.job_bytes(job));
-            }
+            partial.insert(job.name.clone(), self.job_bytes(job));
         }
         let state = json!({
             "partial": partial,
@@ -368,7 +374,7 @@ async fn main() {
         key,
         port,
         ws_port,
-        modes,
+        modes: RwLock::new(modes),
         sleeper: Mutex::new(sleeper),
         leak,
         cache,
@@ -427,6 +433,7 @@ async fn main() {
         .route("/fake/env", get(fake_env))
         .route("/fake/requests", get(fake_requests))
         .route("/fake/script", post(fake_script))
+        .route("/fake/mode", post(fake_mode))
         .route("/fake/stats", get(fake_stats))
         .layer(middleware::from_fn_with_state(app.clone(), guard))
         .with_state(app);
@@ -493,11 +500,8 @@ async fn health(State(app): State<Shared>) -> Json<Value> {
 async fn system_info(State(app): State<Shared>) -> Json<Value> {
     let mut inner = app.inner();
     app.tick(&mut inner);
-    let gpu = app
-        .modes
-        .get("gpu")
-        .map(String::as_str)
-        .unwrap_or("integrated");
+    let gpu_mode = app.mode("gpu");
+    let gpu = gpu_mode.as_deref().unwrap_or("integrated");
     let amd_gpu = match gpu {
         "none" => json!([]),
         "discrete" => {
@@ -662,9 +666,7 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
         }
         "remove" => {
             let job = inner.jobs.remove(pos);
-            if job.kind == "model" {
-                inner.partial.insert(job.name, bytes);
-            }
+            inner.partial.insert(job.name, bytes);
             app.persist_locked(&mut inner);
             Json(json!({"status": "ok"})).into_response()
         }
@@ -913,6 +915,13 @@ async fn fake_script(State(app): State<Shared>, Json(body): Json<Value>) -> Json
     if let Some(items) = body["chat"].as_array() {
         inner.script = items.iter().cloned().collect();
     }
+    Json(json!({"status": "ok"}))
+}
+
+/// Replaces the mode string while the fake runs, for tests that change conditions mid-flight.
+async fn fake_mode(State(app): State<Shared>, Json(body): Json<Value>) -> Json<Value> {
+    *app.modes.write().unwrap_or_else(|e| e.into_inner()) =
+        parse_modes(body["mode"].as_str().unwrap_or(""));
     Json(json!({"status": "ok"}))
 }
 

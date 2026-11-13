@@ -64,7 +64,33 @@ struct Shared {
     ready_since: Mutex<Option<Instant>>,
 }
 
+/// A cheap, cloneable handle on a running supervisor's settings.
+#[derive(Clone)]
+pub struct Control {
+    dirs: Dirs,
+    client: Client,
+    shared: Arc<Shared>,
+}
+
+impl Control {
+    pub fn dirs(&self) -> &Dirs {
+        &self.dirs
+    }
+
+    pub fn client(&self) -> Client {
+        self.client.clone()
+    }
+
+    pub async fn set_online(&self, online: bool) -> Result<(), RuntimeError> {
+        self.shared.online.store(online, Ordering::SeqCst);
+        self.client
+            .set(&serde_json::json!({ "offline": !online }))
+            .await
+    }
+}
+
 pub struct Supervisor {
+    dirs: Dirs,
     client: Client,
     state: watch::Receiver<RuntimeState>,
     shared: Arc<Shared>,
@@ -103,7 +129,7 @@ impl Supervisor {
         let (cmd_tx, cmd_rx) = mpsc::channel(4);
         let (first_tx, first_rx) = oneshot::channel();
         let actor = Actor {
-            dirs,
+            dirs: dirs.clone(),
             exe,
             opts,
             client: client.clone(),
@@ -113,6 +139,7 @@ impl Supervisor {
         let task = tokio::spawn(actor.run(cmd_rx, first_tx));
         match first_rx.await {
             Ok(Ok(())) => Ok(Supervisor {
+                dirs,
                 client,
                 state: state_rx,
                 shared,
@@ -160,10 +187,20 @@ impl Supervisor {
     /// Lets the engine reach the internet (for a download the person approved) or not.
     /// The choice outlives a restart.
     pub async fn set_online(&self, online: bool) -> Result<(), RuntimeError> {
-        self.shared.online.store(online, Ordering::SeqCst);
-        self.client
-            .set(&serde_json::json!({ "offline": !online }))
-            .await
+        self.control().set_online(online).await
+    }
+
+    /// A handle for the parts of the supervisor that other components need.
+    pub fn control(&self) -> Control {
+        Control {
+            dirs: self.dirs.clone(),
+            client: self.client.clone(),
+            shared: self.shared.clone(),
+        }
+    }
+
+    pub fn dirs(&self) -> &Dirs {
+        &self.dirs
     }
 
     /// Stops the engine and everything it started. Asks politely, then insists.
