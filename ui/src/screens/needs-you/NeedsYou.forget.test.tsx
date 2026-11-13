@@ -1,25 +1,11 @@
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NeedsYouEntry } from "../../engine/bindings";
 import { MockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
 
-// The shared forget dialog is a stub until the memories screens land; this stands in for its
-// promise: it reports what it was given and calls onDone once the person confirms.
-vi.mock("../../components/ForgetDialog/ForgetDialog", () => ({
-  ForgetDialog: ({ memoryIds, onDone }: { memoryIds: string[]; onDone: (r: unknown) => void }) => (
-    <button
-      type="button"
-      onClick={() =>
-        onDone({ memoriesRemoved: memoryIds.length, originalsRemoved: 0, pagesRedacted: 0 })
-      }
-    >
-      {`Confirm forgetting ${memoryIds.join(",")}`}
-    </button>
-  ),
-}));
-
+/** The nut allergy waits, with one other thing behind it; forgetting really removes the memory. */
 class Waiting extends MockEngine {
   override async listNeedsYou(): Promise<NeedsYouEntry[]> {
     const memories = await this.listMemories({
@@ -29,9 +15,15 @@ class Waiting extends MockEngine {
       query: null,
       limit: null,
     });
-    const memory = memories.find((m) => m.id === "mem-nut");
-    if (!memory) throw new Error("seed");
-    return [{ type: "unconfirmed", memory, agreeingSources: 0, used: false }];
+    const nut = memories.find((m) => m.id === "mem-nut");
+    const trip = memories.find((m) => m.id === "mem-trip");
+    if (!trip) throw new Error("seed");
+    const out: NeedsYouEntry[] = [];
+    if (nut?.status === "unconfirmed") {
+      out.push({ type: "unconfirmed", memory: nut, agreeingSources: 0, used: false });
+    }
+    out.push({ type: "due", memory: trip, due: "2026-11-20", done: false });
+    return out;
   }
 }
 
@@ -40,18 +32,44 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-describe("Not true, forget it", () => {
-  it("once forgotten the entry goes and the screen says what happened", async () => {
-    renderApp({ hash: "#/needs-you", engine: new Waiting() });
+describe("Not true, forget it, with the real forget dialog", () => {
+  it("settles the entry once, as soon as it is forgotten, and keeps the dialog's own words until closed", async () => {
+    const engine = new Waiting();
+    const forget = vi.spyOn(engine, "forget");
+    const listed = vi.spyOn(engine, "listNeedsYou");
+    renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it" }));
-    await userEvent.click(screen.getByRole("button", { name: "Confirm forgetting mem-nut" }));
-    expect(await screen.findByText("Nothing needs you.")).toBeInTheDocument();
+    const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
+    await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
+
+    // The dialog says so while the screen behind it has already moved on.
+    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
+    expect(forget).toHaveBeenCalledOnce();
+    await waitFor(() => expect(listed.mock.calls.length).toBeGreaterThan(1));
     await waitFor(() =>
-      expect(
-        screen.getByText(
-          "Forgotten. The original is still kept; nothing from it is treated as true.",
-        ),
-      ).toBeInTheDocument(),
+      expect(screen.getByText(/Forgotten\. The original is still kept/)).toBeInTheDocument(),
+    );
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(forget).toHaveBeenCalledOnce();
+    // The entry after it takes the focus.
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute("data-entry", "due:mem-trip"),
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("One thing is waiting");
+  });
+
+  it("Keep them leaves everything as it was", async () => {
+    const engine = new Waiting();
+    const forget = vi.spyOn(engine, "forget");
+    renderApp({ hash: "#/needs-you", engine });
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+    expect(forget).not.toHaveBeenCalled();
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
+      "2 things are waiting",
     );
   });
 });

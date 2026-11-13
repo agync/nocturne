@@ -42,6 +42,7 @@ export function Actions({
   const [correcting, setCorrecting] = useState<MemoryView | null>(null);
   const [draft, setDraft] = useState("");
   const [forgetting, setForgetting] = useState<string[] | null>(null);
+  const forgotten = useRef(false);
   const [busy, setBusy] = useState(false);
   const opener = useRef<HTMLButtonElement | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
@@ -223,15 +224,22 @@ export function Actions({
       {forgetting ? (
         <ForgetDialog
           memoryIds={forgetting}
-          onClose={() => setForgetting(null)}
-          onDone={() => {
-            const ids = forgetting;
+          onClose={() => {
             setForgetting(null);
+            // The dialog hands focus back to a button that is gone: the result is what is left.
+            if (forgotten.current) setTimeout(() => resultRef.current?.focus(), 0);
+          }}
+          onDone={() => {
+            // Called once, as soon as the engine has forgotten; the dialog says so until closed.
+            forgotten.current = true;
+            const ids = forgetting;
             onForgotten(
               ids,
               memories.filter((m) => ids.includes(m.id)).map((m) => m.sentence),
             );
-            void refresh();
+            for (const key of ["askMemories", "needsYou", "status", "page", "pages", "items"]) {
+              void client.invalidateQueries({ queryKey: [key] });
+            }
           }}
         />
       ) : null}

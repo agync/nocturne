@@ -289,7 +289,6 @@ export default function Ask() {
     setResult(
       everything ? t("ask.forget.done") : t("ask.forget.some", { sentences: sentences.join(" ") }),
     );
-    setTimeout(() => resultRef.current?.focus(), 0);
   };
 
   return (

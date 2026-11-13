@@ -77,6 +77,23 @@ test.describe("an unconfirmed web page", () => {
     ).toContainText("2");
   });
 
+  test("Not true, forget it forgets through the shared dialog and focus moves on when it closes", async ({
+    page,
+  }) => {
+    await withWebPage(page);
+    await page.getByRole("button", { name: "Not true, forget it" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog.getByRole("button", { name: "Keep them" })).toBeFocused();
+    await dialog.getByRole("button", { name: /^Forget 1 memory$/ }).click();
+    await expect(dialog.getByText("Gone.")).toBeVisible();
+    // Behind the dialog the entry has already gone.
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
+    await dialog.getByRole("button", { name: "OK" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(said(page)).toContainText("Forgotten.");
+    await expect(rows(page).nth(1)).toBeFocused();
+  });
+
   test("Recently kept shows it as Unconfirmed and Confirm leads here", async ({ page }) => {
     await withWebPage(page);
     await page.evaluate(() => {

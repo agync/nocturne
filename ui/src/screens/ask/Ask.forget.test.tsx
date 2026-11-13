@@ -1,23 +1,11 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import type { AskDelta } from "../../engine/bindings";
 import { MockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
 import { askSession } from "./session";
-
-// The shared forget dialog is a stub until the memories screens land; this one confirms at once.
-vi.mock("../../components/ForgetDialog/ForgetDialog", () => ({
-  ForgetDialog: ({ onDone }: { onDone: (r: unknown) => void }) => (
-    <button
-      type="button"
-      onClick={() => onDone({ memoriesRemoved: 1, originalsRemoved: 0, pagesRedacted: 0 })}
-    >
-      Confirm forgetting
-    </button>
-  ),
-}));
 
 /** Every question gets the same two-memory answer. */
 class TwoMemories extends MockEngine {
@@ -92,15 +80,21 @@ describe("forgetting what an answer used", () => {
     await userEvent.click(screen.getByRole("button", { name: "Forget this…" }));
     const chooser = await screen.findByRole("group", { name: "Which one?" });
     await userEvent.click(within(chooser).getByRole("button", { name: "All of them" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Confirm forgetting" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(
+      await within(dialog).findByRole("button", { name: /^Forget 2 memories$/ }),
+    );
+    expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
     await waitFor(() => expect(announcer()).toHaveTextContent(/^$/));
+    await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(document.body).not.toHaveTextContent(/Leo swims on Mondays/);
     expect(within(earlier).getByText("Forgotten. It is no longer kept.")).toBeInTheDocument();
     expect(within(earlier).queryByRole("button", { name: /^Source:/ })).toBeNull();
     const result = await screen.findByText("Forgotten. It is no longer kept.", {
       selector: "p[role=status]",
     });
-    expect(result).toHaveFocus();
+    await waitFor(() => expect(result).toHaveFocus());
     expect(screen.queryByRole("button", { name: "That’s wrong" })).toBeNull();
   });
 
@@ -109,7 +103,10 @@ describe("forgetting what an answer used", () => {
     await userEvent.click(screen.getByRole("button", { name: "Forget this…" }));
     const chooser = await screen.findByRole("group", { name: "Which one?" });
     await userEvent.click(within(chooser).getAllByRole("button")[0] as HTMLElement);
-    await userEvent.click(await screen.findByRole("button", { name: "Confirm forgetting" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 1 memory$/ }));
+    await within(dialog).findByText("Gone.");
+    await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
     const said = await screen.findByText(/^Forgotten: Leo’s swimming is on Mondays/, {
       selector: "p[role=status]",
     });

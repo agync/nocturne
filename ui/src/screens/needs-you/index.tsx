@@ -46,21 +46,27 @@ export default function NeedsYou() {
   const list = useRef<HTMLOListElement>(null);
   const empty = useRef<HTMLDivElement>(null);
   const focusAt = useRef<number | null>(null);
+  /** Where focus goes once the forget dialog, which stays open to say it is done, is closed. */
+  const afterForget = useRef<number | null>(null);
 
   const entries = (needs.data ?? [])
     .filter((e) => isOpen(e) && !settled.has(entryKey(e)))
     .sort((a, b) => RANK[a.type] - RANK[b.type]);
 
   // After an action the entry is gone; focus goes to whoever took its place, never to the page top.
-  useEffect(() => {
-    const at = focusAt.current;
-    if (at === null) return;
-    focusAt.current = null;
+  const focusEntry = useCallback((at: number) => {
     const items = list.current?.querySelectorAll<HTMLElement>(":scope > li");
     const next = items?.[Math.min(at, (items?.length ?? 1) - 1)];
     if (next) next.focus();
     else empty.current?.focus();
-  }, [entries.length]);
+  }, []);
+
+  useEffect(() => {
+    const at = focusAt.current;
+    if (at === null) return;
+    focusAt.current = null;
+    focusEntry(at);
+  }, [entries.length, focusEntry]);
 
   const openReceipt = useCallback(
     (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
@@ -218,15 +224,23 @@ export default function NeedsYou() {
       {forgetting ? (
         <ForgetDialog
           memoryIds={[forgetting.memory.id]}
-          onClose={() => setForgetting(null)}
-          onDone={() => {
-            const { key } = forgetting;
+          onClose={() => {
             setForgetting(null);
-            const at = entries.findIndex((e) => entryKey(e) === key);
-            focusAt.current = Math.max(0, at);
+            const at = afterForget.current;
+            afterForget.current = null;
+            // The dialog hands focus back to a button that has gone; the next entry takes it.
+            if (at !== null) setTimeout(() => focusEntry(at), 0);
+          }}
+          onDone={() => {
+            // Called once, as soon as the engine has forgotten; the dialog says so until closed.
+            const { key } = forgetting;
+            afterForget.current = Math.max(
+              0,
+              entries.findIndex((e) => entryKey(e) === key),
+            );
             setSettled((all) => new Set(all).add(key));
             setMessage(t("needs.msg.forgotten"));
-            refresh("needsYou", "status", "page");
+            refresh("needsYou", "status", "page", "items", "memories");
           }}
         />
       ) : null}
