@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
@@ -24,7 +24,9 @@ function OnlineLine() {
       ? t("models.online.state.on")
       : state === "off" || state === undefined
         ? t("models.online.state.off")
-        : t("models.online.state.other");
+        : state === "problem"
+          ? t("models.online.state.problem")
+          : t("models.online.state.other");
   return (
     <span className={styles.hint}>
       {t("models.online.line")}{" "}
@@ -83,13 +85,17 @@ function Row({
 
 /** #/settings/models (M1, M2): what runs each job, memory at its busiest, and any change under way. */
 export function ModelsPage() {
-  const { data: view } = useModels({ screen: true });
+  const { data: view, error, refetch } = useModels({ screen: true });
   const { act } = useModelsCommands();
+  const heading = useRef<HTMLHeadingElement>(null);
   const [failed, setFailed] = useState(false);
   const fail = () => setFailed(true);
-  const run: typeof act = (command) => {
+  const run: typeof act = async (command) => {
     setFailed(false);
-    return act(command);
+    const next = await act(command);
+    // The card that held the button is gone, so focus goes to the heading, not nowhere.
+    if (command === "cancel" || command === "keepOld") heading.current?.focus();
+    return next;
   };
 
   return (
@@ -98,7 +104,9 @@ export function ModelsPage() {
         <BackLink to="/settings" label={t("models.back")} />
       </div>
       <div className={styles.titleRow}>
-        <h1 className="t-page-title">{t("advanced.models.title")}</h1>
+        <h1 className="t-page-title" ref={heading} tabIndex={-1}>
+          {t("advanced.models.title")}
+        </h1>
         <span className={styles.tag}>{t("models.tag")}</span>
       </div>
       {view ? (
@@ -118,6 +126,13 @@ export function ModelsPage() {
             })}
           </ul>
         </>
+      ) : error ? (
+        <div className={styles.card} role="alert">
+          <p className={styles.body}>{t("advanced.error")}</p>
+          <div className={styles.actions}>
+            <Button onClick={refetch}>{t("models.read.retry")}</Button>
+          </div>
+        </div>
       ) : (
         <p className={styles.body} role="status">
           {t("models.loading")}

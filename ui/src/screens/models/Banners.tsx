@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { Dialog } from "../../components/Dialog/Dialog";
 import { Progress } from "../../components/Progress/Progress";
@@ -55,7 +55,10 @@ function Download({ view, act, fail }: { view: ModelsView; act: Act; fail: () =>
       ? "models.dl.hintResumed"
       : "models.dl.hint";
   return (
-    <div className={styles.card} role="status">
+    <div className={styles.card}>
+      <span className="sr-only" role="status">
+        {title}
+      </span>
       <Progress
         value={received}
         max={total}
@@ -108,7 +111,10 @@ function Reread({ view, act, fail }: { view: ModelsView; act: Act; fail: () => v
   if (reindex.phase === "running") {
     const eta = reindex.etaSeconds;
     return (
-      <div className={styles.card} role="status">
+      <div className={styles.card}>
+        <span className="sr-only" role="status">
+          {t("models.ri.title", { name: reindex.model })}
+        </span>
         <Progress
           value={reindex.done}
           max={reindex.total}
@@ -141,11 +147,6 @@ function Reread({ view, act, fail }: { view: ModelsView; act: Act; fail: () => v
 /** After a switch: keep the old one (the default, and focused) or remove it to free its space. */
 function Old({ view, act, fail }: { view: ModelsView; act: Act; fail: () => void }) {
   const old = view.old;
-  const actions = useRef<HTMLDivElement>(null);
-  const showing = old !== null && !old.removed;
-  useEffect(() => {
-    if (showing) actions.current?.querySelector("button")?.focus();
-  }, [showing]);
   if (!old) return null;
   const now = jobOf(view, old.job);
   const size = gb(old.bytes);
@@ -171,7 +172,7 @@ function Old({ view, act, fail }: { view: ModelsView; act: Act; fail: () => void
           <p className={styles.body}>{t("models.old.body", { from: old.model, size })}</p>
         </>
       )}
-      <div className={styles.actions} ref={actions}>
+      <div className={styles.actions}>
         <Button onClick={() => void act("keepOld").catch(fail)}>{t("models.old.keep")}</Button>
         <Button onClick={() => void act("removeOld").catch(fail)}>
           {reread
