@@ -1,3 +1,5 @@
+# Every `uses:` carries a PLACEHOLDER all-zero commit SHA: replace each with the full commit SHA
+# of the release named in its comment before the first run.
 # Builds tailscaled and tailscale for macOS and Windows from the pinned upstream tag, for Away from
 # home (Most private). Run by hand or on a release. Two independent builds must agree on the
 # checksums before the signed programs are packaged and attached to the release.
@@ -32,13 +34,13 @@ jobs:
             runs-on: ubuntu-22.04
     runs-on: ${{ matrix.runs-on }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
           go-version: ${{ vars.TAILSCALED_GO_VERSION }}
           cache: false
       - run: scripts/build-tailscaled.sh build ${{ matrix.target }} "$RUNNER_TEMP/${{ matrix.copy }}"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: unsigned-${{ matrix.target }}-${{ matrix.copy }}
           path: ${{ runner.temp }}/${{ matrix.copy }}/${{ matrix.target }}/unsigned
@@ -50,21 +52,29 @@ jobs:
       matrix:
         target: [darwin-arm64, windows-amd64]
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           pattern: unsigned-${{ matrix.target }}-*
       - name: the two builds agree
         run: |
           set -euo pipefail
-          diff "unsigned-${{ matrix.target }}-first/SHA256SUMS" "unsigned-${{ matrix.target }}-second/SHA256SUMS"
-          cat "unsigned-${{ matrix.target }}-first/SHA256SUMS"
+          t=${{ matrix.target }}
+          for copy in first second; do
+            (cd "unsigned-$t-$copy" && sha256sum -c SHA256SUMS)
+          done
+          diff "unsigned-$t-first/SHA256SUMS" "unsigned-$t-second/SHA256SUMS"
+          for f in unsigned-$t-first/tailscale*; do
+            [ "$(basename "$f")" = SHA256SUMS ] && continue
+            cmp "$f" "unsigned-$t-second/$(basename "$f")"
+          done
+          cat "unsigned-$t-first/SHA256SUMS"
 
   sign-macos:
     needs: reproduce
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: unsigned-darwin-arm64-first
           path: out/darwin-arm64/signed
@@ -84,13 +94,14 @@ jobs:
           security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$DEVELOPER_ID_PASSWORD" "$keychain"
           cd out/darwin-arm64/signed
+          shasum -a 256 -c SHA256SUMS
           rm -f SHA256SUMS
           codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" tailscaled tailscale
           zip -q notarise.zip tailscaled tailscale
           xcrun notarytool submit notarise.zip --keychain-profile "$NOTARY_PROFILE" --wait
           rm notarise.zip
           codesign --verify --strict --verbose=2 tailscaled tailscale
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: signed-darwin-arm64
           path: out/darwin-arm64/signed
@@ -102,8 +113,8 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: unsigned-windows-amd64-first
           path: out/windows-amd64/signed
@@ -115,12 +126,13 @@ jobs:
           set -euo pipefail
           printf '%s' "$WINDOWS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/code-signing.pfx"
           cd out/windows-amd64/signed
+          sha256sum -c SHA256SUMS
           rm -f SHA256SUMS
           for f in tailscaled.exe tailscale.exe; do
             signtool sign //f "$RUNNER_TEMP/code-signing.pfx" //p "$WINDOWS_CERTIFICATE_PASSWORD" //fd SHA256 //tr http://timestamp.digicert.com //td SHA256 "$f"
             signtool verify //pa "$f"
           done
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: signed-windows-amd64
           path: out/windows-amd64/signed
@@ -131,12 +143,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
           go-version: ${{ vars.TAILSCALED_GO_VERSION }}
           cache: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           pattern: signed-*
       - name: package, list the checksums for helpers.lock, write the licence report
@@ -148,7 +160,7 @@ jobs:
             scripts/build-tailscaled.sh package "$target" out | tee -a out/pins.txt
           done
           scripts/build-tailscaled.sh licenses out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
           name: tailscaled-release-files
           path: |
