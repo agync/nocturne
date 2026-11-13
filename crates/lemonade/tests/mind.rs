@@ -796,3 +796,95 @@ async fn an_engine_killed_mid_answer_is_unavailable_and_the_next_answer_works() 
     let (again, _) = answer(&r, &facts).await;
     assert!(again.is_ok(), "{again:?}");
 }
+
+fn docx_with_body(xml_body: &[u8]) -> Vec<u8> {
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    zip.start_file("word/document.xml", opts).unwrap();
+    zip.write_all(b"<w:document xmlns:w=\"x\"><w:body><w:p><w:r><w:t>")
+        .unwrap();
+    zip.write_all(xml_body).unwrap();
+    zip.write_all(b"</w:t></w:r></w:p></w:body></w:document>")
+        .unwrap();
+    zip.finish().unwrap().into_inner()
+}
+
+#[tokio::test]
+async fn a_zip_bomb_docx_is_refused_without_being_expanded() {
+    let r = rig_with("", Tier::Standard).await;
+    let dir = &r.dirs.root;
+    let huge = vec![b'a'; 30 * 1024 * 1024];
+    let bomb = docx_with_body(&huge);
+    assert!(
+        bomb.len() < 100_000,
+        "it must be small on disk: {}",
+        bomb.len()
+    );
+    assert_eq!(
+        r.mind
+            .read_document(&put(dir, "bomb.docx", &bomb))
+            .await
+            .unwrap_err(),
+        MindError::TooLong
+    );
+    let big_text = docx_with_body(&vec![b'b'; 10 * 1024 * 1024]);
+    assert_eq!(
+        r.mind
+            .read_document(&put(dir, "wide.docx", &big_text))
+            .await
+            .unwrap_err(),
+        MindError::TooLong,
+        "text over the cap"
+    );
+    let fine = docx_with_body(b"ordinary words");
+    assert!(
+        r.mind
+            .read_document(&put(dir, "fine.docx", &fine))
+            .await
+            .is_ok()
+    );
+}
+
+#[tokio::test]
+async fn a_pdf_with_thousands_of_pages_is_refused_by_count() {
+    let r = rig_with("", Tier::Standard).await;
+    let many = vec!["x"; 5000];
+    let started = std::time::Instant::now();
+    assert_eq!(
+        r.mind
+            .read_document(&put(&r.dirs.root, "many.pdf", &make_pdf(&many)))
+            .await
+            .unwrap_err(),
+        MindError::TooLong
+    );
+    assert!(started.elapsed() < Duration::from_secs(10));
+}
+
+#[tokio::test]
+async fn a_pdf_with_an_unreadable_page_fails_instead_of_being_cut_short() {
+    let r = rig_with("", Tier::Standard).await;
+    let mut pdf = String::from_utf8(make_pdf(&["First page", "Second page"])).unwrap();
+    // Point the second page at a content object that does not exist.
+    pdf = pdf.replacen("/Contents 7 0 R", "/Contents 99 0 R", 1);
+    let err = r
+        .mind
+        .read_document(&put(&r.dirs.root, "torn.pdf", pdf.as_bytes()))
+        .await
+        .unwrap_err();
+    assert!(matches!(err, MindError::Failed(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn a_file_over_the_size_limit_is_never_read() {
+    let r = rig_with("", Tier::Standard).await;
+    let path = r.dirs.root.join("huge.txt");
+    std::fs::File::create(&path)
+        .unwrap()
+        .set_len(51 * 1024 * 1024)
+        .unwrap();
+    assert_eq!(
+        r.mind.read_document(&path).await.unwrap_err(),
+        MindError::TooLong
+    );
+}
