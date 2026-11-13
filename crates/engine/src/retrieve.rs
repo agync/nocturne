@@ -16,7 +16,7 @@ use rusqlite::Connection;
 use crate::Engine;
 use crate::error::Result;
 use crate::rows::{load_mem, mem_view, query_mems};
-use crate::types::Hit;
+use crate::types::{Hit, MemoryId};
 use crate::util::{fts_or, key_of};
 
 /// Reciprocal rank fusion constant.
@@ -210,6 +210,28 @@ impl Engine {
             let room = k - live.len();
             live.extend(let_go.into_iter().take(room));
             Ok(live)
+        })
+    }
+
+    /// The open which-is-right questions that involve any of `ids`, each as the two memories it
+    /// is between.
+    pub fn open_disputes(&self, ids: &[MemoryId]) -> Result<Vec<(MemoryId, MemoryId)>> {
+        self.read(|conn| {
+            let mut stmt = conn.prepare_cached(
+                "SELECT a, b FROM conflicts WHERE resolved_at IS NULL AND (a = ?1 OR b = ?1) \
+                 ORDER BY created_at, id",
+            )?;
+            let mut out: Vec<(MemoryId, MemoryId)> = Vec::new();
+            for id in ids {
+                let rows = stmt.query_map([id], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                for pair in rows {
+                    let pair = pair?;
+                    if !out.contains(&pair) {
+                        out.push(pair);
+                    }
+                }
+            }
+            Ok(out)
         })
     }
 }

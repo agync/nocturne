@@ -10,8 +10,8 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nocturne_contract::{AskDelta, AskPhase, EVENT_ASK, MemoryView, NearMatch};
-use nocturne_engine::{Hit, MindError, UseKind};
+use nocturne_contract::{AskDelta, AskPhase, EVENT_ASK, NearMatch};
+use nocturne_engine::{Engine, Fact, Hit, MindError, UseKind};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -269,7 +269,15 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         sink.phase(AskPhase::Nothing);
         return;
     }
-    let facts: Vec<MemoryView> = hits.iter().map(|h| h.memory.clone()).collect();
+    let e = engine.clone();
+    let (hits, facts) = match blocking(move || with_disputes(&e, hits)).await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::error!("could not read the open questions: {:?}", err.code);
+            sink.phase(AskPhase::Unavailable);
+            return;
+        }
+    };
     sink.send(AskPhase::Reading, |d| d.found = Some(facts.len() as u32));
 
     let mut said = String::new();
@@ -349,6 +357,46 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         d.memory_ids = ids;
         d.plain = plain;
     });
+}
+
+/// The facts for the mind: each hit with the memories it disagrees with in an open
+/// which-is-right question. A memory on the other side that the search did not find is brought
+/// in, so the answer can give both and cite both.
+fn with_disputes(
+    engine: &Engine,
+    mut hits: Vec<Hit>,
+) -> nocturne_engine::Result<(Vec<Hit>, Vec<Fact>)> {
+    let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
+    let disputes = engine.open_disputes(&ids)?;
+    for (a, b) in &disputes {
+        for id in [a, b] {
+            if !hits.iter().any(|h| &h.memory.id == id) {
+                hits.push(Hit {
+                    memory: engine.get_memory(id)?,
+                    score: 0.0,
+                    let_go: false,
+                });
+            }
+        }
+    }
+    let facts = hits
+        .iter()
+        .map(|h| {
+            let id = &h.memory.id;
+            Fact {
+                memory: h.memory.clone(),
+                disputed_by: disputes
+                    .iter()
+                    .filter_map(|(a, b)| match (a == id, b == id) {
+                        (true, _) => Some(b.clone()),
+                        (_, true) => Some(a.clone()),
+                        _ => None,
+                    })
+                    .collect(),
+            }
+        })
+        .collect();
+    Ok((hits, facts))
 }
 
 /// Whether the bold spans in `text` can stand one for one, in order, for the `cited` memories

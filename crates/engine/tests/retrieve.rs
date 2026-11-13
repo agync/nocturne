@@ -406,3 +406,55 @@ fn who_someone_is_comes_first_when_asked_who_they_are() {
     let hits = f.engine.retrieve("What does Leo need?", None, 1).unwrap();
     assert_ne!(hits[0].memory.id, son);
 }
+
+#[test]
+fn an_open_which_is_right_question_names_both_sides() {
+    let f = fixture();
+    let (_, a) = learn(
+        &f.engine,
+        "Club on Tuesday",
+        cand(
+            "Book club",
+            Predicate::Scheduled,
+            "Tuesday",
+            "Book club is on Tuesday.",
+        ),
+    );
+    let item = keep(&f.engine, "Club on Wednesday");
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![cand(
+                "Book club",
+                Predicate::Scheduled,
+                "Wednesday",
+                "Book club is on Wednesday.",
+            )],
+        )
+        .unwrap();
+    let b = r.created[0].clone();
+    let (_, other) = learn(
+        &f.engine,
+        "Gran in York",
+        cand("Gran", Predicate::LivesIn, "York", "Gran lives in York."),
+    );
+
+    let pair = vec![(a.clone(), b.clone())];
+    assert_eq!(
+        f.engine.open_disputes(std::slice::from_ref(&a)).unwrap(),
+        pair
+    );
+    assert_eq!(
+        f.engine.open_disputes(&[b.clone(), a.clone()]).unwrap(),
+        pair
+    );
+    assert!(f.engine.open_disputes(&[other]).unwrap().is_empty());
+
+    let conflict = match &f.engine.needs_you().unwrap()[0] {
+        nocturne_contract::NeedsYouEntry::Which { conflict_id, .. } => conflict_id.clone(),
+        other => panic!("{other:?}"),
+    };
+    f.engine.resolve_which(&conflict, &b).unwrap();
+    assert!(f.engine.open_disputes(&[a, b]).unwrap().is_empty());
+}

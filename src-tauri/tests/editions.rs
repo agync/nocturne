@@ -100,7 +100,7 @@ impl Mind for Voice {
     fn answer<'a>(
         &'a self,
         q: &'a str,
-        f: &'a [nocturne_contract::MemoryView],
+        f: &'a [nocturne_engine::Fact],
         o: mpsc::Sender<String>,
     ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
         self.inner.answer(q, f, o)

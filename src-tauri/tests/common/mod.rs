@@ -10,7 +10,7 @@ use nocturne_app_lib::runtime::{self, Services, StartOptions};
 use nocturne_app_lib::{AppState, configure};
 use nocturne_contract::{AskDelta, AskPhase, MemoryView, PageView};
 use nocturne_engine::{
-    AnswerMeta, BoxFuture, Candidate, Engine, ExtractContext, FakeMind, ManualClock, Mind,
+    AnswerMeta, BoxFuture, Candidate, Engine, ExtractContext, Fact, FakeMind, ManualClock, Mind,
     MindError, Predicate, Transcript, Understanding,
 };
 use nocturne_intelligence::FakeHost;
@@ -338,6 +338,8 @@ pub struct TestMind {
     inner: FakeMind,
     pub mode: AnswerMode,
     pub busy_embeds: AtomicU32,
+    /// The facts each answer was given, in order.
+    pub answered_from: Mutex<Vec<Vec<Fact>>>,
 }
 
 impl TestMind {
@@ -346,6 +348,7 @@ impl TestMind {
             inner: FakeMind::new(),
             mode,
             busy_embeds: AtomicU32::new(0),
+            answered_from: Mutex::new(Vec::new()),
         })
     }
 
@@ -397,10 +400,11 @@ impl Mind for TestMind {
     fn answer<'a>(
         &'a self,
         question: &'a str,
-        facts: &'a [MemoryView],
+        facts: &'a [Fact],
         out: mpsc::Sender<String>,
     ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
         Box::pin(async move {
+            self.answered_from.lock().unwrap().push(facts.to_vec());
             match self.mode {
                 AnswerMode::Normal => self.inner.answer(question, facts, out).await,
                 AnswerMode::NotSure => Ok(AnswerMeta {
@@ -420,7 +424,7 @@ impl Mind for TestMind {
                 }
                 AnswerMode::Bold(n) => {
                     let mut cited = Vec::new();
-                    for (i, f) in facts.iter().rev().enumerate() {
+                    for (i, f) in facts.iter().rev().map(|f| &f.memory).enumerate() {
                         let words = if i < n {
                             format!("**{}** ", f.sentence)
                         } else {
@@ -437,7 +441,7 @@ impl Mind for TestMind {
                     })
                 }
                 AnswerMode::BoldBothForTheFirst => {
-                    let (a, b) = (&facts[0], &facts[1]);
+                    let (a, b) = (&facts[0].memory, &facts[1].memory);
                     let _ = out
                         .send(format!("**{}** **{}**", a.sentence, b.sentence))
                         .await;

@@ -41,6 +41,24 @@ pub struct ExtractContext {
     pub known_entities: Vec<(String, EntityKind)>,
 }
 
+/// A memory handed to the mind to answer from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Fact {
+    pub memory: MemoryView,
+    /// The memories it disagrees with in an open which-is-right question. Each of them is among
+    /// the facts handed over with it.
+    pub disputed_by: Vec<MemoryId>,
+}
+
+impl From<MemoryView> for Fact {
+    fn from(memory: MemoryView) -> Self {
+        Fact {
+            memory,
+            disputed_by: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct AnswerMeta {
     pub cited: Vec<MemoryId>,
@@ -86,7 +104,7 @@ pub trait Mind: Send + Sync {
     fn answer<'a>(
         &'a self,
         question: &'a str,
-        facts: &'a [MemoryView],
+        facts: &'a [Fact],
         out: mpsc::Sender<String>,
     ) -> BoxFuture<'a, Result<AnswerMeta, MindError>>;
     fn write_headline<'a>(
@@ -110,11 +128,11 @@ mod fake {
     use std::sync::{Arc, Mutex};
     use std::time::Duration;
 
-    use nocturne_contract::{MemoryView, PageView};
+    use nocturne_contract::PageView;
     use tokio::sync::{Notify, mpsc, watch};
 
     use super::{
-        AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding,
+        AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, Transcript, Understanding,
     };
     use crate::types::Candidate;
 
@@ -410,16 +428,16 @@ mod fake {
         fn answer<'a>(
             &'a self,
             _question: &'a str,
-            facts: &'a [MemoryView],
+            facts: &'a [Fact],
             out: mpsc::Sender<String>,
         ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
             Box::pin(async move {
                 self.check("answer").await?;
                 for f in facts {
-                    let _ = out.send(f.sentence.clone()).await;
+                    let _ = out.send(f.memory.sentence.clone()).await;
                 }
                 Ok(AnswerMeta {
-                    cited: facts.iter().map(|f| f.id.clone()).collect(),
+                    cited: facts.iter().map(|f| f.memory.id.clone()).collect(),
                     not_sure: facts.is_empty(),
                     spans: Vec::new(),
                 })

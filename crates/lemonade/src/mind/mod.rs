@@ -11,9 +11,9 @@ use std::path::Path;
 use base64::Engine as _;
 use futures_util::StreamExt;
 use jiff::civil::Date;
-use nocturne_contract::{ComponentRole, EntityKind, MemoryView, PageView, Span, Tier};
+use nocturne_contract::{ComponentRole, EntityKind, PageView, Span, Tier};
 use nocturne_engine::{
-    AnswerMeta, BoxFuture, Candidate, ExtractContext, Mind, MindError, Predicate, Transcript,
+    AnswerMeta, BoxFuture, Candidate, ExtractContext, Fact, Mind, MindError, Predicate, Transcript,
     Understanding,
 };
 use serde::Deserialize;
@@ -205,7 +205,7 @@ impl LemonadeMind {
     async fn answer_impl(
         &self,
         question: &str,
-        facts: &[MemoryView],
+        facts: &[Fact],
         out: mpsc::Sender<String>,
     ) -> Result<AnswerMeta, MindError> {
         if facts.is_empty() {
@@ -298,14 +298,14 @@ impl LemonadeMind {
                 .cited()
                 .iter()
                 .filter_map(|n| facts.get(n - 1))
-                .map(|f| f.id.clone())
+                .map(|f| f.memory.id.clone())
                 .collect()
         };
         let spans = match filter.bold_facts() {
             Some(facts_of_spans) if !not_sure => facts_of_spans
                 .iter()
                 .filter_map(|n| facts.get(n - 1))
-                .map(|f| f.id.clone())
+                .map(|f| f.memory.id.clone())
                 .collect(),
             _ => Vec::new(),
         };
@@ -691,7 +691,7 @@ impl Mind for LemonadeMind {
     fn answer<'a>(
         &'a self,
         question: &'a str,
-        facts: &'a [MemoryView],
+        facts: &'a [Fact],
         out: mpsc::Sender<String>,
     ) -> BoxFuture<'a, Result<AnswerMeta, MindError>> {
         Box::pin(self.answer_impl(question, facts, out))

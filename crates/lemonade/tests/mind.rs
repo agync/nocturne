@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use nocturne_contract::{EntityKind, MemoryView, PageView, Tier};
-use nocturne_engine::{ExtractContext, Mind, MindError, Predicate};
+use nocturne_engine::{ExtractContext, Fact, Mind, MindError, Predicate};
 use nocturne_lemonade::{Dirs, LemonadeMind, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -392,6 +392,14 @@ async fn answer(
     r: &Rig,
     facts: &[MemoryView],
 ) -> (Result<nocturne_engine::AnswerMeta, MindError>, String) {
+    let facts: Vec<Fact> = facts.iter().cloned().map(Fact::from).collect();
+    answer_facts(r, &facts).await
+}
+
+async fn answer_facts(
+    r: &Rig,
+    facts: &[Fact],
+) -> (Result<nocturne_engine::AnswerMeta, MindError>, String) {
     let (tx, mut rx) = mpsc::channel(64);
     let result = r.mind.answer("When do I see Sam?", facts, tx).await;
     let mut text = String::new();
@@ -419,7 +427,7 @@ async fn answer_maps_markers_to_ids_and_strips_them_from_the_stream() {
     assert_eq!(req["stream"], true);
     let user = req["messages"][1]["content"].as_str().unwrap();
     assert!(
-        user.contains("[m2] Sam on Tuesday. (learned 2026-11-10, Active)"),
+        user.contains("[m2] Sam on Tuesday. (about: Sam; learned Tuesday 10 November 2026; sure)"),
         "{user}"
     );
     assert!(
@@ -492,6 +500,68 @@ async fn an_answer_that_merely_starts_like_not_sure_is_still_an_answer() {
     let (meta, text) = answer(&r, &facts).await;
     assert_eq!(text, "NOT today: Monday.");
     assert_eq!(meta.unwrap().cited, ["a"]);
+}
+
+fn detailed(id: &str, sentence: &str, extra: Value) -> MemoryView {
+    let mut v = serde_json::to_value(memory(id, sentence)).unwrap();
+    for (k, x) in extra.as_object().unwrap() {
+        v[k] = x.clone();
+    }
+    serde_json::from_value(v).unwrap()
+}
+
+/// Each fact carries what an honest answer needs: its date, what it was before, an open
+/// which-is-right question with the fact on the other side, and how sure it is.
+#[tokio::test]
+async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
+    let r = rig().await;
+    let facts = [
+        Fact::from(detailed(
+            "moved",
+            "The dentist is on Thursday at 14:30.",
+            json!({"subject": "Dentist", "was": "Wednesday at 10:00", "due": "2026-11-19"}),
+        )),
+        Fact {
+            memory: detailed(
+                "tue",
+                "Book club meets on Tuesdays.",
+                json!({"subject": "Book club", "learnedAt": "2026-11-09T08:00:00+00:00"}),
+            ),
+            disputed_by: vec!["wed".into()],
+        },
+        Fact {
+            memory: detailed(
+                "wed",
+                "Book club meets on Wednesdays.",
+                json!({"subject": "Book club", "certainty": "notSure", "status": "unconfirmed"}),
+            ),
+            disputed_by: vec!["tue".into()],
+        },
+    ];
+    r.script(json!([{"deltas": ["Thursday [m1]."]}])).await;
+    answer_facts(&r, &facts).await.0.unwrap();
+    let req = &r.seen("/v1/chat/completions").await[0]["body"];
+    let user = req["messages"][1]["content"].as_str().unwrap();
+    for line in [
+        "[m1] The dentist is on Thursday at 14:30. (about: Dentist; on or by: Thursday 19 November 2026; \
+         before, it was: Wednesday at 10:00; learned Tuesday 10 November 2026; sure)",
+        "[m2] Book club meets on Tuesdays. (about: Book club; not settled: disagrees with [m3]; \
+         learned Monday 9 November 2026; sure)",
+        "[m3] Book club meets on Wednesdays. (about: Book club; not settled: disagrees with [m2]; \
+         learned Tuesday 10 November 2026; not sure; not confirmed)",
+    ] {
+        assert!(user.contains(line), "{line}\n{user}");
+    }
+    let system = req["messages"][0]["content"].as_str().unwrap();
+    for rule in [
+        "not settled which is right",
+        "Copy times, numbers, names and dates exactly",
+        "Never put details of different things or people into one sentence",
+        "Asked who someone is, start with how they are related",
+        "Never write a sentence and then NOT_SURE",
+    ] {
+        assert!(system.contains(rule), "{rule}\n{system}");
+    }
 }
 
 #[tokio::test]

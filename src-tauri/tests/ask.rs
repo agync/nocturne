@@ -388,3 +388,44 @@ fn deleting_everything_stops_the_answers_in_flight() {
     assert!(!finished(&seen, &id));
     assert_eq!(h.state().asks.in_flight(), 0);
 }
+
+/// An open which-is-right question goes to the mind whole: the memory on the other side comes
+/// along even when the search did not find it, each marked as disagreeing with the other, and
+/// both can be cited with their receipts.
+#[test]
+fn both_sides_of_an_open_question_reach_the_mind() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    let club = |object: &str, sentence: &str| {
+        nocturne_engine::Candidate::new(
+            "Book club",
+            nocturne_engine::Predicate::Scheduled,
+            object,
+            sentence,
+            0.9,
+        )
+    };
+    let (_, a) = h.learn_candidate(
+        "club note",
+        club("Tuesday", "Book club meets at the library on Tuesday."),
+    );
+    let (_, b) = h.learn_candidate(
+        "Sam's note",
+        club("Wednesday", "Sam says it is on Wednesday instead."),
+    );
+    let (a, b) = (a[0].clone(), b[0].clone());
+    let (found, unrelated) = (h.engine().retrieve("library", None, 12).unwrap(), &b);
+    assert!(
+        found.iter().all(|hit| &hit.memory.id != unrelated),
+        "the search alone does not find the other side"
+    );
+
+    let (_, done) = done_delta(&h, "Is it at the library?");
+    assert_eq!(done.phase, AskPhase::Done);
+    let given = mind.answered_from.lock().unwrap().last().cloned().unwrap();
+    let side = |id: &str| given.iter().find(|f| f.memory.id == id).cloned().unwrap();
+    assert_eq!(side(&a).disputed_by, vec![b.clone()]);
+    assert_eq!(side(&b).disputed_by, vec![a.clone()]);
+    assert!(done.memory_ids.contains(&a) && done.memory_ids.contains(&b));
+    assert_eq!(done.receipts.len(), 2);
+}

@@ -1,7 +1,7 @@
 //! The words the model is given, and the schemas its answers must fit.
 
-use nocturne_contract::{EntityKind, ItemKind, MemoryView, PageView};
-use nocturne_engine::ExtractContext;
+use nocturne_contract::{Certainty, EntityKind, ItemKind, MemoryStatus, PageView};
+use nocturne_engine::{ExtractContext, Fact};
 use serde_json::{Value, json};
 
 pub const NOT_SURE: &str = "NOT_SURE";
@@ -159,23 +159,90 @@ pub fn extraction_user(text: &str, cx: &ExtractContext, nonce: &str) -> String {
 pub fn answer_system(nonce: &str) -> String {
     format!(
         "You answer a person's question about their own life using only the numbered facts you are given.\n\
-Write in British English, briefly and plainly. After each claim, cite the fact it came from as [m1], [m2] and so on.\n\
-In each claim, put exactly one short phrase in bold with **: the words that answer the question, copied from the fact it cites. \
+Reply in one of two ways, never both:\n\
+1. Sentences that answer the question, in British English, briefly and plainly, speaking to the person as you. \
+After each claim, cite the fact it came from as [m1], [m2] and so on.\n\
+2. Exactly {NOT_SURE} and nothing else, when no fact answers the question. Never write a sentence and then {NOT_SURE}.\n\
+Rules for sentences:\n\
+- Use only the facts about what was asked. Never put details of different things or people into one sentence unless the question asks about both.\n\
+- Copy times, numbers, names and dates exactly as the fact writes them, and leave none of them out: \
+if a fact says Tuesday 3 March at 7:40, say Tuesday 3 March at 7:40, never just Tuesday 3 March.\n\
+- A fact that answers the question in other words still answers it.\n\
+- When a fact says what it was before, give what it is now.\n\
+- When a fact is marked not settled, or facts give different values for the same thing and none says it replaced the others, \
+give each of them with the date it was learned, and say it is not settled which is right. For example: A note from 2 March says **Monday** [m1]; one from 4 March says **Thursday** [m3]. \
+It is not settled which is right.\n\
+- A fact marked not confirmed was heard only once: say so.\n\
+- Asked who someone is, start with how they are related to the person, from the fact that says so. \
+For example: Rui is your **brother** [m2]. Then add anything else that matters.\n\
+- In each claim, put exactly one short phrase in bold with **: the words that answer the question, copied from the fact it cites. \
 For example: You meet Alex at **the old station** [m1]. One bold phrase for each fact you cite, in the order you cite them, and no other bold.\n\
-Never add anything the facts do not say. If the facts do not answer the question, reply with exactly {NOT_SURE} and nothing else.\n{}",
+Never add anything the facts do not say.\n{}",
         untrusted("facts", nonce)
     )
 }
 
-pub fn answer_user(question: &str, facts: &[MemoryView], nonce: &str) -> String {
+/// An ISO date (or the start of a timestamp) as a person writes it: "Tuesday 24 November 2026".
+fn spoken_day(iso: &str) -> String {
+    let day = iso.get(..10).unwrap_or(iso);
+    match day.parse::<jiff::civil::Date>() {
+        Ok(d) => d.strftime("%A %-d %B %Y").to_string(),
+        Err(_) => day.to_string(),
+    }
+}
+
+/// What the answer may need besides the sentence, in the order it is written after it.
+fn fact_details(fact: &Fact, number_of: &dyn Fn(&str) -> Option<usize>) -> Vec<String> {
+    let m = &fact.memory;
+    let mut out = vec![format!("about: {}", m.subject)];
+    if let Some(due) = &m.due {
+        out.push(format!("on or by: {}", spoken_day(due)));
+    }
+    if let Some(from) = &m.valid_from {
+        out.push(format!("from: {}", spoken_day(from)));
+    }
+    if let Some(to) = &m.valid_to {
+        out.push(format!("until: {}", spoken_day(to)));
+    }
+    if let Some(was) = &m.was {
+        out.push(format!("before, it was: {was}"));
+    }
+    let disputed: Vec<String> = fact
+        .disputed_by
+        .iter()
+        .filter_map(|id| number_of(id))
+        .map(|n| format!("[m{n}]"))
+        .collect();
+    if !disputed.is_empty() {
+        out.push(format!(
+            "not settled: disagrees with {}",
+            disputed.join(" and ")
+        ));
+    }
+    out.push(format!("learned {}", spoken_day(&m.learned_at)));
+    out.push(
+        match m.certainty {
+            Certainty::Sure => "sure",
+            Certainty::FairlySure => "fairly sure",
+            Certainty::NotSure => "not sure",
+        }
+        .to_string(),
+    );
+    if m.status == MemoryStatus::Unconfirmed {
+        out.push("not confirmed".to_string());
+    }
+    out
+}
+
+pub fn answer_user(question: &str, facts: &[Fact], nonce: &str) -> String {
+    let number_of = |id: &str| facts.iter().position(|f| f.memory.id == id).map(|i| i + 1);
     let mut list = String::new();
     for (i, f) in facts.iter().enumerate() {
-        let learned = f.learned_at.get(..10).unwrap_or(&f.learned_at);
         list.push_str(&format!(
-            "[m{}] {} (learned {learned}, {:?})\n",
+            "[m{}] {} ({})\n",
             i + 1,
-            f.sentence,
-            f.status
+            f.memory.sentence,
+            fact_details(f, &number_of).join("; ")
         ));
     }
     format!(

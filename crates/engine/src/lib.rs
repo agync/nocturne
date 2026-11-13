@@ -34,7 +34,9 @@ pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, trust_for
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
-pub use mind::{AnswerMeta, BoxFuture, ExtractContext, Mind, MindError, Transcript, Understanding};
+pub use mind::{
+    AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, Transcript, Understanding,
+};
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
 pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP};
