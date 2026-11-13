@@ -15,6 +15,7 @@ Everything Nocturne holds is on your computer, in one folder, and you can see al
 | System | Folder |
 |---|---|
 | Linux | `~/.local/share/app.nocturne.desktop/` |
+| Mac | `~/Library/Application Support/app.nocturne.desktop/` |
 
 Inside are the things you kept and what Nocturne remembers from them (in `store`), Nocturne's
 reading setup (in `engine`) and a few small log files (in `logs`) that hold counts and error
@@ -51,7 +52,10 @@ Privacy has "Delete everything". It removes everything Nocturne holds from this 
 kept, what it remembers and every page. You have to type the words it shows before it goes ahead,
 and it cannot be undone, so export first if you might want a copy. It keeps the reading setup it
 downloaded and the log files, turns off "Start with this computer" and resets the quick keep
-shortcut. Afterwards Nocturne starts again from setup.
+shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac,
+the folders named `app.nocturne.desktop` in `~/Library/WebKit` and `~/Library/Caches`, and the saved
+window state; on Linux, the window's storage inside the data folder and `~/.cache/app.nocturne.desktop`.
+Afterwards Nocturne starts again from setup.
 
 ## How you can tell nothing leaves your computer
 

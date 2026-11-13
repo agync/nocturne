@@ -188,15 +188,22 @@ run from a session with no one logged in at the Mac.
 
 ### Signing and notarisation
 
-The app is signed ad hoc (`codesign --sign -`). That runs on the Mac that built it and nowhere
-else: Gatekeeper refuses an ad hoc signed download. Handing it to anyone needs, as a decision for
-the owner:
+The app is signed ad hoc (`codesign --sign -`, without `--deep`, so the engine's bytes are not
+touched). That runs on the Mac that built it. A copy that is downloaded or sent carries a
+quarantine mark, and Gatekeeper blocks it unless it is opened with right-click then Open (or Open
+Anyway in System Settings > Privacy & Security), or the mark is removed. Handing it to anyone
+properly needs, as a decision for the owner:
 
 - an Apple Developer ID Application certificate (the paid Apple Developer Program);
 - signing the app and the engine's executables inside `Contents/Resources/lemonade/` with that
-  identity and the hardened runtime (the microphone entitlement is in
+  identity, `--options runtime` and `--timestamp` (the microphone entitlement is in
   `src-tauri/macos/Entitlements.plist`), which `scripts/macos-app.sh --sign` does not do yet;
 - notarisation with `xcrun notarytool` and stapling the ticket to the disk image.
+
+Re-signing the engine changes its bytes, so it no longer matches the manifest. The order is
+therefore fixed: `scripts/macos-app.sh --manifest` checks the copied engine against the manifest
+before it signs, and the signature is verified after. For a Developer ID build, check the signed
+result with `scripts/check-package.sh --no-manifest`, which still verifies the signature.
 
 ### Differences to know on a Mac
 
@@ -206,6 +213,13 @@ the owner:
 - Power comes from `pmset`, idle time from `ioreg` and sleep is held with a `caffeinate` child
   process. Resume has no listener; the scheduler's wall-clock check notices a wake, as on Windows.
 - "Start with this computer" writes `~/Library/LaunchAgents/app.nocturne.desktop.plist` itself, with
-  the program's canonical path escaped; turning it off or deleting everything removes it.
-- The web view keeps its own data under `~/Library/WebKit` and `~/Library/Caches` whatever
-  `NOCTURNE_DATA_DIR` says.
+  the program's canonical path escaped, through a temporary file set to mode 0644 and renamed
+  into place. Turning it off or deleting everything removes it, even when the program's own path
+  cannot be resolved. Run from the mounted disk image, or from the temporary place macOS uses for
+  a downloaded app (App Translocation), turning it on is refused with "Move Nocturne to the
+  Applications folder first, then turn this on.", because that path will not be there at the next
+  login.
+- The web view keeps its own data under `~/Library/WebKit`, `~/Library/Caches` and
+  `~/Library/Saved Application State` whatever `NOCTURNE_DATA_DIR` says. "Delete everything" removes
+  those too (see [Your data](../guide/your-data.md)). The smoke script sets `CFFIXED_USER_HOME`, which
+  Foundation reads before the account's home, so a smoke run keeps all of it in its scratch home.
