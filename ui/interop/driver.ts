@@ -12,9 +12,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-export const repo = resolve(__dirname, "..", "..");
+export const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const HOST = "amber-otter-lamp-quiet.trycloudflare.com";
 
 /** The newest built test program named `name`, or `AWAY_<NAME>` when set. */

@@ -58,6 +58,20 @@ fn photo(marker: &str, pad: usize) -> Vec<u8> {
     b
 }
 
+fn copy_dir(from: &std::path::Path, to: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(to)?;
+    for entry in std::fs::read_dir(from)? {
+        let entry = entry?;
+        let target = to.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), target)?;
+        }
+    }
+    Ok(())
+}
+
 struct Drive {
     h: Harness,
     hub: Arc<RemoteHub>,
@@ -212,18 +226,25 @@ impl Drive {
             "devices" => Ok(serde_json::to_value(block(self.hub.view()).devices).unwrap()),
             "remove" => self
                 .h
-                .call("remove_device", json!({"id": a["id"]}))
+                .call("remove_device", json!({"id": a["device"]}))
                 .map(|_| json!(true))
                 .map_err(|e| e.to_string()),
             "items" => Ok(self.items()),
             "inflight" => Ok(json!(self.h.state().asks.in_flight_in(&AskLane::Phone(
-                a["id"].as_str().unwrap_or_default().to_string()
+                a["device"].as_str().unwrap_or_default().to_string()
             )))),
             "gate" => {
                 if a["open"].as_bool() == Some(true) {
                     self.gate.open();
                 } else {
                     self.gate.close();
+                    // Forget answers that already passed, so `entered` means the next one.
+                    block(async {
+                        while tokio::time::timeout(Duration::from_millis(5), self.gate.entered())
+                            .await
+                            .is_ok()
+                        {}
+                    });
                 }
                 Ok(json!(true))
             }
@@ -235,6 +256,12 @@ impl Drive {
                 })
             })
             .map(|()| json!(true)),
+            "save_store" => {
+                let to = std::path::PathBuf::from(a["to"].as_str().ok_or("to")?);
+                copy_dir(&self.h.dir.path().join("store"), &to.join("store"))
+                    .map_err(|e| e.to_string())?;
+                Ok(json!(true))
+            }
             "calls" => Ok(json!(self.mind.calls())),
             "view" => Ok(serde_json::to_value(block(self.hub.view())).unwrap()),
             other => Err(format!("unknown command {other}")),
