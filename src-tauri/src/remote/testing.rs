@@ -182,3 +182,164 @@ impl PhoneKeys {
         crypto::device_key(crypto::ecdh(&self.d, &c).as_ref(), &self.device_id)
     }
 }
+
+pub mod client;
+
+use std::sync::{Arc, Mutex};
+
+use jiff::Timestamp;
+use nocturne_contract::{
+    PairingRequest, PhoneHello, PhoneReadiness, PhoneStatus, RemoteAnswer, RemoteCall,
+    RemoteConnection,
+};
+use nocturne_engine::{DeviceRow, Engine, ManualClock};
+
+use super::limits::ManualMono;
+use super::session::{BoxFuture, CallCtx, Core, Dispatch, OnState, Shell};
+
+/// What a [`TestShell`] was asked to show.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Shown {
+    Changed,
+    Request(PairingRequest),
+    Active(String),
+    Stopped(String),
+}
+
+/// A shell over a bare engine, recording what it would have shown.
+pub struct TestShell {
+    pub engine: Engine,
+    pub clock: Arc<ManualClock>,
+    pub shown: Mutex<Vec<Shown>>,
+}
+
+impl TestShell {
+    pub fn new(dir: &std::path::Path) -> Arc<TestShell> {
+        let clock = Arc::new(ManualClock::at("2026-11-13T07:00:00Z", "Europe/London"));
+        Arc::new(TestShell {
+            engine: Engine::open(&dir.join("store"), clock.clone()).unwrap(),
+            clock,
+            shown: Mutex::new(Vec::new()),
+        })
+    }
+
+    pub fn shown(&self) -> Vec<Shown> {
+        self.shown.lock().unwrap().clone()
+    }
+
+    fn show(&self, s: Shown) {
+        self.shown.lock().unwrap().push(s);
+    }
+}
+
+impl Shell for TestShell {
+    fn engine(&self) -> Option<Engine> {
+        Some(self.engine.clone())
+    }
+
+    fn wall_now(&self) -> Timestamp {
+        nocturne_engine::Clock::now(self.clock.as_ref())
+    }
+
+    fn changed(&self) {
+        self.show(Shown::Changed);
+    }
+
+    fn pairing_request(&self, request: &PairingRequest) {
+        self.show(Shown::Request(request.clone()));
+    }
+
+    fn device_active(&self, device: &DeviceRow) {
+        self.show(Shown::Active(device.id.clone()));
+    }
+
+    fn hello(&self, device: &DeviceRow, connection: RemoteConnection) -> PhoneHello {
+        PhoneHello {
+            computer_name: "Test computer".into(),
+            device_name: device.name.clone(),
+            connection,
+            version: "0.0.0".into(),
+        }
+    }
+
+    fn stop_phone(&self, device_id: &str) {
+        self.show(Shown::Stopped(device_id.to_string()));
+    }
+}
+
+/// Answers `getStatus` and nothing else: enough to see frames cross the listener.
+pub struct EchoDispatch;
+
+impl Dispatch for EchoDispatch {
+    fn call(&self, _core: Arc<Core>, ctx: CallCtx) -> BoxFuture<'static, ()> {
+        Box::pin(async move {
+            let answer = match ctx.req.call {
+                RemoteCall::GetStatus => RemoteAnswer::Status {
+                    status: PhoneStatus {
+                        readiness: PhoneReadiness::Ready,
+                        page_date: None,
+                        needs_you: 0,
+                    },
+                },
+                _ => RemoteAnswer::Done,
+            };
+            ctx.out.send(answer);
+        })
+    }
+}
+
+/// A core that is on, with a computer key and an address, over a test shell.
+pub struct Bench {
+    pub core: Arc<Core>,
+    pub shell: Arc<TestShell>,
+    pub mono: Arc<ManualMono>,
+    pub computer: Arc<SecretKey>,
+}
+
+pub const TEST_HOST: &str = "amber-otter-lamp-quiet.trycloudflare.com";
+
+/// Everything lives under `dir`, which the test owns.
+pub fn bench(dir: &std::path::Path) -> Bench {
+    let shell = TestShell::new(dir);
+    let mono = ManualMono::new();
+    let core = Core::new(shell.clone(), mono.clone(), dir.join("remote"));
+    core.set_dispatch(Arc::new(EchoDispatch));
+    let computer = Arc::new(crypto::new_secret());
+    core.set_on(Some(OnState {
+        computer: computer.clone(),
+        connection: RemoteConnection::Simple,
+        host: Some(TEST_HOST.to_string()),
+    }));
+    Bench {
+        core,
+        shell,
+        mono,
+        computer,
+    }
+}
+
+impl Bench {
+    /// A phone paired straight into the store, as an allowed pairing would leave it.
+    pub fn paired(&self, name: &str) -> PhoneKeys {
+        paired_in(&self.shell.engine, &self.computer, name)
+    }
+}
+
+/// Add a phone to `engine` for computer key `c`, as an allowed pairing would.
+pub fn paired_in(engine: &Engine, c: &SecretKey, name: &str) -> PhoneKeys {
+    let d = crypto::new_secret();
+    let row = engine
+        .add_device(
+            name,
+            &crypto::public_bytes(&d.public_key()),
+            &format!("https://{TEST_HOST}"),
+            RemoteConnection::Simple,
+            TEST_HOST,
+        )
+        .unwrap();
+    PhoneKeys {
+        device_id: crypto::unb64(&row.id).unwrap().try_into().unwrap(),
+        d,
+        cpub: crypto::public_bytes(&c.public_key()).to_vec(),
+    }
+}

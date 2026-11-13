@@ -10,13 +10,18 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, Runtime};
 
+pub mod audit;
 pub mod crypto;
 pub mod frame;
+pub mod incoming;
 pub mod limits;
+pub mod listener;
 pub mod name;
 pub mod pairing;
 pub mod protocol;
 pub mod qr;
+pub mod session;
+pub mod static_files;
 #[cfg(debug_assertions)]
 #[doc(hidden)]
 pub mod testing;

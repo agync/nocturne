@@ -404,6 +404,29 @@ impl Engine {
         })
     }
 
+    /// Which of these item and memory ids must not reach a phone: private items, memories
+    /// that are private in any version, and ids the store does not know (fail closed).
+    pub fn private_ids(&self, ids: &[String]) -> Result<Vec<String>> {
+        self.read(|conn| {
+            let mut out = Vec::new();
+            for id in ids {
+                let private = if id.starts_with("mem_") {
+                    crate::memory::is_private_chain(conn, id)?
+                } else {
+                    conn.query_row("SELECT private FROM items WHERE id = ?1", [id], |r| {
+                        r.get::<_, bool>(0)
+                    })
+                    .optional()?
+                    .unwrap_or(true)
+                };
+                if private {
+                    out.push(id.clone());
+                }
+            }
+            Ok(out)
+        })
+    }
+
     pub fn add_sent_to_phones(&self, bytes: u64) -> Result<()> {
         self.write(|tx| {
             tx.execute(
