@@ -10,6 +10,7 @@ you one page each morning. Everything runs on your computer through an embedded 
 ## Sections
 
 - [Overview](overview.md) - What Nocturne is, who it is for, scope and non-goals.
+- [Using Nocturne](guide/index.md) - Installing, desktop behaviour and your data, for people who use the app.
 - [Design](design/index.md) - The concept, the forgetting policy, experience principles, the data model and how quality is measured.
 - [Architecture](architecture/index.md) - The desktop shell, the engine, the embedded Lemonade runtime and device placement.
 - [Decisions](adr/index.md) - Architecture decision records, one decision per page.
