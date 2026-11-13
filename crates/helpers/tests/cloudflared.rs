@@ -201,10 +201,17 @@ async fn unix_socket_origin() {
             .join("cloudflared/config.yml")
             .to_string_lossy()
     );
-    assert!(sb.dirs().root.join("cloudflared/config.yml").is_file());
-    let at = args.iter().position(|a| a == "--unix-socket").unwrap();
-    assert_eq!(args[at + 1], sock.to_string_lossy());
-    assert!(!args.contains(&"--url".to_string()));
+    let config = std::fs::read_to_string(sb.dirs().root.join("cloudflared/config.yml")).unwrap();
+    assert!(
+        config.contains(&format!("- service: \"unix:{}\"", sock.to_string_lossy())),
+        "{config}"
+    );
+    let at = args.iter().position(|a| a == "--url").unwrap();
+    assert_eq!(args[at + 1], format!("unix:{}", sock.to_string_lossy()));
+    assert!(
+        !args.contains(&"--unix-socket".to_string()),
+        "the real cloudflared refuses a quick tunnel with only --unix-socket"
+    );
     let port_file = sb.bin_file("c", "fake-public-port");
     until("the public port", 20, || port_file.exists()).await;
     let port: u16 = std::fs::read_to_string(port_file)
@@ -347,7 +354,7 @@ async fn argv_never_holds_a_secret() {
     for record in &records {
         let line = argv(record).join(" ");
         assert!(!line.contains(key), "{line}");
-        if line.contains("--url") {
+        if line.contains("--url http://") {
             assert!(!line.contains("9f8e7d"), "{line}");
         }
     }

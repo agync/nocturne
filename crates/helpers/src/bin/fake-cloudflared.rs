@@ -41,17 +41,25 @@ fn main() {
     if let Some(port) = metrics_port {
         eprintln!("INF Starting metrics server on 127.0.0.1:{port}/metrics");
     }
+    // As the real one: a quick tunnel needs `--url`, so `--unix-socket` alone is refused, and an
+    // ingress rule in the configuration wins over `--url`.
+    let url = fake::flag_value(&args, "--url");
+    if url.is_none() && fake::flag_value(&args, "--unix-socket").is_some() {
+        eprintln!(
+            "You did not specify any valid additional argument to the cloudflared tunnel command."
+        );
+        std::process::exit(1);
+    }
+    let ingress = fake::flag_value(&args, "--config")
+        .and_then(|c| std::fs::read_to_string(c).ok())
+        .and_then(|text| fake::ingress_unix(&text));
     let origin = match (
-        fake::flag_value(&args, "--unix-socket"),
-        fake::flag_value(&args, "--url"),
+        ingress,
+        url.as_deref().and_then(|u| u.strip_prefix("http://")),
     ) {
         (Some(path), _) => Some(fake::Origin::Unix(path.into())),
-        (None, Some(url)) => Some(fake::Origin::Tcp(
-            url.trim_start_matches("http://")
-                .trim_end_matches('/')
-                .to_string(),
-        )),
-        _ => None,
+        (None, Some(addr)) => Some(fake::Origin::Tcp(addr.trim_end_matches('/').to_string())),
+        (None, None) => None,
     };
     if let (Some(origin), Ok(listener)) = (origin, TcpListener::bind("127.0.0.1:0")) {
         if let Ok(addr) = listener.local_addr() {

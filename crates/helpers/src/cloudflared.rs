@@ -85,13 +85,43 @@ pub(crate) fn home(dirs: &HelperDirs) -> PathBuf {
 }
 
 /// The helper's own configuration file, which stops it reading `/etc/cloudflared` or
-/// `/usr/local/etc/cloudflared`. Written by Nocturne and empty of settings.
+/// `/usr/local/etc/cloudflared`. Written by Nocturne; with a Unix socket it holds the one
+/// ingress rule that names the socket.
 pub(crate) fn config_path(dirs: &HelperDirs) -> PathBuf {
     home(dirs).join("config.yml")
 }
 
-const CONFIG_TEXT: &str =
+const CONFIG_HEAD: &str =
     "# Written by Nocturne. It keeps the helper from reading any other configuration.\n";
+
+/// A YAML double-quoted string.
+fn yaml_quoted(text: &str) -> String {
+    let mut out = String::from('"');
+    for c in text.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            c if c.is_control() => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
+    out.push('"');
+    out
+}
+
+/// What the configuration file says. cloudflared starts a quick tunnel only with `--url`, and
+/// its `--unix-socket` flag alone is refused, so a Unix socket is the configuration's single
+/// catch-all ingress rule, which cloudflared prefers over `--url`. A loopback port keeps the
+/// command-line origin, where the helper key travels as the Host header.
+pub(crate) fn config_text(origin: &Origin) -> String {
+    match origin {
+        Origin::Unix(path) => format!(
+            "{CONFIG_HEAD}ingress:\n  - service: {}\n",
+            yaml_quoted(&format!("unix:{}", path.to_string_lossy()))
+        ),
+        Origin::Tcp { .. } => CONFIG_HEAD.to_string(),
+    }
+}
 
 /// The exact command line, after `cloudflared`. The helper picks its own metrics port and names
 /// it in its output, so no other program can be waiting on a port chosen for it.
@@ -109,15 +139,13 @@ pub(crate) fn tunnel_args(origin: &Origin, config: &std::path::Path) -> Vec<Stri
     if allowed_flags_for(HelperKind::Cloudflared, "tunnel").contains(&"--management-diagnostics") {
         args.push("--management-diagnostics=false".into());
     }
+    args.push("--url".into());
     match origin {
-        Origin::Unix(path) => {
-            args.push("--unix-socket".into());
-            args.push(path.to_string_lossy().into_owned());
-        }
-        Origin::Tcp { port, .. } => {
-            args.push("--url".into());
-            args.push(format!("http://127.0.0.1:{port}"));
-        }
+        // Asks for a quick tunnel; the ingress rule in the configuration picks the socket. Were
+        // the rule ever ignored, cloudflared would read this as a host named `unix` and fail: it
+        // names no loopback port another program could hold.
+        Origin::Unix(path) => args.push(format!("unix:{}", path.to_string_lossy())),
+        Origin::Tcp { port, .. } => args.push(format!("http://127.0.0.1:{port}")),
     }
     args
 }
@@ -141,7 +169,7 @@ pub(crate) fn tunnel_env(dirs: &HelperDirs, origin: &Origin) -> Vec<(OsString, O
     env
 }
 
-fn write_config(path: &std::path::Path) -> Result<(), HelperError> {
+fn write_config(path: &std::path::Path, origin: &Origin) -> Result<(), HelperError> {
     use std::io::Write;
     let mut options = std::fs::OpenOptions::new();
     options.create(true).write(true).truncate(true);
@@ -152,7 +180,7 @@ fn write_config(path: &std::path::Path) -> Result<(), HelperError> {
     }
     options
         .open(path)
-        .and_then(|mut f| f.write_all(CONFIG_TEXT.as_bytes()))
+        .and_then(|mut f| f.write_all(config_text(origin).as_bytes()))
         .map_err(|e| HelperError::Spawn(format!("could not write the settings file: {e}")))
 }
 
@@ -200,7 +228,7 @@ impl Transport for CloudflaredTransport {
             make_private_dir(&home)?;
             make_private_dir(&home.join("tmp"))?;
             make_private_dir(&logs)?;
-            write_config(&config_path(&self.dirs))?;
+            write_config(&config_path(&self.dirs), &spec.origin)?;
             let cmd = HelperCommand {
                 name: "cloudflared",
                 program: self.installed.path.clone(),
@@ -402,8 +430,8 @@ mod tests {
             "--loglevel",
             "info",
             "--management-diagnostics=false",
-            "--unix-socket",
-            "/data/remote/run/listener.sock",
+            "--url",
+            "unix:/data/remote/run/listener.sock",
         ]
         .map(String::from)
         .to_vec();
@@ -415,9 +443,35 @@ mod tests {
             },
             &cfg,
         );
-        expected.truncate(9);
-        expected.extend(["--url".into(), "http://127.0.0.1:5000".into()]);
+        expected.truncate(10);
+        expected.push("http://127.0.0.1:5000".into());
         assert_eq!(tcp, expected);
+    }
+
+    #[test]
+    fn a_unix_socket_is_the_one_ingress_rule() {
+        let text = config_text(&Origin::Unix(
+            "/data/a b/Application Support/run/l\"q\\.sock".into(),
+        ));
+        assert_eq!(
+            text,
+            format!(
+                "{CONFIG_HEAD}ingress:\n  - service: \"unix:/data/a b/Application Support/run/l\\\"q\\\\.sock\"\n"
+            )
+        );
+        let tcp = config_text(&Origin::Tcp {
+            port: 5000,
+            key: "s3cret".into(),
+        });
+        assert_eq!(
+            tcp, CONFIG_HEAD,
+            "the key and the port stay out of the file"
+        );
+        assert_eq!(
+            yaml_quoted("a\nb"),
+            "\"a\\u000ab\"",
+            "no line break reaches the file"
+        );
     }
 
     #[test]

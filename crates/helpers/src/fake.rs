@@ -99,6 +99,15 @@ pub fn check_flags(kind: HelperKind, command: &str, args: &[String]) -> Result<(
 }
 
 /// The value after `--name` (as `--name value` or `--name=value`).
+/// The socket of a `service: "unix:<path>"` ingress rule in a configuration Nocturne wrote.
+pub fn ingress_unix(config: &str) -> Option<String> {
+    let line = config
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("- service: \"unix:"))?;
+    let quoted = line.strip_suffix('"')?;
+    Some(quoted.replace("\\\"", "\"").replace("\\\\", "\\"))
+}
+
 pub fn flag_value(args: &[String], name: &str) -> Option<String> {
     let mut it = args.iter();
     while let Some(a) = it.next() {

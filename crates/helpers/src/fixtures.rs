@@ -137,7 +137,7 @@ mod tests {
             "--no-autoupdate",
             "--metrics",
             "--loglevel",
-            "--unix-socket",
+            "--config",
             "--url",
         ] {
             assert!(tunnel.contains(&f), "{f}");
