@@ -157,6 +157,7 @@ export function Choosing({ view, onStarted }: Props) {
       <div className={styles.foot}>
         <Button
           variant="quiet"
+          flush
           aria-expanded={why}
           aria-controls="why"
           onClick={() => setWhy(!why)}

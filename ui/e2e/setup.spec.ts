@@ -185,3 +185,33 @@ test.describe("using it", () => {
     await expect(page.getByRole("switch", { name: /update/i })).toHaveCount(0);
   });
 });
+
+test.describe("size choice layout", () => {
+  test("the four sizes sit in a two by two grid", async ({ browser }) => {
+    const page = await browser.newPage({ viewport: { width: 1100, height: 760 } });
+    await ready(page, "choosing", "#/setup?step=choosing", /lighter mind/);
+    const boxes = await page.getByRole("radio").evaluateAll((els) =>
+      els.map((el) => {
+        const r = (el.parentElement as HTMLElement).getBoundingClientRect();
+        return { x: Math.round(r.x), y: Math.round(r.y) };
+      }),
+    );
+    expect(new Set(boxes.map((b) => b.x)).size).toBe(2);
+    expect(new Set(boxes.map((b) => b.y)).size).toBe(2);
+    await page.close();
+  });
+
+  test("on a phone the set up button is in view and Get started is full width", async ({
+    browser,
+  }) => {
+    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    await ready(page, "tiny", "#/setup?step=choosing", /./);
+    await expect(page.getByRole("button", { name: /^Set up/ })).toBeInViewport();
+    await ready(page, "notStarted", "#/setup", /Keep anything/);
+    const button = page.getByRole("button", { name: "Get started" });
+    const box = await button.boundingBox();
+    expect(box?.height).toBeLessThan(60);
+    expect(box?.width).toBeGreaterThan(280);
+    await page.close();
+  });
+});

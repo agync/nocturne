@@ -82,9 +82,7 @@ describe("what this computer can run", () => {
     ]);
     expect(within(group).getByRole("radio", { name: /Standard · this computer/ })).toBeChecked();
     expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
-    expect(
-      within(group).getByText("Needs more computer memory than this one has"),
-    ).toBeInTheDocument();
+    expect(within(group).getByText("Too big for this computer’s memory")).toBeInTheDocument();
     expect(
       screen.getByText(/Nocturne needs 8\.4 GB of space \(you have 220 GB free\)/),
     ).toBeInTheDocument();
@@ -145,10 +143,8 @@ describe("what this computer can run", () => {
     await open("shortOfSpace", "#/setup?step=choosing");
     const group = await screen.findByRole("group", { name: "How much to set up" });
     expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
-    expect(within(group).getAllByText("Needs more free space than this computer has")).toHaveLength(
-      2,
-    );
-    expect(within(group).queryByText("Needs more computer memory than this one has")).toBeNull();
+    expect(within(group).getAllByText("Too big for the free space")).toHaveLength(2);
+    expect(within(group).queryByText("Too big for this computer’s memory")).toBeNull();
     expect(within(group).getByRole("radio", { name: /Small · this computer/ })).toBeChecked();
   });
 

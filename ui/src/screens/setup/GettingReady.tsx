@@ -127,7 +127,7 @@ export function GettingReady({ view }: { view: SetupView }) {
     <section className={`${styles.card} ${styles.wide}`} aria-labelledby="ready">
       <div className={styles.main}>
         <p className={`t-section ${styles.eyebrow}`}>{t("setup.step.two")}</p>
-        <h1 ref={heading} tabIndex={-1} id="ready" className={`t-page-title ${styles.titleSmall}`}>
+        <h1 ref={heading} tabIndex={-1} id="ready" className="t-page-title">
           {t("setup.ready.title")}
         </h1>
 
