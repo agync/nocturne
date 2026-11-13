@@ -262,11 +262,14 @@ impl Engine {
     /// alone, the pages that cited it and their cached audio. A memory with other sources
     /// stays and loses only the link to this item. A memory this item had replaced or ended
     /// comes back as it was. It runs as a forget job, so a crash part way is finished on the
-    /// next open.
-    pub fn unkeep(&self, item_id: &str) -> Result<()> {
-        let job = self.unkeep_begin(item_id)?;
-        self.finish_forget(job)?;
-        Ok(())
+    /// next open. The first phase already removes the item row and lists its original for
+    /// shredding, so nothing readable is left once it commits.
+    pub fn unkeep(&self, item_id: &str) -> Result<ForgetOutcome> {
+        let (job, pages_redacted, had_original) = self.unkeep_begin(item_id)?;
+        let mut outcome = self.finish_forget(job)?;
+        outcome.report.pages_redacted = pages_redacted;
+        outcome.report.originals_removed = u32::from(had_original);
+        Ok(outcome)
     }
 
     /// Phase 1 of `unkeep` only, for tests that simulate stopping part way.
@@ -275,16 +278,21 @@ impl Engine {
         self.unkeep_begin(item_id).map(|_| ())
     }
 
-    fn unkeep_begin(&self, item_id: &str) -> Result<i64> {
+    fn unkeep_begin(&self, item_id: &str) -> Result<(i64, u32, bool)> {
         let now = self.clock().now();
         let stamp_now = fmt_ts(now);
-        let (job, files) = self.write(|tx| {
-            let kept_at: Option<String> = tx
-                .query_row("SELECT kept_at FROM items WHERE id = ?1", [item_id], |r| {
-                    r.get(0)
-                })
+        let dir = self.originals_dir();
+        let (job, pages_redacted, had_original, files) = self.write(|tx| {
+            type Row = (String, String, Option<String>, Option<String>, String);
+            let row: Option<Row> = tx
+                .query_row(
+                    "SELECT kept_at, sha256, ext, file_name, status FROM items WHERE id = ?1",
+                    [item_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                )
                 .optional()?;
-            let kept_at = kept_at.ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
+            let (kept_at, sha, ext, file_name, status) =
+                row.ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
             if crate::capture::in_forget_job(tx, item_id)? {
                 return Err(Error::not_found(format!("item {item_id}")));
             }
@@ -316,8 +324,9 @@ impl Engine {
             }
             tx.execute("DELETE FROM memory_sources WHERE item_id = ?1", [item_id])?;
             for id in &shared {
-                // Without a trusted source left, only the person's word keeps it active.
-                tx.execute(
+                // Without a trusted source left, only the person's word keeps it active, and
+                // a "which is right?" it entered by being promoted goes with it.
+                let demoted = tx.execute(
                     "UPDATE memories SET status = 'unconfirmed', let_go_at = NULL \
                      WHERE id = ?1 AND confirmed = 0 AND superseded_at IS NULL \
                        AND status IN ('active', 'fading') \
@@ -325,6 +334,12 @@ impl Engine {
                                        WHERE s.memory_id = ?1 AND i.trust = 'trusted')",
                     [id],
                 )?;
+                if demoted > 0 {
+                    tx.execute(
+                        "DELETE FROM conflicts WHERE resolved_at IS NULL AND (a = ?1 OR b = ?1)",
+                        [id],
+                    )?;
+                }
             }
 
             let mut pages = pages_citing(tx, &sole)?;
@@ -338,7 +353,8 @@ impl Engine {
                 }
             }
             tx.execute(
-                "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, 1)",
+                "INSERT INTO forget_jobs(ids, items, include_originals, kind) \
+                 VALUES (?1, ?2, 1, 'unkeep')",
                 params![
                     serde_json::to_string(&sole)?,
                     serde_json::to_string(&[item_id])?,
@@ -354,13 +370,22 @@ impl Engine {
                 )?;
             }
             redact_pages(tx, &sole, &pages, Some(item_id))?;
-            let files = drop_audio_rows(tx, &pages)?;
+            // The item's own row (text, summary and search rows with it) goes now, with its
+            // original recorded for shredding in the same transaction.
+            tx.execute("DELETE FROM items WHERE id = ?1", [item_id])?;
+            let pending = matches!(status.as_str(), "kept" | "reading");
+            forget_in_pages(tx, &kept_at, pending)?;
+            let mut files = drop_audio_rows(tx, &pages)?;
+            let had_original = file_name.is_some();
+            if had_original {
+                files.push(original_path(&dir, &sha, ext.as_deref()));
+            }
             append_job_files(tx, job, &files)?;
-            Ok((job, files))
+            Ok((job, pages.len() as u32, had_original, files))
         })?;
         self.invalidate_vectors();
         shred_all(files);
-        Ok(job)
+        Ok((job, pages_redacted, had_original))
     }
 
     /// Finish forgets that were started and not completed (the app stopped part way).
@@ -493,6 +518,36 @@ impl Engine {
     }
 }
 
+/// An item that is gone no longer counts in the pages whose window held it: their counts and
+/// the template dek say so (a written dek would still quote the old count).
+fn forget_in_pages(tx: &Transaction<'_>, kept_at: &str, was_pending: bool) -> Result<()> {
+    let dates: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT date FROM pages WHERE window_start <= ?1 AND ?1 < window_end ORDER BY date",
+        )?;
+        stmt.query_map([kept_at], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    for date in dates {
+        let body: String =
+            tx.query_row("SELECT body FROM pages WHERE date = ?1", [&date], |r| {
+                r.get(0)
+            })?;
+        let mut view: PageView = serde_json::from_str(&body)?;
+        view.kept_count = view.kept_count.saturating_sub(1);
+        if was_pending {
+            view.pending = view.pending.saturating_sub(1);
+        }
+        let needs = view.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        view.dek = template_dek(view.kept_count, needs, view.let_go_count);
+        tx.execute(
+            "UPDATE pages SET body = ?2, dek = ?3 WHERE date = ?1",
+            params![date, serde_json::to_string(&view)?, view.dek],
+        )?;
+    }
+    Ok(())
+}
+
 /// Remember files a forget must shred, in the same transaction that makes them unreachable.
 fn append_job_files(tx: &Transaction<'_>, job: i64, files: &[PathBuf]) -> Result<()> {
     if files.is_empty() {
@@ -588,12 +643,10 @@ fn redact_pages(
                 }
             }
         }
-        if view
-            .question
-            .as_ref()
-            .and_then(|q| q.memory_id.as_ref())
-            .is_some_and(|m| ids.contains(m))
-        {
+        if view.question.as_ref().is_some_and(|q| {
+            q.memory_id.as_ref().is_some_and(|m| ids.contains(m))
+                || item.is_some_and(|i| q.receipt.as_ref().is_some_and(|r| r.item_id == i))
+        }) {
             view.question = None;
         }
         let needs = view.needs_you.iter().filter(|l| !l.forgotten).count() as u32;

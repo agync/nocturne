@@ -11,6 +11,8 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use crate::Engine;
 use crate::audio::pages_citing;
 use crate::capture::check_lease;
+use std::path::PathBuf;
+
 use crate::error::{Error, Result};
 use crate::rows::{MEM_COLS, MemRow, load_mem, mem_row, mem_view, query_mems, receipts_for};
 use crate::types::{ApplyReport, Candidate, CorrectPatch, Predicate};
@@ -56,6 +58,7 @@ fn independent(a: &Option<String>, b: &Option<String>) -> bool {
 
 struct ItemInfo {
     trusted: bool,
+    private: bool,
     origin: Option<String>,
 }
 
@@ -265,18 +268,19 @@ fn apply(
     item_id: &str,
     lease: &str,
     cands: Vec<Candidate>,
-) -> Result<ApplyReport> {
+) -> Result<(ApplyReport, Vec<PathBuf>)> {
     check_lease(tx, item_id, lease)?;
-    let (trust, origin): (String, Option<String>) = tx
+    let (trust, origin, private): (String, Option<String>, bool) = tx
         .query_row(
-            "SELECT trust, origin FROM items WHERE id = ?1",
+            "SELECT trust, origin, private FROM items WHERE id = ?1",
             [item_id],
-            |r| Ok((r.get(0)?, r.get(1)?)),
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?
         .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
     let item = ItemInfo {
         trusted: trust == "trusted",
+        private,
         origin,
     };
     let mut report = ApplyReport::default();
@@ -305,6 +309,17 @@ fn apply(
             &mut report,
             c,
         )?;
+    }
+
+    // What a private item says is private, whether it made the memory or only agreed with it.
+    let mut files = Vec::new();
+    if item.private {
+        let mut seen: HashSet<&String> = HashSet::new();
+        for id in report.created.iter().chain(&report.reinforced) {
+            if seen.insert(id) {
+                files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
+            }
+        }
     }
 
     for (mid, span) in &prev {
@@ -360,7 +375,7 @@ fn apply(
         "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL WHERE id = ?1",
         params![item_id, status],
     )?;
-    Ok(report)
+    Ok((report, files))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -745,7 +760,8 @@ impl Engine {
             .to_zoned(self.clock().tz())
             .date()
             .to_string();
-        let report = self.write(|tx| apply(tx, &now, &today, item, lease, candidates))?;
+        let (report, files) = self.write(|tx| apply(tx, &now, &today, item, lease, candidates))?;
+        crate::audio::shred_all(files);
         if !report.removed.is_empty() || !report.reworded.is_empty() {
             self.invalidate_vectors();
         }

@@ -167,8 +167,10 @@ impl Engine {
         Ok(())
     }
 
-    /// Mark an item private (or not), and every current memory that came from it with it, in
-    /// one step. Cached audio of pages citing those memories is removed.
+    /// Mark an item private (or not). Turning it on makes every memory linked to the item
+    /// private, history and earlier versions included, and removes the cached audio of pages
+    /// citing any of them. Turning it off clears the flag only on memories this item alone
+    /// supports: another source, or another version, may still call for privacy.
     pub fn set_item_private(&self, item_id: &str, on: bool) -> Result<()> {
         let files = self.write(|tx| {
             item_exists(tx, item_id)?;
@@ -177,8 +179,14 @@ impl Engine {
                 params![item_id, on],
             )?;
             let mut files = Vec::new();
-            for m in current_memories_of(tx, item_id)? {
-                files.extend(set_private_tx(tx, &m, on)?);
+            if on {
+                for m in memories_of(tx, item_id, false)? {
+                    files.extend(set_private_tx(tx, &m, true)?);
+                }
+            } else {
+                for m in memories_of(tx, item_id, true)? {
+                    tx.execute("UPDATE memories SET private = 0 WHERE id = ?1", [&m])?;
+                }
             }
             Ok(files)
         })?;
@@ -187,12 +195,22 @@ impl Engine {
         Ok(())
     }
 
-    /// Keep (or stop keeping) every current memory that came from an item forever.
+    /// Keep (or stop keeping) the memories that came from an item forever. Turning it on covers
+    /// every memory linked to the item and its earlier versions; turning it off only those this
+    /// item alone supports.
     pub fn set_item_keep_forever(&self, item_id: &str, on: bool) -> Result<()> {
         self.write(|tx| {
             item_exists(tx, item_id)?;
-            for m in current_memories_of(tx, item_id)? {
-                set_keep_forever_tx(tx, &m, on)?;
+            if on {
+                for m in memories_of(tx, item_id, false)? {
+                    for v in chain(tx, &m)? {
+                        set_keep_forever_tx(tx, &v, true)?;
+                    }
+                }
+            } else {
+                for m in memories_of(tx, item_id, true)? {
+                    set_keep_forever_tx(tx, &m, false)?;
+                }
             }
             Ok(())
         })
@@ -212,14 +230,21 @@ fn item_exists(tx: &rusqlite::Transaction<'_>, item_id: &str) -> Result<()> {
     }
 }
 
-/// The memories that are current and cite this item.
-fn current_memories_of(tx: &rusqlite::Transaction<'_>, item_id: &str) -> Result<Vec<String>> {
+/// Every memory linked to this item, current or history (not those already being forgotten).
+/// With `only_this_item`, just those whose one source is this item.
+fn memories_of(
+    tx: &rusqlite::Transaction<'_>,
+    item_id: &str,
+    only_this_item: bool,
+) -> Result<Vec<String>> {
     let mut stmt = tx.prepare(
         "SELECT m.id FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
-         WHERE s.item_id = ?1 AND m.superseded_at IS NULL AND m.forgetting = 0 ORDER BY m.id",
+         WHERE s.item_id = ?1 AND m.forgetting = 0 \
+           AND (?2 = 0 OR (SELECT COUNT(*) FROM memory_sources o WHERE o.memory_id = m.id) = 1) \
+         ORDER BY m.id",
     )?;
     Ok(stmt
-        .query_map([item_id], |r| r.get(0))?
+        .query_map(params![item_id, only_this_item], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?)
 }
 
@@ -236,7 +261,11 @@ fn set_keep_forever_tx(tx: &rusqlite::Transaction<'_>, id: &str, on: bool) -> Re
 
 /// Set the flag on the whole version chain, so an earlier version cited on an old page is
 /// covered; returns the cached audio files to shred once the transaction has committed.
-fn set_private_tx(tx: &rusqlite::Transaction<'_>, id: &str, on: bool) -> Result<Vec<PathBuf>> {
+pub(crate) fn set_private_tx(
+    tx: &rusqlite::Transaction<'_>,
+    id: &str,
+    on: bool,
+) -> Result<Vec<PathBuf>> {
     let versions = chain(tx, id)?;
     if versions.is_empty() {
         return Err(Error::not_found(format!("memory {id}")));

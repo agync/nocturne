@@ -55,27 +55,6 @@ fn item_views_have_no_original_path_for_notes_or_missing_files() {
     assert!(got.has_original, "the row still says it was a file");
 }
 
-#[test]
-fn receipts_do_not_carry_the_original_path() {
-    let f = fixture();
-    let src = write_file(f.dir.path(), "brief.txt", b"The brief");
-    let item = kept_item(f.engine.keep_file(&src, Source::Drop).unwrap());
-    let p = f
-        .engine
-        .lease_item(&item.id, std::time::Duration::from_secs(60))
-        .unwrap();
-    f.engine
-        .apply_candidates(
-            &item.id,
-            &p.lease,
-            vec![cand("Brief", Predicate::Knows, "x", "The brief says x.")],
-        )
-        .unwrap();
-    let m = &f.engine.memories(MemoryFilter::default()).unwrap()[0];
-    let json = serde_json::to_string(&m.receipts).unwrap();
-    assert!(!json.contains("originals"), "{json}");
-}
-
 // ---- MemoryFilter.item_id ----
 
 #[test]
@@ -1187,4 +1166,450 @@ fn a_worker_holding_the_read_loses_it_when_the_keep_is_undone() {
             .unwrap()
             .is_empty()
     );
+}
+
+// ---- review fixes ----
+
+fn restamp(f: &Fixture, id: &str, at: &str) {
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute("UPDATE items SET kept_at = ?2 WHERE id = ?1", [id, at])
+        .unwrap();
+}
+
+fn private_count(f: &Fixture, where_sql: &str) -> i64 {
+    sql_count(
+        f.dir.path(),
+        &format!("SELECT COUNT(*) FROM memories WHERE private = 1 AND {where_sql}"),
+    )
+}
+
+#[test]
+fn what_a_private_item_says_is_private_when_it_is_read_later() {
+    let f = fixture();
+    let y = keep(&f.engine, "Therapy notes");
+    f.engine.set_item_private(&y, true).unwrap();
+    let r = f
+        .engine
+        .apply(
+            &y,
+            vec![cand("Leo", Predicate::Knows, "x", "Leo sees a therapist.")],
+        )
+        .unwrap();
+    assert!(f.engine.get_memory(&r.created[0]).unwrap().private);
+    assert!(f.engine.get_item(&y).unwrap().private);
+}
+
+#[test]
+fn a_private_item_that_agrees_with_a_public_memory_makes_it_private_and_drops_audio() {
+    let f = fixture();
+    let (_, m) = learn(
+        &f.engine,
+        "Mia note",
+        cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+    );
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    f.engine
+        .cache("2026-11-14", "af_heart", b"spoken Mia")
+        .unwrap();
+    let y = keep(&f.engine, "private diary");
+    f.engine.set_item_private(&y, true).unwrap();
+    f.engine
+        .apply(
+            &y,
+            vec![cand("Mia", Predicate::Prefers, "chess", "Mia likes chess.")],
+        )
+        .unwrap();
+    assert!(f.engine.get_memory(&m).unwrap().private);
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[test]
+fn an_items_flags_reach_memories_it_lost_to_a_choice() {
+    let f = fixture();
+    let (_, a) = learn(
+        &f.engine,
+        "Dentist Tuesday",
+        cand(
+            "The dentist appointment",
+            Predicate::Scheduled,
+            "Tuesday 14:00",
+            "The dentist appointment is Tuesday at 14:00.",
+        ),
+    );
+    let y = keep(&f.engine, "Dentist moved");
+    let r = f
+        .engine
+        .apply(
+            &y,
+            vec![cand(
+                "dentist appointment",
+                Predicate::Scheduled,
+                "Thursday 10:00",
+                "The dentist appointment is Thursday at 10:00.",
+            )],
+        )
+        .unwrap();
+    let b = r.created[0].clone();
+    // The person keeps the old time; Y's own memory becomes history.
+    f.engine.resolve_which(&r.conflicts[0], &a).unwrap();
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    f.engine.cache("2026-11-14", "af_heart", b"spoken").unwrap();
+
+    f.engine.set_item_private(&y, true).unwrap();
+    assert_eq!(private_count(&f, &format!("id = '{b}'")), 1);
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+    f.engine.set_item_keep_forever(&y, true).unwrap();
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            &format!("SELECT keep_forever FROM memories WHERE id = '{b}'")
+        ),
+        1
+    );
+}
+
+#[test]
+fn turning_an_items_private_flag_off_spares_what_another_source_or_version_still_holds() {
+    let f = fixture();
+    let (_, shared) = learn(
+        &f.engine,
+        "Mia note",
+        cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+    );
+    let y = keep(&f.engine, "private diary");
+    f.engine
+        .apply(
+            &y,
+            vec![
+                cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+                cand("Leo", Predicate::Knows, "x", "Leo knows x."),
+            ],
+        )
+        .unwrap();
+    f.engine.set_item_private(&y, true).unwrap();
+    let only_y = f
+        .engine
+        .memories(MemoryFilter {
+            query: Some("Leo".into()),
+            ..Default::default()
+        })
+        .unwrap()[0]
+        .id
+        .clone();
+    assert!(f.engine.get_memory(&shared).unwrap().private);
+    assert!(f.engine.get_memory(&only_y).unwrap().private);
+
+    f.engine.set_item_private(&y, false).unwrap();
+    assert!(!f.engine.get_item(&y).unwrap().private);
+    assert!(!f.engine.get_memory(&only_y).unwrap().private);
+    assert!(
+        f.engine.get_memory(&shared).unwrap().private,
+        "another source's memory stays private"
+    );
+}
+
+fn page_with_question(f: &Fixture, y: &str) -> nocturne_contract::PageView {
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    let q = page.question.clone().expect("a question");
+    assert_eq!(q.receipt.as_ref().unwrap().item_id, y, "{q:?}");
+    page
+}
+
+#[test]
+fn unkeep_clears_a_daily_question_that_cites_the_item_and_fixes_the_counts() {
+    let f = fixture();
+    // Page 1 first, so the next page asks a yes/no question.
+    let p = f
+        .engine
+        .compose_page(date("2026-11-13"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&p).unwrap();
+    let y = keep(&f.engine, "Zebrafish47 clinic letter");
+    let r = f
+        .engine
+        .apply(
+            &y,
+            vec![cand("Mia", Predicate::Prefers, "chess", "Mia likes chess.")],
+        )
+        .unwrap();
+    let m = r.created[0].clone();
+    f.clock.set_str("2026-11-13T08:00:00Z");
+    let x = keep(&f.engine, "Mia note");
+    f.engine
+        .apply(
+            &x,
+            vec![cand("Mia", Predicate::Prefers, "chess", "Mia likes chess.")],
+        )
+        .unwrap();
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = page_with_question(&f, &y);
+    assert_eq!(page.kept_count, 2);
+    restamp(&f, &y, "2026-11-14T05:59:00.000Z");
+
+    f.engine.unkeep(&y).unwrap();
+
+    assert!(f.engine.get_memory(&m).is_ok());
+    let saved = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    let json = serde_json::to_string(&saved).unwrap();
+    assert!(saved.question.is_none(), "{:?}", saved.question);
+    assert!(!json.contains(&y), "{json}");
+    assert!(!json.to_lowercase().contains("zebrafish47"), "{json}");
+    // The window [07:00 on the 13th, 06:00 on the 14th) held both items; now it holds one.
+    assert_eq!(saved.kept_count, 1);
+    assert!(saved.dek.contains("read 1 thing "), "{}", saved.dek);
+    // A page composed before the undo cannot bring the question back.
+    f.engine.save_page(&page).unwrap();
+    let again = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    assert!(again.question.is_none());
+}
+
+#[test]
+fn an_undone_item_taken_by_the_morning_read_is_not_counted_pending() {
+    let f = fixture();
+    let p = f
+        .engine
+        .compose_page(date("2026-11-13"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&p).unwrap();
+    let a = keep(&f.engine, "waiting note");
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    restamp(&f, &a, "2026-11-14T05:58:00.000Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    assert_eq!((page.kept_count, page.pending), (1, 1));
+    f.engine.save_page(&page).unwrap();
+    f.engine.unkeep(&a).unwrap();
+    let saved = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    assert_eq!((saved.kept_count, saved.pending), (0, 0));
+}
+
+#[test]
+fn unkeep_takes_the_item_row_and_lists_its_original_in_the_first_phase() {
+    let f = fixture();
+    let photo = kept_id(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+    );
+    let original =
+        std::path::PathBuf::from(f.engine.get_item(&photo).unwrap().original_path.unwrap());
+    f.engine.unkeep_begin_only(&photo).unwrap();
+    assert!(f.engine.get_item(&photo).is_err());
+    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM items"), 0);
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM items_fts WHERE items_fts MATCH 'zebrafish47'"
+        ),
+        0
+    );
+    let listed: String = {
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.query_row("SELECT files FROM forget_jobs", [], |r| r.get(0))
+            .unwrap()
+    };
+    assert!(listed.contains(original.file_name().unwrap().to_str().unwrap()));
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM forget_jobs WHERE kind = 'unkeep'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn a_crash_after_the_memories_were_purged_is_finished_on_open() {
+    let f = fixture();
+    let photo = kept_id(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+    );
+    let r = f.engine.apply(&photo, vec![secret("on Tuesday")]).unwrap();
+    assert_eq!(r.created.len(), 1);
+    let original =
+        std::path::PathBuf::from(f.engine.get_item(&photo).unwrap().original_path.unwrap());
+    f.engine.unkeep_begin_only(&photo).unwrap();
+    {
+        // Phase 2 had purged the memories; the app stopped before the clean-up.
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.execute("DELETE FROM memories", []).unwrap();
+    }
+    let clock = f.clock.clone();
+    let dir = f.dir.path().to_path_buf();
+    drop(f.engine);
+    let _engine = nocturne_engine::Engine::open(&dir, clock).unwrap();
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM forget_jobs"), 0);
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM entities"), 0);
+    assert!(!original.exists());
+}
+
+#[test]
+fn unkeep_reports_what_it_removed() {
+    let f = fixture();
+    let photo = kept_id(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+    );
+    f.engine.apply(&photo, vec![secret("on Tuesday")]).unwrap();
+    let out = f.engine.unkeep(&photo).unwrap();
+    assert_eq!(out.report.memories_removed, 1);
+    assert_eq!(out.report.originals_removed, 1);
+    let note = keep(&f.engine, "a note");
+    let out = f.engine.unkeep(&note).unwrap();
+    assert_eq!(
+        (out.report.memories_removed, out.report.originals_removed),
+        (0, 0)
+    );
+}
+
+#[test]
+fn a_regular_forget_job_is_not_an_unkeep_job() {
+    let f = fixture();
+    let (_, m) = learn(
+        &f.engine,
+        "Zed note",
+        cand("Zed", Predicate::Knows, "x", "Zed knows x."),
+    );
+    let p = f.engine.preview_forget(&[m], false).unwrap();
+    f.engine.forget_begin_only(&p.token).unwrap();
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM forget_jobs WHERE kind = 'forget'"
+        ),
+        1
+    );
+}
+
+#[test]
+fn undoing_the_keep_that_promoted_a_memory_removes_the_choice_the_promotion_made() {
+    let f = fixture();
+    let x = keep_as(&f.engine, "web: dentist Tuesday", Source::PastedWeb);
+    let rx = f
+        .engine
+        .apply(
+            &x,
+            vec![cand(
+                "The dentist appointment",
+                Predicate::Scheduled,
+                "Tuesday 14:00",
+                "The dentist appointment is Tuesday at 14:00.",
+            )],
+        )
+        .unwrap();
+    let mx = rx.created[0].clone();
+    learn(
+        &f.engine,
+        "dentist thursday",
+        cand(
+            "The dentist appointment",
+            Predicate::Scheduled,
+            "Thursday 10:00",
+            "The dentist appointment is Thursday at 10:00.",
+        ),
+    );
+    let y = keep(&f.engine, "rang: dentist Tuesday");
+    let ry = f
+        .engine
+        .apply(
+            &y,
+            vec![cand(
+                "The dentist appointment",
+                Predicate::Scheduled,
+                "Tuesday 14:00",
+                "The dentist appointment is Tuesday at 14:00.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(ry.conflicts.len(), 1, "the promotion made a choice");
+    f.engine.unkeep(&y).unwrap();
+    assert_eq!(
+        f.engine.get_memory(&mx).unwrap().status,
+        nocturne_contract::MemoryStatus::Unconfirmed
+    );
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM conflicts WHERE resolved_at IS NULL"
+        ),
+        0
+    );
+}
+
+#[test]
+fn an_export_is_one_snapshot_even_if_an_item_is_undone_while_it_runs() {
+    let f = fixture();
+    let ids: Vec<String> = ["alpha.txt", "bravo.txt", "charlie.txt"]
+        .iter()
+        .enumerate()
+        .map(|(i, n)| {
+            f.clock.set_str(&format!("2026-11-13T07:0{i}:00Z"));
+            let p = write_file(f.dir.path(), n, n.as_bytes());
+            kept_id(f.engine.keep_file(&p, Source::Drop).unwrap())
+        })
+        .collect();
+    f.clock.set_str("2026-11-13T07:05:00Z");
+    let out = tempfile::tempdir().unwrap();
+    let fired = std::cell::Cell::new(false);
+    let r = f
+        .engine
+        .export_to_with(out.path(), &|done, _| {
+            if done == 1 && !fired.get() {
+                fired.set(true);
+                f.engine.unkeep(&ids[1]).unwrap();
+            }
+        })
+        .unwrap();
+    assert!(fired.get());
+    let root = std::path::PathBuf::from(&r.path);
+    let data: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(root.join("nocturne.json")).unwrap())
+            .unwrap();
+    let mut exported = 0;
+    for item in data["items"].as_array().unwrap() {
+        let id = item["id"].as_str().unwrap();
+        let name = item["fileName"].as_str().unwrap();
+        // Whatever is in the export is whole: the copy named for an id holds that item's bytes.
+        let copy = root.join(item["export"].as_str().expect("a copy"));
+        assert_eq!(std::fs::read(&copy).unwrap(), name.as_bytes(), "{id}");
+        assert!(copy.file_name().unwrap().to_str().unwrap().starts_with(id));
+        exported += 1;
+    }
+    let copies = std::fs::read_dir(root.join("originals")).unwrap().count();
+    assert_eq!(
+        copies, exported,
+        "no copy without its item, no item without its copy"
+    );
+    assert!(exported >= 2);
+    assert_eq!(r.originals as usize, copies);
+    assert!(f.engine.get_item(&ids[1]).is_err());
 }

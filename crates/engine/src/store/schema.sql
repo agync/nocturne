@@ -127,3 +127,7 @@ ALTER TABLE forget_jobs ADD COLUMN files TEXT NOT NULL DEFAULT '[]';
 -- "Read now" ordering for the queue, and a memory the person asked to see again later.
 ALTER TABLE items ADD COLUMN priority INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE memories ADD COLUMN snoozed_until TEXT;
+
+-- migration 4
+-- What started a job: a forget, or an undone keep (which also takes the item's own row).
+ALTER TABLE forget_jobs ADD COLUMN kind TEXT NOT NULL DEFAULT 'forget';

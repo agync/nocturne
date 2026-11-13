@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use nocturne_contract::{ExportReport, PageLine, PageView};
 use rusqlite::Connection;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 
 use crate::Engine;
 use crate::error::{Error, Result};
@@ -28,15 +29,14 @@ nocturne.json      all of it as data, including earlier versions of memories\n\
 Memories you marked private are included here, because this is your own copy. They are marked.\n\
 Anything you asked Nocturne to forget completely is not here.\n";
 
-/// `id, sha256, ext, file_name, origin, metadata` of an item.
-type ItemRow = (
-    String,
-    String,
-    Option<String>,
-    Option<String>,
-    Option<String>,
-    String,
-);
+/// An item as the export sees it: the view, and the columns the view leaves out.
+struct ItemExport {
+    view: nocturne_contract::ItemView,
+    sha: String,
+    ext: Option<String>,
+    origin: Option<String>,
+    metadata: String,
+}
 
 fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     use std::io::Write;
@@ -45,11 +45,22 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<()> {
     Ok(())
 }
 
-fn copy_new(src: &Path, dest: &Path) -> Result<()> {
+/// Copy a file into a new one and return the SHA-256 of what was copied.
+fn copy_new_hashed(src: &Path, dest: &Path) -> std::io::Result<String> {
+    use std::io::{Read, Write};
     let mut input = std::fs::File::open(src)?;
     let mut output = fsutil::create_private_file_new(dest)?;
-    std::io::copy(&mut input, &mut output)?;
-    Ok(())
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 64 * 1024];
+    loop {
+        let n = input.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+        output.write_all(&buf[..n])?;
+    }
+    Ok(crate::util::hex(&hasher.finalize()))
 }
 
 fn marks(m: &MemRow) -> String {
@@ -183,19 +194,33 @@ impl Engine {
         fsutil::create_private_dir_new(&dir.join("pages"))?;
         fsutil::create_private_dir_new(&dir.join("originals"))?;
         let mut report = self.read(|conn| {
+            // One snapshot for the whole export: what is written is one consistent moment,
+            // however much changes while the files are being copied.
+            let snapshot = conn.unchecked_transaction()?;
+            let conn: &Connection = &snapshot;
             let dates: Vec<String> = {
                 let mut stmt = conn.prepare("SELECT date FROM pages ORDER BY date")?;
                 stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?
             };
-            let mut stmt = conn.prepare(
-                "SELECT id, sha256, ext, file_name, origin, metadata FROM items ORDER BY kept_at, id",
-            )?;
-            let rows: Vec<ItemRow> = stmt
-                .query_map([], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
+            // Each item once, by id: its view and its stored columns come from one row.
+            let rows: Vec<ItemExport> = {
+                let mut stmt = conn.prepare(&format!(
+                    "SELECT {}, i.origin, i.metadata FROM items i ORDER BY i.kept_at, i.id",
+                    crate::rows::ITEM_COLS
+                ))?;
+                let to_view = crate::rows::item_view(&originals_src);
+                stmt.query_map([], |r| {
+                    Ok(ItemExport {
+                        view: to_view(r)?,
+                        sha: r.get(17)?,
+                        ext: r.get(18)?,
+                        origin: r.get(19)?,
+                        metadata: r.get(20)?,
+                    })
                 })?
-                .collect::<rusqlite::Result<_>>()?;
-            let with_files = rows.iter().filter(|r| r.3.is_some()).count();
+                .collect::<rusqlite::Result<_>>()?
+            };
+            let with_files = rows.iter().filter(|r| r.view.file_name.is_some()).count();
             let total = (3 + dates.len() + with_files) as u32;
             let mut done = 0u32;
             let mut step = || {
@@ -243,30 +268,54 @@ impl Engine {
             // Originals: a copy of every kept file.
             let mut copied = 0u32;
             let mut items_json = Vec::new();
-            let views = {
-                // `items` goes through the reader pool on its own; reuse the connection here.
-                let mut stmt = conn.prepare(&format!(
-                    "SELECT {} FROM items i ORDER BY i.kept_at, i.id",
-                    crate::rows::ITEM_COLS
-                ))?;
-                stmt.query_map([], crate::rows::item_view(&originals_src))?
-                    .collect::<rusqlite::Result<Vec<_>>>()?
+            // Whether an item is still in the store now, for telling a file that is missing
+            // from one that went because the item was undone while the export ran.
+            let mut live: Option<Connection> = None;
+            let mut still_kept = |id: &str| -> bool {
+                if live.is_none() {
+                    live = store::open_reader(&self.db_path()).ok();
+                }
+                live.as_ref().is_none_or(|c| {
+                    c.query_row("SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)", [id], |r| {
+                        r.get::<_, bool>(0)
+                    })
+                    .unwrap_or(true)
+                })
             };
-            for ((id, sha, ext, file_name, origin, metadata), view) in rows.into_iter().zip(views) {
+            for item in rows {
+                let ItemExport { view, sha, ext, origin, metadata } = item;
+                let id = view.id.clone();
                 let mut copy_name = None;
-                if let Some(name) = &file_name {
+                let mut included = true;
+                if let Some(name) = &view.file_name {
                     let src = crate::capture::original_path(&originals_src, &sha, ext.as_deref());
                     let safe: String = name
                         .chars()
                         .map(|c| if c == '/' || c == '\\' { '_' } else { c })
                         .collect();
                     let target = format!("{id}-{safe}");
-                    if src.exists() {
-                        copy_new(&src, &dir.join("originals").join(&target))?;
+                    let dest = dir.join("originals").join(&target);
+                    // A copy counts only if it is the bytes the item was kept with: an original
+                    // being removed underneath is overwritten before it is deleted.
+                    let intact = match copy_new_hashed(&src, &dest) {
+                        Ok(h) if h == sha => true,
+                        Ok(_) => {
+                            fsutil::shred(&dest);
+                            false
+                        }
+                        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+                        Err(e) => return Err(e.into()),
+                    };
+                    if intact {
                         copied += 1;
                         copy_name = Some(format!("originals/{target}"));
+                    } else if !still_kept(&id) {
+                        included = false;
                     }
                     step();
+                }
+                if !included {
+                    continue;
                 }
                 // The export names its own copy; where the store keeps the original is not part
                 // of the person's data.

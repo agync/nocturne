@@ -788,14 +788,21 @@ fn strip_stale(
             |r| r.get(0),
         )?)
     };
-    // An item that was undone (or is being) is cited by nothing.
+    // An item that was undone (or is being) is cited by nothing. A forget of memories leaves
+    // items alone unless nothing cites them, so only an undone keep makes an item "gone" here.
     let item_live = |id: &str| -> Result<bool> {
         let exists: bool = conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
             [id],
             |r| r.get(0),
         )?;
-        Ok(exists && !crate::capture::in_forget_job(conn, id)?)
+        let undoing: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM forget_jobs WHERE kind = 'unkeep' \
+             AND instr(items, '\"' || ?1 || '\"') > 0)",
+            [id],
+            |r| r.get(0),
+        )?;
+        Ok(exists && !undoing)
     };
     let mut changed = false;
     for list in [
@@ -830,11 +837,18 @@ fn strip_stale(
             }
         }
     }
-    if let Some(m) = page.question.as_ref().and_then(|q| q.memory_id.clone())
-        && !live(&m)?
-    {
-        page.question = None;
-        changed = true;
+    if let Some(q) = page.question.as_ref() {
+        let mut gone = false;
+        if let Some(m) = &q.memory_id {
+            gone |= !live(m)?;
+        }
+        if let Some(r) = &q.receipt {
+            gone |= !item_live(&r.item_id)?;
+        }
+        if gone {
+            page.question = None;
+            changed = true;
+        }
     }
     if changed {
         let day: Date = page.date.parse()?;
