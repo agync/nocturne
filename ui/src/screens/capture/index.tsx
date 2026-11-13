@@ -19,7 +19,7 @@ import type { ItemKind, ItemView, Kept, Notice, Source } from "../../engine/bind
 import { useEngine, useStatus } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import styles from "./Capture.module.css";
-import { useQuickRecorder } from "./useQuickRecorder";
+import { MIN_HOLD_MS, useQuickRecorder } from "./useQuickRecorder";
 
 /** How long the "Kept." pill stays before the window closes by itself. */
 export const CLOSE_AFTER_MS = 1600;
@@ -42,8 +42,7 @@ const spokenKind = (kind: ItemKind) => t(`kind.${kind}.spoken`);
 const kindOfMime = (mime: string): ItemKind =>
   mime.startsWith("image/") ? "image" : mime.startsWith("audio/") ? "audio" : "document";
 
-/** A press of Space shorter than this was a slip of the finger, not a voice note. */
-export const MIN_HOLD_MS = 300;
+export { MIN_HOLD_MS };
 
 /** The floating window from the shortcut: type, paste, drop or talk, and it is kept. */
 export default function Capture() {
@@ -63,6 +62,7 @@ export default function Capture() {
   const heldBySpace = useRef(false);
   const pressedAt = useRef(0);
   const working = useRef(false);
+  const undoing = useRef(false);
 
   useEffect(() => {
     document.title = `${t("screen.capture.title")} · ${t("app.name")}`;
@@ -129,10 +129,15 @@ export default function Capture() {
       platform.onFileDrop(
         (paths) => {
           setDropping(false);
+          if (working.current) return;
+          working.current = true;
           engine
             .keepFiles(paths, "drop")
             .then((kept) => finishKept(kept, t("capture.kept.later"), t("capture.kept.lead")))
-            .catch(failed);
+            .catch(failed)
+            .finally(() => {
+              working.current = false;
+            });
         },
         (count) => setDropping(count !== null),
       ),
@@ -166,12 +171,17 @@ export default function Capture() {
     async (value: string) => {
       if (working.current) return;
       working.current = true;
-      askRequests.request(value);
-      await platform.handOffAsk(value);
-      if (!(await close())) goTo("/ask");
-      working.current = false;
+      try {
+        askRequests.request(value);
+        await platform.handOffAsk(value);
+        if (!(await close())) goTo("/ask");
+      } catch {
+        failed();
+      } finally {
+        working.current = false;
+      }
     },
-    [platform, close],
+    [platform, close, failed],
   );
 
   const send = (as: "keep" | "ask") => {
@@ -182,6 +192,8 @@ export default function Capture() {
   };
 
   const keepBytes = async (files: File[]) => {
+    if (working.current) return;
+    working.current = true;
     try {
       const kept: Kept[] = [];
       for (const file of files) {
@@ -200,6 +212,8 @@ export default function Capture() {
       );
     } catch {
       failed();
+    } finally {
+      working.current = false;
     }
   };
 
@@ -266,7 +280,7 @@ export default function Capture() {
   const onPageKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
       event.preventDefault();
-      if (recorder.recording) stopRecording(false);
+      if (recorder.recording || recorder.starting()) stopRecording(false);
       else void close();
     } else if (
       view.name === "kept" &&
@@ -287,14 +301,48 @@ export default function Capture() {
   const hasText = text.trim().length > 0;
 
   const undo = async () => {
-    if (view.name !== "kept" || view.itemIds.length === 0) return;
+    if (view.name !== "kept" || view.itemIds.length === 0 || undoing.current) return;
+    undoing.current = true;
     try {
-      await Promise.all(view.itemIds.map((id) => engine.unkeep(id)));
-      setAnnouncement(t("capture.undone"));
-      setView({ name: "compose" });
-      setTimeout(() => input.current?.focus(), 0);
+      const ids = view.itemIds;
+      const results = await Promise.allSettled(ids.map((id) => engine.unkeep(id)));
+      if (results.every((r) => r.status === "fulfilled")) {
+        setAnnouncement(t("capture.undone"));
+        setView({ name: "compose" });
+        setTimeout(() => input.current?.focus(), 0);
+        return;
+      }
+      // Say only what is true: ask which of the failed ones are still there.
+      const failedIds = ids.filter((_, i) => results[i]?.status === "rejected");
+      const stillThere = (
+        await Promise.all(
+          failedIds.map((id) =>
+            engine.getItem(id).then(
+              () => [id],
+              () => [] as string[],
+            ),
+          ),
+        )
+      ).flat();
+      const back = ids.length - stillThere.length;
+      if (stillThere.length === 0) {
+        setAnnouncement(t("capture.undone"));
+        setView({ name: "compose" });
+        setTimeout(() => input.current?.focus(), 0);
+      } else if (back === 0) {
+        failed();
+      } else {
+        setView((current) =>
+          current.name === "kept" ? { ...current, itemIds: stillThere } : current,
+        );
+        setAnnouncement(
+          t("capture.undone.some", { back, total: ids.length, rest: stillThere.length }),
+        );
+      }
     } catch {
       failed();
+    } finally {
+      undoing.current = false;
     }
   };
 

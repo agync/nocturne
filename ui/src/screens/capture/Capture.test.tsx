@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
@@ -293,6 +293,7 @@ describe("recording", () => {
     expect(
       screen.getByText("Press Keep when you are done · long recordings are fine"),
     ).toBeVisible();
+    now.mockReturnValue(start + MIN_HOLD_MS + 100);
     await userEvent.click(screen.getByRole("button", { name: "Keep" }));
     await waitFor(() => expect(spy).toHaveBeenCalledOnce());
   });
@@ -340,7 +341,7 @@ describe("a slow microphone", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("a long enough press released before it opens is still kept", async () => {
+  it("a long press released before the microphone opens keeps no empty recording", async () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "keepRecording");
     const open_ = late();
@@ -349,8 +350,35 @@ describe("a slow microphone", () => {
     now.mockReturnValue(start + MIN_HOLD_MS + 500);
     fireEvent.keyUp(box(), { key: " " });
     await act(async () => open_());
-    await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    await waitFor(() => expect(track.stop).toHaveBeenCalled());
     expect(screen.queryByText("Listening")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("Escape while the microphone is still opening leaves nothing recording", async () => {
+    const { close, engine } = await open();
+    const spy = vi.spyOn(engine, "keepRecording");
+    const open_ = late();
+    track.stop.mockClear();
+    box().focus();
+    fireEvent.keyDown(box(), { key: " " });
+    fireEvent.keyDown(box(), { key: "Escape" });
+    expect(close).not.toHaveBeenCalled();
+    await act(async () => open_());
+    await waitFor(() => expect(track.stop).toHaveBeenCalled());
+    expect(screen.queryByText("Listening")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("closing the window while the microphone opens releases it when it does", async () => {
+    await open();
+    const open_ = late();
+    track.stop.mockClear();
+    box().focus();
+    fireEvent.keyDown(box(), { key: " " });
+    cleanup();
+    await act(async () => open_());
+    expect(track.stop).toHaveBeenCalled();
   });
 });
 
@@ -456,5 +484,89 @@ describe("keeping once", () => {
     expect(spy).toHaveBeenCalledOnce();
     await act(async () => finish());
     await screen.findByText("Kept.", { selector: "strong" });
+  });
+});
+
+describe("when things go wrong", () => {
+  it("a failed hand-off says so and the window still answers", async () => {
+    const { handOff, close } = await open();
+    handOff.mockRejectedValueOnce(new Error("no"));
+    await userEvent.type(box(), "When is the dentist?{Enter}");
+    expect(await screen.findByRole("alert")).toHaveTextContent("I couldn’t keep that just now");
+    expect(close).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: /^Ask/ }));
+    await waitFor(() => expect(handOff).toHaveBeenCalledTimes(2));
+  });
+
+  it("a second Ctrl Z while the first is working does nothing", async () => {
+    const { engine, platform } = await open();
+    const real = engine.unkeep.bind(engine);
+    let finish: () => void = () => undefined;
+    const spy = vi.spyOn(engine, "unkeep").mockImplementation(
+      (id) =>
+        new Promise((resolve) => {
+          finish = () => resolve(real(id));
+        }),
+    );
+    act(() => platform.drop(["/tmp/a.jpg", "/tmp/b.jpg"]));
+    await screen.findByRole("button", { name: "Undo" });
+    fireEvent.keyDown(screen.getByRole("main"), { key: "z", ctrlKey: true });
+    fireEvent.keyDown(screen.getByRole("main"), { key: "z", ctrlKey: true });
+    expect(spy).toHaveBeenCalledTimes(2);
+    await act(async () => finish());
+  });
+
+  it("when one take-back fails it says what stayed", async () => {
+    const { engine, platform } = await open();
+    const real = engine.unkeep.bind(engine);
+    let calls = 0;
+    vi.spyOn(engine, "unkeep").mockImplementation(async (id) => {
+      calls += 1;
+      if (calls === 2) throw new Error("no");
+      return real(id);
+    });
+    act(() => platform.drop(["/tmp/a.jpg", "/tmp/b.jpg"]));
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    await waitFor(() =>
+      expect(live()).toHaveTextContent("Taken back 1 of 2. The other one is still kept."),
+    );
+    expect(live()).not.toHaveTextContent("Nothing was kept");
+    expect(screen.getByRole("button", { name: "Undo" })).toBeVisible();
+  });
+
+  it("a second paste while the first is being kept does nothing", async () => {
+    const { engine } = await open();
+    let finish: () => void = () => undefined;
+    const real = engine.keepBytes.bind(engine);
+    const spy = vi.spyOn(engine, "keepBytes").mockImplementation(
+      (bytes, mime, source) =>
+        new Promise((resolve) => {
+          finish = () => resolve(real(bytes, mime, source));
+        }),
+    );
+    const file = new File([new Uint8Array([9, 9, 9])], "x.png", { type: "image/png" });
+    fireEvent.paste(box(), { clipboardData: { files: [file], types: ["Files"] } });
+    fireEvent.paste(box(), { clipboardData: { files: [file], types: ["Files"] } });
+    await waitFor(() => expect(spy).toHaveBeenCalledOnce());
+    await act(async () => finish());
+    await screen.findByText("Photo. I’ll read it tonight.");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("a drop while a keep is on its way does nothing", async () => {
+    const { engine, platform } = await open();
+    let finish: () => void = () => undefined;
+    const real = engine.keepText.bind(engine);
+    vi.spyOn(engine, "keepText").mockImplementation(
+      (text, source) =>
+        new Promise((resolve) => {
+          finish = () => resolve(real(text, source));
+        }),
+    );
+    const spy = vi.spyOn(engine, "keepFiles");
+    await userEvent.type(box(), "Buy milk{Enter}");
+    act(() => platform.drop(["/tmp/a.jpg"]));
+    expect(spy).not.toHaveBeenCalled();
+    await act(async () => finish());
   });
 });

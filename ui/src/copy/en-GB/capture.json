@@ -6,6 +6,7 @@
   "capture.duplicate": "You already kept this {kind} on {day}. Nothing new to add.",
   "capture.undo": "Undo",
   "capture.undone": "Taken back. Nothing was kept.",
+  "capture.undone.some": "Taken back {back} of {total}. {rest, plural, one {The other one is} other {The others are}} still kept.",
   "capture.files": "{count, plural, one {Kept # file.} other {Kept # files.}} I’ll read {count, plural, one {it} other {them}} tonight.",
   "capture.recording.failed": "I couldn’t keep that voice note just now. It is still here.",
   "capture.mic.unsupported": "This computer can’t record sound inside Nocturne. You can still type, or drop a voice note on the window.",

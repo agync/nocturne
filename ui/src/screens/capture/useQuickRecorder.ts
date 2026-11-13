@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { canRecord, type RecorderFailure } from "../../app/useRecorder";
 
+/** A press of Space shorter than this was a slip of the finger, not a voice note. */
+export const MIN_HOLD_MS = 300;
+
 /** How many bars the level meter draws. */
 export const METER_BARS = 36;
 
@@ -34,6 +37,7 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const starting = useRef(false);
   const stopWanted = useRef<null | { keep: boolean }>(null);
+  const disposed = useRef(false);
   const keep = useRef(true);
   const latest = useRef({ onFinished, onFailed });
   latest.current = { onFinished, onFailed };
@@ -61,6 +65,10 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
     stopWanted.current = null;
     try {
       const media = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (disposed.current) {
+        for (const track of media.getTracks()) track.stop();
+        return;
+      }
       stream.current = media;
       const rec = new MediaRecorder(media);
       chunks.current = [];
@@ -74,7 +82,8 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
         const durationMs = Date.now() - startedAt.current;
         const bytes = new Uint8Array(await blob.arrayBuffer());
         release();
-        if (wanted && bytes.length > 0) latest.current.onFinished(bytes, blob.type, durationMs);
+        if (wanted && durationMs >= MIN_HOLD_MS && bytes.length > 0)
+          latest.current.onFinished(bytes, blob.type, durationMs);
       };
 
       let analyser: AnalyserNode | null = null;
@@ -127,7 +136,10 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
   }, []);
 
   useEffect(() => {
+    disposed.current = false;
     return () => {
+      disposed.current = true;
+      stopWanted.current = { keep: false };
       keep.current = false;
       const rec = recorder.current;
       if (rec && rec.state !== "inactive") rec.stop();
@@ -135,5 +147,12 @@ export function useQuickRecorder({ onFinished, onFailed }: Options) {
     };
   }, [release]);
 
-  return { recording, elapsedMs, levels, start: () => void start(), stop };
+  return {
+    recording,
+    elapsedMs,
+    levels,
+    start: () => void start(),
+    stop,
+    starting: () => starting.current,
+  };
 }
