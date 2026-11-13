@@ -13,8 +13,8 @@ use std::time::Duration;
 use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
 use nocturne_engine::Mind;
 use nocturne_lemonade::{
-    Admin, Client, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor, bundle,
-    residency, selection, tier,
+    Admin, Client, Control, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor,
+    bundle, residency, selection, tier,
 };
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Manager, Runtime};
@@ -114,7 +114,12 @@ pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Servic
         return;
     };
     let dirs = Dirs::new(bundle, state.data_dir.join("engine"));
-    let mut start = tokio::spawn(Supervisor::start(dirs, services.opts.supervisor.clone()));
+    let route = crate::online::route_at_launch(app);
+    let mut start = tokio::spawn(Supervisor::start_with(
+        dirs,
+        services.opts.supervisor.clone(),
+        route,
+    ));
     let started = tokio::select! {
         _ = services.token().cancelled() => {
             // Quitting while the engine is still starting: it is stopped as soon as it is up,
@@ -298,6 +303,11 @@ async fn fill<R: Runtime>(
         ..selection::read(&engine_root.config())
     };
     let picks = selection::picks(&chosen);
+    if let Ok(engine) = state.engine()
+        && !picks.recall.is_empty()
+    {
+        engine.set_recall_model(&picks.recall);
+    }
     let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, picks, tier));
     state
         .status
@@ -448,6 +458,16 @@ impl Services {
             .await
             .as_ref()
             .map(|l| l.client.clone())
+    }
+
+    /// The supervisor's control handle, once the engine is running, for the online and model
+    /// hubs.
+    pub async fn engine_control(&self) -> Option<Control> {
+        self.lemonade
+            .lock()
+            .await
+            .as_ref()
+            .map(|l| l.supervisor.control())
     }
 
     /// The engine's admin endpoints, once it is running.

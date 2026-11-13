@@ -47,6 +47,7 @@ pub async fn get_privacy<R: Runtime>(app: AppHandle<R>) -> Result<PrivacyView, C
         view.sent_measured = measured;
         view.mind_bytes = state.status.mind_bytes();
         crate::remote::privacy(&app, &mut view);
+        crate::online::privacy(&app, &mut view);
         Ok(view)
     })
     .await
@@ -73,6 +74,15 @@ pub async fn export_to<R: Runtime>(
             })
         })
         .await?;
+        let folder = PathBuf::from(&report.path);
+        crate::online::export_files(&app, &folder)
+            .map_err(|e| CommandError::internal(format!("the export is incomplete: {e}")))?;
+        let chosen =
+            crate::models::config_dir(&app.state::<AppState>().data_dir).join("selection.json");
+        if chosen.exists() {
+            std::fs::copy(&chosen, folder.join("models.json"))
+                .map_err(|e| CommandError::internal(format!("the export is incomplete: {e}")))?;
+        }
         // Only a folder made by an export in this session may be opened by `open_export`.
         app.state::<AppState>()
             .allow_export(std::path::Path::new(&report.path));
@@ -98,12 +108,16 @@ pub async fn delete_everything<R: Runtime>(
     // Nothing may land in the store after the wipe: the watched folder stops first.
     crate::os::before_delete_everything(&app).await;
     crate::remote::before_delete_everything(&app).await;
+    crate::online::before_delete_everything(&app).await;
+    crate::models::before_delete_everything(&app).await;
     if let Err(e) = change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await {
         crate::os::after_failed_delete(&app).await;
         return Err(e);
     }
     crate::os::on_delete_everything(&app);
     crate::remote::on_delete_everything(&app);
+    crate::online::on_delete_everything(&app);
+    crate::models::on_delete_everything(&app);
     let state = app.state::<AppState>();
     let handle = app.clone();
     blocking_cmd(move || {
@@ -168,7 +182,7 @@ pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView,
             agents,
             log_dir: state.log_dir().to_string_lossy().into_owned(),
             remote: crate::remote::advanced(&app),
-            online: None,
+            online: crate::online::advanced(&app),
         })
     })
     .await

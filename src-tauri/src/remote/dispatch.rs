@@ -648,6 +648,7 @@ impl<R: Runtime> Call<R> {
                 public_only: true,
                 lane: lane.clone(),
                 sink: AskSink::Channel(tx),
+                place: nocturne_contract::AskPlace::Auto,
             },
         );
         self.audit(RemoteAction::Asked, RemoteResult::Ok, 0.0);

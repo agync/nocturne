@@ -17,6 +17,8 @@ pub mod editions;
 pub mod error;
 pub mod fsutil;
 pub mod logging;
+pub mod models;
+pub mod online;
 pub mod os;
 #[cfg(feature = "preview")]
 pub mod preview;
@@ -223,6 +225,10 @@ pub fn exit_prevented(last_window_closed: bool, tray_available: bool) -> bool {
 
 /// Run the app.
 pub fn run() {
+    // Before anything reads the Online answers key: no core dump of the app or the engine.
+    if let Err(e) = nocturne_lemonade::supervisor::harden_process() {
+        tracing::warn!("{e}");
+    }
     let builder = configure(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let app = app.clone();
@@ -253,6 +259,12 @@ pub fn run() {
             }
             if let Err(e) = remote::install(app) {
                 tracing::warn!("Away from home did not start: {e}");
+            }
+            if let Err(e) = online::install(app) {
+                tracing::warn!("Online answers did not start: {e}");
+            }
+            if let Err(e) = models::install(app) {
+                tracing::warn!("the model choices did not start: {e}");
             }
         }
         handle_run_event(app, &event);

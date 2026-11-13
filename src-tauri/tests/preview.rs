@@ -223,6 +223,37 @@ async fn preview_refuses_remote_commands() {
     }
 }
 
+/// The preview never drives Online answers or choosing models.
+#[tokio::test(flavor = "multi_thread")]
+async fn preview_refuses_online_and_model_commands() {
+    let r = rig();
+    for command in [
+        "get_online",
+        "check_online",
+        "cancel_online_check",
+        "turn_on_online",
+        "turn_off_online",
+        "abandon_online_setup",
+        "update_online_settings",
+        "list_online_sends",
+        "get_models",
+        "list_model_choices",
+        "preview_model_change",
+        "change_model",
+        "pause_model_download",
+        "resume_model_download",
+        "cancel_model_change",
+        "cancel_reindex",
+        "keep_old_model",
+        "remove_old_model",
+        "reset_models_to_tier",
+    ] {
+        let (status, body) = invoke(&r, command, json!({})).await;
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");
+        assert_eq!(body["code"], "unavailable", "{command}");
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_recording_is_kept_from_the_raw_body() {
     let r = rig();

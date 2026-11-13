@@ -1734,3 +1734,131 @@ fn what_the_shell_keeps_on_disk_is_owner_only() {
         assert_eq!(mode, 0o700, "{sub}");
     }
 }
+
+const ONLINE_AND_MODEL_COMMANDS: &[&str] = &[
+    "get_online",
+    "check_online",
+    "cancel_online_check",
+    "turn_on_online",
+    "turn_off_online",
+    "abandon_online_setup",
+    "update_online_settings",
+    "list_online_sends",
+    "get_models",
+    "list_model_choices",
+    "preview_model_change",
+    "change_model",
+    "pause_model_download",
+    "resume_model_download",
+    "cancel_model_change",
+    "cancel_reindex",
+    "keep_old_model",
+    "remove_old_model",
+    "reset_models_to_tier",
+];
+
+/// Online answers and choosing models belong to the main window only.
+#[test]
+fn online_and_model_commands_refused_from_quick_capture() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    for cmd in ONLINE_AND_MODEL_COMMANDS {
+        assert!(COMMAND_NAMES.contains(cmd), "{cmd} is registered");
+        assert_eq!(h.code_from(&quick, cmd, json!({})), "invalid", "{cmd}");
+    }
+}
+
+#[test]
+fn get_online_is_off_on_a_fresh_store() {
+    let h = harness();
+    let view = h.ok("get_online", json!({}));
+    assert_eq!(view["state"], json!({"type": "off"}));
+    assert_eq!(view["setUp"], false);
+    assert_eq!(view["phones"], true);
+    assert_eq!(view["sendSensitive"], false);
+    assert_eq!(
+        view["limit"],
+        json!({"kind": "questions", "questions": 200, "usd": null})
+    );
+    assert_eq!(view["questionsThisMonth"], 0);
+    assert_eq!(view["sentBytes"], 0.0);
+    assert_eq!(view["keyStorage"], Value::Null);
+    // A key handed to the stub check goes nowhere and comes back in nothing.
+    let reply = h.call(
+        "check_online",
+        json!({"form": {"baseUrl": "https://api.example.com/v1", "key": "sk-never-0123456789", "model": "m"}}),
+    );
+    assert!(!format!("{reply:?}").contains("sk-never-0123456789"));
+    assert_eq!(h.code("turn_on_online", json!({"settings": {"phones": true, "sendSensitive": false, "limit": {"kind": "questions", "questions": 200, "usd": null}}})), "unavailable");
+}
+
+#[test]
+fn get_models_is_the_tier_preset() {
+    let h = harness();
+    let fresh = h.ok("get_models", json!({}));
+    assert_eq!(fresh["preset"], "unsupported");
+    assert_eq!(fresh["jobs"], json!([]));
+
+    let config = h.dir.path().join("engine").join("config");
+    std::fs::create_dir_all(&config).unwrap();
+    std::fs::write(
+        config.join("nocturne-setup.json"),
+        r#"{"version": 1, "tier": "small", "done": true, "backends": {}}"#,
+    )
+    .unwrap();
+    let view = h.ok("get_models", json!({}));
+    assert_eq!(view["preset"], "small");
+    assert_eq!(view["custom"], false);
+    let jobs: Vec<(String, String)> = view["jobs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|j| {
+            (
+                j["job"].as_str().unwrap().to_string(),
+                j["model"].as_str().unwrap().to_string(),
+            )
+        })
+        .collect();
+    let want: Vec<(String, String)> =
+        nocturne_lemonade::tier::components(nocturne_contract::Tier::Small)
+            .into_iter()
+            .map(|c| {
+                let job = serde_json::to_value(nocturne_app_lib::models::job_of(c.role)).unwrap();
+                (job.as_str().unwrap().to_string(), c.model.to_string())
+            })
+            .collect();
+    assert_eq!(jobs, want);
+    assert_eq!(
+        h.code("list_model_choices", json!({"job": "answering"})),
+        "unavailable"
+    );
+}
+
+#[test]
+fn ask_place_defaults_to_auto() {
+    let h = harness();
+    assert!(
+        h.ok("ask", json!({"question": "When are the bins?"}))
+            .is_string()
+    );
+    assert!(
+        h.ok(
+            "ask",
+            json!({"question": "When are the bins?", "place": "thisComputer"})
+        )
+        .is_string()
+    );
+    assert!(
+        h.call(
+            "ask",
+            json!({"question": "When are the bins?", "place": "online"})
+        )
+        .is_err(),
+        "only the known places"
+    );
+    assert_eq!(
+        nocturne_contract::AskPlace::default(),
+        nocturne_contract::AskPlace::Auto
+    );
+}

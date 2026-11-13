@@ -17,7 +17,9 @@ mod files;
 pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_each, keep_paths};
 mod forget;
 mod memories;
+mod models;
 mod needs;
+mod online;
 mod os;
 pub(crate) mod page;
 mod remote;
@@ -106,6 +108,25 @@ pub const COMMAND_NAMES: &[&str] = &[
     "update_remote_settings",
     "open_remote_sign_in",
     "new_computer_key",
+    "get_online",
+    "check_online",
+    "cancel_online_check",
+    "turn_on_online",
+    "turn_off_online",
+    "abandon_online_setup",
+    "update_online_settings",
+    "list_online_sends",
+    "get_models",
+    "list_model_choices",
+    "preview_model_change",
+    "change_model",
+    "pause_model_download",
+    "resume_model_download",
+    "cancel_model_change",
+    "cancel_reindex",
+    "keep_old_model",
+    "remove_old_model",
+    "reset_models_to_tier",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -194,6 +215,25 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         remote::update_remote_settings,
         remote::open_remote_sign_in,
         remote::new_computer_key,
+        online::get_online,
+        online::check_online,
+        online::cancel_online_check,
+        online::turn_on_online,
+        online::turn_off_online,
+        online::abandon_online_setup,
+        online::update_online_settings,
+        online::list_online_sends,
+        models::get_models,
+        models::list_model_choices,
+        models::preview_model_change,
+        models::change_model,
+        models::pause_model_download,
+        models::resume_model_download,
+        models::cancel_model_change,
+        models::cancel_reindex,
+        models::keep_old_model,
+        models::remove_old_model,
+        models::reset_models_to_tier,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();

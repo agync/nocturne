@@ -13,7 +13,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nocturne_contract::{AskDelta, AskPhase, EVENT_ASK, NearMatch};
+use nocturne_contract::{AskDelta, AskPhase, AskPlace, EVENT_ASK, NearMatch};
 use nocturne_engine::{Engine, Fact, Hit, MindError, UseKind};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::mpsc;
@@ -71,6 +71,8 @@ pub struct AskOptions {
     pub public_only: bool,
     pub lane: AskLane,
     pub sink: AskSink,
+    /// Where this one question may be answered.
+    pub place: AskPlace,
 }
 
 /// The cancel switch of one ask. Emitting and cancelling take the same lock, so once
@@ -271,6 +273,11 @@ impl<R: Runtime> Sink<R> {
 
 /// Start answering `question` for the windows; returns the ask id at once.
 pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
+    start_placed(app, question, AskPlace::Auto)
+}
+
+/// Like [`start`], with the place the person chose for this question.
+pub fn start_placed<R: Runtime>(app: &AppHandle<R>, question: String, place: AskPlace) -> String {
     start_with(
         app,
         question,
@@ -278,6 +285,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
             public_only: false,
             lane: AskLane::Desktop,
             sink: AskSink::Emit,
+            place,
         },
     )
 }

@@ -11,7 +11,7 @@ pub const RAW: &[&str] = &["keep_recording", "keep_bytes"];
 
 /// Commands that reach for the desktop (dialogs, the file manager, the printer, the shell) or
 /// for a folder named by the caller. A browser has none of that. Away from home is never
-/// driven from the preview either.
+/// driven from the preview either, and neither are Online answers and choosing models.
 pub const UNAVAILABLE: &[&str] = &[
     "pick_folder",
     "pick_files",
@@ -36,6 +36,25 @@ pub const UNAVAILABLE: &[&str] = &[
     "update_remote_settings",
     "open_remote_sign_in",
     "new_computer_key",
+    "get_online",
+    "check_online",
+    "cancel_online_check",
+    "turn_on_online",
+    "turn_off_online",
+    "abandon_online_setup",
+    "update_online_settings",
+    "list_online_sends",
+    "get_models",
+    "list_model_choices",
+    "preview_model_change",
+    "change_model",
+    "pause_model_download",
+    "resume_model_download",
+    "cancel_model_change",
+    "cancel_reindex",
+    "keep_old_model",
+    "remove_old_model",
+    "reset_models_to_tier",
 ];
 
 pub fn unavailable() -> Value {
