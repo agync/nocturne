@@ -174,7 +174,7 @@ function TodayPage({ date }: { date: string | undefined }) {
 
   const forgetDialog = forgetting ? (
     <ForgetDialog
-      memoryIds={forgetting.memoryIds.slice(0, 1)}
+      memoryIds={forgetting.memoryIds}
       onClose={() => {
         const id = forgottenLine.current;
         forgottenLine.current = null;

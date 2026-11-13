@@ -189,7 +189,7 @@ describe("the morning page on Today", () => {
 
   describe("Not true, forget it", () => {
     /** The gran line waits to be confirmed, so the page offers the choice. */
-    const unconfirmedGran = () => {
+    const unconfirmedGran = (memoryIds?: string[]) => {
       const engine = createMockEngine();
       const real = engine.getPage.bind(engine);
       vi.spyOn(engine, "getPage").mockImplementation(async (date) => {
@@ -197,7 +197,9 @@ describe("the morning page on Today", () => {
         return {
           ...page,
           changed: page.changed.map((l) =>
-            l.id === "line-gran" && !l.forgotten ? { ...l, kind: "unconfirmed" as const } : l,
+            l.id === "line-gran" && !l.forgotten
+              ? { ...l, kind: "unconfirmed" as const, memoryIds: memoryIds ?? l.memoryIds }
+              : l,
           ),
         };
       });
@@ -210,7 +212,7 @@ describe("the morning page on Today", () => {
       const forget = vi.spyOn(engine, "forget");
       await open(engine);
       await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
-      const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
+      const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
       expect(screen.queryByText(/^Forgotten\./)).toBeNull();
       expect(confirm).not.toHaveBeenCalled();
       await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
@@ -220,6 +222,15 @@ describe("the morning page on Today", () => {
       const gone = await screen.findByText("Forgotten. This line is gone from the page.");
       await waitFor(() => expect(gone).toHaveFocus());
       expect(document.body.textContent).not.toContain("4471");
+    });
+
+    it("forgets every memory behind the line, not only the first", async () => {
+      const engine = unconfirmedGran(["mem-gran", "mem-swim"]);
+      const preview = vi.spyOn(engine, "previewForget");
+      await open(engine);
+      await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+      await screen.findByRole("dialog", { name: "Forget 2 memories?" });
+      expect(preview.mock.calls[0]?.[0]).toEqual(["mem-gran", "mem-swim"]);
     });
 
     it("leaves the line alone when the person keeps it", async () => {
