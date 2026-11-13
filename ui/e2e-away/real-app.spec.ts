@@ -234,17 +234,18 @@ test.describe("the real app", () => {
       expect(report.leftAfterQuit).toEqual([]);
       expect(report.quitLogged).toBe(true);
 
-      // The budgets. Wake-ups of the async runtime come in groups (a timer and the threads it
-      // wakes); groups further apart than five seconds are separate timers, and none repeats
-      // more often than about every thirty seconds (housekeeping and log rotation, each 30 s,
-      // so their groups interleave).
-      const onEvents = onWake.clusters;
-      const repeats = onEvents
-        .slice(1)
-        .map((t, i) => t - (onEvents[i] ?? t))
-        .filter((g) => g >= 5);
-      report.fastestRepeatSeconds = Math.min(...repeats, Number.POSITIVE_INFINITY);
-      expect(report.fastestRepeatSeconds as number).toBeGreaterThanOrEqual(15);
+      // The budgets. Wake-ups of the async runtime come in groups: a timer, then the threads it
+      // wakes and the other 30-second timers (housekeeping, log rotation) a few seconds behind it.
+      // Wake-ups less than eight seconds apart are one group; groups must be about thirty
+      // seconds apart, in the baseline as well as with Away from home on.
+      const periods = (events: number[]) => {
+        const starts = events.filter((t, i) => i === 0 || t - (events[i - 1] ?? t) >= 8);
+        return starts.slice(1).map((t, i) => Math.round((t - (starts[i] ?? t)) * 10) / 10);
+      };
+      report.groupPeriodsSeconds = { off: periods(offWake.clusters), on: periods(onWake.clusters) };
+      for (const gap of [...periods(offWake.clusters), ...periods(onWake.clusters)]) {
+        expect(gap).toBeGreaterThanOrEqual(25);
+      }
       expect(report.idleGrowthMb as number).toBeLessThan(25);
       expect(report.uploadPeakGrowthMb as number).toBeLessThan(10);
     } finally {
