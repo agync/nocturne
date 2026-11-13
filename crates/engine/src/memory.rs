@@ -409,6 +409,7 @@ fn date_str(d: Option<jiff::civil::Date>) -> Option<String> {
     d.map(|d| d.to_string())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply(
     tx: &Transaction<'_>,
     now: &str,
@@ -417,6 +418,7 @@ fn apply(
     item_id: &str,
     lease: &str,
     cands: Vec<Candidate>,
+    took: Option<std::time::Duration>,
 ) -> Result<(ApplyReport, Vec<PathBuf>)> {
     check_lease(tx, item_id, lease)?;
     // A forget since the read began: what the mind found may be what was forgotten.
@@ -596,8 +598,13 @@ fn apply(
     };
     tx.execute(
         "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL, \
-         status_before = NULL, reread = 0, failures = 0 WHERE id = ?1",
-        params![item_id, status],
+         status_before = NULL, reread = 0, failures = 0, \
+         understood_in_ms = COALESCE(?3, understood_in_ms) WHERE id = ?1",
+        params![
+            item_id,
+            status,
+            took.map(|t| u32::try_from(t.as_millis()).unwrap_or(u32::MAX))
+        ],
     )?;
     Ok((report, files))
 }
@@ -1021,11 +1028,33 @@ impl Engine {
         lease: &str,
         candidates: Vec<Candidate>,
     ) -> Result<ApplyReport> {
+        self.apply_timed(item, lease, candidates, None)
+    }
+
+    /// `apply_candidates` for a reading that took `took` so far: the item becomes understood
+    /// and timed in one step, so it never shows as understood without its time.
+    pub fn apply_candidates_took(
+        &self,
+        item: &str,
+        lease: &str,
+        candidates: Vec<Candidate>,
+        took: std::time::Duration,
+    ) -> Result<ApplyReport> {
+        self.apply_timed(item, lease, candidates, Some(took))
+    }
+
+    fn apply_timed(
+        &self,
+        item: &str,
+        lease: &str,
+        candidates: Vec<Candidate>,
+        took: Option<std::time::Duration>,
+    ) -> Result<ApplyReport> {
         let now = fmt_ts(self.clock().now());
         let tz = self.clock().tz();
         let today = self.clock().now().to_zoned(tz.clone()).date().to_string();
         let (report, files) =
-            self.write(|tx| apply(tx, &now, &today, &tz, item, lease, candidates))?;
+            self.write(|tx| apply(tx, &now, &today, &tz, item, lease, candidates, took))?;
         crate::audio::shred_all(files);
         if !report.removed.is_empty() || !report.reworded.is_empty() || !report.replaced.is_empty()
         {

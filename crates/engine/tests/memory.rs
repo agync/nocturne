@@ -805,6 +805,34 @@ fn an_undated_arrangement_said_two_ways_asks_which_is_right() {
     assert_eq!(r.conflicts.len(), 1);
 }
 
+/// An item never shows as understood without its reading time: both are written together.
+#[test]
+fn an_item_is_understood_and_timed_in_one_step() {
+    let f = fixture();
+    let item = keep(&f.engine, "Gran lives in Leeds");
+    let lease = f
+        .engine
+        .lease_item(&item, std::time::Duration::from_secs(60))
+        .unwrap()
+        .lease;
+    f.engine
+        .apply_candidates_took(
+            &item,
+            &lease,
+            vec![cand(
+                "Gran",
+                Predicate::LivesIn,
+                "Leeds",
+                "Gran lives in Leeds.",
+            )],
+            std::time::Duration::from_millis(4_200),
+        )
+        .unwrap();
+    let view = f.engine.get_item(&item).unwrap();
+    assert_eq!(view.status, nocturne_contract::ItemStatus::Understood);
+    assert_eq!(view.understood_in_ms, Some(4_200));
+}
+
 #[test]
 fn only_single_valued_predicates_conflict() {
     let f = fixture();

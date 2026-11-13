@@ -884,6 +884,7 @@ impl Reader {
         p: PendingItem,
         reread: bool,
     ) -> Result<Outcome, Abort> {
+        let started = tokio::time::Instant::now();
         let id = p.id.clone();
         let lease = p.lease.clone();
         let mut text: Option<String> = p.text.clone().filter(|t| !t.trim().is_empty());
@@ -977,8 +978,9 @@ impl Reader {
             merge_candidates(&mut candidates, found);
         }
         let (i, l) = (id.clone(), lease.clone());
+        let took = started.elapsed();
         let report: ApplyReport = self
-            .eng(move |e| e.apply_candidates(&i, &l, candidates))
+            .eng(move |e| e.apply_candidates_took(&i, &l, candidates, took))
             .await?;
 
         // The item is understood. Vectors are best effort: the tidy fills in any that are
