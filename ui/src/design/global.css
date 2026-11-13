@@ -86,6 +86,7 @@ ol {
 @media (max-width: 44.99em) {
   :root {
     --size-control: var(--size-touch);
+    --toast-bottom: 5.5rem;
   }
 
   .t-page-title {

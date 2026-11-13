@@ -215,6 +215,7 @@ describe("narrow window", () => {
     const dialog = await screen.findByRole("dialog", { name: "Menu" });
     expect(within(dialog).getByRole("link", { name: "Privacy" })).toBeInTheDocument();
     expect(within(dialog).queryByText("Nocturne")).toBeNull();
+    expect(within(dialog).getByRole("navigation")).toHaveAttribute("data-in-drawer", "true");
     await userEvent.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(menu).toHaveFocus();

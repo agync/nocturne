@@ -107,7 +107,12 @@ export function Rail({ onNavigate, brand = true }: RailProps) {
   };
 
   return (
-    <nav className={styles.rail} aria-label={t("rail.label")} data-region="rail">
+    <nav
+      className={styles.rail}
+      aria-label={t("rail.label")}
+      data-region="rail"
+      data-in-drawer={brand ? undefined : "true"}
+    >
       {brand ? (
         <div className={styles.brand}>
           <Mark state="resting" size={20} decorative />

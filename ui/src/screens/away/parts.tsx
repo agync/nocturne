@@ -60,6 +60,8 @@ interface ConfirmProps {
   confirm: string;
   keep: string;
   busy?: boolean;
+  /** Turning something off or removing it for good: the confirm button is ember, like Delete. */
+  destructive?: boolean;
   onConfirm: () => void;
   onClose: () => void;
 }
@@ -71,6 +73,7 @@ export function Confirm({
   confirm,
   keep,
   busy,
+  destructive,
   onConfirm,
   onClose,
 }: ConfirmProps) {
@@ -82,7 +85,12 @@ export function Confirm({
           <Button variant="secondary" onClick={onClose} disabled={busy}>
             {keep}
           </Button>
-          <Button variant="primary" onClick={onConfirm} disabled={busy}>
+          <Button
+            variant={destructive ? "forget" : "primary"}
+            confirming={destructive}
+            onClick={onConfirm}
+            disabled={busy}
+          >
             {confirm}
           </Button>
         </div>

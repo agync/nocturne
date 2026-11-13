@@ -27,6 +27,7 @@ describe("global styles", () => {
   it("grows controls and titles when narrow", () => {
     const block = global.match(/@media \(max-width: 44\.99em\)\s*\{([\s\S]*?)\n\}\n/)?.[1] ?? "";
     expect(block).toMatch(/--size-control:\s*var\(--size-touch\)/);
+    expect(block).toMatch(/--toast-bottom:\s*5\.5rem/);
     expect(block).toMatch(/\.t-page-title\s*\{\s*font-size:\s*2rem/);
     expect(block).toMatch(/\.t-display\s*\{\s*font-size:\s*2\.5rem/);
   });

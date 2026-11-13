@@ -238,12 +238,7 @@ export function Shell({ children }: ShellProps) {
   const section = sectionId ? t(sectionId) : title;
 
   return (
-    <div
-      ref={root}
-      className={styles.shell}
-      data-size={size}
-      style={narrow ? ({ "--toast-bottom": "5.5rem" } as React.CSSProperties) : undefined}
-    >
+    <div ref={root} className={styles.shell} data-size={size}>
       <button type="button" className={styles.skip} onClick={() => main.current?.focus()}>
         {t("shell.skip")}
       </button>

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -262,5 +263,12 @@ describe("Toast", () => {
       });
       expect(onExpire).not.toHaveBeenCalled();
     });
+  });
+
+  it("sizes the action to a touch target", () => {
+    const css = readFileSync("src/components/Toast/Toast.module.css", "utf8");
+    const action = css.match(/\.action \{([^}]*)\}/)?.[1] ?? "";
+    expect(action).toMatch(/min-height: var\(--size-control\)/);
+    expect(action).toMatch(/min-width: var\(--size-touch\)/);
   });
 });

@@ -1,6 +1,7 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Confirm } from "./parts";
 import { openAway } from "./testing";
 
 afterEach(() => {
@@ -265,5 +266,34 @@ describe("away", () => {
     await openAway("/settings/away", "offBefore");
     expect(screen.getByText("Turn on will use Simple, through Cloudflare.")).toBeInTheDocument();
     expect(screen.queryByText(/About two minutes/)).toBeNull();
+  });
+});
+
+describe("Confirm", () => {
+  it("fills the confirm button in ember only when the step is destructive", () => {
+    const { rerender } = render(
+      <Confirm title="Sure?" confirm="Do it" keep="Not now" onConfirm={() => {}} onClose={() => {}}>
+        <p>Body</p>
+      </Confirm>,
+    );
+    expect(screen.getByRole("button", { name: "Do it" })).toHaveAttribute(
+      "data-variant",
+      "primary",
+    );
+    rerender(
+      <Confirm
+        title="Sure?"
+        confirm="Do it"
+        keep="Not now"
+        destructive
+        onConfirm={() => {}}
+        onClose={() => {}}
+      >
+        <p>Body</p>
+      </Confirm>,
+    );
+    const button = screen.getByRole("button", { name: "Do it" });
+    expect(button).toHaveAttribute("data-variant", "forget");
+    expect(button).toHaveAttribute("data-filled", "true");
   });
 });

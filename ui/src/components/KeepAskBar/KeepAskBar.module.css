@@ -14,7 +14,7 @@
   background: var(--raised);
 }
 
-.field:focus-within {
+.field:has(.input:focus-visible) {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
   border-color: var(--ink);
@@ -45,8 +45,11 @@
 }
 
 .input::placeholder {
+  overflow: hidden;
   color: var(--ink2);
   opacity: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .shortcut {
