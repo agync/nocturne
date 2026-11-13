@@ -15,13 +15,16 @@ use sha2::{Digest, Sha256};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
+mod cloudflared;
 #[cfg(feature = "fake")]
 pub mod fake;
 mod fixtures;
 mod install;
 mod lock;
 mod supervise;
+mod util;
 
+pub use cloudflared::{CloudflaredOptions, CloudflaredTransport};
 pub use fixtures::{allowed_flags, allowed_flags_for, parse_flags};
 pub use install::remove_partial;
 pub use lock::{HelpersLock, LockedAsset, LockedExtra, LockedHelper, PLATFORMS, platform};
@@ -217,14 +220,26 @@ pub trait Transport: Send + Sync {
     fn info(&self) -> Option<HelperInfo>;
 }
 
+/// How a helper proves a request came through it: the file permissions of the Unix socket, or a
+/// key in the Host (cloudflared) or the path (tailscale serve) on Windows.
+pub(crate) fn key_carrier(kind: HelperKind) -> KeyCarrier {
+    match (cfg!(windows), kind) {
+        (false, _) => KeyCarrier::UnixSocket,
+        (true, HelperKind::Cloudflared) => KeyCarrier::HostHeader,
+        (true, HelperKind::Tailscaled) => KeyCarrier::PathPrefix,
+    }
+}
+
 /// The transport for an installed helper.
 pub fn transport_for(
     kind: HelperKind,
     dirs: &HelperDirs,
     installed: &Installed,
 ) -> Box<dyn Transport> {
-    let _ = (dirs, installed);
-    Box::new(NotYet { kind })
+    match kind {
+        HelperKind::Cloudflared => Box::new(CloudflaredTransport::new(dirs, installed)),
+        HelperKind::Tailscaled => Box::new(NotYet { kind }),
+    }
 }
 
 /// A transport that starts nothing.
@@ -238,11 +253,7 @@ impl Transport for NotYet {
     }
 
     fn key_carrier(&self) -> KeyCarrier {
-        match (cfg!(windows), self.kind) {
-            (false, _) => KeyCarrier::UnixSocket,
-            (true, HelperKind::Cloudflared) => KeyCarrier::HostHeader,
-            (true, HelperKind::Tailscaled) => KeyCarrier::PathPrefix,
-        }
+        key_carrier(self.kind)
     }
 
     fn start(
@@ -312,16 +323,24 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn nothing_starts_yet() {
+    async fn nothing_is_installed_or_downloaded_by_asking() {
         let dirs = HelperDirs {
             root: PathBuf::from("unused"),
         };
         assert_eq!(installed(HelperKind::Tailscaled, &dirs), None);
         let (tx, _) = watch::channel(InstallProgress::default());
+        // The pins are not set yet, so there is nothing to download.
         assert_eq!(
             install(HelperKind::Cloudflared, &dirs, tx, CancellationToken::new()).await,
             Err(HelperError::Unsupported)
         );
+    }
+
+    #[tokio::test]
+    async fn a_transport_that_was_never_started_has_nothing_to_stop() {
+        let dirs = HelperDirs {
+            root: PathBuf::from("unused"),
+        };
         let pinned = Installed {
             kind: HelperKind::Cloudflared,
             version: "1".into(),
@@ -330,12 +349,17 @@ mod tests {
         };
         let t = transport_for(HelperKind::Cloudflared, &dirs, &pinned);
         assert_eq!(t.kind(), HelperKind::Cloudflared);
+        assert_eq!(t.stop().await, Ok(()));
+        assert_eq!(t.sign_out().await, Ok(()));
+        assert!(t.info().is_none());
         let spec = LaunchSpec {
             origin: Origin::Unix(PathBuf::from("unused.sock")),
             machine_name: "nocturne-ab12".into(),
         };
-        assert_eq!(t.start(spec).await.err(), Some(HelperError::Unsupported));
-        assert_eq!(t.stop().await, Ok(()));
-        assert!(t.info().is_none());
+        assert_eq!(
+            t.start(spec).await.err(),
+            Some(HelperError::Mismatch),
+            "an unchecked helper never starts"
+        );
     }
 }
