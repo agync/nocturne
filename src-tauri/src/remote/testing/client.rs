@@ -403,9 +403,16 @@ impl Wire {
 
     /// Close the WebSocket, or stop polling.
     pub async fn close(mut self) {
-        if let Some(ws) = self.ws.as_mut() {
+        self.close_ref().await;
+    }
+
+    /// Close without giving the wire up (the phone's tab went away).
+    pub async fn close_ref(&mut self) {
+        if let Some(mut ws) = self.ws.take() {
             let _ = ws.frame(8, &1000u16.to_be_bytes()).await;
+            let _ = ws.s.shutdown().await;
         }
+        self.poll = None;
     }
 }
 

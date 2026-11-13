@@ -492,6 +492,9 @@ impl<R: Runtime> Call<R> {
                     h
                 }
                 Some(h) => {
+                    let wait =
+                        (last_sent + flush).saturating_duration_since(tokio::time::Instant::now());
+                    tokio::time::sleep(wait).await;
                     if !self.send(RemoteAnswer::AskDelta { delta: h }).await {
                         self.app.state::<AppState>().asks.cancel_in(&lane, &ask_id);
                         return None;
