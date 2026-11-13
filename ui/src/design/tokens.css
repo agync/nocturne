@@ -92,6 +92,7 @@
   --size-control: 2.5rem;
   --size-touch: 2.75rem;
   --size-rail: 232px;
+  --size-gutter: 28px;
   --size-page-measure: 680px;
   --bp-narrow: 400px;
   --bp-standard: 960px;
@@ -137,6 +138,15 @@
   line-height: 1.5;
   font-weight: 400;
   font-style: italic;
+  font-optical-sizing: auto;
+}
+
+.t-item-title {
+  font-family: var(--font-serif);
+  font-size: 1.75rem;
+  line-height: 1.2;
+  font-weight: 400;
+  letter-spacing: -0.01em;
   font-optical-sizing: auto;
 }
 

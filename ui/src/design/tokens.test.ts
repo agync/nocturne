@@ -49,6 +49,8 @@ describe("generated tokens", () => {
     expect(css).toContain("--size-touch: 2.75rem;");
     expect(css).toContain("--size-control: 2.5rem;");
     expect(css).toContain(".t-page-line {");
+    expect(css).toContain("--size-gutter: 28px;");
+    expect(css).toContain(".t-item-title {");
     expect(css).toContain(".t-receipt {");
     expect(css).toContain("@media print");
   });

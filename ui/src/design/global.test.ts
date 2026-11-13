@@ -15,6 +15,22 @@ describe("global styles", () => {
     );
   });
 
+  it("keeps the focus ring off programmatically focused headings", () => {
+    expect(global).toMatch(/:is\(h1, h2\)\[tabindex="-1"\]:focus-visible\s*\{\s*outline:\s*none;/);
+  });
+
+  it("offers a 44 px hit area utility", () => {
+    expect(global).toMatch(/\.hit\s*\{\s*position:\s*relative;/);
+    expect(global).toMatch(/\.hit::after\s*\{[^}]*max\(100%, var\(--size-touch\)\)/);
+  });
+
+  it("grows controls and titles when narrow", () => {
+    const block = global.match(/@media \(max-width: 44\.99em\)\s*\{([\s\S]*?)\n\}\n/)?.[1] ?? "";
+    expect(block).toMatch(/--size-control:\s*var\(--size-touch\)/);
+    expect(block).toMatch(/\.t-page-title\s*\{\s*font-size:\s*2rem/);
+    expect(block).toMatch(/\.t-display\s*\{\s*font-size:\s*2\.5rem/);
+  });
+
   it("zeroes durations under reduced motion", () => {
     expect(global).toMatch(
       /prefers-reduced-motion: reduce[\s\S]*animation-duration:\s*0s !important/,
