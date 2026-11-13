@@ -46,12 +46,26 @@ export interface MockOptions {
   notices?: Notice[];
   /** The smaller mind on offer, when a `tierDropped` notice is among the notices. */
   tierOffer?: Tier;
+  /** The first question wakes the voice that reads and says so (a `waking` step with a wait). */
+  cold?: boolean;
+  /** Answers mark their key phrase in bold. */
+  emphasis?: boolean;
 }
 
 /** How long after keeping something it can still be taken back. */
 const UNKEEP_MINUTES = 10;
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+/** How long the mock says the first question takes to wake the voice. */
+const WAKE_SECONDS = 8;
+
+/** Marks the key phrase of an answer in bold: the first place the memory's value appears. */
+function emphasise(sentence: string, value: string): string {
+  const at = value ? sentence.toLowerCase().indexOf(value.toLowerCase()) : -1;
+  if (at < 0) return sentence;
+  return `${sentence.slice(0, at)}**${sentence.slice(at, at + value.length)}**${sentence.slice(at + value.length)}`;
+}
 
 /** The mock voice is silence: each section lasts this long. */
 const MOCK_SECTION_MS = 4000;
@@ -179,6 +193,8 @@ export class MockEngine implements EngineClient {
   tidyAnywayCount = 0;
 
   constructor(options: MockOptions = {}) {
+    this.firstAsk = options.cold ?? false;
+    this.emphasis = options.emphasis ?? false;
     const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
     this.clock = new Date(raw);
     const seed = buildSeed(this.clock);
@@ -359,6 +375,7 @@ export class MockEngine implements EngineClient {
       ...extra,
     };
     this.items.unshift(item);
+    this.emit("item-changed", clone(item));
     this.scheduleReading(item.id, source === "pastedWeb");
     return item;
   }
@@ -544,6 +561,14 @@ export class MockEngine implements EngineClient {
   // Asking
 
   private readonly cancelledAsks = new Set<string>();
+  private firstAsk: boolean;
+  private readonly emphasis: boolean;
+  private askUnavailable = false;
+
+  /** Makes every question answer "unavailable", as when the voice that reads cannot start. */
+  setAskUnavailable(on: boolean): void {
+    this.askUnavailable = on;
+  }
 
   async cancelAsk(askId: string): Promise<void> {
     this.cancelledAsks.add(askId);
@@ -582,6 +607,15 @@ export class MockEngine implements EngineClient {
     const active = scored("active").slice(0, 2);
     const unconfirmed = scored("unconfirmed").slice(0, 2);
 
+    if (this.askUnavailable) {
+      setTimeout(() => send(delta({ phase: "unavailable" })), 0);
+      return;
+    }
+    // The first question after the app starts wakes the voice that reads, and says so.
+    if (this.firstAsk) {
+      this.firstAsk = false;
+      setTimeout(() => send(delta({ phase: "waking", etaSeconds: WAKE_SECONDS })), 0);
+    }
     setTimeout(() => send(delta({ phase: "searching" })), 0);
     setTimeout(() => {
       if (active.length > 0) {
@@ -594,7 +628,9 @@ export class MockEngine implements EngineClient {
             memoryIds: active.map((x) => x.m.id),
           }),
         );
-        const text = active.map((x) => x.m.sentence).join(" ");
+        const text = active
+          .map((x) => (this.emphasis ? emphasise(x.m.sentence, x.m.object) : x.m.sentence))
+          .join(" ");
         const pieces = text.split(/(?<=\s)/);
         pieces.forEach((piece, i) => {
           setTimeout(() => send(delta({ phase: "streaming", textDelta: piece })), 30 * (i + 1));
@@ -900,6 +936,7 @@ export class MockEngine implements EngineClient {
     const out: NeedsYouEntry[] = [];
     for (const line of this.todayPage().needsYou) {
       if (line.kind === "which" && line.conflictId) {
+        if (line.done) continue;
         out.push({
           type: "which",
           conflictId: line.conflictId,
@@ -916,6 +953,12 @@ export class MockEngine implements EngineClient {
           type: "due",
           memory: clone(memory),
           due: memory.due ?? this.today(),
+          done: line.done,
+        });
+      } else if (line.kind === "promise" && line.memoryIds[0]) {
+        out.push({
+          type: "promise",
+          memory: clone(this.memory(line.memoryIds[0])),
           done: line.done,
         });
       }
@@ -976,7 +1019,9 @@ export class MockEngine implements EngineClient {
   async updateSettings(patch: SettingsPatch): Promise<SettingsView> {
     const next = { ...this.settings } as Record<string, unknown>;
     for (const [key, value] of Object.entries(patch)) {
-      if (value !== null) next[key] = value;
+      if (value === null) continue;
+      // Like the app: an empty folder clears it.
+      next[key] = key === "inboxFolder" && value === "" ? null : value;
     }
     this.settings = next as unknown as SettingsView;
     return clone(this.settings);

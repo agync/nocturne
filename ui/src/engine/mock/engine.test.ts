@@ -460,3 +460,70 @@ describe("MockEngine print check page", () => {
     expect((await engine.listPages()).map((p) => p.date)).not.toContain("2026-01-01");
   });
 });
+
+describe("MockEngine fidelity for ask, needs you and capture", () => {
+  const phases = (deltas: AskDelta[]) => deltas.map((d) => d.phase);
+
+  it("mock.ask.waking_first_only", async () => {
+    const engine = createMockEngine({ now: NOW, cold: true });
+    const { deltas, off } = collectAsk(engine);
+    await engine.ask("Is Leo allergic to nuts?");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(phases(deltas)[0]).toBe("waking");
+    expect(deltas[0]?.etaSeconds).toBeGreaterThan(0);
+    expect(phases(deltas)).toContain("searching");
+    deltas.length = 0;
+    await engine.ask("Is Ava allergic to penicillin?");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(phases(deltas)).not.toContain("waking");
+    off();
+    const warm = createMockEngine({ now: NOW });
+    const seen = collectAsk(warm);
+    await warm.ask("Is Ava allergic to penicillin?");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(phases(seen.deltas)).not.toContain("waking");
+  });
+
+  it("mock.ask.bolds_the_key_phrase", async () => {
+    const engine = createMockEngine({ now: NOW, emphasis: true });
+    const { deltas } = collectAsk(engine);
+    await engine.ask("Is Ava allergic to penicillin?");
+    await vi.advanceTimersByTimeAsync(2000);
+    const text = deltas.map((d) => d.textDelta ?? "").join("");
+    expect(text).toContain("**penicillin**");
+  });
+
+  it("mock.ask.unavailable_switch", async () => {
+    const engine = createMockEngine({ now: NOW });
+    engine.setAskUnavailable(true);
+    const { deltas } = collectAsk(engine);
+    await engine.ask("Is Ava allergic to penicillin?");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(phases(deltas)).toEqual(["unavailable"]);
+    engine.setAskUnavailable(false);
+    deltas.length = 0;
+    await engine.ask("Is Ava allergic to penicillin?");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(phases(deltas)).toContain("done");
+  });
+
+  it("mock.needs_you.skips_settled", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const which = (await engine.listNeedsYou()).find((e) => e.type === "which");
+    expect(which).toBeDefined();
+    if (which?.type !== "which") return;
+    await engine.resolveWhich(which.conflictId, which.options[0]?.memoryId as string);
+    const after = await engine.listNeedsYou();
+    expect(after.some((e) => e.type === "which" && e.conflictId === which.conflictId)).toBe(false);
+  });
+
+  it("mock.new_item_emits", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const seen: ItemView[] = [];
+    engine.on("item-changed", (item) => seen.push(item));
+    const kept = await engine.keepText("Ask Sam about Saturday", "quickCapture");
+    expect(seen).toHaveLength(1);
+    expect(seen[0]?.id).toBe(kept.type === "new" ? kept.item.id : "");
+    expect(seen[0]?.status).toBe("kept");
+  });
+});
