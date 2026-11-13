@@ -60,6 +60,21 @@ test.describe("wide window", () => {
   });
 });
 
+test.describe("wide window layout", () => {
+  test("the status block and the kept-today footer sit at the bottom, as in the design", async ({
+    page,
+  }) => {
+    await ready(page);
+    const height = page.viewportSize()?.height ?? 800;
+    const status = await page.getByRole("region", { name: "Nocturne status" }).boundingBox();
+    const privacy = await page.getByRole("link", { name: "Privacy" }).boundingBox();
+    const tonight = await page.getByText(/^Tonight, from about/).boundingBox();
+    expect((privacy?.y ?? 0) + (privacy?.height ?? 0)).toBeGreaterThan(height - 40);
+    expect((status?.y ?? 0) + (status?.height ?? 0)).toBeGreaterThan(height - 140);
+    expect((tonight?.y ?? 0) + (tonight?.height ?? 0)).toBeGreaterThan(height - 40);
+  });
+});
+
 test.describe("narrow window", () => {
   test.use({ viewport: { width: 400, height: 760 } });
 
@@ -100,17 +115,35 @@ test.describe("text at 200%", () => {
     expect((box?.x ?? 0) + (box?.width ?? 0)).toBeLessThanOrEqual(viewport?.width ?? 0);
   });
 
-  test("controls grow with the text instead of clipping it", async ({ page }) => {
+  test("controls grow with the text and nothing is clipped", async ({ page }) => {
     await ready(page);
-    const heightAt = async () =>
-      page.evaluate(
-        () =>
-          document.querySelector("textarea")?.closest("div")?.getBoundingClientRect().height ?? 0,
-      );
-    const before = await heightAt();
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    await page.waitForTimeout(150);
-    expect(await heightAt()).toBeGreaterThanOrEqual(before);
+    await page.waitForTimeout(200);
+    const clipped = await page.evaluate(() => {
+      const bad: string[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>("button, a, textarea, [role=tab]")) {
+        const box = el.getBoundingClientRect();
+        if (box.width === 0 || box.height === 0) continue;
+        if (el.scrollHeight > el.clientHeight + 1 && getComputedStyle(el).overflowY !== "auto") {
+          bad.push(`${el.tagName} ${el.textContent?.trim().slice(0, 20)}`);
+        }
+        if (el.tagName === "BUTTON" && box.height < 44 - 1)
+          bad.push(`short ${el.textContent?.trim()}`);
+      }
+      return bad;
+    });
+    expect(clipped).toEqual([]);
+    const bar = await page
+      .getByRole("textbox", { name: "Keep something, or ask" })
+      .evaluate((el) => {
+        const field = el.parentElement as HTMLElement;
+        return {
+          height: field.getBoundingClientRect().height,
+          clipped: field.scrollHeight > field.clientHeight + 1,
+        };
+      });
+    expect(bar.height).toBeGreaterThanOrEqual(44);
+    expect(bar.clipped).toBe(false);
   });
 });
 

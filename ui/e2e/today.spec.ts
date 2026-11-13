@@ -50,13 +50,12 @@ test.describe("the page works", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two things need you today.");
     await page.getByRole("button", { name: /Thursday 19 Nov, 10:00/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("One thing needs you today.");
-    const status = page
-      .getByRole("status")
-      .filter({ hasText: "The other is kept as history, not deleted." });
-    await expect(status).toHaveText(
-      "Set to Thursday 19 Nov, 10:00. The other is kept as history, not deleted.",
-    );
+    const status = page.getByRole("status").filter({ hasText: "set to" });
+    await expect(status).toHaveText("Dentist set to Thursday 19 Nov, 10:00.");
     await expect(status).toHaveAttribute("aria-live", "polite");
+    await expect(
+      page.getByText(/it is\. The other is kept as history, not deleted\./),
+    ).toBeVisible();
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
     ).toContainText("1");
@@ -98,7 +97,7 @@ test.describe("the page works", () => {
     await ready(page);
     await page.getByRole("main").focus();
     const reached: string[] = [];
-    for (let i = 0; i < 12; i += 1) {
+    for (let i = 0; i < 30; i += 1) {
       await page.keyboard.press("Tab");
       reached.push(
         await page.evaluate(() => (document.activeElement?.textContent ?? "").trim().slice(0, 30)),
@@ -188,4 +187,67 @@ test("axe passes on today after the page has been used", async ({ page }) => {
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();
   expect(results.violations.map((v) => v.id)).toEqual([]);
+});
+
+test.describe("focus stays with the person after an action", () => {
+  const stays = async (page: Page, container: string) => {
+    const inside = await page.evaluate((selector) => {
+      const active = document.activeElement;
+      return Boolean(active && active !== document.body && active.closest(selector));
+    }, container);
+    expect(inside).toBe(true);
+  };
+  const press = async (page: Page, name: string | RegExp) => {
+    const button = page.getByRole("button", { name }).first();
+    await button.focus();
+    await page.keyboard.press("Enter");
+  };
+
+  test("Mark as done", async ({ page }) => {
+    await ready(page);
+    await press(page, "Mark as done");
+    await stays(page, '[data-kind="due"]');
+  });
+
+  test("choosing which is right", async ({ page }) => {
+    await ready(page);
+    await press(page, /Thursday 19 Nov/);
+    await stays(page, '[data-kind="which"]');
+  });
+
+  test("Bring back", async ({ page }) => {
+    await ready(page);
+    await press(page, "Bring back");
+    await stays(page, '[data-kind="letGo"]');
+  });
+
+  test("answering the question", async ({ page }) => {
+    await ready(page);
+    await press(page, "Yes");
+    await stays(page, "section");
+    await expect(page.getByRole("button", { name: "Change answer" })).toBeFocused();
+  });
+});
+
+test.describe("a screen that fails does not take the window with it", () => {
+  test("a page that is not a date says so and the shell stays", async ({ page }) => {
+    await ready(page, "#/pages/not-a-date");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("That page isn\u2019t here");
+    await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+  });
+});
+
+test.describe("which-is-right cards on a narrow window", () => {
+  test.use({ viewport: { width: 320, height: 700 } });
+  test("stack instead of overflowing", async ({ page }) => {
+    await ready(page);
+    const cards = page.getByRole("button", { name: /Tuesday 17 Nov|Thursday 19 Nov/ });
+    const [a, b] = [await cards.nth(0).boundingBox(), await cards.nth(1).boundingBox()];
+    expect((b?.y ?? 0) > (a?.y ?? 0) + (a?.height ?? 0) - 1).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      ),
+    ).toBeLessThanOrEqual(0);
+  });
 });

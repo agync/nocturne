@@ -68,15 +68,27 @@ test("the production policy header is sent", async ({ page }) => {
   expect(csp).toContain("connect-src 'self' ipc: http://ipc.localhost");
 });
 
-test("fonts load from the app itself", async ({ page }) => {
+test("each font family loads from the app's own origin", async ({ page, baseURL }) => {
+  const origin = new URL(baseURL ?? "http://localhost:4174").origin;
+  const fontUrls: string[] = [];
+  page.on("response", (response) => {
+    if (/\.woff2?$/.test(new URL(response.url()).pathname)) fontUrls.push(response.url());
+  });
   await page.goto("/#/today");
   await page.getByRole("heading", { level: 1 }).waitFor();
   const faces = await page.evaluate(async () => {
     await document.fonts.ready;
-    return [...document.fonts]
-      .filter((f) => f.status === "loaded")
-      .map((f) => f.family.replace(/"/g, ""));
+    return [
+      ...new Set(
+        [...document.fonts]
+          .filter((f) => f.status === "loaded")
+          .map((f) => f.family.replace(/"/g, "")),
+      ),
+    ];
   });
-  expect(faces.length).toBeGreaterThan(0);
-  expect(new Set(faces).size).toBeGreaterThan(0);
+  for (const family of ["Newsreader", "IBM Plex Sans", "IBM Plex Mono"]) {
+    expect(faces, family).toContain(family);
+  }
+  expect(fontUrls.length).toBeGreaterThanOrEqual(3);
+  for (const url of fontUrls) expect(new URL(url).origin).toBe(origin);
 });
