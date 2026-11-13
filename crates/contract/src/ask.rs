@@ -41,4 +41,8 @@ pub struct AskDelta {
     pub near: Vec<NearMatch>,
     pub found: Option<u32>,
     pub eta_seconds: Option<u32>,
+    /// Set on `done` when the bold spans in the streamed text cannot be matched one for one to
+    /// `memory_ids`: the answer is to be shown without bold.
+    #[serde(default)]
+    pub plain: bool,
 }

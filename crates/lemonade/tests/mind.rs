@@ -313,6 +313,30 @@ async fn answer_maps_markers_to_ids_and_strips_them_from_the_stream() {
     );
 }
 
+/// The answer marks one phrase per cited fact in bold, in citation order, and the bold reaches
+/// the person untouched while the markers are taken out.
+#[tokio::test]
+async fn answer_asks_for_one_bold_phrase_per_cited_fact_and_keeps_it() {
+    let r = rig().await;
+    let facts = [
+        memory("a", "Dentist on Monday."),
+        memory("b", "Sam on Tuesday."),
+    ];
+    r.script(json!([{"deltas": ["You see Sam on **Tues", "day** [m2]; the dentist is on **Mon", "day** [m1]."]}])).await;
+    let (meta, text) = answer(&r, &facts).await;
+    assert_eq!(
+        text,
+        "You see Sam on **Tuesday**; the dentist is on **Monday**."
+    );
+    assert_eq!(meta.unwrap().cited, ["b", "a"]);
+    let req = &r.seen("/v1/chat/completions").await[0]["body"];
+    let system = req["messages"][0]["content"].as_str().unwrap();
+    assert!(
+        system.contains("exactly one") && system.contains("**"),
+        "{system}"
+    );
+}
+
 #[tokio::test]
 async fn answer_returns_not_sure_without_saying_it() {
     let r = rig().await;

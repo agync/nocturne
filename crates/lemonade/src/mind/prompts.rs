@@ -137,6 +137,8 @@ pub fn answer_system(nonce: &str) -> String {
     format!(
         "You answer a person's question about their own life using only the numbered facts you are given.\n\
 Write in British English, briefly and plainly. After each claim, cite the fact it came from as [m1], [m2] and so on.\n\
+In each claim, put exactly one short phrase in bold with **: the words that answer the question, copied from the fact it cites. \
+For example: You meet Alex at **the old station** [m1]. One bold phrase for each fact you cite, in the order you cite them, and no other bold.\n\
 Never add anything the facts do not say. If the facts do not answer the question, reply with exactly {NOT_SURE} and nothing else.\n{}",
         untrusted("facts", nonce)
     )

@@ -89,6 +89,7 @@ describe("useAsk", () => {
       near: [],
       found: null,
       etaSeconds: null,
+      plain: false,
     };
     const emit = (engine as unknown as { emit: (n: string, p: unknown) => void }).emit.bind(engine);
     engine.ask = async () => {
@@ -104,6 +105,40 @@ describe("useAsk", () => {
     expect(result.current.deltas.map((d) => d.phase)).toEqual(["searching", "done"]);
     expect(result.current.text).toBe("Yes.");
     expect(result.current.phase).toBe("done");
+  });
+
+  it("shows the answer without bold when its bold cannot be matched to the memories", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const step: AskDelta = {
+      askId: "bold-1",
+      phase: "streaming",
+      textDelta: "Leo swims **on Mondays** with Coach Dee.",
+      receipts: [],
+      memoryIds: [],
+      near: [],
+      found: null,
+      etaSeconds: null,
+      plain: false,
+    };
+    const emit = (engine as unknown as { emit: (n: string, p: unknown) => void }).emit.bind(engine);
+    engine.ask = async () => {
+      emit("ask-delta", step);
+      emit("ask-delta", {
+        ...step,
+        phase: "done",
+        textDelta: null,
+        memoryIds: ["a", "b"],
+        plain: true,
+      });
+      await Promise.resolve();
+      return "bold-1";
+    };
+    const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
+    await act(async () => {
+      await result.current.ask("When does Leo swim?");
+    });
+    expect(result.current.phase).toBe("done");
+    expect(result.current.text).toBe("Leo swims on Mondays with Coach Dee.");
   });
 
   it("ends in nothing when nothing matches", async () => {
@@ -151,6 +186,7 @@ describe("useAsk", () => {
       near: [],
       found: null,
       etaSeconds: null,
+      plain: false,
     });
     const resolvers: Record<string, (id: string) => void> = {};
     engine.ask = (question: string) =>
@@ -207,6 +243,7 @@ describe("useAsk", () => {
           near: [],
           found: null,
           etaSeconds: null,
+          plain: false,
         });
       }
     });

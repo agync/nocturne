@@ -248,7 +248,8 @@ export function useAsk(): AskResult {
       }
     }
   }
-  const text = deltas.map((d) => d.textDelta ?? "").join("");
+  const streamed = deltas.map((d) => d.textDelta ?? "").join("");
+  const text = deltas.some((d) => d.plain) ? streamed.replaceAll("**", "") : streamed;
   const near = deltas.flatMap((d) => d.near);
   const found = [...deltas].reverse().find((d) => d.found !== null)?.found ?? null;
 

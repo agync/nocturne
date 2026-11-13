@@ -74,6 +74,53 @@ fn deltas_arrive_in_phase_order_and_end_in_one_terminal_phase() {
     });
 }
 
+fn two_memories(mode: AnswerMode) -> (Harness, Vec<String>) {
+    let h = harness_with_mind(TestMind::new(mode));
+    let (_, a) = h.learn("swim note", "Leo swims on Mondays.", "Leo", "swimming");
+    let (_, b) = h.learn(
+        "coach note",
+        "Coach Dee runs the swim.",
+        "Coach Dee",
+        "swim",
+    );
+    (h, vec![a, b])
+}
+
+fn done_delta(h: &Harness, question: &str) -> (String, nocturne_contract::AskDelta) {
+    let seen = h.ask_deltas();
+    let id = ask(h, question);
+    wait_for("the answer", || finished(&seen, &id));
+    let got = deltas_for(&seen, &id);
+    let text = got.iter().filter_map(|d| d.text_delta.clone()).collect();
+    (text, got.last().unwrap().clone())
+}
+
+/// The nth bold span stands for the nth cited memory, so the memories go out in the order the
+/// answer cites them, not the order they were found in.
+#[test]
+fn bold_spans_match_the_memories_in_the_order_they_are_cited() {
+    let (h, mems) = two_memories(AnswerMode::Bold(2));
+    let (text, done) = done_delta(&h, "When does Leo swim with Coach Dee?");
+    assert_eq!(done.phase, AskPhase::Done);
+    assert!(!done.plain, "{text}");
+    let mut by_place = mems.clone();
+    by_place.sort_by_key(|m| text.find(&h.memory(m).sentence).unwrap());
+    assert_eq!(done.memory_ids, by_place);
+}
+
+/// One bold span for two memories cannot be matched up: the answer is shown without bold, and
+/// its receipts stay grouped by memory.
+#[test]
+fn bold_spans_that_do_not_match_the_cited_memories_are_dropped() {
+    let (h, _) = two_memories(AnswerMode::Bold(1));
+    let (text, done) = done_delta(&h, "When does Leo swim with Coach Dee?");
+    assert_eq!(done.phase, AskPhase::Done);
+    assert_eq!(text.matches("**").count(), 2);
+    assert!(done.plain);
+    assert_eq!(done.memory_ids.len(), 2);
+    assert_eq!(done.receipts.len(), 2);
+}
+
 /// Review focus 2: two asks in flight keep their deltas apart.
 #[test]
 fn concurrent_asks_do_not_mix_their_deltas() {

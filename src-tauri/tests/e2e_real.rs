@@ -895,6 +895,8 @@ struct Answer {
     memory_ids: Vec<String>,
     receipts: Vec<Value>,
     near: Vec<Value>,
+    /// The engine dropped the bold: it could not be matched one for one to the receipts.
+    plain: bool,
 }
 
 impl Asker {
@@ -957,6 +959,10 @@ impl Asker {
                         .to_string();
                     answer.total_ms = since;
                     answer.memory_ids = d.memory_ids.clone();
+                    if d.plain {
+                        answer.plain = true;
+                        answer.text = plain(&answer.text);
+                    }
                     answer.receipts = d
                         .receipts
                         .iter()
@@ -1008,7 +1014,7 @@ fn answer_json(q: &Question, a: &Answer, extra: Value) -> Value {
         "text": plain(&a.text), "raw_text": a.text,
         "first_delta_ms": a.first_delta_ms, "first_sentence_ms": a.first_sentence_ms,
         "total_ms": a.total_ms, "saw_waking": a.saw_waking, "found": a.found,
-        "memory_ids": a.memory_ids, "receipts": a.receipts, "near": a.near,
+        "memory_ids": a.memory_ids, "receipts": a.receipts, "near": a.near, "bold_dropped": a.plain,
         "judged": extra,
     })
 }
@@ -1437,7 +1443,7 @@ fn the_whole_product_works_with_real_models() {
     let (mut recall_hits, mut recall_total) = (0, 0);
     let (mut correct, mut cited_ok, mut cited_all) = (0, 0, 0);
     let (mut first_sentence, mut totals) = (Vec::new(), Vec::new());
-    let (mut bold_total, mut bold_mapped) = (0, 0);
+    let (mut bold_total, mut bold_mapped, mut bold_answers, mut bold_dropped) = (0, 0, 0, 0);
     let mut every_terminal = true;
     for q in QUESTIONS {
         let wanted: HashSet<String> = q.sources.iter().map(|k| ids[k].clone()).collect();
@@ -1504,6 +1510,12 @@ fn the_whole_product_works_with_real_models() {
             .count();
         bold_total += spans.len();
         bold_mapped += mapped;
+        if a.phase == "done" {
+            bold_dropped += usize::from(a.plain);
+            bold_answers += usize::from(
+                !spans.is_empty() && spans.len() == a.memory_ids.len() && mapped == spans.len(),
+            );
+        }
         if let Some(t) = a.first_sentence_ms {
             first_sentence.push(t);
         }
@@ -1607,7 +1619,8 @@ fn the_whole_product_works_with_real_models() {
         "citation_precision": {"supporting": cited_ok, "cited": cited_all, "value": ratio(cited_ok, cited_all), "target": "> 0.9"},
         "first_sentence_ms": {"p50": percentile(&first_sentence, 50.0), "p95": percentile(&first_sentence, 95.0), "max": first_sentence.iter().max(), "target_p95": "< 3000"},
         "total_ms": {"p50": percentile(&totals, 50.0), "p95": percentile(&totals, 95.0), "max": totals.iter().max()},
-        "bold_spans": {"in_answers": bold_total, "supported_by_cited_memory": bold_mapped, "answers_given": answered_asks},
+        "bold_spans": {"in_answers": bold_total, "supported_by_cited_memory": bold_mapped, "answers_given": answered_asks,
+                       "answers_fully_covered": bold_answers, "answers_bold_dropped": bold_dropped},
     });
     run.put("questions", Value::Array(rows));
     run.put("metrics", metrics);
@@ -2114,6 +2127,12 @@ fn summary(run: &Run) -> String {
     s.push_str(&format!(
         "| Bold spans in answers | {} ({} supported by the cited memory) | n/a |\n",
         m["bold_spans"]["in_answers"], m["bold_spans"]["supported_by_cited_memory"]
+    ));
+    s.push_str(&format!(
+        "| Answers with one bold span per receipt | {} of {} given ({} shown without bold) | n/a |\n",
+        m["bold_spans"]["answers_fully_covered"],
+        m["bold_spans"]["answers_given"],
+        m["bold_spans"]["answers_bold_dropped"]
     ));
     s.push_str("\n## Questions\n\n| # | Kind | Phase | Correct | Recall rank | First sentence | Total |\n|---|---|---|---|---|---|---|\n");
     for q in o["questions"].as_array().into_iter().flatten() {

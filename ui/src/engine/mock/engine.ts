@@ -626,6 +626,7 @@ export class MockEngine implements EngineClient {
       near: [],
       found: null,
       etaSeconds: null,
+      plain: false,
       ...d,
     });
     const send = (d: AskDelta): void => {

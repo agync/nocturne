@@ -50,6 +50,7 @@ class Scripted extends MockEngine {
       near: [],
       found: null,
       etaSeconds: null,
+      plain: false,
       ...step,
     };
     // emit is private on the mock; a test engine may reach it.

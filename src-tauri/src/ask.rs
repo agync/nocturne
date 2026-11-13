@@ -154,6 +154,7 @@ impl<R: Runtime> Sink<R> {
             near: Vec::new(),
             found: None,
             eta_seconds: None,
+            plain: false,
         };
         edit(&mut delta);
         let cancelled = self
@@ -271,6 +272,7 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
     let facts: Vec<MemoryView> = hits.iter().map(|h| h.memory.clone()).collect();
     sink.send(AskPhase::Reading, |d| d.found = Some(facts.len() as u32));
 
+    let mut said = String::new();
     let meta = loop {
         let (tx, mut rx) = mpsc::channel::<String>(32);
         let m = mind.clone();
@@ -278,8 +280,10 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         let f = facts.clone();
         let mut task = AbortOnDrop(tokio::spawn(async move { m.answer(&q, &f, tx).await }));
         let mut streamed = false;
+        said.clear();
         while let Some(text) = rx.recv().await {
             streamed = true;
+            said.push_str(&text);
             sink.send(AskPhase::Streaming, |d| d.text_delta = Some(text));
         }
         match (&mut task.0).await {
@@ -307,9 +311,11 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         }
     };
 
-    let cited: Vec<&Hit> = hits
+    // In the order the answer cites them: the nth bold span stands for the nth memory.
+    let cited: Vec<&Hit> = meta
+        .cited
         .iter()
-        .filter(|h| meta.cited.contains(&h.memory.id))
+        .filter_map(|id| hits.iter().find(|h| &h.memory.id == id))
         .collect();
     // An answer with nothing to cite is not an answer: every claim carries a receipt.
     if meta.not_sure || cited.is_empty() {
@@ -337,8 +343,31 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
     if let Err(e) = blocking(move || engine.mark_used(&used, UseKind::Answer)).await {
         tracing::warn!("could not note the memories used: {e}");
     }
+    let plain = !bold_matches(&said, ids.len());
     sink.send(AskPhase::Done, |d| {
         d.receipts = receipts;
         d.memory_ids = ids;
+        d.plain = plain;
     });
+}
+
+/// Whether the bold spans in `text` can stand one for one for `cited` memories: none at all, or
+/// exactly one each, every one closed.
+fn bold_matches(text: &str, cited: usize) -> bool {
+    let markers = text.matches("**").count();
+    markers == 0 || (markers.is_multiple_of(2) && markers / 2 == cited)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::bold_matches;
+
+    #[test]
+    fn bold_spans_match_one_for_one_or_not_at_all() {
+        assert!(bold_matches("On Thursday.", 1));
+        assert!(bold_matches("On **Thursday** with **Marek**.", 2));
+        assert!(!bold_matches("On **Thursday** with Marek.", 2));
+        assert!(!bold_matches("On **Thursday** with **Marek**.", 1));
+        assert!(!bold_matches("On **Thursday with Marek.", 1));
+    }
 }

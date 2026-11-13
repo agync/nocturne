@@ -7,4 +7,9 @@ import type { Receipt } from "./Receipt";
  * One step of an answer. Deltas for one `askId` arrive in order and end with a terminal phase
  * (`done`, `notSure`, `nothing` or `unavailable`).
  */
-export type AskDelta = { askId: string, phase: AskPhase, textDelta: string | null, receipts: Array<Receipt>, memoryIds: Array<string>, near: Array<NearMatch>, found: number | null, etaSeconds: number | null, };
+export type AskDelta = { askId: string, phase: AskPhase, textDelta: string | null, receipts: Array<Receipt>, memoryIds: Array<string>, near: Array<NearMatch>, found: number | null, etaSeconds: number | null, 
+/**
+ * Set on `done` when the bold spans in the streamed text cannot be matched one for one to
+ * `memory_ids`: the answer is to be shown without bold.
+ */
+plain: boolean, };

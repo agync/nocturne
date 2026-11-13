@@ -27,6 +27,7 @@ class TwoMemories extends MockEngine {
           near: [],
           found: null,
           etaSeconds: null,
+          plain: false,
           ...step,
         });
       }, ms);

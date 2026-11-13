@@ -327,6 +327,8 @@ pub enum AnswerMode {
     Panics,
     /// Streams some words, then says it is busy.
     BusyAfterStreaming,
+    /// Cites the facts last first, the first `n` of them in bold.
+    Bold(usize),
 }
 
 /// A scripted mind with knobs: how it answers and how long it takes to wake.
@@ -412,6 +414,22 @@ impl Mind for TestMind {
                 AnswerMode::BusyAfterStreaming => {
                     let _ = out.send("Half an ".to_string()).await;
                     Err(MindError::Busy)
+                }
+                AnswerMode::Bold(n) => {
+                    let mut cited = Vec::new();
+                    for (i, f) in facts.iter().rev().enumerate() {
+                        let words = if i < n {
+                            format!("**{}** ", f.sentence)
+                        } else {
+                            format!("{} ", f.sentence)
+                        };
+                        let _ = out.send(words).await;
+                        cited.push(f.id.clone());
+                    }
+                    Ok(AnswerMeta {
+                        cited,
+                        not_sure: false,
+                    })
                 }
                 AnswerMode::CitesNothing => {
                     let _ = out.send("Something.".to_string()).await;
