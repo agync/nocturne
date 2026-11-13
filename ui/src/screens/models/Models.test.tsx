@@ -77,6 +77,10 @@ describe("picker", () => {
       const option = screen.getByText(name).closest("div");
       const mark = option?.querySelector("[data-fit]") as HTMLElement;
       expect(mark.textContent, name).toBe(word);
+      expect(
+        screen.getByRole("radio", { name: new RegExp(name) }),
+        name,
+      ).toHaveAccessibleDescription(new RegExp(`\\b${word}$|\\b${word} `));
       expect(mark.querySelector("svg")?.getAttribute("aria-hidden")).toBe("true");
     }
     expect(
@@ -138,7 +142,10 @@ describe("picker", () => {
   it("picker.aloud_single_choice: one voice, informational, nothing to confirm", async () => {
     await open("/settings/models/aloud");
     await screen.findByText(/is the only voice Nocturne can use for now/);
-    expect(screen.getAllByRole("radio")).toHaveLength(1);
+    const radios = screen.getAllByRole("radio");
+    expect(radios).toHaveLength(1);
+    expect(radios[0]).toBeDisabled();
+    expect(radios[0]).toBeChecked();
     expect(screen.getByRole("button", { name: "Use the chosen one…" })).toBeDisabled();
   });
 });
@@ -226,7 +233,7 @@ describe("download", () => {
     const { user } = await open("/settings/models", "downloading");
     await user.click(await screen.findByRole("button", { name: "Pause" }));
     expect(
-      await screen.findByText("Paused: getting Qwen3-VL-8B", { exact: false }),
+      await screen.findByRole("progressbar", { name: "Paused: getting Qwen3-VL-8B" }),
     ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Resume" }));
     expect(await screen.findByRole("button", { name: "Pause" })).toBeInTheDocument();
@@ -274,14 +281,16 @@ describe("reindex", () => {
 });
 
 describe("old", () => {
-  it("old.keep_is_default: Keep is focused, and nothing is removed unless chosen", async () => {
+  it("old.keep_is_default: Keep comes first, nothing is removed unless chosen, focus goes to the heading", async () => {
     const { user, sim } = await open("/settings/models", "oldKeep");
     const keep = await screen.findByRole("button", { name: "Keep it" });
-    await waitFor(() => expect(keep).toHaveFocus());
+    expect(keep).not.toHaveFocus();
+    const buttons = within(keep.parentElement as HTMLElement).getAllByRole("button");
+    expect(buttons[0]).toBe(keep);
     expect(screen.getByText("Qwen3-VL-8B is now answering questions.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Remove, free 6.9 GB" })).toBeInTheDocument();
-    await user.keyboard("{Enter}");
+    await user.click(keep);
     await waitFor(() => expect(sim.view().old).toBeNull());
+    expect(screen.getByRole("heading", { level: 1, name: "Models" })).toHaveFocus();
     expect((await sim.choices("answering")).find((c) => c.id === "Qwen3.5-9B-GGUF")?.onDisk).toBe(
       true,
     );
@@ -297,3 +306,115 @@ describe("old", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("picker, more", () => {
+  it("picker.current_stays_listed: the current one is listed and checked even when it no longer fits", async () => {
+    const { engine } = modelsEngine();
+    const real = engine.listModelChoices;
+    engine.listModelChoices = async (job) =>
+      (await real(job)).map((c) =>
+        c.current ? { ...c, fit: "wontFit", reason: { type: "memory", limiter: null } } : c,
+      );
+    renderApp({ hash: "#/settings/models/answering", engine });
+    const radio = await screen.findByRole("radio", { name: /Qwen3.5-9B-GGUF/ });
+    expect(radio).toBeChecked();
+    expect(radio).not.toBeDisabled();
+    expect(radio).toHaveAccessibleDescription(/Won’t fit/);
+    expect(radio).toHaveAccessibleDescription(/Too much memory beside the other jobs\./);
+    expect(screen.getAllByText("Current").length).toBeGreaterThan(0);
+  });
+
+  it("picker.preview_names_what_it_previews: nothing can be picked while it loads, and the confirm changes what it names", async () => {
+    const { engine, sim } = modelsEngine();
+    let release: () => void = () => undefined;
+    const real = engine.previewModelChange;
+    engine.previewModelChange = (job, model) =>
+      new Promise((resolve) => {
+        release = () => resolve(real(job, model));
+      });
+    renderApp({ hash: "#/settings/models/answering", engine });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("radio", { name: /Qwen3-VL-8B/ }));
+    await user.click(screen.getByRole("button", { name: "Use the chosen one…" }));
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Gemma-4-E4B/ })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Use the chosen one…" })).toBeDisabled();
+    release();
+    const dialog = await screen.findByRole("dialog", { name: /Get Qwen3-VL-8B/ });
+    await user.click(within(dialog).getByRole("button", { name: "Download 6.2 GB" }));
+    await waitFor(() => expect(sim.view().change?.model).toBe("Qwen3-VL-8B"));
+  });
+
+  it("picker.read_error_retries: a failed read says so and tries again", async () => {
+    const { engine } = modelsEngine();
+    const real = engine.listModelChoices;
+    let fail = true;
+    engine.listModelChoices = async (job) => {
+      if (fail) throw new Error("no");
+      return real(job);
+    };
+    renderApp({ hash: "#/settings/models/finding", engine });
+    const user = userEvent.setup();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nocturne couldn’t check what this computer can run.");
+    fail = false;
+    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("radio", { name: /Qwen3-Embedding-4B/ })).toBeInTheDocument();
+  });
+
+  it("picker.use_waits_for_a_running_change: Use is off and points to the running card", async () => {
+    await open("/settings/models/answering", "downloading");
+    await user_wait();
+    expect(screen.getByRole("button", { name: "Use the chosen one…" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "See where it is" })).toHaveAttribute(
+      "href",
+      "#/settings/models",
+    );
+  });
+});
+
+describe("models, page errors and the row", () => {
+  it("models.read_error_retries", async () => {
+    const { engine } = modelsEngine();
+    const real = engine.getModels;
+    let fail = true;
+    engine.getModels = async () => {
+      if (fail) throw new Error("no");
+      return real();
+    };
+    renderApp({ hash: "#/settings/models", engine });
+    const user = userEvent.setup();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nocturne couldn’t read these details. What you kept is safe.");
+    fail = false;
+    await user.click(within(alert).getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Standard · for this computer")).toBeInTheDocument();
+  });
+
+  it("models.attention_row_in_settings: the Settings row says Needs you and why", async () => {
+    await open("/settings", "attention");
+    const link = await screen.findByRole("link", {
+      name: "Choose what runs each job, Needs you. Open",
+    });
+    expect(link).toHaveAccessibleDescription("A download stopped. What you use now keeps working.");
+  });
+
+  it("download.cancel_moves_focus_to_the_heading", async () => {
+    const { user } = await open("/settings/models", "downloading");
+    await user.click(await screen.findByRole("button", { name: "Cancel…" }));
+    await user.click(await screen.findByRole("button", { name: "Stop and remove" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Models" })).toHaveFocus(),
+    );
+  });
+
+  it("models.progress_announces_phases_not_amounts: the live region holds no numbers", async () => {
+    await open("/settings/models", "downloading");
+    const bar = await screen.findByRole("progressbar", { name: "Getting Qwen3-VL-8B" });
+    for (const region of screen.getAllByRole("status")) {
+      expect(region.textContent).not.toMatch(/\d+(\.\d+)? GB/);
+    }
+    expect(bar).toHaveAttribute("aria-valuetext", expect.stringContaining("2.1 GB of 6.2 GB"));
+  });
+});
+
+const user_wait = () => screen.findByRole("link", { name: "See where it is" });

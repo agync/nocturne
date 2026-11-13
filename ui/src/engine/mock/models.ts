@@ -511,16 +511,4 @@ export class ModelsSim {
     this.old = null;
     return this.view();
   }
-
-  /**
-   * Lets a running download or re-read finish at once. The mock engine routes pause, resume,
-   * cancel, keep, remove and reset here too, so it can only say "carry on"; the named methods above
-   * are what each of those does.
-   */
-  async step(): Promise<ModelsView> {
-    await Promise.resolve();
-    if (this.run?.live) this.land(this.run);
-    if (this.reread?.phase === "running") this.finishReread(this.reread);
-    return this.view();
-  }
 }

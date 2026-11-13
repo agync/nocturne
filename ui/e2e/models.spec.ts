@@ -82,7 +82,6 @@ test("a download is asked for, runs, and the old one is kept by default", async 
   ).toBeVisible();
   const keep = page.getByRole("button", { name: "Keep it" });
   await keep.waitFor({ timeout: 15_000 });
-  await expect(keep).toBeFocused();
   await expect(page.getByText("Qwen3-VL-8B is now answering questions.")).toBeVisible();
 });
 
@@ -114,7 +113,9 @@ test.describe("narrow", () => {
 test("pause, resume and cancel a download, from the page", async ({ page }) => {
   await open(page, "/settings/models", "downloading");
   await page.getByRole("button", { name: "Pause" }).click();
-  await expect(page.getByText("Paused: getting Qwen3-VL-8B")).toBeVisible();
+  await expect(
+    page.getByRole("progressbar", { name: "Paused: getting Qwen3-VL-8B" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByRole("button", { name: "Pause" })).toBeVisible();
   await page.getByRole("button", { name: "Cancel…" }).click();
