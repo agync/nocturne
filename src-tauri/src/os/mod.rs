@@ -9,6 +9,7 @@ use tauri::{AppHandle, Runtime};
 
 use crate::error::CommandError;
 
+pub mod autostart;
 pub mod copy;
 pub mod notify;
 pub mod quick_capture;
@@ -55,6 +56,16 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
     }
+    #[cfg(not(windows))]
+    if let Some(target) = autostart::Target::from_env() {
+        os.set_autostart(target);
+    }
+    if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
+        match set_start_at_login(app, &os, settings.start_at_login) {
+            Ok(()) => tracing::info!("start with this computer: {}", settings.start_at_login),
+            Err(e) => tracing::warn!("start with this computer could not be reconciled: {e}"),
+        }
+    }
     tray::install(app);
     notify::install(app, &os);
     let handle = app.clone();
@@ -85,10 +96,58 @@ pub fn window_may_call(label: &str, command: &str) -> bool {
     }
 }
 
+/// Make the desktop start (or not start) the app at login.
+fn set_start_at_login<R: Runtime>(
+    app: &AppHandle<R>,
+    os: &OsState,
+    want: bool,
+) -> Result<(), String> {
+    #[cfg(windows)]
+    {
+        let _ = os;
+        use tauri_plugin_autostart::ManagerExt;
+        let launcher = app.autolaunch();
+        let result = if want {
+            launcher.enable()
+        } else {
+            launcher.disable()
+        };
+        result.map_err(|e| e.to_string())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        match os.autostart() {
+            Some(target) => autostart::apply(want, &target)
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            None => Ok(()),
+        }
+    }
+}
+
+/// Whether the desktop will start the app at login, or `None` when it cannot tell.
+fn start_at_login_now<R: Runtime>(app: &AppHandle<R>, os: &OsState) -> Option<bool> {
+    #[cfg(windows)]
+    {
+        let _ = os;
+        use tauri_plugin_autostart::ManagerExt;
+        app.autolaunch().is_enabled().ok()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        os.autostart().map(|t| autostart::enabled(&t.dir))
+    }
+}
+
 /// Fill in what only the desktop knows (the shortcut is registered, the folder is watched).
 pub fn adjust_settings<R: Runtime>(app: &AppHandle<R>, mut view: SettingsView) -> SettingsView {
     if let Some(os) = app.try_state::<OsState>() {
         view.shortcut_available = os.shortcut_registered();
+        if let Some(on) = start_at_login_now(app, &os) {
+            view.start_at_login = on;
+        }
     }
     view
 }
@@ -106,6 +165,12 @@ pub async fn apply_settings<R: Runtime>(
         && *new != before.shortcut
     {
         shortcut::change(&os, new)?;
+    }
+    if let Some(want) = patch.start_at_login {
+        set_start_at_login(app, &os, want).map_err(|e| {
+            tracing::warn!("start with this computer was not changed: {e}");
+            CommandError::unavailable("start with this computer could not be changed")
+        })?;
     }
     Ok(())
 }

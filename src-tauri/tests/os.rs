@@ -302,3 +302,47 @@ fn page_ready_with_a_saved_page_sends_one_private_free_notification() {
         "{body}"
     );
 }
+
+#[test]
+fn start_at_login_writes_the_entry_in_the_given_folder_and_reports_the_truth() {
+    use nocturne_app_lib::os::autostart::{ENTRY, Target};
+    let h = harness();
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("autostart");
+    h.app.manage(OsState::new(h.dir.path()));
+    h.app.state::<OsState>().set_autostart(Target {
+        dir: dir.clone(),
+        exec: "/usr/bin/nocturne".into(),
+    });
+    assert_eq!(h.ok("get_settings", json!({}))["startAtLogin"], false);
+    let on = h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
+    assert_eq!(on["startAtLogin"], true);
+    let entry = std::fs::read_to_string(dir.join(ENTRY)).unwrap();
+    assert!(entry.contains("Exec=/usr/bin/nocturne --hidden"), "{entry}");
+    // The person removes the entry by hand: the settings say what is true.
+    std::fs::remove_file(dir.join(ENTRY)).unwrap();
+    assert_eq!(h.ok("get_settings", json!({}))["startAtLogin"], false);
+    h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
+    let off = h.ok("update_settings", json!({"patch": {"startAtLogin": false}}));
+    assert_eq!(off["startAtLogin"], false);
+    assert!(!dir.join(ENTRY).exists());
+}
+
+#[test]
+fn a_start_at_login_that_cannot_be_written_is_refused_and_not_saved() {
+    use nocturne_app_lib::os::autostart::Target;
+    let h = harness();
+    let root = tempfile::tempdir().unwrap();
+    let blocked = root.path().join("a-file");
+    std::fs::write(&blocked, b"x").unwrap();
+    h.app.manage(OsState::new(h.dir.path()));
+    h.app.state::<OsState>().set_autostart(Target {
+        dir: blocked.join("autostart"),
+        exec: "/usr/bin/nocturne".into(),
+    });
+    assert_eq!(
+        h.code("update_settings", json!({"patch": {"startAtLogin": true}})),
+        "unavailable"
+    );
+    assert!(!h.engine().settings().unwrap().start_at_login);
+}

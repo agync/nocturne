@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use serde::{Deserialize, Serialize};
 
+use super::autostart::Target;
 use super::notify::Notifier;
 use super::shortcut::{Registrar, ShortcutSlot};
 
@@ -44,6 +45,7 @@ pub struct OsState {
     file: Mutex<OsFile>,
     shortcut: Mutex<ShortcutSlot>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
+    autostart: Mutex<Option<Target>>,
 }
 
 impl OsState {
@@ -53,6 +55,7 @@ impl OsState {
             file: Mutex::new(load(dir)),
             shortcut: Mutex::new(ShortcutSlot::default()),
             notifier: Mutex::new(None),
+            autostart: Mutex::new(None),
         }
     }
 
@@ -86,6 +89,18 @@ impl OsState {
     /// Hand the shortcut code the thing that grabs keys.
     pub fn set_registrar(&self, registrar: Arc<dyn Registrar>) {
         self.shortcut().registrar = Some(registrar);
+    }
+
+    /// Where the autostart entry goes (Linux).
+    pub fn set_autostart(&self, target: Target) {
+        *self.autostart.lock().unwrap_or_else(|e| e.into_inner()) = Some(target);
+    }
+
+    pub fn autostart(&self) -> Option<Target> {
+        self.autostart
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn set_notifier(&self, notifier: Arc<dyn Notifier>) {
