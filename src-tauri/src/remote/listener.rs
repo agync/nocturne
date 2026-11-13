@@ -202,8 +202,9 @@ async fn handle(ctx: Arc<Ctx>, req: Request<Body>) -> Response<Body> {
     if !ctx.core.is_on() {
         return bare(StatusCode::SERVICE_UNAVAILABLE);
     }
+    // Full is not off: 503 means only "turned off" to the phone.
     let Ok(permit) = ctx.permits.clone().try_acquire_owned() else {
-        return bare(StatusCode::SERVICE_UNAVAILABLE);
+        return bare(StatusCode::CONFLICT);
     };
     if path == PATH_SESSION {
         return session(ctx, req, permit).await;

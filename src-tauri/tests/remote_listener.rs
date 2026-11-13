@@ -572,7 +572,7 @@ async fn connection_cap() {
         );
     }
     let res = get(&r, "/p", &[]).await;
-    assert_eq!(res.status, 503);
+    assert_eq!(res.status, 409, "full is not off");
     assert!(
         Ws::connect(&r.addr, PATH_SESSION, &keyed(&r))
             .await
