@@ -725,73 +725,40 @@ impl Engine {
         self.read(|conn| load_page(conn, day))
     }
 
-    /// A saved page for an edition. Audio and print drop lines about memories that are private
-    /// now, whatever they were when the page was saved.
+    /// A saved page for an edition. Every edition but the screen drops lines about memories
+    /// that are private now, whatever they were when the page was saved.
     pub fn page_for(
         &self,
         day: Option<Date>,
         edition: Edition,
     ) -> Result<Option<nocturne_contract::PageView>> {
+        self.read(|conn| edition_page(conn, day, edition))
+    }
+
+    /// Every saved page, newest first, as an edition sees it. Every edition but the screen
+    /// takes the headline and the needs-you count from `page_for`: the template headline when a
+    /// line is private now, and public needs-you lines only.
+    pub fn pages_for(&self, edition: Edition) -> Result<Vec<PageSummary>> {
+        if edition == Edition::Screen {
+            return self.pages();
+        }
         self.read(|conn| {
-            let Some(mut page) = load_page(conn, day)? else {
-                return Ok(None);
-            };
-            page.edition = edition;
-            if edition == Edition::Screen {
-                return Ok(Some(page));
-            }
-            let mut skipped = 0u32;
-            let mut dropped_let_go = 0u32;
-            for (i, list) in [
-                &mut page.needs_you,
-                &mut page.changed,
-                &mut page.let_go,
-                &mut page.upcoming,
-                &mut page.learned,
-            ]
-            .into_iter()
-            .enumerate()
-            {
-                let mut kept = Vec::new();
-                for line in std::mem::take(list) {
-                    let mut private = false;
-                    for m in &line.memory_ids {
-                        private |= is_private(conn, m)?;
-                    }
-                    if private {
-                        skipped += 1;
-                        if i == 2 {
-                            dropped_let_go += 1;
-                        }
-                    } else {
-                        kept.push(line);
-                    }
+            let dates: Vec<String> = conn
+                .prepare("SELECT date FROM pages ORDER BY date DESC")?
+                .query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut out = Vec::with_capacity(dates.len());
+            for date in dates {
+                if let Some(page) = edition_page(conn, Some(date.parse()?), edition)? {
+                    out.push(PageSummary {
+                        needs_you: needs_you_count(&page),
+                        date: page.date,
+                        page_number: page.page_number,
+                        headline: page.headline,
+                    });
                 }
-                *list = kept;
             }
-            if let Some(q) = &page.question
-                && let Some(m) = &q.memory_id
-                && is_private(conn, m)?
-            {
-                page.question = None;
-                skipped += 1;
-            }
-            page.private_skipped += skipped;
-            if skipped > 0 {
-                // The stored headline and dek were written with the private content in view.
-                // Never hand them to audio or print: fall back to the template, from the
-                // counts that remain.
-                let day: Date = page.date.parse()?;
-                let needs = page.needs_you.iter().filter(|l| !l.forgotten).count() as u32
-                    + page.more_needs_you;
-                page.headline = template_headline(day);
-                page.dek = template_dek(
-                    page.kept_count,
-                    needs,
-                    page.let_go_count.saturating_sub(dropped_let_go),
-                );
-            }
-            Ok(Some(page))
+            Ok(out)
         })
     }
 
@@ -1015,6 +982,78 @@ pub(crate) fn load_page(
             .optional()?
             .flatten();
         q.answered = opt_enum(answer)?;
+    }
+    Ok(Some(page))
+}
+
+/// The needs-you lines a page shows that are not forgotten: the count a page summary carries.
+pub fn needs_you_count(page: &nocturne_contract::PageView) -> u32 {
+    page.needs_you.iter().filter(|l| !l.forgotten).count() as u32
+}
+
+/// A saved page for an edition, inside a read.
+fn edition_page(
+    conn: &Connection,
+    day: Option<Date>,
+    edition: Edition,
+) -> Result<Option<nocturne_contract::PageView>> {
+    let Some(mut page) = load_page(conn, day)? else {
+        return Ok(None);
+    };
+    page.edition = edition;
+    if edition == Edition::Screen {
+        return Ok(Some(page));
+    }
+    let mut skipped = 0u32;
+    let mut dropped_let_go = 0u32;
+    for (i, list) in [
+        &mut page.needs_you,
+        &mut page.changed,
+        &mut page.let_go,
+        &mut page.upcoming,
+        &mut page.learned,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut kept = Vec::new();
+        for line in std::mem::take(list) {
+            let mut private = false;
+            for m in &line.memory_ids {
+                private |= is_private(conn, m)?;
+            }
+            if private {
+                skipped += 1;
+                if i == 2 {
+                    dropped_let_go += 1;
+                }
+            } else {
+                kept.push(line);
+            }
+        }
+        *list = kept;
+    }
+    if let Some(q) = &page.question
+        && let Some(m) = &q.memory_id
+        && is_private(conn, m)?
+    {
+        page.question = None;
+        skipped += 1;
+    }
+    page.private_skipped += skipped;
+    if skipped > 0 {
+        // The stored headline and dek were written with the private content in view.
+        // Never hand them to audio or print: fall back to the template, from the
+        // counts that remain.
+        let day: Date = page.date.parse()?;
+        let needs =
+            page.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + page.more_needs_you;
+        page.headline = template_headline(day);
+        page.dek = template_dek(
+            page.kept_count,
+            needs,
+            page.let_go_count.saturating_sub(dropped_let_go),
+        );
     }
     Ok(Some(page))
 }

@@ -27,6 +27,10 @@ const TABLES: &[&str] = &[
     "forget_tokens",
     "items_fts",
     "memories_fts",
+    "remote_devices",
+    "remote_keeps",
+    "remote_events",
+    "remote_state",
 ];
 
 #[test]
@@ -117,4 +121,67 @@ fn deleted_text_is_overwritten_in_the_store_and_in_both_search_indexes() {
             .unwrap();
         assert_eq!(v, "1", "{table} deletes securely");
     }
+}
+
+#[test]
+fn migration_7_applies_on_a_v6_store() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+        for (version, sql) in store::migrations() {
+            if version <= 6 {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", version).unwrap();
+            }
+        }
+        conn.execute(
+            "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status) \
+             VALUES ('itm_old', 'text', 'quickCapture', 'trusted', 'abc', 't', \
+             '2026-11-01T00:00:00.000Z', 'kept')",
+            [],
+        )
+        .unwrap();
+    }
+    let e = engine(dir.path());
+    assert_eq!(e.get_item("itm_old").unwrap().title, "t");
+    drop(e);
+
+    let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+    let version: u32 = conn
+        .query_row("PRAGMA user_version", [], |r| r.get(0))
+        .unwrap();
+    assert!(version >= 7);
+    for table in ["remote_devices", "remote_keeps", "remote_events"] {
+        let n: u32 = conn
+            .query_row(&format!("SELECT COUNT(*) FROM {table}"), [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 0, "{table} starts empty");
+    }
+    // Off is the fresh state: one settings row, nothing wanted on, nothing sent.
+    let row: (String, i64, String, i64, f64, Option<String>) = conn
+        .query_row(
+            "SELECT connection, wanted_on, auto_off, keep_awake, sent_bytes, on_since \
+             FROM remote_state",
+            [],
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        row,
+        ("simple".into(), 0, "unused30Days".into(), 0, 0.0, None)
+    );
+    assert!(
+        conn.execute("INSERT INTO remote_state(id) VALUES (2)", [])
+            .is_err(),
+        "one row only"
+    );
 }

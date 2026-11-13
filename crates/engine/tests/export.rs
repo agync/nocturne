@@ -186,6 +186,19 @@ fn delete_everything_needs_the_phrase_and_leaves_an_empty_working_store() {
     w.f.engine
         .record_download(LedgerKind::Setup, "model", Some("example.org"), 10.0)
         .unwrap();
+    {
+        let conn = rusqlite::Connection::open(dir.join("nocturne.db")).unwrap();
+        conn.execute_batch(
+            "INSERT INTO remote_devices(id, name, public_key, home_origin, connection, paired_at) \
+               VALUES ('dev1', 'Pixel', x'04', 'https://a.example', 'simple', '2026-11-13T07:00:00.000Z'); \
+             INSERT INTO remote_keeps(item_id, device_id, client_id, kept_at) \
+               SELECT id, 'dev1', 'c-1', kept_at FROM items LIMIT 1; \
+             INSERT INTO remote_events(device_id, action, result, at) \
+               VALUES ('dev1', 'keptText', 'ok', '2026-11-13T07:00:00.000Z'); \
+             UPDATE remote_state SET wanted_on = 1, sent_bytes = 42, address = 'a.example';",
+        )
+        .unwrap();
+    }
     assert!(w.f.engine.delete_everything("yes").is_err());
     assert!(w.f.engine.delete_everything("Delete everything").is_err());
     assert_eq!(
@@ -209,6 +222,9 @@ fn delete_everything_needs_the_phrase_and_leaves_an_empty_working_store() {
         "ledger",
         "settings",
         "forget_tokens",
+        "remote_devices",
+        "remote_keeps",
+        "remote_events",
     ] {
         assert_eq!(
             sql_count(dir, &format!("SELECT COUNT(*) FROM {table}")),
@@ -216,6 +232,15 @@ fn delete_everything_needs_the_phrase_and_leaves_an_empty_working_store() {
             "{table}"
         );
     }
+    assert_eq!(
+        sql_count(
+            dir,
+            "SELECT COUNT(*) FROM remote_state \
+             WHERE wanted_on = 0 AND sent_bytes = 0 AND address IS NULL"
+        ),
+        1,
+        "Away from home's settings are back to off"
+    );
     assert_eq!(std::fs::read_dir(dir.join("originals")).unwrap().count(), 0);
     assert_eq!(std::fs::read_dir(dir.join("audio")).unwrap().count(), 0);
     for name in ["nocturne.db", "nocturne.db-wal"] {

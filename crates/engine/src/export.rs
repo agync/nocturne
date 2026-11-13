@@ -447,6 +447,10 @@ impl Engine {
         self.bump_forget();
         let wrote = self.write(|tx| {
             for table in [
+                "remote_keeps",
+                "remote_events",
+                "remote_devices",
+                "remote_state",
                 "page_line_memories",
                 "page_lines",
                 "pages",
@@ -465,6 +469,7 @@ impl Engine {
             ] {
                 tx.execute(&format!("DELETE FROM {table}"), [])?;
             }
+            tx.execute("INSERT INTO remote_state(id) VALUES (1)", [])?;
             tx.execute(
                 "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
                 [],

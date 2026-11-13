@@ -157,3 +157,27 @@ CREATE TABLE forgotten_claims(
   item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   claim TEXT NOT NULL,
   PRIMARY KEY(item_id, claim));
+
+-- migration 7
+-- Away from home: paired phones, what they kept, what they did (never content), and the
+-- feature's own settings and counters. A removed phone keeps its row (revoked) so receipts
+-- still name it; delete everything removes every row.
+CREATE TABLE remote_devices(
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, public_key BLOB NOT NULL, home_origin TEXT NOT NULL,
+  connection TEXT NOT NULL, address TEXT, paired_at TEXT NOT NULL, last_used_at TEXT, revoked_at TEXT);
+CREATE TABLE remote_keeps(
+  item_id TEXT PRIMARY KEY REFERENCES items(id) ON DELETE CASCADE,
+  device_id TEXT NOT NULL REFERENCES remote_devices(id),
+  client_id TEXT NOT NULL, kept_at TEXT NOT NULL,
+  UNIQUE(device_id, client_id));
+CREATE TABLE remote_events(
+  id INTEGER PRIMARY KEY, device_id TEXT, action TEXT NOT NULL, result TEXT NOT NULL,
+  bytes REAL NOT NULL DEFAULT 0, count INTEGER NOT NULL DEFAULT 1, at TEXT NOT NULL);
+CREATE INDEX remote_events_at ON remote_events(at);
+CREATE TABLE remote_state(
+  id INTEGER PRIMARY KEY CHECK (id = 1), connection TEXT NOT NULL DEFAULT 'simple',
+  wanted_on INTEGER NOT NULL DEFAULT 0, auto_off TEXT NOT NULL DEFAULT 'unused30Days',
+  keep_awake INTEGER NOT NULL DEFAULT 0, sent_bytes REAL NOT NULL DEFAULT 0,
+  first_on_at TEXT, on_since TEXT, last_on_at TEXT, last_off_at TEXT,
+  address TEXT, address_since TEXT, machine_name TEXT);
+INSERT INTO remote_state(id) VALUES (1);

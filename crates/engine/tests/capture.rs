@@ -88,6 +88,21 @@ fn keep_file_copies_to_originals_by_hash_and_dedupes() {
     assert_eq!(names.len(), 1, "{names:?}");
 }
 
+/// Spec D9: what a paired phone keeps is the person's own, trusted and labelled by its source.
+#[test]
+fn phone_keeps_are_trusted() {
+    let f = fixture();
+    let item = new_item(
+        f.engine
+            .keep_text("Bin day moved to Thursday", Source::Phone)
+            .unwrap(),
+    );
+    assert_eq!(item.source, Source::Phone);
+    assert_eq!(item.trust, Trust::Trusted);
+    let again = f.engine.get_item(&item.id).unwrap();
+    assert_eq!((again.source, again.trust), (Source::Phone, Trust::Trusted));
+}
+
 #[test]
 fn trust_follows_the_source_table() {
     let f = fixture();
@@ -101,6 +116,7 @@ fn trust_follows_the_source_table() {
         (Source::Recording, Trust::Trusted),
         (Source::Agent, Trust::Untrusted),
         (Source::Setup, Trust::Trusted),
+        (Source::Phone, Trust::Trusted),
     ];
     for (i, (source, trust)) in cases.into_iter().enumerate() {
         assert_eq!(nocturne_engine::trust_for(source), trust);

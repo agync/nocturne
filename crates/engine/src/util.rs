@@ -194,6 +194,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn phone_source_round_trips() {
+        use nocturne_contract::Source;
+        assert_eq!(enum_str(&Source::Phone), "phone");
+        assert_eq!(parse_enum::<Source>("phone").unwrap(), Source::Phone);
+    }
+
+    #[test]
+    fn remote_ledger_kinds_round_trip() {
+        use nocturne_contract::LedgerKind;
+        for (kind, text) in [
+            (LedgerKind::RemoteHelper, "remoteHelper"),
+            (LedgerKind::RemoteOnOff, "remoteOnOff"),
+        ] {
+            assert_eq!(enum_str(&kind), text);
+            assert_eq!(parse_enum::<LedgerKind>(text).unwrap(), kind);
+        }
+    }
+
+    #[test]
     fn keys_strip_leading_articles() {
         assert_eq!(
             key_of("  The   Dentist appointment "),

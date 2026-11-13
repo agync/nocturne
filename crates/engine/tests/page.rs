@@ -505,7 +505,7 @@ fn audio_and_print_editions_exclude_private_memories_and_the_screen_shows_them()
         .unwrap();
     assert_eq!(lines(&screen).len(), 3);
     assert_eq!(screen.private_skipped, 0);
-    for edition in [Edition::Audio, Edition::Print] {
+    for edition in [Edition::Audio, Edition::Print, Edition::Phone] {
         let p = f.engine.compose_page(date("2026-11-14"), edition).unwrap();
         let ls = lines(&p);
         assert_eq!(ls.len(), 1, "{edition:?}");
@@ -850,7 +850,7 @@ fn audio_and_print_never_carry_a_headline_written_with_private_content() {
     assert_eq!(audio.headline, "News about Zebrafish47");
 
     f.engine.set_private(&secret, true).unwrap();
-    for edition in [Edition::Audio, Edition::Print] {
+    for edition in [Edition::Audio, Edition::Print, Edition::Phone] {
         let p = f
             .engine
             .page_for(Some(date("2026-11-14")), edition)
@@ -903,4 +903,61 @@ fn audio_and_print_never_carry_a_headline_written_with_private_content() {
         .unwrap();
     assert!(p.question.is_none());
     assert_eq!(p.headline, "Sunday 15 November");
+}
+
+/// What a phone lists: the template headline once a line is private, and only public needs-you
+/// lines in the count, the same count its phone edition of the page gives.
+#[test]
+fn phone_summaries_never_count_or_headline_private_lines() {
+    let f = fixture();
+    learn(
+        &f.engine,
+        "g",
+        cand(
+            "Gran",
+            Predicate::Promised,
+            "a call",
+            "You promised Gran a call.",
+        ),
+    );
+    let (_, errand) = learn(
+        &f.engine,
+        "pr",
+        cand(
+            "Secret errand",
+            Predicate::Promised,
+            "Leo",
+            "You promised Leo something private.",
+        ),
+    );
+    let mut page = compose(&f, "2026-11-14");
+    page.headline = "Zebrafish47 and Gran".into();
+    f.engine.save_page(&page).unwrap();
+
+    let screen = f.engine.pages_for(Edition::Screen).unwrap();
+    assert_eq!(screen, f.engine.pages().unwrap());
+    assert_eq!(screen[0].needs_you, 2);
+    assert_eq!(
+        f.engine.pages_for(Edition::Phone).unwrap(),
+        screen,
+        "nothing private yet"
+    );
+
+    f.engine.set_private(&errand, true).unwrap();
+    let phone = f.engine.pages_for(Edition::Phone).unwrap();
+    assert_eq!(phone.len(), 1);
+    assert_eq!(phone[0].needs_you, 1);
+    assert_eq!(phone[0].headline, "Saturday 14 November");
+    let json = serde_json::to_string(&phone).unwrap().to_lowercase();
+    assert!(!json.contains("zebrafish47"), "{json}");
+    let edition = f
+        .engine
+        .page_for(Some(date("2026-11-14")), Edition::Phone)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        nocturne_engine::needs_you_count(&edition),
+        phone[0].needs_you
+    );
+    assert_eq!(f.engine.pages_for(Edition::Screen).unwrap()[0].needs_you, 2);
 }

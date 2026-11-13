@@ -21,6 +21,7 @@ mod lifecycle;
 mod memory;
 mod mind;
 mod page;
+mod remote;
 mod retrieve;
 mod rows;
 mod settings;
@@ -39,7 +40,7 @@ pub use mind::{
 };
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
-pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP};
+pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count};
 pub use types::*;
 
 use std::path::{Path, PathBuf};
