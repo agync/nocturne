@@ -179,7 +179,7 @@ describe("Fading & let go", () => {
     motion(true);
     await open();
     await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
-    await userEvent.click(screen.getByRole("button", { name: "Forget 1 completely…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete 1…" }));
     const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
     expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
@@ -203,7 +203,7 @@ describe("Fading & let go", () => {
         }),
     );
     await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
-    await userEvent.click(screen.getByRole("button", { name: "Forget 1 completely…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Delete 1…" }));
     const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
     act(() => {

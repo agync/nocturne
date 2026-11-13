@@ -8,7 +8,7 @@
   "fading.keepIt.named": "Keep it: {sentence}",
   "fading.bringBack.named": "Bring back: {sentence}",
   "fading.bulk.bringBack": "Bring back {count}",
-  "fading.bulk.forget": "Forget {count} completely…",
+  "fading.bulk.forget": "Delete {count}…",
   "fading.letGo.tonight": "let go tonight",
   "fading.letGo.days": "let go in {count, plural, one {# day} other {# days}}",
   "fading.letGo.weeks": "let go in {count, plural, one {# week} other {# weeks}}",

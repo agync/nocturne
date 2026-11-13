@@ -4,6 +4,7 @@ import { useQueryParam } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { paceDays } from "../../copy/pace";
 import { t } from "../../copy/t";
@@ -185,135 +186,133 @@ export default function Fading() {
   const nothing = fading.length === 0 && letGo.length === 0;
 
   return (
-    <div className={styles.frame}>
-      <div className={styles.card}>
-        <h1 ref={title} tabIndex={-1} className={`t-page-title ${styles.title}`}>
-          {t("fading.title")}
-        </h1>
-        <p className={`t-ui-body ${styles.explain}`}>
-          {t("fading.explain", { fade: days.fade, letGo: days.letGo })}
-        </p>
-        <hr className={styles.rule} />
+    <ScreenSheet>
+      <h1 ref={title} tabIndex={-1} className={`t-page-title ${styles.title}`}>
+        {t("fading.title")}
+      </h1>
+      <p className={`t-ui-body ${styles.explain}`}>
+        {t("fading.explain", { fade: days.fade, letGo: days.letGo })}
+      </p>
+      <hr className={styles.rule} />
 
-        {nothing ? <p className={styles.empty}>{t("fading.empty.all")}</p> : null}
+      {nothing ? <p className={styles.empty}>{t("fading.empty.all")}</p> : null}
 
-        {!nothing ? (
-          <section className={styles.section} aria-labelledby={fadingId}>
-            <div className={styles.head}>
-              <h2 id={fadingId} className={`t-section ${styles.heading}`}>
-                {t("fading.section.fading")}
-              </h2>
-            </div>
-            {fading.length === 0 ? (
-              <p className={styles.empty}>{t("fading.empty.fading")}</p>
-            ) : (
-              <ul className={styles.list}>
-                {fading.map((m) => (
-                  <li
-                    key={m.id}
-                    className={styles.row}
-                    data-row-id={m.id}
-                    data-leaving={leaving.has(m.id)}
-                  >
-                    <div className={styles.text}>
-                      <span className={styles.sentence}>{m.sentence}</span>
-                      <span className={styles.meta}>{fadingMeta(m, today, days.letGo)}</span>
-                    </div>
-                    <Button
-                      variant="quiet"
-                      aria-label={t("fading.keepIt.named", { sentence: m.sentence })}
-                      aria-disabled={working.has(m.id) || leaving.has(m.id)}
-                      onClick={() => void keepIt(m)}
-                    >
-                      {t("fading.keepIt")}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : null}
-
-        {!nothing ? (
-          <section className={styles.section} aria-labelledby={letGoId}>
-            <div className={styles.head}>
-              <h2
-                id={letGoId}
-                ref={letGoHeading}
-                tabIndex={-1}
-                className={`t-section ${styles.heading}`}
-              >
-                {chosen.length > 0
-                  ? t("fading.section.letGo.selected", { count: chosen.length })
-                  : t("fading.section.letGo", { count: letGo.length })}
-              </h2>
-              {chosen.length > 0 ? (
-                <div className={styles.bulk}>
+      {!nothing ? (
+        <section className={styles.section} aria-labelledby={fadingId}>
+          <div className={styles.head}>
+            <h2 id={fadingId} className={`t-section ${styles.heading}`}>
+              {t("fading.section.fading")}
+            </h2>
+          </div>
+          {fading.length === 0 ? (
+            <p className={styles.empty}>{t("fading.empty.fading")}</p>
+          ) : (
+            <ul className={styles.list}>
+              {fading.map((m) => (
+                <li
+                  key={m.id}
+                  className={styles.row}
+                  data-row-id={m.id}
+                  data-leaving={leaving.has(m.id)}
+                >
+                  <div className={styles.text}>
+                    <span className={styles.sentence}>{m.sentence}</span>
+                    <span className={styles.meta}>{fadingMeta(m, today, days.letGo)}</span>
+                  </div>
                   <Button
-                    variant="primary"
-                    aria-disabled={chosen.some((id) => working.has(id) || leaving.has(id))}
-                    onClick={() => void bringBack(chosen)}
+                    variant="quiet"
+                    aria-label={t("fading.keepIt.named", { sentence: m.sentence })}
+                    aria-disabled={working.has(m.id) || leaving.has(m.id)}
+                    onClick={() => void keepIt(m)}
                   >
-                    {t("fading.bulk.bringBack", { count: chosen.length })}
+                    {t("fading.keepIt")}
                   </Button>
-                  <Button variant="forget" onClick={() => setForgetting(chosen)}>
-                    {t("fading.bulk.forget", { count: chosen.length })}
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-            {letGo.length === 0 ? (
-              <p className={styles.empty}>{t("fading.empty.letGo")}</p>
-            ) : (
-              <ul className={styles.list}>
-                {letGo.map((m) => (
-                  <li
-                    key={m.id}
-                    className={styles.row}
-                    data-row-id={m.id}
-                    data-leaving={leaving.has(m.id)}
-                  >
-                    <Checkbox
-                      label={m.sentence}
-                      hint={letGoMeta(m)}
-                      checked={selected.has(m.id)}
-                      onChange={(on) => toggle(m.id, on)}
-                    />
-                    <Button
-                      variant="quiet"
-                      aria-label={t("fading.bringBack.named", { sentence: m.sentence })}
-                      aria-disabled={working.has(m.id) || leaving.has(m.id)}
-                      onClick={() => void bringBack([m.id])}
-                    >
-                      {t("button.bringBack")}
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
 
-        {forgetting ? (
-          <ForgetDialog
-            memoryIds={forgetting}
-            defaultIncludeOriginals
-            onDone={() => {
-              forgotten.current = forgetting;
-              // Leaving the screen while it works means nothing here will close the dialog, so
-              // the lists are refreshed now instead of at the next visit.
-              if (!alive.current)
-                refresh("fading", "memories", "entities", "page", "pages", "status", "needsYou");
-            }}
-            onClose={() => {
-              setForgetting(null);
-              const ids = forgotten.current;
-              forgotten.current = [];
-              if (ids.length > 0) leave(ids);
-            }}
-          />
-        ) : null}
-      </div>
-    </div>
+      {!nothing ? (
+        <section className={styles.section} aria-labelledby={letGoId}>
+          <div className={styles.head}>
+            <h2
+              id={letGoId}
+              ref={letGoHeading}
+              tabIndex={-1}
+              className={`t-section ${styles.heading}`}
+            >
+              {chosen.length > 0
+                ? t("fading.section.letGo.selected", { count: chosen.length })
+                : t("fading.section.letGo", { count: letGo.length })}
+            </h2>
+            {chosen.length > 0 ? (
+              <div className={styles.bulk}>
+                <Button
+                  variant="primary"
+                  aria-disabled={chosen.some((id) => working.has(id) || leaving.has(id))}
+                  onClick={() => void bringBack(chosen)}
+                >
+                  {t("fading.bulk.bringBack", { count: chosen.length })}
+                </Button>
+                <Button variant="forget" onClick={() => setForgetting(chosen)}>
+                  {t("fading.bulk.forget", { count: chosen.length })}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          {letGo.length === 0 ? (
+            <p className={styles.empty}>{t("fading.empty.letGo")}</p>
+          ) : (
+            <ul className={styles.list}>
+              {letGo.map((m) => (
+                <li
+                  key={m.id}
+                  className={styles.row}
+                  data-row-id={m.id}
+                  data-leaving={leaving.has(m.id)}
+                >
+                  <Checkbox
+                    label={m.sentence}
+                    hint={letGoMeta(m)}
+                    checked={selected.has(m.id)}
+                    onChange={(on) => toggle(m.id, on)}
+                  />
+                  <Button
+                    variant="quiet"
+                    aria-label={t("fading.bringBack.named", { sentence: m.sentence })}
+                    aria-disabled={working.has(m.id) || leaving.has(m.id)}
+                    onClick={() => void bringBack([m.id])}
+                  >
+                    {t("button.bringBack")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
+
+      {forgetting ? (
+        <ForgetDialog
+          memoryIds={forgetting}
+          defaultIncludeOriginals
+          onDone={() => {
+            forgotten.current = forgetting;
+            // Leaving the screen while it works means nothing here will close the dialog, so
+            // the lists are refreshed now instead of at the next visit.
+            if (!alive.current)
+              refresh("fading", "memories", "entities", "page", "pages", "status", "needsYou");
+          }}
+          onClose={() => {
+            setForgetting(null);
+            const ids = forgotten.current;
+            forgotten.current = [];
+            if (ids.length > 0) leave(ids);
+          }}
+        />
+      ) : null}
+    </ScreenSheet>
   );
 }
