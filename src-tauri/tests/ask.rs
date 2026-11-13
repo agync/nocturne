@@ -121,6 +121,18 @@ fn bold_spans_that_do_not_match_the_cited_memories_are_dropped() {
     assert_eq!(done.receipts.len(), 2);
 }
 
+/// As many bold spans as memories is not enough: when the spans do not go with the memories in
+/// order (both stand for the first), the bold is dropped.
+#[test]
+fn bold_spans_that_stand_for_other_memories_than_their_place_are_dropped() {
+    let (h, _) = two_memories(AnswerMode::BoldBothForTheFirst);
+    let (text, done) = done_delta(&h, "When does Leo swim with Coach Dee?");
+    assert_eq!(done.phase, AskPhase::Done);
+    assert_eq!(text.matches("**").count(), 4);
+    assert_eq!(done.memory_ids.len(), 2);
+    assert!(done.plain);
+}
+
 /// Review focus 2: two asks in flight keep their deltas apart.
 #[test]
 fn concurrent_asks_do_not_mix_their_deltas() {

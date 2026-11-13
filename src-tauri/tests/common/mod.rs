@@ -329,6 +329,8 @@ pub enum AnswerMode {
     BusyAfterStreaming,
     /// Cites the facts last first, the first `n` of them in bold.
     Bold(usize),
+    /// Cites two facts, each with a bold span, but both spans stand for the first fact.
+    BoldBothForTheFirst,
 }
 
 /// A scripted mind with knobs: how it answers and how long it takes to wake.
@@ -404,6 +406,7 @@ impl Mind for TestMind {
                 AnswerMode::NotSure => Ok(AnswerMeta {
                     cited: Vec::new(),
                     not_sure: true,
+                    spans: Vec::new(),
                 }),
                 AnswerMode::Slow(d) => {
                     tokio::time::sleep(d).await;
@@ -426,9 +429,22 @@ impl Mind for TestMind {
                         let _ = out.send(words).await;
                         cited.push(f.id.clone());
                     }
+                    let spans = cited.iter().take(n).cloned().collect();
                     Ok(AnswerMeta {
                         cited,
                         not_sure: false,
+                        spans,
+                    })
+                }
+                AnswerMode::BoldBothForTheFirst => {
+                    let (a, b) = (&facts[0], &facts[1]);
+                    let _ = out
+                        .send(format!("**{}** **{}**", a.sentence, b.sentence))
+                        .await;
+                    Ok(AnswerMeta {
+                        cited: vec![a.id.clone(), b.id.clone()],
+                        not_sure: false,
+                        spans: vec![a.id.clone(), a.id.clone()],
                     })
                 }
                 AnswerMode::CitesNothing => {

@@ -343,7 +343,7 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
     if let Err(e) = blocking(move || engine.mark_used(&used, UseKind::Answer)).await {
         tracing::warn!("could not note the memories used: {e}");
     }
-    let plain = !bold_matches(&said, ids.len());
+    let plain = !bold_matches(&said, &meta.spans, &ids);
     sink.send(AskPhase::Done, |d| {
         d.receipts = receipts;
         d.memory_ids = ids;
@@ -351,23 +351,47 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
     });
 }
 
-/// Whether the bold spans in `text` can stand one for one for `cited` memories: none at all, or
-/// exactly one each, every one closed.
-fn bold_matches(text: &str, cited: usize) -> bool {
+/// Whether the bold spans in `text` can stand one for one, in order, for the `cited` memories
+/// (the interface reads the nth span as the nth memory): there is no bold, or the mind paired
+/// every span with the memory the next citation after it names, and that pairing is `cited`.
+fn bold_matches(text: &str, spans: &[String], cited: &[String]) -> bool {
     let markers = text.matches("**").count();
-    markers == 0 || (markers.is_multiple_of(2) && markers / 2 == cited)
+    markers == 0 || (markers.is_multiple_of(2) && markers / 2 == spans.len() && spans == cited)
 }
 
 #[cfg(test)]
 mod tests {
     use super::bold_matches;
 
+    fn ids(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
     #[test]
-    fn bold_spans_match_one_for_one_or_not_at_all() {
-        assert!(bold_matches("On Thursday.", 1));
-        assert!(bold_matches("On **Thursday** with **Marek**.", 2));
-        assert!(!bold_matches("On **Thursday** with Marek.", 2));
-        assert!(!bold_matches("On **Thursday** with **Marek**.", 1));
-        assert!(!bold_matches("On **Thursday with Marek.", 1));
+    fn bold_spans_match_one_for_one_in_order_or_not_at_all() {
+        let ab = ids(&["a", "b"]);
+        assert!(bold_matches("On Thursday.", &[], &ab));
+        assert!(bold_matches("On **Thursday** with **Marek**.", &ab, &ab));
+        assert!(!bold_matches(
+            "On **Thursday** with **Marek**.",
+            &ids(&["b", "a"]),
+            &ab
+        ));
+        assert!(!bold_matches(
+            "On **Thursday** with **Marek**.",
+            &ids(&["a", "a"]),
+            &ab
+        ));
+        assert!(!bold_matches(
+            "On **Thursday** with Marek.",
+            &ids(&["a"]),
+            &ab
+        ));
+        assert!(!bold_matches("On **Thursday** with **Marek**.", &[], &ab));
+        assert!(!bold_matches(
+            "On **Thursday with Marek.",
+            &ids(&["a"]),
+            &ids(&["a"])
+        ));
     }
 }

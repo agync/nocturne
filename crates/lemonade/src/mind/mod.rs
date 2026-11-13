@@ -204,6 +204,7 @@ impl LemonadeMind {
             return Ok(AnswerMeta {
                 cited: Vec::new(),
                 not_sure: true,
+                spans: Vec::new(),
             });
         }
         let model = self.warm_mind().await?;
@@ -292,10 +293,19 @@ impl LemonadeMind {
                 .map(|f| f.id.clone())
                 .collect()
         };
+        let spans = match filter.bold_facts() {
+            Some(facts_of_spans) if !not_sure => facts_of_spans
+                .iter()
+                .filter_map(|n| facts.get(n - 1))
+                .map(|f| f.id.clone())
+                .collect(),
+            _ => Vec::new(),
+        };
         let cited_none = cited.is_empty();
         Ok(AnswerMeta {
             cited,
             not_sure: not_sure || !sent_any || cited_none,
+            spans,
         })
     }
 

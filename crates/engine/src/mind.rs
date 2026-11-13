@@ -45,6 +45,9 @@ pub struct ExtractContext {
 pub struct AnswerMeta {
     pub cited: Vec<MemoryId>,
     pub not_sure: bool,
+    /// The memory each bold span in the answer stands for, in order: the one cited by the next
+    /// marker after it. Empty when there is no bold, or when a span could not be paired.
+    pub spans: Vec<MemoryId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -418,6 +421,7 @@ mod fake {
                 Ok(AnswerMeta {
                     cited: facts.iter().map(|f| f.id.clone()).collect(),
                     not_sure: facts.is_empty(),
+                    spans: Vec::new(),
                 })
             })
         }

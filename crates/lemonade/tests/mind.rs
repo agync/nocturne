@@ -404,7 +404,13 @@ async fn answer_asks_for_one_bold_phrase_per_cited_fact_and_keeps_it() {
         text,
         "You see Sam on **Tuesday**; the dentist is on **Monday**."
     );
-    assert_eq!(meta.unwrap().cited, ["b", "a"]);
+    let meta = meta.unwrap();
+    assert_eq!(meta.cited, ["b", "a"]);
+    assert_eq!(
+        meta.spans,
+        ["b", "a"],
+        "each span goes with the marker after it"
+    );
     let req = &r.seen("/v1/chat/completions").await[0]["body"];
     let system = req["messages"][0]["content"].as_str().unwrap();
     assert!(
