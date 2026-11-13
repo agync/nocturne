@@ -127,6 +127,23 @@ describe("What Nocturne remembers", () => {
     expect(await screen.findByText("Leo is allergic to peanuts.")).toBeInTheDocument();
   });
 
+  it("keeps the typed correction in the box when saving fails", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "correctMemory").mockRejectedValueOnce(new Error("no"));
+    await openLeo(engine);
+    await userEvent.click(screen.getByRole("button", { name: "Leo is allergic to nuts." }));
+    await userEvent.click(screen.getByRole("button", { name: "Correct" }));
+    const field = screen.getByRole("textbox", { name: "What should it say?" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "Leo is allergic to peanuts.{Enter}");
+    expect(await screen.findByText("That didn’t work. Nothing was changed.")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "What should it say?" })).toHaveValue(
+      "Leo is allergic to peanuts.",
+    );
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText("Corrected.")).toBeInTheDocument();
+  });
+
   it("keeps forever and marks private, as pressed buttons", async () => {
     const { engine } = await openLeo();
     const keep = vi.spyOn(engine, "setKeepForever");

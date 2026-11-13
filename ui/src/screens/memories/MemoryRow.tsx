@@ -46,14 +46,16 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
     if (editing) field.current?.focus();
   }, [editing]);
 
-  const run = async (work: () => Promise<unknown>, message: string) => {
+  const run = async (work: () => Promise<unknown>, message: string): Promise<boolean> => {
     setBusy(true);
     try {
       await work();
       refresh(...MEMORY_KEYS);
       toast.show({ message });
+      return true;
     } catch {
       toast.show({ message: t("memories.failed") });
+      return false;
     } finally {
       setBusy(false);
     }
@@ -66,7 +68,8 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
       button.current?.focus();
       return;
     }
-    await run(() => engine.correctMemory(m.id, text), t("memory.correct.saved"));
+    // A failed save keeps what was typed, so it can be sent again.
+    if (!(await run(() => engine.correctMemory(m.id, text), t("memory.correct.saved")))) return;
     setEditing(false);
     button.current?.focus();
   };
