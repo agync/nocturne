@@ -6,7 +6,20 @@ export function privacySeed(
 ): Pick<PrivacyView, "checkedAt" | "ledger" | "keptBytes" | "mindBytes" | "dataDir"> {
   return {
     checkedAt: new Date(now.getTime() - 2000).toISOString(),
-    ledger: [{ kind: "setup", label: "Nocturne’s mind", bytes: 8.4e9, at: now.toISOString() }],
+    ledger: [
+      {
+        kind: "setup",
+        label: "Nocturne’s mind",
+        bytes: 8.4e9,
+        at: new Date(now.getTime() - 86_400_000).toISOString(),
+      },
+      {
+        kind: "appUpdate",
+        label: "1.0.3",
+        bytes: 84e6,
+        at: new Date(now.getTime() - 7 * 86_400_000).toISOString(),
+      },
+    ],
     keptBytes: 4.3e9,
     mindBytes: 8.4e9,
     dataDir: "Documents/Nocturne",
