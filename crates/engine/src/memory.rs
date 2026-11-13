@@ -728,6 +728,13 @@ impl Engine {
                 args.push(e.clone());
                 sql.push_str(&format!(" AND m.entity_id = ?{}", args.len()));
             }
+            if let Some(i) = &filter.item_id {
+                args.push(i.clone());
+                sql.push_str(&format!(
+                    " AND m.id IN (SELECT memory_id FROM memory_sources WHERE item_id = ?{})",
+                    args.len()
+                ));
+            }
             if let Some(s) = &filter.status {
                 args.push(enum_str(s));
                 sql.push_str(&format!(" AND m.status = ?{}", args.len()));
@@ -999,12 +1006,26 @@ impl Engine {
 
     /// People, places and things the person has kept things about.
     pub fn entities(&self, kind: Option<EntityKind>) -> Result<Vec<EntityView>> {
-        self.read(|conn| {
+        self.entities_matching(kind, None)
+    }
+
+    /// Entities whose name or role contains `query` (case-insensitive; blank means all),
+    /// optionally of one kind. Most memories first, then by name.
+    pub fn entities_matching(
+        &self,
+        kind: Option<EntityKind>,
+        query: Option<&str>,
+    ) -> Result<Vec<EntityView>> {
+        let needle = query
+            .map(|q| q.trim().to_lowercase())
+            .filter(|q| !q.is_empty());
+        let mut out: Vec<EntityView> = self.read(|conn| {
             let mut sql = String::from(
                 "SELECT e.id, e.kind, e.name, e.role, \
-                 (SELECT COUNT(*) FROM memories m WHERE m.entity_id = e.id AND m.superseded_at IS NULL), \
+                 (SELECT COUNT(*) FROM memories m WHERE m.entity_id = e.id AND m.superseded_at IS NULL \
+                  AND m.forgetting = 0), \
                  (SELECT COUNT(DISTINCT s.item_id) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-                  WHERE m.entity_id = e.id AND m.superseded_at IS NULL) \
+                  WHERE m.entity_id = e.id AND m.superseded_at IS NULL AND m.forgetting = 0) \
                  FROM entities e",
             );
             let mut args = Vec::new();
@@ -1012,7 +1033,6 @@ impl Engine {
                 args.push(enum_str(&k));
                 sql.push_str(" WHERE e.kind = ?1");
             }
-            sql.push_str(" ORDER BY e.name COLLATE NOCASE, e.id");
             let mut stmt = conn.prepare(&sql)?;
             let rows = stmt.query_map(rusqlite::params_from_iter(args.iter()), |r| {
                 Ok(EntityView {
@@ -1025,7 +1045,22 @@ impl Engine {
                 })
             })?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
-        })
+        })?;
+        if let Some(n) = &needle {
+            out.retain(|e| {
+                e.name.to_lowercase().contains(n.as_str())
+                    || e.role
+                        .as_ref()
+                        .is_some_and(|r| r.to_lowercase().contains(n.as_str()))
+            });
+        }
+        out.sort_by(|a, b| {
+            b.memory_count
+                .cmp(&a.memory_count)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        Ok(out)
     }
 
     pub fn entity(&self, id: &str) -> Result<(EntityView, Vec<MemoryView>)> {

@@ -81,19 +81,20 @@ struct NewItem<'a> {
     origin: Option<&'a str>,
 }
 
-fn find_by_sha(tx: &Transaction<'_>, sha: &str) -> Result<Option<ItemView>> {
+fn find_by_sha(tx: &Transaction<'_>, originals: &Path, sha: &str) -> Result<Option<ItemView>> {
     let id: Option<String> = tx
         .query_row("SELECT id FROM items WHERE sha256 = ?1", [sha], |r| {
             r.get(0)
         })
         .optional()?;
     match id {
-        Some(id) => get_item_view(tx, &id),
+        Some(id) => get_item_view(tx, originals, &id),
         None => Ok(None),
     }
 }
 
-fn insert_item(tx: &Transaction<'_>, now: &str, n: &NewItem<'_>) -> Result<ItemView> {
+/// Insert the row and return its id; the view is read after any file has been put in place.
+fn insert_item(tx: &Transaction<'_>, now: &str, n: &NewItem<'_>) -> Result<String> {
     let id = new_id("itm");
     tx.execute(
         "INSERT INTO items(id, kind, source, trust, sha256, ext, mime, file_name, title, kept_at, \
@@ -113,7 +114,7 @@ fn insert_item(tx: &Transaction<'_>, now: &str, n: &NewItem<'_>) -> Result<ItemV
             n.origin,
         ],
     )?;
-    get_item_view(tx, &id)?.ok_or_else(|| Error::not_found(&id))
+    Ok(id)
 }
 
 impl Engine {
@@ -135,12 +136,13 @@ impl Engine {
         } else {
             ItemKind::Text
         };
+        let originals = self.originals_dir();
         self.write(|tx| {
-            if let Some(item) = find_by_sha(tx, &sha)? {
+            if let Some(item) = find_by_sha(tx, &originals, &sha)? {
                 return Ok(Kept::Duplicate { item });
             }
             let title = title_of(text);
-            let item = insert_item(
+            let id = insert_item(
                 tx,
                 &now,
                 &NewItem {
@@ -155,6 +157,7 @@ impl Engine {
                     origin,
                 },
             )?;
+            let item = get_item_view(tx, &originals, &id)?.ok_or_else(|| Error::not_found(&id))?;
             Ok(Kept::New { item })
         })
     }
@@ -190,10 +193,10 @@ impl Engine {
         let now = fmt_ts(self.clock().now());
 
         let result = self.write(|tx| {
-            if let Some(item) = find_by_sha(tx, &sha)? {
+            if let Some(item) = find_by_sha(tx, &originals, &sha)? {
                 return Ok(Kept::Duplicate { item });
             }
-            let item = insert_item(
+            let id = insert_item(
                 tx,
                 &now,
                 &NewItem {
@@ -209,6 +212,7 @@ impl Engine {
                 },
             )?;
             std::fs::rename(&tmp, &dest)?;
+            let item = get_item_view(tx, &originals, &id)?.ok_or_else(|| Error::not_found(&id))?;
             Ok(Kept::New { item })
         });
         match &result {
@@ -222,6 +226,7 @@ impl Engine {
 
     /// Items, newest first.
     pub fn items(&self, filter: ItemFilter) -> Result<Vec<ItemView>> {
+        let originals = self.originals_dir();
         self.read(|conn| {
             let mut sql = format!("SELECT {ITEM_COLS} FROM items i WHERE 1=1");
             let mut args: Vec<String> = Vec::new();
@@ -241,13 +246,17 @@ impl Engine {
                 sql.push_str(&format!(" LIMIT {limit}"));
             }
             let mut stmt = conn.prepare(&sql)?;
-            let rows = stmt.query_map(rusqlite::params_from_iter(args.iter()), item_view)?;
+            let rows = stmt.query_map(
+                rusqlite::params_from_iter(args.iter()),
+                item_view(&originals),
+            )?;
             Ok(rows.collect::<rusqlite::Result<_>>()?)
         })
     }
 
     pub fn get_item(&self, id: &str) -> Result<ItemView> {
-        self.read(|conn| get_item_view(conn, id))?
+        let originals = self.originals_dir();
+        self.read(|conn| get_item_view(conn, &originals, id))?
             .ok_or_else(|| Error::not_found(format!("item {id}")))
     }
 

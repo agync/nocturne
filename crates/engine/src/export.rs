@@ -231,7 +231,7 @@ impl Engine {
                     "SELECT {} FROM items i ORDER BY i.kept_at, i.id",
                     crate::rows::ITEM_COLS
                 ))?;
-                stmt.query_map([], crate::rows::item_view)?
+                stmt.query_map([], crate::rows::item_view(&originals_src))?
                     .collect::<rusqlite::Result<Vec<_>>>()?
             };
             for ((id, sha, ext, file_name, origin, metadata), view) in rows.into_iter().zip(views) {
@@ -249,6 +249,10 @@ impl Engine {
                         copy_name = Some(format!("originals/{target}"));
                     }
                 }
+                // The export names its own copy; where the store keeps the original is not part
+                // of the person's data.
+                let mut view = view;
+                view.original_path = None;
                 let mut v = serde_json::to_value(&view)?;
                 v["sha256"] = json!(sha);
                 v["origin"] = json!(origin);

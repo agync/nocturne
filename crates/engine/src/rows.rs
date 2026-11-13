@@ -2,7 +2,9 @@
 
 use nocturne_contract::{Certainty, ItemView, MemoryStatus, MemoryView, Receipt, Span, Trust};
 use rusqlite::{Connection, Row};
+use std::path::Path;
 
+use crate::capture::original_path;
 use crate::error::Result;
 use crate::util::parse_enum;
 
@@ -24,9 +26,27 @@ pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.
     i.reason, i.duration_ms, i.pages, i.file_name, i.private, i.understood_in_ms, i.summary, \
     i.text, i.language, \
     (SELECT COUNT(*) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-     WHERE s.item_id = i.id AND m.superseded_at IS NULL)";
+     WHERE s.item_id = i.id AND m.superseded_at IS NULL), \
+    i.sha256, i.ext";
 
-pub(crate) fn item_view(row: &Row<'_>) -> rusqlite::Result<ItemView> {
+/// Builds an `ItemView` from an `ITEM_COLS` row. `originals` is the directory the stored files
+/// live in; the view names the original only while that file exists.
+pub(crate) fn item_view(originals: &Path) -> impl Fn(&Row<'_>) -> rusqlite::Result<ItemView> + '_ {
+    move |row| {
+        let mut view = item_view_row(row)?;
+        if view.has_original {
+            let sha: String = row.get(17)?;
+            let ext: Option<String> = row.get(18)?;
+            let path = original_path(originals, &sha, ext.as_deref());
+            if path.is_file() {
+                view.original_path = Some(path.to_string_lossy().into_owned());
+            }
+        }
+        Ok(view)
+    }
+}
+
+fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
     Ok(ItemView {
         id: row.get(0)?,
         kind: de(row.get(1)?)?,
@@ -40,7 +60,6 @@ pub(crate) fn item_view(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         pages: row.get(9)?,
         has_original: row.get::<_, Option<String>>(10)?.is_some(),
         file_name: row.get(10)?,
-        // Filled by the engine methods that know the data directory.
         original_path: None,
         private: row.get(11)?,
         understood_in_ms: row.get(12)?,
@@ -51,9 +70,13 @@ pub(crate) fn item_view(row: &Row<'_>) -> rusqlite::Result<ItemView> {
     })
 }
 
-pub(crate) fn get_item_view(conn: &Connection, id: &str) -> Result<Option<ItemView>> {
+pub(crate) fn get_item_view(
+    conn: &Connection,
+    originals: &Path,
+    id: &str,
+) -> Result<Option<ItemView>> {
     let sql = format!("SELECT {ITEM_COLS} FROM items i WHERE i.id = ?1");
-    match conn.query_row(&sql, [id], item_view) {
+    match conn.query_row(&sql, [id], item_view(originals)) {
         Ok(v) => Ok(Some(v)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
         Err(e) => Err(e.into()),
