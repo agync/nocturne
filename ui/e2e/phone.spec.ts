@@ -306,7 +306,7 @@ test("ask: streams, shows where it came from, opens the original and comes back 
   page,
   phoneUrl,
 }) => {
-  await page.goto(`${phoneUrl}/?s=connected`);
+  await page.goto(`${phoneUrl}/?s=connected&pace=250`);
   await page.getByRole("button", { name: /^Ask/ }).click();
   await axeClean(page);
   await page.getByLabel("Your question").fill("What do I need for Leo’s school trip?");
