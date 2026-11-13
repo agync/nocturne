@@ -213,3 +213,11 @@ download ledger. Because a live count of what a program sends needs privileges t
 have, the proof is a release-time check: the app and the engine run in a private network
 namespace under `strace` and any attempt to reach beyond the computer fails the release
 ([decision 0009](/adr/0009-packaging.md)).
+
+The one exception is Away from home, which is off until the person turns it on. While it is on,
+sealed traffic goes to the person's own paired phones through the connection they chose, and that
+connection's helper makes its own upkeep traffic to its company's servers and relays. The
+listener for phones is local (an owner-only Unix socket, or loopback on Windows), but the feature
+is not: the Tailscale daemon binds UDP on every network interface while on, and both helpers talk to
+their company. The release check allows that only for helper processes and fails it for the app and
+the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home.md)).

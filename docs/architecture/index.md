@@ -5,3 +5,4 @@ runs on the hardware.
 
 - [Runtime](runtime.md) - The components, the embedded Lemonade lifecycle, tiers, the packaged layout, desktop integration and failure modes.
 - [Repository layout](layout.md) - Where each part of Nocturne lives and which direction dependencies run.
+- [Remote access](remote.md) - Away from home: the local listener, the two connections, pairing, the sealed channel and the limits.
