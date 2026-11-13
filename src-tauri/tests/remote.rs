@@ -481,6 +481,30 @@ fn revoked_phone_gets_sealed_revoked() {
 }
 
 #[test]
+fn a_removed_phone_is_answered_sealed_only_so_often() {
+    let p = on();
+    let keys = p.pair("Pixel");
+    let other = p.pair("iPad");
+    p.h.ok("remove_device", json!({"id": keys.id()}));
+    let mut sealed = 0;
+    for _ in 0..LIMIT_FAILED_SESSION_OPEN + 3 {
+        match block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)) {
+            Opened::Revoked => sealed += 1,
+            Opened::Refused => {}
+            other => panic!("{other:?}"),
+        }
+    }
+    assert_eq!(sealed, LIMIT_FAILED_SESSION_OPEN);
+    use nocturne_app_lib::remote::limits::Bucket;
+    assert!(p.hub.core.limits.has(Bucket::FailedOpen, ""));
+    let mut c = p.open(&other, Mode::WebSocket);
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetStatus),
+        RemoteAnswer::Status { .. }
+    ));
+}
+
+#[test]
 fn strangers_trying_codes_do_not_stop_the_persons_pairing() {
     let p = on();
     use nocturne_app_lib::remote::limits::Bucket;

@@ -593,19 +593,33 @@ impl Core {
         };
         // Failed opens are counted by whom they claim to be: per paired phone, or in one shared
         // bucket when they name no paired phone. Failures naming one phone never stop another,
-        // and a verified open never touches either.
-        let claimed = frame
+        // and a verified open never touches either. Every check that needs no key work comes
+        // first, so an open that would be refused anyway costs no key agreement.
+        let named = frame
             .get(HEADER_LEN..HEADER_LEN + DEVICE_ID_LEN)
             .map(crypto::b64)
-            .filter(|id| {
-                engine
-                    .device(id)
-                    .ok()
-                    .flatten()
-                    .is_some_and(|d| d.revoked_at.is_none() && !self.removed(&d.id))
-            })
+            .and_then(|id| engine.device(&id).ok().flatten());
+        let removed = named
+            .as_ref()
+            .is_some_and(|d| d.revoked_at.is_some() || self.removed(&d.id));
+        let claimed = named
+            .as_ref()
+            .filter(|_| !removed)
+            .map(|d| d.id.clone())
             .unwrap_or_default();
-        if !self.limits.has(Bucket::FailedOpen, &claimed) {
+        if removed {
+            // Its sealed REVOKED needs the key agreement: a removed phone is answered so often
+            // a minute, by its own bucket, and refused unsealed after that.
+            let id = named.as_ref().map(|d| d.id.as_str()).unwrap_or_default();
+            if !self
+                .limits
+                .take(Bucket::FailedOpen, &format!("removed:{id}"))
+            {
+                return self.refuse(conv);
+            }
+        } else if !self.limits.has(Bucket::FailedOpen, &claimed)
+            || (!claimed.is_empty() && !self.limits.has(Bucket::SessionOpens, &claimed))
+        {
             return self.refuse(conv);
         }
         let lookup = |id: &crypto::DeviceId| {
