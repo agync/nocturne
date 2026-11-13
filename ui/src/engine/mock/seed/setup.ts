@@ -26,7 +26,7 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
   return {
     tier: "standard",
     ramGib: 32,
-    gpu: "Integrated graphics",
+    gpu: "Radeon 780M (iGPU)",
     npu: false,
     components: [
       { role: "mind", name: "Qwen3.5-9B-GGUF", bytes: 5.9e9, backend: "vulkan", loaded: true },
@@ -40,9 +40,9 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
         loaded: true,
       },
     ],
-    engineVersion: "mock",
-    enginePort: null,
-    engineUptimeSeconds: 0,
+    engineVersion: "8.2.2",
+    enginePort: 8020,
+    engineUptimeSeconds: 273_600,
     restarts: 0,
     storeVersion: 1,
     memoryCount: counts.memories,
@@ -50,6 +50,6 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
     integrityOk: true,
     lastTidy: { from: "02:10", to: "02:16", items: 14, merged: 3, letGo: 3 },
     agents: false,
-    logDir: "logs",
+    logDir: "~/.local/share/nocturne/logs",
   };
 }

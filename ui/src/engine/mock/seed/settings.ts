@@ -5,7 +5,7 @@ export function settingsSeed(): SettingsView {
     pageTime: "07:00",
     delivery: "notify",
     autoPrint: false,
-    voice: "isla",
+    voice: "bf_emma",
     voiceSpeed: 1,
     shortcut: "Ctrl+Shift+Space",
     shortcutAvailable: true,

@@ -1,8 +1,9 @@
 import { useRoute } from "wouter";
-import { Placeholder } from "../Placeholder";
+import { Advanced } from "./Advanced";
+import { Settings } from "./Settings";
 
 /** Serves #/settings and #/settings/advanced. */
-export default function Settings() {
+export default function SettingsScreen() {
   const [advanced] = useRoute("/settings/advanced");
-  return <Placeholder title={advanced ? "screen.advanced.title" : "screen.settings.title"} />;
+  return advanced ? <Advanced /> : <Settings />;
 }
