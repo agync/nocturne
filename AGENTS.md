@@ -10,7 +10,9 @@ The design lives in `docs/` (start at `docs/overview.md` and `docs/design/`).
 1. **No elevation.** Never run `sudo`, a system package manager, or a privileged script unless a
    human explicitly asks.
 2. **Local only.** No telemetry, no cloud calls, no network traffic other than consented model and app
-   downloads. The embedded `lemond` binds loopback with a per-launch key.
+   downloads, and, while the person has turned on Away from home, sealed traffic to their own paired
+   phones through the connection they chose, plus that connection's own traffic to its company's
+   servers and relays to stay connected. The embedded `lemond` binds loopback with a per-launch key.
 3. **No jargon in the interface.** Model, inference, token, NPU, GPU, embedding and graph appear only
    in advanced details views. See `docs/design/experience-principles.md`.
 4. **Receipts or it did not happen.** Every answer and page line cites the original it came from.
