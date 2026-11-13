@@ -182,7 +182,25 @@ describe("PageSheet, a normal day", () => {
       screen.getByRole("link", { name: "Previous page, Thursday 12 November" }),
     ).toHaveAttribute("href", "#/pages/2026-11-12");
     expect(screen.getByText("Tidied 02:10–02:16")).toBeInTheDocument();
+    expect(screen.queryByText(/Sent to the internet/)).toBeNull();
+  });
+
+  it("says nothing was sent only when that was measured, and what is true when it was not", () => {
+    const { rerender } = render(
+      <PageSheet page={today} onAction={vi.fn()} sentToInternet="nothing" />,
+    );
     expect(screen.getByText("Sent to the internet: nothing")).toBeInTheDocument();
+    rerender(<PageSheet page={today} onAction={vi.fn()} sentToInternet="84 MB" />);
+    expect(screen.getByText("Sent to the internet: 84 MB")).toBeInTheDocument();
+    rerender(<PageSheet page={today} onAction={vi.fn()} />);
+    expect(screen.queryByText(/Sent to the internet/)).toBeNull();
+    const footer = screen
+      .getByText(/Nocturne only goes online to download, and asks first\./)
+      .closest("footer") as HTMLElement;
+    expect(within(footer).getByRole("link", { name: "Privacy" })).toHaveAttribute(
+      "href",
+      "#/privacy",
+    );
   });
 
   it("redacts a forgotten line", () => {

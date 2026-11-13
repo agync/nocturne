@@ -60,6 +60,8 @@
   "page.footer.notTidied": "Not tidied yet",
   "page.footer.sent": "Sent to the internet: {amount}",
   "page.footer.sent.nothing": "nothing",
+  "page.footer.unmeasured": "Nocturne only goes online to download, and asks first.",
+  "page.footer.privacy": "Privacy",
   "page.writing.title": "Still writing today’s page",
   "page.writing.past": "This page was still being written. Some of what you kept that day may be missing from it.",
   "page.writing.body": "Nocturne is reading what you kept. This page fills in as it goes.",

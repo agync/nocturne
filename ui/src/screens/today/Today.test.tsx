@@ -98,6 +98,24 @@ describe("the morning page on Today", () => {
     expect(screen.getByRole("button", { name: "Mark as done" })).toBeInTheDocument();
   });
 
+  it("claims nothing was sent to the internet only when that is measured", async () => {
+    const measured = createMockEngine();
+    const real = measured.getStatus.bind(measured);
+    measured.getStatus = async () => ({ ...(await real()), sentMeasured: true });
+    const first = await open(measured);
+    expect(await screen.findByText("Sent to the internet: nothing")).toBeInTheDocument();
+    first.unmount();
+
+    const unmeasured = createMockEngine();
+    const real2 = unmeasured.getStatus.bind(unmeasured);
+    unmeasured.getStatus = async () => ({ ...(await real2()), sentMeasured: false });
+    await open(unmeasured);
+    expect(
+      await screen.findByText(/Nocturne only goes online to download, and asks first\./),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Sent to the internet: nothing/)).toBeNull();
+  });
+
   it("opens an original from a receipt", async () => {
     await open();
     await userEvent.click(

@@ -35,7 +35,7 @@ interface PageSheetProps {
   previousDate?: string | null;
   /** `HH:MM`, for the page-time question. */
   pageTime?: string;
-  /** What has been sent to the internet, already worded: "nothing" or "84 MB". */
+  /** What has been sent to the internet, already worded: "nothing" or "84 MB". Absent when it was not measured. */
   sentToInternet?: string;
   /** How far the overnight tidy has got, while a page is still being written. */
   progress?: WritingProgress | null;
@@ -389,9 +389,16 @@ export function PageSheet({
                   })
                 : t("page.footer.notTidied")}
             </span>
-            <span>
-              {t("page.footer.sent", { amount: sentToInternet ?? t("page.footer.sent.nothing") })}
-            </span>
+            {sentToInternet === undefined ? (
+              <span>
+                {t("page.footer.unmeasured")}{" "}
+                <a className={styles.more} href="#/privacy">
+                  {t("page.footer.privacy")}
+                </a>
+              </span>
+            ) : (
+              <span>{t("page.footer.sent", { amount: sentToInternet })}</span>
+            )}
           </footer>
         </div>
       </article>

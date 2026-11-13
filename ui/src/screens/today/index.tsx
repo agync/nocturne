@@ -183,10 +183,12 @@ function TodayPage({ date }: { date: string | undefined }) {
     );
   }
 
-  const sent =
-    status?.sentMeasured && status.sentToInternetBytes > 0
+  // Only a measured figure is worded; unmeasured reads as what is true, not as "nothing".
+  const sent = status?.sentMeasured
+    ? status.sentToInternetBytes > 0
       ? formatBytes(status.sentToInternetBytes)
-      : undefined;
+      : t("page.footer.sent.nothing")
+    : undefined;
 
   return (
     <div className={styles.frame}>
