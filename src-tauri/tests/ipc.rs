@@ -532,10 +532,69 @@ fn pending_engine_work_is_refused_plainly_not_faked() {
         h.code("snooze", json!({"memoryId": "m", "days": 3})),
         "unavailable"
     );
+}
+
+#[test]
+fn setup_commands_wait_for_the_runtime_lane() {
+    let h = harness();
     assert_eq!(
         h.code("start_setup", json!({"tier": "standard"})),
         "unavailable"
     );
+    assert_eq!(h.code("pause_setup", json!({})), "unavailable");
+    assert_eq!(h.code("resume_setup", json!({})), "unavailable");
+}
+
+/// Commands that need the second round of engine work (feature `engine-round2`).
+#[cfg(feature = "engine-round2")]
+mod round2 {
+    use super::*;
+
+    #[test]
+    fn unkeep_removes_a_fresh_item_and_is_too_late_after_the_window() {
+        let h = harness();
+        let fresh = h.ok(
+            "keep_text",
+            json!({"text": "kept by mistake", "source": "paste"}),
+        );
+        h.ok("unkeep", json!({"id": id_of(&fresh)}));
+        assert_eq!(h.code("get_item", json!({"id": id_of(&fresh)})), "notFound");
+        let old = h.ok(
+            "keep_text",
+            json!({"text": "kept long ago", "source": "paste"}),
+        );
+        h.clock.advance_days(1);
+        assert_eq!(h.code("unkeep", json!({"id": id_of(&old)})), "tooLate");
+    }
+
+    #[test]
+    fn item_flags_and_snooze_reach_the_engine() {
+        let h = harness();
+        let (item, mem) = h.learn("a note", "You like tea.", "Tea", "tea");
+        h.ok("set_item_private", json!({"id": item, "private": true}));
+        assert!(h.memory(&mem).private);
+        h.ok(
+            "set_item_keep_forever",
+            json!({"id": item, "keepForever": true}),
+        );
+        assert!(h.memory(&mem).keep_forever);
+        h.ok("snooze", json!({"memoryId": mem, "days": 3}));
+        assert_eq!(
+            h.code("snooze", json!({"memoryId": "mem_nope", "days": 3})),
+            "notFound"
+        );
+    }
+
+    #[test]
+    fn read_now_returns_the_item() {
+        let h = harness();
+        let kept = h.ok(
+            "keep_text",
+            json!({"text": "read me first", "source": "paste"}),
+        );
+        let item = h.ok("read_now", json!({"id": id_of(&kept)}));
+        assert_eq!(item["id"], json!(id_of(&kept)));
+    }
 }
 
 #[test]
