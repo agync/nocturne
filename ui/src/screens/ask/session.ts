@@ -34,6 +34,11 @@ export interface Turn {
   summary: string;
   receipts: Receipt[];
   memoryIds: string[];
+  /** Where the answer was written, so Earlier keeps its mark. */
+  answeredBy?: AnsweredBy | null;
+  sendId?: number | null;
+  /** How many things the answer used. */
+  count?: number;
 }
 
 export interface Session {

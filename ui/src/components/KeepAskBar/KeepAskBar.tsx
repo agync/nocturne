@@ -127,7 +127,14 @@ export function KeepAskBar({
       data-placement={placement}
       data-verb={verb}
     >
-      {hasText ? <AnswerWhere place={place} onPlace={setPlace} className={styles.where} /> : null}
+      {hasText ? (
+        <AnswerWhere
+          place={place}
+          onPlace={setPlace}
+          className={styles.where}
+          visible={verb === "ask"}
+        />
+      ) : null}
       <div className={styles.field}>
         <textarea
           ref={inputRef}

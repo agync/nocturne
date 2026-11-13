@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useEffect, useId } from "react";
 import { formatLongDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { AskPlace, OnlineView } from "../../engine/bindings";
@@ -40,6 +40,8 @@ interface Props {
   place: AskPlace;
   onPlace: (place: AskPlace) => void;
   className?: string;
+  /** False while the bar is not asking: nothing shows, but a stale choice is still cleared. */
+  visible?: boolean;
 }
 
 /**
@@ -47,13 +49,17 @@ interface Props {
  * tab order before the field it belongs to, so it can be set before the question is sent, and it
  * is drawn below the field. Nothing shows until Online answers has been set up.
  */
-export function AnswerWhere({ place, onPlace, className }: Props) {
+export function AnswerWhere({ place, onPlace, className, visible = true }: Props) {
   const { data: view } = useOnline();
   const state = whereState(view);
   const labelId = useId();
   const hintId = useId();
   const name = useId();
-  if (state.kind === "hidden") return null;
+  // A choice for "this computer" must not outlive the options it was made from.
+  useEffect(() => {
+    if (state.kind === "hidden" && place !== "auto") onPlace("auto");
+  }, [state.kind, place, onPlace]);
+  if (state.kind === "hidden" || !visible) return null;
 
   const disabled = state.kind === "paused";
   const checked: AskPlace = disabled ? "thisComputer" : place;

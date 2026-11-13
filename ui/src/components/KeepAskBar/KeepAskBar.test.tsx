@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { OnlineView } from "../../engine/bindings";
@@ -291,6 +291,34 @@ describe("Answer this", () => {
     setup({}, onlineViewOn());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("is not there while the text is a note to keep", async () => {
+    const { input } = setup({}, onlineViewOn());
+    await userEvent.type(input, "Gran’s new number ends 4471.");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("radiogroup")).toBeNull();
+  });
+
+  it("forgets a choice of this computer once Online answers goes off", async () => {
+    const engine = onlineEngine(onlineViewOn());
+    const onAsk = vi.fn();
+    render(
+      <EngineProvider engine={engine}>
+        <KeepAskBar placement="top" onKeep={vi.fn()} onAsk={onAsk} />
+      </EngineProvider>,
+    );
+    const input = screen.getByRole("textbox");
+    await typeQuestion(input);
+    await group();
+    await userEvent.click(screen.getByRole("radio", { name: "This computer" }));
+    expect(screen.getByRole("radio", { name: "This computer" })).toBeChecked();
+    vi.spyOn(engine.online, "view").mockReturnValue(onlineViewOn({ state: { type: "off" } }));
+    await act(async () => engine.online.setScenario("off"));
+    await waitFor(() => expect(screen.queryByRole("radiogroup")).toBeNull());
+    await userEvent.click(input);
+    await userEvent.keyboard("{Alt>}{Enter}{/Alt}");
+    expect(askPlace.take()).toBe("auto");
   });
 
   it("is reached before the Ask button, so it can be set before submitting", async () => {

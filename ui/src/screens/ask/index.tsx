@@ -201,6 +201,9 @@ export default function Ask() {
           summary: summaryOf(now),
           receipts: gone ? [] : now.shown.receipts,
           memoryIds: gone ? [] : now.shown.memoryIds,
+          answeredBy: gone || now.shown.phase !== "done" ? null : (now.shown.answeredBy ?? null),
+          sendId: now.shown.sendId ?? null,
+          count: new Set(now.shown.receipts.map((r) => r.itemId)).size,
         };
         setEarlier((all) => [...all, turn]);
       }
@@ -315,6 +318,21 @@ export default function Ask() {
     else setAnnouncement(t("notice.notReady.text"));
   }, [phase, shown.failed, askId, current, restored, text, near.length, answeredBy, host]);
 
+  useEffect(() => {
+    if (restored) return;
+    if (phase === "waitingOnline") {
+      setAnnouncement(
+        [
+          t("ask.online.waiting.title"),
+          t("ask.online.waiting.body"),
+          t("ask.online.waiting.button"),
+        ].join(" "),
+      );
+    } else if (phase === "switchingToComputer") {
+      setAnnouncement(`${t("ask.online.slow")} ${t("ask.online.switching")}`);
+    }
+  }, [phase, restored]);
+
   const openReceipt = useCallback(
     (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
     [navigate],
@@ -395,8 +413,13 @@ export default function Ask() {
     phase === "askingOnline" || phase === "waitingOnline" || phase === "switchingToComputer";
   const answeredOnline = marked && answeredBy.type === "online";
   const markedCount = items > 0 ? items : memoryIds.length;
+  // Only an answer still being waited for is replaced. One that was sent and counted stays in
+  // Earlier, and the answer on this computer follows it as a new turn.
   const askHere = () => {
-    if (current) start(current, false, "thisComputer", true);
+    if (!current) return;
+    const waiting = latest.current.shown.phase === "waitingOnline";
+    heading.current?.focus({ preventScroll: true });
+    start(current, false, "thisComputer", waiting);
   };
   const memoriesHref = hashHref("/memories", { q: current });
 
@@ -426,6 +449,15 @@ export default function Ask() {
             <ol className={styles.turns}>
               {earlier.map((turn) => (
                 <li key={turn.key} className={styles.turn}>
+                  {turn.answeredBy && hasMark(turn.answeredBy) && turn.text ? (
+                    <AnswerMark
+                      by={turn.answeredBy}
+                      phase="done"
+                      count={turn.count ?? turn.memoryIds.length}
+                      host={host}
+                      sendId={turn.sendId ?? null}
+                    />
+                  ) : null}
                   <p className={styles.turnQuestion}>
                     {t("ask.question", { question: turn.question })}
                   </p>
@@ -695,7 +727,10 @@ export default function Ask() {
                 </div>
               ) : null}
 
-              {leftOut && (phase === "done" || phase === "notSure") && !forgotten ? (
+              {leftOut &&
+              answeredOnline &&
+              (phase === "done" || phase === "notSure") &&
+              !forgotten ? (
                 <div className={styles.leftOut}>
                   <span className={styles.leftOutText}>
                     <PlaceIcon place="computer" size={16} />
