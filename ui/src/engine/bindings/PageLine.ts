@@ -6,7 +6,12 @@ import type { Receipt } from "./Receipt";
 /**
  * One line of the morning page. `text` marks emphasis with `**double asterisks**`.
  */
-export type PageLine = { id: string, kind: LineKind, text: string, memoryIds: Array<string>, receipts: Array<Receipt>, choices: Array<Choice>, conflictId: string | null, done: boolean, forgotten: boolean, 
+export type PageLine = { id: string, kind: LineKind, text: string, memoryIds: Array<string>, receipts: Array<Receipt>, choices: Array<Choice>, conflictId: string | null, 
+/**
+ * The short subject the line is about, for example "Dentist appointment"; lets the interface
+ * say "Dentist appointment set to Thursday 10:00." after a which-is-right choice.
+ */
+subject: string | null, done: boolean, forgotten: boolean, 
 /**
  * For upcoming lines: the day it happens (`YYYY-MM-DD`).
  */

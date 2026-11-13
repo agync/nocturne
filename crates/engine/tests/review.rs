@@ -754,3 +754,48 @@ fn needs_you_public_leaves_private_out_and_values_serialise() {
     serde_json::to_string(&f.engine.pending_items(5).unwrap()).unwrap();
     assert_eq!(f.engine.memories(MemoryFilter::default()).unwrap().len(), 2);
 }
+
+#[test]
+fn which_lines_carry_the_memory_subject() {
+    use common::{cand, fixture, keep, learn};
+    use nocturne_engine::Predicate;
+    let f = fixture();
+    learn(
+        &f.engine,
+        "Dentist Tuesday 14:00",
+        cand(
+            "The dentist appointment",
+            Predicate::Scheduled,
+            "Tuesday 14:00",
+            "Your dentist appointment is Tuesday at 14:00.",
+        ),
+    );
+    let item_b = keep(&f.engine, "Dentist moved to Thursday 10:00");
+    f.engine
+        .apply(
+            &item_b,
+            vec![cand(
+                "dentist appointment",
+                Predicate::Scheduled,
+                "Thursday 10:00",
+                "Your dentist appointment is Thursday at 10:00.",
+            )],
+        )
+        .unwrap();
+    let day = f.engine.next_page_date().unwrap();
+    let page = f
+        .engine
+        .compose_page(day, nocturne_contract::Edition::Screen)
+        .unwrap();
+    let which = page
+        .needs_you
+        .iter()
+        .find(|l| l.kind == nocturne_contract::LineKind::Which)
+        .expect("a which line");
+    assert!(
+        which
+            .subject
+            .as_deref()
+            .is_some_and(|s| s.contains("dentist"))
+    );
+}

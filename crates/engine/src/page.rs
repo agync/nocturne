@@ -72,6 +72,7 @@ fn base_line(kind: LineKind, text: String) -> PageLine {
         receipts: Vec::new(),
         choices: Vec::new(),
         conflict_id: None,
+        subject: None,
         done: false,
         forgotten: false,
         on: None,
@@ -83,6 +84,7 @@ fn memory_line(kind: LineKind, m: &MemoryView) -> PageLine {
     let mut line = base_line(kind, bold(&m.sentence, &m.object));
     line.memory_ids = vec![m.id.clone()];
     line.receipts = m.receipts.clone();
+    line.subject = Some(m.subject.clone());
     line.done = false;
     line
 }
@@ -303,6 +305,15 @@ fn compose(
             } => {
                 let mut line = base_line(LineKind::Which, title);
                 line.conflict_id = Some(conflict_id);
+                if let Some(first) = options.first() {
+                    line.subject = conn
+                        .query_row(
+                            "SELECT subject FROM memories WHERE id = ?1",
+                            [&first.memory_id],
+                            |r| r.get(0),
+                        )
+                        .optional()?;
+                }
                 let mut private = false;
                 for o in options {
                     private |= is_private(conn, &o.memory_id)?;

@@ -60,6 +60,9 @@ pub struct PageLine {
     pub receipts: Vec<Receipt>,
     pub choices: Vec<Choice>,
     pub conflict_id: Option<String>,
+    /// The short subject the line is about, for example "Dentist appointment"; lets the interface
+    /// say "Dentist appointment set to Thursday 10:00." after a which-is-right choice.
+    pub subject: Option<String>,
     pub done: bool,
     pub forgotten: bool,
     /// For upcoming lines: the day it happens (`YYYY-MM-DD`).
