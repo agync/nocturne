@@ -87,6 +87,15 @@ describe("KeepAskBar", () => {
     expect(input).toHaveValue("");
   });
 
+  it("gives the words back when keeping failed", async () => {
+    const onKeep = vi.fn().mockRejectedValue(new Error("no"));
+    render(<KeepAskBar placement="top" onKeep={onKeep} onAsk={vi.fn()} />);
+    const input = screen.getByRole("textbox", { name: "Keep something, or ask" });
+    await userEvent.type(input, "A note I must not lose{Enter}");
+    expect(onKeep).toHaveBeenCalled();
+    expect(input).toHaveValue("A note I must not lose");
+  });
+
   it("does nothing for an empty bar and Shift+Enter makes a new line", async () => {
     const { onKeep, onAsk, input } = setup();
     await userEvent.type(input, "{Enter}");

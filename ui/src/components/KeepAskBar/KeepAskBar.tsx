@@ -54,7 +54,12 @@ export function KeepAskBar({
     const value = text.trim();
     if (!value) return;
     setText("");
-    await (as === "keep" ? onKeep(value) : onAsk(value));
+    try {
+      await (as === "keep" ? onKeep(value) : onAsk(value));
+    } catch {
+      // Nothing is lost: what was typed comes back unless the person has already started again.
+      setText((current) => (current === "" ? value : current));
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {

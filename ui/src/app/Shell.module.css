@@ -25,6 +25,7 @@
 }
 
 .railColumn {
+  order: -1;
   width: var(--size-rail);
   flex: none;
   overflow-y: auto;

@@ -191,6 +191,15 @@ describe("wide window", () => {
     expect(bar).toHaveFocus();
   });
 
+  it("keeps the design's focus order: the bar, the page, then the rail", async () => {
+    renderApp();
+    const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    const rail = screen.getByRole("navigation", { name: "Main" });
+    const main = screen.getByRole("main");
+    expect(bar.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(main.compareDocumentPosition(rail) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("cycles focus with F6: bar, page, rail, bar", async () => {
     renderApp();
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });

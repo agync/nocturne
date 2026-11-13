@@ -72,8 +72,9 @@ export function Shell({ children }: ShellProps) {
           toast.show({ lead: t("capture.kept.lead"), message: t("capture.kept.later") });
         }
         refresh("items", "status", "page");
-      } catch {
+      } catch (error) {
         toast.show({ message: t("bar.kept.error") });
+        throw error;
       }
     },
     [engine, toast, refresh],
@@ -163,11 +164,6 @@ export function Shell({ children }: ShellProps) {
       <button type="button" className={styles.skip} onClick={() => main.current?.focus()}>
         {t("shell.skip")}
       </button>
-      {!narrow ? (
-        <div className={styles.railColumn}>
-          <Rail />
-        </div>
-      ) : null}
       <div className={styles.body}>
         {narrow ? (
           <header className={styles.narrowHeader}>
@@ -216,6 +212,12 @@ export function Shell({ children }: ShellProps) {
         </div>
         {narrow ? <div className={styles.bottomBar}>{bar}</div> : null}
       </div>
+      {!narrow ? (
+        // Last in the document, first on screen: the design's focus order ends at the rail.
+        <div className={styles.railColumn}>
+          <Rail />
+        </div>
+      ) : null}
       {menuOpen ? (
         <Dialog title={t("shell.menu.title")} edge="start" onClose={() => setMenuOpen(false)}>
           <Rail onNavigate={() => setMenuOpen(false)} />

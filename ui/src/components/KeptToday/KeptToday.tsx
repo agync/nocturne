@@ -44,7 +44,9 @@ export function KeptToday() {
   const since = page ? startOf(page.date) : null;
   const until = page ? startOf(addDays(page.date, 1)) : null;
   const { data: items } = useItems({ since, status: null, limit: null }, since !== null);
-  const today = (items ?? []).filter((i) => until === null || i.keptAt < until);
+  const today = (items ?? []).filter(
+    (i) => until === null || new Date(i.keptAt).getTime() < new Date(until).getTime(),
+  );
 
   return (
     <aside className={styles.kept} aria-label={t("kept.region")}>
