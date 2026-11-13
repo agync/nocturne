@@ -32,13 +32,13 @@ afterEach(() => {
   window.location.hash = "";
 });
 
-describe("Not true, forget it, with the real forget dialog", () => {
+describe("Not true, delete it, with the real forget dialog", () => {
   it("settles the entry once, as soon as it is forgotten, and keeps the dialog's own words until closed", async () => {
     const engine = new Waiting();
     const forget = vi.spyOn(engine, "forget");
     const listed = vi.spyOn(engine, "listNeedsYou");
     renderApp({ hash: "#/needs-you", engine });
-    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
     const dialog = await screen.findByRole("dialog", { name: "Forget 1 memory?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: "Forget 1 memory" }));
 
@@ -63,7 +63,7 @@ describe("Not true, forget it, with the real forget dialog", () => {
   it("says only Forgotten, because whether the original went depends on what was ticked", async () => {
     const engine = new Waiting();
     renderApp({ hash: "#/needs-you", engine });
-    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
     const dialog = await screen.findByRole("dialog", { name: /Forget/ });
     const box = await within(dialog).findByRole("checkbox", { name: /Also delete the original/ });
     if (!(box as HTMLInputElement).checked) await userEvent.click(box);
@@ -78,7 +78,7 @@ describe("Not true, forget it, with the real forget dialog", () => {
     const engine = new Waiting();
     const forget = vi.spyOn(engine, "forget");
     renderApp({ hash: "#/needs-you", engine });
-    await userEvent.click(await screen.findByRole("button", { name: "Not true, forget it…" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
     await userEvent.click(await screen.findByRole("button", { name: "Keep it" }));
     expect(forget).not.toHaveBeenCalled();
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(

@@ -43,8 +43,15 @@ const promise = (memories: MemoryView[]) =>
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
+  vi.useRealTimers();
   window.location.hash = "";
 });
+
+/** Lets the "Marked as done" toast run out, which is when the press is committed. */
+const toastEnds = () =>
+  act(async () => {
+    await vi.advanceTimersByTimeAsync(10_500);
+  });
 
 const open = async (engine = new Waiting()) => {
   renderApp({ hash: "#/needs-you", engine });
@@ -79,17 +86,17 @@ describe("what is waiting", () => {
     expect(screen.getByText("Which is right?")).toBeInTheDocument();
     const group = screen.getByRole("group", { name: "Choose the right one" });
     expect(within(group).getAllByRole("button", { name: /^This one:/ })).toHaveLength(2);
-    expect(within(group).getByText(/^Appointment card · photo · 3 Nov$/)).toBeInTheDocument();
+    expect(within(group).getByText(/^Appointment card · /)).toBeInTheDocument();
     expect(within(group).getByText(/^Voice note · 0:08 · /)).toBeInTheDocument();
   });
 
   it("a due form shows its badge, its source and Done", async () => {
     await open();
     expect(screen.getByText(/^Due (Friday|Fri )/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Done: The Year 4 trip form/ })).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Letter · image|Letter · photo/ }),
+      screen.getByRole("button", { name: /^Mark as done: The Year 4 trip form/ }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Letter · / })).toBeInTheDocument();
   });
 
   it("an unconfirmed one says what it is, where from and that nothing else says it", async () => {
@@ -104,7 +111,7 @@ describe("what is waiting", () => {
       screen.getByText("Nothing else you kept says this. It has not been used anywhere."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Web page you pasted/ })).toBeInTheDocument();
-    for (const name of ["It’s true", "Not true, forget it…", "Leave unconfirmed"]) {
+    for (const name of ["It’s true", "Not true, delete it…", "Leave unconfirmed"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
   });
@@ -124,8 +131,35 @@ describe("what is waiting", () => {
     await open(engine);
     expect(screen.getByText("A promise")).toBeInTheDocument();
     const spy = vi.spyOn(engine, "markDone");
-    await userEvent.click(screen.getByRole("button", { name: /^Done: You decided to book/ }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await userEvent.click(
+      screen.getByRole("button", { name: /^Mark as done: You decided to book/ }),
+    );
+    await toastEnds();
     expect(spy).toHaveBeenCalledWith("mem-lake");
+  });
+
+  it("Undo puts the entry back and never marks it", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const engine = await open();
+    const spy = vi.spyOn(engine, "markDone");
+    await userEvent.click(screen.getByRole("button", { name: /^Mark as done:/ }));
+    expect(screen.queryByRole("button", { name: /^Mark as done:/ })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByRole("button", { name: /^Mark as done:/ })).toBeInTheDocument();
+    await toastEnds();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("marks a press that is still waiting when the screen goes away", async () => {
+    const engine = new Waiting();
+    const view = renderApp({ hash: "#/needs-you", engine });
+    await screen.findByRole("list", { name: "Things waiting for you" });
+    const spy = vi.spyOn(engine, "markDone");
+    await userEvent.click(screen.getByRole("button", { name: /^Mark as done:/ }));
+    expect(spy).not.toHaveBeenCalled();
+    view.unmount();
+    expect(spy).toHaveBeenCalledWith("mem-trip");
   });
 });
 
@@ -156,7 +190,10 @@ describe("acting on what is waiting", () => {
     await userEvent.click(
       within(group).getAllByRole("button", { name: /^This one:/ })[0] as HTMLElement,
     );
-    await userEvent.click(await screen.findByRole("button", { name: /^Done:/ }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    await userEvent.click(await screen.findByRole("button", { name: /^Mark as done:/ }));
+    expect(spy).not.toHaveBeenCalled();
+    await toastEnds();
     expect(spy).toHaveBeenCalledWith("mem-trip");
     expect(await screen.findByText("Nothing needs you.")).toBeInTheDocument();
     expect(screen.getByText("Anything new will be on tomorrow’s page.")).toBeInTheDocument();
@@ -199,14 +236,16 @@ describe("acting on what is waiting", () => {
     const engine = new Waiting();
     engine.extra = [unconfirmed()];
     await open(engine);
-    await userEvent.click(screen.getByRole("button", { name: "Not true, forget it…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Not true, delete it…" }));
     expect(await screen.findByRole("dialog", { name: "Forget 1 memory?" })).toBeVisible();
   });
 
   it("an action that fails says so and keeps the entry", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     const engine = await open();
     vi.spyOn(engine, "markDone").mockRejectedValue(new Error("no"));
-    await userEvent.click(screen.getByRole("button", { name: /^Done:/ }));
+    await userEvent.click(screen.getByRole("button", { name: /^Mark as done:/ }));
+    await toastEnds();
     await waitFor(() =>
       expect(said()).toHaveTextContent("That didn’t go through, so nothing was changed."),
     );
@@ -276,7 +315,7 @@ describe("keyboard", () => {
 describe("a receipt", () => {
   it("opens the original", async () => {
     await open();
-    await userEvent.click(screen.getByText(/^Appointment card · photo/));
+    await userEvent.click(screen.getAllByText(/^Appointment card · /)[0] as HTMLElement);
     expect(window.location.hash).toBe("#/items/item-card");
   });
 });

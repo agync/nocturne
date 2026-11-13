@@ -56,7 +56,7 @@ test.describe("an unconfirmed web page", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
     await expect(page.getByText("Unconfirmed", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Web page you pasted/ })).toBeVisible();
-    for (const name of ["It’s true", "Not true, forget it", "Leave unconfirmed"]) {
+    for (const name of ["It’s true", "Not true, delete it", "Leave unconfirmed"]) {
       await expect(page.getByRole("button", { name })).toBeVisible();
     }
     await expect(
@@ -77,11 +77,11 @@ test.describe("an unconfirmed web page", () => {
     ).toContainText("2");
   });
 
-  test("Not true, forget it forgets through the shared dialog and focus moves on when it closes", async ({
+  test("Not true, delete it deletes through the shared dialog and focus moves on when it closes", async ({
     page,
   }) => {
     await withWebPage(page);
-    await page.getByRole("button", { name: "Not true, forget it" }).click();
+    await page.getByRole("button", { name: "Not true, delete it" }).click();
     const dialog = page.getByRole("dialog");
     await expect(dialog.getByRole("button", { name: /^Keep (it|them)$/ })).toBeFocused();
     await dialog.getByRole("button", { name: /^Forget 1 memory$/ }).click();
@@ -202,16 +202,41 @@ test.describe("Needs you", () => {
         ),
       );
     }
-    for (const word of ["This one: Tuesday", "This one: Thursday", "Done:"]) {
+    for (const word of ["This one: Tuesday", "This one: Thursday", "Mark as done:"]) {
       expect(
         reached.some((r) => r.includes(word)),
         word,
       ).toBe(true);
     }
-    await page.getByRole("button", { name: /^Done:/ }).focus();
+    await page.getByRole("button", { name: /^Mark as done:/ }).focus();
     await page.keyboard.press("Enter");
     await expect(said(page)).toContainText("done.");
     await expect(rows(page)).toHaveCount(1);
+  });
+
+  test("Mark as done can be undone while its toast is up", async ({ page }) => {
+    await ready(page);
+    await page.getByRole("button", { name: /^Mark as done:/ }).click();
+    await expect(rows(page)).toHaveCount(1);
+    await expect(page.getByText("Marked as done.")).toBeVisible();
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(rows(page)).toHaveCount(2);
+    await expect(page.getByRole("button", { name: /^Mark as done:/ })).toBeVisible();
+  });
+
+  test("the title sits at the shared left edge and receipts are chips with a 44 px hit area", async ({
+    page,
+  }) => {
+    await ready(page);
+    const box = await page.getByRole("heading", { level: 1 }).boundingBox();
+    expect(Math.round(box?.x ?? 0)).toBe(292);
+    const chip = page.getByRole("button", { name: /^Appointment card/ });
+    const hit = await chip.evaluate((el) => {
+      const after = getComputedStyle(el, "::after");
+      return [Number.parseFloat(after.width), Number.parseFloat(after.height)];
+    });
+    expect(hit[0]).toBeGreaterThanOrEqual(44);
+    expect(hit[1]).toBeGreaterThanOrEqual(44);
   });
 
   test("a receipt opens its original", async ({ page }) => {
@@ -257,7 +282,7 @@ for (const scheme of ["light", "dark"] as const) {
     await page.getByRole("button", { name: /^This one: Tuesday/ }).click();
     await expect(said(page)).toContainText("Dentist set to");
     expect(await axe(page), "one left").toEqual([]);
-    await page.getByRole("button", { name: /^Done:/ }).click();
+    await page.getByRole("button", { name: /^Mark as done:/ }).click();
     await expect(page.getByText("Nothing needs you.")).toBeVisible();
     expect(await axe(page), "all clear").toEqual([]);
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/needs-you-clear-dark.png` });

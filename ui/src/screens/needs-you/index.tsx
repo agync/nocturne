@@ -1,6 +1,8 @@
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
+import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { MemoryView, NeedsYouEntry, Receipt } from "../../engine/bindings";
 import { useEngine, useNeedsYou, usePage, useRefresh } from "../../engine/context";
@@ -36,6 +38,7 @@ const isOpen = (entry: NeedsYouEntry) =>
 export default function NeedsYou() {
   const engine = useEngine();
   const refresh = useRefresh();
+  const toast = useToast();
   const [, navigate] = useLocation();
   const needs = useNeedsYou();
   const { data: page } = usePage();
@@ -67,6 +70,65 @@ export default function NeedsYou() {
     focusAt.current = null;
     focusEntry(at);
   }, [entries.length, focusEntry]);
+
+  /** "Mark as done" waits out its toast: entry key -> the memory to mark. */
+  const pendingDone = useRef(new Map<string, string>());
+
+  const unsettle = useCallback((key: string) => {
+    setSettled((all) => {
+      const next = new Set(all);
+      next.delete(key);
+      return next;
+    });
+  }, []);
+
+  const commitDone = useCallback(
+    (key: string) => {
+      const memoryId = pendingDone.current.get(key);
+      if (memoryId === undefined) return;
+      pendingDone.current.delete(key);
+      engine.markDone(memoryId).then(
+        () => refresh("needsYou", "status", "page"),
+        () => {
+          unsettle(key);
+          setMessage(t("needs.msg.failed"));
+        },
+      );
+    },
+    [engine, refresh, unsettle],
+  );
+
+  // A press that is still waiting for its toast to end must not be lost.
+  useEffect(() => {
+    const flush = () => {
+      for (const key of [...pendingDone.current.keys()]) commitDone(key);
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [commitDone]);
+
+  const markDone = (key: string, index: number, memory: MemoryView) => {
+    pendingDone.current.set(key, memory.id);
+    focusAt.current = index;
+    setSettled((all) => new Set(all).add(key));
+    setMessage(t("needs.msg.done", { subject: memory.subject }));
+    toast.show({
+      key: `done:${key}`,
+      message: t("page.done.toast"),
+      action: {
+        label: t("page.done.undo"),
+        onAction: () => {
+          pendingDone.current.delete(key);
+          unsettle(key);
+          setMessage("");
+        },
+      },
+      onExpire: () => commitDone(key),
+    });
+  };
 
   const openReceipt = useCallback(
     (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
@@ -112,138 +174,147 @@ export default function NeedsYou() {
 
   if (needs.isError) {
     return (
-      <div className={styles.message} role="alert">
-        <p>{t("needs.error")}</p>
-        <button type="button" className={styles.retry} onClick={() => void needs.refetch()}>
-          {t("button.tryAgain")}
-        </button>
-      </div>
+      <ScreenSheet>
+        <div className={styles.message} role="alert">
+          <p>{t("needs.error")}</p>
+          <button type="button" className={styles.retry} onClick={() => void needs.refetch()}>
+            {t("button.tryAgain")}
+          </button>
+        </div>
+      </ScreenSheet>
     );
   }
   if (!needs.data) {
     return (
-      <p className={styles.message} role="status">
-        {t("needs.loading")}
-      </p>
+      <ScreenSheet>
+        <p className={styles.message} role="status">
+          {t("needs.loading")}
+        </p>
+      </ScreenSheet>
     );
   }
 
   const count = entries.length;
   return (
-    <div className={styles.screen}>
-      <header className={styles.header}>
-        <div className={styles.headerText}>
-          <p className={styles.eyebrow}>{t("needs.eyebrow", { count })}</p>
-          <h1 className={styles.title}>{t("needs.title", { count })}</h1>
-        </div>
-        <p className={styles.keys}>{t("needs.keys")}</p>
-      </header>
-
-      <div className={styles.content}>
-        {count > 0 ? (
-          <ol ref={list} className={styles.list} aria-label={t("needs.list")} onKeyDown={onKeyDown}>
-            {entries.map((entry, index) => {
-              const key = entryKey(entry);
-              const working = busy === key;
-              return (
-                <li key={key} className={styles.item} data-entry={key} tabIndex={-1}>
-                  {entry.type === "which" ? (
-                    <WhichEntry
-                      index={index}
-                      busy={working}
-                      title={entry.title}
-                      options={entry.options}
-                      onOpen={openReceipt}
-                      onPick={(option) =>
-                        void settle(key, index, async () => {
-                          const done = await engine.resolveWhich(entry.conflictId, option.memoryId);
-                          return t("needs.msg.which", {
-                            subject: done.subject,
-                            chosen: done.chosen,
-                          });
-                        })
-                      }
-                    />
-                  ) : entry.type === "unconfirmed" ? (
-                    <UnconfirmedEntry
-                      index={index}
-                      busy={working}
-                      memory={entry.memory}
-                      agreeingSources={entry.agreeingSources}
-                      used={entry.used}
-                      onOpen={openReceipt}
-                      onTrue={() =>
-                        void settle(key, index, async () => {
-                          await engine.confirmMemory(entry.memory.id, true);
-                          return t("needs.msg.confirmed", { sentence: entry.memory.sentence });
-                        })
-                      }
-                      onFalse={() => setForgetting({ key, memory: entry.memory })}
-                      onLeave={() =>
-                        void settle(key, index, async () => {
-                          await engine.snooze(entry.memory.id, 7);
-                          return t("needs.msg.left");
-                        })
-                      }
-                    />
-                  ) : (
-                    <DueEntry
-                      index={index}
-                      busy={working}
-                      memory={entry.memory}
-                      badge={
-                        entry.type === "due"
-                          ? dueBadge(entry.due, page?.date)
-                          : t("needs.promise.badge")
-                      }
-                      onOpen={openReceipt}
-                      onDone={() =>
-                        void settle(key, index, async () => {
-                          await engine.markDone(entry.memory.id);
-                          return t("needs.msg.done", { subject: entry.memory.subject });
-                        })
-                      }
-                    />
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        ) : (
-          <div ref={empty} className={styles.clear} role="status" tabIndex={-1}>
-            <span className={styles.circle} aria-hidden="true" />
-            <p className={styles.clearTitle}>{t("needs.empty.title")}</p>
-            <p className={styles.clearBody}>{t("needs.empty.body")}</p>
+    <ScreenSheet>
+      <div className={styles.screen}>
+        <header className={styles.header}>
+          <div className={styles.headerText}>
+            <p className={styles.eyebrow}>{t("needs.eyebrow", { count })}</p>
+            <h1 className="t-page-title">{t("needs.title", { count })}</h1>
           </div>
-        )}
-        <p className={styles.said} role="status" aria-live="polite">
-          {message}
-        </p>
-      </div>
+          <p className={styles.keys}>{t("needs.keys")}</p>
+        </header>
 
-      {forgetting ? (
-        <ForgetDialog
-          memoryIds={[forgetting.memory.id]}
-          onClose={() => {
-            setForgetting(null);
-            const at = afterForget.current;
-            afterForget.current = null;
-            // The dialog hands focus back to a button that has gone; the next entry takes it.
-            if (at !== null) setTimeout(() => focusEntry(at), 0);
-          }}
-          onDone={() => {
-            // Called once, as soon as the engine has forgotten; the dialog says so until closed.
-            const { key } = forgetting;
-            afterForget.current = Math.max(
-              0,
-              entries.findIndex((e) => entryKey(e) === key),
-            );
-            setSettled((all) => new Set(all).add(key));
-            setMessage(t("needs.msg.forgotten"));
-            refresh("needsYou", "status", "page", "items", "memories");
-          }}
-        />
-      ) : null}
-    </div>
+        <div className={styles.content}>
+          {count > 0 ? (
+            <ol
+              ref={list}
+              className={styles.list}
+              aria-label={t("needs.list")}
+              onKeyDown={onKeyDown}
+            >
+              {entries.map((entry, index) => {
+                const key = entryKey(entry);
+                const working = busy === key;
+                return (
+                  <li key={key} className={styles.item} data-entry={key} tabIndex={-1}>
+                    {entry.type === "which" ? (
+                      <WhichEntry
+                        index={index}
+                        busy={working}
+                        title={entry.title}
+                        options={entry.options}
+                        onOpen={openReceipt}
+                        onPick={(option) =>
+                          void settle(key, index, async () => {
+                            const done = await engine.resolveWhich(
+                              entry.conflictId,
+                              option.memoryId,
+                            );
+                            return t("needs.msg.which", {
+                              subject: done.subject,
+                              chosen: done.chosen,
+                            });
+                          })
+                        }
+                      />
+                    ) : entry.type === "unconfirmed" ? (
+                      <UnconfirmedEntry
+                        index={index}
+                        busy={working}
+                        memory={entry.memory}
+                        agreeingSources={entry.agreeingSources}
+                        used={entry.used}
+                        onOpen={openReceipt}
+                        onTrue={() =>
+                          void settle(key, index, async () => {
+                            await engine.confirmMemory(entry.memory.id, true);
+                            return t("needs.msg.confirmed", { sentence: entry.memory.sentence });
+                          })
+                        }
+                        onFalse={() => setForgetting({ key, memory: entry.memory })}
+                        onLeave={() =>
+                          void settle(key, index, async () => {
+                            await engine.snooze(entry.memory.id, 7);
+                            return t("needs.msg.left");
+                          })
+                        }
+                      />
+                    ) : (
+                      <DueEntry
+                        index={index}
+                        busy={working}
+                        memory={entry.memory}
+                        badge={
+                          entry.type === "due"
+                            ? dueBadge(entry.due, page?.date)
+                            : t("needs.promise.badge")
+                        }
+                        onOpen={openReceipt}
+                        onDone={() => markDone(key, index, entry.memory)}
+                      />
+                    )}
+                  </li>
+                );
+              })}
+            </ol>
+          ) : (
+            <div ref={empty} className={styles.clear} role="status" tabIndex={-1}>
+              <span className={styles.circle} aria-hidden="true" />
+              <p className={styles.clearTitle}>{t("needs.empty.title")}</p>
+              <p className={styles.clearBody}>{t("needs.empty.body")}</p>
+            </div>
+          )}
+          <p className={styles.said} role="status" aria-live="polite">
+            {message}
+          </p>
+        </div>
+
+        {forgetting ? (
+          <ForgetDialog
+            memoryIds={[forgetting.memory.id]}
+            onClose={() => {
+              setForgetting(null);
+              const at = afterForget.current;
+              afterForget.current = null;
+              // The dialog hands focus back to a button that has gone; the next entry takes it.
+              if (at !== null) setTimeout(() => focusEntry(at), 0);
+            }}
+            onDone={() => {
+              // Called once, as soon as the engine has forgotten; the dialog says so until closed.
+              const { key } = forgetting;
+              afterForget.current = Math.max(
+                0,
+                entries.findIndex((e) => entryKey(e) === key),
+              );
+              setSettled((all) => new Set(all).add(key));
+              setMessage(t("needs.msg.forgotten"));
+              refresh("needsYou", "status", "page", "items", "memories");
+            }}
+          />
+        ) : null}
+      </div>
+    </ScreenSheet>
   );
 }

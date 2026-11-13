@@ -2,43 +2,13 @@ import { useId } from "react";
 import { Button } from "../../components/Button/Button";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { Thumb } from "../../components/Thumb/Thumb";
-import { formatDay, formatDuration } from "../../copy/format";
+import { formatDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { MemoryView, Receipt, WhichOption } from "../../engine/bindings";
 import styles from "./NeedsYou.module.css";
 
-const shortDate = (iso: string) =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(new Date(iso));
-
 const weekdayLong = (iso: string) =>
   new Intl.DateTimeFormat("en-GB", { weekday: "long" }).format(new Date(`${iso}T12:00:00`));
-
-/** "Appointment card · photo · 3 Nov", or for a voice note "Voice note · 0:08 · 10 Nov". */
-export function optionMeta(receipt: Receipt): string {
-  if (receipt.kind === "audio") {
-    return [
-      t("kind.audio"),
-      receipt.durationMs === null ? null : formatDuration(receipt.durationMs),
-      shortDate(receipt.keptAt),
-    ]
-      .filter(Boolean)
-      .join(" · ");
-  }
-  return t("needs.source", {
-    label: receipt.label,
-    kind: t(`kind.${receipt.kind}.spoken`),
-    date: shortDate(receipt.keptAt),
-  });
-}
-
-/** "Letter · photo · Tue 11 Nov" */
-export function sourceLine(receipt: Receipt): string {
-  return t("needs.source", {
-    label: receipt.label,
-    kind: t(`kind.${receipt.kind}.spoken`),
-    date: formatDay(receipt.keptAt),
-  });
-}
 
 /** "Due Friday" within the week, "Due Fri 21 Nov" after that. */
 export function dueBadge(due: string | null, today: string | undefined): string {
@@ -95,13 +65,7 @@ export function WhichEntry({ title, options, onPick, busy, onOpen }: WhichProps)
             <Preview receipt={option.receipt} />
             <div className={styles.optionBody}>
               <span className={styles.optionText}>{option.text}</span>
-              <button
-                type="button"
-                className={styles.optionMeta}
-                onClick={() => onOpen(option.receipt)}
-              >
-                {optionMeta(option.receipt)}
-              </button>
+              <ReceiptChip receipt={option.receipt} onOpen={onOpen} />
               <button
                 type="button"
                 className={styles.pick}
@@ -220,21 +184,17 @@ export function DueEntry({ memory, badge, onDone, onOpen, busy }: DueProps) {
             {memory.sentence}
           </h2>
         </div>
-        {receipt ? (
-          <button type="button" className={styles.source} onClick={() => onOpen(receipt)}>
-            {sourceLine(receipt)}
-          </button>
-        ) : null}
+        {receipt ? <ReceiptChip receipt={receipt} onOpen={onOpen} /> : null}
       </div>
       <Button
         variant="secondary"
         data-choice
         disabled={busy}
         aria-keyshortcuts="1"
-        aria-label={`${t("needs.done")}: ${memory.sentence}`}
+        aria-label={`${t("button.markDone")}: ${memory.sentence}`}
         onClick={onDone}
       >
-        {t("needs.done")}
+        {t("button.markDone")}
       </Button>
     </section>
   );
