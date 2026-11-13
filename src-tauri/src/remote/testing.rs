@@ -376,6 +376,8 @@ pub struct FakeTransport {
     pub auto_up: AtomicBool,
     /// What it reports on start instead of `Up` (sign-in, a failure).
     pub on_start: Mutex<Option<TransportState>>,
+    /// Make the next sign-outs fail, as one that could not reach Tailscale.
+    pub sign_out_fails: AtomicBool,
 }
 
 impl FakeTransport {
@@ -396,6 +398,7 @@ impl FakeTransport {
             addresses: Mutex::new(vec![format!("https://{TEST_HOST}")]),
             auto_up: AtomicBool::new(true),
             on_start: Mutex::new(None),
+            sign_out_fails: AtomicBool::new(false),
         })
     }
 
@@ -467,6 +470,9 @@ impl Transport for Shared {
             self.0
                 .signed_out_running
                 .store(self.0.running(), Ordering::SeqCst);
+            if self.0.sign_out_fails.load(Ordering::SeqCst) {
+                return Err(HelperError::SignIn("signing out did not finish".into()));
+            }
             Ok(())
         })
     }

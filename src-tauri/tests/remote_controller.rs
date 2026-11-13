@@ -499,6 +499,65 @@ fn account_blocked_is_a_problem() {
 }
 
 #[test]
+fn retrying_most_private_keeps_the_sign_in() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailnet);
+    a.start("mostPrivate", false).unwrap();
+    a.settle();
+    a.helpers.transport.set(TransportState::Failed {
+        error: HelperError::Exited("the helper stopped".into()),
+    });
+    wait_for("problem", || {
+        matches!(a.hub.state(), RemoteState::Problem { .. })
+    });
+    // "Try again" on the same connection: the helper restarts, the sign-in stays.
+    a.start("mostPrivate", false).unwrap();
+    a.settle();
+    assert!(matches!(a.view().state, RemoteState::On { .. }));
+    assert_eq!(a.helpers.transport.sign_outs.load(Ordering::SeqCst), 0);
+    // Leaving Most private for Simple is what signs out.
+    a.helpers.install_now(HelperKind::Cloudflared);
+    a.start("simple", false).unwrap();
+    a.settle();
+    assert_eq!(a.helpers.transport.sign_outs.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn a_failed_sign_out_is_reported() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailnet);
+    a.start("mostPrivate", false).unwrap();
+    a.settle();
+    a.helpers
+        .transport
+        .sign_out_fails
+        .store(true, Ordering::SeqCst);
+    assert_eq!(
+        a.h.code("stop_remote", json!({"removeAll": true})),
+        "unavailable"
+    );
+    assert_eq!(
+        a.hub.state(),
+        RemoteState::Off,
+        "everything local still stopped"
+    );
+    assert!(!a.helpers.transport.running());
+}
+
+#[test]
+fn a_late_up_never_turns_it_back_on() {
+    let a = away();
+    a.on();
+    a.h.ok("stop_remote", json!({"removeAll": false}));
+    assert_eq!(a.hub.state(), RemoteState::Off);
+    a.hub.on_transport(TransportState::Up {
+        address: format!("https://{}", testing::TEST_HOST),
+        route: None,
+    });
+    assert_eq!(a.hub.state(), RemoteState::Off);
+}
+
+#[test]
 fn short_helper_blip_not_shown() {
     let a = away();
     a.on();

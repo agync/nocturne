@@ -406,8 +406,12 @@ impl RemoteHub {
             if previous == connection && !problem {
                 return Ok(self.view().await);
             }
-            self.stop_inner(previous == RemoteConnection::MostPrivate, false)
-                .await;
+            // Signing out is only for leaving Most private. A retry of the same connection keeps
+            // the sign-in, so the computer keeps its name and every phone its address.
+            let leaving = previous == RemoteConnection::MostPrivate && previous != connection;
+            if let Err(e) = self.stop_inner(leaving, false).await {
+                tracing::warn!("signing out of Tailscale did not finish: {e}");
+            }
             ctl = self.ctl.lock().await;
         }
         engine
@@ -643,13 +647,23 @@ impl RemoteHub {
                         r.machine_name = machine.clone();
                     });
                 }
-                {
+                let _ = route;
+                // Decided and written under one lock: a stop that turned it off meanwhile wins.
+                let changed = {
                     let mut rt = self.rt();
+                    if matches!(rt.state, RemoteState::Off) {
+                        return;
+                    }
                     rt.down_since = None;
                     rt.up = Some((host.clone(), machine.clone()));
+                    let next = self.up_state(&host, machine);
+                    let changed = rt.state != next;
+                    rt.state = next;
+                    changed
+                };
+                if changed {
+                    self.shell.changed();
                 }
-                let _ = route;
-                self.set_state(self.up_state(&host, machine));
             }
             TransportState::Restarting { .. } => {
                 let mut rt = self.rt();
@@ -758,14 +772,19 @@ impl RemoteHub {
     /// Turn off. `remove_all` also unpairs every phone and, for Most private, signs out.
     pub async fn stop(&self, remove_all: bool) -> Result<RemoteView, CommandError> {
         let engine = self.engine()?;
-        self.stop_inner(remove_all, true).await;
+        let signed_out = self.stop_inner(remove_all, true).await;
         if remove_all {
             self.unpair_all(&engine, RemoteAction::Removed)?;
         }
+        // Everything local is done; the person still learns that the sign-out did not finish.
+        signed_out.map_err(failed)?;
         Ok(self.view().await)
     }
 
-    async fn stop_inner(&self, sign_out: bool, forget_wanted: bool) {
+    /// Stop, and sign out first when asked. Returns how the sign-out went; the stop itself
+    /// always completes.
+    async fn stop_inner(&self, sign_out: bool, forget_wanted: bool) -> Result<(), HelperError> {
+        let mut signed_out = Ok(());
         let mut ctl = self.ctl.lock().await;
         let was_on = ctl.transport.is_some();
         if let Some(d) = ctl.download.take() {
@@ -787,7 +806,7 @@ impl RemoteHub {
                     .map(|i| Arc::from(self.helpers.transport(HelperKind::Tailnet, &i)))
             });
             if let Some(t) = t {
-                let _ = t.sign_out().await;
+                signed_out = t.sign_out().await;
             }
         }
         if let Some(t) = ctl.transport.take()
@@ -828,6 +847,7 @@ impl RemoteHub {
             }
         }
         self.set_state(RemoteState::Off);
+        signed_out
     }
 
     /// Stop for the app quitting: the helper and the listener, nothing else changes.
@@ -1017,8 +1037,10 @@ impl RemoteHub {
                 (ctl.transport.is_some(), ctl.download.is_some())
             };
             let leaving_tailscale = before.connection == RemoteConnection::MostPrivate;
-            if running || downloading || leaving_tailscale {
-                self.stop_inner(leaving_tailscale, false).await;
+            if (running || downloading || leaving_tailscale)
+                && let Err(e) = self.stop_inner(leaving_tailscale, false).await
+            {
+                tracing::warn!("signing out of Tailscale did not finish: {e}");
             }
             if running || downloading {
                 engine
@@ -1120,7 +1142,9 @@ impl RemoteHub {
 
     /// Before delete everything: stop, and sign out of Most private.
     pub async fn before_delete(&self) {
-        self.stop_inner(true, true).await;
+        if let Err(e) = self.stop_inner(true, true).await {
+            tracing::warn!("signing out of Tailscale did not finish: {e}");
+        }
     }
 
     /// After delete everything: Away from home's own folder goes.
