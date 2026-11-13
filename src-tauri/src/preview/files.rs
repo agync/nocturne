@@ -61,10 +61,28 @@ fn inside(path: &Path, root: &Path) -> Option<PathBuf> {
     (real.starts_with(root) && real.is_file()).then_some(real)
 }
 
+/// The places whose names never reach the browser: the data folder, then the home folder.
+pub fn hidden_roots(data_dir: &Path) -> Vec<String> {
+    let mut roots = vec![data_dir.to_string_lossy().into_owned()];
+    if let Some(home) = std::env::var_os("HOME").filter(|h| h.len() > 1) {
+        roots.push(home.to_string_lossy().trim_end_matches('/').to_owned());
+    }
+    roots.retain(|r| r.len() > 1);
+    roots
+}
+
 /// Replace what names a place on this machine with a link the server will honour: an item's
-/// original with `/originals/<id>`, a spoken page with `/audio/<name>`.
-pub fn hide_paths(v: &mut Value) {
+/// original with `/originals/<id>`, a spoken page with `/audio/<name>`. Any other text that
+/// holds a folder in `hidden` has that folder replaced by a plain word.
+pub fn hide_paths(v: &mut Value, hidden: &[String]) {
     match v {
+        Value::String(text) => {
+            for (i, root) in hidden.iter().enumerate() {
+                if text.contains(root.as_str()) {
+                    *text = text.replace(root.as_str(), if i == 0 { "(data)" } else { "~" });
+                }
+            }
+        }
         Value::Object(map) => {
             let id = map.get("id").and_then(Value::as_str).map(str::to_owned);
             if let (Some(id), Some(Value::String(path))) = (id, map.get_mut("originalPath")) {
@@ -80,18 +98,18 @@ pub fn hide_paths(v: &mut Value) {
                 *path = format!("/audio/{name}");
             }
             for child in map.values_mut() {
-                hide_paths(child);
+                hide_paths(child, hidden);
             }
         }
-        Value::Array(items) => items.iter_mut().for_each(hide_paths),
+        Value::Array(items) => items.iter_mut().for_each(|i| hide_paths(i, hidden)),
         _ => {}
     }
 }
 
 /// [`hide_paths`] over the text of an event's payload.
-pub fn hide_paths_in_json(text: &str) -> Option<String> {
+pub fn hide_paths_in_json(text: &str, hidden: &[String]) -> Option<String> {
     let mut v: Value = serde_json::from_str(text).ok()?;
-    hide_paths(&mut v);
+    hide_paths(&mut v, hidden);
     serde_json::to_string(&v).ok()
 }
 
@@ -120,11 +138,30 @@ mod tests {
             "spoken": { "path": "/data/store/audio/p.wav", "sections": [], "durationMs": 1 },
             "other": { "path": "/keep/me" }
         });
-        hide_paths(&mut v);
+        hide_paths(&mut v, &[]);
         assert_eq!(v["items"][0]["originalPath"], "/originals/i1");
         assert_eq!(v["items"][1]["originalPath"], Value::Null);
         assert_eq!(v["spoken"]["path"], "/audio/p.wav");
         assert_eq!(v["other"]["path"], "/keep/me");
+    }
+
+    #[test]
+    fn the_data_and_home_folders_are_named_nowhere_in_what_the_browser_reads() {
+        let hidden = vec!["/srv/x/data".to_string(), "/srv/y/home".to_string()];
+        let mut v = json!({
+            "detail": "cannot open /srv/x/data/store/a.db: denied",
+            "settings": { "inbox": "/srv/y/home/Inbox", "list": ["/srv/x/data/logs"] },
+            "other": "no path here"
+        });
+        hide_paths(&mut v, &hidden);
+        let text = v.to_string();
+        assert!(
+            !text.contains("/srv/x") && !text.contains("/srv/y/home"),
+            "{text}"
+        );
+        assert_eq!(v["detail"], "cannot open (data)/store/a.db: denied");
+        assert_eq!(v["settings"]["inbox"], "~/Inbox");
+        assert_eq!(v["other"], "no path here");
     }
 
     #[test]

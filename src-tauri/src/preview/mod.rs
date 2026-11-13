@@ -39,8 +39,14 @@ pub const DATA_MARKER: &str = ".nocturne-preview";
 
 /// How long a ticket for the event stream lives, and that it works once.
 const EVENTS_TICKET_TTL: Duration = Duration::from_secs(30);
-/// How long a ticket for showing originals lives. Media elements cannot send a header.
-const MEDIA_TICKET_TTL: Duration = Duration::from_secs(12 * 3600);
+/// How long a ticket for showing originals lives after it was made or last used. Media elements
+/// cannot send a header, so the ticket rides in the address and is kept short.
+const MEDIA_TICKET_TTL: Duration = Duration::from_secs(3600);
+/// Raw uploads (recordings, files) that may be read and converted at once.
+const RAW_UPLOADS: usize = 2;
+
+/// Where converted recordings are worked on, under the data folder. Emptied at every start.
+pub(crate) const WORK_DIR: &str = "preview-tmp";
 
 /// What the server is told at start.
 #[derive(Clone, Debug)]
@@ -66,6 +72,44 @@ struct Ticket {
     expires: Instant,
 }
 
+/// The tickets in use. Expired ones are dropped whenever the set is touched.
+#[derive(Default)]
+struct Tickets(HashMap<String, Ticket>);
+
+impl Tickets {
+    fn issue(&mut self, kind: TicketKind, now: Instant) -> String {
+        let ticket = auth::random_hex(16);
+        let ttl = match kind {
+            TicketKind::Events => EVENTS_TICKET_TTL,
+            TicketKind::Media => MEDIA_TICKET_TTL,
+        };
+        self.0.retain(|_, t| t.expires > now);
+        self.0.insert(
+            ticket.clone(),
+            Ticket {
+                kind,
+                expires: now + ttl,
+            },
+        );
+        ticket
+    }
+
+    /// An events ticket is spent by the check; a media ticket is renewed by it.
+    fn redeem(&mut self, ticket: &str, kind: TicketKind, now: Instant) -> bool {
+        self.0.retain(|_, t| t.expires > now);
+        let Some(found) = self.0.get_mut(ticket).filter(|t| t.kind == kind) else {
+            return false;
+        };
+        match kind {
+            TicketKind::Events => {
+                self.0.remove(ticket);
+            }
+            TicketKind::Media => found.expires = now + MEDIA_TICKET_TTL,
+        }
+        true
+    }
+}
+
 /// One event the app emitted, as the browser hears it.
 pub(crate) type Event = (String, String);
 
@@ -76,7 +120,13 @@ pub struct Preview {
     pub(crate) hosts: Vec<String>,
     pub(crate) origins: Vec<String>,
     pub(crate) data_dir: PathBuf,
-    tickets: Mutex<HashMap<String, Ticket>>,
+    /// The places on this machine that never reach the browser as text.
+    pub(crate) hidden: Vec<String>,
+    /// The converter, resolved once at start.
+    pub(crate) ffmpeg: Option<PathBuf>,
+    /// One slot per raw upload being read or converted.
+    pub(crate) raw_slots: tokio::sync::Semaphore,
+    tickets: Mutex<Tickets>,
     pub(crate) events: broadcast::Sender<Event>,
 }
 
@@ -90,10 +140,13 @@ impl Preview {
     ) -> Arc<Preview> {
         let (events, _) = broadcast::channel(4096);
         let (hosts, origins) = allowed(&opts);
+        let hidden = files::hidden_roots(data_dir);
+        let _ = std::fs::remove_dir_all(data_dir.join(WORK_DIR));
         for name in nocturne_contract::ALL_EVENTS {
             let tx = events.clone();
+            let hidden = hidden.clone();
             app.listen(name, move |ev| {
-                if let Some(payload) = files::hide_paths_in_json(ev.payload()) {
+                if let Some(payload) = files::hide_paths_in_json(ev.payload(), &hidden) {
                     let _ = tx.send((name.to_string(), payload));
                 }
             });
@@ -105,41 +158,24 @@ impl Preview {
             hosts,
             origins,
             data_dir: data_dir.to_path_buf(),
-            tickets: Mutex::new(HashMap::new()),
+            hidden,
+            ffmpeg: transcode::find_ffmpeg(),
+            raw_slots: tokio::sync::Semaphore::new(RAW_UPLOADS),
+            tickets: Mutex::new(Tickets::default()),
             events,
         })
     }
 
-    /// A ticket for the event stream (once, soon) or for media (many times, for hours).
+    /// A ticket for the event stream (once, soon) or for media (for an hour after its last use).
     pub(crate) fn issue(&self, kind: TicketKind) -> String {
-        let ticket = auth::random_hex(16);
-        let ttl = match kind {
-            TicketKind::Events => EVENTS_TICKET_TTL,
-            TicketKind::Media => MEDIA_TICKET_TTL,
-        };
-        let now = Instant::now();
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        all.retain(|_, t| t.expires > now);
-        all.insert(
-            ticket.clone(),
-            Ticket {
-                kind,
-                expires: now + ttl,
-            },
-        );
-        ticket
+        all.issue(kind, Instant::now())
     }
 
-    /// Whether `ticket` is a live one of this kind. An events ticket is spent by the check.
+    /// Whether `ticket` is a live one of this kind.
     pub(crate) fn redeem(&self, ticket: &str, kind: TicketKind) -> bool {
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        let live = all
-            .get(ticket)
-            .is_some_and(|t| t.kind == kind && t.expires > Instant::now());
-        if live && kind == TicketKind::Events {
-            all.remove(ticket);
-        }
-        live
+        all.redeem(ticket, kind, Instant::now())
     }
 
     pub(crate) fn engine(&self) -> Option<nocturne_engine::Engine> {
@@ -150,7 +186,7 @@ impl Preview {
         invoke::call(&self.window, "get_status", serde_json::json!({}))
             .ok()
             .map(|mut v| {
-                files::hide_paths(&mut v);
+                files::hide_paths(&mut v, &self.hidden);
                 v
             })
     }
@@ -176,4 +212,48 @@ fn allowed(opts: &Options) -> (Vec<String>, Vec<String>) {
         }
     }
     (hosts, origins)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_media_ticket_is_renewed_by_use_and_dropped_when_it_lapses() {
+        let t0 = Instant::now();
+        let mut tickets = Tickets::default();
+        let ticket = tickets.issue(TicketKind::Media, t0);
+        let later = t0 + MEDIA_TICKET_TTL - Duration::from_secs(1);
+        assert!(tickets.redeem(&ticket, TicketKind::Media, later));
+        let again = later + MEDIA_TICKET_TTL - Duration::from_secs(1);
+        assert!(tickets.redeem(&ticket, TicketKind::Media, again));
+        assert!(!tickets.redeem(&ticket, TicketKind::Events, again));
+        let lapsed = again + MEDIA_TICKET_TTL;
+        assert!(!tickets.redeem(&ticket, TicketKind::Media, lapsed));
+        assert!(tickets.0.is_empty());
+    }
+
+    #[test]
+    fn an_events_ticket_works_once_and_lapses_quickly() {
+        let t0 = Instant::now();
+        let mut tickets = Tickets::default();
+        let used = tickets.issue(TicketKind::Events, t0);
+        assert!(tickets.redeem(&used, TicketKind::Events, t0));
+        assert!(!tickets.redeem(&used, TicketKind::Events, t0));
+        let old = tickets.issue(TicketKind::Events, t0);
+        assert!(!tickets.redeem(&old, TicketKind::Events, t0 + EVENTS_TICKET_TTL));
+    }
+
+    #[test]
+    fn expired_tickets_are_purged_when_a_new_one_is_made() {
+        let t0 = Instant::now();
+        let mut tickets = Tickets::default();
+        tickets.issue(TicketKind::Media, t0);
+        tickets.issue(TicketKind::Events, t0);
+        tickets.issue(
+            TicketKind::Media,
+            t0 + MEDIA_TICKET_TTL + Duration::from_secs(1),
+        );
+        assert_eq!(tickets.0.len(), 1);
+    }
 }

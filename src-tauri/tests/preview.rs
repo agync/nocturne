@@ -421,3 +421,48 @@ async fn the_interface_is_served_without_the_token_but_not_to_a_wrong_host() {
         .unwrap();
     assert_eq!(send(&r, wrong).await.status(), StatusCode::FORBIDDEN);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_a_raw_upload_may_be_large() {
+    let r = rig();
+    let big = vec![b' '; (1 << 20) + 1];
+    let response = send(
+        &r,
+        authed(Method::POST, "/api/invoke/get_status")
+            .body(Body::from(big.clone()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = send(
+        &r,
+        authed(Method::POST, "/api/ticket")
+            .body(Body::from(big))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    let response = send(
+        &r,
+        authed(Method::POST, "/api/invoke/keep_bytes")
+            .header("x-nocturne-mime", "image/png")
+            .body(Body::from(vec![0u8; (1 << 20) + 1]))
+            .unwrap(),
+    )
+    .await;
+    let refused = json_of(response).await;
+    assert!(
+        !refused.to_string().contains("too large to send"),
+        "{refused}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_data_folder_is_named_nowhere_in_an_answer() {
+    let r = rig();
+    let dir = r.h.dir.path().to_string_lossy().into_owned();
+    for command in ["get_status", "get_settings", "get_item"] {
+        let (_, body) = invoke(&r, command, json!({ "id": "missing" })).await;
+        assert!(!body.to_string().contains(&dir), "{command}: {body}");
+    }
+}

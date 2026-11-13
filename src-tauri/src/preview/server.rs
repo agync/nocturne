@@ -23,18 +23,22 @@ use super::{Preview, TicketKind, auth, files, invoke, transcode};
 const UI_CSP: &str = "default-src 'self'; img-src 'self' blob: data:; media-src 'self' blob:; \
     style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self'; frame-ancestors 'none'";
 
+/// What any request may carry except a raw upload, which has its own, larger limit.
+const JSON_LIMIT: usize = 1 << 20;
+
 /// Everything the browser talks to.
 pub fn router(preview: Arc<Preview>) -> Router {
     Router::new()
-        .route("/api/invoke/{command}", post(invoke_command))
+        .route(
+            "/api/invoke/{command}",
+            post(invoke_command).layer(DefaultBodyLimit::disable()),
+        )
         .route("/api/ticket", post(ticket))
         .route("/api/events", get(events))
         .route("/originals/{id}", get(original))
         .route("/audio/{name}", get(audio))
         .fallback(fallback)
-        .layer(DefaultBodyLimit::max(
-            crate::commands::MAX_RAW_BYTES + (1 << 20),
-        ))
+        .layer(DefaultBodyLimit::max(JSON_LIMIT))
         .layer(middleware::from_fn_with_state(preview.clone(), auth::gate))
         .with_state(preview)
 }
@@ -74,7 +78,7 @@ async fn invoke_command(
     State(preview): State<Arc<Preview>>,
     Path(command): Path<String>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Body,
 ) -> Response {
     if !crate::COMMAND_NAMES.contains(&command.as_str()) {
         return failure(json!({ "code": "notFound", "detail": "no such command" }));
@@ -83,21 +87,39 @@ async fn invoke_command(
         return failure(invoke::unavailable());
     }
     let window = preview.window.clone();
-    let result = if invoke::RAW.contains(&command.as_str()) {
+    let raw = invoke::RAW.contains(&command.as_str());
+    let _slot = if raw {
+        match preview.raw_slots.try_acquire() {
+            Ok(permit) => Some(permit),
+            Err(_) => return failure(json!({ "code": "busy", "detail": "try again shortly" })),
+        }
+    } else {
+        None
+    };
+    let limit = if raw {
+        crate::commands::MAX_RAW_BYTES + (1 << 20)
+    } else {
+        JSON_LIMIT
+    };
+    let Ok(body) = axum::body::to_bytes(body, limit).await else {
+        return failure(json!({ "code": "invalid", "detail": "that is too large to send" }));
+    };
+    let result = if raw {
         let mut forwarded = tauri::http::HeaderMap::new();
         for name in ["x-nocturne-mime", "x-nocturne-source"] {
             if let Some(value) = headers.get(name) {
                 forwarded.insert(tauri::http::HeaderName::from_static(name), value.clone());
             }
         }
-        let mut bytes = body.to_vec();
+        let mut bytes = Vec::from(body);
         let wanted = forwarded
             .get("x-nocturne-mime")
             .and_then(|v| v.to_str().ok())
             .is_some_and(transcode::needs_conversion);
         if wanted
+            && let Some(ffmpeg) = &preview.ffmpeg
             && let Some(wav) =
-                transcode::to_wav(&preview.data_dir.join("preview-tmp"), &bytes).await
+                transcode::to_wav(ffmpeg, &preview.data_dir.join(super::WORK_DIR), &bytes).await
         {
             bytes = wav;
             forwarded.insert(
@@ -123,10 +145,13 @@ async fn invoke_command(
     };
     match result {
         Ok(Ok(mut value)) => {
-            files::hide_paths(&mut value);
+            files::hide_paths(&mut value, &preview.hidden);
             json_response(StatusCode::OK, value)
         }
-        Ok(Err(error)) => failure(error),
+        Ok(Err(mut error)) => {
+            files::hide_paths(&mut error, &preview.hidden);
+            failure(error)
+        }
         Err(_) => failure(json!({ "code": "internal", "detail": "the command did not finish" })),
     }
 }
