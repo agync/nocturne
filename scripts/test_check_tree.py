@@ -142,6 +142,26 @@ class FixtureTrees(unittest.TestCase):
         self.assertEqual(proc.returncode, 1)
         self.assertIn("text files naming a home directory", proc.stdout)
 
+    def test_the_real_preview_binary_or_its_text_fails(self):
+        lib = make_tree(self.tmp)
+        self.assertEqual(run_check(self.tmp).returncode, 0)
+        write(os.path.join(self.tmp, "usr/bin/nocturne-preview"), b"\x7fELF\0", 0o755)
+        proc = run_check(self.tmp)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("development-only real preview", proc.stdout)
+        os.remove(os.path.join(self.tmp, "usr/bin/nocturne-preview"))
+        # The program itself, carrying the text the preview prints.
+        write(os.path.join(self.tmp, "usr/bin/nocturne"), b"\x7fELF\0nocturne-preview-dev-only\0", 0o755)
+        proc = run_check(self.tmp)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("nocturne", proc.stdout.split("development-only real preview")[1])
+        write(os.path.join(self.tmp, "usr/bin/nocturne"), b"\x7fELF\0", 0o755)
+        # The interface built for the preview, which keeps its token under a name of its own.
+        write(os.path.join(lib, "ui/app.js"), 'sessionStorage.getItem("nocturne.preview.token")')
+        proc = run_check(self.tmp)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("app.js", proc.stdout)
+
     def test_missing_icon_size_fails(self):
         make_tree(self.tmp)
         os.remove(os.path.join(self.tmp, "usr/share/icons/hicolor/256x256/apps/nocturne.png"))

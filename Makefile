@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck e2e-real
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck e2e-real preview-real
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -18,6 +18,12 @@ DEV_DATA_DIR ?= $(CURDIR)/target/dev-data
 dev: ui/node_modules ## Run the desktop app with a scripted mind and a scratch data dir
 	cd src-tauri && NOCTURNE_FAKE_MIND=1 NOCTURNE_DATA_DIR=$(DEV_DATA_DIR) \
 		../ui/node_modules/.bin/tauri dev --features fake-mind
+
+# The real preview is for development only and is never packaged. See docs/contribution/building.md.
+preview-real: ui/node_modules ## Use the real engine and models from a browser (development only)
+	cd ui && npx vite build --mode preview-real
+	cargo build -p nocturne-app --features preview --bin nocturne-preview
+	scripts/preview-real.sh
 
 ##@ Build & Quality
 
@@ -37,10 +43,12 @@ rust/build: ## Build the Rust workspace
 
 rust/test: ## Test the Rust workspace
 	cargo test --workspace
+	cargo test -p nocturne-app --features preview --lib --test preview
 
 rust/lint: ## Clippy and rustfmt check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
+	cargo clippy -p nocturne-app --features preview --all-targets -- -D warnings
 
 rust/fmt: ## Format Rust code
 	cargo fmt --all

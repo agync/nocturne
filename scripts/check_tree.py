@@ -29,6 +29,10 @@ FORBIDDEN_PARTS = (".agents", "vendor/", "/home/")
 HOME_PATTERN = re.compile(rb"/home/")
 MAC_HOME_PATTERN = re.compile(rb"/Users/[^/\s]")
 APP_IDENTIFIER = "app.nocturne.desktop"
+# The development-only real preview (the `preview` feature) must never ship: its binary has this
+# name and prints the first marker, and its interface keeps the token under the second.
+PREVIEW_BINARY = "nocturne-preview"
+PREVIEW_MARKERS = (b"nocturne-preview-dev-only", b"nocturne.preview.token")
 
 
 def walk(root):
@@ -176,6 +180,21 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
         report.fail(f"fetch stamp files in the package: {stamps}")
     else:
         report.ok("no .sha256 stamp files")
+
+    preview = [r for r in rel if os.path.basename(r).startswith(PREVIEW_BINARY)]
+    for r, p in rel.items():
+        if os.path.islink(p) or not os.path.isfile(p) or r in preview:
+            continue
+        if lemon_dir and r.startswith(lemon_dir + os.sep):
+            continue
+        with open(p, "rb") as handle:
+            data = handle.read()
+        if any(marker in data for marker in PREVIEW_MARKERS):
+            preview.append(r)
+    if preview:
+        report.fail(f"the development-only real preview is in the package: {preview[:5]}")
+    else:
+        report.ok("no development-only real preview in the package")
 
     leaks = []
     for r, p in rel.items():
