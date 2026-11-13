@@ -109,7 +109,13 @@ test("check 9 and the idle run", async ({ browser }) => {
       record(LOG, { ask: r });
       return r;
     } catch (e) {
-      const shown = await page.evaluate(() => document.body.textContent?.slice(0, 300) ?? "");
+      const shown = await page
+        .evaluate(() => document.body.textContent?.slice(0, 300) ?? "")
+        .catch(() => "");
+      await page
+        .screenshot({ path: `test-results/trials/idle-${label.replace(/\W+/g, "-")}.png` })
+        .catch(() => {});
+      await page.goto(`https://${real.host}/`).catch(() => {});
       const r = { label, ok: false, ms: Date.now() - t, shown, error: String(e).slice(0, 200) };
       asks.push(r);
       record(LOG, { ask: r });
@@ -144,6 +150,50 @@ test("check 9 and the idle run", async ({ browser }) => {
       .filter((e) => e.kind === "ws-close")
       .map((e) => new Date(e.t).toISOString()),
   });
+
+  // A 50 MB upload: the app's peak while it streams to disk.
+  const before = sample("before upload");
+  let peakApp = before.appKb as number;
+  let peakHelper = (before.helperKb as number | null) ?? 0;
+  const t = Date.now();
+  await page.getByRole("button", { name: /^Keep/ }).click();
+  await page
+    .locator('input[type="file"]')
+    .first()
+    .setInputFiles({
+      name: "large.jpg",
+      mimeType: "image/jpeg",
+      buffer: photo("LARGE-UPLOAD", 49_500_000),
+    });
+  await page.getByRole("button", { name: "Keep", exact: true }).click();
+  const done = page.getByRole("heading", { name: "Kept." });
+  let kept = false;
+  while (Date.now() - t < 600_000) {
+    const s = sample("upload");
+    peakApp = Math.max(peakApp, s.appKb as number);
+    peakHelper = Math.max(peakHelper, (s.helperKb as number | null) ?? 0);
+    if (await done.isVisible()) {
+      kept = true;
+      break;
+    }
+    await sleep(200);
+  }
+  record(LOG, {
+    check: 9,
+    phase: "50 MB upload",
+    kept,
+    seconds: Math.round((Date.now() - t) / 1000),
+    appBeforeKb: before.appKb,
+    appPeakKb: peakApp,
+    appGrowthKb: peakApp - (before.appKb as number),
+    helperPeakKb: peakHelper,
+    partsLeft: partials(real.data).length,
+    asks,
+  });
+  console.log(
+    `upload kept=${kept} app growth ${peakApp - (before.appKb as number)} kB, helper peak ${peakHelper} kB`,
+  );
+  if (kept) await home(page);
 
   // The helper freezes for a minute (the edge loses it), then carries on.
   const frozen = helperPids(real.data)[0]?.pid ?? 0;
@@ -226,7 +276,14 @@ test("check 9 and the idle run", async ({ browser }) => {
   if (newHost) {
     real.host = newHost;
     const t = Date.now();
-    await page.reload().catch(() => {});
+    // Home on the old address: the phone app comes from its own cache there.
+    await page.goto(`https://${old}/`).catch(() => {});
+    // The app may come back on the screen it was on; the new-address card is on Home.
+    await page
+      .getByRole("button", { name: /^(Back to home|Home)$/ })
+      .first()
+      .click({ timeout: 10_000 })
+      .catch(() => {});
     const asleep = await page
       .getByText("Has your computer got a new address?")
       .waitFor({ timeout: 120_000 })
@@ -263,48 +320,7 @@ test("check 9 and the idle run", async ({ browser }) => {
   }
   record(LOG, { step: "relink", relinked, stateNow: (await state()).type });
 
-  // A 50 MB upload: the app's peak while it streams to disk.
-  const before = sample("before upload");
-  let peakApp = before.appKb as number;
-  let peakHelper = (before.helperKb as number | null) ?? 0;
-  const t = Date.now();
-  await page.getByRole("button", { name: /^Keep/ }).click();
-  await page
-    .locator('input[type="file"]')
-    .first()
-    .setInputFiles({
-      name: "large.jpg",
-      mimeType: "image/jpeg",
-      buffer: photo("LARGE-UPLOAD", 49_500_000),
-    });
-  await page.getByRole("button", { name: "Keep", exact: true }).click();
-  const done = page.getByRole("heading", { name: "Kept." });
-  let kept = false;
-  while (Date.now() - t < 600_000) {
-    const s = sample("upload");
-    peakApp = Math.max(peakApp, s.appKb as number);
-    peakHelper = Math.max(peakHelper, (s.helperKb as number | null) ?? 0);
-    if (await done.isVisible()) {
-      kept = true;
-      break;
-    }
-    await sleep(200);
-  }
-  record(LOG, {
-    check: 9,
-    phase: "50 MB upload",
-    kept,
-    seconds: Math.round((Date.now() - t) / 1000),
-    appBeforeKb: before.appKb,
-    appPeakKb: peakApp,
-    appGrowthKb: peakApp - (before.appKb as number),
-    helperPeakKb: peakHelper,
-    partsLeft: partials(real.data).length,
-    asks,
-  });
-  console.log(
-    `upload kept=${kept} app growth ${peakApp - (before.appKb as number)} kB, helper peak ${peakHelper} kB`,
-  );
   await context.close();
   expect(kept).toBe(true);
+  expect(relinked.ok).toBe(true);
 });

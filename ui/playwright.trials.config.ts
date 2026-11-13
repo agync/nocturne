@@ -26,5 +26,7 @@ export default defineConfig({
     locale: "en-GB",
     timezoneId: "Europe/London",
     screenshot: "only-on-failure",
+    actionTimeout: 30_000,
+    navigationTimeout: 60_000,
   },
 });
