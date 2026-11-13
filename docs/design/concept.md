@@ -49,8 +49,9 @@ flowchart TD
 | The person says forget | Delete with cascade | gone |
 | Untrusted source | Quarantine, no promotion | unconfirmed |
 
-Archiving is reversible; deletion is explicit. Answering the daily question is a reinforcement
-signal, so the page trains the memory without a settings screen.
+Archiving is reversible; forgetting is explicit. Future-dated facts do not fade before their date,
+and health, allergy and medication facts are kept forever by default. Answering the daily question
+is a reinforcement signal, so the page trains the memory without a settings screen.
 
 ## Why this shape
 
