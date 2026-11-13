@@ -187,6 +187,34 @@ fn walk(root: &Path, dir: &Path, depth: usize, limit: usize, out: &mut Listing) 
     }
 }
 
+/// The real path of a listed file, if it is still a plain file inside `root` right now.
+///
+/// A listing is a moment in the past: by the time a file is kept, it (or a folder on its way)
+/// may have been swapped for a link to somewhere else. So just before keeping, every folder
+/// between `root` and the file must still be a real folder, the file must still be a regular
+/// file, and its real path must still be under the real `root`. What is left is a window of
+/// microseconds between this check and the open inside the store, which only another process
+/// of the same user could use, and that process could read the file itself. (Opening without
+/// following links needs `libc`, which this app does not depend on.)
+pub fn confirm_inside(root: &Path, rel: &str) -> Option<PathBuf> {
+    let root = std::fs::canonicalize(root).ok()?;
+    let mut at = root.clone();
+    let mut parts = Path::new(rel).components().peekable();
+    while let Some(part) = parts.next() {
+        let std::path::Component::Normal(name) = part else {
+            return None;
+        };
+        at.push(name);
+        let kind = std::fs::symlink_metadata(&at).ok()?.file_type();
+        let last = parts.peek().is_none();
+        if kind.is_symlink() || (last && !kind.is_file()) || (!last && !kind.is_dir()) {
+            return None;
+        }
+    }
+    let real = std::fs::canonicalize(&at).ok()?;
+    real.starts_with(&root).then_some(real)
+}
+
 /// Whether the folder holds more files than the ledger can remember.
 pub fn too_many(root: &Path, cap: usize) -> bool {
     list(root, cap).is_ok_and(|l| !l.complete && l.entries.len() >= cap)
@@ -655,6 +683,57 @@ mod tests {
         let listing = list(folder.path(), 100).unwrap();
         let names: Vec<_> = listing.entries.iter().map(|e| e.rel.as_str()).collect();
         assert_eq!(names, ["real.txt"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_file_swapped_for_a_link_after_the_look_is_not_kept() {
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("secret.txt"), b"secret").unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::write(folder.path().join("a.txt"), b"fine").unwrap();
+        let seen = list(folder.path(), 10).unwrap();
+        assert_eq!(seen.entries.len(), 1);
+        let real = std::fs::canonicalize(folder.path().join("a.txt")).unwrap();
+        assert_eq!(confirm_inside(folder.path(), "a.txt"), Some(real));
+
+        std::fs::remove_file(folder.path().join("a.txt")).unwrap();
+        std::os::unix::fs::symlink(
+            outside.path().join("secret.txt"),
+            folder.path().join("a.txt"),
+        )
+        .unwrap();
+        assert_eq!(confirm_inside(folder.path(), "a.txt"), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_subfolder_swapped_for_a_link_after_the_look_is_not_followed() {
+        let outside = tempfile::tempdir().unwrap();
+        std::fs::write(outside.path().join("b.txt"), b"secret").unwrap();
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::create_dir(folder.path().join("sub")).unwrap();
+        std::fs::write(folder.path().join("sub").join("b.txt"), b"fine").unwrap();
+        assert!(confirm_inside(folder.path(), "sub/b.txt").is_some());
+
+        std::fs::remove_dir_all(folder.path().join("sub")).unwrap();
+        std::os::unix::fs::symlink(outside.path(), folder.path().join("sub")).unwrap();
+        assert_eq!(confirm_inside(folder.path(), "sub/b.txt"), None);
+    }
+
+    #[test]
+    fn a_path_that_climbs_out_or_is_not_a_plain_file_is_refused() {
+        let folder = tempfile::tempdir().unwrap();
+        std::fs::create_dir(folder.path().join("d")).unwrap();
+        std::fs::write(folder.path().join("a.txt"), b"x").unwrap();
+        assert_eq!(confirm_inside(folder.path(), "../a.txt"), None);
+        assert_eq!(confirm_inside(folder.path(), "/etc/passwd"), None);
+        assert_eq!(
+            confirm_inside(folder.path(), "d"),
+            None,
+            "a folder is not a file"
+        );
+        assert_eq!(confirm_inside(folder.path(), "missing.txt"), None);
     }
 
     #[test]
