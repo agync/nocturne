@@ -30,8 +30,8 @@ pub use lemonade::{EngineDetails, pause_setup, resume_setup, retry_engine, start
 
 /// How long quitting waits for the reader to give back the item it is reading.
 const STOP_TASKS: Duration = Duration::from_secs(1);
-/// How long quitting waits for the private engine to stop. Past this the app goes anyway: the
-/// engine ends by itself within about six seconds, when its watchdog sees the app gone.
+/// How long quitting waits for the private engine to stop on request. Past this its process
+/// group is sent SIGTERM, then SIGKILL a second later.
 const QUIT_BUDGET: Duration = Duration::from_secs(1);
 /// How long after the engine gives up another start is tried.
 const RETRY_AFTER: Duration = Duration::from_secs(10 * 60);

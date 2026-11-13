@@ -22,7 +22,7 @@ const RESTART_WINDOW: Duration = Duration::from_secs(3600);
 const LIVE_POLL: Duration = Duration::from_millis(100);
 const HUNG_AFTER: u32 = 3;
 /// How long each stage of a stop may take: the request, the wait after it, SIGTERM, SIGKILL.
-/// Together about twelve seconds. A process that exits without running `Drop` (as a Tauri
+/// Together about twelve seconds; quitting cuts the first three short (see [`Stop::quick`]). A process that exits without running `Drop` (as a Tauri
 /// `exit()` does) skips all of this; the engine's own watchdog then ends it, in about six seconds.
 const SHUTDOWN_REQUEST: Duration = Duration::from_secs(2);
 const AFTER_REQUEST: Duration = Duration::from_secs(4);
@@ -59,8 +59,35 @@ pub enum RuntimeState {
     Failed { reason: String },
 }
 
+/// How patient a stop is: how long the engine has to stop on request, and after SIGTERM.
+#[derive(Debug, Clone, Copy)]
+struct Stop {
+    polite: Duration,
+    after_term: Duration,
+}
+
+impl Stop {
+    fn patient() -> Stop {
+        Stop {
+            polite: SHUTDOWN_REQUEST + AFTER_REQUEST,
+            after_term: AFTER_TERM,
+        }
+    }
+
+    /// For quitting: the request gets `budget`, then the group gets SIGTERM and a moment.
+    fn quick(budget: Duration) -> Stop {
+        Stop {
+            polite: budget,
+            after_term: QUICK_AFTER_TERM,
+        }
+    }
+}
+
+/// How long a quitting app waits after SIGTERM before SIGKILL.
+const QUICK_AFTER_TERM: Duration = Duration::from_millis(1000);
+
 enum Cmd {
-    Shutdown(oneshot::Sender<Result<(), RuntimeError>>),
+    Shutdown(oneshot::Sender<Result<(), RuntimeError>>, Stop),
     /// Stop the engine and start it again, so launch-time settings take effect.
     Relaunch(oneshot::Sender<Result<(), RuntimeError>>),
 }
@@ -223,8 +250,18 @@ impl Supervisor {
 
     /// Stops the engine and everything it started. Asks politely, then insists.
     pub async fn shutdown(self) -> Result<(), RuntimeError> {
+        self.stop(Stop::patient()).await
+    }
+
+    /// Stops the engine for a quitting app: asks, waits up to `budget`, then sends the engine's
+    /// whole process group SIGTERM and, a second later, SIGKILL.
+    pub async fn shutdown_within(self, budget: Duration) -> Result<(), RuntimeError> {
+        self.stop(Stop::quick(budget)).await
+    }
+
+    async fn stop(self, how: Stop) -> Result<(), RuntimeError> {
         let (tx, rx) = oneshot::channel();
-        if self.cmd.send(Cmd::Shutdown(tx)).await.is_err() {
+        if self.cmd.send(Cmd::Shutdown(tx, how)).await.is_err() {
             return Ok(());
         }
         let result = rx.await.unwrap_or(Ok(()));
@@ -290,7 +327,7 @@ impl Actor {
                         Some(Cmd::Relaunch(reply)) => {
                             let _ = reply.send(Err(RuntimeError::Unavailable));
                         }
-                        Some(Cmd::Shutdown(reply)) => {
+                        Some(Cmd::Shutdown(reply, _)) => {
                             let _ = reply.send(Ok(()));
                         }
                         None => {}
@@ -353,7 +390,7 @@ impl Actor {
                 c = cmd.recv() => {
                     match c {
                         Some(Cmd::Relaunch(reply)) => relaunch = Some(reply),
-                        Some(Cmd::Shutdown(reply)) => {
+                        Some(Cmd::Shutdown(reply, _)) => {
                             let _ = reply.send(Ok(()));
                             self.set_state(RuntimeState::Stopped);
                             return;
@@ -375,7 +412,7 @@ impl Actor {
         self.set_state(RuntimeState::Failed { reason });
         while let Some(c) = cmd.recv().await {
             match c {
-                Cmd::Shutdown(reply) => {
+                Cmd::Shutdown(reply, _) => {
                     let _ = reply.send(Ok(()));
                     return;
                 }
@@ -567,14 +604,14 @@ impl Actor {
                 }
                 c = cmd.recv() => {
                     let exit = match c {
-                        Some(Cmd::Shutdown(reply)) => {
-                            let r = self.stop_gracefully(&mut running).await;
+                        Some(Cmd::Shutdown(reply, how)) => {
+                            let r = self.stop_gracefully(&mut running, how).await;
                             let _ = reply.send(r);
                             self.set_state(RuntimeState::Stopped);
                             Exit::Shutdown
                         }
                         Some(Cmd::Relaunch(reply)) => {
-                            let _ = self.stop_gracefully(&mut running).await;
+                            let _ = self.stop_gracefully(&mut running, Stop::patient()).await;
                             self.set_state(RuntimeState::Starting);
                             Exit::Relaunch(reply)
                         }
@@ -592,14 +629,18 @@ impl Actor {
         }
     }
 
-    /// The shutdown request, then SIGTERM, then SIGKILL, each stage with its own short limit.
-    async fn stop_gracefully(&self, running: &mut Running) -> Result<(), RuntimeError> {
-        let _ = tokio::time::timeout(SHUTDOWN_REQUEST, self.client.shutdown()).await;
-        if wait_exit(running, AFTER_REQUEST).await.is_none() {
+    /// The shutdown request, then SIGTERM to the group, then SIGKILL, each stage with its own
+    /// short limit.
+    async fn stop_gracefully(&self, running: &mut Running, how: Stop) -> Result<(), RuntimeError> {
+        let begun = tokio::time::Instant::now();
+        let request = SHUTDOWN_REQUEST.min(how.polite);
+        let _ = tokio::time::timeout(request, self.client.shutdown()).await;
+        let rest = how.polite.saturating_sub(begun.elapsed());
+        if wait_exit(running, rest).await.is_none() {
             drop(running.stdin.take());
             #[cfg(unix)]
             let _ = running.child.signal(15);
-            if wait_exit(running, AFTER_TERM).await.is_none() {
+            if wait_exit(running, how.after_term).await.is_none() {
                 let _ = running.child.start_kill();
                 wait_exit(running, AFTER_KILL).await;
             }

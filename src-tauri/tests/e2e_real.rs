@@ -2012,19 +2012,20 @@ fn the_whole_product_works_with_real_models() {
             && processes_mentioning(&engine_root.to_string_lossy()).is_empty()
     });
     let left = processes_mentioning(&engine_root.to_string_lossy());
+    let gone_ms = gone.map(|d| ms(d) + quit_ms);
     run.check(
         "quit.clean",
-        "no engine process is left running after quit",
-        pgid != 0 && gone.is_some() && left.is_empty(),
+        "no engine process is left running 3 s after quit",
+        pgid != 0 && gone_ms.is_some_and(|t| t <= 3000) && left.is_empty(),
         format!(
             "{before_quit} processes in the engine's group before quit; quit call {quit_ms} ms; all gone after {} ms",
-            gone.map(|d| ms(d) + quit_ms).unwrap_or(0)
+            gone_ms.unwrap_or(0)
         ),
     );
     run.put(
         "quit",
         json!({"engine_group_size_before": before_quit, "exit_hooks_ms": quit_ms,
-               "gone_after_ms": gone.map(|d| ms(d) + quit_ms)}),
+               "gone_after_ms": gone_ms}),
     );
 
     // The table -----------------------------------------------------------------------------

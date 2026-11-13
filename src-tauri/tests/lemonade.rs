@@ -848,12 +848,15 @@ fn a_finished_setup_leaves_the_engine_offline() {
     });
 }
 
-/// Quitting does not wait on an engine that will not stop: it ends by itself soon after.
+/// Quitting does not wait on an engine that will not stop, and does not leave it behind
+/// either: past the budget its whole group is ended, and none of it is left 3 s after quit.
 #[cfg(target_os = "linux")]
 #[test]
 fn quitting_does_not_wait_for_an_engine_that_hangs_on_shutdown() {
-    let lab = lab(Plan::new("downloaded=all,hang-shutdown").installed(Tier::Small));
+    let lab = lab(Plan::new("downloaded=all,hang-shutdown,leak-sleeper").installed(Tier::Small));
     wait_for("the mind to arrive", || lab.has_mind());
+    let engine_dir = lab.h.dir.path().join("engine");
+    assert!(!engines_using(&engine_dir).is_empty());
     let started = std::time::Instant::now();
     lab.h.state().run_exit_hooks();
     assert!(
@@ -861,6 +864,14 @@ fn quitting_does_not_wait_for_an_engine_that_hangs_on_shutdown() {
         "quitting took {:?}",
         started.elapsed()
     );
+    while !engines_using(&engine_dir).is_empty() {
+        assert!(
+            started.elapsed() < Duration::from_secs(3),
+            "engine processes outlived quit: {:?}",
+            engines_using(&engine_dir)
+        );
+        std::thread::sleep(Duration::from_millis(50));
+    }
 }
 
 /// Quitting while the engine is still starting must not leave it running.

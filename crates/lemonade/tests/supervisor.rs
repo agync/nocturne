@@ -373,6 +373,26 @@ async fn a_stuck_engine_is_stopped_within_the_budget() {
     assert_eq!(common::group_members(pgid), Vec::<u32>::new());
 }
 
+/// Quitting cannot wait the full polite stop: past its budget the engine's whole group is
+/// sent SIGTERM, then SIGKILL, and nothing of it is left a moment later.
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn quitting_stops_a_stuck_engine_soon_after_the_budget() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some("hang-shutdown,no-watchdog,leak-sleeper")).await;
+    let pgid = sup.pid().unwrap();
+    let begun = Instant::now();
+    sup.shutdown_within(Duration::from_secs(1)).await.unwrap();
+    let took = begun.elapsed();
+    assert!(
+        took >= Duration::from_secs(1),
+        "the request got its budget: {took:?}"
+    );
+    assert!(took < Duration::from_secs(3), "{took:?}");
+    assert_eq!(common::group_members(pgid), Vec::<u32>::new());
+}
+
 #[tokio::test]
 async fn an_engine_that_ignores_its_key_is_refused() {
     let tmp = tempfile::tempdir().unwrap();

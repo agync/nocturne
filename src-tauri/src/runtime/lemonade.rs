@@ -28,6 +28,9 @@ pub const BUNDLE_ENV: &str = "NOCTURNE_LEMOND";
 /// The id of the notice shown when the engine keeps failing.
 pub const RESTARTS_NOTICE: &str = "restarts";
 
+/// How long past the polite budget a stop may take: SIGTERM, a second, then SIGKILL.
+const STOP_AFTER_BUDGET: Duration = Duration::from_secs(2);
+
 /// What is known of the engine for the advanced details. Empty while there is no engine.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct EngineDetails {
@@ -46,12 +49,14 @@ pub(super) struct Lemonade {
 }
 
 impl Lemonade {
-    /// Stop watching and stop the engine, asking politely for up to `budget`.
+    /// Stop watching and stop the engine: ask politely for up to `budget`, then end its whole
+    /// process group (SIGTERM, then SIGKILL).
     pub(super) async fn stop(self, budget: Duration) {
         for task in &self.watchers {
             task.abort();
         }
-        match tokio::time::timeout(budget, self.supervisor.shutdown()).await {
+        let limit = budget + STOP_AFTER_BUDGET;
+        match tokio::time::timeout(limit, self.supervisor.shutdown_within(budget)).await {
             Ok(Ok(())) => {}
             Ok(Err(e)) => tracing::warn!("the private engine did not stop cleanly: {e}"),
             Err(_) => tracing::warn!("the private engine was slow to stop; it ends with the app"),
