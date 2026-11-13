@@ -58,3 +58,4 @@ export type { Tier } from "./Tier";
 export type { Trust } from "./Trust";
 export type { UpdateOffer } from "./UpdateOffer";
 export type { WhichOption } from "./WhichOption";
+export type { WhichResolved } from "./WhichResolved";

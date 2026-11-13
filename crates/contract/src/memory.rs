@@ -163,3 +163,15 @@ pub struct ForgetReport {
     pub originals_removed: u32,
     pub pages_redacted: u32,
 }
+
+/// What `resolve_which` settled, so the interface can say "Dentist set to Thursday 10:00."
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct WhichResolved {
+    /// The short subject, for example "Dentist".
+    pub subject: String,
+    /// The chosen value as written in the page line, for example "Thursday 19 Nov, 10:00".
+    pub chosen: String,
+    pub memory_id: String,
+}
