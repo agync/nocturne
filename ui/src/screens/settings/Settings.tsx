@@ -8,6 +8,7 @@ import { t } from "../../copy/t";
 import type {
   Delivery,
   LettingGo,
+  RemoteView,
   SettingsPatch,
   SettingsView,
   Theme,
@@ -15,6 +16,7 @@ import type {
 import { EngineError } from "../../engine/client";
 import { useEngine, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { useRemote } from "../away/useRemote";
 import { patch } from "./patch";
 import styles from "./Settings.module.css";
 import { ShortcutField } from "./ShortcutField";
@@ -79,6 +81,27 @@ function Select<V extends string | number>({
   );
 }
 
+/** The words on the Away from home row: Off, or how it is on and with how many phones. */
+export function awayValue(view: RemoteView): string {
+  const connection = t(
+    view.connection === "simple" ? "away.connection.simple" : "away.connection.mostPrivate",
+  );
+  switch (view.state.type) {
+    case "off":
+      return t("away.row.off");
+    case "on":
+      return view.devices.length === 0
+        ? t("away.row.onNoPhones", { connection })
+        : t("away.row.on", { connection, count: view.devices.length });
+    case "needsRelink":
+      return t("away.row.relink");
+    case "problem":
+      return t("away.row.problem");
+    default:
+      return t("away.row.setting");
+  }
+}
+
 /** #/settings: nobody has to visit. Every change is saved as it is made. */
 export function Settings() {
   const engine = useEngine();
@@ -86,6 +109,7 @@ export function Settings() {
   const toast = useToast();
   const client = useQueryClient();
   const query = useSettings();
+  const away = useRemote().data;
   const [saved, setSaved] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -312,6 +336,21 @@ export function Settings() {
               </>
             )}
           </Row>
+
+          {away ? (
+            <Row label={t("away.row.label")} hint={t("away.row.hint")}>
+              {(hint) => (
+                <a
+                  className={styles.value}
+                  href="#/settings/away"
+                  aria-describedby={hint}
+                  aria-label={t("away.row.open", { value: awayValue(away) })}
+                >
+                  {awayValue(away)} ›
+                </a>
+              )}
+            </Row>
+          ) : null}
         </ul>
         <a className={styles.advanced} href="#/settings/advanced">
           {t("settings.advanced.show")}

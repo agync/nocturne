@@ -394,3 +394,24 @@ describe("Advanced details", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/setup?step=welcome"));
   });
 });
+
+describe("settings", () => {
+  it("settings.away_row_value: shows Off, and then how it is on with how many phones", async () => {
+    await open();
+    const row = (await screen.findByRole("link", {
+      name: "Open Away from home, Off",
+    })) as HTMLAnchorElement;
+    expect(row).toHaveAttribute("href", "#/settings/away");
+    expect(row).toHaveAccessibleDescription("Use Nocturne from your phone");
+    document.body.innerHTML = "";
+    await open(createMockEngine({ remote: { auto: false, scenario: "on" } }));
+    expect(
+      await screen.findByRole("link", { name: "Open Away from home, On · Simple · 2 phones" }),
+    ).toBeInTheDocument();
+    document.body.innerHTML = "";
+    await open(createMockEngine({ remote: { auto: false, scenario: "relink" } }));
+    expect(
+      await screen.findByRole("link", { name: "Open Away from home, Phones need the new address" }),
+    ).toBeInTheDocument();
+  });
+});
