@@ -307,11 +307,12 @@ async fn session(
             let Ok(upgrade) = WebSocketUpgrade::from_request_parts(&mut parts, &()).await else {
                 return bare(code(HTTP_NOT_FOUND));
             };
-            let core = ctx.core.clone();
+            let (core, permits) = (ctx.core.clone(), ctx.permits.clone());
             let res = upgrade
                 .max_message_size(MAX_FRAME)
                 .max_frame_size(MAX_FRAME)
-                .on_upgrade(move |socket| websocket(socket, core, permit));
+                .on_upgrade(move |socket| websocket(socket, core, permits));
+            drop(permit);
             with_cors(res, &origin)
         }
         Method::POST => with_cors(poll_up(&ctx, req).await, &origin),
@@ -319,8 +320,11 @@ async fn session(
     }
 }
 
-async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemaphorePermit) {
+/// A socket holds a connection permit only once it carries a session: until then it is one of
+/// the few strangers `Core` keeps, and the permits stay for paired phones.
+async fn websocket(mut socket: WebSocket, core: Arc<Core>, permits: Arc<Semaphore>) {
     let conv = core.new_conv(Carrier::WebSocket);
+    let mut permit: Option<OwnedSemaphorePermit> = None;
     let mut rx = conv.rx.lock().await;
     let handshake = tokio::time::sleep(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS));
     tokio::pin!(handshake);
@@ -342,7 +346,14 @@ async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemapho
             () = &mut handshake, if conv.is_fresh() => break,
             msg = socket.recv() => match msg {
                 Some(Ok(Message::Binary(frame))) => match core.inbound(&conv, &frame) {
-                    Inbound::Continue => {}
+                    Inbound::Continue => {
+                        if permit.is_none() && conv.is_verified() {
+                            match permits.clone().try_acquire_owned() {
+                                Ok(p) => permit = Some(p),
+                                Err(_) => break,
+                            }
+                        }
+                    }
                     Inbound::Refuse => {
                         refused = true;
                         break;

@@ -87,6 +87,17 @@ pub enum Carrier {
 /// about two frames of an original are in memory at once.
 pub const OUT_BUDGET: usize = MAX_FRAME;
 
+/// Conversations that are not yet a session, of each kind at once: fresh ones that have sent
+/// nothing, and pairing ones. Neither holds a connection permit, so the permits stay for
+/// sessions with paired phones. Past this many fresh ones the oldest gives way, so idle
+/// sockets cannot keep a newcomer out; past this many pairing ones a new pairing is refused,
+/// so a phone partway through pairing is never pushed out.
+pub const STRANGER_CONVS: usize = MAX_CONNECTIONS / 2;
+
+/// How long a pairing conversation may last before it reveals a phone for the person to decide
+/// on: enough for HELLO, commit, nonce and reveal.
+pub const PAIRING_CONV_SECS: u64 = HANDSHAKE_TIMEOUT_SECS + REVEAL_WINDOW_SECS;
+
 /// One conversation: the frames going out wait in `out` for the transport.
 pub struct Conv {
     pub id: ConvId,
@@ -174,6 +185,11 @@ impl Conv {
 
     pub fn is_fresh(&self) -> bool {
         matches!(&*self.role(), Role::Fresh)
+    }
+
+    /// A session, pending or live: its open carried a paired phone's proof.
+    pub fn is_verified(&self) -> bool {
+        matches!(&*self.role(), Role::Session(_))
     }
 
     pub fn age(&self, now: Instant) -> Duration {
@@ -348,7 +364,23 @@ impl Core {
             refused: AtomicBool::new(false),
         });
         lock(&self.convs).insert(conv.id, conv.clone());
+        self.trim_strangers(conv.id);
         conv
+    }
+
+    /// Keep at most [`STRANGER_CONVS`] fresh conversations: the oldest give way to `newest`.
+    /// They have sent nothing, so no pairing and no session is lost.
+    fn trim_strangers(&self, newest: ConvId) {
+        let mut strangers: Vec<Arc<Conv>> =
+            self.convs().into_iter().filter(|c| c.is_fresh()).collect();
+        if strangers.len() <= STRANGER_CONVS {
+            return;
+        }
+        strangers.sort_by_key(|c| (c.created, c.id));
+        let over = strangers.len() - STRANGER_CONVS;
+        for c in strangers.iter().filter(|c| c.id != newest).take(over) {
+            self.end_conv(c);
+        }
     }
 
     /// The conversation a session id or pairing id belongs to.
@@ -417,10 +449,11 @@ impl Core {
         self.limits.forget(device_id);
     }
 
-    /// Housekeeping: pending sessions past ten seconds, long-poll conversations nobody polls,
-    /// expired pairing deadlines.
+    /// Housekeeping: pending sessions past ten seconds, pairing conversations past their time,
+    /// long-poll conversations nobody polls, expired pairing deadlines.
     pub fn sweep(&self) {
         let now = self.now();
+        let deciding = lock(&self.pairings).revealed_conv(now);
         for c in self.convs() {
             let stale = {
                 let role = c.role();
@@ -430,6 +463,10 @@ impl Core {
                             >= Duration::from_secs(PENDING_SESSION_TTL_SECS)
                     }
                     Role::Fresh => c.age(now) >= Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
+                    Role::Pairing => {
+                        Some(c.id) != deciding
+                            && c.age(now) >= Duration::from_secs(PAIRING_CONV_SECS)
+                    }
                     Role::Closed => true,
                     _ => false,
                 }
@@ -465,6 +502,28 @@ impl Core {
         }
     }
 
+    /// The conversations a pairing must not lose: the one that has sent a good frame for the
+    /// open offer, and the one carrying a phone the person is deciding on.
+    fn pairing_kept(&self) -> [Option<ConvId>; 2] {
+        let (pid, deciding) = {
+            let p = lock(&self.pairings);
+            (p.open_pid(), p.revealed_conv(self.now()))
+        };
+        let offer = pid.and_then(|pid| lock(&self.sids).get(&pid).copied());
+        [offer, deciding]
+    }
+
+    /// Whether the pairing conversations other than those a pairing must not lose are at the
+    /// cap.
+    fn pairing_full(&self) -> bool {
+        let kept = self.pairing_kept();
+        self.convs()
+            .iter()
+            .filter(|c| matches!(&*c.role(), Role::Pairing) && !kept.contains(&Some(c.id)))
+            .count()
+            >= STRANGER_CONVS
+    }
+
     // Frames -------------------------------------------------------------------------------
 
     /// Handle one frame that arrived on `conv`.
@@ -482,8 +541,15 @@ impl Core {
         };
         match (role, kind) {
             (0 | 1, KIND_HELLO | KIND_PAIR_COMMIT | KIND_PAIR_REVEAL) => {
+                // Frames for the open offer are always heard; other new pairings wait their
+                // turn when the pool is full.
+                let for_offer = crypto::parse_header(frame)
+                    .is_ok_and(|h| lock(&self.pairings).is_open_offer(&h.sid));
+                if role == 0 && !for_offer && self.pairing_full() {
+                    return Inbound::Close;
+                }
                 *conv.role() = Role::Pairing;
-                self.pairing_frame(conv, frame)
+                self.pairing_frame(conv, frame, for_offer)
             }
             (0, KIND_SESSION_OPEN) => self.open_session(conv, frame),
             (2, _) => self.session_frame(conv, frame),
@@ -493,8 +559,13 @@ impl Core {
         }
     }
 
-    fn pairing_frame(&self, conv: &Arc<Conv>, frame: &[u8]) -> Inbound {
-        if !self.limits.take(Bucket::PairingFrames, "") {
+    /// `for_offer`: the frame names the open offer. Those frames have a bucket of their own,
+    /// so strangers trying codes cannot use up the one the person's phone pairs with.
+    fn pairing_frame(&self, conv: &Arc<Conv>, frame: &[u8], for_offer: bool) -> Inbound {
+        if !self
+            .limits
+            .take(Bucket::PairingFrames, if for_offer { "offer" } else { "" })
+        {
             return Inbound::Close;
         }
         let step = lock(&self.pairings).handle(frame, conv.id, self.now(), self.shell.wall_now());

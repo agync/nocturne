@@ -79,40 +79,36 @@ fn code_expires_after_5_minutes() {
 }
 
 #[test]
-fn five_wrong_tries_pause_15_minutes() {
+fn wrong_tries_are_noted_and_never_pause() {
     let mut b = bench();
-    b.begin();
-    for i in 1..=WRONG_CODES {
+    let offer = b.begin();
+    for i in 1..=WRONG_CODES * 3 {
         let wrong = crypto::code_encode(&crypto::random());
         let phone = PhonePair::typed(&wrong, HOST, "Pixel");
         let step = b.send(&phone.hello());
         assert!(step.wrong && step.reply.is_empty(), "try {i}");
     }
-    assert!(matches!(b.phase(), PairingPhase::Paused { .. }));
-    assert_eq!(
-        b.p.begin(b.c.clone(), HOST, b.now, b.wall).err(),
-        Some(PairError::Paused)
+    assert_eq!(b.phase(), PairingPhase::WaitingForScan);
+    let mut phone = PhonePair::scanned(&offer.link, "Pixel");
+    assert!(
+        b.pair(&mut phone).is_some(),
+        "the person still adds the phone"
     );
 }
 
 #[test]
-fn pause_shows_in_view_and_lifts() {
+fn junk_before_the_commit_leaves_the_offer_open() {
     let mut b = bench();
     let offer = b.begin();
-    let good = PhonePair::scanned(&offer.link, "Pixel");
+    let mut good = PhonePair::scanned(&offer.link, "Pixel");
     let mut bad = good.commit();
     let last = bad.len() - 1;
     bad[last] ^= 1;
-    for _ in 0..WRONG_CODES {
-        b.send(&bad);
+    for _ in 0..WRONG_CODES * 3 {
+        assert!(b.send(&bad).wrong);
     }
-    let PairingPhase::Paused { until } = b.phase() else {
-        panic!("paused")
-    };
-    assert_eq!(until, "2026-11-13T07:15:00.000Z");
-    assert!(b.send(&good.commit()).reply.is_empty(), "nothing answers");
-    b.wait(PAUSE_SECS);
-    assert!(!matches!(b.phase(), PairingPhase::Paused { .. }));
+    assert_eq!(b.phase(), PairingPhase::WaitingForScan);
+    assert!(b.pair(&mut good).is_some());
     b.begin();
 }
 

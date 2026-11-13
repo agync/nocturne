@@ -5,6 +5,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
+use nocturne_app_lib::remote::crypto;
+use nocturne_app_lib::remote::limits::Mono;
 use nocturne_app_lib::remote::listener::{self, Bind, ListenerConfig, ListenerHandle};
 use nocturne_app_lib::remote::protocol::*;
 use nocturne_app_lib::remote::static_files::DirFiles;
@@ -585,16 +587,25 @@ async fn long_poll_batch_cap() {
     );
 }
 
+async fn session(r: &Running, keys: &testing::PhoneKeys) -> Box<PhoneClient> {
+    let wire = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(r)).await;
+    let Opened::Session(mut phone, _) = PhoneClient::open_on(wire, keys).await else {
+        panic!("a session")
+    };
+    let answer = phone.call(RemoteCall::GetStatus).await.unwrap();
+    assert!(matches!(answer, RemoteAnswer::Status { .. }));
+    phone
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn connection_cap() {
     let r = local().await;
     let mut held = Vec::new();
-    for _ in 0..MAX_CONNECTIONS {
-        held.push(
-            Ws::connect(&r.addr, PATH_SESSION, &keyed(&r))
-                .await
-                .unwrap(),
-        );
+    for i in 0..MAX_CONNECTIONS {
+        let keys = r
+            .bench
+            .paired(&format!("Phone {}", i / MAX_SESSIONS_PER_DEVICE));
+        held.push(session(&r, &keys).await);
     }
     let res = get(&r, "/p", &[]).await;
     assert_eq!(res.status, 409, "full is not off");
@@ -613,6 +624,124 @@ async fn connection_cap() {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert!(ok, "the cap frees as connections close");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn idle_strangers_and_a_hello_flood_leave_room_for_a_paired_phone() {
+    let r = local().await;
+    let keys = r.bench.paired("Pixel");
+    let hello =
+        testing::PhonePair::typed(&crypto::code_encode(&crypto::random()), TEST_HOST, "x").hello();
+    let mut strangers = Vec::new();
+    for _ in 0..MAX_CONNECTIONS {
+        let mut w = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(&r)).await;
+        let _ = w.send(&hello).await;
+        strangers.push(w);
+    }
+    let mut body = (hello.len() as u32).to_be_bytes().to_vec();
+    body.extend_from_slice(&hello);
+    for _ in 0..LIMIT_PAIRING_FRAMES * 2 {
+        let _ = http(&r.addr, "POST", "/s", &keyed(&r), &body).await;
+    }
+    let start = std::time::Instant::now();
+    while r.bench.core.conv_count() > MAX_CONNECTIONS / 2 {
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "strangers held on"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    session(&r, &keys).await;
+    drop(strangers);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_phone_partway_through_pairing_outlasts_a_flood_of_strangers() {
+    let r = local().await;
+    let offer = r
+        .bench
+        .core
+        .pairings
+        .lock()
+        .unwrap()
+        .begin(
+            r.bench.computer.clone(),
+            TEST_HOST,
+            r.bench.mono.now(),
+            jiff::Timestamp::now(),
+        )
+        .unwrap();
+    let mut phone = testing::PhonePair::scanned(&offer.link, "Pixel");
+    let mut w = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(&r)).await;
+    w.send(&phone.commit()).await.unwrap();
+    let nonce = w
+        .recv_within(Duration::from_secs(10))
+        .await
+        .expect("the nonce");
+    let mut strangers = Vec::new();
+    for _ in 0..50 {
+        let mut s = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(&r)).await;
+        let hello =
+            testing::PhonePair::typed(&crypto::code_encode(&crypto::random()), TEST_HOST, "x")
+                .hello();
+        let _ = s.send(&hello).await;
+        strangers.push(s);
+    }
+    phone.take_nonce(&nonce).unwrap();
+    w.send(&phone.reveal()).await.unwrap();
+    let start = std::time::Instant::now();
+    loop {
+        let phase = r
+            .bench
+            .core
+            .pairings
+            .lock()
+            .unwrap()
+            .status(r.bench.mono.now())
+            .map(|s| s.phase);
+        if matches!(
+            phase,
+            Some(nocturne_contract::PairingPhase::WaitingForYou { .. })
+        ) {
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "the reveal never arrived: {phase:?}"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    drop(strangers);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pairing_conversations_time_out() {
+    let r = local().await;
+    let offer = r
+        .bench
+        .core
+        .pairings
+        .lock()
+        .unwrap()
+        .begin(
+            r.bench.computer.clone(),
+            TEST_HOST,
+            r.bench.mono.now(),
+            jiff::Timestamp::now(),
+        )
+        .unwrap();
+    let phone = testing::PhonePair::scanned(&offer.link, "Pixel");
+    let mut w = Wire::open_with(&r.addr, Mode::WebSocket, &keyed(&r)).await;
+    w.send(&phone.hello()).await.unwrap();
+    w.recv_within(Duration::from_secs(10))
+        .await
+        .expect("the HELLO is answered");
+    r.bench.mono.advance(Duration::from_secs(
+        HANDSHAKE_TIMEOUT_SECS + REVEAL_WINDOW_SECS,
+    ));
+    r.bench.core.sweep();
+    assert_eq!(r.bench.core.conv_count(), 0);
+    assert!(w.recv_within(Duration::from_secs(10)).await.is_err());
 }
 
 #[tokio::test(flavor = "multi_thread")]

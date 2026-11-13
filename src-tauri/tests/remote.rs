@@ -481,6 +481,19 @@ fn revoked_phone_gets_sealed_revoked() {
 }
 
 #[test]
+fn strangers_trying_codes_do_not_stop_the_persons_pairing() {
+    let p = on();
+    use nocturne_app_lib::remote::limits::Bucket;
+    while p.hub.core.limits.take(Bucket::PairingFrames, "") {}
+    let keys = p.pair("Pixel");
+    let mut c = p.open(&keys, Mode::WebSocket);
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetStatus),
+        RemoteAnswer::Status { .. }
+    ));
+}
+
+#[test]
 fn ask_stops_when_session_closes() {
     let mind = Arc::new(FakeMind::new());
     let gate = mind.gate("answer");

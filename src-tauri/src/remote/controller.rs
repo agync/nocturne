@@ -28,7 +28,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::limits::Mono;
 use super::listener::{self, Bind, ListenerConfig, ListenerHandle};
-use super::pairing::{PairError, fmt_wall};
+use super::pairing::fmt_wall;
 use super::protocol::*;
 use super::session::{Core, OnState, Shell};
 use super::static_files::PhoneFiles;
@@ -929,10 +929,7 @@ impl RemoteHub {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .begin(computer, &host, self.mono.now(), self.shell.wall_now());
-        let offer = offer.map_err(|e| match e {
-            PairError::Paused => CommandError::invalid("adding a phone is paused for a while"),
-            _ => not_on(),
-        })?;
+        let offer = offer.map_err(|_| not_on())?;
         self.shell.changed();
         Ok(offer)
     }

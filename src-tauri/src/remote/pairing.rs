@@ -2,9 +2,11 @@
 //! code to type, then commit, nonce, reveal, the three check words and the person's decision.
 //!
 //! The offer is single use and lasts five minutes. Each pairing kind is accepted once. A second
-//! commit, or a reveal later than ten seconds after the nonce, spends the offer. Five frames
-//! that do not open under the pair key (a wrongly typed code included) pause pairing for
-//! fifteen minutes. Nothing becomes a device until the person allows it.
+//! commit, or a reveal later than ten seconds after the nonce, spends the offer. A frame that
+//! does not open under the pair key (a wrongly typed code included) is noted in the activity
+//! list and changes nothing: the code is 120 bits, so a pause would protect nothing and would
+//! only keep the person from adding their phone. The frames are rate limited where they arrive.
+//! Nothing becomes a device until the person allows it.
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -39,7 +41,7 @@ pub struct PairStep {
     pub request: Option<PairingRequest>,
     /// The phase changed: refresh the view.
     pub changed: bool,
-    /// A wrong frame was counted (`WrongCode`).
+    /// A frame that did not open: noted in the activity list (`WrongCode`).
     pub wrong: bool,
 }
 
@@ -47,8 +49,6 @@ pub struct PairStep {
 pub enum PairError {
     /// Away from home is off, or has no address yet.
     NotOn,
-    /// Pairing is paused after wrong codes.
-    Paused,
     /// No such offer waiting for a decision.
     NoRequest,
 }
@@ -93,8 +93,6 @@ impl Offer {
 #[derive(Default)]
 pub struct Pairings {
     offer: Option<Offer>,
-    wrong: u32,
-    paused_until: Option<(Instant, Timestamp)>,
 }
 
 fn wall_after(now_wall: Timestamp, d: Duration) -> Timestamp {
@@ -109,17 +107,10 @@ pub fn fmt_wall(t: Timestamp) -> String {
 
 impl Pairings {
     /// Expire what is due: the offer after five minutes, an undecided request after two, a
-    /// reveal window after ten seconds, a pause after fifteen. Returns whether anything changed
-    /// and, for a request that timed out, the refusal to send and where.
+    /// reveal window after ten seconds. Returns whether anything changed and, for a request
+    /// that timed out, the refusal to send and where.
     pub fn tick(&mut self, now: Instant) -> (bool, Option<(ConvId, Vec<u8>)>) {
         let mut changed = false;
-        if let Some((until, _)) = self.paused_until
-            && now >= until
-        {
-            self.paused_until = None;
-            self.wrong = 0;
-            changed = true;
-        }
         let mut send = None;
         if let Some(o) = self.offer.as_mut() {
             match &o.phase {
@@ -159,9 +150,6 @@ impl Pairings {
         now_wall: Timestamp,
     ) -> Result<PairingOffer, PairError> {
         self.tick(now);
-        if self.paused_until.is_some() {
-            return Err(PairError::Paused);
-        }
         let s = Zeroizing::new(crypto::random::<S_LEN>());
         let pid = crypto::pairing_id(&s);
         let cpub = crypto::public_bytes(&computer.public_key()).to_vec();
@@ -200,19 +188,6 @@ impl Pairings {
 
     pub fn status(&mut self, now: Instant) -> Option<PairingStatus> {
         self.tick(now);
-        if let Some((_, until)) = self.paused_until {
-            return Some(PairingStatus {
-                pairing_id: self
-                    .offer
-                    .as_ref()
-                    .map(|o| crypto::b64(&o.pid))
-                    .unwrap_or_default(),
-                phase: PairingPhase::Paused {
-                    until: fmt_wall(until),
-                },
-                expires_at: fmt_wall(until),
-            });
-        }
         self.offer.as_ref().map(|o| PairingStatus {
             pairing_id: crypto::b64(&o.pid),
             phase: o.phase.clone(),
@@ -220,23 +195,23 @@ impl Pairings {
         })
     }
 
-    pub fn paused(&self) -> bool {
-        self.paused_until.is_some()
+    /// The pairing id of the offer that is open now.
+    pub fn open_pid(&self) -> Option<PairingId> {
+        self.offer.as_ref().filter(|o| o.open()).map(|o| o.pid)
     }
 
-    fn wrong_frame(&mut self, now: Instant, now_wall: Timestamp, step: &mut PairStep) {
-        self.wrong += 1;
-        step.wrong = true;
-        if self.wrong >= WRONG_CODES {
-            let d = Duration::from_secs(PAUSE_SECS);
-            self.paused_until = Some((now + d, wall_after(now_wall, d)));
-            if let Some(o) = self.offer.as_mut()
-                && o.open()
-            {
-                o.phase = PairingPhase::Expired;
-            }
-            step.changed = true;
-        }
+    /// Whether `sid` is the pairing id of the offer that is open now.
+    pub fn is_open_offer(&self, sid: &[u8]) -> bool {
+        self.offer
+            .as_ref()
+            .is_some_and(|o| o.open() && crypto::eq_ct(sid, &o.pid))
+    }
+
+    /// The conversation that revealed a phone for the person to decide on, while it may still
+    /// carry the outcome: until ten seconds past the decision deadline.
+    pub fn revealed_conv(&self, now: Instant) -> Option<ConvId> {
+        let r = self.offer.as_ref()?.revealed.as_ref()?;
+        (now < r.decide_by + Duration::from_secs(HANDSHAKE_TIMEOUT_SECS)).then_some(r.conv)
     }
 
     /// Handle one pairing frame (HELLO, PAIR_COMMIT or PAIR_REVEAL) from conversation `conv`.
@@ -250,9 +225,6 @@ impl Pairings {
         let mut step = PairStep::default();
         let (changed, _) = self.tick(now);
         step.changed = changed;
-        if self.paused_until.is_some() {
-            return step;
-        }
         let Some(o) = self.offer.as_mut().filter(|o| o.open()) else {
             return step;
         };
@@ -265,7 +237,7 @@ impl Pairings {
         if !crypto::eq_ct(&h.sid, &o.pid) {
             // Another pairing id: a wrongly typed code, or a stale offer.
             if !committed {
-                self.wrong_frame(now, now_wall, &mut step);
+                step.wrong = true;
             }
             return step;
         }
@@ -284,7 +256,7 @@ impl Pairings {
                     crypto::pair_open(frame, KIND_PAIR_COMMIT, &o.pid, &o.keys.up)
                 else {
                     if !committed {
-                        self.wrong_frame(now, now_wall, &mut step);
+                        step.wrong = true;
                     }
                     return step;
                 };
@@ -317,7 +289,7 @@ impl Pairings {
                     crypto::pair_open(frame, KIND_PAIR_REVEAL, &o.pid, &o.keys.up)
                 else {
                     if !committed {
-                        self.wrong_frame(now, now_wall, &mut step);
+                        step.wrong = true;
                     }
                     return step;
                 };
@@ -379,7 +351,7 @@ impl Pairings {
                 step.request = Some(request);
                 step.changed = true;
             }
-            _ if !committed => self.wrong_frame(now, now_wall, &mut step),
+            _ if !committed => step.wrong = true,
             _ => {}
         }
         step
@@ -419,9 +391,6 @@ impl Pairings {
             Some(_) => PairingPhase::Allowed { device_name: name },
             None => PairingPhase::Refused,
         };
-        if device_id.is_some() {
-            self.wrong = 0;
-        }
         Some((conv, frame))
     }
 }
