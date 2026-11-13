@@ -502,6 +502,26 @@ async fn an_answer_that_merely_starts_like_not_sure_is_still_an_answer() {
     assert_eq!(meta.unwrap().cited, ["a"]);
 }
 
+/// The answer is sentences or the marker alone: sentences followed by the marker are an answer
+/// the mind did not stand behind, and the marker itself is never shown.
+#[tokio::test]
+async fn words_before_not_sure_make_the_whole_answer_not_sure() {
+    let r = rig().await;
+    let facts = [memory("a", "Nadia lent me her stove.")];
+    r.script(json!([
+        {"deltas": ["I have nothing about that. NOT_SURE"]},
+        {"deltas": ["It is the **stove** [m1].", " But NOT_", "SURE", " really."]},
+    ]))
+    .await;
+    for _ in 0..2 {
+        let (meta, text) = answer(&r, &facts).await;
+        let meta = meta.unwrap();
+        assert!(meta.not_sure, "{meta:?}");
+        assert!(meta.cited.is_empty() && meta.spans.is_empty(), "{meta:?}");
+        assert!(!text.contains("NOT_") && !text.contains("SURE"), "{text:?}");
+    }
+}
+
 fn detailed(id: &str, sentence: &str, extra: Value) -> MemoryView {
     let mut v = serde_json::to_value(memory(id, sentence)).unwrap();
     for (k, x) in extra.as_object().unwrap() {

@@ -234,8 +234,8 @@ impl LemonadeMind {
             }
         };
         let mut filter = CiteFilter::new(facts.len());
-        let mut head = String::new();
-        let mut deciding = true;
+        // Text not yet shown because it may be the start of the not-sure marker.
+        let mut held = String::new();
         let mut not_sure = false;
         let mut sent_any = false;
         while let Some(item) = stream.next().await {
@@ -246,24 +246,19 @@ impl LemonadeMind {
                     return Err(MindError::Unavailable);
                 }
             };
-            let text = if deciding {
-                head.push_str(&delta);
-                let trimmed = head.trim_start();
-                if trimmed.len() < prompts::NOT_SURE.len() && prompts::NOT_SURE.starts_with(trimmed)
-                {
-                    continue;
-                }
-                deciding = false;
-                if trimmed.starts_with(prompts::NOT_SURE) {
-                    not_sure = true;
-                    continue;
-                }
-                filter.push(&std::mem::take(&mut head))
-            } else if not_sure {
+            if not_sure {
                 continue;
-            } else {
-                filter.push(&delta)
-            };
+            }
+            held.push_str(&delta);
+            // The marker anywhere makes the whole answer not sure: whatever came before it is
+            // an answer the mind did not stand behind.
+            if held.contains(prompts::NOT_SURE) {
+                not_sure = true;
+                continue;
+            }
+            let keep = marker_start_len(&held);
+            let ready: String = held.drain(..held.len() - keep).collect();
+            let text = filter.push(&ready);
             if !text.is_empty() {
                 sent_any = true;
                 if out.send(text).await.is_err() {
@@ -271,21 +266,12 @@ impl LemonadeMind {
                 }
             }
         }
-        if deciding && !head.trim().is_empty() {
-            if head.trim_start() == prompts::NOT_SURE {
-                not_sure = true;
-            } else {
-                let text = filter.push(&head);
-                if !text.is_empty() {
-                    sent_any = true;
-                    let _ = out.send(text).await;
-                }
-            }
-        }
         let tail = if not_sure {
             String::new()
         } else {
-            filter.finish()
+            let mut text = filter.push(&held);
+            text.push_str(&filter.finish());
+            text
         };
         if !tail.is_empty() {
             sent_any = true;
@@ -430,6 +416,14 @@ impl LemonadeMind {
             segments,
         })
     }
+}
+
+/// How many bytes at the end of `text` could be the start of the not-sure marker.
+fn marker_start_len(text: &str) -> usize {
+    (1..prompts::NOT_SURE.len())
+        .rev()
+        .find(|&n| text.ends_with(&prompts::NOT_SURE[..n]))
+        .unwrap_or(0)
 }
 
 fn non_empty(s: String) -> Option<String> {
