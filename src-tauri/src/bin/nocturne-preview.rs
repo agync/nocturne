@@ -12,8 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nocturne_app_lib::preview::{self, DATA_MARKER, MARKER, Options, Preview};
-use nocturne_app_lib::runtime::{self, StartOptions};
-use nocturne_app_lib::{AppState, configure, logging, refresh_status};
+use nocturne_app_lib::{AppState, configure, logging};
 use nocturne_engine::SystemClock;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Manager, WebviewWindowBuilder};
@@ -85,7 +84,7 @@ fn main() {
         .build()
         .expect("a window");
     let handle = app.handle().clone();
-    if runtime::start(&handle, StartOptions::default()).is_none() {
+    if !nocturne_app_lib::start_services(&handle) {
         eprintln!("the store could not be opened");
         std::process::exit(1);
     }
@@ -98,21 +97,6 @@ fn main() {
         ui_dir: args.ui_dir.clone(),
     };
     let server = Preview::new(handle.clone(), window, &data_dir, opts);
-
-    tauri::async_runtime::spawn({
-        let handle = handle.clone();
-        async move {
-            loop {
-                refresh_status(&handle).await;
-                let dir = handle.state::<AppState>().log_dir();
-                let _ = tokio::task::spawn_blocking(move || {
-                    nocturne_app_lib::fsutil::restrict_folder_files(&dir)
-                })
-                .await;
-                tokio::time::sleep(Duration::from_secs(60)).await;
-            }
-        }
-    });
 
     let listener =
         tauri::async_runtime::block_on(tokio::net::TcpListener::bind(("127.0.0.1", args.port)))

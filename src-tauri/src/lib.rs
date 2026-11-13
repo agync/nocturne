@@ -69,11 +69,18 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
         state.set_start_hidden(window::wants_hidden(&args));
         app.manage(state);
     }
-    runtime::start(app, runtime::StartOptions::default());
+    start_services(app);
     allow_originals_in_the_interface(app);
     window::match_system_theme(app);
     window::show_after_grace(app);
+    Ok(())
+}
 
+/// Start the reader, the tidy and the scheduler, and the loop that keeps the status and the
+/// log files' permissions current. The desktop shell and the development preview both start
+/// the app this way. `false` when the store could not be opened.
+pub fn start_services<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let started = runtime::start(app, runtime::StartOptions::default()).is_some();
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         loop {
@@ -83,7 +90,7 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
             tokio::time::sleep(TICK).await;
         }
     });
-    Ok(())
+    started
 }
 
 /// The interface may show originals and spoken pages through the asset protocol, and nothing
