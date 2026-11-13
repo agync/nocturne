@@ -77,7 +77,7 @@ describe("what the quick capture window asks of the engine", () => {
     expect(allowed).toContain("keep_text");
 
     const { engine, calls } = recording();
-    const platform = fakePlatform();
+    const platform = fakePlatform(null, { quickCapture: true });
     /** Each thing the window can do starts from a freshly opened window. */
     const fresh = async () => {
       cleanup();

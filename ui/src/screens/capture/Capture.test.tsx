@@ -47,7 +47,7 @@ interface Opened {
 }
 
 const open = async (): Promise<Opened> => {
-  const platform = fakePlatform();
+  const platform = fakePlatform(null, { quickCapture: true });
   const close = vi.fn(async () => undefined);
   const handOff = vi.fn(async () => undefined);
   platform.closeQuickCapture = close;
@@ -154,6 +154,20 @@ describe("keeping words", () => {
     await userEvent.click(screen.getByRole("button", { name: "Open it" }));
     expect(platform.opened()).toBe("/items/item-gran");
     expect(close).toHaveBeenCalledOnce();
+  });
+
+  it("decides to close by the window it is in, not by the route", async () => {
+    const platform = fakePlatform();
+    const close = vi.fn(async () => undefined);
+    platform.closeQuickCapture = close;
+    renderApp({ hash: "#/quick-capture", engine: createMockEngine(), platform });
+    await userEvent.type(
+      await screen.findByRole("textbox", { name: "Keep something, or ask" }),
+      "Gran’s new number ends 4471.{Enter}",
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "Open it" }));
+    expect(platform.opened()).toBe("/items/item-gran");
+    expect(close).not.toHaveBeenCalled();
   });
 
   it("keeps the text and says so when keeping fails", async () => {

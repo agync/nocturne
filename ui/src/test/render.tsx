@@ -15,7 +15,10 @@ export interface FakePlatform extends Platform {
   printed(): number;
 }
 
-export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
+export function fakePlatform(
+  initial: SystemTheme | null = null,
+  options: { quickCapture?: boolean } = {},
+): FakePlatform {
   let onDrop: (paths: string[]) => void = () => undefined;
   let onHover: (count: number | null) => void = () => undefined;
   let onTheme: (theme: SystemTheme) => void = () => undefined;
@@ -40,6 +43,7 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
     openOriginal: async () => undefined,
     openLogs: async () => undefined,
     originalSrc: (path) => `file:${path}`,
+    inQuickCapture: () => options.quickCapture ?? false,
     closeQuickCapture: async () => undefined,
     handOffAsk: async () => undefined,
     onAskHandOff: (cb) => {

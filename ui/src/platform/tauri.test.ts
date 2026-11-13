@@ -1,5 +1,5 @@
 import { emit } from "@tauri-apps/api/event";
-import { clearMocks, mockConvertFileSrc, mockIPC } from "@tauri-apps/api/mocks";
+import { clearMocks, mockConvertFileSrc, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TauriPlatform } from "./tauri";
 
@@ -45,6 +45,13 @@ describe("TauriPlatform shared pieces", () => {
       { cmd: "open_logs", args: {} },
     ]);
     expect(calls.some((c) => c.cmd.startsWith("plugin:"))).toBe(false);
+  });
+
+  it("knows the quick capture window by its label", () => {
+    mockWindows("main", "quick-capture");
+    expect(new TauriPlatform().inQuickCapture()).toBe(false);
+    mockWindows("quick-capture");
+    expect(new TauriPlatform().inQuickCapture()).toBe(true);
   });
 
   it("turns a file path into a URL the page may show", () => {

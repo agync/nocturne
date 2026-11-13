@@ -91,6 +91,10 @@ export class WebPlatform implements Platform {
     return PLACEHOLDER;
   }
 
+  inQuickCapture(): boolean {
+    return false;
+  }
+
   async closeQuickCapture(): Promise<void> {
     window.location.hash = "#/today";
   }

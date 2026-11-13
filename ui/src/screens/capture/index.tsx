@@ -71,7 +71,7 @@ export default function Capture() {
   const close = useCallback(async () => {
     await platform.closeQuickCapture();
     // In a browser the window is the main one: leaving it goes to Today, so follow the request.
-    return window.location.hash.startsWith("#/quick-capture");
+    return platform.inQuickCapture();
   }, [platform]);
 
   const finishKept = useCallback((kept: Kept[], message: string, spoken: string) => {
@@ -349,7 +349,7 @@ export default function Capture() {
   const openItem = async (id: string) => {
     await platform.openInMain(`/items/${id}`);
     // A browser has one window: opening the item already left this screen.
-    if (window.location.hash.startsWith("#/quick-capture")) await platform.closeQuickCapture();
+    if (platform.inQuickCapture()) await platform.closeQuickCapture();
   };
 
   return (

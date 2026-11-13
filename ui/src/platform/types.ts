@@ -21,6 +21,8 @@ export interface Platform {
   openLogs(): Promise<void>;
   /** A URL the page can show for a kept original on disk. */
   originalSrc(path: string): string;
+  /** True in the floating quick-capture window, by the window's own label; never in a browser. */
+  inQuickCapture(): boolean;
   /** Closes the floating quick-capture window (or leaves the screen, in a browser). */
   closeQuickCapture(): Promise<void>;
   /** Sends a question to the main window, which shows the answer. */

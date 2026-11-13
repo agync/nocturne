@@ -69,6 +69,10 @@ export class TauriPlatform implements Platform {
     return convertFileSrc(path);
   }
 
+  inQuickCapture(): boolean {
+    return getCurrentWindow().label === "quick-capture";
+  }
+
   async closeQuickCapture(): Promise<void> {
     await getCurrentWindow().close();
   }
