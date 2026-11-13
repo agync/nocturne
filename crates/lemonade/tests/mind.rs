@@ -427,7 +427,7 @@ async fn answer_maps_markers_to_ids_and_strips_them_from_the_stream() {
     assert_eq!(req["stream"], true);
     let user = req["messages"][1]["content"].as_str().unwrap();
     assert!(
-        user.contains("[m2] Sam on Tuesday. (about: Sam; learned Tuesday 10 November 2026; sure)"),
+        user.contains("[m2] Sam on Tuesday. (learned Tuesday 10 November)"),
         "{user}"
     );
     assert!(
@@ -557,18 +557,31 @@ async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
             ),
             disputed_by: vec!["tue".into()],
         },
+        Fact::from(detailed(
+            "bins",
+            "Bins go out on 3 December.",
+            json!({"due": "2027-12-03"}),
+        )),
+        Fact::from(detailed(
+            "next",
+            "Bins go out every other Friday.",
+            json!({"due": "2027-12-04"}),
+        )),
     ];
     r.script(json!([{"deltas": ["Thursday [m1]."]}])).await;
     answer_facts(&r, &facts).await.0.unwrap();
     let req = &r.seen("/v1/chat/completions").await[0]["body"];
     let user = req["messages"][1]["content"].as_str().unwrap();
     for line in [
-        "[m1] The dentist is on Thursday at 14:30. (about: Dentist; on or by: Thursday 19 November 2026; \
-         before, it was: Wednesday at 10:00; learned Tuesday 10 November 2026; sure)",
-        "[m2] Book club meets on Tuesdays. (about: Book club; not settled: disagrees with [m3]; \
-         learned Monday 9 November 2026; sure)",
-        "[m3] Book club meets on Wednesdays. (about: Book club; not settled: disagrees with [m2]; \
-         learned Tuesday 10 November 2026; not sure; not confirmed)",
+        "[m1] The dentist is on Thursday at 14:30. (on Thursday 19 November; \
+         before, it was Wednesday at 10:00; learned Tuesday 10 November)",
+        "[m2] Book club meets on Tuesdays. (not settled: disagrees with [m3]; \
+         learned Monday 9 November)",
+        "[m3] Book club meets on Wednesdays. (not settled: disagrees with [m2]; \
+         learned Tuesday 10 November; not confirmed)",
+        "[m4] Bins go out on 3 December. (learned Tuesday 10 November)",
+        "[m5] Bins go out every other Friday. (on Saturday 4 December 2027; \
+         learned Tuesday 10 November)",
     ] {
         assert!(user.contains(line), "{line}\n{user}");
     }
@@ -578,6 +591,7 @@ async fn the_answer_is_told_dates_history_disagreement_and_certainty() {
         "Copy times, numbers, names and dates exactly",
         "Never put details of different things or people into one sentence",
         "Asked who someone is, start with how they are related",
+        "Never guess a relationship",
         "Never write a sentence and then NOT_SURE",
     ] {
         assert!(system.contains(rule), "{rule}\n{system}");
