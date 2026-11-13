@@ -37,3 +37,12 @@ describe("route table", () => {
     expect(findRoute("/pages/a/b")).toBeUndefined();
   });
 });
+
+describe("routes with a query", () => {
+  it("finds the screen whatever follows the ?", () => {
+    expect(findRoute("/memories?q=bakery")?.folder).toBe("memories");
+    expect(findRoute("/fading?show=letGo")?.folder).toBe("fading");
+    expect(findRoute("/pages/2026-11-12?x=1")?.folder).toBe("today");
+    expect(findRoute("/nowhere?q=1")).toBeUndefined();
+  });
+});

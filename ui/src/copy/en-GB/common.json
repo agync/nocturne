@@ -64,5 +64,8 @@
   "dialog.cancel": "Cancel",
   "toggle.on": "On",
   "toggle.off": "Off",
-  "icon.mic": "Microphone"
+  "icon.mic": "Microphone",
+  "forget.title": "{count, plural, one {Forget # thing?} other {Forget # things?}}",
+  "forget.stub": "This part of Nocturne is on its way. Nothing has been forgotten.",
+  "forget.keep": "Keep them"
 }

@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from "react";
+import type { BaseLocationHook } from "wouter";
 import { Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
 import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
@@ -10,6 +11,7 @@ import { EngineProvider } from "../engine/context";
 import { PlatformProvider } from "../platform/context";
 import type { Platform } from "../platform/types";
 import { NotFound } from "../screens/NotFound";
+import { pathOf } from "./query";
 import { findRoute } from "./routes";
 import { Shell } from "./Shell";
 import { useThemeSync } from "./theme";
@@ -20,6 +22,12 @@ interface AppProps {
 }
 
 const hrefs = (path: string) => `#${path}`;
+
+/** The hash location without its `?query`, so routes match and `useQueryParam` reads the rest. */
+const useHashPath: BaseLocationHook = (...args) => {
+  const [location, navigate] = useHashLocation(...args);
+  return [pathOf(location), navigate];
+};
 
 function Routed() {
   const [location, navigate] = useLocation();
@@ -56,7 +64,7 @@ function AppProviders({ engine, platform }: AppProps) {
     <EngineProvider engine={engine}>
       <PlatformProvider platform={platform}>
         <ToastProvider>
-          <Router hook={useHashLocation} hrefs={hrefs}>
+          <Router hook={useHashPath} hrefs={hrefs}>
             <Routed />
           </Router>
         </ToastProvider>

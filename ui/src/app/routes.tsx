@@ -1,5 +1,6 @@
 import { type ComponentType, type LazyExoticComponent, lazy } from "react";
 import type { CopyId } from "../copy/t";
+import { pathOf } from "./query";
 
 export interface AppRoute {
   /** wouter pattern, without the leading `#`. */
@@ -135,5 +136,6 @@ function matches(pattern: string, location: string): boolean {
 }
 
 export function findRoute(location: string): AppRoute | undefined {
-  return routes.find((r) => matches(r.path, location));
+  const path = pathOf(location);
+  return routes.find((r) => matches(r.path, path));
 }
