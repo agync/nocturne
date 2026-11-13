@@ -80,22 +80,13 @@ pub fn decide(
     (now >= start && now < end).then_some(today)
 }
 
-/// "Two things need you today.", "One thing needs you today.", "Nothing needs you today."
-pub fn count_sentence(public_needs: u32) -> String {
-    const WORDS: [&str; 10] = [
-        "Nothing", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-    ];
-    match public_needs {
-        0 => "Nothing needs you today.".to_string(),
-        1 => "One thing needs you today.".to_string(),
-        n @ 2..=9 => format!("{} things need you today.", WORDS[n as usize]),
-        n => format!("{n} things need you today."),
-    }
-}
-
 /// The whole body: the count, then where the page is.
 pub fn body(public_needs: u32) -> String {
-    format!("{} {}", count_sentence(public_needs), copy::NOTICE_TAIL)
+    format!(
+        "{} {}",
+        copy::count_sentence(public_needs),
+        copy::NOTICE_TAIL
+    )
 }
 
 /// Look at everything and send the notification if one is due. Returns whether one was shown.
@@ -315,7 +306,7 @@ mod tests {
 
     #[test]
     fn body_counts_words() {
-        let sentences: Vec<_> = [0, 1, 2, 9, 10].map(count_sentence).into();
+        let sentences: Vec<_> = [0, 1, 2, 9, 10].map(copy::count_sentence).into();
         assert_eq!(
             sentences,
             [

@@ -37,6 +37,19 @@ pub fn things_need_you(n: u32) -> String {
     }
 }
 
+/// "Two things need you today.", "One thing needs you today.", "Nothing needs you today."
+pub fn count_sentence(public_needs: u32) -> String {
+    const WORDS: [&str; 10] = [
+        "Nothing", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    ];
+    match public_needs {
+        0 => "Nothing needs you today.".to_string(),
+        1 => "One thing needs you today.".to_string(),
+        n @ 2..=9 => format!("{} things need you today.", WORDS[n as usize]),
+        n => format!("{n} things need you today."),
+    }
+}
+
 /// "About 3 minutes.", "About 1 minute."
 pub fn about_minutes(seconds: u32) -> String {
     let m = seconds.div_ceil(60).max(1);
@@ -78,6 +91,7 @@ pub fn all() -> Vec<String> {
     .collect();
     for n in [0, 1, 2, 9, 10] {
         v.push(things_need_you(n));
+        v.push(count_sentence(n));
     }
     v.push(about_minutes(30));
     v.push(about_minutes(600));
@@ -111,4 +125,17 @@ pub fn has_jargon(text: &str) -> Option<String> {
     text.split(|c: char| !c.is_alphanumeric())
         .map(str::to_lowercase)
         .find(|w| JARGON.contains(&w.as_str()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_count_sentence_is_worded_here() {
+        assert_eq!(count_sentence(0), "Nothing needs you today.");
+        assert_eq!(count_sentence(1), "One thing needs you today.");
+        assert_eq!(count_sentence(2), "Two things need you today.");
+        assert_eq!(count_sentence(10), "10 things need you today.");
+    }
 }
