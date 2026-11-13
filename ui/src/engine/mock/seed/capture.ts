@@ -81,6 +81,9 @@ export function captureSeed({ at }: BaseContext): ItemView[] {
     item("item-dentist-chen", "text", "Dr Chen", "quickCapture", at(-30, 9, 0), {
       text: "Leo’s dentist is Dr Chen at Willow Dental.",
     }),
+    item("item-leo-son", "text", "Leo turns 9 in March", "quickCapture", at(-21, 8, 15), {
+      text: "My son Leo turns 9 in March.",
+    }),
     item("item-counciltax", "document", "council-tax-2026.pdf", "drop", at(-1, 9, 9), {
       status: "couldntRead",
       reason: "locked",

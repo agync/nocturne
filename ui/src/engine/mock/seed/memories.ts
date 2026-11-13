@@ -110,6 +110,15 @@ export function memoriesSeed(ctx: SeedContext): { memories: MemoryView[]; entiti
       { entityId: "ent-leo", lastUsed: at(-9, 10, 15) },
     ),
     memory(
+      "mem-leo-son",
+      "Leo is your son.",
+      "Leo",
+      "relationship",
+      "your son",
+      [receipt("item-leo-son", { type: "quote", text: "My son Leo turns 9 in March." })],
+      { entityId: "ent-leo", certainty: "sure" },
+    ),
+    memory(
       "mem-gym",
       "The old gym door code is 4821.",
       "Gym door code",

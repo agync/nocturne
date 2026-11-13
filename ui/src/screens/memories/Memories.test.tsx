@@ -41,7 +41,7 @@ describe("What Nocturne remembers", () => {
     await browse();
     const leo = await screen.findByRole("link", { name: /^Leo/ });
     expect(leo).toHaveTextContent("Son");
-    expect(leo).toHaveTextContent("5");
+    expect(leo).toHaveTextContent("6");
     expect(leo).toHaveAttribute("href", "#/memories/ent-leo");
     expect(screen.getByRole("link", { name: /Dr Chen/ })).toHaveTextContent("Dentist");
   });
@@ -60,7 +60,7 @@ describe("What Nocturne remembers", () => {
 
   it("opens a person: name, role, counts and Mark all private", async () => {
     await openLeo();
-    expect(screen.getByText("Son · 5 memories from 4 things you kept")).toBeInTheDocument();
+    expect(screen.getByText("Son · 6 memories from 5 things you kept")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark all private" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Leo/ })).toHaveAttribute("aria-current", "page");
   });
@@ -189,8 +189,8 @@ describe("What Nocturne remembers", () => {
     const { engine } = await openLeo();
     const spy = vi.spyOn(engine, "setPrivate");
     await userEvent.click(screen.getByRole("button", { name: "Mark all private" }));
-    await waitFor(() => expect(spy).toHaveBeenCalledTimes(5));
-    expect(await screen.findByText("Marked 5 memories private.")).toBeInTheDocument();
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(6));
+    expect(await screen.findByText("Marked 6 memories private.")).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: "All private" })).toBeDisabled();
   });
 

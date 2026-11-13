@@ -274,3 +274,24 @@ for (const scheme of ["light", "dark"] as const) {
     await context.close();
   });
 }
+
+test.describe("who is Leo", () => {
+  test.use({ viewport: { width: 400, height: 800 }, colorScheme: "dark" });
+
+  test("says who Leo is first, with the facts in bold and a receipt for each", async ({ page }) => {
+    await ready(page, "#/today");
+    await ask(page, "Who is Leo?");
+    await settled(page);
+    const answer = page.locator("article p[class*=answer]");
+    await expect(answer).toHaveText(
+      "Leo is your son. Leo’s swimming is on Mondays at 17:30. Leo needs a packed lunch on the trip day.",
+    );
+    await expect(answer.getByRole("button")).toHaveText([
+      "your son",
+      "Mondays at 17:30",
+      "packed lunch",
+    ]);
+    await expect(page.getByText("Answered from 3 things you kept")).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/ask-who-is-leo-dark-400.png` });
+  });
+});

@@ -52,7 +52,7 @@ export interface MockOptions {
   sentMeasured?: boolean;
   /** The first question wakes the voice that reads and says so (a `waking` step with a wait). */
   cold?: boolean;
-  /** Answers mark their key phrase in bold. */
+  /** Answers mark one key phrase per cited memory in bold, as the real app does. On unless false. */
   emphasis?: boolean;
 }
 
@@ -72,11 +72,29 @@ function templateDek(kept: number, needs: number, letGo: number): string {
 /** How long the mock says the first question takes to wake the voice. */
 const WAKE_SECONDS = 8;
 
-/** Marks the key phrase of an answer in bold: the first place the memory's value appears. */
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Marks the key phrase of one cited sentence in bold: where the memory's value appears, or, when the
+ * sentence words it differently, the stretch that holds all of the value's words.
+ */
 function emphasise(sentence: string, value: string): string {
-  const at = value ? sentence.toLowerCase().indexOf(value.toLowerCase()) : -1;
-  if (at < 0) return sentence;
-  return `${sentence.slice(0, at)}**${sentence.slice(at, at + value.length)}**${sentence.slice(at + value.length)}`;
+  const wrap = (from: number, to: number) =>
+    `${sentence.slice(0, from)}**${sentence.slice(from, to)}**${sentence.slice(to)}`;
+  const exact = value ? sentence.toLowerCase().indexOf(value.toLowerCase()) : -1;
+  if (exact >= 0) return wrap(exact, exact + value.length);
+  const spans = value
+    .split(/\s+/)
+    .filter((w) => w.length > 2)
+    .map((w) =>
+      new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(w)}[\\p{L}\\p{N}]*`, "iu").exec(sentence),
+    );
+  if (spans.length === 0 || spans.some((m) => m === null)) return sentence;
+  const found = spans as RegExpExecArray[];
+  return wrap(
+    Math.min(...found.map((m) => m.index)),
+    Math.max(...found.map((m) => m.index + m[0].length)),
+  );
 }
 
 /** The mock voice is silence: each section lasts this long. */
@@ -173,6 +191,15 @@ function scoreMemory(tokens: string[], memory: MemoryView): number {
   return tokens.filter((t) => haystack.has(t)).length;
 }
 
+/** Predicates that state when something happens, which is what a "when" question wants. */
+const TIME_PREDICATES: ReadonlySet<string> = new Set(["appointmentAt", "dueOn", "swimsOn"]);
+
+/** The one predicate that says who a person is to the household. */
+const RELATIONSHIP_PREDICATE = "relationship";
+
+const ABOUT_ENTITY =
+  /^\s*(?:who\s+(?:is|was)|who['’]s|tell\s+me\s+about|what\s+about)\s+(?:the\s+)?(.+?)\s*[?.!]*\s*$/i;
+
 const kindFromName = (name: string): ItemKind => {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (["jpg", "jpeg", "png", "heic", "webp", "gif"].includes(ext)) return "image";
@@ -207,7 +234,7 @@ export class MockEngine implements EngineClient {
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
-    this.emphasis = options.emphasis ?? false;
+    this.emphasis = options.emphasis ?? true;
     const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
     this.clock = new Date(raw);
     const seed = buildSeed(this.clock);
@@ -617,6 +644,39 @@ export class MockEngine implements EngineClient {
     return askId;
   }
 
+  /**
+   * For "who is Leo?" and its kin: the memory that says who the person is to the household first,
+   * then up to two more things kept about them, newest first. Nothing is said without a receipt, so
+   * a person with no memory that states the relationship gets the facts alone.
+   */
+  private memoriesAboutEntity(question: string): { m: MemoryView; score: number }[] | null {
+    const asked = ABOUT_ENTITY.exec(question)?.[1];
+    if (!asked) return null;
+    const name = words(asked).join(" ");
+    const entity = this.entities.find((e) => {
+      if (e.kind === "thing") return false;
+      const full = words(e.name).join(" ");
+      return full === name || words(e.name)[0] === name;
+    });
+    if (!entity) return null;
+    const first = words(entity.name)[0] as string;
+    const mentions = (m: MemoryView) => words(m.sentence).includes(first);
+    const mine = this.memories.filter(
+      (m) => m.status === "active" && !m.private && (m.entityId === entity.id || mentions(m)),
+    );
+    const lead = mine.find(
+      (m) => m.predicate === RELATIONSHIP_PREDICATE && m.entityId === entity.id,
+    );
+    const rank = (m: MemoryView) =>
+      (words(m.subject)[0] === first ? 1 : 0) * 1e15 + new Date(m.learnedAt).getTime();
+    const facts = mine
+      .filter((m) => m !== lead)
+      .sort((a, b) => rank(b) - rank(a))
+      .slice(0, 2);
+    const chosen = lead ? [lead, ...facts] : facts;
+    return chosen.length > 0 ? chosen.map((m) => ({ m, score: 1 })) : null;
+  }
+
   private runAsk(askId: string, question: string): void {
     const delta = (d: Partial<AskDelta> & Pick<AskDelta, "phase">): AskDelta => ({
       askId,
@@ -633,13 +693,17 @@ export class MockEngine implements EngineClient {
       if (!this.cancelledAsks.has(askId)) this.emit("ask-delta", d);
     };
     const tokens = contentTokens(question);
-    const scored = (status: MemoryView["status"]) =>
-      this.memories
+    const asksWhen = /^\s*when\b/i.test(question);
+    const scored = (status: MemoryView["status"]) => {
+      const matches = this.memories
         .filter((m) => m.status === status && !m.private)
         .map((m) => ({ m, score: scoreMemory(tokens, m) }))
         .filter((x) => tokens.length > 0 && x.score / tokens.length >= 0.5)
         .sort((a, b) => b.score - a.score);
-    const active = scored("active").slice(0, 2);
+      return asksWhen ? matches.filter((x) => TIME_PREDICATES.has(x.m.predicate)) : matches;
+    };
+    const aboutEntity = this.memoriesAboutEntity(question);
+    const active = aboutEntity ?? scored("active").slice(0, 2);
     const unconfirmed = scored("unconfirmed").slice(0, 2);
 
     if (this.askUnavailable) {

@@ -67,13 +67,13 @@ describe("useAsk", () => {
     const { result } = renderHook(() => useAsk(), { wrapper: wrapper(engine) });
     expect(result.current.phase).toBe("idle");
     await act(async () => {
-      await result.current.ask("When is the dentist?");
+      await result.current.ask("What is Gran’s new number?");
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(result.current.phase).toBe("done");
-    expect(result.current.text).toContain("Dr Chen");
+    expect(result.current.text).toContain("4471");
     expect(result.current.receipts.length).toBeGreaterThan(0);
     vi.useRealTimers();
   });

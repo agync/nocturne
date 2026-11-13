@@ -113,6 +113,12 @@ const open = async (
   return { engine, platform };
 };
 
+/** An answer paragraph by its words, whichever phrases in it are bold. */
+const plain =
+  (text: string) =>
+  (_content: string, element: Element | null): boolean =>
+    element?.tagName === "P" && element.textContent === text;
+
 const heading = (name: string | RegExp) => screen.findByRole("heading", { level: 1, name });
 const announcer = () =>
   screen
@@ -126,7 +132,7 @@ describe("the Ask page when nothing has been asked", () => {
     await userEvent.click(screen.getByRole("button", { name: "What is Gran’s new number?" }));
     expect(await heading("“What is Gran’s new number?”")).toBeInTheDocument();
     expect(engine.asked).toEqual(["What is Gran’s new number?"]);
-    expect(await screen.findByText("Gran’s new number ends 4471.")).toBeInTheDocument();
+    expect(await screen.findByText(plain("Gran’s new number ends 4471."))).toBeInTheDocument();
   });
 });
 
@@ -146,13 +152,13 @@ describe("a question from the bar", () => {
     expect(await heading("“What did we decide about half term?”")).toBeInTheDocument();
     const earlier = screen.getByRole("region", { name: "Earlier" });
     expect(within(earlier).getByText("“What is Gran’s new number?”")).toBeInTheDocument();
-    expect(within(earlier).getByText("Gran’s new number ends 4471.")).toBeInTheDocument();
+    expect(within(earlier).getByText(plain("Gran’s new number ends 4471."))).toBeInTheDocument();
     expect(engine.asked).toHaveLength(2);
   });
 
   it("the follow-up field asks too", async () => {
     const { engine } = await open({ question: "What is Gran’s new number?" });
-    await screen.findByText("Gran’s new number ends 4471.");
+    await screen.findByText(plain("Gran’s new number ends 4471."));
     await userEvent.type(
       screen.getByRole("textbox", { name: "Ask a follow-up" }),
       "half term{Enter}",
@@ -235,7 +241,7 @@ describe("the answer", () => {
 
   it("offers no Read aloud until that edition exists", async () => {
     await open({ question: "What is Gran’s new number?" });
-    await screen.findByText("Gran’s new number ends 4471.");
+    await screen.findByText(plain("Gran’s new number ends 4471."));
     expect(screen.queryByRole("button", { name: /Read aloud/ })).toBeNull();
   });
 
@@ -357,7 +363,7 @@ describe("what to do about an answer", () => {
   it("That’s wrong opens an inline correction for the one memory and saves it", async () => {
     const { engine } = await open({ question: "What is Gran’s new number?" });
     const spy = vi.spyOn(engine, "correctMemory");
-    await screen.findByText("Gran’s new number ends 4471.");
+    await screen.findByText(plain("Gran’s new number ends 4471."));
     await userEvent.click(await screen.findByRole("button", { name: "That’s wrong" }));
     const field = await screen.findByRole("textbox", {
       name: "What is right? Write it as one sentence.",
@@ -444,11 +450,9 @@ describe("coming back to an answer", () => {
       window.location.hash = "#/ask";
     });
     expect(await heading("“What did we decide about half term?”")).toBeInTheDocument();
-    expect(
-      await screen.findByText(/You decided to book the Lake District cottage/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/You decided to book the/)).toBeInTheDocument();
     const earlier = screen.getByRole("region", { name: "Earlier" });
-    expect(within(earlier).getByText("Gran’s new number ends 4471.")).toBeInTheDocument();
+    expect(within(earlier).getByText(plain("Gran’s new number ends 4471."))).toBeInTheDocument();
     expect(engine.asked).toHaveLength(2);
     expect(
       within(document.querySelector("article") as HTMLElement).getByRole("button", {

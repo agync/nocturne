@@ -79,16 +79,82 @@ describe("MockEngine memories", () => {
   });
 });
 
+/** Everything one question says, and the last step it reached. */
+async function answerTo(question: string, options: { emphasis?: boolean } = {}) {
+  const engine = createMockEngine({ now: NOW, ...options });
+  const { deltas } = collectAsk(engine);
+  const id = await engine.ask(question);
+  await vi.advanceTimersByTimeAsync(10_000);
+  const mine = deltas.filter((d) => d.askId === id);
+  const last = mine.at(-1);
+  return {
+    phase: last?.phase,
+    text: mine.map((d) => d.textDelta ?? "").join(""),
+    receipts: mine.flatMap((d) => d.receipts),
+    memoryIds: last?.memoryIds ?? [],
+    near: mine.flatMap((d) => d.near),
+  };
+}
+
+const bold = (text: string) => [...text.matchAll(/\*\*(.+?)\*\*/g)].map((m) => m[1]);
+
 describe("MockEngine ask", () => {
   it("answers from what was kept, with a receipt, ending in done", async () => {
-    const engine = createMockEngine({ now: NOW });
-    const { deltas } = collectAsk(engine);
-    const id = await engine.ask("When is the dentist?");
-    await vi.advanceTimersByTimeAsync(10_000);
-    const mine = deltas.filter((d) => d.askId === id);
-    expect(mine.at(-1)?.phase).toBe("done");
-    expect(mine.flatMap((d) => d.receipts).length).toBeGreaterThan(0);
-    expect(mine.map((d) => d.textDelta ?? "").join("")).toContain("Dr Chen");
+    const answer = await answerTo("What is Gran’s new number?");
+    expect(answer.phase).toBe("done");
+    expect(answer.receipts.length).toBeGreaterThan(0);
+    expect(answer.text).toBe("Gran’s new number ends **4471**.");
+  });
+
+  it("says when the dentist is only if it is sure: two kept times disagree, so it is not sure", async () => {
+    const answer = await answerTo("When is the dentist?");
+    expect(answer.phase).toBe("notSure");
+    expect(answer.near).toHaveLength(2);
+    expect(answer.near.map((n) => n.text).join(" ")).not.toContain("Dr Chen");
+  });
+
+  it("answers the half term example from the voice note", async () => {
+    const answer = await answerTo("What did we decide about half term?");
+    expect(answer.phase).toBe("done");
+    expect(answer.text).toBe("You decided to book the **Lake District cottage** for half term.");
+    expect(answer.receipts.map((r) => r.itemId)).toEqual(["item-lake"]);
+  });
+
+  it.each(["Who is Leo?", "who’s Leo", "Tell me about Leo", "What about Leo?"])(
+    "answers %s with who Leo is first, then what else was kept, each with a receipt",
+    async (question) => {
+      const answer = await answerTo(question);
+      expect(answer.phase).toBe("done");
+      expect(answer.text.startsWith("Leo is **your son**.")).toBe(true);
+      expect(answer.memoryIds).toEqual(["mem-leo-son", "mem-swim", "mem-trip-lunch"]);
+      expect(answer.receipts.map((r) => r.itemId)).toEqual([
+        "item-leo-son",
+        "item-swim",
+        "item-letter",
+      ]);
+      expect(bold(answer.text)).toHaveLength(answer.memoryIds.length);
+    },
+  );
+
+  it("never states a role without a memory that says it", async () => {
+    const answer = await answerTo("Who is Gran?");
+    expect(answer.phase).toBe("done");
+    expect(answer.text).not.toMatch(/mother/i);
+    expect(answer.memoryIds).not.toContain("mem-leo-son");
+    expect(answer.memoryIds.length).toBeGreaterThan(0);
+    expect(answer.receipts.length).toBeGreaterThanOrEqual(answer.memoryIds.length);
+  });
+
+  it("does not use a private memory to say who someone is", async () => {
+    const answer = await answerTo("Who is Gran?");
+    expect(answer.text).not.toContain("amlodipine");
+  });
+
+  it("bolds one phrase per cited memory in citation order, and none with emphasis off", async () => {
+    const answer = await answerTo("Who is Leo?");
+    expect(bold(answer.text)).toEqual(["your son", "Mondays at 17:30", "packed lunch"]);
+    const plain = await answerTo("Who is Leo?", { emphasis: false });
+    expect(plain.text).not.toContain("*");
   });
 
   it("says nothing was found when nothing matches", async () => {
