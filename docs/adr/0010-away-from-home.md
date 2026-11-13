@@ -65,11 +65,28 @@ outside is a risk to that promise, so it has to be off by default, small, and pr
   stable device id per phone, session ids, how many frames are sent, their sizes (text is padded to
   multiples of 256 bytes, nothing else is) and their timing. It can drop or delay traffic or block
   pairing.
-- Cloudflare delivers the phone page's code. An edge that alters that page can use the phone's key
-  while the page runs. A native phone app would close this and is deferred.
-- A typed address must be exact. The three words catch a wrong host only if the person compares
-  them. Pressing Allow without comparing defeats them if someone at the relay also has the code, for
-  example from a photo of the screen.
+- In Simple, Cloudflare serves the phone page's code, and nothing on the phone can check it against
+  anything Cloudflare does not control. The phone's service worker keeps the page so it opens with
+  no connection, and keeps it for good: one altered response, from Cloudflare or from someone who
+  broke into it, can stay on the phone until the phone is added again, and the altered page can use
+  the phone's key while it runs. After the computer restarts, the phone's home origin is a retired
+  quick-tunnel name that Cloudflare, or a later tenant of that name, answers. This is a known
+  limitation. Revalidating the page against the same origin, or checking hashes embedded in the
+  build, was considered and not done: the origin also serves the service worker and the hashes, so
+  an attacker who controls it controls the check. A native phone app is the long-term fix and is
+  deferred. Most private makes this much harder, not impossible: the page comes from the computer
+  over a certificate Tailscale would have to issue for the computer's name, which shows up in
+  public certificate logs.
+- A typed address must be exact. The three words stop a passive relay. They do not stop a look-alike
+  site that has the typed code: it can pair itself with the computer and show matching words, so
+  only an exact address protects against it. A leaked code, from a photo, a screen share or a cloud
+  QR scanner, is stopped only by comparing the words. Pressing Allow without comparing defeats them.
+  The pairing screens say that a computer asking to allow a phone that is not showing three words
+  means someone else is trying to pair, and to refuse.
+- An unlocked or stolen phone can read everything not marked private until it is removed from the
+  computer.
+- In Simple, any local user on the computer can see the public address, because the address is
+  stored where the computer's own programs can read it. It does not admit anyone.
 - After a new computer key or Delete everything, phones can only show "can't connect", because no
   sealed notice can reach them.
 - With Most private, only the person's own devices on their tailnet are admitted, and they still
@@ -82,8 +99,9 @@ outside is a risk to that promise, so it has to be off by default, small, and pr
 
 ## What the companies see
 
-Cloudflare sees the phone's internet address and rough place, when it connects, the size of
-everything sent each way, and that it delivers the phone page. It does not see content. Tailscale
+Cloudflare sees the phone's internet address and rough place, a stable device id, when it
+connects, the size and timing of every message, and that it serves the phone page. It does not see
+content. Tailscale
 sees the account, the machines on it and when they connect, and carries traffic when no direct path
 exists. It does not see content. Each helper also makes its own upkeep traffic to its company while
 on. Helpers are pinned by hash, never update themselves and upload no logs. A tailnet that requires

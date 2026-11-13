@@ -50,11 +50,17 @@ account, or turn Away from home off.
 
 1. Choose Add a phone. Nocturne shows a code that works once and lasts five minutes.
 2. On the phone, scan the code with its camera. If you cannot scan it, open the address shown and
-   type the 24 characters of the typed code instead. Type the address exactly: a look-alike address
-   is how someone would try to trick you.
+   type the 24 characters of the typed code instead. Type the address exactly: a look-alike site
+   that has your code can pair itself and show matching words, and only the exact address protects
+   you from that.
 3. Name the phone.
 4. Compare the three words. Both screens show three words. If they are the same, press Allow on the
-   computer. If they differ, or you did not start this, press Don't allow.
+   computer. If they differ, or you did not start this, press Don't allow. If the computer asks to
+   allow a phone and your phone is not showing three words, someone else is trying to pair, so
+   refuse.
+
+A pairing code can leak through a photo, a screen share or a cloud QR scanner. Comparing the words
+is the only thing that stops someone who has it, so do not press Allow without comparing.
 
 If an iPhone is involved, add Nocturne to the home screen first and open it from there, so the phone
 keeps its key.
@@ -69,15 +75,25 @@ phones.
 If the phone has no signal, what it keeps waits on the phone and is sent when it connects again.
 That waiting list sits in the phone's own storage and is not hidden from someone who has the phone.
 
+An unlocked or stolen phone can read everything not marked private until you remove it from the
+computer, so remove a lost phone first.
+
 ## What the companies can see
 
 Content is sealed, so neither company can read your questions, your page or your files. They can see
 other things.
 
-- **Simple (Cloudflare).** Your phone's internet address and rough place, when it connects, the size
-  of everything sent each way, and that Cloudflare hands your phone the page it opens. Someone able
-  to change that page could misuse your phone's key while the page is open, which a native phone app
-  would later fix.
+- **Simple (Cloudflare).** Your phone's internet address and rough place, a stable id for each
+  phone, when it connects, and the size and timing of every message. Cloudflare also serves the
+  code of the page your phone opens. The phone keeps that page so it opens without a connection, so
+  a change Cloudflare makes, or someone who breaks into it, can stay on the phone until you add the
+  phone again, and a changed page could misuse your phone's key while it is open. After your
+  computer restarts, the phone looks for it at an old name that Cloudflare, or someone who later
+  gets that name, answers. Nothing in the phone app can check this, so it is a known limit. A
+  native phone app would later fix it. Most private makes it much harder: Tailscale would have to
+  issue a certificate for your computer's name, which shows up in public certificate logs. In
+  Simple, anyone using your computer can also see the public address, though it does not let them
+  in.
 - **Most private (Tailscale).** Your account, the computers on it and when they connect. When your
   phone and computer cannot connect directly, Tailscale carries the sealed traffic. Only your own
   devices on your Tailscale account can reach your computer. Other people's devices, tagged

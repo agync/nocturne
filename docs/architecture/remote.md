@@ -39,7 +39,9 @@ that state is on and automatic switch-off is not due. The release check proves t
   supervisor talks to it in JSON lines and it reports states such as sign-in needed, approval
   needed and ready. It is built in CI and tested offline against an in-process control server.
 - **The phone app.** A second, small web app served by the listener. It lives at the address the
-  phone was paired on, caches only its own shell, and talks to the current address.
+  phone was paired on, caches only its own shell, and talks to the current address. The shell is
+  served cache first and is not revalidated, so in Simple one altered response from the relay stays
+  on the phone until it is added again (see below).
 
 ## Pairing
 
@@ -88,8 +90,16 @@ than the pairing fragment.
 ## What the channel does not hide
 
 The relay sees a stable device id per phone, session ids, frame counts, sizes and timing, and can
-drop or delay frames. Cloudflare delivers the phone page's code, so an edge that alters it can use
-the phone's key while the page runs. A typed address must be exact, and the three words help only if
-compared. After a new computer key or Delete everything, phones can only show "can't connect". With
+drop or delay frames. In Simple, Cloudflare serves the phone page's code. The phone keeps the page,
+so one altered response can stay until the phone is added again, and an altered page can use the
+phone's key while it runs. After a computer restart the phone's home origin is a retired quick-tunnel
+name that Cloudflare, or a later tenant of the name, answers. Revalidating the page or checking
+hashes in the service worker would not help, because the same origin serves the worker and the
+hashes, so this is a known limitation and a native phone app is the long-term fix. Most private
+makes it much harder, since Tailscale would have to issue a certificate for the computer's name,
+which shows up in public certificate logs. A typed address must be exact. The three words stop a
+passive relay but not a look-alike site that has the typed code, and a leaked code is stopped only by
+comparing them. An unlocked or stolen phone can read everything not marked private until it is
+removed, and in Simple any local user on the computer can see the public address. After a new computer key or Delete everything, phones can only show "can't connect". With
 Most private, only the person's own devices are admitted, and they still need a code and the
 person's Allow to pair. The Tailscale helper binds UDP on every network interface while on. See the decision for the full list.
