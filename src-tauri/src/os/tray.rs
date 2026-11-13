@@ -270,11 +270,6 @@ pub fn until_tonight(now: Timestamp, tz: &TimeZone) -> Timestamp {
     }
 }
 
-/// `--hidden` only holds when the tray can bring the window back.
-pub fn effective_start_hidden(wants_hidden: bool, tray_available: bool) -> bool {
-    wants_hidden && tray_available
-}
-
 impl Action {
     fn id(self) -> &'static str {
         match self {
@@ -304,12 +299,36 @@ impl Action {
     }
 }
 
-/// Start the tray. Whether the desktop has somewhere to show it is asked off the main thread;
-/// the tray itself is built on the main thread, and `AppState::tray_available` says how it went.
+/// How many times the desktop is asked whether it has somewhere for the tray, and how long
+/// between asks: at login the panel may start after this app, so one look is not enough.
+const HOST_TRIES: u32 = 15;
+const HOST_PAUSE: Duration = Duration::from_secs(2);
+
+/// Ask `check` until it says yes or `tries` asks have been made, calling `pause` between them.
+pub fn wait_for_host(check: &mut dyn FnMut() -> bool, pause: &mut dyn FnMut(), tries: u32) -> bool {
+    for attempt in 0..tries {
+        if check() {
+            return true;
+        }
+        if attempt + 1 < tries {
+            pause();
+        }
+    }
+    false
+}
+
+/// Start the tray. Whether the desktop has somewhere to show it is asked off the main thread,
+/// and asked again for about half a minute (a start at login can come before the panel); the
+/// tray itself is built on the main thread, and `AppState::tray_available` says how it went. A
+/// hidden start keeps the window hidden until the answer is final.
 pub fn install<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     std::thread::spawn(move || {
-        let host = host_registered();
+        let host = wait_for_host(
+            &mut host_registered,
+            &mut || std::thread::sleep(HOST_PAUSE),
+            HOST_TRIES,
+        );
         let handle = app.clone();
         if let Err(e) = app.run_on_main_thread(move || finish(&handle, host)) {
             tracing::warn!("the tray could not be started: {e}");
@@ -368,7 +387,7 @@ fn finish<R: Runtime>(app: &AppHandle<R>, host: bool) {
             "this desktop has no notification area"
         }
     );
-    if state.start_hidden() && !effective_start_hidden(true, false) {
+    if state.start_hidden() {
         state.set_start_hidden(false);
         window::show_when_ready(app, ShowReason::NoTray);
     }
@@ -767,10 +786,30 @@ mod tests {
     }
 
     #[test]
-    fn hidden_needs_tray() {
-        assert!(!effective_start_hidden(true, false));
-        assert!(effective_start_hidden(true, true));
-        assert!(!effective_start_hidden(false, true));
+    fn the_tray_host_is_asked_again_until_it_appears_or_the_tries_run_out() {
+        let mut asked = 0;
+        let mut waited = 0;
+        let found = wait_for_host(
+            &mut || {
+                asked += 1;
+                asked == 3
+            },
+            &mut || waited += 1,
+            15,
+        );
+        assert!(found);
+        assert_eq!((asked, waited), (3, 2));
+        let (mut asked, mut waited) = (0, 0);
+        let found = wait_for_host(
+            &mut || {
+                asked += 1;
+                false
+            },
+            &mut || waited += 1,
+            4,
+        );
+        assert!(!found);
+        assert_eq!((asked, waited), (4, 3), "no pause after the last ask");
     }
 
     #[test]

@@ -10,7 +10,6 @@ pub const STATE_RESTING: &str = "Resting";
 pub const STATE_READING: &str = "Reading";
 pub const STATE_TIDYING: &str = "Tidying";
 pub const STATE_STOPPED: &str = "Stopped";
-pub const STATE_PAUSED: &str = "Paused";
 pub const PAUSED_UNTIL: &str = "Paused until";
 pub const PAUSED_UNTIL_RESUMED: &str = "Paused until you resume";
 
@@ -59,7 +58,6 @@ pub fn all() -> Vec<String> {
         STATE_READING,
         STATE_TIDYING,
         STATE_STOPPED,
-        STATE_PAUSED,
         PAUSED_UNTIL,
         PAUSED_UNTIL_RESUMED,
         TIDY_PAUSING_IS_FINE,
