@@ -169,15 +169,6 @@ pub struct Hit {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ExportReport {
-    pub memories: u32,
-    pub pages: u32,
-    pub originals: u32,
-    /// The new folder the export was written to.
-    pub path: PathBuf,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Stats {
     pub store_version: u32,
     pub memory_count: u32,

@@ -714,3 +714,81 @@ fn an_items_keep_forever_flag_reaches_every_current_memory_from_it() {
         Err(nocturne_engine::Error::NotFound(_))
     ));
 }
+
+// ---- export progress ----
+
+#[test]
+fn export_reports_progress_for_every_file_and_returns_the_contract_report() {
+    let f = fixture();
+    let (_, m) = learn(
+        &f.engine,
+        "Leo swims",
+        cand("Leo", Predicate::Prefers, "swimming", "Leo likes swimming."),
+    );
+    let _ = m;
+    f.engine
+        .keep_bytes(b"photo bytes", "jpg", Source::Paste)
+        .unwrap();
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+
+    let out = tempfile::tempdir().unwrap();
+    let calls = std::cell::RefCell::new(Vec::<(u32, u32)>::new());
+    let report: nocturne_contract::ExportReport = f
+        .engine
+        .export_to_with(out.path(), &|done, total| {
+            calls.borrow_mut().push((done, total))
+        })
+        .unwrap();
+    let calls = calls.into_inner();
+
+    // README, memories.md, nocturne.json, one page, one original.
+    assert_eq!((report.memories, report.pages, report.originals), (1, 1, 1));
+    assert_eq!(calls.first(), Some(&(0, 5)));
+    assert_eq!(calls.last(), Some(&(5, 5)));
+    assert!(
+        calls
+            .windows(2)
+            .all(|w| w[0].0 <= w[1].0 && w[0].1 == w[1].1)
+    );
+    assert_eq!(calls.iter().filter(|c| **c == (5, 5)).count(), 1);
+
+    let root = std::path::PathBuf::from(&report.path);
+    assert!(root.starts_with(out.path()));
+    let written: usize = ["memories.md", "README.txt", "nocturne.json"]
+        .iter()
+        .filter(|n| root.join(n).exists())
+        .count()
+        + std::fs::read_dir(root.join("pages")).unwrap().count()
+        + std::fs::read_dir(root.join("originals")).unwrap().count();
+    assert_eq!(written, 5, "progress counts files written");
+
+    // Where the store keeps an original is not part of the person's data.
+    let json = std::fs::read_to_string(root.join("nocturne.json")).unwrap();
+    let data: serde_json::Value = serde_json::from_str(&json).unwrap();
+    for item in data["items"].as_array().unwrap() {
+        assert!(item["originalPath"].is_null());
+    }
+    assert!(!json.contains(f.dir.path().to_str().unwrap()));
+}
+
+#[test]
+fn export_to_is_the_same_export_without_a_callback() {
+    let f = fixture();
+    f.engine.keep_text("a note", Source::Paste).unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let r = f.engine.export_to(out.path()).unwrap();
+    assert_eq!((r.memories, r.pages, r.originals), (0, 0, 0));
+    assert!(std::path::Path::new(&r.path).join("nocturne.json").exists());
+    // An empty store still reports (0, 3) then (3, 3).
+    let calls = std::cell::RefCell::new(Vec::new());
+    f.engine
+        .export_to_with(out.path(), &|d, t| calls.borrow_mut().push((d, t)))
+        .unwrap();
+    let calls = calls.into_inner();
+    assert_eq!((calls[0], *calls.last().unwrap()), ((0, 3), (3, 3)));
+}

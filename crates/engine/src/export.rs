@@ -3,7 +3,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
-use nocturne_contract::{PageLine, PageView};
+use nocturne_contract::{ExportReport, PageLine, PageView};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -13,7 +13,6 @@ use crate::fsutil;
 use crate::page::load_page;
 use crate::rows::{MEM_COLS, MemRow, mem_row};
 use crate::store;
-use crate::types::ExportReport;
 use crate::util::fmt_ts;
 
 /// The exact phrase `delete_everything` requires.
@@ -149,6 +148,13 @@ impl Engine {
     /// is taken) inside `dir`, owner-only, and return its path. It contains `README.txt`, `memories.md`, `pages/`, `originals/` and
     /// `nocturne.json`. Private memories are included and marked: it is the person's own copy.
     pub fn export_to(&self, dir: &Path) -> Result<ExportReport> {
+        self.export_to_with(dir, &|_, _| {})
+    }
+
+    /// Like `export_to`, and calls `progress(done, total)` as files are written: first with
+    /// `(0, total)`, then after each file, last with `(total, total)`. `total` is every file the
+    /// export will write (the three top-level files, one per page, one per original).
+    pub fn export_to_with(&self, dir: &Path, progress: &dyn Fn(u32, u32)) -> Result<ExportReport> {
         let now = fmt_ts(self.clock().now());
         let originals_src = self.originals_dir();
         // A fresh, owner-only folder named for the day; never an existing one.
@@ -177,6 +183,27 @@ impl Engine {
         fsutil::create_private_dir_new(&dir.join("pages"))?;
         fsutil::create_private_dir_new(&dir.join("originals"))?;
         let mut report = self.read(|conn| {
+            let dates: Vec<String> = {
+                let mut stmt = conn.prepare("SELECT date FROM pages ORDER BY date")?;
+                stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?
+            };
+            let mut stmt = conn.prepare(
+                "SELECT id, sha256, ext, file_name, origin, metadata FROM items ORDER BY kept_at, id",
+            )?;
+            let rows: Vec<ItemRow> = stmt
+                .query_map([], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            let with_files = rows.iter().filter(|r| r.3.is_some()).count();
+            let total = (3 + dates.len() + with_files) as u32;
+            let mut done = 0u32;
+            let mut step = || {
+                done += 1;
+                progress(done, total);
+            };
+            progress(0, total);
+
             // Memories: current ones in the markdown, every version in the data file.
             let all: Vec<MemRow> = {
                 let sql = format!(
@@ -198,13 +225,11 @@ impl Engine {
                 current += 1;
             }
             write_new(&dir.join("memories.md"), md.as_bytes())?;
+            step();
             write_new(&dir.join("README.txt"), README.as_bytes())?;
+            step();
 
             // Pages.
-            let dates: Vec<String> = {
-                let mut stmt = conn.prepare("SELECT date FROM pages ORDER BY date")?;
-                stmt.query_map([], |r| r.get(0))?.collect::<rusqlite::Result<_>>()?
-            };
             let mut pages_json = Vec::new();
             for d in &dates {
                 let day = d.parse()?;
@@ -212,19 +237,12 @@ impl Engine {
                     write_new(&dir.join("pages").join(format!("{d}.md")), page_md(conn, &p)?.as_bytes())?;
                     pages_json.push(serde_json::to_value(&p)?);
                 }
+                step();
             }
 
             // Originals: a copy of every kept file.
             let mut copied = 0u32;
             let mut items_json = Vec::new();
-            let mut stmt = conn.prepare(
-                "SELECT id, sha256, ext, file_name, origin, metadata FROM items ORDER BY kept_at, id",
-            )?;
-            let rows: Vec<ItemRow> = stmt
-                .query_map([], |r| {
-                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?))
-                })?
-                .collect::<rusqlite::Result<_>>()?;
             let views = {
                 // `items` goes through the reader pool on its own; reuse the connection here.
                 let mut stmt = conn.prepare(&format!(
@@ -248,6 +266,7 @@ impl Engine {
                         copied += 1;
                         copy_name = Some(format!("originals/{target}"));
                     }
+                    step();
                 }
                 // The export names its own copy; where the store keeps the original is not part
                 // of the person's data.
@@ -295,14 +314,15 @@ impl Engine {
                 "settings": settings,
             });
             write_new(&dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?.as_bytes())?;
+            step();
             Ok(ExportReport {
                 memories: current,
                 pages: dates.len() as u32,
                 originals: copied,
-                path: PathBuf::new(),
+                path: String::new(),
             })
         })?;
-        report.path = root;
+        report.path = root.to_string_lossy().into_owned();
         Ok(report)
     }
 

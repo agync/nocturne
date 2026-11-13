@@ -89,7 +89,7 @@ fn export_writes_readme_memories_pages_originals_and_data() {
     let w = world();
     let out = tempfile::tempdir().unwrap();
     let report = w.f.engine.export_to(out.path()).unwrap();
-    let root = report.path.clone();
+    let root = std::path::PathBuf::from(&report.path);
     assert_eq!((report.memories, report.pages, report.originals), (4, 1, 1));
 
     let readme = std::fs::read_to_string(root.join("README.txt")).unwrap();
@@ -169,7 +169,7 @@ fn a_forgotten_memory_is_not_in_a_later_export() {
             .unwrap();
     w.f.engine.forget(&p.token).unwrap();
     let out = tempfile::tempdir().unwrap();
-    let root = w.f.engine.export_to(out.path()).unwrap().path;
+    let root = std::path::PathBuf::from(w.f.engine.export_to(out.path()).unwrap().path);
     for entry in ["memories.md", "nocturne.json", "pages/2026-11-14.md"] {
         let text = std::fs::read_to_string(root.join(entry)).unwrap();
         assert!(!text.contains("Zebrafish47"), "{entry}");
@@ -274,8 +274,8 @@ fn export_goes_to_a_fresh_dated_folder_and_never_reuses_a_name() {
     let f = fixture();
     f.engine.keep_text("a note", Source::Paste).unwrap();
     let out = tempfile::tempdir().unwrap();
-    let a = f.engine.export_to(out.path()).unwrap().path;
-    let b = f.engine.export_to(out.path()).unwrap().path;
+    let a = std::path::PathBuf::from(f.engine.export_to(out.path()).unwrap().path);
+    let b = std::path::PathBuf::from(f.engine.export_to(out.path()).unwrap().path);
     assert_eq!(a.file_name().unwrap(), "Nocturne export 2026-11-13");
     assert_eq!(b.file_name().unwrap(), "Nocturne export 2026-11-13 (1)");
     assert!(a.join("nocturne.json").exists() && b.join("nocturne.json").exists());
@@ -290,7 +290,7 @@ fn a_symlink_waiting_in_the_target_folder_is_not_followed() {
     let victim = tempfile::tempdir().unwrap();
     std::os::unix::fs::symlink(victim.path(), out.path().join("Nocturne export 2026-11-13"))
         .unwrap();
-    let root = f.engine.export_to(out.path()).unwrap().path;
+    let root = std::path::PathBuf::from(f.engine.export_to(out.path()).unwrap().path);
     assert_eq!(root.file_name().unwrap(), "Nocturne export 2026-11-13 (1)");
     assert_eq!(
         std::fs::read_dir(victim.path()).unwrap().count(),
@@ -306,7 +306,7 @@ fn export_folders_and_files_are_owner_only() {
     let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
     let w = world();
     let out = tempfile::tempdir().unwrap();
-    let root = w.f.engine.export_to(out.path()).unwrap().path;
+    let root = std::path::PathBuf::from(w.f.engine.export_to(out.path()).unwrap().path);
     for d in [root.clone(), root.join("pages"), root.join("originals")] {
         assert_eq!(mode(&d), 0o700, "{d:?}");
     }
