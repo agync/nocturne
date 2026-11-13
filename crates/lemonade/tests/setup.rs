@@ -575,3 +575,27 @@ async fn two_starts_for_different_tiers_at_once_let_one_run_and_refuse_the_other
     );
     rig.sup.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn an_unfinished_change_of_tier_is_dropped_so_resume_does_not_aim_at_it() {
+    let rig = rig("downloaded=all", 64).await;
+    nocturne_lemonade::record::write(
+        &rig.dirs.config(),
+        &nocturne_lemonade::record::SetupRecord {
+            version: 1,
+            tier: Some(Tier::Standard),
+            done: false,
+            completed: Some(Tier::Small),
+            backends: Default::default(),
+        },
+    )
+    .unwrap();
+    let view = rig.setup.check().await.unwrap();
+    assert_eq!(view.phase, SetupPhase::Done);
+    assert_eq!(view.chosen, Some(Tier::Small));
+    let record = nocturne_lemonade::record::read(&rig.dirs.config()).unwrap();
+    assert_eq!(record.tier, Some(Tier::Small), "nothing is left pending");
+    assert!(record.done);
+    assert_eq!(record.completed, Some(Tier::Small));
+    rig.sup.shutdown().await.unwrap();
+}

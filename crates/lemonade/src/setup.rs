@@ -444,6 +444,23 @@ impl Inner {
                 Some(w) if self.missing(w).await?.is_empty() => Some(w),
                 _ => None,
             };
+            // Nothing in this launch is fetching the other tier, and nothing starts a download
+            // without the person asking again, so the unfinished change is dropped rather than
+            // left to read as done while a later resume still aims at it.
+            if let Some(w) = working
+                && rec.tier != Some(w)
+                && !self.ctl().running
+            {
+                let settled = SetupRecord {
+                    tier: Some(w),
+                    done: true,
+                    completed: Some(w),
+                    ..rec.clone()
+                };
+                if let Err(e) = record::write(&self.config_dir, &settled) {
+                    tracing::warn!("could not settle the unfinished change of tier: {e}");
+                }
+            }
             let t = working.or(rec.tier).unwrap_or(Tier::Unsupported);
             let missing = self.missing(t).await?;
             total = self.comps(t).iter().map(|c| c.bytes).sum();
