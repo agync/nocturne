@@ -65,6 +65,20 @@ describe("MockEngine capture", () => {
   });
 });
 
+describe("MockEngine memories", () => {
+  it("lists a memory that is not yet confirmed when no status is asked for", async () => {
+    const engine = createMockEngine();
+    const all = await engine.listMemories({
+      entityId: null,
+      itemId: null,
+      status: null,
+      query: null,
+      limit: null,
+    });
+    expect(all.find((m) => m.id === "mem-nut")?.status).toBe("unconfirmed");
+  });
+});
+
 describe("MockEngine ask", () => {
   it("answers from what was kept, with a receipt, ending in done", async () => {
     const engine = createMockEngine({ now: NOW });
