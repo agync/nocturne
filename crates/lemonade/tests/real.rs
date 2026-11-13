@@ -220,3 +220,72 @@ async fn the_mind_never_triggers_a_download_for_a_missing_model() {
     );
     sup.shutdown().await.unwrap();
 }
+
+/// Runs setup end to end against the real engine for the smallest model there is. It reaches
+/// the network (the model, about 75 MB, and the speech backend), so it runs only with
+/// `NOCTURNE_REAL_PULL=1`, and it works in a scratch folder that is removed afterwards.
+#[tokio::test]
+#[ignore = "needs NOCTURNE_LEMOND and NOCTURNE_REAL_PULL=1"]
+async fn setup_pulls_whisper_tiny_through_the_real_engine() {
+    use nocturne_contract::{ComponentRole, LedgerKind, SetupPhase, Tier};
+    use nocturne_lemonade::{Component, Setup, SetupOptions};
+    use std::sync::{Arc, Mutex};
+
+    if std::env::var("NOCTURNE_REAL_PULL").as_deref() != Ok("1") {
+        println!("skipped: set NOCTURNE_REAL_PULL=1 to download Whisper-Tiny (75 MB)");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = nocturne_lemonade::Dirs::new(bundle(), tmp.path().join("root"));
+    let sup = Supervisor::start(dirs.clone(), SupervisorOptions::default())
+        .await
+        .unwrap();
+    let ledger: Arc<Mutex<Vec<(LedgerKind, String, u64)>>> = Arc::default();
+    let sink = ledger.clone();
+    let setup = Setup::with_options(
+        &sup,
+        dirs.models(),
+        move |k, label, bytes| sink.lock().unwrap().push((k, label, bytes)),
+        SetupOptions {
+            ram_bytes: Some(16 << 30),
+            components: Some(vec![Component {
+                role: ComponentRole::Speech,
+                model: "Whisper-Tiny",
+                bytes: 75_000_000,
+            }]),
+            ..SetupOptions::default()
+        },
+    );
+    assert_eq!(setup.check().await.unwrap().phase, SetupPhase::Choosing);
+    setup.start(Tier::Small).await.unwrap();
+    let mut view = setup.view();
+    let outcome = tokio::time::timeout(Duration::from_secs(900), async {
+        loop {
+            let v = view.borrow_and_update().clone();
+            println!("{:?} {}/{}", v.phase, v.downloaded_bytes, v.total_bytes);
+            if matches!(v.phase, SetupPhase::Done | SetupPhase::Failed) {
+                return v;
+            }
+            view.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("setup did not finish in 15 minutes");
+    assert_eq!(outcome.phase, SetupPhase::Done, "{outcome:?}");
+
+    assert_eq!(setup.installed(), Some(Tier::Small));
+    let ledger = ledger.lock().unwrap().clone();
+    println!("ledger: {ledger:?}");
+    assert!(
+        ledger
+            .iter()
+            .any(|(_, l, b)| l == "Whisper-Tiny" && *b > 50_000_000)
+    );
+    assert!(files_under(&dirs.models()) > 0);
+    let cfg = sup.client().config().await.unwrap();
+    assert_eq!(cfg["offline"], true);
+    assert_eq!(cfg["no_fetch_executables"], true);
+    let models = sup.client().models().await.unwrap();
+    assert!(models.iter().any(|m| m.id == "Whisper-Tiny" && m.present()));
+    sup.shutdown().await.unwrap();
+}

@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use nocturne_contract::{LedgerKind, PauseReason, SetupError, SetupPhase, SetupView, Tier};
+use nocturne_contract::{
+    ComponentRole, LedgerKind, PauseReason, SetupError, SetupPhase, SetupView, Tier,
+};
 use tokio::sync::{Notify, watch};
 use tokio::task::JoinHandle;
 
@@ -31,6 +33,9 @@ pub struct SetupOptions {
     pub retry_delay: Duration,
     /// Memory to assume instead of reading it from the machine.
     pub ram_bytes: Option<u64>,
+    /// Install these instead of the tier's own models. For tests that must stay small.
+    #[doc(hidden)]
+    pub components: Option<Vec<Component>>,
 }
 
 impl Default for SetupOptions {
@@ -40,6 +45,7 @@ impl Default for SetupOptions {
             offline_after: Duration::from_secs(30),
             retry_delay: Duration::from_secs(5),
             ram_bytes: None,
+            components: None,
         }
     }
 }
@@ -372,6 +378,30 @@ impl Inner {
         (ram, free, info)
     }
 
+    /// What setup installs for `tier`.
+    fn comps(&self, tier: Tier) -> Vec<Component> {
+        self.opts
+            .components
+            .clone()
+            .unwrap_or_else(|| tier::components(tier))
+    }
+
+    /// The backends those models need.
+    fn recipes(&self, tier: Tier) -> Vec<&'static str> {
+        let mut out = Vec::new();
+        for c in self.comps(tier) {
+            let recipe = match c.role {
+                ComponentRole::Mind | ComponentRole::Recall => "llamacpp",
+                ComponentRole::Speech => "whispercpp",
+                ComponentRole::Voice => "kokoro",
+            };
+            if !out.contains(&recipe) {
+                out.push(recipe);
+            }
+        }
+        out
+    }
+
     fn describe_host(&self, ram: u64, free: u64) {
         self.update(|v| {
             v.ram_gib = (ram / GIB) as u32;
@@ -383,7 +413,8 @@ impl Inner {
 
     async fn missing(&self, tier: Tier) -> Result<Vec<Component>, RuntimeError> {
         let models = self.client.models().await?;
-        Ok(tier::components(tier)
+        Ok(self
+            .comps(tier)
             .into_iter()
             .filter(|c| !models.iter().any(|m| m.id == c.model && m.present()))
             .collect())
@@ -402,7 +433,7 @@ impl Inner {
         if let Some(rec) = record.as_ref().filter(|r| r.tier.is_some()) {
             let t = rec.tier.unwrap_or(Tier::Unsupported);
             let missing = self.missing(t).await?;
-            total = tier::download_bytes(t);
+            total = self.comps(t).iter().map(|c| c.bytes).sum();
             done = total - missing.iter().map(|c| c.bytes).sum::<u64>();
             chosen = Some(t);
             if rec.done && missing.is_empty() {
@@ -454,7 +485,8 @@ impl Inner {
             return Ok(());
         }
         let models: u64 = self.missing(tier).await?.iter().map(|c| c.bytes).sum();
-        let backends: u64 = ["llamacpp", "whispercpp", "kokoro"]
+        let backends: u64 = self
+            .recipes(tier)
             .into_iter()
             .map(|recipe| {
                 let backend = tier::choose_backend(&info, recipe);
@@ -610,7 +642,11 @@ impl Inner {
             return Err(Fail::Error(SetupError::EngineFailed));
         }
         let info = self.client.system_info().await.map_err(engine)?;
-        for (recipe, backend) in &rec.backends {
+        for (recipe, backend) in rec
+            .backends
+            .iter()
+            .filter(|(r, _)| self.recipes(tier).contains(&r.as_str()))
+        {
             if info.backend_state(recipe, backend) != BackendState::Installed {
                 return Err(Fail::Error(SetupError::EngineFailed));
             }
@@ -618,7 +654,7 @@ impl Inner {
         rec.done = true;
         record::write(&self.config_dir, &rec).map_err(engine)?;
         self.control.set_online(false).await.map_err(engine)?;
-        let total = tier::download_bytes(tier) as f64;
+        let total = self.comps(tier).iter().map(|c| c.bytes).sum::<u64>() as f64;
         self.update(|v| {
             v.phase = SetupPhase::Done;
             v.downloaded_bytes = total.max(v.downloaded_bytes);
@@ -635,7 +671,7 @@ impl Inner {
         rec: &SetupRecord,
     ) -> Result<Vec<Step>, SetupError> {
         let mut steps = Vec::new();
-        for recipe in ["llamacpp", "whispercpp", "kokoro"] {
+        for recipe in self.recipes(tier) {
             let backend = rec
                 .backends
                 .get(recipe)
@@ -652,7 +688,7 @@ impl Inner {
             .await
             .map_err(|_| SetupError::EngineFailed)?;
         let mut book = Progress::default();
-        for c in tier::components(tier) {
+        for c in self.comps(tier) {
             let absent = missing.iter().any(|m| m.model == c.model);
             book.steps.push(StepProgress {
                 id: format!("model:{}", c.model),
@@ -761,10 +797,10 @@ impl Inner {
                 need_start = true;
                 continue;
             };
-            self.record(step, &job);
             if job.finished() {
                 return self.finish(step, Some(job)).await;
             }
+            self.record(step, &job);
             last_seen = Some(job.clone());
             match job.status.as_str() {
                 "error" => {

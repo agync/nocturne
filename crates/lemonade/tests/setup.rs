@@ -29,6 +29,7 @@ fn setup_opts(ram_gib: u64) -> SetupOptions {
         offline_after: Duration::from_millis(500),
         retry_delay: Duration::from_millis(100),
         ram_bytes: Some(ram_gib * GIB),
+        ..SetupOptions::default()
     }
 }
 
