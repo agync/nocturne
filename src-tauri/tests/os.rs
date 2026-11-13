@@ -204,7 +204,13 @@ fn failed_change_keeps_old() {
     let os = h.app.state::<OsState>();
     os.set_registrar(fake.clone());
     shortcut::install(&os, "CommandOrControl+Shift+Space", true);
-    let old = shortcut::parse("Ctrl+Shift+Space").unwrap();
+    // CommandOrControl is Command on a Mac and Control elsewhere.
+    let old = shortcut::parse(if cfg!(target_os = "macos") {
+        "Command+Shift+Space"
+    } else {
+        "Ctrl+Shift+Space"
+    })
+    .unwrap();
     assert_eq!(*fake.held.lock().unwrap(), vec![old]);
     assert_eq!(h.ok("get_settings", json!({}))["shortcutAvailable"], true);
 
@@ -371,7 +377,15 @@ fn start_at_login_writes_the_entry_in_the_given_folder_and_reports_the_truth() {
     let on = h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
     assert_eq!(on["startAtLogin"], true);
     let entry = std::fs::read_to_string(dir.join(ENTRY)).unwrap();
-    assert!(entry.contains("Exec=/usr/bin/nocturne --hidden"), "{entry}");
+    if cfg!(target_os = "macos") {
+        assert!(
+            entry.contains("<string>/usr/bin/nocturne</string>"),
+            "{entry}"
+        );
+        assert!(entry.contains("<string>--hidden</string>"), "{entry}");
+    } else {
+        assert!(entry.contains("Exec=/usr/bin/nocturne --hidden"), "{entry}");
+    }
     // The person removes the entry by hand: the settings say what is true.
     std::fs::remove_file(dir.join(ENTRY)).unwrap();
     assert_eq!(h.ok("get_settings", json!({}))["startAtLogin"], false);
@@ -486,13 +500,19 @@ mod inbox {
     fn a_file_still_growing_is_not_kept_until_it_stops() {
         let h = harness();
         let folder = watching(&h);
+        // A write can stall for over a hundred milliseconds on a Mac, which would leave the
+        // file still for as long as the shorter settle time of the other tests.
+        h.app.state::<OsState>().set_inbox_timing(Timing {
+            stable_after: Duration::from_millis(500),
+            ..fast()
+        });
         h.ok(
             "update_settings",
             json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),
         );
         wait_for("the baseline", || ledger_folder(&h).is_some());
         let path = folder.path().join("growing.txt");
-        let end = Instant::now() + Duration::from_millis(600);
+        let end = Instant::now() + Duration::from_millis(1200);
         let mut n = 0;
         while Instant::now() < end {
             n += 1;

@@ -194,17 +194,25 @@ mod tests {
 
     #[test]
     fn parses_ui_and_engine_spellings() {
-        let a = parse("Ctrl+Shift+Space").unwrap();
+        // CommandOrControl is Command on a Mac and Control elsewhere.
+        let primary = if cfg!(target_os = "macos") {
+            "Command"
+        } else {
+            "Ctrl"
+        };
+        let a = parse(&format!("{primary}+Shift+Space")).unwrap();
         let b = parse("CommandOrControl+Shift+Space").unwrap();
-        let c = parse("Control+Shift+Space").unwrap();
+        let c = parse(&format!("{primary}+Shift+Space").replace("Ctrl", "Control")).unwrap();
         assert_eq!(a, b);
         assert_eq!(a, c);
+        assert_eq!(parse("Ctrl+Shift+Space"), parse("Control+Shift+Space"));
         assert!(parse("Super+Alt+K").is_ok());
         assert!(parse("Ctrl+Shift").is_err());
         assert!(parse("").is_err());
         assert!(parse("Ctrl+Space+K").is_err());
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     fn env(pairs: &[(&'static str, &'static str)]) -> impl Fn(&str) -> Option<String> {
         let map: Vec<_> = pairs.to_vec();
         move |k| {

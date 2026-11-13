@@ -7,7 +7,6 @@
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
-#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 use jiff::civil::Date;
