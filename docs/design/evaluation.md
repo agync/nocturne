@@ -49,8 +49,14 @@ before building more.
 | Outbound traffic at all without consent | None; model and app downloads are explicit |
 | The embedded server is reachable by other apps | No: per-launch key, loopback only |
 | Away from home off: listeners, helper processes and outbound traffic | None; no helper file unless a download was agreed to |
-| Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale daemon |
+| Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale helper |
 | Plaintext in a relay recording after a scanned pairing | 0 bytes |
 | Bytes sent to phones | Counted at the listener and shown on Privacy |
 | Private items reaching a phone | 0 |
 | Away from home idle memory and wake-ups, no phone connected | Targets: app resident growth under 25 MB, no timer more often than every 30 s; during a 50 MB upload, peak growth under 10 MB. To be measured on the 8 GB Mac; the helper's own memory (target under 80 MB) is measured in the real-network trial |
+
+Measured on Linux with the stand-in helper (`scripts/away-integration.sh real`, a desktop session
+under a virtual display): with Away from home on, the app's resident memory grew by 2.8 MB, its
+peak grew by 2.5 MB during a 50 MB upload, and after turning it off and after quitting no process
+or listener of Nocturne was left. These are the app's own figures, not the real helper's, and Mac
+and Windows are not measured.

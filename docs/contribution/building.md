@@ -161,6 +161,27 @@ Modes of `scripts/net-check.sh`:
 The unit tests for the traffic judge use recorded `strace` lines, so a change to the parser is
 tested without running the app.
 
+### Away from home integration runs
+
+`scripts/away-integration.sh [interop|e2e|real|netcheck|all]` runs the Away from home checks that
+need the computer's side built from Rust. They use the stand-in helpers, so nothing reaches a
+network beyond loopback, no real helper starts and none touches a person's own data. Run it under
+the machine's resource cap.
+
+- `interop`: the Rust test phone and the TypeScript phone client against each other's real
+  implementation (vitest).
+- `e2e`: the built phone app in Chromium at 390 by 844 against the real app (Playwright), through a
+  scanned and a typed code, and the queue after the computer goes away.
+- `real`: Linux only. The real desktop app under a virtual display turns Away from home on, pairs,
+  uploads 50 MB, turns it off and quits, then checks that nothing is left and records the memory and
+  timer budgets.
+- `netcheck`: `make netcheck` on the release binary, then `make netcheck-remote` on a release
+  binary built with the stand-in helpers. It needs the fetched engine in `vendor/lemonade`.
+- `all`, the default: `interop` and `e2e`.
+
+None of this proves behaviour on the real internet or with the real helpers; that waits for the
+owner-approved trials.
+
 ## Windows
 
 The Windows installers (NSIS and MSI) are built on a Windows machine only, and v1 does not publish
