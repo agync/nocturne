@@ -123,5 +123,14 @@
   "item.loading": "Opening what you kept…",
   "item.missing": "I couldn’t find that. It may have been forgotten.",
   "item.error": "I couldn’t open this. What you kept is safe.",
-  "item.page": "p.{page}"
+  "item.page": "p.{page}",
+  "pages.title": "Past pages",
+  "pages.dek": "One page each morning. Open any day to read it again.",
+  "pages.group": "{month}",
+  "pages.number": "Page {number}",
+  "pages.today": "Today",
+  "pages.needsYou": "{count, plural, one {# still needs you} other {# still need you}}",
+  "pages.empty": "No pages yet. Your first one arrives after Nocturne’s first night.",
+  "pages.loading": "Looking for your pages…",
+  "pages.error": "I couldn’t open your pages. What you kept is safe."
 }

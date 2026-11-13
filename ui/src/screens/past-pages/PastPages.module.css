@@ -1,0 +1,117 @@
+.frame {
+  padding: 24px 28px 0;
+}
+
+.card {
+  min-height: 32rem;
+  padding: var(--s-6) var(--s-6) var(--s-7);
+  border-radius: 10px 10px 0 0;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.dek {
+  margin-top: var(--s-2);
+  color: var(--ink2);
+}
+
+.rule {
+  height: 0;
+  margin: var(--s-4) 0 var(--s-2);
+  border: 0;
+  border-top: 1px solid var(--ink);
+}
+
+.month {
+  margin: var(--s-5) 0 var(--s-1);
+  color: var(--ink2);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--s-4);
+  min-height: var(--size-touch);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.date {
+  display: flex;
+  flex-direction: column;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+}
+
+.today {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.headline {
+  font: 400 1.125rem / 1.4 var(--font-serif);
+}
+
+.page:hover .headline {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+  text-align: right;
+}
+
+.needs {
+  color: var(--ember);
+  font-family: var(--font-sans);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  padding: var(--s-6) 28px;
+  color: var(--ink2);
+}
+
+.empty {
+  padding: var(--s-5) 0;
+  color: var(--ink2);
+}
+
+:global([data-size="narrow"]) .frame {
+  padding: 0;
+}
+
+:global([data-size="narrow"]) .card {
+  padding: var(--s-5) var(--s-4) var(--s-6);
+  border-radius: 0;
+  box-shadow: none;
+}
+
+:global([data-size="narrow"]) .page {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+:global([data-size="narrow"]) .date {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  gap: var(--s-2);
+}
