@@ -81,6 +81,23 @@ impl Channel {
         ))
     }
 
+    /// Open the next frame without closing on a refusal: for a session not yet established,
+    /// where a frame that does not open is dropped and changes nothing.
+    pub fn try_open(&mut self, frame: &[u8]) -> Checked<Envelope> {
+        if let Some(why) = self.closed {
+            return Err(why);
+        }
+        let (ctr, env) = crypto::data_open(
+            frame,
+            &self.recv_key,
+            self.recv_dir,
+            &self.sid,
+            self.received,
+        )?;
+        self.received = ctr;
+        Ok(env)
+    }
+
     /// Open the next frame; any refusal closes the channel.
     pub fn open(&mut self, frame: &[u8]) -> Checked<Envelope> {
         if let Some(why) = self.closed {

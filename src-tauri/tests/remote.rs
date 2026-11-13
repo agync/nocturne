@@ -1490,3 +1490,30 @@ fn pairing_over_long_poll() {
         ));
     }
 }
+
+#[test]
+fn junk_before_established_changes_nothing() {
+    let p = on();
+    let keys = p.pair("Pixel");
+    let mut c = p.open(&keys, Mode::LongPoll);
+    // Someone who saw the sid sends junk under it before the phone's first frame.
+    let sid = c.sid();
+    for kind in [KIND_DATA, KIND_HELLO, KIND_PAIR_COMMIT] {
+        let mut junk = crypto::header(kind, &sid, 1).to_vec();
+        junk.extend_from_slice(&[7u8; 64]);
+        let mut body = (junk.len() as u32).to_be_bytes().to_vec();
+        body.extend_from_slice(&junk);
+        let res = block(testing::client::http(&p.addr(), "POST", "/s", &[], &body)).unwrap();
+        assert_eq!(res.status, 204, "dropped, kind {kind}");
+    }
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetStatus),
+        RemoteAnswer::Status { .. }
+    ));
+    // Once live, a frame that does not open ends the session, as the plan says.
+    let mut junk = crypto::header(KIND_DATA, &sid, 2).to_vec();
+    junk.extend_from_slice(&[7u8; 64]);
+    let _ = block(c.send_raw(&junk));
+    let r = block(c.request(RemoteCall::GetStatus)).and_then(|id| block(c.answer(id)));
+    assert!(r.is_err());
+}

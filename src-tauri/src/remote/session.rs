@@ -423,6 +423,8 @@ impl Core {
             }
             (0, KIND_SESSION_OPEN) => self.open_session(conv, frame),
             (2, _) => self.session_frame(conv, frame),
+            // Another kind on a pairing: dropped, the pairing goes on.
+            (1, _) => Inbound::Continue,
             _ => Inbound::Close,
         }
     }
@@ -548,7 +550,17 @@ impl Core {
                 *role = Role::Closed;
                 return Inbound::Close;
             }
-            let Ok(env) = s.channel.open(frame) else {
+            // Until the session is established a frame that does not open is dropped, so junk
+            // naming a sid cannot end it; once live, any refusal closes it.
+            let opened = if s.live {
+                s.channel.open(frame)
+            } else {
+                s.channel.try_open(frame)
+            };
+            let Ok(env) = opened else {
+                if !s.live {
+                    return Inbound::Continue;
+                }
                 *role = Role::Closed;
                 return Inbound::Close;
             };
