@@ -16,6 +16,7 @@ use crate::bundle::{self, Dirs};
 use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
 use crate::error::RuntimeError;
+use crate::tier;
 
 const PORT_TRIES: u32 = 5;
 const RESTART_WINDOW: Duration = Duration::from_secs(3600);
@@ -461,6 +462,9 @@ impl Actor {
                     whispercpp_backend: whisper.as_deref(),
                 },
             )?;
+            let mut recall = serde_json::Map::new();
+            recall.insert("ctx_size".into(), tier::RECALL_CONTEXT.into());
+            config::write_model_options(&self.dirs.config(), tier::RECALL.model, &recall)?;
             let mut running = self.spawn(port, &key)?;
             match self.await_ready(&mut running, port, ws_port, &key).await {
                 Ok(version) => {

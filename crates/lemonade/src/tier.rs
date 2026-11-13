@@ -21,11 +21,17 @@ const fn c(role: ComponentRole, model: &'static str, bytes: u64) -> Component {
 }
 
 const VOICE: Component = c(ComponentRole::Voice, "kokoro-v1", 354_000_000);
-const RECALL: Component = c(
+/// The recall model, the same on every tier.
+pub const RECALL: Component = c(
     ComponentRole::Recall,
     "Qwen3-Embedding-0.6B-GGUF",
     640_000_000,
 );
+
+/// The context the recall model is loaded with. It reads one memory sentence or one question
+/// at a time; left to itself the engine gives it 32768, a 3.7 GB cache that is never used. The
+/// engine raises anything smaller than 8192 to 8192, and takes a saved 4096 for its old default.
+pub const RECALL_CONTEXT: u32 = 8192;
 
 pub fn components(tier: Tier) -> Vec<Component> {
     match tier {
