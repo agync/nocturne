@@ -5,7 +5,7 @@
 mod common;
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use common::*;
@@ -20,31 +20,35 @@ use tauri::async_runtime::block_on;
 
 const GIB: u64 = 1 << 30;
 
-/// The fake engine binary, built on demand when the test run did not build it.
+/// The fake engine binary, brought up to date once per test run. A test run of this package alone
+/// does not build another package's binaries, so one left by an earlier checkout would otherwise
+/// be used as it is.
 fn fake_engine() -> PathBuf {
+    static BUILT: OnceLock<PathBuf> = OnceLock::new();
+    BUILT.get_or_init(build_fake_engine).clone()
+}
+
+fn build_fake_engine() -> PathBuf {
     let exe = std::env::current_exe().unwrap();
-    let debug = exe.parent().and_then(Path::parent).unwrap().to_path_buf();
-    let bin = debug.join(if cfg!(windows) {
+    let profile_dir = exe.parent().and_then(Path::parent).unwrap().to_path_buf();
+    let target_dir = profile_dir.parent().unwrap();
+    let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
+    let mut build = std::process::Command::new(cargo);
+    build
+        .args(["build", "-p", "nocturne-lemonade"])
+        .args(["--features", "fake-server", "--bin", "fake-lemond"])
+        .arg("--target-dir")
+        .arg(target_dir);
+    if profile_dir.file_name().is_some_and(|n| n == "release") {
+        build.arg("--release");
+    }
+    let built = build.status().expect("cargo runs");
+    let bin = profile_dir.join(if cfg!(windows) {
         "fake-lemond.exe"
     } else {
         "fake-lemond"
     });
-    if !bin.exists() {
-        let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-        let built = std::process::Command::new(cargo)
-            .args([
-                "build",
-                "-p",
-                "nocturne-lemonade",
-                "--features",
-                "fake-server",
-                "--bin",
-                "fake-lemond",
-            ])
-            .status()
-            .expect("cargo runs");
-        assert!(built.success() && bin.exists(), "the fake engine is built");
-    }
+    assert!(built.success() && bin.exists(), "the fake engine is built");
     bin
 }
 
