@@ -22,11 +22,15 @@ fn de_opt<T: serde::de::DeserializeOwned>(s: Option<String>) -> rusqlite::Result
     s.map(de).transpose()
 }
 
+/// The item columns every loader selects, with the table aliased `i`. The memory count includes
+/// memories that a later item replaced (history still came from this item), but not a version
+/// this same item replaced, so a correction counts once.
 pub(crate) const ITEM_COLS: &str = "i.id, i.kind, i.source, i.trust, i.title, i.kept_at, i.status, \
     i.reason, i.duration_ms, i.pages, i.file_name, i.private, i.understood_in_ms, i.summary, \
     i.text, i.language, \
     (SELECT COUNT(*) FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-     WHERE s.item_id = i.id AND m.superseded_at IS NULL), \
+     WHERE s.item_id = i.id AND (m.superseded_at IS NULL OR NOT EXISTS ( \
+       SELECT 1 FROM memory_sources n WHERE n.memory_id = m.superseded_by AND n.item_id = i.id))), \
     i.sha256, i.ext";
 
 /// Builds an `ItemView` from an `ITEM_COLS` row. `originals` is the directory the stored files

@@ -320,7 +320,7 @@ fn current_objects(f: &Fixture) -> Vec<String> {
 #[test]
 fn a_moved_appointment_replaces_the_old_one() {
     let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
-    let (_, wed) = learn(
+    let (first, wed) = learn(
         &f.engine,
         "Dentist on Wednesday 18 November at 10:00",
         appointment("Wednesday 18 November at 10:00", "2026-11-18"),
@@ -345,6 +345,10 @@ fn a_moved_appointment_replaces_the_old_one() {
     assert_eq!(thu.was.as_deref(), Some("Wednesday 18 November at 10:00"));
     let history = f.engine.history(&thu.id).unwrap();
     assert!(history.iter().any(|m| m.id == wed));
+    // The first note still counts what came of it, now as history; a correction made from one
+    // note still counts once.
+    assert_eq!(f.engine.get_item(&first).unwrap().memory_count, 1);
+    assert_eq!(f.engine.get_item(&item).unwrap().memory_count, 1);
 }
 
 /// The mind may say so itself: a candidate marked as moved is a move without a move word.
@@ -768,6 +772,11 @@ fn correct_closes_the_old_row_into_history_and_cites_the_same_sources() {
     assert_eq!(m.certainty, Certainty::Sure);
     assert_eq!(m.receipts.len(), 1);
     assert_eq!(m.receipts[0].item_id, item);
+    assert_eq!(
+        f.engine.get_item(&item).unwrap().memory_count,
+        1,
+        "counted once"
+    );
     assert_eq!(m.valid_from.as_deref(), Some("2026-11-01"));
 
     // The old row is history: superseded, dates untouched (wrong, not ended), still has its source.

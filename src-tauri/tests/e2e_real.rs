@@ -1426,14 +1426,8 @@ fn the_whole_product_works_with_real_models() {
     let mut couldnt = 0;
     for (id, at_ms) in order {
         let item = h.ok("get_item", json!({"id": id}));
-        let memories = h
-            .ok(
-                "list_memories",
-                json!({"filter": {"itemId": id, "limit": 100}}),
-            )
-            .as_array()
-            .map(Vec::len)
-            .unwrap_or(0);
+        // Current memories, and history a later item replaced (a moved appointment).
+        let memories = item["memoryCount"].as_u64().unwrap_or(0);
         if item["status"] == "couldntRead" && by_id.get(id) != Some(&"voice_raw") {
             couldnt += 1;
         }
@@ -1473,24 +1467,9 @@ fn the_whole_product_works_with_real_models() {
             .unwrap_or_default(),
     );
     let all_memories = h.ok("list_memories", json!({"filter": {"limit": 500}}));
-    // A memory a later item replaced (a moved appointment) is history, not gone: its item still
-    // counts as read into a memory.
-    let in_history: HashSet<String> = all_memories
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|m| !m["was"].is_null())
-        .filter_map(|m| m["id"].as_str())
-        .flat_map(|id| h.engine().history(id).unwrap_or_default())
-        .flat_map(|m| m.receipts.into_iter().map(|r| r.item_id))
-        .collect();
     let none_made = item_rows
         .iter()
         .filter(|r| r["memories"] == 0 && r["key"] != "voice_raw")
-        .filter(|r| {
-            let key = r["key"].as_str().unwrap_or("?");
-            !ids.get(key).is_some_and(|id| in_history.contains(id))
-        })
         .map(|r| r["key"].as_str().unwrap_or("?").to_string())
         .collect::<Vec<_>>();
     run.check(
