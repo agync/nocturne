@@ -139,6 +139,24 @@ export function Shell({ children }: ShellProps) {
         engine.resumeSetup().catch(() => toast.show({ message: t("notice.action.failed") }));
       },
       diskFull: () => navigate("/setup"),
+      tierDropped: () => {
+        engine
+          .getTierOffer()
+          .then(async (tier) => {
+            if (tier) {
+              await engine.startSetup(tier);
+              toast.show({ message: t("notice.tierDropped.started") });
+            }
+            refresh("status");
+          })
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
+      tidyPausedBattery: () => {
+        engine
+          .tidyAnyway()
+          .then(() => refresh("status"))
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
       restarts: () => navigate("/settings/advanced"),
       catchingUp: () => {
         if (today) navigate(`/pages/${addDays(today, -1)}`);
@@ -148,6 +166,18 @@ export function Shell({ children }: ShellProps) {
       },
     }),
     [engine, navigate, refresh, today, toast],
+  );
+
+  const dismissals: NoticeHandlers = useMemo(
+    () => ({
+      tierDropped: () => {
+        engine
+          .declineTierOffer()
+          .then(() => refresh("status"))
+          .catch(() => toast.show({ message: t("notice.action.failed") }));
+      },
+    }),
+    [engine, refresh, toast],
   );
 
   const bar = (
@@ -201,7 +231,7 @@ export function Shell({ children }: ShellProps) {
           </div>
         )}
         {status && status.notices.length > 0 ? (
-          <Notices notices={status.notices} handlers={handlers} />
+          <Notices notices={status.notices} handlers={handlers} dismissals={dismissals} />
         ) : null}
         <div className={styles.content} data-size={size}>
           <main

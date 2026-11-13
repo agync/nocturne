@@ -87,6 +87,12 @@ export interface EngineClient {
   startSetup(tier: Tier): Promise<void>;
   pauseSetup(): Promise<void>;
   resumeSetup(): Promise<void>;
+  /** The smaller mind on offer because memory is short, while the offer stands. */
+  getTierOffer(): Promise<Tier | null>;
+  /** "Not now" to that offer. It returns only after memory runs short twice more. */
+  declineTierOffer(): Promise<void>;
+  /** "Tidy anyway": the battery rule is set aside until this tidy is done. */
+  tidyAnyway(): Promise<void>;
 
   keepText(text: string, source: Source): Promise<Kept>;
   keepFiles(paths: string[], source: Source): Promise<Kept[]>;

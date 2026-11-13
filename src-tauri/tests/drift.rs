@@ -12,10 +12,6 @@ const SHELL_ONLY: &[&str] = &[
     "print_page",
     "open_sound_settings",
     "quick_keep_command",
-    // Wired in the interface by the next commit.
-    "tidy_anyway",
-    "get_tier_offer",
-    "decline_tier_offer",
 ];
 
 fn read(rel: &str) -> String {

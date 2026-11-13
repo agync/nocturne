@@ -15,6 +15,8 @@ import type {
   MemoryFilter,
   MemoryView,
   NeedsYouEntry,
+  Notice,
+  NoticeCode,
   PageLine,
   PageSummary,
   PageView,
@@ -36,6 +38,10 @@ import { advancedSeed } from "./seed/setup";
 export interface MockOptions {
   /** The fixed clock. Defaults to `VITE_MOCK_NOW`, else 2026-11-13T07:02:00Z. */
   now?: Date | string;
+  /** Notices to start with (for tests and the demo). */
+  notices?: Notice[];
+  /** The smaller mind on offer, when a `tierDropped` notice is among the notices. */
+  tierOffer?: Tier;
 }
 
 /** How long after keeping something it can still be taken back. */
@@ -133,6 +139,9 @@ export class MockEngine implements EngineClient {
   private readonly previews = new Map<string, { ids: string[]; includeOriginals: boolean }>();
   private counter = 0;
   private readonly snoozed = new Set<string>();
+  private tierOffer: Tier | null;
+  /** How many times "Tidy anyway" was pressed. */
+  tidyAnywayCount = 0;
 
   constructor(options: MockOptions = {}) {
     const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
@@ -152,8 +161,9 @@ export class MockEngine implements EngineClient {
       pausedUntil: null,
       tidy: null,
       nextTidy: "01:00",
-      notices: [],
+      notices: options.notices ?? [],
     };
+    this.tierOffer = options.tierOffer ?? null;
     this.setup = seed.setup;
     this.refreshStatus();
   }
@@ -244,8 +254,31 @@ export class MockEngine implements EngineClient {
   }
 
   async startSetup(tier: Tier): Promise<void> {
+    if (tier === this.tierOffer) {
+      this.tierOffer = null;
+      this.dropNotices("tierDropped");
+    }
     this.setup = { ...this.setup, phase: "downloading", chosen: tier, paused: null };
     this.emit("setup-progress", this.setup);
+  }
+
+  async getTierOffer(): Promise<Tier | null> {
+    return this.tierOffer;
+  }
+
+  async declineTierOffer(): Promise<void> {
+    this.tierOffer = null;
+    this.dropNotices("tierDropped");
+  }
+
+  async tidyAnyway(): Promise<void> {
+    this.tidyAnywayCount += 1;
+    this.dropNotices("tidyPausedBattery");
+  }
+
+  private dropNotices(code: NoticeCode): void {
+    this.status = { ...this.status, notices: this.status.notices.filter((n) => n.code !== code) };
+    this.emit("status-changed", this.status);
   }
 
   async pauseSetup(): Promise<void> {

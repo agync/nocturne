@@ -266,6 +266,56 @@ describe("notices", () => {
   });
 });
 
+describe("notices that offer something", () => {
+  const offer = {
+    id: "n-tier",
+    code: "tierDropped" as const,
+    itemId: null,
+    etaSeconds: null,
+    bytes: 3_660_000_000,
+  };
+
+  it("offers the smaller mind, says what it costs and starts it when asked", async () => {
+    const engine = createMockEngine({ notices: [offer], tierOffer: "small" });
+    const started: string[] = [];
+    const real = engine.startSetup.bind(engine);
+    engine.startSetup = async (tier) => {
+      started.push(tier);
+      return real(tier);
+    };
+    renderApp({ engine });
+    const region = await screen.findByRole("list", { name: "Things to know" });
+    expect(within(region).getByText(/needs 3\.7 GB to download/)).toBeInTheDocument();
+    await userEvent.click(within(region).getByRole("button", { name: "Use the smaller one" }));
+    await waitFor(() => expect(started).toEqual(["small"]));
+    await waitFor(() => expect(screen.queryByText(/running short of memory/)).toBeNull());
+  });
+
+  it("says not now, and the offer goes without anything being downloaded", async () => {
+    const engine = createMockEngine({ notices: [offer], tierOffer: "small" });
+    const startSetup = vi.spyOn(engine, "startSetup");
+    renderApp({ engine });
+    const region = await screen.findByRole("list", { name: "Things to know" });
+    await userEvent.click(within(region).getByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByText(/running short of memory/)).toBeNull());
+    expect(startSetup).not.toHaveBeenCalled();
+    await expect(engine.getTierOffer()).resolves.toBeNull();
+  });
+
+  it("tidies anyway from the battery notice", async () => {
+    const engine = createMockEngine({
+      notices: [
+        { id: "n-bat", code: "tidyPausedBattery", itemId: null, etaSeconds: null, bytes: null },
+      ],
+    });
+    renderApp({ engine });
+    const region = await screen.findByRole("list", { name: "Things to know" });
+    await userEvent.click(within(region).getByRole("button", { name: "Tidy anyway" }));
+    await waitFor(() => expect(engine.tidyAnywayCount).toBe(1));
+    await waitFor(() => expect(screen.queryByText(/paused tidying/)).toBeNull());
+  });
+});
+
 describe("drop anywhere", () => {
   it("says what will be kept while files are over the window, then keeps them", async () => {
     const platform = fakePlatform();

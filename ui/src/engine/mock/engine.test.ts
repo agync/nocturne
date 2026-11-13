@@ -328,6 +328,25 @@ describe("MockEngine, shared by the screen lanes", () => {
     await expect(engine.readNow(kept.item.id)).resolves.toMatchObject({ status: "reading" });
   });
 
+  it("withdraws a standing offer of a smaller mind when it is declined or taken", async () => {
+    const notice = {
+      id: "n",
+      code: "tierDropped" as const,
+      itemId: null,
+      etaSeconds: null,
+      bytes: 1,
+    };
+    const declined = createMockEngine({ now: NOW, notices: [notice], tierOffer: "small" });
+    await expect(declined.getTierOffer()).resolves.toBe("small");
+    await declined.declineTierOffer();
+    await expect(declined.getTierOffer()).resolves.toBeNull();
+    expect((await declined.getStatus()).notices).toEqual([]);
+
+    const taken = createMockEngine({ now: NOW, notices: [notice], tierOffer: "small" });
+    await taken.startSetup("small");
+    expect((await taken.getStatus()).notices).toEqual([]);
+  });
+
   it("lists people, places and things, filtered", async () => {
     const engine = createMockEngine({ now: NOW });
     expect((await engine.listEntities(null, null)).length).toBeGreaterThan(3);

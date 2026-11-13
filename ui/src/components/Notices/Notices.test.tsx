@@ -68,6 +68,28 @@ describe("Notices", () => {
     expect(onRetry).toHaveBeenCalledWith(notices[0]);
   });
 
+  it("offers the smaller mind with what it costs to download, and a way to say not now", async () => {
+    const choose = vi.fn();
+    const decline = vi.fn();
+    const notice = make("tierDropped", { bytes: 3_660_000_000 });
+    expect(noticeText(notice)).toBe(
+      "This computer is running short of memory. Nocturne can switch to a smaller mind, which needs 3.7 GB to download. Nothing you have kept is lost.",
+    );
+    expect(noticeText(make("tierDropped"))).not.toContain("{size}");
+    render(
+      <Notices
+        notices={[notice]}
+        handlers={{ tierDropped: choose }}
+        dismissals={{ tierDropped: decline }}
+      />,
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(decline).toHaveBeenCalledWith(notice);
+    expect(choose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Use the smaller one" }));
+    expect(choose).toHaveBeenCalledWith(notice);
+  });
+
   it("keeps both live regions mounted, even with nothing to say", () => {
     render(<Notices notices={[]} />);
     expect(screen.getByRole("alert")).toBeEmptyDOMElement();

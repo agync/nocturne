@@ -68,6 +68,9 @@ export class TauriEngine implements EngineClient {
   startSetup: EngineClient["startSetup"] = (tier) => this.call("start_setup", { tier });
   pauseSetup: EngineClient["pauseSetup"] = () => this.call("pause_setup");
   resumeSetup: EngineClient["resumeSetup"] = () => this.call("resume_setup");
+  getTierOffer: EngineClient["getTierOffer"] = () => this.call("get_tier_offer");
+  declineTierOffer: EngineClient["declineTierOffer"] = () => this.call("decline_tier_offer");
+  tidyAnyway: EngineClient["tidyAnyway"] = () => this.call("tidy_anyway");
 
   keepText: EngineClient["keepText"] = (text, source) => this.call("keep_text", { text, source });
   keepFiles: EngineClient["keepFiles"] = (paths, source) =>

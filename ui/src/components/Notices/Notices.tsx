@@ -10,6 +10,8 @@ interface NoticesProps {
   notices: Notice[];
   /** What each action does. A notice without a handler shows its sentence and no button. */
   handlers?: NoticeHandlers;
+  /** "Not now" for the notices that offer a choice. Shown beside the action. */
+  dismissals?: NoticeHandlers;
 }
 
 /** E-01 to E-12: one sentence, one button. Codes never reach the screen. */
@@ -26,7 +28,9 @@ export function noticeText(notice: Notice): string {
     case "downloadStalled":
       return t("notice.downloadStalled.text");
     case "tierDropped":
-      return t("notice.tierDropped.text");
+      return notice.bytes !== null
+        ? t("notice.tierDropped.text", { size: formatBytes(notice.bytes) })
+        : t("notice.tierDropped.text.unknown");
     case "restarts":
       return t("notice.restarts.text");
     case "couldntRead":
@@ -79,6 +83,11 @@ export function noticeAction(code: NoticeCode): string {
   }
 }
 
+/** The label of the way to turn an offer down, for the notices that make one. */
+export function noticeDismiss(code: NoticeCode): string | null {
+  return code === "tierDropped" ? t("notice.tierDropped.dismiss") : null;
+}
+
 /** Problems that stop something working are announced at once; the rest wait their turn. */
 const URGENT: ReadonlySet<NoticeCode> = new Set<NoticeCode>([
   "diskFull",
@@ -86,19 +95,30 @@ const URGENT: ReadonlySet<NoticeCode> = new Set<NoticeCode>([
   "repairNeeded",
 ]);
 
-export function Notices({ notices, handlers = {} }: NoticesProps) {
+export function Notices({ notices, handlers = {}, dismissals = {} }: NoticesProps) {
   const render = (list: Notice[]) =>
     list.length === 0 ? null : (
       <ul className={styles.list} aria-label={t("notice.region")}>
         {list.map((notice) => {
           const handler = handlers[notice.code];
+          const dismiss = dismissals[notice.code];
+          const dismissLabel = noticeDismiss(notice.code);
           return (
             <li key={notice.id} className={styles.notice} data-code={notice.code}>
               <p className={styles.text}>{noticeText(notice)}</p>
-              {handler ? (
-                <Button variant="secondary" onClick={() => handler(notice)}>
-                  {noticeAction(notice.code)}
-                </Button>
+              {handler || (dismiss && dismissLabel) ? (
+                <div className={styles.actions}>
+                  {handler ? (
+                    <Button variant="secondary" onClick={() => handler(notice)}>
+                      {noticeAction(notice.code)}
+                    </Button>
+                  ) : null}
+                  {dismiss && dismissLabel ? (
+                    <Button variant="quiet" onClick={() => dismiss(notice)}>
+                      {dismissLabel}
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
             </li>
           );
