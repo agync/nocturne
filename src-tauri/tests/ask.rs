@@ -231,3 +231,101 @@ fn an_empty_question_is_refused_at_the_door() {
     assert_eq!(h.code("ask", json!({"question": "   "})), "invalid");
     assert_eq!(h.state().asks.in_flight(), 0);
 }
+
+#[test]
+fn a_mind_that_panics_still_ends_the_ask_with_a_terminal_phase() {
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Panics));
+    let seen = h.ask_deltas();
+    let id = ask(&h, "dentist");
+    wait_for("the answer", || finished(&seen, &id));
+    assert_eq!(phases(&seen, &id).last(), Some(&AskPhase::Unavailable));
+    wait_for("the ask to be forgotten", || {
+        h.state().asks.in_flight() == 0
+    });
+    // The app carries on.
+    let again = ask(&h, "dentist");
+    wait_for("another answer", || finished(&seen, &again));
+}
+
+#[test]
+fn a_busy_mind_is_not_waited_for_once_words_have_gone_out() {
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::BusyAfterStreaming));
+    let seen = h.ask_deltas();
+    let id = ask(&h, "dentist");
+    wait_for("the answer", || finished(&seen, &id));
+    let order = phases(&seen, &id);
+    assert!(!order.contains(&AskPhase::Waking), "{order:?}");
+    assert_eq!(order.last(), Some(&AskPhase::Unavailable));
+    let words: Vec<_> = deltas_for(&seen, &id)
+        .iter()
+        .filter_map(|d| d.text_delta.clone())
+        .collect();
+    assert_eq!(words, vec!["Half an ".to_string()], "not started over");
+}
+
+#[test]
+fn a_third_ask_cancels_the_oldest() {
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(400))));
+    let seen = h.ask_deltas();
+    let a = ask(&h, "dentist");
+    let b = ask(&h, "dentist");
+    let c = ask(&h, "dentist");
+    assert_eq!(h.state().asks.in_flight(), 2);
+    wait_for("the two newest", || {
+        finished(&seen, &b) && finished(&seen, &c)
+    });
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(
+        !finished(&seen, &a),
+        "the oldest was cancelled: {:?}",
+        phases(&seen, &a)
+    );
+}
+
+/// Forget racing an ask: once the forget has returned, no word of the forgotten memory reaches
+/// the page, and the answer that was reading it is stopped.
+#[test]
+fn forgetting_while_an_answer_is_reading_stops_it() {
+    let (h, mem) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(300))));
+    let seen = h.ask_deltas();
+    let id = ask(&h, "dentist");
+    wait_for("the answer to be reading", || {
+        phases(&seen, &id).contains(&AskPhase::Reading)
+    });
+    let preview = h.ok(
+        "preview_forget",
+        json!({"ids": [mem], "includeOriginals": true}),
+    );
+    h.ok("forget", json!({"previewToken": preview["token"]}));
+    let at_forget = deltas_for(&seen, &id).len();
+    std::thread::sleep(Duration::from_millis(600));
+    let after = deltas_for(&seen, &id);
+    assert_eq!(after.len(), at_forget, "nothing followed the forget");
+    assert!(
+        after.iter().all(|d| d.text_delta.is_none()),
+        "no words went out"
+    );
+    assert!(!finished(&seen, &id));
+    assert_eq!(h.state().asks.in_flight(), 0);
+    // And a new question finds nothing of it.
+    let again = ask(&h, "dentist");
+    wait_for("the new answer", || finished(&seen, &again));
+    assert_eq!(phases(&seen, &again).last(), Some(&AskPhase::Nothing));
+}
+
+#[test]
+fn deleting_everything_stops_the_answers_in_flight() {
+    let (h, _) = dentist_world(TestMind::new(AnswerMode::Slow(Duration::from_millis(300))));
+    let seen = h.ask_deltas();
+    let id = ask(&h, "dentist");
+    wait_for("reading", || {
+        phases(&seen, &id).contains(&AskPhase::Reading)
+    });
+    h.ok(
+        "delete_everything",
+        json!({"confirmPhrase": "delete everything"}),
+    );
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!finished(&seen, &id));
+    assert_eq!(h.state().asks.in_flight(), 0);
+}

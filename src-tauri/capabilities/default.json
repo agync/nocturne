@@ -1,15 +1,16 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "What the main window may do beyond the app's own commands.",
+  "description": "What the main window may do. Files and folders are chosen and opened by the app's own commands, so no dialog or opener permission is granted here. A second window (quick capture) gets its own capability file.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
+    "core:event:default",
+    "core:window:default",
+    "core:webview:default",
+    "core:app:default",
     "core:window:allow-show",
     "core:window:allow-hide",
     "core:window:allow-set-focus",
-    "core:window:allow-start-dragging",
-    "dialog:allow-open",
-    "opener:allow-reveal-item-in-dir"
+    "core:window:allow-start-dragging"
   ]
 }

@@ -15,12 +15,32 @@ pub const READY_GRACE: Duration = Duration::from_secs(5);
 /// The window's background while the interface loads, to match the dark theme.
 const DARK_BACKGROUND: tauri::window::Color = tauri::window::Color(14, 16, 20, 255);
 
+/// Show the window now (a second launch, the tray). Always acts.
 pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     if let Some(w) = app.get_webview_window(MAIN) {
         let _ = w.unminimize();
         let _ = w.show();
         let _ = w.set_focus();
+        if let Some(state) = app.try_state::<AppState>() {
+            state.mark_window_shown();
+        }
     }
+}
+
+/// Show the window because the interface is ready (or the grace period ran out): unless
+/// something showed it already, or the app was asked to start in the tray.
+pub fn show_when_ready<R: Runtime>(app: &AppHandle<R>) {
+    let skip = app
+        .try_state::<AppState>()
+        .is_some_and(|s| s.window_shown() || s.start_hidden());
+    if !skip {
+        show_main(app);
+    }
+}
+
+/// `--hidden` on the command line starts in the tray (autostart passes it).
+pub fn wants_hidden(args: &[String]) -> bool {
+    args.iter().skip(1).any(|a| a == "--hidden")
 }
 
 /// Dark systems get the dark background before the interface has painted.
@@ -37,7 +57,7 @@ pub fn show_after_grace<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(READY_GRACE).await;
-        show_main(&app);
+        show_when_ready(&app);
     });
 }
 
@@ -58,6 +78,12 @@ pub fn close_action(tray_available: bool) -> CloseAction {
 }
 
 pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
+    // Files dropped on the window may be kept by path; nothing else may.
+    if let WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event
+        && let Some(state) = window.app_handle().try_state::<AppState>()
+    {
+        state.allow_paths(paths.iter().cloned());
+    }
     if let WindowEvent::CloseRequested { api, .. } = event
         && window.label() == MAIN
     {
@@ -75,6 +101,17 @@ pub fn on_window_event<R: Runtime>(window: &Window<R>, event: &WindowEvent) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hidden_is_asked_for_by_an_argument() {
+        let args = |a: &[&str]| a.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(wants_hidden(&args(&["nocturne", "--hidden"])));
+        assert!(!wants_hidden(&args(&["nocturne"])));
+        assert!(
+            !wants_hidden(&args(&["--hidden"])),
+            "the program name is not an argument"
+        );
+    }
 
     #[test]
     fn closing_hides_only_when_the_tray_can_bring_it_back() {

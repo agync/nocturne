@@ -1,8 +1,9 @@
 //! The state the app manages: the engine, the mind slot, the status hub, the live asks.
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 
 use jiff::Timestamp;
 use nocturne_contract::{
@@ -24,6 +25,10 @@ pub const FAKE_MIND_ENV: &str = "NOCTURNE_FAKE_MIND";
 
 /// Where the mind lives. The intelligence lane fills it with the real mind once the private
 /// engine is up; until then it is empty and anything that needs the mind says "unavailable".
+///
+/// The mind goes into the slot first and then reports `MindError::Busy` while a model loads
+/// (the status shows "starting" and an ask shows "waking"); it is not held back until it is
+/// ready. Use [`set_mind`] so the status and the setup view follow.
 #[derive(Default)]
 pub struct MindSlot {
     inner: RwLock<Option<Arc<dyn Mind>>>,
@@ -63,18 +68,19 @@ impl MindSlot {
         }
     }
 
-    /// Fill the slot with a scripted mind when `NOCTURNE_FAKE_MIND=1` and the build has one.
+    /// Fill the slot with a scripted mind when `NOCTURNE_FAKE_MIND=1`. Only a debug build with
+    /// the `fake-mind` feature has one; a release build ignores the variable.
     pub fn install_from_env(&self) {
         let wanted = std::env::var(FAKE_MIND_ENV).is_ok_and(|v| v == "1");
         if !wanted {
             return;
         }
-        #[cfg(feature = "fake-mind")]
+        #[cfg(all(feature = "fake-mind", debug_assertions))]
         {
             self.set(Arc::new(nocturne_engine::FakeMind::new()));
             tracing::info!("using the scripted mind");
         }
-        #[cfg(not(feature = "fake-mind"))]
+        #[cfg(not(all(feature = "fake-mind", debug_assertions)))]
         tracing::warn!("{FAKE_MIND_ENV} is set but this build has no scripted mind");
     }
 }
@@ -91,6 +97,30 @@ pub struct AppState {
     /// Signalled whenever there is new work for the reading pipeline (an item was kept or
     /// put back in the queue). Capture never waits on it.
     pub work: Notify,
+    /// Files the person dropped or picked in this session: the only paths `keep_files` takes.
+    chosen_paths: Mutex<HashSet<PathBuf>>,
+    /// Folders made by an export in this session: the only ones `open_export` opens.
+    exports: Mutex<HashSet<PathBuf>>,
+    opener: Mutex<Option<OpenFn>>,
+    /// Whether something has shown the main window yet.
+    window_shown: AtomicBool,
+    /// Start in the tray, without showing the window (set by the OS integration lane).
+    start_hidden: AtomicBool,
+    /// One status refresh at a time, so two events cannot publish out of order.
+    refresh: tokio::sync::Mutex<()>,
+    exit_hooks: Mutex<Vec<ExitHook>>,
+}
+
+/// Opens a path with the system's own app (installed by `run`).
+pub type OpenFn = Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
+/// Runs when the app is exiting (stop the private engine, flush, remove the tray).
+pub type ExitHook = Box<dyn Fn() + Send + Sync>;
+
+/// The most chosen paths remembered.
+const MAX_CHOSEN: usize = 4096;
+
+fn canonical(p: &Path) -> PathBuf {
+    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn blank_setup() -> SetupView {
@@ -112,10 +142,14 @@ fn blank_setup() -> SetupView {
 
 /// `NOCTURNE_DATA_DIR` when set and not empty, else the platform's app data directory.
 pub fn resolve_data_dir(env_override: Option<String>, platform_default: PathBuf) -> PathBuf {
-    match env_override {
+    let dir = match env_override {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p),
         _ => platform_default,
-    }
+    };
+    // Symlinks and `..` are resolved once, so every path derived from it (the asset scope, the
+    // checks that a file is inside) compares like with like.
+    let _ = std::fs::create_dir_all(&dir);
+    std::fs::canonicalize(&dir).unwrap_or(dir)
 }
 
 impl AppState {
@@ -147,6 +181,97 @@ impl AppState {
             data_dir: data_dir.to_path_buf(),
             tray_available: AtomicBool::new(false),
             work: Notify::new(),
+            chosen_paths: Mutex::new(HashSet::new()),
+            exports: Mutex::new(HashSet::new()),
+            opener: Mutex::new(None),
+            window_shown: AtomicBool::new(false),
+            start_hidden: AtomicBool::new(false),
+            refresh: tokio::sync::Mutex::new(()),
+            exit_hooks: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Remember files the person dropped or picked.
+    pub fn allow_paths(&self, paths: impl IntoIterator<Item = PathBuf>) {
+        let mut set = self.chosen_paths.lock().unwrap_or_else(|e| e.into_inner());
+        if set.len() >= MAX_CHOSEN {
+            set.clear();
+        }
+        set.extend(paths.into_iter().map(|p| canonical(&p)));
+    }
+
+    pub fn path_allowed(&self, path: &Path) -> bool {
+        self.chosen_paths
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&canonical(path))
+    }
+
+    pub fn allow_export(&self, folder: &Path) {
+        self.exports
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(canonical(folder));
+    }
+
+    pub fn export_allowed(&self, folder: &Path) -> bool {
+        self.exports
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&canonical(folder))
+    }
+
+    pub fn forget_session(&self) {
+        self.exports
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.chosen_paths
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+    }
+
+    pub fn set_opener(&self, open: OpenFn) {
+        *self.opener.lock().unwrap_or_else(|e| e.into_inner()) = Some(open);
+    }
+
+    pub fn opener(&self) -> Option<OpenFn> {
+        self.opener
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    pub fn window_shown(&self) -> bool {
+        self.window_shown.load(Ordering::SeqCst)
+    }
+
+    pub fn mark_window_shown(&self) {
+        self.window_shown.store(true, Ordering::SeqCst);
+    }
+
+    pub fn start_hidden(&self) -> bool {
+        self.start_hidden.load(Ordering::SeqCst)
+    }
+
+    pub fn set_start_hidden(&self, on: bool) {
+        self.start_hidden.store(on, Ordering::SeqCst);
+    }
+
+    /// Register something to run when the app exits. The runtime lane stops its private
+    /// engine here; the OS integration lane removes its tray.
+    pub fn on_exit(&self, hook: ExitHook) {
+        self.exit_hooks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(hook);
+    }
+
+    pub fn run_exit_hooks(&self) {
+        let hooks = std::mem::take(&mut *self.exit_hooks.lock().unwrap_or_else(|e| e.into_inner()));
+        for hook in hooks {
+            hook();
         }
     }
 
@@ -163,10 +288,6 @@ impl AppState {
 
     pub fn log_dir(&self) -> PathBuf {
         self.data_dir.join("logs")
-    }
-
-    pub fn tmp_dir(&self) -> PathBuf {
-        self.data_dir.join("tmp")
     }
 
     pub fn now(&self) -> Timestamp {
@@ -199,6 +320,8 @@ impl AppState {
     }
 }
 
+// Counts are read with item queries capped at 1000 each; the intelligence lane is adding
+// `Engine::status_counts()`, which replaces this.
 fn read_counts(engine: &Engine) -> Counts {
     let needs_you = engine.needs_you().map(|v| v.len() as u32).unwrap_or(0);
     let count = |status| {
@@ -227,6 +350,7 @@ fn read_counts(engine: &Engine) -> Counts {
 /// the last one. Call after anything that can change what is waiting.
 pub async fn refresh_status<R: Runtime>(app: &AppHandle<R>) -> EngineStatus {
     let state = app.state::<AppState>();
+    let _one_at_a_time = state.refresh.lock().await;
     state.status.set_mind(state.mind.state());
     let counts = match state.engine() {
         Ok(engine) => blocking(move || Ok(read_counts(&engine)))
@@ -258,6 +382,21 @@ pub fn publish_setup<R: Runtime>(app: &AppHandle<R>, view: SetupView) {
     }
 }
 
+/// Put a mind in the slot (or take it out with `None`), then bring the status and the setup
+/// view in line with it. The runtime lane calls this when its private engine is up.
+pub async fn set_mind<R: Runtime>(app: &AppHandle<R>, mind: Option<Arc<dyn Mind>>) {
+    let state = app.state::<AppState>();
+    match mind {
+        Some(m) => state.mind.set(m),
+        None => state.mind.clear(),
+    }
+    refresh_status(app).await;
+    let view = state.get_setup();
+    if let Err(e) = app.emit(EVENT_SETUP, &view) {
+        tracing::warn!("could not emit setup progress: {e}");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -275,6 +414,36 @@ mod tests {
             default
         );
         assert_eq!(resolve_data_dir(None, default.clone()), default);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_data_dir_is_resolved_through_symlinks_and_dots() {
+        let dir = tempfile::tempdir().unwrap();
+        let real = dir.path().join("real");
+        std::fs::create_dir(&real).unwrap();
+        let link = dir.path().join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let tricky = link.join("..").join("link");
+        let got = resolve_data_dir(Some(tricky.to_string_lossy().into_owned()), PathBuf::new());
+        assert_eq!(got, std::fs::canonicalize(&real).unwrap());
+    }
+
+    #[test]
+    fn chosen_paths_and_exports_are_remembered_by_their_real_location() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(dir.path(), Arc::new(SystemClock));
+        let f = dir.path().join("a.txt");
+        std::fs::write(&f, b"x").unwrap();
+        assert!(!state.path_allowed(&f));
+        state.allow_paths([f.clone()]);
+        assert!(state.path_allowed(&f));
+        assert!(state.path_allowed(&dir.path().join(".").join("a.txt")));
+        assert!(!state.path_allowed(&dir.path().join("b.txt")));
+        state.allow_export(dir.path());
+        assert!(state.export_allowed(dir.path()));
+        state.forget_session();
+        assert!(!state.export_allowed(dir.path()) && !state.path_allowed(&f));
     }
 
     #[test]

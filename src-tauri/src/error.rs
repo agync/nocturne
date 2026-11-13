@@ -70,15 +70,23 @@ impl From<nocturne_engine::Error> for CommandError {
             E::NotFound(_) => Self::new(ErrorCode::NotFound, &e),
             E::Invalid(_) => Self::new(ErrorCode::Invalid, &e),
             E::StaleToken => Self::new(ErrorCode::TokenExpired, &e),
-            E::LeaseLost => Self::new(ErrorCode::Busy, &e),
-            #[cfg(feature = "engine-round2")]
+            E::LeaseLost | E::Busy => Self::new(ErrorCode::Busy, &e),
             E::TooLate => Self::new(ErrorCode::TooLate, &e),
             E::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
                 Self::new(ErrorCode::NotFound, &e)
             }
             E::Store(rusqlite_err) if is_busy(rusqlite_err) => Self::new(ErrorCode::Busy, &e),
             E::Store(_) | E::Io(_) | E::Time(_) | E::Json(_) => {
-                tracing::error!("engine error: {e}");
+                // Kinds only: the text of an engine error can carry a path or a sentence.
+                tracing::error!(
+                    "engine error: {}",
+                    match &e {
+                        E::Store(_) => "store",
+                        E::Io(_) => "file",
+                        E::Time(_) => "time",
+                        _ => "encoding",
+                    }
+                );
                 Self::new(ErrorCode::Internal, &e)
             }
         }
@@ -152,6 +160,8 @@ mod tests {
         assert_eq!(code(Error::Invalid("x".into())), ErrorCode::Invalid);
         assert_eq!(code(Error::StaleToken), ErrorCode::TokenExpired);
         assert_eq!(code(Error::LeaseLost), ErrorCode::Busy);
+        assert_eq!(code(Error::Busy), ErrorCode::Busy);
+        assert_eq!(code(Error::TooLate), ErrorCode::TooLate);
         assert_eq!(
             code(Error::Io(std::io::ErrorKind::PermissionDenied.into())),
             ErrorCode::Internal

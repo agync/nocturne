@@ -67,6 +67,9 @@ fn finish(
 ) -> Harness {
     let builder = hook(configure(mock_builder().manage(state)));
     let app = builder.build(mock_context(noop_assets())).unwrap();
+    // `setup` runs when the app starts running, which a test never does: do its parts that
+    // matter here.
+    nocturne_app_lib::allow_originals_in_the_interface(app.handle());
     let webview = WebviewWindowBuilder::new(&app, "main", Default::default())
         .build()
         .unwrap();
@@ -137,6 +140,17 @@ impl Harness {
         }
         let req = request(cmd, InvokeBody::Raw(bytes), map);
         tauri::test::get_ipc_response(&self.webview, req).map(|b| b.deserialize::<Value>().unwrap())
+    }
+
+    /// Install an opener that records what it was asked to open.
+    pub fn recording_opener(&self) -> Arc<Mutex<Vec<std::path::PathBuf>>> {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let sink = seen.clone();
+        self.state().set_opener(Arc::new(move |p| {
+            sink.lock().unwrap().push(p.to_path_buf());
+            Ok(())
+        }));
+        seen
     }
 
     /// Collect the payloads of an event.
@@ -258,6 +272,10 @@ pub enum AnswerMode {
     Never,
     /// Streams, then cites nothing.
     CitesNothing,
+    /// Panics while answering.
+    Panics,
+    /// Streams some words, then says it is busy.
+    BusyAfterStreaming,
 }
 
 /// A scripted mind with knobs: how it answers and how long it takes to wake.
@@ -339,6 +357,11 @@ impl Mind for TestMind {
                     self.inner.answer(question, facts, out).await
                 }
                 AnswerMode::Never => std::future::pending().await,
+                AnswerMode::Panics => panic!("the mind misbehaved"),
+                AnswerMode::BusyAfterStreaming => {
+                    let _ = out.send("Half an ".to_string()).await;
+                    Err(MindError::Busy)
+                }
                 AnswerMode::CitesNothing => {
                     let _ = out.send("Something.".to_string()).await;
                     Ok(AnswerMeta::default())

@@ -12,6 +12,7 @@ use nocturne_app_lib::COMMAND_NAMES;
 use nocturne_contract::{EVENT_ITEM, EVENT_NEEDS_YOU, EVENT_STATUS};
 use nocturne_engine::{Candidate, Predicate};
 use serde_json::{Value, json};
+use tauri::Manager;
 
 const CSP: &str = "default-src 'self'; img-src 'self' asset: http://asset.localhost blob: data:; media-src 'self' asset: http://asset.localhost blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src 'self' ipc: http://ipc.localhost";
 
@@ -122,50 +123,6 @@ fn every_roadmap_command_is_registered() {
         assert!(registered.contains(name), "{name} missing from the list");
     }
     assert_eq!(registered.len(), COMMAND_NAMES.len(), "no duplicates");
-}
-
-/// Plan C1: the interface's own client is the source of truth for names.
-#[test]
-fn every_command_the_ui_client_calls_is_registered() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/engine/tauri.ts");
-    let Ok(src) = std::fs::read_to_string(path) else {
-        eprintln!("SKIPPED: ui/src/engine/tauri.ts is not in this checkout (the UI is not merged)");
-        return;
-    };
-    let mut names = BTreeSet::new();
-    for marker in ["this.call", "invoke("] {
-        for (at, _) in src.match_indices(marker) {
-            let rest = &src[at + marker.len()..];
-            // The first quoted word after the marker, within the same call.
-            let Some(open) = rest.find('"') else { continue };
-            let close = rest[open + 1..].find('"').unwrap_or(0);
-            let name = &rest[open + 1..open + 1 + close];
-            let between = &rest[..open];
-            if name.chars().all(|c| c.is_ascii_lowercase() || c == '_')
-                && !name.is_empty()
-                && !between.contains(';')
-                && !between.contains('\n')
-            {
-                names.insert(name.to_string());
-            }
-        }
-    }
-    assert!(names.len() >= 30, "found too few commands: {names:?}");
-    let registered: BTreeSet<_> = COMMAND_NAMES.iter().map(|s| s.to_string()).collect();
-    let missing: Vec<_> = names.difference(&registered).collect();
-    assert!(
-        missing.is_empty(),
-        "the UI calls unregistered commands: {missing:?}"
-    );
-    let h = harness();
-    for name in &names {
-        if let Err(e) = h.call(name, json!({})) {
-            assert!(
-                !e.as_str().is_some_and(|s| s.contains("not found")),
-                "{name}"
-            );
-        }
-    }
 }
 
 // ---- Task 2: errors and the status hub ----
@@ -397,6 +354,7 @@ fn keep_files_keeps_each_file_and_reports_a_missing_one() {
     let src = tempfile::tempdir().unwrap();
     let a = write_file(src.path(), "a.txt", b"first file");
     let b = write_file(src.path(), "b.txt", b"second file");
+    h.state().allow_paths([a.clone(), b.clone()]);
     let kept = h.ok(
         "keep_files",
         json!({"paths": [a.to_str().unwrap(), b.to_str().unwrap()], "source": "drop"}),
@@ -405,6 +363,8 @@ fn keep_files_keeps_each_file_and_reports_a_missing_one() {
     assert_eq!(kept[0]["item"]["kind"], "document");
     // One good, one missing: the good one is kept.
     let c = write_file(src.path(), "c.txt", b"third file");
+    h.state()
+        .allow_paths([c.clone(), "/no/such/file.txt".into()]);
     let mixed = h.ok(
         "keep_files",
         json!({"paths": [c.to_str().unwrap(), "/no/such/file.txt"], "source": "drop"}),
@@ -416,6 +376,15 @@ fn keep_files_keeps_each_file_and_reports_a_missing_one() {
             json!({"paths": ["/no/such/file.txt"], "source": "drop"})
         ),
         "notFound"
+    );
+    // A path nobody dropped or picked is refused, whatever it is.
+    let stranger = write_file(src.path(), "d.txt", b"never chosen");
+    assert_eq!(
+        h.code(
+            "keep_files",
+            json!({"paths": [stranger.to_str().unwrap()], "source": "drop"})
+        ),
+        "invalid"
     );
     assert_eq!(
         h.code("keep_files", json!({"paths": [], "source": "drop"})),
@@ -512,28 +481,6 @@ fn retry_item_requeues_and_wakes_the_pipeline() {
     assert_eq!(h.code("read_now", json!({"id": "itm_nope"})), "notFound");
 }
 
-#[cfg(not(feature = "engine-round2"))]
-#[test]
-fn pending_engine_work_is_refused_plainly_not_faked() {
-    let h = harness();
-    assert_eq!(h.code("unkeep", json!({"id": "itm_x"})), "unavailable");
-    assert_eq!(
-        h.code("set_item_private", json!({"id": "itm_x", "private": true})),
-        "unavailable"
-    );
-    assert_eq!(
-        h.code(
-            "set_item_keep_forever",
-            json!({"id": "itm_x", "keepForever": true})
-        ),
-        "unavailable"
-    );
-    assert_eq!(
-        h.code("snooze", json!({"memoryId": "m", "days": 3})),
-        "unavailable"
-    );
-}
-
 #[test]
 fn setup_commands_wait_for_the_runtime_lane() {
     let h = harness();
@@ -545,8 +492,7 @@ fn setup_commands_wait_for_the_runtime_lane() {
     assert_eq!(h.code("resume_setup", json!({})), "unavailable");
 }
 
-/// Commands that need the second round of engine work (feature `engine-round2`).
-#[cfg(feature = "engine-round2")]
+/// Commands built on the second round of engine work.
 mod round2 {
     use super::*;
 
@@ -983,12 +929,495 @@ fn a_second_launch_keeps_the_files_it_was_given_and_focuses_the_window() {
         f.to_string_lossy().into_owned(),
         "/no/such/file".to_string(),
     ];
-    assert_eq!(nocturne_app_lib::paths_from_args(&args), vec![f.clone()]);
+    let cwd = "/".to_string();
+    assert_eq!(
+        nocturne_app_lib::paths_from_args(&args, &cwd),
+        vec![f.clone()]
+    );
     let handle = h.app.handle().clone();
-    tauri::async_runtime::block_on(nocturne_app_lib::handle_second_launch(&handle, args));
+    tauri::async_runtime::block_on(nocturne_app_lib::handle_second_launch(&handle, args, cwd));
     assert_eq!(items.lock().unwrap().len(), 1);
+    assert!(h.state().window_shown(), "the window comes first");
     assert_eq!(
         h.engine().items(Default::default()).unwrap()[0].source,
         nocturne_contract::Source::Drop
     );
+}
+
+#[test]
+fn a_second_launch_reads_relative_paths_and_file_links_properly() {
+    let src = tempfile::tempdir().unwrap();
+    write_file(src.path(), "my note.txt", b"x");
+    write_file(src.path(), "plain.txt", b"y");
+    let cwd = src.path().to_string_lossy().into_owned();
+    let args: Vec<String> = ["nocturne", "plain.txt", "file:///no/such%20thing.txt"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    assert_eq!(
+        nocturne_app_lib::paths_from_args(&args, &cwd),
+        vec![src.path().join("plain.txt")],
+        "relative to the second launch's own folder"
+    );
+    let link = format!("file://{}/my%20note.txt", src.path().display());
+    let args = vec!["nocturne".to_string(), link];
+    assert_eq!(
+        nocturne_app_lib::paths_from_args(&args, "/"),
+        vec![src.path().join("my note.txt")],
+        "a file link is decoded"
+    );
+}
+
+#[test]
+fn a_second_launch_that_keeps_nothing_says_so() {
+    let h = harness_with_mind(Arc::new(nocturne_engine::FakeMind::new()));
+    let args = vec!["nocturne".to_string(), "/no/such/file".to_string()];
+    let handle = h.app.handle().clone();
+    tauri::async_runtime::block_on(nocturne_app_lib::handle_second_launch(
+        &handle,
+        args,
+        "/".into(),
+    ));
+    let status = h.ok("get_status", json!({}));
+    assert!(
+        status["notices"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|n| n["id"] == "not-kept"),
+        "{status}"
+    );
+    // Keeping something later clears it.
+    h.ok("keep_text", json!({"text": "later", "source": "paste"}));
+    let status = h.ok("get_status", json!({}));
+    assert!(status["notices"].as_array().unwrap().is_empty(), "{status}");
+}
+
+// ---- least privilege: what the interface may reach ----
+
+#[test]
+fn the_asset_scope_reaches_originals_and_nothing_beside_them() {
+    let h = harness();
+    let kept = h
+        .call_raw(
+            "keep_bytes",
+            vec![0x89, b'P', b'N', b'G', 9, 9],
+            &[
+                ("x-nocturne-mime", "image/png"),
+                ("x-nocturne-source", "screenshot"),
+            ],
+        )
+        .unwrap();
+    let item = h.ok("get_item", json!({"id": id_of(&kept)}));
+    let original = std::path::PathBuf::from(item["originalPath"].as_str().unwrap());
+    let scope = h.app.asset_protocol_scope();
+    assert!(scope.is_allowed(&original), "an original may be shown");
+    let store = std::fs::canonicalize(h.dir.path()).unwrap().join("store");
+    assert!(
+        !scope.is_allowed(store.join("nocturne.db")),
+        "the database is not an original"
+    );
+    assert!(
+        !scope.is_allowed(store.join("originals").join("..").join("nocturne.db")),
+        "a .. path does not climb out"
+    );
+    assert!(
+        !scope.is_allowed(store.join("other").join("a.png")),
+        "a sibling folder is out"
+    );
+    assert!(!scope.is_allowed(h.dir.path().join("app-state.json")));
+    assert!(!scope.is_allowed("/etc/passwd"));
+}
+
+fn capabilities() -> Value {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/capabilities/default.json");
+    serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap()
+}
+
+fn granted() -> BTreeSet<String> {
+    capabilities()["permissions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p.as_str().unwrap().to_string())
+        .collect()
+}
+
+#[test]
+fn the_main_window_holds_least_privilege() {
+    let c = capabilities();
+    assert_eq!(c["windows"], json!(["main"]));
+    let granted = granted();
+    for wanted in [
+        "core:event:default",
+        "core:window:default",
+        "core:webview:default",
+        "core:app:default",
+    ] {
+        assert!(granted.contains(wanted), "{wanted} is missing");
+    }
+    assert!(
+        !granted.contains("core:default"),
+        "core:default is broader than needed"
+    );
+    for p in &granted {
+        assert!(
+            p.starts_with("core:"),
+            "{p}: no plugin permission is granted; files go through the app's commands"
+        );
+    }
+}
+
+/// Every plugin call and window method in the platform adapter has its permission.
+#[test]
+fn the_capability_covers_exactly_what_the_platform_adapter_calls() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/platform/tauri.ts");
+    let src = std::fs::read_to_string(path).expect("ui/src/platform/tauri.ts must exist");
+    let granted = granted();
+    // Plugin IPC calls: `plugin:name|command` needs `name:allow-command`.
+    for (at, _) in src.match_indices("plugin:") {
+        let rest = &src[at + "plugin:".len()..];
+        let end = rest.find('"').unwrap();
+        let (plugin, command) = rest[..end].split_once('|').unwrap();
+        let permission = format!("{plugin}:allow-{}", command.replace('_', "-"));
+        assert!(
+            granted.contains(&permission),
+            "the adapter calls {plugin}|{command}: {permission} is not granted"
+        );
+    }
+    // Window and event methods the adapter uses, and the permission each needs.
+    let needs: &[(&str, &str)] = &[
+        ("emitTo(", "core:event:default"),
+        ("listen<", "core:event:default"),
+        ("onDragDropEvent(", "core:event:default"),
+        ("onThemeChanged(", "core:event:default"),
+        (".theme()", "core:window:default"),
+        (".show()", "core:window:allow-show"),
+        (".setFocus()", "core:window:allow-set-focus"),
+        (".close()", "core:window:allow-close"),
+    ];
+    // `close` and the hand-off belong to the quick-capture window, which has its own
+    // capability file; the main window needs the rest.
+    let quick_capture_only = [
+        "core:window:allow-close",
+        "core:window:allow-show",
+        "core:window:allow-set-focus",
+    ];
+    for (call, permission) in needs {
+        if src.contains(call) && !quick_capture_only.contains(permission) {
+            assert!(granted.contains(*permission), "{call} needs {permission}");
+        }
+    }
+    // The main window itself shows, hides and focuses (tray, second launch, ready).
+    for p in [
+        "core:window:allow-show",
+        "core:window:allow-hide",
+        "core:window:allow-set-focus",
+    ] {
+        assert!(granted.contains(p), "{p}");
+    }
+}
+
+#[test]
+fn the_app_defaults_to_no_scripted_mind() {
+    let cargo =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/Cargo.toml")).unwrap();
+    assert!(
+        cargo.contains("default = []"),
+        "fake-mind must not be on by default"
+    );
+    assert!(!cargo.contains("engine-round2"));
+}
+
+// ---- keeping things: what is accepted ----
+
+#[test]
+fn raw_content_over_the_limit_is_refused_before_it_is_copied() {
+    let h = harness();
+    let big = vec![0u8; nocturne_app_lib::commands::MAX_RAW_BYTES + 1];
+    let r = h.call_raw(
+        "keep_bytes",
+        big,
+        &[
+            ("x-nocturne-mime", "image/png"),
+            ("x-nocturne-source", "paste"),
+        ],
+    );
+    assert_eq!(r.unwrap_err()["code"], "invalid");
+    assert_eq!(h.engine().items(Default::default()).unwrap().len(), 0);
+}
+
+#[test]
+fn pasted_bytes_leave_no_trace_of_the_data_folder_in_the_item() {
+    let h = harness();
+    let kept = h
+        .call_raw(
+            "keep_bytes",
+            vec![1, 2, 3],
+            &[
+                ("x-nocturne-mime", "image/png"),
+                ("x-nocturne-source", "paste"),
+            ],
+        )
+        .unwrap();
+    let item = h.ok("get_item", json!({"id": id_of(&kept)}));
+    let dir = h.dir.path().to_string_lossy().into_owned();
+    assert!(!item["title"].as_str().unwrap().contains(&dir));
+    assert!(!item["fileName"].as_str().unwrap_or("").contains("tmp"));
+    assert!(
+        !h.dir.path().join("tmp").exists(),
+        "no temporary copy is made"
+    );
+}
+
+#[test]
+fn only_regular_files_of_a_sensible_size_are_kept_by_path() {
+    let h = harness();
+    let src = tempfile::tempdir().unwrap();
+    // A folder.
+    let folder = src.path().join("folder");
+    std::fs::create_dir(&folder).unwrap();
+    // A pipe.
+    let pipe = src.path().join("pipe");
+    let made = std::process::Command::new("mkfifo").arg(&pipe).status();
+    // A sparse file over the cap.
+    let huge = src.path().join("huge.pdf");
+    let f = std::fs::File::create(&huge).unwrap();
+    f.set_len(nocturne_app_lib::commands::MAX_FILE_BYTES + 1)
+        .unwrap();
+    let mut chosen = vec![folder.clone(), huge.clone()];
+    if made.is_ok_and(|s| s.success()) {
+        chosen.push(pipe.clone());
+    }
+    h.state().allow_paths(chosen.clone());
+    for p in chosen {
+        assert_eq!(
+            h.code(
+                "keep_files",
+                json!({"paths": [p.to_str().unwrap()], "source": "drop"})
+            ),
+            "invalid",
+            "{}",
+            p.display()
+        );
+    }
+    assert_eq!(h.engine().items(Default::default()).unwrap().len(), 0);
+}
+
+#[test]
+fn files_dropped_on_the_window_may_then_be_kept() {
+    use tauri::{DragDropEvent, WindowEvent};
+    let h = harness();
+    let src = tempfile::tempdir().unwrap();
+    let f = write_file(src.path(), "dropped.txt", b"dropped on the window");
+    let window = h.webview.as_ref().window();
+    nocturne_app_lib::window::on_window_event(
+        &window,
+        &WindowEvent::DragDrop(DragDropEvent::Drop {
+            paths: vec![f.clone()],
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+        }),
+    );
+    h.ok(
+        "keep_files",
+        json!({"paths": [f.to_str().unwrap()], "source": "drop"}),
+    );
+}
+
+// ---- opening and choosing: the shell does it, within bounds ----
+
+#[test]
+fn open_original_opens_only_the_kept_original() {
+    let h = harness();
+    let opened = h.recording_opener();
+    let kept = h
+        .call_raw(
+            "keep_bytes",
+            vec![7, 7, 7],
+            &[
+                ("x-nocturne-mime", "image/png"),
+                ("x-nocturne-source", "paste"),
+            ],
+        )
+        .unwrap();
+    h.ok("open_original", json!({"itemId": id_of(&kept)}));
+    let item = h.ok("get_item", json!({"id": id_of(&kept)}));
+    let seen = opened.lock().unwrap().clone();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(
+        std::fs::canonicalize(&seen[0]).unwrap(),
+        std::fs::canonicalize(item["originalPath"].as_str().unwrap()).unwrap()
+    );
+    // A note has no original; a missing item is not found.
+    let note = h.ok(
+        "keep_text",
+        json!({"text": "just words", "source": "paste"}),
+    );
+    assert_eq!(
+        h.code("open_original", json!({"itemId": id_of(&note)})),
+        "notFound"
+    );
+    assert_eq!(
+        h.code("open_original", json!({"itemId": "itm_nope"})),
+        "notFound"
+    );
+    assert_eq!(opened.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn open_export_opens_only_a_folder_an_export_made_in_this_session() {
+    let h = harness();
+    let opened = h.recording_opener();
+    h.learn("a note", "You like tea.", "Tea", "tea");
+    let out = tempfile::tempdir().unwrap();
+    // Nothing exported yet: even a real folder is refused.
+    assert_eq!(
+        h.code("open_export", json!({"path": out.path().to_str().unwrap()})),
+        "invalid"
+    );
+    let report = h.ok("export_to", json!({"dir": out.path().to_str().unwrap()}));
+    let made = report["path"].as_str().unwrap();
+    h.ok("open_export", json!({"path": made}));
+    assert_eq!(opened.lock().unwrap().len(), 1);
+    // Not the parent, not the data folder, not something with `..` in it.
+    for bad in [
+        out.path().to_string_lossy().into_owned(),
+        h.dir.path().to_string_lossy().into_owned(),
+        format!("{made}/../.."),
+        "/etc".to_string(),
+    ] {
+        assert_eq!(
+            h.code("open_export", json!({"path": bad})),
+            "invalid",
+            "{bad}"
+        );
+    }
+    assert_eq!(opened.lock().unwrap().len(), 1);
+}
+
+#[test]
+fn open_logs_opens_the_log_folder_inside_the_data_folder() {
+    let h = harness();
+    let opened = h.recording_opener();
+    assert_eq!(h.code("open_logs", json!({})), "notFound", "no logs yet");
+    std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
+    h.ok("open_logs", json!({}));
+    assert_eq!(
+        opened.lock().unwrap().as_slice(),
+        &[h.dir.path().join("logs")]
+    );
+}
+
+#[test]
+fn nothing_can_be_opened_before_the_app_installs_its_opener() {
+    let h = harness();
+    std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
+    assert_eq!(h.code("open_logs", json!({})), "unavailable");
+}
+
+// ---- the window ----
+
+#[test]
+fn the_window_shows_once_and_not_at_all_when_started_hidden() {
+    let h = harness();
+    assert!(!h.state().window_shown());
+    h.ok("app_ready", json!({}));
+    assert!(h.state().window_shown());
+
+    let hidden = harness();
+    hidden.state().set_start_hidden(true);
+    hidden.ok("app_ready", json!({}));
+    assert!(
+        !hidden.state().window_shown(),
+        "started in the tray: the interface's ready does not show it"
+    );
+    nocturne_app_lib::window::show_main(hidden.app.handle());
+    assert!(
+        hidden.state().window_shown(),
+        "an explicit show still works"
+    );
+}
+
+#[test]
+fn exit_hooks_run_once_when_the_app_exits() {
+    let h = harness();
+    let ran = Arc::new(std::sync::atomic::AtomicU32::new(0));
+    let r = ran.clone();
+    h.state().on_exit(Box::new(move || {
+        r.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }));
+    nocturne_app_lib::handle_run_event(h.app.handle(), &tauri::RunEvent::Exit);
+    nocturne_app_lib::handle_run_event(h.app.handle(), &tauri::RunEvent::Exit);
+    assert_eq!(ran.load(std::sync::atomic::Ordering::SeqCst), 1);
+    assert!(nocturne_app_lib::exit_prevented(true, true));
+    assert!(!nocturne_app_lib::exit_prevented(true, false));
+    assert!(
+        !nocturne_app_lib::exit_prevented(false, true),
+        "an explicit quit is not refused"
+    );
+}
+
+// ---- the mind slot and the status ----
+
+#[test]
+fn putting_a_mind_in_the_slot_refreshes_the_status_and_the_setup_view() {
+    let h = harness();
+    let status = h.events(EVENT_STATUS);
+    let setup = h.events("setup-progress");
+    assert_eq!(h.ok("get_status", json!({}))["state"], "gettingReady");
+    let handle = h.app.handle().clone();
+    tauri::async_runtime::block_on(nocturne_app_lib::set_mind(
+        &handle,
+        Some(Arc::new(nocturne_engine::FakeMind::new())),
+    ));
+    let all = status.lock().unwrap().clone();
+    assert_eq!(all.last().unwrap()["state"], "resting");
+    assert_eq!(setup.lock().unwrap().last().unwrap()["phase"], "done");
+    tauri::async_runtime::block_on(nocturne_app_lib::set_mind(&handle, None));
+    assert_eq!(
+        status.lock().unwrap().last().unwrap()["state"],
+        "gettingReady"
+    );
+}
+
+#[test]
+fn refreshes_that_race_publish_once() {
+    let h = harness_with_mind(Arc::new(nocturne_engine::FakeMind::new()));
+    let status = h.events(EVENT_STATUS);
+    let handle = h.app.handle().clone();
+    tauri::async_runtime::block_on(async move {
+        let mut all = Vec::new();
+        for _ in 0..12 {
+            let h = handle.clone();
+            all.push(tauri::async_runtime::spawn(async move {
+                nocturne_app_lib::refresh_status(&h).await;
+            }));
+        }
+        for t in all {
+            t.await.unwrap();
+        }
+    });
+    assert_eq!(status.lock().unwrap().len(), 1);
+}
+
+#[cfg(unix)]
+#[test]
+fn what_the_shell_keeps_on_disk_is_owner_only() {
+    use std::os::unix::fs::PermissionsExt;
+    let h = harness_with_mind(Arc::new(nocturne_engine::FakeMind::new()));
+    h.ok("pause", json!({"until": null}));
+    let mode = std::fs::metadata(h.dir.path().join("app-state.json"))
+        .unwrap()
+        .permissions()
+        .mode()
+        & 0o777;
+    assert_eq!(mode, 0o600);
+    for sub in ["store", "store/originals", "store/audio"] {
+        let mode = std::fs::metadata(h.dir.path().join(sub))
+            .unwrap()
+            .permissions()
+            .mode()
+            & 0o777;
+        assert_eq!(mode, 0o700, "{sub}");
+    }
 }

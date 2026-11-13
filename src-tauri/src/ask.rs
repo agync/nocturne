@@ -7,7 +7,6 @@
 //! `streaming` deltas, then a terminal one: `done`, `notSure` (with the two nearest memories),
 //! `nothing` (retrieval found nothing) or `unavailable` (no mind, or it failed).
 
-use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,6 +23,8 @@ use crate::state::AppState;
 const RETRIEVE_K: usize = 12;
 /// How many near matches an "I'm not sure" shows.
 const NEAR: usize = 2;
+/// Asks in flight at once; starting another cancels the oldest.
+const MAX_ASKS: usize = 2;
 /// How long a waking mind is waited for, and how often it is asked.
 const WAKE_LIMIT: Duration = Duration::from_secs(120);
 const WAKE_POLL: Duration = Duration::from_millis(500);
@@ -42,59 +43,86 @@ struct Live {
     task: Option<JoinHandle<()>>,
 }
 
-/// The asks in flight.
+/// The asks in flight, oldest first.
 #[derive(Default)]
 pub struct AskRegistry {
-    live: Mutex<HashMap<String, Live>>,
+    live: Mutex<Vec<(String, Live)>>,
 }
 
 impl AskRegistry {
-    fn live(&self) -> std::sync::MutexGuard<'_, HashMap<String, Live>> {
+    fn live(&self) -> std::sync::MutexGuard<'_, Vec<(String, Live)>> {
         self.live.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// Track a new ask, cancelling the oldest if there are already `MAX_ASKS`.
     fn register(&self, id: &str) -> Arc<Gate> {
         let gate = Arc::new(Gate::default());
-        self.live().insert(
-            id.to_string(),
-            Live {
-                gate: gate.clone(),
-                task: None,
-            },
-        );
+        let evicted = {
+            let mut live = self.live();
+            let mut out = Vec::new();
+            while live.len() >= MAX_ASKS {
+                out.push(live.remove(0).1);
+            }
+            live.push((
+                id.to_string(),
+                Live {
+                    gate: gate.clone(),
+                    task: None,
+                },
+            ));
+            out
+        };
+        evicted.into_iter().for_each(Live::stop);
         gate
     }
 
     fn set_task(&self, id: &str, task: JoinHandle<()>) {
-        match self.live().get_mut(id) {
-            Some(l) => l.task = Some(task),
+        match self.live().iter_mut().find(|(i, _)| i == id) {
+            Some((_, l)) => l.task = Some(task),
             // Already finished: nothing to track.
             None => drop(task),
         }
     }
 
     fn finish(&self, id: &str) {
-        self.live().remove(id);
+        self.live().retain(|(i, _)| i != id);
     }
 
     /// Stop one ask. No delta for it is emitted after this returns. Unknown or finished
     /// asks are fine: cancelling twice is not an error.
     pub fn cancel(&self, id: &str) {
-        let Some(live) = self.live().remove(id) else {
-            return;
+        let found = {
+            let mut live = self.live();
+            live.iter()
+                .position(|(i, _)| i == id)
+                .map(|at| live.remove(at).1)
         };
-        *live
-            .gate
-            .cancelled
-            .lock()
-            .unwrap_or_else(|e| e.into_inner()) = true;
-        if let Some(task) = live.task {
-            task.abort();
+        if let Some(l) = found {
+            l.stop();
         }
+    }
+
+    /// Stop every ask (after a forget, an undo or deleting everything). No delta follows.
+    pub fn cancel_all(&self) {
+        let all: Vec<Live> = self.live().drain(..).map(|(_, l)| l).collect();
+        all.into_iter().for_each(Live::stop);
     }
 
     pub fn in_flight(&self) -> usize {
         self.live().len()
+    }
+}
+
+impl Live {
+    fn stop(self) {
+        *self
+            .gate
+            .cancelled
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = true;
+        if let Some(task) = self.task {
+            task.abort();
+        }
     }
 }
 
@@ -111,6 +139,8 @@ struct Sink<R: Runtime> {
     app: AppHandle<R>,
     id: String,
     gate: Arc<Gate>,
+    /// Set once a terminal phase has gone out (or the ask was cancelled).
+    ended: std::sync::atomic::AtomicBool,
 }
 
 impl<R: Runtime> Sink<R> {
@@ -131,6 +161,12 @@ impl<R: Runtime> Sink<R> {
             .cancelled
             .lock()
             .unwrap_or_else(|e| e.into_inner());
+        if matches!(
+            phase,
+            AskPhase::Done | AskPhase::NotSure | AskPhase::Nothing | AskPhase::Unavailable
+        ) {
+            self.ended.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
         if !*cancelled && let Err(e) = self.app.emit(EVENT_ASK, &delta) {
             tracing::warn!("could not emit an answer step: {e}");
         }
@@ -146,16 +182,26 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
     let state = app.state::<AppState>();
     let id = format!("ask_{}", random_hex(8));
     let gate = state.asks.register(&id);
-    let sink = Sink {
+    let sink = Arc::new(Sink {
         app: app.clone(),
         id: id.clone(),
         gate,
-    };
+        ended: std::sync::atomic::AtomicBool::new(false),
+    });
     let finished = app.clone();
     let finished_id = id.clone();
     let task = tokio::spawn(async move {
         tokio::time::sleep(START_DELAY).await;
-        answer(&sink, question).await;
+        // The work runs on its own task so that a panic in it (a mind that misbehaves) still
+        // ends the ask with a terminal phase instead of leaving the page waiting.
+        let worker = sink.clone();
+        let outcome = tokio::spawn(async move { answer(&worker, question).await }).await;
+        if outcome.is_err() {
+            tracing::error!("an answer failed unexpectedly");
+        }
+        if !sink.ended.load(std::sync::atomic::Ordering::SeqCst) {
+            sink.phase(AskPhase::Unavailable);
+        }
         finished.state::<AppState>().asks.finish(&finished_id);
     });
     state.asks.set_task(&id, task);
@@ -208,8 +254,8 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         match blocking(move || e.retrieve(&q, query_vec.as_deref(), RETRIEVE_K)).await {
             Ok(h) => h,
             Err(err) => {
-                tracing::error!("retrieval failed: {err}");
-                sink.phase(AskPhase::NotSure);
+                tracing::error!("retrieval failed: {:?}", err.code);
+                sink.phase(AskPhase::Unavailable);
                 return;
             }
         };
@@ -228,12 +274,16 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
         let q = question.clone();
         let f = facts.clone();
         let mut task = AbortOnDrop(tokio::spawn(async move { m.answer(&q, &f, tx).await }));
+        let mut streamed = false;
         while let Some(text) = rx.recv().await {
+            streamed = true;
             sink.send(AskPhase::Streaming, |d| d.text_delta = Some(text));
         }
         match (&mut task.0).await {
             Ok(Ok(meta)) => break meta,
-            Ok(Err(MindError::Busy)) if tokio::time::Instant::now() < deadline => {
+            // Only a mind that has said nothing yet is waited for; half an answer is not
+            // started over.
+            Ok(Err(MindError::Busy)) if !streamed && tokio::time::Instant::now() < deadline => {
                 if !woke {
                     woke = true;
                     sink.phase(AskPhase::Waking);
@@ -241,7 +291,8 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String) {
                 tokio::time::sleep(WAKE_POLL).await;
             }
             Ok(Err(err)) => {
-                tracing::warn!("the mind could not answer: {err}");
+                tracing::warn!("the mind could not answer");
+                let _ = err;
                 sink.phase(AskPhase::Unavailable);
                 return;
             }

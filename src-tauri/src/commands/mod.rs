@@ -12,8 +12,8 @@ use crate::error::{CommandError, blocking, guard};
 use crate::state::{AppState, refresh_status};
 
 mod capture;
-pub(crate) use capture::create_private_dir;
-pub use capture::keep_paths;
+mod files;
+pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_paths};
 mod forget;
 mod memories;
 mod needs;
@@ -69,6 +69,11 @@ pub const COMMAND_NAMES: &[&str] = &[
     "get_advanced",
     "speak_page",
     "app_ready",
+    "pick_folder",
+    "pick_files",
+    "open_original",
+    "open_export",
+    "open_logs",
 ];
 
 /// The handler for every command above. `configure` installs it; tests that add a command of
@@ -122,6 +127,11 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         settings::get_advanced,
         page::speak_page,
         system::app_ready,
+        files::pick_folder,
+        files::pick_files,
+        files::open_original,
+        files::open_export,
+        files::open_logs,
     ]
 }
 

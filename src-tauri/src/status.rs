@@ -194,10 +194,8 @@ impl StatusHub {
             paused: g.pause.clone(),
         };
         let write = || -> std::io::Result<()> {
-            std::fs::create_dir_all(dir)?;
-            let tmp = dir.join(format!("{PAUSE_FILE}.tmp"));
-            std::fs::write(&tmp, serde_json::to_vec(&file)?)?;
-            std::fs::rename(&tmp, &path)
+            crate::fsutil::create_private_dir(dir)?;
+            crate::fsutil::write_private(&path, &serde_json::to_vec(&file)?)
         };
         if let Err(e) = write() {
             tracing::warn!("could not keep the pause: {e}");

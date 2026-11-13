@@ -1,7 +1,9 @@
 //! Forgetting: a preview of exactly what goes, then the forget itself.
 
 use nocturne_contract::{ForgetPreview, ForgetReport};
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
+
+use crate::state::AppState;
 
 use super::{change, read};
 use crate::error::CommandError;
@@ -22,6 +24,9 @@ pub async fn forget<R: Runtime>(
     app: AppHandle<R>,
     preview_token: String,
 ) -> Result<ForgetReport, CommandError> {
+    // The forget hides the memories at once; an answer already reading them is stopped first,
+    // so no word of it follows the forget.
+    app.state::<AppState>().asks.cancel_all();
     let outcome = change(app, move |e| e.forget(&preview_token)).await?;
     if !outcome.fully_scrubbed {
         tracing::warn!("a forget finished but the log could not be truncated yet");

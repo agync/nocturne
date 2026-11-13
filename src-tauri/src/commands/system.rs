@@ -45,7 +45,7 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
 #[tauri::command]
 pub async fn app_ready<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     run(app, |app| async move {
-        crate::window::show_main(&app);
+        crate::window::show_when_ready(&app);
         Ok(())
     })
     .await

@@ -3,10 +3,17 @@
 //! `AppState` (engine, mind slot, status hub, live asks) is managed by Tauri. Commands are thin:
 //! validate, run the engine on a blocking thread, map the result to a value or a `CommandError`.
 //! Events (`status-changed`, `item-changed`, `ask-delta`, ...) are named in `nocturne_contract`.
+//!
+//! Wiring for the next lanes: the runtime lane replaces the setup stubs in `commands/system.rs`,
+//! puts its mind in with [`set_mind`], publishes progress with [`publish_setup`] and stops its
+//! engine in an [`AppState::on_exit`] hook. The OS integration lane sets `tray_available`,
+//! `set_start_hidden` and its own exit hooks, and gives the quick-capture window its own
+//! capability file (`capabilities/` only grants the `main` window).
 
 pub mod ask;
 pub mod commands;
 pub mod error;
+pub mod fsutil;
 pub mod logging;
 pub mod state;
 pub mod status;
@@ -16,21 +23,24 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use nocturne_contract::Source;
+use nocturne_contract::{Notice, NoticeCode, Source};
 use nocturne_engine::SystemClock;
-use tauri::{AppHandle, Builder, Manager, Runtime};
+use tauri::{AppHandle, Builder, Manager, RunEvent, Runtime};
 
-pub use commands::{COMMAND_NAMES, invoke_handler};
-pub use state::{AppState, DATA_DIR_ENV, FAKE_MIND_ENV, MindSlot, publish_setup, refresh_status};
+pub use commands::{COMMAND_NAMES, invoke_handler, keep_paths};
+pub use state::{
+    AppState, DATA_DIR_ENV, FAKE_MIND_ENV, MindSlot, publish_setup, refresh_status, set_mind,
+};
 
-/// How often the status is recomputed when nothing else asks (a timed pause ends by itself).
-const TICK: Duration = Duration::from_secs(15);
+/// How often the status is recomputed when nothing else asks: a timed pause ends by itself.
+/// Everything else refreshes on the event that changed it.
+const TICK: Duration = Duration::from_secs(60);
 
 /// Keeps the log writer alive.
 struct LogGuard(#[allow(dead_code)] Option<tracing_appender::non_blocking::WorkerGuard>);
 
 /// Install the commands, the window behaviour and the setup step on a builder. A test manages
-/// its own `AppState` first; otherwise setup opens the store (see [`resolve_state`]).
+/// its own `AppState` first; otherwise setup opens the store (see [`state::resolve_data_dir`]).
 pub fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
     builder
         .invoke_handler(invoke_handler())
@@ -45,15 +55,15 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
     if app.try_state::<AppState>().is_none() {
         let platform = app.path().app_data_dir()?;
         let dir = state::resolve_data_dir(std::env::var(DATA_DIR_ENV).ok(), platform);
-        let _ = std::fs::create_dir_all(dir.join("logs"));
         let guard = logging::init(&dir.join("logs"));
         app.manage(LogGuard(guard));
         let state = AppState::open(&dir, Arc::new(SystemClock));
         state.mind.install_from_env();
+        let args: Vec<String> = std::env::args().collect();
+        state.set_start_hidden(window::wants_hidden(&args));
         app.manage(state);
     }
-    let state = app.state::<AppState>();
-    allow_originals_in_the_interface(app, &state);
+    allow_originals_in_the_interface(app);
     window::match_system_theme(app);
     window::show_after_grace(app);
 
@@ -61,6 +71,8 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
     tauri::async_runtime::spawn(async move {
         loop {
             refresh_status(&handle).await;
+            let dir = handle.state::<AppState>().log_dir();
+            let _ = tokio::task::spawn_blocking(move || fsutil::restrict_folder_files(&dir)).await;
             tokio::time::sleep(TICK).await;
         }
     });
@@ -69,7 +81,8 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
 
 /// The interface may show originals and spoken pages through the asset protocol, and nothing
 /// else on disk.
-fn allow_originals_in_the_interface<R: Runtime>(app: &AppHandle<R>, state: &AppState) {
+pub fn allow_originals_in_the_interface<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
     if !state.has_engine() {
         return;
     }
@@ -77,7 +90,7 @@ fn allow_originals_in_the_interface<R: Runtime>(app: &AppHandle<R>, state: &AppS
     let scope = app.asset_protocol_scope();
     for sub in ["originals", "audio"] {
         let dir = store.join(sub);
-        if let Err(e) = commands::create_private_dir(&dir).and_then(|()| {
+        if let Err(e) = fsutil::create_private_dir(&dir).and_then(|()| {
             scope
                 .allow_directory(&dir, true)
                 .map_err(std::io::Error::other)
@@ -87,39 +100,140 @@ fn allow_originals_in_the_interface<R: Runtime>(app: &AppHandle<R>, state: &AppS
     }
 }
 
-/// The files named on a second launch's command line: existing files only, `file://` links
-/// accepted, flags and the program name ignored.
-pub fn paths_from_args(args: &[String]) -> Vec<PathBuf> {
+/// Decode `%XX` escapes (a `file://` link from a file manager).
+fn percent_decode(s: &str) -> String {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let Some(hex) = s.get(i + 1..i + 3)
+            && let Ok(v) = u8::from_str_radix(hex, 16)
+        {
+            out.push(v);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// The files named on a second launch's command line: existing files only. `file://` links are
+/// decoded, relative paths are taken from the second launch's own working folder, flags and
+/// the program name are ignored.
+pub fn paths_from_args(args: &[String], cwd: &str) -> Vec<PathBuf> {
     args.iter()
         .skip(1)
         .filter(|a| !a.starts_with('-'))
-        .map(|a| PathBuf::from(a.strip_prefix("file://").unwrap_or(a)))
+        .map(|a| match a.strip_prefix("file://") {
+            Some(rest) => PathBuf::from(percent_decode(rest)),
+            None => PathBuf::from(a),
+        })
+        .map(|p| {
+            if p.is_relative() {
+                PathBuf::from(cwd).join(p)
+            } else {
+                p
+            }
+        })
         .filter(|p| p.is_file())
         .collect()
 }
 
-/// A second launch: keep any files it was given, then bring the window forward.
-pub async fn handle_second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>) {
-    let paths = paths_from_args(&args);
-    if !paths.is_empty()
-        && let Err(e) = commands::keep_paths(app, paths, Source::Drop).await
-    {
-        tracing::warn!("files from a second launch could not be kept: {e}");
-    }
+/// A second launch: bring the window forward first (the person is waiting), then keep any files
+/// it was given. If files were named and none could be kept, say so in the status.
+pub async fn handle_second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>, cwd: String) {
     window::show_main(app);
+    let named = args.iter().skip(1).filter(|a| !a.starts_with('-')).count();
+    let paths = paths_from_args(&args, &cwd);
+    if named == 0 {
+        return;
+    }
+    let kept = if paths.is_empty() {
+        Err(())
+    } else {
+        keep_paths(app, paths, Source::Drop).await.map_err(|e| {
+            tracing::warn!("files from a second launch could not be kept: {:?}", e.code);
+        })
+    };
+    if kept.is_err() {
+        app.state::<AppState>().status.add_notice(Notice {
+            id: commands::NOT_KEPT_NOTICE.to_string(),
+            code: NoticeCode::CouldntRead,
+            item_id: None,
+            eta_seconds: None,
+            bytes: None,
+        });
+        refresh_status(app).await;
+    }
+}
+
+/// What the app does at the edges of its life: keep running in the tray when the last window
+/// closes (if there is one), and run the exit hooks (stop the private engine, remove the tray).
+pub fn handle_run_event<R: Runtime>(app: &AppHandle<R>, event: &RunEvent) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    match event {
+        RunEvent::ExitRequested { api, code, .. } => {
+            if exit_prevented(code.is_none(), state.tray_available()) {
+                api.prevent_exit();
+            }
+        }
+        RunEvent::Exit => state.run_exit_hooks(),
+        _ => {}
+    }
+}
+
+/// Whether an exit request is refused: only the "last window closed" kind (no exit code), and
+/// only while the tray can bring the app back.
+pub fn exit_prevented(last_window_closed: bool, tray_available: bool) -> bool {
+    last_window_closed && tray_available
 }
 
 /// Run the app.
 pub fn run() {
-    configure(tauri::Builder::default())
-        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+    let app = configure(tauri::Builder::default())
+        .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
-                handle_second_launch(&app, args).await;
+                handle_second_launch(&app, args, cwd).await;
             });
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .run(tauri::generate_context!())
+        .build(tauri::generate_context!())
         .expect("the Nocturne window could not start");
+    {
+        use tauri_plugin_opener::OpenerExt;
+        let handle = app.handle().clone();
+        app.state::<AppState>().set_opener(Arc::new(move |path| {
+            handle
+                .opener()
+                .open_path(path.to_string_lossy(), None::<&str>)
+                .map_err(|e| e.to_string())
+        }));
+    }
+    app.run(|app, event| handle_run_event(app, &event));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percent_escapes_decode_and_bad_ones_are_left_alone() {
+        assert_eq!(percent_decode("/a%20b/c%2Fd"), "/a b/c/d");
+        assert_eq!(percent_decode("/100%"), "/100%");
+        assert_eq!(percent_decode("/%zz"), "/%zz");
+        assert_eq!(percent_decode("/caf%C3%A9"), "/café");
+        assert_eq!(
+            percent_decode("/é%"),
+            "/é%",
+            "multi-byte text next to a stray percent"
+        );
+    }
 }

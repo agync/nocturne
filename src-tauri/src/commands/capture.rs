@@ -1,21 +1,23 @@
 //! Capture, items and questions. Capture is acknowledged as soon as the engine has written the
 //! item; nothing here waits on the mind.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use nocturne_contract::{EVENT_ITEM, ItemFilter, ItemView, Kept, Source};
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-#[cfg(not(feature = "engine-round2"))]
-use super::not_yet;
 use super::{change, engine, read, run};
 use crate::ask;
 use crate::error::{CommandError, blocking, blocking_cmd};
 use crate::state::{AppState, refresh_status};
 
 /// The most a single piece of raw content may weigh on its way in.
-const MAX_RAW_BYTES: usize = 512 * 1024 * 1024;
+pub const MAX_RAW_BYTES: usize = 256 * 1024 * 1024;
+/// The largest file kept by path.
+pub const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
+/// The id of the notice shown when files were offered and none could be kept.
+pub const NOT_KEPT_NOTICE: &str = "not-kept";
 
 /// Tell the interface about a new item, wake the pipeline and refresh the status. Used by every
 /// way an item can arrive.
@@ -29,10 +31,32 @@ pub async fn announce<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
             }
         }
     }
+    let state = app.state::<AppState>();
+    if !kept.is_empty() {
+        state.status.clear_notice(NOT_KEPT_NOTICE);
+    }
     if any_new {
-        app.state::<AppState>().wake_pipeline();
+        state.wake_pipeline();
     }
     refresh_status(app).await;
+}
+
+/// Only a regular file of a sensible size is kept by path: no folders, devices or pipes.
+fn check_file(path: &std::path::Path) -> Result<(), CommandError> {
+    let meta = std::fs::metadata(path).map_err(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            CommandError::not_found("that file is not there")
+        } else {
+            CommandError::invalid("that file cannot be read")
+        }
+    })?;
+    if !meta.is_file() {
+        return Err(CommandError::invalid("only files can be kept"));
+    }
+    if meta.len() > MAX_FILE_BYTES {
+        return Err(CommandError::invalid("that file is too large"));
+    }
+    Ok(())
 }
 
 /// Keep files by path (a drop, a second launch, the tray). Files that cannot be kept are logged
@@ -46,7 +70,10 @@ pub async fn keep_paths<R: Runtime>(
     let results = blocking_cmd(move || {
         Ok(paths
             .iter()
-            .map(|p| e.keep_file(p, source))
+            .map(|p| {
+                check_file(p)?;
+                e.keep_file(p, source).map_err(CommandError::from)
+            })
             .collect::<Vec<_>>())
     })
     .await?;
@@ -56,8 +83,8 @@ pub async fn keep_paths<R: Runtime>(
         match r {
             Ok(k) => kept.push(k),
             Err(err) => {
-                tracing::warn!("a file could not be kept: {err}");
-                first_error.get_or_insert(CommandError::from(err));
+                tracing::warn!("a file could not be kept: {:?}", err.code);
+                first_error.get_or_insert(err);
             }
         }
     }
@@ -95,7 +122,15 @@ pub async fn keep_files<R: Runtime>(
         if paths.is_empty() {
             return Err(CommandError::invalid("there is nothing to keep"));
         }
-        keep_paths(&app, paths.into_iter().map(PathBuf::from).collect(), source).await
+        let state = app.state::<AppState>();
+        let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
+        // Only files the person dropped or picked in this session are kept by path.
+        if let Some(p) = paths.iter().find(|p| !state.path_allowed(p)) {
+            tracing::warn!("a path that was not chosen was offered");
+            let _ = p;
+            return Err(CommandError::invalid("that file was not chosen"));
+        }
+        keep_paths(&app, paths, source).await
     })
     .await
 }
@@ -123,68 +158,6 @@ fn extension_for(mime: &str) -> Option<&'static str> {
     })
 }
 
-/// Write the bytes to a private temporary folder, keep them as a file, remove the folder.
-fn keep_raw_bytes(
-    state: &AppState,
-    bytes: &[u8],
-    ext: &str,
-    source: Source,
-) -> Result<Kept, nocturne_engine::Error> {
-    use std::io::Write;
-    let engine = state.engine().map_err(|_| {
-        nocturne_engine::Error::Io(std::io::Error::other("the store could not be opened"))
-    })?;
-    let mut id = [0u8; 8];
-    getrandom::fill(&mut id)
-        .map_err(|_| nocturne_engine::Error::Io(std::io::Error::other("no random bytes")))?;
-    let id: String = id.iter().map(|b| format!("{b:02x}")).collect();
-    let dir = state.tmp_dir().join(id);
-    create_private_dir(&dir)?;
-    let stamp = state
-        .now()
-        .to_zoned(state.clock.tz())
-        .strftime("%Y%m%d-%H%M%S");
-    let stem = if source == Source::Recording {
-        "recording"
-    } else {
-        "item"
-    };
-    let path = dir.join(format!("{stem}-{stamp}.{ext}"));
-    let result = (|| {
-        let mut f = create_private_file(&path)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        drop(f);
-        engine.keep_file(&path, source)
-    })();
-    let _ = std::fs::remove_dir_all(&dir);
-    result
-}
-
-pub(crate) fn create_private_dir(path: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)
-    }
-    #[cfg(not(unix))]
-    std::fs::create_dir_all(path)
-}
-
-fn create_private_file(path: &Path) -> std::io::Result<std::fs::File> {
-    let mut opts = std::fs::OpenOptions::new();
-    opts.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        opts.mode(0o600);
-    }
-    opts.open(path)
-}
-
 /// Keep the raw body of a request: the mime type rides in `x-nocturne-mime`, and (when the
 /// caller does not fix it) the source in `x-nocturne-source`.
 async fn keep_raw<R: Runtime>(
@@ -193,6 +166,9 @@ async fn keep_raw<R: Runtime>(
     fixed_source: Option<Source>,
 ) -> Result<Kept, CommandError> {
     let bytes = match request.body() {
+        InvokeBody::Raw(b) if b.len() > MAX_RAW_BYTES => {
+            return Err(CommandError::invalid("this is too large to keep"));
+        }
         InvokeBody::Raw(b) => b.clone(),
         InvokeBody::Json(_) => {
             return Err(CommandError::invalid("the content is sent as raw bytes"));
@@ -231,15 +207,8 @@ async fn keep_raw<R: Runtime>(
         if bytes.is_empty() {
             return Err(CommandError::invalid("there is nothing to keep"));
         }
-        if bytes.len() > MAX_RAW_BYTES {
-            return Err(CommandError::invalid("this is too large to keep"));
-        }
-        let handle = app.clone();
-        let kept = blocking_cmd(move || {
-            let state = handle.state::<AppState>();
-            keep_raw_bytes(&state, &bytes, ext, source).map_err(CommandError::from)
-        })
-        .await?;
+        let e = engine(&app)?;
+        let kept = blocking(move || e.keep_bytes(&bytes, ext, source)).await?;
         announce(&app, std::slice::from_ref(&kept)).await;
         Ok(kept)
     })
@@ -296,25 +265,17 @@ pub async fn retry_item<R: Runtime>(
 }
 
 /// Take back an item kept in the last few minutes, with everything read from it. Too late
-/// answers `tooLate`.
+/// answers `tooLate`. Answers in flight are stopped: they may have read what is now gone.
 #[tauri::command]
 pub async fn unkeep<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
-    #[cfg(feature = "engine-round2")]
-    {
-        change(app, move |e| e.unkeep(&id)).await
-    }
-    #[cfg(not(feature = "engine-round2"))]
-    {
-        let _ = (app, id);
-        Err(not_yet("undoing a keep"))
-    }
+    app.state::<AppState>().asks.cancel_all();
+    change(app, move |e| e.unkeep(&id).map(|_| ())).await
 }
 
 /// Read an item next: it moves to the front of the queue and the pipeline is woken.
 #[tauri::command]
 pub async fn read_now<R: Runtime>(app: AppHandle<R>, id: String) -> Result<ItemView, CommandError> {
-    let item = read(app.clone(), move |e| {
-        #[cfg(feature = "engine-round2")]
+    let item = change(app.clone(), move |e| {
         e.prioritize(&id)?;
         e.get_item(&id)
     })

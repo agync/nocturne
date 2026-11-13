@@ -10,7 +10,7 @@ use nocturne_contract::{
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
 use super::{change, engine, read, run};
-use crate::error::{CommandError, blocking};
+use crate::error::{CommandError, blocking, blocking_cmd};
 use crate::state::{AppState, refresh_status};
 
 #[tauri::command]
@@ -56,33 +56,19 @@ pub async fn export_to<R: Runtime>(
             return Err(CommandError::invalid("choose an existing folder"));
         }
         let e = engine(&app)?;
-        #[cfg(feature = "engine-round2")]
-        {
-            let handle = app.clone();
-            blocking(move || {
-                e.export_to_with(&target, &|done, total| {
-                    if let Err(err) = handle.emit(EVENT_EXPORT, ExportProgress { done, total }) {
-                        tracing::warn!("could not emit export progress: {err}");
-                    }
-                })
+        let handle = app.clone();
+        let report = blocking(move || {
+            e.export_to_with(&target, &|done, total| {
+                if let Err(err) = handle.emit(EVENT_EXPORT, ExportProgress { done, total }) {
+                    tracing::warn!("could not emit export progress: {err}");
+                }
             })
-            .await
-        }
-        #[cfg(not(feature = "engine-round2"))]
-        {
-            let report = blocking(move || e.export_to(&target)).await?;
-            let total = report.memories + report.pages + report.originals;
-            // This engine reports no steps; the interface gets the finished count.
-            if let Err(err) = app.emit(EVENT_EXPORT, ExportProgress { done: total, total }) {
-                tracing::warn!("could not emit export progress: {err}");
-            }
-            Ok(ExportReport {
-                path: report.path.to_string_lossy().into_owned(),
-                memories: report.memories,
-                pages: report.pages,
-                originals: report.originals,
-            })
-        }
+        })
+        .await?;
+        // Only a folder made by an export in this session may be opened by `open_export`.
+        app.state::<AppState>()
+            .allow_export(std::path::Path::new(&report.path));
+        Ok(report)
     })
     .await
 }
@@ -93,10 +79,19 @@ pub async fn delete_everything<R: Runtime>(
     app: AppHandle<R>,
     confirm_phrase: String,
 ) -> Result<(), CommandError> {
+    // Nothing in flight may answer from what is about to go.
+    app.state::<AppState>().asks.cancel_all();
     change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await?;
     let state = app.state::<AppState>();
-    state.status.forget_persisted();
-    let _ = std::fs::remove_dir_all(state.tmp_dir());
+    let handle = app.clone();
+    blocking_cmd(move || {
+        let state = handle.state::<AppState>();
+        state.status.forget_persisted();
+        let _ = std::fs::remove_dir_all(state.data_dir.join("tmp"));
+        Ok(())
+    })
+    .await?;
+    state.forget_session();
     refresh_status(&app).await;
     Ok(())
 }
@@ -117,7 +112,12 @@ pub async fn pause<R: Runtime>(
                 return Err(CommandError::invalid("that time has passed"));
             }
         }
-        state.status.pause(until);
+        let handle = app.clone();
+        blocking_cmd(move || {
+            handle.state::<AppState>().status.pause(until);
+            Ok(())
+        })
+        .await?;
         refresh_status(&app).await;
         Ok(())
     })
@@ -128,7 +128,12 @@ pub async fn pause<R: Runtime>(
 pub async fn resume<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     run(app, move |app| async move {
         let state = app.state::<AppState>();
-        state.status.resume();
+        let handle = app.clone();
+        blocking_cmd(move || {
+            handle.state::<AppState>().status.resume();
+            Ok(())
+        })
+        .await?;
         state.wake_pipeline();
         refresh_status(&app).await;
         Ok(())

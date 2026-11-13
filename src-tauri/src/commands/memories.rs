@@ -4,8 +4,6 @@ use nocturne_contract::{EntityKind, EntityView, MemoryFilter, MemoryView};
 use nocturne_engine::CorrectPatch;
 use tauri::{AppHandle, Runtime};
 
-#[cfg(not(feature = "engine-round2"))]
-use super::not_yet;
 use super::{change, read};
 use crate::error::CommandError;
 
@@ -34,33 +32,14 @@ pub async fn get_entity<R: Runtime>(
     read(app, move |e| e.entity(&id).map(|(view, _)| view)).await
 }
 
-/// People, places and things, optionally of one kind and matching a text (a name, case
-/// ignored).
+/// People, places and things, optionally of one kind and matching a text.
 #[tauri::command]
 pub async fn list_entities<R: Runtime>(
     app: AppHandle<R>,
     kind: Option<EntityKind>,
     query: Option<String>,
 ) -> Result<Vec<EntityView>, CommandError> {
-    read(app, move |e| {
-        let needle = query
-            .as_deref()
-            .map(str::trim)
-            .filter(|q| !q.is_empty())
-            .map(str::to_lowercase);
-        Ok(e.entities(kind)?
-            .into_iter()
-            .filter(|v| {
-                needle.as_deref().is_none_or(|n| {
-                    v.name.to_lowercase().contains(n)
-                        || v.role
-                            .as_deref()
-                            .is_some_and(|r| r.to_lowercase().contains(n))
-                })
-            })
-            .collect())
-    })
-    .await
+    read(app, move |e| e.entities_matching(kind, query.as_deref())).await
 }
 
 /// Correct a memory: the old one closes into history, the new one is returned.
@@ -102,15 +81,7 @@ pub async fn set_item_private<R: Runtime>(
     id: String,
     private: bool,
 ) -> Result<(), CommandError> {
-    #[cfg(feature = "engine-round2")]
-    {
-        change(app, move |e| e.set_item_private(&id, private)).await
-    }
-    #[cfg(not(feature = "engine-round2"))]
-    {
-        let _ = (app, id, private);
-        Err(not_yet("making an item private"))
-    }
+    change(app, move |e| e.set_item_private(&id, private)).await
 }
 
 /// Keep an item (and what was read from it) forever, or stop.
@@ -120,15 +91,7 @@ pub async fn set_item_keep_forever<R: Runtime>(
     id: String,
     keep_forever: bool,
 ) -> Result<(), CommandError> {
-    #[cfg(feature = "engine-round2")]
-    {
-        change(app, move |e| e.set_item_keep_forever(&id, keep_forever)).await
-    }
-    #[cfg(not(feature = "engine-round2"))]
-    {
-        let _ = (app, id, keep_forever);
-        Err(not_yet("keeping an item forever"))
-    }
+    change(app, move |e| e.set_item_keep_forever(&id, keep_forever)).await
 }
 
 /// Hide a memory for some days; it comes back.
@@ -138,15 +101,7 @@ pub async fn snooze<R: Runtime>(
     memory_id: String,
     days: u32,
 ) -> Result<(), CommandError> {
-    #[cfg(feature = "engine-round2")]
-    {
-        change(app, move |e| e.snooze(&memory_id, days)).await
-    }
-    #[cfg(not(feature = "engine-round2"))]
-    {
-        let _ = (app, memory_id, days);
-        Err(not_yet("snoozing"))
-    }
+    change(app, move |e| e.snooze(&memory_id, days)).await
 }
 
 #[tauri::command]
