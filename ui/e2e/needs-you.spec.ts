@@ -90,7 +90,7 @@ test.describe("an unconfirmed web page", () => {
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
     await dialog.getByRole("button", { name: "OK" }).click();
     await expect(dialog).toHaveCount(0);
-    await expect(said(page)).toContainText("Forgotten.");
+    await expect(said(page)).toContainText("Deleted.");
     await expect(rows(page).nth(1)).toBeFocused();
   });
 

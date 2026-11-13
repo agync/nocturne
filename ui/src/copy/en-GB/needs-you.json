@@ -25,7 +25,7 @@
   "needs.empty.body": "Anything new will be on tomorrow’s page.",
   "needs.msg.which": "{subject} set to {chosen}. The other is kept as history.",
   "needs.msg.confirmed": "Confirmed: {sentence} Marked as sure because you said so.",
-  "needs.msg.forgotten": "Forgotten.",
+  "needs.msg.forgotten": "Deleted.",
   "needs.msg.left": "Left unconfirmed. It won’t be used in answers.",
   "needs.msg.done": "{subject} done.",
   "needs.msg.failed": "That didn’t go through, so nothing was changed. Try again."

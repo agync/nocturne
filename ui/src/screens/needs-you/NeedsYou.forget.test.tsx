@@ -46,7 +46,7 @@ describe("Not true, delete it, with the real forget dialog", () => {
     expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
     expect(forget).toHaveBeenCalledOnce();
     await waitFor(() => expect(listed.mock.calls.length).toBeGreaterThan(1));
-    await waitFor(() => expect(screen.getByText("Forgotten.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getAllByText("Deleted.")).toHaveLength(2));
     expect(document.body.textContent).not.toMatch(/original is still kept/);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -60,7 +60,7 @@ describe("Not true, delete it, with the real forget dialog", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("One thing is waiting");
   });
 
-  it("says only Forgotten, because whether the original went depends on what was ticked", async () => {
+  it("says only Deleted, because whether the original went depends on what was ticked", async () => {
     const engine = new Waiting();
     renderApp({ hash: "#/needs-you", engine });
     await userEvent.click(await screen.findByRole("button", { name: "Not true, delete it…" }));
@@ -69,8 +69,10 @@ describe("Not true, delete it, with the real forget dialog", () => {
     if (!(box as HTMLInputElement).checked) await userEvent.click(box);
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Delete \d+ thing/ }));
     await within(dialog).findByText("Deleted.");
-    const said = await screen.findByText("Forgotten.");
-    expect(said).toHaveAttribute("aria-live", "polite");
+    const said = (await screen.findAllByText("Deleted.")).find(
+      (e) => e.getAttribute("aria-live") === "polite",
+    );
+    expect(said).toBeDefined();
     expect(document.body.textContent).not.toMatch(/original is still kept/);
   });
 
