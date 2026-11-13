@@ -6,7 +6,8 @@ import { MEMORY_KEYS } from "./queries";
 
 /**
  * Holds the forget dialog above the rows it came from, so it can say "Gone." even after the
- * memory has left the list. The lists are re-read, and `onGone` runs, once the dialog closes.
+ * memory has left the list. The lists are re-read as soon as the engine is done; `onGone` runs
+ * once the dialog closes.
  */
 export function useForget(onGone?: (report: ForgetReport) => void, itemIds?: string[]) {
   const refresh = useRefresh();
@@ -20,13 +21,14 @@ export function useForget(onGone?: (report: ForgetReport) => void, itemIds?: str
       defaultIncludeOriginals
       onDone={(report) => {
         done.current = report;
+        // At once, not on close: the lists are right even if the dialog is gone by now.
+        refresh(...MEMORY_KEYS, "items", "pages");
       }}
       onClose={() => {
         setTarget(null);
         const report = done.current;
         done.current = null;
         if (report) {
-          refresh(...MEMORY_KEYS, "items", "pages");
           // Once the dialog has gone and given focus back, so what `onGone` focuses is not inert.
           setTimeout(() => onGone?.(report), 0);
         }

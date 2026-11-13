@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ForgetPreview } from "../../engine/bindings";
@@ -51,11 +51,14 @@ const preview = (over: Partial<ForgetPreview> = {}): ForgetPreview => ({
 describe("ForgetDialog", () => {
   it("names every memory and the original, and states the count on the button", async () => {
     open();
-    const dialog = await screen.findByRole("dialog", { name: "Forget 2 things?" });
+    const dialog = await screen.findByRole("dialog", { name: "Forget 4 things?" });
     const list = await within(dialog).findByRole("list", { name: "What will be forgotten" });
     expect(within(list).getByText("Leo is allergic to nuts.")).toBeInTheDocument();
     expect(within(list).getByText("Leo’s swimming is on Mondays at 17:30.")).toBeInTheDocument();
-    expect(within(list).getAllByRole("checkbox")).toHaveLength(2);
+    expect(within(dialog).getAllByRole("checkbox")).toHaveLength(1);
+    expect(
+      within(dialog).getByRole("checkbox", { name: "Also delete the 2 originals" }),
+    ).toBeChecked();
     expect(within(dialog).getByRole("button", { name: "Forget 4 things" })).toBeInTheDocument();
   });
 
@@ -73,7 +76,7 @@ describe("ForgetDialog", () => {
     open({ defaultIncludeOriginals: false });
     const dialog = await screen.findByRole("dialog");
     expect(
-      await within(dialog).findByText(/If the original stays, so does its transcript/),
+      await within(dialog).findByText(/The original stays, and so does its transcript/),
     ).toBeInTheDocument();
     expect(within(dialog).getByText(/exported or printed is out of reach/)).toBeInTheDocument();
   });
@@ -106,7 +109,7 @@ describe("ForgetDialog", () => {
   it("keeps the original when its box is unticked and asks for a matching preview", async () => {
     const { engine } = open({ memoryIds: ["mem-nut"] });
     const spy = vi.spyOn(engine, "previewForget");
-    const box = await screen.findByRole("checkbox", { name: /Nut-free lunchbox ideas/ });
+    const box = await screen.findByRole("checkbox", { name: "Also delete the original" });
     expect(box).toBeChecked();
     await userEvent.click(box);
     expect(box).not.toBeChecked();
@@ -134,10 +137,10 @@ describe("ForgetDialog", () => {
       }),
     );
     open({ memoryIds: ["a"] }, engine);
-    const box = await screen.findByRole("checkbox", { name: /Voice note, 0:34/ });
-    expect(box).not.toBeChecked();
-    expect(box).toBeDisabled();
-    expect(screen.getByText("Other memories from that note are kept.")).toBeInTheDocument();
+    expect(await screen.findByText(/Voice note, 0:34/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.getByText(/Other memories still use this, so it stays\./)).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Forget 1 thing?" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Forget 1 memory" })).toBeInTheDocument();
   });
 
@@ -168,10 +171,14 @@ describe("ForgetDialog", () => {
   it("says nothing was forgotten when forgetting fails", async () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "forget").mockRejectedValue(new Error("disk"));
+    const previews = vi.spyOn(engine, "previewForget");
     const { onDone } = open({ memoryIds: ["mem-nut"] }, engine);
     await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Nothing has been forgotten/);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /Anything already hidden stays hidden/,
+    );
     expect(onDone).not.toHaveBeenCalled();
+    expect(previews.mock.calls.length).toBeGreaterThan(1);
   });
 
   it("says so when the list cannot be made, and offers to try again", async () => {
@@ -206,5 +213,101 @@ describe("ForgetDialog", () => {
     open({ memoryIds: [], itemIds: [] });
     expect(await screen.findByText("There is nothing left to forget here.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Forget \d/ })).toBeNull();
+  });
+
+  it("cannot be cancelled while forgetting, and still reports when it is done", async () => {
+    const engine = createMockEngine();
+    let finish: (r: {
+      memoriesRemoved: number;
+      originalsRemoved: number;
+      pagesRedacted: number;
+    }) => void = () => undefined;
+    vi.spyOn(engine, "forget").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { onClose, onDone } = open({ memoryIds: ["mem-nut"] }, engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
+    expect(screen.getByRole("button", { name: "Keep them" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("dialog").parentElement as HTMLElement);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await act(async () => {
+      finish({ memoriesRemoved: 1, originalsRemoved: 1, pagesRedacted: 0 });
+    });
+    expect(await screen.findByText("Gone.")).toBeInTheDocument();
+    expect(onDone).toHaveBeenCalledOnce();
+    expect(screen.getByRole("button", { name: "Close" })).toBeEnabled();
+  });
+
+  it("reports the result even if the dialog has been taken away meanwhile", async () => {
+    const engine = createMockEngine();
+    let finish: (r: {
+      memoriesRemoved: number;
+      originalsRemoved: number;
+      pagesRedacted: number;
+    }) => void = () => undefined;
+    vi.spyOn(engine, "forget").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { onDone, unmount } = open({ memoryIds: ["mem-nut"] }, engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
+    unmount();
+    await act(async () => {
+      finish({ memoriesRemoved: 1, originalsRemoved: 1, pagesRedacted: 0 });
+    });
+    expect(onDone).toHaveBeenCalledWith({
+      memoriesRemoved: 1,
+      originalsRemoved: 1,
+      pagesRedacted: 0,
+    });
+  });
+
+  it("locks the box and the button while the list is read again, so an untick cannot be lost", async () => {
+    const engine = createMockEngine();
+    let release: (p: ForgetPreview) => void = () => undefined;
+    const previews = vi
+      .spyOn(engine, "previewForget")
+      .mockResolvedValueOnce(preview({ token: "old" }))
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            release = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(preview({ token: "full" }))
+      .mockResolvedValueOnce(preview({ token: "no-originals", includeOriginals: false }));
+    const forget = vi
+      .spyOn(engine, "forget")
+      .mockRejectedValueOnce(new Error("That preview has expired"))
+      .mockResolvedValueOnce({ memoriesRemoved: 1, originalsRemoved: 0, pagesRedacted: 0 });
+    open({ memoryIds: ["a"] }, engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Forget 2 things" }));
+    // The token has expired and the list is being read again.
+    const box = await screen.findByRole("checkbox", { name: "Also delete the original" });
+    await waitFor(() => expect(box).toBeDisabled());
+    await userEvent.click(box);
+    expect(box).toBeChecked();
+    expect(screen.getByRole("button", { name: /^Forget/ })).toBeDisabled();
+    await act(async () => {
+      release(preview({ token: "fresh" }));
+    });
+    await waitFor(() => expect(box).toBeEnabled());
+    expect(screen.getByRole("button", { name: "Forget 2 things" })).toBeEnabled();
+    // Unticking now asks for a matching token, and the button then says what it will do.
+    await userEvent.click(box);
+    const button = await screen.findByRole("button", { name: "Forget 1 memory" });
+    await waitFor(() => expect(button).toBeEnabled());
+    expect(previews).toHaveBeenLastCalledWith(["a"], false);
+    await userEvent.click(button);
+    expect(forget).toHaveBeenLastCalledWith("no-originals");
+    expect(await screen.findByText(/The original is kept\./)).toBeInTheDocument();
   });
 });

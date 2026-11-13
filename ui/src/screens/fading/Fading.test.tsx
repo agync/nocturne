@@ -130,7 +130,7 @@ describe("Fading & let go", () => {
     await open();
     await userEvent.click(screen.getByRole("checkbox", { name: "The old gym door code is 4821." }));
     await userEvent.click(screen.getByRole("button", { name: "Forget 1 completely…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Forget 1 thing?" });
+    const dialog = await screen.findByRole("dialog", { name: "Forget 2 things?" });
     await userEvent.click(await within(dialog).findByRole("button", { name: /^Forget 2 things/ }));
     expect(await within(dialog).findByText("Gone.")).toBeInTheDocument();
     await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));

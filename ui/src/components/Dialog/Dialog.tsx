@@ -12,6 +12,11 @@ interface DialogProps {
   initialFocus?: RefObject<HTMLElement | null>;
   /** Backdrop clicks close it unless this is false. */
   dismissible?: boolean;
+  /**
+   * While true the dialog cannot be dismissed: Escape, the backdrop and Close do nothing. For
+   * work that cannot be taken back once it has started.
+   */
+  locked?: boolean;
   /** Pins the panel to the left edge, for the narrow menu. */
   edge?: "start";
 }
@@ -39,6 +44,7 @@ export function Dialog({
   children,
   initialFocus,
   dismissible = true,
+  locked = false,
   edge,
 }: DialogProps) {
   const panel = useRef<HTMLDivElement>(null);
@@ -46,6 +52,8 @@ export function Dialog({
   const titleId = useId();
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -79,7 +87,7 @@ export function Dialog({
       if (event.key === "Escape") {
         event.stopImmediatePropagation();
         event.preventDefault();
-        onCloseRef.current();
+        if (!lockedRef.current) onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !panel.current) return;
@@ -115,7 +123,7 @@ export function Dialog({
       className={styles.backdrop}
       data-edge={edge}
       onClick={(event) => {
-        if (dismissible && event.target === event.currentTarget) onClose();
+        if (dismissible && !locked && event.target === event.currentTarget) onClose();
       }}
     >
       <div
@@ -130,7 +138,7 @@ export function Dialog({
           <h2 id={titleId} className={styles.title}>
             {title}
           </h2>
-          <button type="button" className={styles.close} onClick={onClose}>
+          <button type="button" className={styles.close} disabled={locked} onClick={onClose}>
             <Icon name="x" size={16} />
             <span>{t("dialog.close")}</span>
           </button>

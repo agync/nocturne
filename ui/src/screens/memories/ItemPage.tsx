@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "../../components/Button/Button";
@@ -47,19 +48,26 @@ export function ItemPage({ id }: { id: string }) {
     if (changed.id === id) refresh("item");
   });
 
+  const page = (node: ReactNode) => (
+    <>
+      {node}
+      {forget.dialog}
+    </>
+  );
+
   if (item.isError || memories.isError) {
-    return (
+    return page(
       <div className={styles.message} role="alert">
         <h1 className="t-page-title">{t("item.missing")}</h1>
         <a href="#/memories">{t("memories.back")}</a>
-      </div>
+      </div>,
     );
   }
   if (!item.data || !memories.data) {
-    return (
+    return page(
       <p className={styles.message} role="status">
         {t("item.loading")}
-      </p>
+      </p>,
     );
   }
 
@@ -88,7 +96,7 @@ export function ItemPage({ id }: { id: string }) {
   const seconds =
     it.understoodInMs === null ? null : Math.max(1, Math.round(it.understoodInMs / 1000));
 
-  return (
+  return page(
     <div className={styles.frame}>
       <div className={styles.card}>
         <div className={styles.original}>
@@ -214,7 +222,6 @@ export function ItemPage({ id }: { id: string }) {
           </div>
         </div>
       </div>
-      {forget.dialog}
-    </div>
+    </div>,
   );
 }

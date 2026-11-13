@@ -120,4 +120,35 @@ describe("Dialog", () => {
     expect(root).not.toHaveAttribute("inert");
     root.remove();
   });
+
+  it("ignores Escape, the backdrop and Close while locked", async () => {
+    const onClose = vi.fn();
+    render(
+      <Dialog title="Working" locked onClose={onClose}>
+        <button type="button">Inside</button>
+      </Dialog>,
+    );
+    await userEvent.keyboard("{Escape}");
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    const backdrop = screen.getByRole("dialog").parentElement as HTMLElement;
+    await userEvent.click(backdrop);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
+  });
+
+  it("closes on Escape again once it is unlocked", async () => {
+    const onClose = vi.fn();
+    const { rerender } = render(
+      <Dialog title="Working" locked onClose={onClose}>
+        <button type="button">Inside</button>
+      </Dialog>,
+    );
+    rerender(
+      <Dialog title="Working" onClose={onClose}>
+        <button type="button">Inside</button>
+      </Dialog>,
+    );
+    await userEvent.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

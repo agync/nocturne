@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
@@ -19,19 +20,26 @@ export function EntityPage({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const forget = useForget(() => heading.current?.focus());
 
+  const page = (node: ReactNode) => (
+    <>
+      {node}
+      {forget.dialog}
+    </>
+  );
+
   if (entity.isError || memories.isError) {
-    return (
+    return page(
       <div className={styles.message} role="alert">
         <h1 className="t-page-title">{t("memories.entity.missing")}</h1>
         <a href="#/memories">{t("memories.back")}</a>
-      </div>
+      </div>,
     );
   }
   if (!entity.data || !memories.data) {
-    return (
+    return page(
       <p className={styles.message} role="status">
         {t("memories.loading")}
-      </p>
+      </p>,
     );
   }
 
@@ -54,7 +62,7 @@ export function EntityPage({ id }: { id: string }) {
     }
   };
 
-  return (
+  return page(
     <div className={styles.entity}>
       <a className={styles.back} href="#/memories">
         {t("memories.back")}
@@ -87,7 +95,6 @@ export function EntityPage({ id }: { id: string }) {
           <p className={styles.hint}>{t("memories.hint")}</p>
         </>
       )}
-      {forget.dialog}
-    </div>
+    </div>,
   );
 }

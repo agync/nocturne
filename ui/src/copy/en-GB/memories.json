@@ -5,16 +5,15 @@
   "forget.row.original": "Original",
   "forget.original.audio": "{kind}, {duration} · {day}",
   "forget.original.other": "{title} ({kind}) · {day}",
-  "forget.original.hint": "Tick the original to delete it too. Other memories from that note are kept.",
-  "forget.original.blocked": "Other memories from that note are kept.",
-  "forget.stays.original": "If the original stays, so does its transcript, but not the memories from it.",
+  "forget.original.blocked": "Other memories still use this, so it stays.",
+  "forget.stays.original": "The original stays, and so does its transcript, but not the memories from it.",
   "forget.stays.out": "Anything you exported or printed is out of reach. Nocturne can’t delete it.",
   "forget.button.memories": "{count, plural, one {Forget # memory} other {Forget # memories}}",
   "forget.button.things": "{count, plural, one {Forget # thing} other {Forget # things}}",
   "forget.working": "Forgetting…",
   "forget.loading": "Getting the list ready…",
   "forget.error.preview": "I couldn’t get the list ready. Nothing has been forgotten.",
-  "forget.error.forget": "That didn’t finish. Nothing has been forgotten. Try again in a moment.",
+  "forget.error.forget": "That didn’t finish cleanly. Anything already hidden stays hidden, and Nocturne finishes the rest the next time it opens. Check the list, then try again.",
   "forget.refreshed": "That list was out of date, so I refreshed it. Check it, then forget.",
   "forget.nothing": "There is nothing left to forget here.",
   "forget.done.lead": "Gone.",
@@ -132,5 +131,6 @@
   "pages.needsYou": "{count, plural, one {# still needs you} other {# still need you}}",
   "pages.empty": "No pages yet. Your first one arrives after Nocturne’s first night.",
   "pages.loading": "Looking for your pages…",
-  "pages.error": "I couldn’t open your pages. What you kept is safe."
+  "pages.error": "I couldn’t open your pages. What you kept is safe.",
+  "forget.originals.also": "{count, plural, one {Also delete the original} other {Also delete the # originals}}"
 }

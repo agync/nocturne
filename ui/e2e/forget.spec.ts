@@ -12,7 +12,7 @@ const openDialog = async (page: Page) => {
   await page.evaluate(() => document.fonts.ready);
   await page.getByRole("checkbox", { name: GYM }).check({ force: true });
   await page.getByRole("button", { name: "Forget 1 completely…" }).click();
-  const dialog = page.getByRole("dialog", { name: "Forget 1 thing?" });
+  const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: /^Forget 2 things/ }).waitFor();
   return dialog;
 };
@@ -21,7 +21,7 @@ test.describe("forgetting completely", () => {
   test("names the memory and the original, with the count on the button", async ({ page }) => {
     const dialog = await openDialog(page);
     await expect(dialog.getByText(GYM)).toBeVisible();
-    await expect(dialog.getByRole("checkbox", { name: /Gym door code/ })).toBeChecked();
+    await expect(dialog.getByRole("checkbox", { name: "Also delete the original" })).toBeChecked();
     await expect(dialog.getByText(/exported or printed is out of reach/)).toBeVisible();
     await page.screenshot({ path: `${SHOTS}/forget-light.png` });
   });
@@ -59,7 +59,9 @@ test.describe("forgetting completely", () => {
 
   test("keeping the original is one tick away", async ({ page }) => {
     const dialog = await openDialog(page);
-    await dialog.getByRole("checkbox", { name: /Gym door code/ }).uncheck({ force: true });
+    await dialog
+      .getByRole("checkbox", { name: "Also delete the original" })
+      .uncheck({ force: true });
     await expect(dialog.getByRole("button", { name: "Forget 1 memory" })).toBeVisible();
     await expect(dialog.getByText(/so does its transcript/)).toBeVisible();
   });

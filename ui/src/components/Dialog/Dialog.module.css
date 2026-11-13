@@ -73,3 +73,9 @@
   flex-direction: column;
   gap: var(--s-4);
 }
+
+.close:disabled {
+  background: transparent;
+  color: var(--ink3);
+  cursor: not-allowed;
+}
