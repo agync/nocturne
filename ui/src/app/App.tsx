@@ -1,12 +1,15 @@
 import { Suspense, useEffect } from "react";
 import { Router, useLocation } from "wouter";
 import { useHashLocation } from "wouter/use-hash-location";
+import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
+import { AppError } from "../components/ErrorBoundary/ScreenError";
 import { ToastProvider } from "../components/Toast/Toast";
 import { t } from "../copy/t";
 import type { EngineClient } from "../engine/client";
 import { EngineProvider } from "../engine/context";
 import { PlatformProvider } from "../platform/context";
 import type { Platform } from "../platform/types";
+import { NotFound } from "../screens/NotFound";
 import { findRoute } from "./routes";
 import { Shell } from "./Shell";
 import { useThemeSync } from "./theme";
@@ -17,18 +20,6 @@ interface AppProps {
 }
 
 const hrefs = (path: string) => `#${path}`;
-
-function NotFound() {
-  return (
-    <section style={{ padding: "var(--s-6) var(--s-5)" }}>
-      <h1 className="t-page-title">{t("screen.notFound.title")}</h1>
-      <p className="t-ui-body" style={{ margin: "var(--s-3) 0", color: "var(--ink2)" }}>
-        {t("screen.notFound.body")}
-      </p>
-      <a href="#/today">{t("screen.notFound.action")}</a>
-    </section>
-  );
-}
 
 function Routed() {
   const [location, navigate] = useLocation();
@@ -53,6 +44,14 @@ function Routed() {
 }
 
 export function App({ engine, platform }: AppProps) {
+  return (
+    <ErrorBoundary fallback={<AppError />}>
+      <AppProviders engine={engine} platform={platform} />
+    </ErrorBoundary>
+  );
+}
+
+function AppProviders({ engine, platform }: AppProps) {
   return (
     <EngineProvider engine={engine}>
       <PlatformProvider platform={platform}>

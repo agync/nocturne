@@ -6,32 +6,59 @@ const LOCALE = "en-GB";
 function toDate(input: string | Date): Date {
   if (input instanceof Date) return input;
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
-  if (day) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), 12);
+  if (day) {
+    return isDay(input)
+      ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), 12)
+      : new Date(Number.NaN);
+  }
   return new Date(input);
 }
 
 const clean = (s: string) => s.replace(/,/g, "");
 
+const valid = (d: Date) => !Number.isNaN(d.getTime());
+
+/** True for a real `YYYY-MM-DD` calendar day. */
+export function isDay(input: string): boolean {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input);
+  if (!m) return false;
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const date = new Date(y, mo - 1, d, 12);
+  return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d;
+}
+
+/** Formats a date, or gives "" for one that is not a date, so a bad value never breaks a screen. */
+function safely(input: string | Date, format: (d: Date) => string): string {
+  const d = toDate(input);
+  return valid(d) ? format(d) : "";
+}
+
 const fmt = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat(LOCALE, options);
 
 /** "Tue 11 Nov" */
 export function formatDay(input: string | Date): string {
-  return clean(fmt({ weekday: "short", day: "numeric", month: "short" }).format(toDate(input)));
+  return safely(input, (d) =>
+    clean(fmt({ weekday: "short", day: "numeric", month: "short" }).format(d)),
+  );
 }
 
 /** "Thursday 13 November" */
 export function formatLongDay(input: string | Date): string {
-  return clean(fmt({ weekday: "long", day: "numeric", month: "long" }).format(toDate(input)));
+  return safely(input, (d) =>
+    clean(fmt({ weekday: "long", day: "numeric", month: "long" }).format(d)),
+  );
 }
 
 /** "Thursday 20 Nov, 10:00" style helper for a day plus time, used in spoken receipts. */
 export function formatSpokenDay(input: string | Date): string {
-  return clean(fmt({ weekday: "long", day: "numeric", month: "long" }).format(toDate(input)));
+  return safely(input, (d) =>
+    clean(fmt({ weekday: "long", day: "numeric", month: "long" }).format(d)),
+  );
 }
 
 /** "Thu" */
 export function formatWeekday(input: string | Date): string {
-  return fmt({ weekday: "short" }).format(toDate(input));
+  return safely(input, (d) => fmt({ weekday: "short" }).format(d));
 }
 
 /** "MON" source for the upcoming rows; styling uppercases it. */
@@ -39,12 +66,12 @@ export const formatWeekdayShort = formatWeekday;
 
 /** "August" */
 export function formatMonth(input: string | Date): string {
-  return fmt({ month: "long" }).format(toDate(input));
+  return safely(input, (d) => fmt({ month: "long" }).format(d));
 }
 
 /** "07:00", 24-hour, in the person's time zone. */
 export function formatTime(input: string | Date): string {
-  return fmt({ hour: "2-digit", minute: "2-digit", hour12: false }).format(toDate(input));
+  return safely(input, (d) => fmt({ hour: "2-digit", minute: "2-digit", hour12: false }).format(d));
 }
 
 /** `HH:MM` text kept as typed. */
@@ -99,6 +126,7 @@ export function formatBytes(bytes: number): string {
 /** `YYYY-MM-DD` of an instant in the person's time zone. */
 export function localDay(input: string | Date): string {
   const d = toDate(input);
+  if (!valid(d)) return "";
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
@@ -108,6 +136,7 @@ export function localDay(input: string | Date): string {
 /** Shifts a `YYYY-MM-DD` day by whole days. */
 export function addDays(day: string, delta: number): string {
   const d = toDate(day);
+  if (!valid(d)) return "";
   d.setDate(d.getDate() + delta);
   return localDay(d);
 }

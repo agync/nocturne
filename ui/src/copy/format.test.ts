@@ -8,6 +8,7 @@ import {
   formatEta,
   formatLongDay,
   formatTime,
+  isDay,
   localDay,
 } from "./format";
 
@@ -45,5 +46,21 @@ describe("format", () => {
     expect(addDays("2026-03-28", 1)).toBe("2026-03-29");
     expect(addDays("2026-03-29", 1)).toBe("2026-03-30");
     expect(localDay("2026-11-13T07:02:00Z")).toBe("2026-11-13");
+  });
+
+  it("gives an empty string, never an error, for something that is not a date", () => {
+    for (const bad of ["not-a-date", "", "2026-13-45", "2026-02-31"]) {
+      expect(formatDay(bad), bad).toBe("");
+      expect(formatLongDay(bad), bad).toBe("");
+      expect(formatTime(bad), bad).toBe("");
+      expect(localDay(bad), bad).toBe("");
+      expect(addDays(bad, 1), bad).toBe("");
+    }
+  });
+
+  it("knows a real calendar day from an impossible one", () => {
+    expect(isDay("2026-11-13")).toBe(true);
+    expect(isDay("2026-02-29")).toBe(false);
+    expect(isDay("not-a-date")).toBe(false);
   });
 });

@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineClient } from "../engine/client";
 import { createMockEngine } from "../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../test/render";
@@ -292,5 +292,49 @@ describe("theme", () => {
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "dark"));
     act(() => platform.theme("light"));
     await waitFor(() => expect(document.documentElement).toHaveAttribute("data-theme", "light"));
+  });
+});
+
+describe("when a screen fails", () => {
+  it("says kindly that a page that is not a date is not here", async () => {
+    renderApp({ hash: "#/pages/not-a-date" });
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "That page isn’t here" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
+  });
+
+  it("keeps the shell and recovers on the next route when a screen throws while drawing", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const engine = createMockEngine();
+    const real = engine.getPage.bind(engine);
+    engine.getPage = async (date) => ({ ...(await real(date)), needsYou: null as never });
+    renderApp({ engine });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("I couldn’t show this. What you kept is safe.");
+    expect(within(alert).getByRole("link", { name: "Back to today’s page" })).toHaveAttribute(
+      "href",
+      "#/today",
+    );
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Keep something, or ask" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("link", { name: "Privacy" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Privacy" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    error.mockRestore();
+  });
+
+  it("has a last-resort fallback outside every provider", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const engine = createMockEngine();
+    engine.on = () => {
+      throw new Error("engine gone");
+    };
+    renderApp({ engine });
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Nocturne hit a problem" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start again" })).toBeInTheDocument();
+    error.mockRestore();
   });
 });

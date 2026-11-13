@@ -293,6 +293,12 @@
   "screen.notFound.title": "That page isn’t here",
   "screen.notFound.body": "Go back to today’s page.",
   "screen.notFound.action": "Today’s page",
+  "error.screen.title": "That didn’t open",
+  "error.screen.body": "I couldn’t show this. What you kept is safe.",
+  "error.screen.action": "Back to today’s page",
+  "error.app.title": "Nocturne hit a problem",
+  "error.app.body": "I couldn’t draw the window. What you kept is safe.",
+  "error.app.action": "Start again",
   "screen.placeholder": "This part of Nocturne is on its way.",
   "screen.loading": "Loading…",
 

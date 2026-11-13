@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useLocation, useRoute } from "wouter";
 import { PageSheet, type SheetAction } from "../../components/PageSheet/PageSheet";
 import { useToast } from "../../components/Toast/Toast";
-import { formatBytes } from "../../copy/format";
+import { formatBytes, isDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import {
   useEngine,
@@ -12,6 +12,7 @@ import {
   useSettings,
   useStatus,
 } from "../../engine/context";
+import { NotFound } from "../NotFound";
 import { applyOverrides, NO_OVERRIDES, type Overrides } from "./optimistic";
 import styles from "./Today.module.css";
 
@@ -20,6 +21,7 @@ export default function Today() {
   const [, params] = useRoute("/pages/:date");
   const date = params?.date;
   // A new day starts with a clean slate of just-now changes.
+  if (date !== undefined && !isDay(date)) return <NotFound />;
   return <TodayPage key={date ?? "today"} date={date} />;
 }
 

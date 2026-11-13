@@ -2,6 +2,8 @@ import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useS
 import { useLocation } from "wouter";
 import { Dialog } from "../components/Dialog/Dialog";
 import { DropOverlay } from "../components/DropOverlay/DropOverlay";
+import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
+import { ScreenError } from "../components/ErrorBoundary/ScreenError";
 import { KeepAskBar } from "../components/KeepAskBar/KeepAskBar";
 import { KeptToday } from "../components/KeptToday/KeptToday";
 import { Mark } from "../components/Mark/Mark";
@@ -191,9 +193,11 @@ export function Shell({ children }: ShellProps) {
             aria-label={title}
             data-region="main"
           >
-            <Suspense fallback={<p className={styles.loading}>{t("screen.loading")}</p>}>
-              {children}
-            </Suspense>
+            <ErrorBoundary resetKey={location} fallback={<ScreenError />}>
+              <Suspense fallback={<p className={styles.loading}>{t("screen.loading")}</p>}>
+                {children}
+              </Suspense>
+            </ErrorBoundary>
           </main>
           {!narrow ? (
             <div className={styles.aside}>
