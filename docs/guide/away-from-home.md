@@ -27,6 +27,25 @@ computer can read it.
 4. Your computer must stay on and awake for the phone to reach it. Nocturne can keep it awake, but
    only while it is plugged in.
 
+## Most private sign-in
+
+Most private uses your own Tailscale account, and Nocturne walks you through what that account asks
+for. Each step opens the right Tailscale page in your browser, and Nocturne carries on by itself
+when you are done.
+
+1. **Sign in.** Sign in to Tailscale in the page that opens.
+2. **Approve.** If your Tailscale network requires new computers to be approved, Nocturne says so
+   and opens the page that lists this computer. Approve it there. It shows under a made-up name.
+3. **Allow secure links.** If your account has not turned on HTTPS, Nocturne opens that page. Choose
+   Enable HTTPS once.
+4. **Waiting on a certificate.** Tailscale can take a little while to issue the secure address.
+   Nocturne keeps retrying. If it is still not ready after 30 seconds, Away from home shows a
+   problem and keeps retrying, then returns to normal when it works.
+
+If your Tailscale network requires computers to keep a log of their activity for Tailscale, Most
+private refuses to join and says so in plain words, because it never uploads logs. Use another
+account, or turn Away from home off.
+
 ## Add a phone
 
 1. Choose Add a phone. Nocturne shows a code that works once and lasts five minutes.
@@ -60,13 +79,14 @@ other things.
   to change that page could misuse your phone's key while the page is open, which a native phone app
   would later fix.
 - **Most private (Tailscale).** Your account, the computers on it and when they connect. When your
-  phone and computer cannot connect directly, Tailscale carries the sealed traffic. Other people and
-  devices on your Tailscale account can reach your computer and try to pair, and would still need a
-  code and your Allow.
+  phone and computer cannot connect directly, Tailscale carries the sealed traffic. Only your own
+  devices on your Tailscale account can reach your computer. Other people's devices, tagged
+  devices and devices shared with you are refused, and your own still need a code and your Allow to
+  pair.
 - **Both.** The helper also talks to its company's servers to stay connected while Away from home
   is on. Your computer may ask whether Nocturne's helper may accept connections. That is expected.
   It is why this feature is not described as staying on your own computer: while it is on, a
-  helper listens on your computer's network interfaces, not only on its internal address.
+  helper uses your computer's network interfaces, not only its internal address.
 
 Nocturne does not measure this live. Privacy shows what was sent to your phones.
 
