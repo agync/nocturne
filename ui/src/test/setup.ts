@@ -2,9 +2,24 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterEach } from "vitest";
 
-// A screen renders slowly while other suites share the machine; a wait that gives up early would
-// fail on load, not on a defect. Passing tests never wait this long.
-configure({ asyncUtilTimeout: 15_000 });
+// Screens load on first use, which is slow while other suites share the machine. Loading them
+// here, before a test starts, keeps that cost out of every wait.
+await Promise.all([
+  import("../screens/today"),
+  import("../screens/ask"),
+  import("../screens/needs-you"),
+  import("../screens/recent"),
+  import("../screens/capture"),
+  import("../screens/memories"),
+  import("../screens/fading"),
+  import("../screens/past-pages"),
+  import("../screens/setup"),
+  import("../screens/privacy"),
+  import("../screens/settings"),
+  import("../screens/editions"),
+]);
+
+configure({ asyncUtilTimeout: 5_000 });
 
 afterEach(() => {
   cleanup();

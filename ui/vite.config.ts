@@ -29,8 +29,6 @@ export default defineConfig(({ mode }) => {
       globalSetup: ["./src/test/global-setup.ts"],
       setupFiles: ["./src/test/setup.ts"],
       include: ["src/**/*.test.{ts,tsx}"],
-      testTimeout: 30_000,
-      hookTimeout: 30_000,
       css: { modules: { classNameStrategy: "non-scoped" } },
     },
   };
