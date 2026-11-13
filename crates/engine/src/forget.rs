@@ -418,6 +418,8 @@ pub(crate) fn redact_line(line: &mut nocturne_contract::PageLine) {
     line.memory_ids.clear();
     line.receipts.clear();
     line.choices.clear();
+    line.subject = None;
+    line.conflict_id = None;
     line.on = None;
     line.last_used = None;
     line.done = false;
