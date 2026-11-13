@@ -270,7 +270,7 @@ async fn giving_up_on_ports_after_five_tries() {
     assert!(matches!(err, RuntimeError::Start(_)), "{err:?}");
     let launches = common::launch_count(&dirs);
     assert_eq!(launches, 5);
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     assert_eq!(
         common::processes_mentioning(&dirs.cache().to_string_lossy()),
         Vec::<u32>::new()
@@ -288,7 +288,7 @@ async fn a_slow_start_past_the_timeout_is_an_error_and_leaves_nothing() {
     };
     let err = Supervisor::start(dirs.clone(), opts).await.err().unwrap();
     assert!(matches!(err, RuntimeError::Start(_)), "{err:?}");
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     assert_eq!(
         common::processes_mentioning(&dirs.cache().to_string_lossy()),
         Vec::<u32>::new()
@@ -355,7 +355,7 @@ async fn online_relaunches_the_engine_and_survives_a_crash() {
     sup.shutdown().await.unwrap();
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[tokio::test]
 async fn a_stuck_engine_is_stopped_within_the_budget() {
     let tmp = tempfile::tempdir().unwrap();
@@ -406,7 +406,7 @@ async fn an_engine_that_ignores_its_key_is_refused() {
         matches!(err, RuntimeError::Start(ref m) if m.contains("key")),
         "{err:?}"
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     assert_eq!(
         common::processes_mentioning(&dirs.cache().to_string_lossy()),
         Vec::<u32>::new()
@@ -425,7 +425,7 @@ async fn an_engine_on_the_wrong_websocket_port_is_refused() {
     );
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[tokio::test]
 async fn shutdown_leaves_no_process_in_the_group() {
     let tmp = tempfile::tempdir().unwrap();
@@ -441,7 +441,7 @@ async fn shutdown_leaves_no_process_in_the_group() {
     assert!(!common::alive(pgid));
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[tokio::test]
 async fn dropping_the_supervisor_stops_the_engine() {
     let tmp = tempfile::tempdir().unwrap();
@@ -452,7 +452,7 @@ async fn dropping_the_supervisor_stops_the_engine() {
     assert!(common::wait_dead(pid, Duration::from_secs(5)).await);
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[tokio::test]
 async fn killing_the_owner_makes_the_engine_exit_by_itself() {
     let tmp = tempfile::tempdir().unwrap();

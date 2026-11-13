@@ -706,8 +706,8 @@ async fn reap_group(running: &mut Running) {
     }
 }
 
-/// Processes still in the engine's process group (Linux only; elsewhere the job object or the
-/// watchdog does this work and nothing is reported).
+/// Processes still in the engine's process group: `/proc` on Linux, `ps` on macOS. Elsewhere the
+/// job object or the watchdog does this work and nothing is reported.
 #[cfg(target_os = "linux")]
 pub fn group_members(pgid: u32) -> Vec<u32> {
     let mut out = Vec::new();
@@ -736,7 +736,68 @@ pub fn group_members(pgid: u32) -> Vec<u32> {
     out
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "macos")]
+pub fn group_members(pgid: u32) -> Vec<u32> {
+    if pgid == 0 {
+        return Vec::new();
+    }
+    let listing = std::process::Command::new("/bin/ps")
+        .args(["-ax", "-o", "pid=,pgid=,stat="])
+        .env_clear()
+        .env("LC_ALL", "C")
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output();
+    match listing {
+        Ok(out) if out.status.success() => {
+            parse_ps_group(&String::from_utf8_lossy(&out.stdout), pgid)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// The live processes of group `pgid` in `ps -ax -o pid=,pgid=,stat=` output. A zombie (state
+/// `Z`) has already ended and only waits to be reaped, so it does not count.
+#[cfg(any(target_os = "macos", test))]
+fn parse_ps_group(listing: &str, pgid: u32) -> Vec<u32> {
+    listing
+        .lines()
+        .filter_map(|line| {
+            let mut cols = line.split_whitespace();
+            let pid = cols.next()?.parse::<u32>().ok()?;
+            let group = cols.next()?.parse::<u32>().ok()?;
+            let state = cols.next()?;
+            (group == pgid && !state.starts_with('Z')).then_some(pid)
+        })
+        .collect()
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
 pub fn group_members(_pgid: u32) -> Vec<u32> {
     Vec::new()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ps_output_yields_the_live_members_of_one_group() {
+        let listing = "\
+    1     1 Ss
+  612   612 Ss
+  613   612 S
+  614   612 Z
+  700   700 S+
+  615   612 U
+";
+        assert_eq!(parse_ps_group(listing, 612), vec![612, 613, 615]);
+        assert!(parse_ps_group(listing, 999).is_empty());
+    }
+
+    #[test]
+    fn unreadable_ps_lines_are_skipped() {
+        assert!(parse_ps_group("", 1).is_empty());
+        assert!(parse_ps_group("pid pgid stat\nabc 1 S\n 5 x S\n 6 1\n", 1).is_empty());
+    }
 }

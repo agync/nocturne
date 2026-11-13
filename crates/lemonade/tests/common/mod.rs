@@ -62,6 +62,26 @@ pub fn free_port() -> u16 {
 /// A port nothing listens on, for "no engine" tests: connecting is refused, always.
 pub const CLOSED_PORT: u16 = 1;
 
+/// One row of `ps`: process id, group id, state and command line.
+#[cfg(all(unix, not(target_os = "linux")))]
+fn ps_rows() -> Vec<(u32, u32, String, String)> {
+    let out = std::process::Command::new("/bin/ps")
+        .args(["-axww", "-o", "pid=,pgid=,stat=,command="])
+        .output()
+        .unwrap();
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter_map(|line| {
+            let mut cols = line.split_whitespace();
+            let pid = cols.next()?.parse().ok()?;
+            let pgid = cols.next()?.parse().ok()?;
+            let state = cols.next()?.to_string();
+            let command = cols.collect::<Vec<_>>().join(" ");
+            Some((pid, pgid, state, command))
+        })
+        .collect()
+}
+
 /// True while a process exists and is not a zombie.
 #[cfg(target_os = "linux")]
 pub fn alive(pid: u32) -> bool {
@@ -74,7 +94,14 @@ pub fn alive(pid: u32) -> bool {
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(all(unix, not(target_os = "linux")))]
+pub fn alive(pid: u32) -> bool {
+    ps_rows()
+        .iter()
+        .any(|(p, _, state, _)| *p == pid && !state.starts_with('Z'))
+}
+
+#[cfg(unix)]
 pub async fn wait_dead(pid: u32, within: Duration) -> bool {
     let start = Instant::now();
     while start.elapsed() < within {
@@ -108,6 +135,15 @@ pub fn group_members(pgid: u32) -> Vec<u32> {
     out
 }
 
+#[cfg(all(unix, not(target_os = "linux")))]
+pub fn group_members(pgid: u32) -> Vec<u32> {
+    ps_rows()
+        .into_iter()
+        .filter(|(_, group, state, _)| *group == pgid && !state.starts_with('Z'))
+        .map(|(pid, ..)| pid)
+        .collect()
+}
+
 /// Live processes whose command line mentions `needle`, for proving nothing was left behind.
 #[cfg(target_os = "linux")]
 pub fn processes_mentioning(needle: &str) -> Vec<u32> {
@@ -124,6 +160,15 @@ pub fn processes_mentioning(needle: &str) -> Vec<u32> {
         }
     }
     out
+}
+
+#[cfg(all(unix, not(target_os = "linux")))]
+pub fn processes_mentioning(needle: &str) -> Vec<u32> {
+    ps_rows()
+        .into_iter()
+        .filter(|(_, _, state, command)| command.contains(needle) && !state.starts_with('Z'))
+        .map(|(pid, ..)| pid)
+        .collect()
 }
 
 /// A fake engine run directly, without a supervisor, with the key `k3y`.

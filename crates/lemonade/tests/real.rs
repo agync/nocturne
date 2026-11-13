@@ -69,7 +69,7 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
     sup.set_online(false).await.unwrap();
     let pgid = sup.pid().unwrap();
     assert_ne!(pgid, relaunched_from);
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     assert_eq!(common::group_members(relaunched_from), Vec::<u32>::new());
     let client = sup.client();
     assert_eq!(client.config().await.unwrap()["no_fetch_executables"], true);
@@ -115,14 +115,14 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
             .success()
     );
     sup.shutdown().await.unwrap();
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         assert_eq!(common::group_members(pgid), Vec::<u32>::new());
         assert!(common::wait_dead(pgid, Duration::from_secs(5)).await);
     }
 }
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 #[tokio::test]
 #[ignore = "needs NOCTURNE_LEMOND"]
 async fn the_real_engine_exits_when_its_owner_is_killed() {
