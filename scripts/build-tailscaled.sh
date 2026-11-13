@@ -22,12 +22,16 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 repo=$PWD
 source scripts/sha256.sh
 
-# The Go toolchain every build uses and the commit the pinned tag must point at. Both are
-# filled in with the pin (scripts/helpers-pin.sh prints the version; the tag's commit comes from
-# `git ls-remote https://github.com/tailscale/tailscale refs/tags/v<version>^{}`).
-GO_VERSION=${TAILSCALED_GO_VERSION:-PLACEHOLDER-set-with-the-pin}
-TAG_COMMIT=${TAILSCALED_TAG_COMMIT:-PLACEHOLDER-set-with-the-pin}
-GO_LICENSES_VERSION=${TAILSCALED_GO_LICENSES_VERSION:-PLACEHOLDER-set-with-the-pin}
+# The Go toolchain, the commit the pinned tag must point at and the go-licenses version are pinned in
+# helpers.lock (go_version, tag_commit, go_licenses_version) beside the version itself. The
+# toolchain never downloads another: GOTOOLCHAIN=local.
+export GOTOOLCHAIN=local
+lockfield() {
+    python3 -I -c 'import sys, tomllib; l = tomllib.load(open("helpers.lock", "rb")); print(next(h for h in l["helpers"] if h["kind"] == "tailscaled").get(sys.argv[1], ""))' "$1"
+}
+GO_VERSION=$(lockfield go_version)
+TAG_COMMIT=$(lockfield tag_commit)
+GO_LICENSES_VERSION=$(lockfield go_licenses_version)
 
 version=$(python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print(next(h["version"] for h in l["helpers"] if h["kind"] == "tailscaled"))')
 mode=${1:?mode: build, package or licenses}
@@ -35,7 +39,7 @@ mode=${1:?mode: build, package or licenses}
 need_pins() {
     local v
     for v in "$GO_VERSION" "$TAG_COMMIT"; do
-        [[ "$v" != PLACEHOLDER* ]] || { printf 'the Go version and the tag commit are not pinned yet\n' >&2; exit 2; }
+        [[ -n "$v" && "$v" != PLACEHOLDER* ]] || { printf 'the Go version and the tag commit are not pinned yet\n' >&2; exit 2; }
     done
 }
 
@@ -62,19 +66,20 @@ case "$mode" in
         out=${3:?output folder}
         need_pins
         target_vars "$target"
-        [[ "$(go env GOVERSION)" == "go$GO_VERSION" ]] \
-            || { printf 'expected go%s, found %s\n' "$GO_VERSION" "$(go env GOVERSION)" >&2; exit 1; }
         work=$(mktemp -d)
         trap 'rm -rf "$work"' EXIT
         source_tree "$work/src"
         cd "$work/src"
+        # Checked inside the upstream tree, where its go.mod and toolchain line apply.
+        [[ "$(go env GOVERSION)" == "go$GO_VERSION" ]] \
+            || { printf 'expected go%s, found %s\n' "$GO_VERSION" "$(go env GOVERSION)" >&2; exit 1; }
         eval "$(./build_dist.sh shellvars)"
         ldflags="-X tailscale.com/version.longStamp=${VERSION_LONG} -X tailscale.com/version.shortStamp=${VERSION_SHORT} -w -s"
         dest="$(cd "$repo" && mkdir -p "$out" && cd "$out" && pwd)/$target/unsigned"
         mkdir -p "$dest"
         for program in tailscaled tailscale; do
             CGO_ENABLED=0 GOOS=$goos GOARCH=$goarch GOFLAGS=-mod=readonly \
-                go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$dest/$program$exe" "./cmd/$program"
+                go build -trimpath -buildvcs=false -tags ts_omit_ssh,ts_omit_taildrop,ts_omit_webclient -ldflags "$ldflags" -o "$dest/$program$exe" "./cmd/$program"
         done
         (cd "$dest" && for f in tailscaled$exe tailscale$exe; do printf '%s  %s\n' "$(sha256_of "$f")" "$f"; done) | tee "$dest/SHA256SUMS"
         ;;
@@ -119,7 +124,7 @@ PY
     licenses)
         out=${2:?output folder}
         need_pins
-        [[ "$GO_LICENSES_VERSION" != PLACEHOLDER* ]] || { printf 'go-licenses is not pinned yet\n' >&2; exit 2; }
+        [[ -n "$GO_LICENSES_VERSION" && "$GO_LICENSES_VERSION" != PLACEHOLDER* ]] || { printf 'go-licenses is not pinned yet\n' >&2; exit 2; }
         work=$(mktemp -d)
         trap 'rm -rf "$work"' EXIT
         source_tree "$work/src"

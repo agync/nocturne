@@ -15,7 +15,7 @@ Fails (exit 1) on:
     (so the real session bus, and the resolver, Avahi and nscd sockets, all fail);
   * io_uring, which can send without a traced network call;
   * a log with no network calls at all, which proves nothing;
-  * in the default `off` mode, any `listen` by the app process and any exec of a helper (a
+  * in the default `off` mode, any `listen` by the app or a program it started (only lemond may listen) and any exec of a helper (a
     program under a `remote/helpers` folder): with Away from home off nothing may run or listen.
 The system bus is reported and does not fail.
 
@@ -208,8 +208,8 @@ def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None
                 failures.append(f"pid {pid}: executed the helper {m.group(1)} while Away from home is off")
             continue
         if started and started.group(1) == "listen":
-            if mode == "off" and who == "app":
-                failures.append(f"pid {pid}: the app called listen while Away from home is off")
+            if mode == "off" and who in ("app", "other"):
+                failures.append(f"pid {pid} ({who}): listen while Away from home is off")
             continue
         if not started or started.group(1) not in CALLS:
             continue

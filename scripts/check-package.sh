@@ -12,7 +12,7 @@
 # manifest. For Away from home it checks that no connection helper (cloudflared, tailscaled,
 # tailscale) and no stand-in helper is inside, that the binary embeds the repository's
 # helpers.lock, and that every pinned version has its captured help text; with NOCTURNE_RELEASE=1
-# it also refuses a placeholder pin, a pin older than 183 days and help text that was not
+# it also refuses a placeholder pin, a pinned release older than 183 days and help text that was not
 # captured from the pinned binary. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
 # .dmg, mounted read-only) is checked for its Info.plist (identifier, executable, icon, version,
 # minimum system, microphone sentence) and, on a Mac, its code signature.
@@ -195,12 +195,16 @@ for helper in lock["helpers"]:
         )
         if placeholder:
             bad(f"{kind} {version} is still a placeholder pin")
-        pinned = datetime.date.fromisoformat(helper["pinned_at"])
-        age = (datetime.date.today() - pinned).days
-        if age > 183:
-            bad(f"{kind} {version} was pinned {age} days ago; pins must be younger than 183 days")
+        try:
+            released = datetime.date.fromisoformat(helper.get("released_at", ""))
+        except ValueError:
+            bad(f"{kind} {version} has no valid released_at date")
         else:
-            good(f"{kind} {version} pinned {age} days ago")
+            age = (datetime.date.today() - released).days
+            if age > 183:
+                bad(f"{kind} {version} was released {age} days ago; pins must be younger than 183 days")
+            else:
+                good(f"{kind} {version} released {age} days ago")
         stale = [n for n in texts if "not yet the pinned binary" in open(os.path.join(folder, n), encoding="utf-8").read()]
         if stale:
             bad(f"help text for {kind} {version} was not captured from the pinned binary: {', '.join(stale)}")

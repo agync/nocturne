@@ -94,7 +94,7 @@ if [[ "${1:-}" == --inner ]]; then
             mkdir -p "$dest" && chmod 700 "$helpers_dir" "$helpers_dir/$kind" "$dest"
             name=${fake#fake-}
             cp "$fakes/$fake" "$dest/$name"
-            printf '{"edge_attempt": true}\n' > "$dest/fake-control.json"
+            printf '{"edge_attempt": true, "udp_any": true}\n' > "$dest/fake-control.json"
             expected+=" $dest"
         done
         python3 -I - "$scratch/fake.lock" "$helpers_dir" << 'PY'
@@ -121,8 +121,6 @@ for kind, extra in (("cloudflared", None), ("tailscaled", "tailscale")):
 open(out, "w").write(text)
 PY
         export NOCTURNE_FAKE_HELPERS_LOCK=$scratch/fake.lock
-    elif [[ -d "$helpers_dir" ]] && [[ -n "$(find "$helpers_dir" -type f 2> /dev/null | head -1)" ]]; then
-        bad "files under remote/helpers although nothing was consented: $(find "$helpers_dir" -type f | head -3 | tr '\n' ' ')"
     fi
 
     find_app() {
@@ -237,6 +235,9 @@ PY
     fi
     if grep -q 'panicked' "$logs"/*.log "$scratch"/stderr/* 2> /dev/null; then bad "a panic was logged"; fi
 
+    if [[ "$mode" != remote && -d "$helpers_dir" ]] && [[ -n "$(find "$helpers_dir" -type f 2> /dev/null | head -1)" ]]; then
+        bad "files under remote/helpers although nothing was consented: $(find "$helpers_dir" -type f | head -3 | tr '\n' ' ')"
+    fi
     if [[ "$mode" == remote ]]; then
         for dir in $expected; do
             if [[ -s "$dir/fake-record.jsonl" ]]; then good "the stand-in ran: $(basename "$(dirname "$dir")")"; else bad "the stand-in never ran in $dir"; fi

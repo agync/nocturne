@@ -246,10 +246,13 @@ class OffMode(unittest.TestCase):
         self.assertIn("helper", failures[0])
         self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "remote")["failures"], [])
 
-    def test_a_program_the_app_started_is_not_the_app_when_it_is_named(self):
+    def test_off_mode_fails_on_listen_by_a_program_the_app_started(self):
         lines = [execve(100, APP), clone(100, 400), execve(400, "/usr/lib/webkit/WebKitNetworkProcess"), "400 listen(5, 1) = 0\n", connect(100, V4 % (1, "127.0.0.1"))]
-        self.assertEqual(len(netlog.analyse(lines, "/tmp/scratch")["failures"]), 1)
-        self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "off", app_exe=APP)["failures"], [])
+        for exe in (None, APP):
+            failures = netlog.analyse(lines, "/tmp/scratch", "off", app_exe=exe)["failures"]
+            self.assertEqual(len(failures), 1, exe)
+            self.assertIn("pid 400", failures[0])
+        self.assertEqual(netlog.analyse(lines, "/tmp/scratch", "remote", app_exe=APP)["failures"], [])
 
     def test_explicit_helper_folders(self):
         lines = [execve(100, "/custom/h/cloudflared"), connect(100, V4 % (1, "127.0.0.1"))]

@@ -13,11 +13,6 @@ on:
 permissions:
   contents: read
 
-env:
-  TAILSCALED_GO_VERSION: ${{ vars.TAILSCALED_GO_VERSION }}
-  TAILSCALED_TAG_COMMIT: ${{ vars.TAILSCALED_TAG_COMMIT }}
-  TAILSCALED_GO_LICENSES_VERSION: ${{ vars.TAILSCALED_GO_LICENSES_VERSION }}
-
 jobs:
   build:
     name: build ${{ matrix.target }} (${{ matrix.copy }})
@@ -35,9 +30,12 @@ jobs:
     runs-on: ${{ matrix.runs-on }}
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - id: pins
+        name: pinned Go version (from helpers.lock)
+        run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailscaled")["go_version"])' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
-          go-version: ${{ vars.TAILSCALED_GO_VERSION }}
+          go-version: ${{ steps.pins.outputs.go }}
           cache: false
       - run: scripts/build-tailscaled.sh build ${{ matrix.target }} "$RUNNER_TEMP/${{ matrix.copy }}"
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
@@ -83,7 +81,9 @@ jobs:
           DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
           DEVELOPER_ID_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_PASSWORD }}
           DEVELOPER_ID_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_IDENTITY }}
-          NOTARY_PROFILE: ${{ secrets.MACOS_NOTARY_PROFILE }}
+          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
         run: |
           set -euo pipefail
           keychain="$RUNNER_TEMP/build.keychain"
@@ -93,12 +93,13 @@ jobs:
           printf '%s' "$DEVELOPER_ID_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
           security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$DEVELOPER_ID_PASSWORD" "$keychain"
+          xcrun notarytool store-credentials nocturne-notary --apple-id "$NOTARY_APPLE_ID" --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --keychain "$keychain"
           cd out/darwin-arm64/signed
           shasum -a 256 -c SHA256SUMS
           rm -f SHA256SUMS
           codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" tailscaled tailscale
           zip -q notarise.zip tailscaled tailscale
-          xcrun notarytool submit notarise.zip --keychain-profile "$NOTARY_PROFILE" --wait
+          xcrun notarytool submit notarise.zip --keychain-profile nocturne-notary --keychain "$keychain" --wait
           rm notarise.zip
           codesign --verify --strict --verbose=2 tailscaled tailscale
       - uses: actions/upload-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
@@ -144,9 +145,12 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
+      - id: pins
+        name: pinned Go version (from helpers.lock)
+        run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailscaled")["go_version"])' >> "$GITHUB_OUTPUT"
       - uses: actions/setup-go@0000000000000000000000000000000000000000 # v5, PLACEHOLDER: pin the full commit SHA
         with:
-          go-version: ${{ vars.TAILSCALED_GO_VERSION }}
+          go-version: ${{ steps.pins.outputs.go }}
           cache: false
       - uses: actions/download-artifact@0000000000000000000000000000000000000000 # v4, PLACEHOLDER: pin the full commit SHA
         with:
