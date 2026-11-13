@@ -1,0 +1,181 @@
+//! The commands the interface calls. Names are the interface's (snake_case), argument keys are
+//! camelCase, errors are `CommandError`. Every body runs under [`guard`], so a failure of any
+//! kind settles the promise.
+
+use std::future::Future;
+
+use jiff::civil::Date;
+use nocturne_engine::Engine;
+use tauri::{AppHandle, Manager, Runtime};
+
+use crate::error::{CommandError, blocking, guard};
+use crate::state::{AppState, refresh_status};
+
+mod capture;
+pub(crate) use capture::create_private_dir;
+pub use capture::keep_paths;
+mod forget;
+mod memories;
+mod needs;
+mod page;
+mod settings;
+mod system;
+
+/// Every command name registered, in the order of [`invoke_handler`]. The tests call each one.
+pub const COMMAND_NAMES: &[&str] = &[
+    "get_status",
+    "get_setup",
+    "start_setup",
+    "pause_setup",
+    "resume_setup",
+    "keep_text",
+    "keep_files",
+    "keep_recording",
+    "keep_bytes",
+    "unkeep",
+    "read_now",
+    "list_items",
+    "get_item",
+    "retry_item",
+    "ask",
+    "cancel_ask",
+    "get_page",
+    "list_pages",
+    "answer_question",
+    "resolve_which",
+    "confirm_memory",
+    "mark_done",
+    "list_memories",
+    "get_entity",
+    "list_entities",
+    "correct_memory",
+    "set_keep_forever",
+    "set_private",
+    "set_item_private",
+    "set_item_keep_forever",
+    "snooze",
+    "restore",
+    "preview_forget",
+    "forget",
+    "list_needs_you",
+    "list_fading",
+    "get_privacy",
+    "export_to",
+    "delete_everything",
+    "get_settings",
+    "update_settings",
+    "pause",
+    "resume",
+    "get_advanced",
+    "speak_page",
+    "app_ready",
+];
+
+/// The handler for every command above. `configure` installs it; tests that add a command of
+/// their own wrap it.
+pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
+{
+    tauri::generate_handler![
+        system::get_status,
+        system::get_setup,
+        system::start_setup,
+        system::pause_setup,
+        system::resume_setup,
+        capture::keep_text,
+        capture::keep_files,
+        capture::keep_recording,
+        capture::keep_bytes,
+        capture::unkeep,
+        capture::read_now,
+        capture::list_items,
+        capture::get_item,
+        capture::retry_item,
+        capture::ask,
+        capture::cancel_ask,
+        page::get_page,
+        page::list_pages,
+        page::answer_question,
+        page::resolve_which,
+        memories::confirm_memory,
+        page::mark_done,
+        memories::list_memories,
+        memories::get_entity,
+        memories::list_entities,
+        memories::correct_memory,
+        memories::set_keep_forever,
+        memories::set_private,
+        memories::set_item_private,
+        memories::set_item_keep_forever,
+        memories::snooze,
+        memories::restore,
+        forget::preview_forget,
+        forget::forget,
+        needs::list_needs_you,
+        needs::list_fading,
+        settings::get_privacy,
+        settings::export_to,
+        settings::delete_everything,
+        settings::get_settings,
+        settings::update_settings,
+        settings::pause,
+        settings::resume,
+        settings::get_advanced,
+        page::speak_page,
+        system::app_ready,
+    ]
+}
+
+/// The engine, or `unavailable`.
+fn engine<R: Runtime>(app: &AppHandle<R>) -> Result<Engine, CommandError> {
+    app.state::<AppState>().engine()
+}
+
+/// Run a read on the engine, off the async threads.
+async fn read<R, T, F>(app: AppHandle<R>, f: F) -> Result<T, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(Engine) -> Result<T, nocturne_engine::Error> + Send + 'static,
+{
+    guard(async move {
+        let e = engine(&app)?;
+        blocking(move || f(e)).await
+    })
+    .await
+}
+
+/// Run a change on the engine, then recompute the status (the counts may have moved).
+async fn change<R, T, F>(app: AppHandle<R>, f: F) -> Result<T, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(Engine) -> Result<T, nocturne_engine::Error> + Send + 'static,
+{
+    guard(async move {
+        let e = engine(&app)?;
+        let out = blocking(move || f(e)).await?;
+        refresh_status(&app).await;
+        Ok(out)
+    })
+    .await
+}
+
+/// A whole command body under the guard, for commands that do more than one engine call.
+async fn run<R, T, F, Fut>(app: AppHandle<R>, f: F) -> Result<T, CommandError>
+where
+    R: Runtime,
+    T: Send + 'static,
+    F: FnOnce(AppHandle<R>) -> Fut + Send + 'static,
+    Fut: Future<Output = Result<T, CommandError>> + Send + 'static,
+{
+    guard(f(app)).await
+}
+
+fn parse_date(s: &str) -> Result<Date, CommandError> {
+    s.parse::<Date>()
+        .map_err(|_| CommandError::invalid("a date is YYYY-MM-DD"))
+}
+
+fn not_yet(what: &str) -> CommandError {
+    CommandError::unavailable(format!("{what} is not available yet"))
+}
