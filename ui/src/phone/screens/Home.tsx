@@ -30,6 +30,7 @@ interface HomeProps {
   onKeep(): void;
   onPage(): void;
   onMenu(): void;
+  onRelink(kind: "scan" | "words"): void;
 }
 
 function Tile({
@@ -138,6 +139,21 @@ export function Home(p: HomeProps) {
               off
               onPress={p.onPage}
             />
+            {kind === "asleep" && p.device.connection !== "mostPrivate" && (
+              <section className="ph-card" aria-labelledby="new-address-title">
+                <h2 id="new-address-title" className="ph-card-title">
+                  {t("phone.asleep.address.title")}
+                </h2>
+                <p className="ph-hint ph-hint--ink2">{t("phone.address.where")}</p>
+                <Button kind="quiet" onClick={() => p.onRelink("scan")}>
+                  <Icon name="camera" size={20} />
+                  {t("phone.address.scan")}
+                </Button>
+                <Button kind="quiet" onClick={() => p.onRelink("words")}>
+                  {t("phone.address.words")}
+                </Button>
+              </section>
+            )}
           </>
         ) : (
           <>
@@ -225,70 +241,27 @@ export function TurnedOff({
   );
 }
 
-/** P-Offline-address: the computer's address changed; scan or type the new one. */
-export function NewAddress({
-  waiting,
-  onScan,
-  onWords,
-  onKeep,
-  onMenu,
-}: {
-  waiting: number;
-  onScan(): void;
-  onWords(): void;
-  onKeep(): void;
-  onMenu(): void;
-}) {
+/** The phone's app is older than the computer wants: the key stays, and a new pairing replaces it. */
+export function Outdated({ onScan, onType }: { onScan(): void; onType(): void }) {
   return (
-    <Page bar={<Bar onMenu={onMenu} />}>
+    <Page bar={<Bar />}>
       <main className="ph-main">
-        <div className="ph-live" role="status" style={{ flex: "none" }}>
+        <div className="ph-live" role="alert" style={{ flex: "none" }}>
           <span className="ph-icon-box ph-icon-box--ember" aria-hidden="true">
-            <Icon name="pin" size={24} />
+            <Icon name="unlink" size={24} />
           </span>
-          <h1 className="ph-h1">{t("phone.address.title")}</h1>
-          <p className="ph-body">{t("phone.address.body")}</p>
+          <h1 className="ph-h1">{t("phone.outdated.title")}</h1>
+          <p className="ph-body">{t("phone.outdated.body")}</p>
         </div>
-        <p
-          style={{
-            margin: 0,
-            fontSize: "0.9375rem",
-            lineHeight: 1.5,
-            padding: "12px 0",
-            borderTop: "1px solid var(--rule)",
-            borderBottom: "1px solid var(--rule)",
-          }}
-        >
-          {t("phone.address.where")}
-        </p>
-        <div className="ph-stack" style={{ marginTop: 4 }}>
+        <div className="ph-spacer ph-stack">
           <Button kind="primary" onClick={onScan}>
             <Icon name="camera" size={20} />
-            {t("phone.address.scan")}
+            {t("phone.welcome.scan")}
           </Button>
-          <Button kind="quiet" onClick={onWords}>
-            {t("phone.address.words")}
+          <Button kind="quiet" onClick={onType}>
+            {t("phone.welcome.type")}
           </Button>
         </div>
-        <p className="ph-hint ph-hint--ink2">{t("phone.address.off")}</p>
-        <div className="ph-spacer" />
-        <p className="ph-hint ph-hint--ink2">
-          {t("phone.address.keep.hint")}{" "}
-          <button
-            type="button"
-            className="ph-src"
-            style={{
-              fontFamily: "inherit",
-              fontSize: "inherit",
-              fontWeight: 500,
-              color: "var(--accent)",
-            }}
-            onClick={onKeep}
-          >
-            {t("phone.address.keep")}
-            {waiting > 0 ? ` · ${t("phone.asleep.waiting", { count: waiting })}` : ""}
-          </button>
-        </p>
       </main>
     </Page>
   );

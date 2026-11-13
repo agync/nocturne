@@ -5,7 +5,7 @@ import type { PairedDevice } from "../engine";
 import type { Services } from "../services";
 import { refreshShellOnce } from "../shell";
 import { Ask, useAskSession } from "./Ask";
-import { Home, NewAddress, Removed, Sheet, TurnedOff } from "./Home";
+import { Home, Outdated, Removed, Sheet, TurnedOff } from "./Home";
 import { Keep } from "./Keep";
 import { Original } from "./Original";
 import { PageScreen } from "./PageScreen";
@@ -49,7 +49,7 @@ interface PairedProps {
   services: Services;
   initial: PairedDevice;
   onUnpaired(): void;
-  onRelink(kind: "scan" | "words"): void;
+  onRelink(kind: "scan" | "words" | "pair" | "type"): void;
   /** Bump to re-read the device after a re-link. */
   deviceVersion: number;
 }
@@ -106,6 +106,12 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
     }, RETRY_MS);
     return () => clearInterval(timer);
   }, [conn.kind, engine]);
+
+  // A computer that wants a newer phone app: fetch the new shell once; if it still wants more, say so.
+  const minBuild = conn.kind === "outdated" ? conn.minBuild : null;
+  useEffect(() => {
+    if (minBuild !== null && !services.scripted) void refreshShellOnce(`build-${minBuild}`);
+  }, [minBuild, services.scripted]);
 
   // Once connected: note the device, send what waited, read the headline, check the version.
   const connectedAt = conn.kind === "connected" ? conn.hello : null;
@@ -207,19 +213,8 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
       </>
     );
   }
-  if (conn.kind === "newAddress") {
-    return (
-      <>
-        <NewAddress
-          waiting={waiting}
-          onScan={() => onRelink("scan")}
-          onWords={() => onRelink("words")}
-          onKeep={toKeep}
-          onMenu={openMenu}
-        />
-        {sheetView}
-      </>
-    );
+  if (conn.kind === "outdated") {
+    return <Outdated onScan={() => onRelink("pair")} onType={() => onRelink("type")} />;
   }
   return (
     <>
@@ -235,6 +230,7 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
         onKeep={toKeep}
         onPage={() => go({ name: "page" })}
         onMenu={openMenu}
+        onRelink={onRelink}
       />
       {sheetView}
     </>

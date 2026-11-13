@@ -5,7 +5,7 @@ import { generateDeviceKey } from "./crypto";
 import type { PairedDevice, PhoneEngine } from "./engine";
 import { ConnectionError, PhoneRequestError } from "./engine";
 import { DEVICE_FIELDS, idbKeyStore, readDevice, requestPersistence } from "./keys";
-import { idbQueue, memoryQueue } from "./queue";
+import { idbQueue, memoryQueue, withKeepLock } from "./queue";
 import { missingFeatures } from "./support";
 import { fakeIndexedDb } from "./testing/fakeIdb";
 
@@ -230,5 +230,44 @@ describe("the waiting queue", () => {
     await queue.add(keep("c-1", 1));
     await queue.clear();
     expect(await queue.count()).toBe(0);
+  });
+});
+
+describe("one upload in flight across tabs", () => {
+  it("direct keeps take the same lock as the queue, so two tabs never send at once", async () => {
+    let held = false;
+    let overlap = false;
+    const waiting: Array<() => void> = [];
+    const locks = {
+      async request(_name: string, fn: () => Promise<unknown>) {
+        while (held) await new Promise<void>((r) => waiting.push(r));
+        held = true;
+        try {
+          return await fn();
+        } finally {
+          held = false;
+          waiting.shift()?.();
+        }
+      },
+    };
+    Object.defineProperty(globalThis, "navigator", { value: { locks }, configurable: true });
+    try {
+      let inFlight = 0;
+      const send = async () => {
+        inFlight += 1;
+        if (inFlight > 1) overlap = true;
+        await new Promise((r) => setTimeout(r, 5));
+        inFlight -= 1;
+        return "ok";
+      };
+      await Promise.all([withKeepLock(send), withKeepLock(send), withKeepLock(send)]);
+      expect(overlap).toBe(false);
+    } finally {
+      Reflect.deleteProperty(globalThis, "navigator");
+    }
+  });
+
+  it("without Web Locks a keep just runs", async () => {
+    expect(await withKeepLock(async () => 7)).toBe(7);
   });
 });

@@ -45,7 +45,9 @@ describe("home", () => {
 
   it("home.asleep_disables_ask_and_page", async () => {
     await open("s=asleep");
-    expect(await screen.findByText("Home computer is asleep or switched off.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Home computer is asleep, switched off or has a new address."),
+    ).toBeInTheDocument();
     expect(button(/^Ask/)).toHaveAttribute("aria-disabled", "true");
     expect(button(/^Today’s page/)).toHaveAttribute("aria-disabled", "true");
     expect(button(/^Keep/)).not.toHaveAttribute("aria-disabled");
@@ -72,14 +74,40 @@ describe("home", () => {
 });
 
 describe("offline and removed", () => {
-  it("offline.new_address", async () => {
-    await open("s=newAddress");
+  it("offline.asleep_or_new_address: one state, with Scan the code for Simple and the Tailscale sentence for Most private", async () => {
+    await open("s=asleep");
     expect(
-      await screen.findByRole("heading", { name: "Your computer has a new address." }),
+      await screen.findByText("Home computer is asleep, switched off or has a new address."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "Has your computer got a new address?" }),
     ).toBeInTheDocument();
     expect(button("Scan the new code")).toBeInTheDocument();
     expect(button("Type the words instead")).toBeInTheDocument();
-    expect(screen.getByText(/nothing to allow/)).toBeInTheDocument();
+    expect(
+      screen.queryByText("If you use Most private, check Tailscale is on."),
+    ).not.toBeInTheDocument();
+    cleanup();
+    await open("s=asleepMostPrivate");
+    expect(
+      await screen.findByText("If you use Most private, check Tailscale is on."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("heading", { name: "Has your computer got a new address?" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offline.outdated: an old phone app asks to add the phone again and keeps the key", async () => {
+    const services = await open("s=outdated");
+    expect(
+      await screen.findByRole("heading", { name: "This phone needs adding again." }),
+    ).toBeInTheDocument();
+    expect(await services.store.device()).not.toBeNull();
+    await userEvent.click(button("Type the code"));
+    expect(
+      await screen.findByRole("heading", { name: "Type the code from your computer" }),
+    ).toBeInTheDocument();
+    expect(await services.store.device()).not.toBeNull();
   });
 
   it("offline.turned_off", async () => {
@@ -284,6 +312,57 @@ describe("keep", () => {
     expect(id).toMatch(/^[A-Za-z0-9_-]{1,36}$/);
     expect(caption).toBe("Leo’s trip form");
     expect(await screen.findByRole("heading", { name: "Kept." })).toBeInTheDocument();
+  });
+
+  it("keep.written_to_the_queue_first: the entry is there while the keep is sent, and goes when it is kept", async () => {
+    let during = -1;
+    const services = await open("s=connected", (s) => {
+      s.engineFor = () =>
+        engineWith(
+          {},
+          {
+            keepText: async () => {
+              during = await s.queue.count();
+              return kept;
+            },
+          },
+        );
+    });
+    await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+    await userEvent.type(screen.getByLabelText("Type something to keep"), "Bin day moved");
+    await userEvent.click(button("Keep"));
+    expect(await screen.findByRole("heading", { name: "Kept." })).toBeInTheDocument();
+    expect(during).toBe(1);
+    expect(await services.queue.count()).toBe(0);
+  });
+
+  it("keep.busy_goes_back_to_the_queue: a busy or rate-limited refusal waits, and is not a failure", async () => {
+    for (const code of ["busy", "tooMany", "notReady", "paused"] as const) {
+      const services = await open("s=connected", (s) => {
+        s.engineFor = () =>
+          engineWith({}, { keepText: async () => Promise.reject(new PhoneRequestError(code)) });
+      });
+      await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+      await userEvent.type(screen.getByLabelText("Type something to keep"), "Bin day moved");
+      await userEvent.click(button("Keep"));
+      expect(await screen.findByRole("heading", { name: "Waiting." }), code).toBeInTheDocument();
+      expect(await services.queue.count(), code).toBe(1);
+      cleanup();
+    }
+  });
+
+  it("keep.never_taken_leaves_the_queue: a refusal that will not change is a failure and does not wait", async () => {
+    const services = await open("s=connected", (s) => {
+      s.engineFor = () =>
+        engineWith({}, { keepText: async () => Promise.reject(new PhoneRequestError("tooLarge")) });
+    });
+    await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+    await userEvent.type(screen.getByLabelText("Type something to keep"), "x");
+    await userEvent.click(button("Keep"));
+    expect(
+      await screen.findByRole("heading", { name: "Too big to keep from a phone." }),
+    ).toBeInTheDocument();
+    expect(await services.queue.count()).toBe(0);
   });
 
   it("keep.too_large_before_send: nothing is sent", async () => {
@@ -567,6 +646,64 @@ describe("originals", () => {
       cleanup();
     }
     expect(create).not.toHaveBeenCalled();
+  });
+
+  it("original.pdf_offers_open_and_download, and falls back to the download when opening fails", async () => {
+    const pdf = new Blob(["%PDF-1.7\n"], { type: "application/pdf" });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test/pdf");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const open = vi.spyOn(window, "open").mockReturnValue(null);
+    const click = vi
+      .spyOn(HTMLAnchorElement.prototype, "click")
+      .mockImplementation(() => undefined);
+    const engine = engineWith(
+      {},
+      {
+        getItem: async () => ({
+          id: "item-doc",
+          kind: "document",
+          title: "Trip letter",
+          keptAt: "2026-11-11T10:00:00.000Z",
+          durationMs: null,
+          pages: 2,
+          hasOriginal: true,
+          summary: null,
+          text: null,
+          truncated: false,
+        }),
+        original: async () => pdf,
+      },
+    );
+    render(<Original engine={engine} itemId="item-doc" quote={null} onBack={() => undefined} />);
+    const download = await screen.findByRole("link", { name: "Download" });
+    expect(download).toHaveAttribute("download", "Trip letter.pdf");
+    expect(download).toHaveAttribute("href", "blob:test/pdf");
+    await userEvent.click(button("Open the document"));
+    expect(open).toHaveBeenCalledWith("blob:test/pdf", "_blank");
+    expect(click).toHaveBeenCalledOnce();
+  });
+
+  it("original.heic_is_a_download: it is never drawn as a picture", async () => {
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test/heic");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+    const heic = new Blob(
+      [Uint8Array.of(0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63)],
+      { type: "image/heic" },
+    );
+    render(
+      <Original
+        engine={engineWith({}, { original: async () => heic })}
+        itemId="item-letter"
+        quote={null}
+        onBack={() => undefined}
+      />,
+    );
+    expect(await screen.findByText(/can’t be shown on this phone/)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Download" })).toHaveAttribute(
+      "download",
+      "Year 4 trip letter.heic",
+    );
+    expect(document.querySelector("img")).toBeNull();
   });
 
   it("a private or missing item says so, and a failure offers to try again", async () => {

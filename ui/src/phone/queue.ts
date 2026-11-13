@@ -13,6 +13,17 @@ interface Backing {
   clear(): Promise<void>;
 }
 
+const KEEP_LOCK = "nocturne-keep";
+
+/**
+ * Runs `fn` while no other tab is sending a keep, so at most one upload is in flight across the
+ * phone's tabs. Without Web Locks it just runs, one tab being the common case.
+ */
+export function withKeepLock<T>(fn: () => Promise<T>): Promise<T> {
+  const locks = globalThis.navigator?.locks;
+  return locks ? locks.request(KEEP_LOCK, fn) : fn();
+}
+
 function build(backing: Backing): Queue {
   let flushing = false;
   const rejected = new Set<string>();
@@ -58,6 +69,7 @@ function build(backing: Backing): Queue {
 
   return {
     add: (keep) => backing.put(keep),
+    remove: (clientId) => backing.remove(clientId),
     count: async () => (await backing.all()).length,
     list,
     clear: () => backing.clear(),
@@ -70,7 +82,7 @@ function build(backing: Backing): Queue {
         const locks = globalThis.navigator?.locks;
         if (!locks) return await flushOnce(engine);
         // Two tabs never flush at once; the second finds the first at work and leaves.
-        const result = await locks.request("nocturne-queue", { ifAvailable: true }, async (lock) =>
+        const result = await locks.request(KEEP_LOCK, { ifAvailable: true }, async (lock) =>
           lock ? flushOnce(engine) : null,
         );
         return result ?? { sent: 0, failed: 0, remaining: (await backing.all()).length, kept: [] };

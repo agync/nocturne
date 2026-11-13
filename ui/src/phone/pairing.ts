@@ -24,6 +24,9 @@ import {
 import type { KeyStore, PairedDevice } from "./engine";
 import * as P from "./protocol";
 
+/** An answer to HELLO is immediate when there is an offer; none in this long means there is not. */
+const HELLO_WAIT_MS = 5000;
+
 export type PairingResult =
   | { kind: "allowed"; device: PairedDevice }
   | { kind: "refused" }
@@ -39,6 +42,8 @@ export interface PairingContext {
   store: KeyStore;
   preferPoll?: boolean;
   socketTimeoutMs?: number;
+  /** How long to wait for the computer's first answer (its key, or the nonce) before the code is called run out. */
+  answerWaitMs?: number;
 }
 
 /** A typed code or a link that cannot start a pairing. */
@@ -88,7 +93,8 @@ export class Pairing {
     });
     try {
       await link.send(helloRequest(pid));
-      const got = await inbox.next(P.HANDSHAKE_TIMEOUT_SECS * 1000);
+      // Over long-poll the answer rides the same exchange: none there means no open offer.
+      const got = await inbox.next(link.kind === "poll" ? 0 : (ctx.answerWaitMs ?? HELLO_WAIT_MS));
       if (!("frame" in got)) throw new PairingError("expired");
       const cpub = openHelloAnswer(got.frame, pid);
       const { up, down } = await pairKeys(s, cpub, pid);
@@ -142,26 +148,34 @@ export class Pairing {
       const open = (frame: Bytes, kind: number) =>
         openPairFrame(frame, kind, this.pid, this.keys.down);
 
-      link.setSid(this.pid);
       await send(P.KIND_PAIR_COMMIT, {
         path: this.path,
         deviceName: name,
         commit: toBase64Url(commit),
       });
+      // The pairing exists on the computer once the commit is in; later frames come down here.
+      link.setSid(this.pid);
 
       let nc: Bytes | null = null;
-      let deadline = this.ctx.env.now() + P.HANDSHAKE_TIMEOUT_SECS * 1000;
+      let deadline =
+        this.ctx.env.now() + (this.ctx.answerWaitMs ?? P.HANDSHAKE_TIMEOUT_SECS * 1000);
       for (;;) {
         const got = await inbox.next(Math.max(deadline - this.ctx.env.now(), 0));
         if ("timeout" in got || "end" in got) return { kind: nc ? "spent" : "expired" };
         const kind = got.frame[1];
+        // A frame that does not open, or is not the next one expected, is junk: it ends nothing.
         if (kind === P.KIND_PAIR_NONCE) {
           if (nc) continue;
-          const body = JSON.parse(fromUtf8((await open(got.frame, P.KIND_PAIR_NONCE)).body)) as {
-            nc?: string;
-          };
-          const received = fromBase64Url(String(body.nc));
-          if (received.length !== P.NONCE_PAIR_LEN) return { kind: "spent" };
+          let received: Bytes;
+          try {
+            const body = JSON.parse(fromUtf8((await open(got.frame, P.KIND_PAIR_NONCE)).body)) as {
+              nc?: string;
+            };
+            received = fromBase64Url(String(body.nc));
+          } catch {
+            continue;
+          }
+          if (received.length !== P.NONCE_PAIR_LEN) continue;
           nc = received;
           deadline = this.ctx.env.now() + (P.DECIDE_TTL_SECS + 20) * 1000;
           await send(P.KIND_PAIR_REVEAL, {
@@ -180,11 +194,13 @@ export class Pairing {
           });
           onWords(words);
         } else if (kind === P.KIND_PAIR_OUTCOME) {
-          if (!nc) return { kind: "spent" };
-          const body = JSON.parse(fromUtf8((await open(got.frame, P.KIND_PAIR_OUTCOME)).body)) as {
-            allowed?: boolean;
-            deviceId?: string;
-          };
+          if (!nc) continue;
+          let body: { allowed?: boolean; deviceId?: string };
+          try {
+            body = JSON.parse(fromUtf8((await open(got.frame, P.KIND_PAIR_OUTCOME)).body));
+          } catch {
+            continue;
+          }
           if (body.allowed !== true) return { kind: "refused" };
           const deviceId = fromBase64Url(String(body.deviceId));
           if (deviceId.length !== P.DEVICE_ID_LEN) return { kind: "spent" };
@@ -204,8 +220,6 @@ export class Pairing {
           };
           await this.ctx.store.save(paired);
           return { kind: "allowed", device: paired };
-        } else {
-          return { kind: "spent" };
         }
       }
     } catch {

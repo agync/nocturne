@@ -35,6 +35,7 @@ import {
 import type { PairedDevice } from "./engine";
 import { PhoneRequestError } from "./engine";
 import * as P from "./protocol";
+import { HTTP_ENDED, HTTP_OFF, HTTP_POLL_BUSY, HTTP_REFUSED, WS_REFUSED } from "./status";
 
 // Environment -------------------------------------------------------------------------------------
 
@@ -77,7 +78,7 @@ export function originOf(address: string): string {
 // Links -------------------------------------------------------------------------------------------
 
 export type LinkEnd =
-  | { kind: "closed"; opened: boolean }
+  | { kind: "closed"; opened: boolean; code: number }
   | { kind: "network" }
   | { kind: "http"; status: number }
   | { kind: "protocol" };
@@ -144,6 +145,8 @@ export interface Link {
   close(): void;
 }
 
+/** How long to wait before polling again after a busy answer. */
+const POLL_BUSY_WAIT_MS = 1000;
 const BUFFER_HIGH = P.MAX_FRAME * 2;
 
 class SocketLink implements Link {
@@ -163,9 +166,10 @@ class SocketLink implements Link {
       }
       this.inbox.push(copy(new Uint8Array(data)));
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       this.closed = true;
-      this.inbox.end({ kind: "closed", opened: true });
+      const code = (ev as { code?: number } | null)?.code ?? 1000;
+      this.inbox.end({ kind: "closed", opened: true, code });
     };
     ws.onerror = () => undefined;
   }
@@ -247,6 +251,7 @@ class PollLink implements Link {
     this.inbox.end(end);
   }
 
+  /** A busy answer (409) comes back as a response; every other failure ends the link. */
   private async exchange(init: RequestInit, url: string): Promise<Response | null> {
     try {
       const response = await this.env.fetch(url, {
@@ -257,7 +262,7 @@ class PollLink implements Link {
         signal: this.abort.signal,
       });
       if (this.closed) return null;
-      if (!response.ok) {
+      if (!response.ok && response.status !== HTTP_POLL_BUSY) {
         this.end({ kind: "http", status: response.status });
         return null;
       }
@@ -270,6 +275,11 @@ class PollLink implements Link {
 
   private async take(response: Response): Promise<boolean> {
     if (response.status === 204) return true;
+    if (response.status === HTTP_POLL_BUSY) {
+      // Another poll for this id is still held: wait, then poll again.
+      await new Promise((r) => setTimeout(r, POLL_BUSY_WAIT_MS));
+      return true;
+    }
     const frames = parseRun(new Uint8Array(await response.arrayBuffer()));
     if (!frames) {
       this.end({ kind: "protocol" });
@@ -373,7 +383,7 @@ export async function openLink(
 
 // Sessions ----------------------------------------------------------------------------------------
 
-export type OpenFailure = "revoked" | "refused" | "network" | "gone" | "off" | "protocol";
+export type OpenFailure = "revoked" | "refused" | "network" | "ended" | "off" | "protocol";
 
 export class OpenError extends Error {
   readonly failure: OpenFailure;
@@ -394,20 +404,25 @@ export class SessionClosed extends Error {
   }
 }
 
-const GONE_STATUSES = new Set([404, 502, 504, 521, 522, 523, 524, 530]);
-
-function failureFor(end: LinkEnd, answered: boolean): OpenError {
+/**
+ * What an ended link means for an open. Off (503) and the unsealed refusal (403, or a close with
+ * 4403) are told apart; a session that ended (410) is tried again; everything else, from no
+ * network to a 404, 502 or 530 from the edge, is one state: the computer is asleep or has a
+ * new address. The phone never reads those as "turned off".
+ */
+function failureFor(end: LinkEnd): OpenError {
   switch (end.kind) {
     case "http":
-      if (end.status === 503) return new OpenError("off", end.status);
-      if (GONE_STATUSES.has(end.status)) return new OpenError("gone", end.status);
-      return new OpenError("refused", end.status);
+      if (end.status === HTTP_OFF) return new OpenError("off", end.status);
+      if (end.status === HTTP_ENDED) return new OpenError("ended", end.status);
+      if (end.status === HTTP_REFUSED) return new OpenError("refused", end.status);
+      return new OpenError("network", end.status);
     case "network":
       return new OpenError("network");
     case "protocol":
       return new OpenError("protocol");
     case "closed":
-      return new OpenError(end.opened && !answered ? "refused" : "network");
+      return new OpenError(end.code === WS_REFUSED ? "refused" : "network");
   }
 }
 
@@ -495,7 +510,7 @@ export class Session {
         await link.send(open);
       } catch {
         const got = await inbox.next(0);
-        return fail("end" in got ? failureFor(got.end, false) : new OpenError("network"));
+        return fail("end" in got ? failureFor(got.end) : new OpenError("network"));
       }
 
       const started = env.now();
@@ -505,7 +520,7 @@ export class Session {
       while (!accepted) {
         const got = await inbox.next(left());
         if ("timeout" in got) return fail(new OpenError("network"));
-        if ("end" in got) return fail(failureFor(got.end, false));
+        if ("end" in got) return fail(failureFor(got.end));
         const kind = got.frame[1];
         if (kind === P.KIND_SESSION_ACCEPT) {
           try {
@@ -538,7 +553,7 @@ export class Session {
 
       const first = await inbox.next(left());
       if ("timeout" in first) return fail(new OpenError("network"));
-      if ("end" in first) return fail(failureFor(first.end, true));
+      if ("end" in first) return fail(failureFor(first.end));
       let reply: RemoteReply;
       try {
         const env1 = await openDataFrame(first.frame, keys.down, "down", accepted.sid, 0);

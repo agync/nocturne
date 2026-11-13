@@ -231,6 +231,8 @@ export function App({ services }: { services: Services }) {
           onUnpaired={() => void toWelcome()}
           onRelink={(kind) => {
             origin.current = screen;
+            if (kind === "pair") return setScreen({ name: "scanPair" });
+            if (kind === "type") return setScreen({ name: "typed", error: null, busy: false });
             setScreen(
               kind === "scan"
                 ? { name: "scanRelink" }

@@ -40,7 +40,7 @@ export type Connection =
   | { kind: "asleep" }
   | { kind: "cantConnect" }
   | { kind: "turnedOff" }
-  | { kind: "newAddress" }
+  | { kind: "outdated"; minBuild: number }
   | { kind: "removed" };
 
 export interface ConnectionHandle {
@@ -100,6 +100,8 @@ export interface FlushResult {
 
 export interface Queue {
   add(keep: PendingKeep): Promise<void>;
+  /** Forget one keep that the computer has, or will never take. */
+  remove(clientId: string): Promise<void>;
   count(): Promise<number>;
   list(): Promise<PendingKeep[]>;
   flush(engine: PhoneEngine): Promise<FlushResult>;

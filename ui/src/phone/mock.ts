@@ -396,5 +396,7 @@ function initialConnected(script: MockScript): Connection {
 
 function initial(script: MockScript): Connection {
   const kind = script.connection ?? "connected";
-  return kind === "connected" ? initialConnected(script) : ({ kind } as Connection);
+  if (kind === "connected") return initialConnected(script);
+  if (kind === "outdated") return { kind, minBuild: 2 };
+  return { kind } as Connection;
 }

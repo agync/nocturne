@@ -1,5 +1,7 @@
-// Sends a blob as chunk frames: one chunk being sent and one being read ahead, never more, so a
-// large file never sits whole in memory.
+// Sends a blob as chunk frames. At most two chunks of the file are held at once: the one being
+// sealed and sent, and the next one, read ahead. The chunk in hand also exists briefly as its
+// envelope and its sealed frame; those are copies of that same chunk, not further chunks. A large
+// file therefore never sits whole in memory.
 
 import type { Bytes } from "./bytes";
 import { copy } from "./bytes";

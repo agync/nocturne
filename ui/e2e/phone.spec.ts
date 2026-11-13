@@ -103,11 +103,11 @@ async function watch(page: Page, origin: string): Promise<Watch> {
 const SCENARIOS: Array<[string, string]> = [
   ["connected", "Connected to Home computer"],
   ["connecting", "Connecting to Home computer…"],
-  ["asleep", "Home computer is asleep or switched off."],
+  ["asleep", "Home computer is asleep, switched off or has a new address."],
   ["asleepMostPrivate", "If you use Most private, check Tailscale is on."],
   ["cantConnect", "Can’t connect to Home computer right now."],
   ["turnedOff", "Away from home is off."],
-  ["newAddress", "Your computer has a new address."],
+  ["outdated", "This phone needs adding again."],
   ["removed&waiting=2", "This phone was removed from Nocturne."],
   ["welcome", "Add this phone from your computer"],
   ["welcomeWaiting", "Add this phone from your computer"],

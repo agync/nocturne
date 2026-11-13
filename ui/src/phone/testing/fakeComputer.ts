@@ -26,6 +26,8 @@ import type { Env, WebSocketLike } from "../channel";
 import * as C from "../crypto";
 import * as P from "../protocol";
 
+export type Outcome = "ok" | "refuse" | "gone" | "notFound";
+
 export interface Sink {
   send(frame: Bytes): void;
 }
@@ -88,6 +90,8 @@ export interface Upload {
 
 class PollQueue implements Sink {
   frames: Bytes[] = [];
+  /** A held poll is waiting on this queue. */
+  held = false;
   private waiter: (() => void) | null = null;
   send(frame: Bytes): void {
     this.frames.push(frame);
@@ -121,6 +125,7 @@ export interface ComputerOptions {
   connection?: RemoteConnection;
   version?: string;
   computerName?: string;
+  minPhoneBuild?: number;
   cKey?: { privateKey: CryptoKey; publicKey: Bytes };
   now?: () => number;
 }
@@ -180,6 +185,7 @@ export class FakeComputer {
   readonly connection: RemoteConnection;
   readonly version: string;
   readonly computerName: string;
+  readonly minPhoneBuild: number | undefined;
   readonly cpub: Bytes;
   readonly devices = new Map<string, FakeDevice>();
   readonly sessions = new Map<string, FakeSession>();
@@ -201,6 +207,8 @@ export class FakeComputer {
   lastWords: string[] | null = null;
   wsAvailable = true;
   networkDown = false;
+  /** Away from home is off: every request is a bare 503. */
+  off = false;
   httpStatus: number | null = null;
   holdMs = 50;
   /** Rewrites the frames the computer sends in a session: replay, reorder, drop or tamper. */
@@ -216,6 +224,10 @@ export class FakeComputer {
   private readonly sockets = new Set<FakeSocket>();
   private readonly aborts = new Set<AbortController>();
   private chain: Promise<unknown> = Promise.resolve();
+  /** Conversations whose queued frames ride back on the POST that started them. */
+  private drain = new Set<string>();
+  /** Frames that answer the POST in hand and have no conversation to wait under. */
+  private replyNow: Bytes[] = [];
 
   private constructor(cKey: { privateKey: CryptoKey; publicKey: Bytes }, o: ComputerOptions) {
     this.cPrivate = cKey.privateKey;
@@ -224,6 +236,7 @@ export class FakeComputer {
     this.connection = o.connection ?? "simple";
     this.version = o.version ?? "0.1.0";
     this.computerName = o.computerName ?? "Home computer";
+    this.minPhoneBuild = o.minPhoneBuild;
     this.now = o.now ?? (() => Date.now());
   }
 
@@ -255,6 +268,13 @@ export class FakeComputer {
     for (const q of this.queues.values()) q.wake();
   }
 
+  /** The computer ends a session: a held poll for it answers 410. */
+  endSession(sid: Bytes): void {
+    const session = this.sessions.get(toHex(sid));
+    if (session) session.closed = "ended";
+    this.queues.get(toHex(sid))?.wake();
+  }
+
   private serial<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.chain.then(fn, fn);
     this.chain = run.catch(() => undefined);
@@ -271,41 +291,63 @@ export class FakeComputer {
     return q;
   }
 
+  /** Whether a conversation by this id is there to poll: a live session or a pairing. */
+  private known(sid: string): boolean {
+    const session = this.sessions.get(sid);
+    if (session) return session.closed === null;
+    return this.offers.get(sid)?.committed === true;
+  }
+
+  /** The listener's long-poll contract: see `listener.rs` in the computer's remote module. */
   async fetch(input: string, init?: RequestInit): Promise<Response> {
     if (this.networkDown) throw new TypeError("network down");
     if (this.httpStatus !== null) return new Response(null, { status: this.httpStatus });
+    // While Away from home is off every keyed request is a bare 503.
+    if (this.off) return new Response(null, { status: 503 });
     const url = new URL(input);
     if (url.pathname !== P.PATH_SESSION) return new Response(null, { status: 404 });
     const signal = init?.signal ?? null;
     if (init?.method === "GET") {
       const sid = url.searchParams.get("sid") ?? "";
-      if (!/^[0-9a-f]{32}$/.test(sid)) return new Response(null, { status: 400 });
-      const q = this.queue(
-        copy(Uint8Array.from(sid.match(/../g) ?? [], (h) => Number.parseInt(h, 16))),
-      );
+      if (!/^[0-9a-f]{32}$/.test(sid)) return new Response(null, { status: 404 });
+      if (!this.known(sid)) return new Response(null, { status: 410 });
+      const q = this.queue(hexBytes(sid));
+      if (q.held) return new Response(null, { status: 409 });
       const ac = new AbortController();
       this.aborts.add(ac);
       signal?.addEventListener("abort", () => ac.abort());
+      q.held = true;
       try {
         const frames = await q.take(this.holdMs, ac.signal);
         if (signal?.aborted || ac.signal.aborted) throw new DOMException("aborted", "AbortError");
-        if (frames.length === 0) return new Response(null, { status: 204 });
+        if (frames.length === 0) {
+          return new Response(null, { status: this.known(sid) ? 204 : 410 });
+        }
         return new Response(frameRun(frames), { status: 200 });
       } finally {
+        q.held = false;
         this.aborts.delete(ac);
       }
     }
+    if (init?.method !== "POST") return new Response(null, { status: 404 });
     const body = new Uint8Array(await new Response(init?.body as BodyInit).arrayBuffer());
     const frames = splitRun(body);
-    if (!frames) return new Response(null, { status: 400 });
-    const reply: Bytes[] = [];
-    let refused = false;
-    const sink: Sink = { send: (f) => reply.push(f) };
+    if (!frames || frames.length > P.MAX_LONG_POLL_BATCH)
+      return new Response(null, { status: 413 });
+    this.drain = new Set();
+    this.replyNow = [];
     for (const f of frames) {
-      const ok = await this.receive(f, sink);
-      if (!ok) refused = true;
+      const outcome = await this.receive(f, null);
+      if (outcome === "refuse") return new Response(null, { status: 403 });
+      if (outcome === "gone") return new Response(null, { status: 410 });
+      if (outcome === "notFound") return new Response(null, { status: 404 });
     }
-    if (refused) return new Response(null, { status: 403 });
+    // Only the conversations this POST began or answered hand back their frames with it.
+    const reply = [...this.replyNow];
+    for (const sid of this.drain) {
+      const q = this.queues.get(sid);
+      if (q) reply.push(...q.frames.splice(0, P.MAX_LONG_POLL_BATCH - reply.length));
+    }
     return reply.length
       ? new Response(frameRun(reply), { status: 200 })
       : new Response(null, { status: 204 });
@@ -379,36 +421,50 @@ export class FakeComputer {
 
   // The frames ----------------------------------------------------------------------------------
 
-  /** One frame from a phone. False means refused. Calls are handled one at a time, in order. */
-  receive(frame: Bytes, sink: Sink): Promise<boolean> {
-    return this.serial(() => this.handle(frame, sink));
+  /**
+   * One frame from a phone. `via` is a WebSocket's sink; null means long-poll, where frames for
+   * a conversation wait in its queue. Calls are handled one at a time, in order.
+   */
+  receive(frame: Bytes, via: Sink | null): Promise<Outcome> {
+    return this.serial(() => this.handle(frame, via));
   }
 
-  private async handle(frame: Bytes, sink: Sink): Promise<boolean> {
+  /** A sink that puts frames in a conversation's long-poll queue. */
+  private pollSink(sid: Bytes): Sink {
+    const queue = this.queue(sid);
+    return { send: (f) => queue.send(f) };
+  }
+
+  private async handle(frame: Bytes, via: Sink | null): Promise<Outcome> {
     this.seen.up.push(frame);
     let h: C.Header;
     try {
       h = C.parseHeader(frame);
     } catch {
-      return false;
+      return "notFound";
     }
-    if (h.version !== P.VERSION) return false;
+    if (h.version !== P.VERSION) return "notFound";
     switch (h.kind) {
       case P.KIND_HELLO: {
         const offer = this.openOffer(h.sid);
-        if (!offer || frame.length !== P.HEADER_LEN) return false;
-        sink.send(concat(frame.subarray(0, P.HEADER_LEN), this.cpub));
-        return true;
+        // No open offer: nothing answers, and nothing is kept.
+        if (!offer || frame.length !== P.HEADER_LEN) return "ok";
+        this.drain.add(toHex(h.sid));
+        (via ?? this.pollSink(h.sid)).send(concat(frame.subarray(0, P.HEADER_LEN), this.cpub));
+        return "ok";
       }
       case P.KIND_PAIR_COMMIT:
       case P.KIND_PAIR_REVEAL:
-        return this.pairing(h, frame, sink);
+        this.drain.add(toHex(h.sid));
+        await this.pairing(h, frame, via ?? this.pollSink(h.sid));
+        // A junk or out-of-turn pairing frame is not answered and ends nothing.
+        return "ok";
       case P.KIND_SESSION_OPEN:
-        return this.sessionOpen(frame, sink);
+        return this.sessionOpen(frame, via);
       case P.KIND_DATA:
         return this.data(h, frame);
       default:
-        return false;
+        return "notFound";
     }
   }
 
@@ -463,13 +519,7 @@ export class FakeComputer {
       offer.decide = async (allow) => {
         offer.decide = null;
         if (!allow) {
-          await this.sealPair(
-            offer,
-            offer.sink ?? sink,
-            P.KIND_PAIR_OUTCOME,
-            { allowed: false },
-            true,
-          );
+          await this.sealPair(offer, offer.sink ?? sink, P.KIND_PAIR_OUTCOME, { allowed: false });
           offer.spent = true;
           return;
         }
@@ -481,13 +531,10 @@ export class FakeComputer {
           path: offer.commit?.path ?? 1,
         };
         this.devices.set(toHex(device.id), device);
-        await this.sealPair(
-          offer,
-          offer.sink ?? sink,
-          P.KIND_PAIR_OUTCOME,
-          { allowed: true, deviceId: toBase64Url(device.id) },
-          true,
-        );
+        await this.sealPair(offer, offer.sink ?? sink, P.KIND_PAIR_OUTCOME, {
+          allowed: true,
+          deviceId: toBase64Url(device.id),
+        });
         offer.spent = true;
       };
       if (this.autoDecide) {
@@ -501,24 +548,16 @@ export class FakeComputer {
     }
   }
 
-  private async sealPair(
-    offer: Offer,
-    sink: Sink,
-    kind: number,
-    body: object,
-    viaQueue = false,
-  ): Promise<void> {
+  private async sealPair(offer: Offer, sink: Sink, kind: number, body: object): Promise<void> {
     const env = C.envelopeJson(utf8(JSON.stringify(body)));
     const frame = await C.sealPairFrame(kind, offer.pid, offer.keys.down, C.randomBytes(12), env);
     this.seen.down.push(frame);
-    // Later frames of a pairing reach a long-poll phone through its pairing id's queue.
-    if (viaQueue && !(sink as { socket?: boolean }).socket) this.queue(offer.pid).send(frame);
-    else sink.send(frame);
+    sink.send(frame);
   }
 
-  private async sessionOpen(frame: Bytes, sink: Sink): Promise<boolean> {
+  private async sessionOpen(frame: Bytes, via: Sink | null): Promise<Outcome> {
     this.opens += 1;
-    if (this.refuseOpens) return false;
+    if (this.refuseOpens) return "refuse";
     const registry = new Map<string, Bytes>(
       [...this.devices].map(([id, d]) => [id, d.dpub] as [string, Bytes]),
     );
@@ -527,17 +566,19 @@ export class FakeComputer {
       opened = await verifyOpen(frame, registry, this.cPrivate);
     } catch (e) {
       this.refusals.push(e instanceof C.Refusal ? e.code : "open");
-      return false;
+      return "refuse";
     }
     const device = this.devices.get(toHex(opened.deviceId));
-    if (!device) return false;
+    if (!device) return "refuse";
     if (device.revoked) {
       const kd = await C.deviceKey(await C.ecdh(this.cPrivate, device.dpub), device.id);
       const nonce = this.revokedForOtherOpen ? C.randomBytes(P.OPEN_NONCE_LEN) : opened.on;
       const rev = await C.sealRevoked(kd, device.id, nonce, C.randomBytes(12));
       this.seen.down.push(rev);
-      sink.send(rev);
-      return true;
+      // Poll: a REVOKED has no session to wait under, so it goes back on the POST itself.
+      if (via) via.send(rev);
+      else this.replyNow.push(rev);
+      return "ok";
     }
     const f = await C.generateSessionKey();
     const sid = C.randomBytes(P.SID_LEN);
@@ -557,18 +598,19 @@ export class FakeComputer {
       C.ecdh(this.cPrivate, device.dpub),
     ]);
     const keys = await C.sessionKeyBytes(terms, ikm as [Bytes, Bytes, Bytes, Bytes]);
-    const isSocket = (sink as { socket?: boolean }).socket === true;
+    const sink = via ?? this.pollSink(sid);
     const session: FakeSession = {
       sid,
       device,
       keys,
       upLast: 0,
       downLast: 0,
-      sink: isSocket ? sink : this.queue(sid),
+      sink,
       closed: null,
       live: false,
     };
     this.sessions.set(toHex(sid), session);
+    this.drain.add(toHex(sid));
     const accept = C.sealSessionAccept(sid, f.publicKey);
     this.seen.down.push(accept);
     sink.send(accept);
@@ -581,32 +623,34 @@ export class FakeComputer {
           deviceName: device.name,
           connection: this.connection,
           version: this.version,
-        },
+          ...(this.minPhoneBuild === undefined ? {} : { minPhoneBuild: this.minPhoneBuild }),
+        } as never,
       }),
     );
-    return true;
+    return "ok";
   }
 
-  private async data(h: C.Header, frame: Bytes): Promise<boolean> {
+  private async data(h: C.Header, frame: Bytes): Promise<Outcome> {
     const session = this.sessions.get(toHex(h.sid));
-    if (!session || session.closed !== null) return false;
+    // A session that is not there, or has ended, is gone (410 over long-poll).
+    if (!session || session.closed !== null) return "gone";
     try {
       const env = await C.openDataFrame(frame, session.keys.up, "up", session.sid, session.upLast);
       session.upLast = h.ctr;
       session.live = true;
-      if (session.device.revoked) return false;
+      if (session.device.revoked) return "ok";
       if (env.type === P.TYPE_CHUNK) {
         await this.onChunk(session, C.chunkParse(env.body));
-        return true;
+        return "ok";
       }
       const request = JSON.parse(fromUtf8(env.body)) as RemoteRequest;
       await this.dispatch(session, request);
-      return true;
+      return "ok";
     } catch (e) {
       session.closed = e instanceof C.Refusal ? e.code : "bad frame";
       this.refusals.push(session.closed);
       if (session.sink instanceof FakeSocketSink) session.sink.close();
-      return false;
+      return "ok";
     }
   }
 
@@ -751,6 +795,10 @@ function keptAnswer(id: string, title: string, duplicate: boolean, now: number):
   };
 }
 
+function hexBytes(hex: string): Bytes {
+  return copy(Uint8Array.from(hex.match(/../g) ?? [], (h) => Number.parseInt(h, 16)));
+}
+
 function frameRun(frames: Bytes[]): Bytes {
   return concat(...frames.flatMap((f) => [u32(f.length), f]));
 }
@@ -797,7 +845,7 @@ export class FakeSocket implements WebSocketLike {
   ) {
     const sockets = (computer as unknown as { sockets: Set<FakeSocket> }).sockets;
     queueMicrotask(() => {
-      if (!computer.wsAvailable || computer.networkDown) {
+      if (!computer.wsAvailable || computer.networkDown || computer.off) {
         this.closed = true;
         this.onerror?.({});
         this.onclose?.({});
@@ -811,11 +859,10 @@ export class FakeSocket implements WebSocketLike {
   send(data: Uint8Array): void {
     if (this.closed) throw new Error("socket closed");
     const frame = copy(data);
-    void this.computer.receive(frame, this.sink).then((ok) => {
-      if (!ok && !this.closed) {
-        const refuseCloses = true;
-        if (refuseCloses) this.serverClose();
-      }
+    void this.computer.receive(frame, this.sink).then((outcome) => {
+      // The unsealed refusal is a close with 4403; a session that is gone is an ordinary close.
+      if (outcome === "refuse") this.serverClose(4403);
+      else if (outcome !== "ok") this.serverClose();
     });
   }
 
@@ -824,11 +871,11 @@ export class FakeSocket implements WebSocketLike {
     queueMicrotask(() => this.onmessage?.({ data: frame.buffer.slice(0) }));
   }
 
-  serverClose(): void {
+  serverClose(code = 1000): void {
     if (this.closed) return;
     this.closed = true;
     (this.computer as unknown as { sockets: Set<FakeSocket> }).sockets.delete(this);
-    queueMicrotask(() => this.onclose?.({}));
+    queueMicrotask(() => this.onclose?.({ code }));
   }
 
   close(): void {

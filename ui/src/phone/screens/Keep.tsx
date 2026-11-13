@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatBytes, formatDuration, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { PhoneKept } from "../../engine/bindings";
+import type { PhoneError, PhoneKept } from "../../engine/bindings";
 import { sniffMime } from "../crypto";
 import {
   type Connection,
@@ -12,6 +12,7 @@ import {
   type Queue,
 } from "../engine";
 import { MAX_CAPTION, MAX_ITEM, MAX_TEXT } from "../protocol";
+import { withKeepLock } from "../queue";
 import { BackBar, Button, Icon, Page } from "./ui";
 
 type Kind = "text" | "photo" | "recording";
@@ -51,6 +52,14 @@ function clientId(): string {
 
 const encoder = new TextEncoder();
 const capped = (text: string, max: number) => [...text].slice(0, max).join("");
+
+const WAIT_CODES: ReadonlySet<PhoneError> = new Set([
+  "busy",
+  "tooMany",
+  "notReady",
+  "paused",
+  "sessionExpired",
+]);
 
 const RECORDER_TYPES = [
   "audio/webm;codecs=opus",
@@ -173,9 +182,11 @@ export function Keep({
       createdAt: now(),
     };
     const preview = kind === "photo" && body.blob ? url(body.blob) : null;
-    const wait = async () => {
-      await queue.add(keep);
-      onQueued();
+    // Written first, so a reload or a phone that kills the page loses nothing: the entry goes
+    // when the computer has the keep, and the client id keeps a second send harmless.
+    await queue.add(keep);
+    onQueued();
+    const wait = () =>
       setState({
         name: "waiting",
         kind,
@@ -183,25 +194,35 @@ export function Keep({
         at: keep.createdAt,
         url: preview,
       });
+    const drop = async () => {
+      await queue.remove(keep.clientId);
+      onQueued();
     };
     if (!connected) return wait();
     setState({ name: "sending" });
     try {
-      const kept =
+      const kept = await withKeepLock(() =>
         kind === "text"
-          ? await engine.keepText(body.text ?? "", keep.clientId)
+          ? engine.keepText(body.text ?? "", keep.clientId)
           : kind === "photo"
-            ? await engine.keepBytes(body.blob as Blob, keep.clientId, body.caption)
-            : await engine.keepRecording(body.blob as Blob, keep.clientId);
+            ? engine.keepBytes(body.blob as Blob, keep.clientId, body.caption)
+            : engine.keepRecording(body.blob as Blob, keep.clientId),
+      );
+      await drop();
       setState({ name: "kept", kind, kept, url: preview, undone: false, late: false });
       setText("");
       setCaption("");
     } catch (e) {
       if (e instanceof ConnectionError) return wait();
       if (e instanceof PhoneRequestError) {
+        // Busy, rate limited or not ready: the keep goes back to waiting, to be sent again.
+        if (WAIT_CODES.has(e.code)) return wait();
+        await drop();
         if (e.code === "tooLarge") return setState({ name: "problem", kind: "big" });
         if (e.code === "invalid") return setState({ name: "problem", kind: "kind" });
+        return setState({ name: "problem", kind: "failed" });
       }
+      await drop();
       setState({ name: "problem", kind: "failed" });
     }
   };

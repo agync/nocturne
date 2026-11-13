@@ -30,10 +30,10 @@ import {
   type Connection,
   ConnectionError,
   type KeyStore,
-  type PairedDevice,
   PhoneRequestError,
 } from "./engine";
 import * as P from "./protocol";
+import { minPhoneBuild, PHONE_BUILD } from "./status";
 import { sendBlob } from "./upload";
 
 export interface EngineOptions {
@@ -69,19 +69,19 @@ async function mimeOf(blob: Blob): Promise<string> {
   return mime;
 }
 
-function connectionFor(failure: OpenFailure, device: PairedDevice | null): Connection["kind"] {
+/** Everything that is not off, refused or removed is one state: asleep, or at a new address. */
+function connectionFor(failure: OpenFailure): "removed" | "cantConnect" | "asleep" | "turnedOff" {
   switch (failure) {
     case "revoked":
       return "removed";
     case "refused":
     case "protocol":
       return "cantConnect";
-    case "network":
-      return "asleep";
     case "off":
       return "turnedOff";
-    case "gone":
-      return device?.connection === "mostPrivate" ? "asleep" : "newAddress";
+    case "network":
+    case "ended":
+      return "asleep";
   }
 }
 
@@ -121,14 +121,26 @@ export function createPhoneEngine(
     if (state.kind !== "connected") set({ kind: "connecting" });
     const host = address();
     try {
-      const opened = await SessionClass.open({
+      const init = {
         address: host,
         device,
         env,
         preferPoll: stickyPoll,
         socketTimeoutMs: options.socketTimeoutMs,
         handshakeMs: options.handshakeMs,
+      };
+      // A session that ended under the open (410) is opened again, once.
+      const opened = await SessionClass.open(init).catch((e: unknown) => {
+        if (e instanceof OpenError && e.failure === "ended") return SessionClass.open(init);
+        throw e;
       });
+      const needed = minPhoneBuild(opened.hello);
+      if (needed > PHONE_BUILD) {
+        // This phone's app is older than the computer wants: keys stay, nothing is saved.
+        opened.close("outdated");
+        set({ kind: "outdated", minBuild: needed });
+        throw new ConnectionError("outdated");
+      }
       if (opened.linkKind === "poll" && env.WebSocket) stickyPoll = true;
       const previous = session;
       session = opened;
@@ -159,7 +171,7 @@ export function createPhoneEngine(
           await forget();
           throw new ConnectionError("removed");
         }
-        const kind = connectionFor(e.failure, device);
+        const kind = connectionFor(e.failure);
         set({ kind } as Connection);
         throw new ConnectionError(kind, e.status);
       }

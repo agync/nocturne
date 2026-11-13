@@ -8,6 +8,7 @@ import type { PairedDevice } from "./engine";
 import { ConnectionError, PhoneRequestError } from "./engine";
 import { offerFromFragment, Pairing } from "./pairing";
 import * as P from "./protocol";
+import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, PHONE_BUILD } from "./status";
 import { delta, FakeComputer } from "./testing/fakeComputer";
 import { memoryKeyStore } from "./testing/memoryStore";
 
@@ -335,33 +336,258 @@ describe("revocation", () => {
     expect(store.current()).not.toBeNull();
   });
 
-  it("classifies what the edge says without touching the keys", async () => {
+  it("503 is off; 403 and a 4403 close are the unsealed refusal; every other status, and no network, is asleep or at a new address", async () => {
     const { computer, device } = await paired();
     computer.wsAvailable = false;
     const store = memoryKeyStore(device);
+    const state = async () => {
+      const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+      const kind = (await engine.connect()).kind;
+      expect(store.current(), `${kind} kept the key`).not.toBeNull();
+      return kind;
+    };
     for (const [status, kind] of [
-      [530, "newAddress"],
-      [503, "turnedOff"],
-      [403, "cantConnect"],
+      [HTTP_OFF, "turnedOff"],
+      [HTTP_REFUSED, "cantConnect"],
+      [HTTP_NOT_FOUND, "asleep"],
+      [502, "asleep"],
+      [530, "asleep"],
+      [500, "asleep"],
+      [504, "asleep"],
+      [429, "asleep"],
     ] as const) {
       computer.httpStatus = status;
-      const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
-      expect((await engine.connect()).kind).toBe(kind);
-      expect(store.current()).not.toBeNull();
+      expect(await state(), String(status)).toBe(kind);
     }
     computer.httpStatus = null;
     computer.networkDown = true;
-    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
-    expect((await engine.connect()).kind).toBe("asleep");
+    expect(await state()).toBe("asleep");
+    computer.networkDown = false;
+    computer.off = true;
+    expect(await state()).toBe("turnedOff");
   });
 
-  it("Most private never offers a new address", async () => {
+  it("a 530 or 502 never says the feature is off, for either connection", async () => {
     const { computer, device } = await paired();
     computer.wsAvailable = false;
-    computer.httpStatus = 530;
-    const store = memoryKeyStore({ ...device, connection: "mostPrivate" });
+    for (const connection of ["simple", "mostPrivate"] as const) {
+      for (const status of [530, 502]) {
+        computer.httpStatus = status;
+        const store = memoryKeyStore({ ...device, connection });
+        const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+        expect((await engine.connect()).kind).toBe("asleep");
+      }
+    }
+  });
+
+  it("over a WebSocket, only a 4403 close is the refusal", async () => {
+    const { computer, device } = await paired();
+    const store = memoryKeyStore(device);
+    computer.refuseOpens = true;
+    const refused = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    expect((await refused.connect()).kind).toBe("cantConnect");
+    computer.refuseOpens = false;
+    computer.mutate = null;
+    computer.wsAvailable = true;
+    computer.dropAll();
+    const real = computer.env;
+    const closesOther = createPhoneEngine(store, () => host(computer), {
+      env: {
+        ...real,
+        WebSocket: class extends (real.WebSocket as NonNullable<typeof real.WebSocket>) {
+          send() {
+            queueMicrotask(() => this.onclose?.({ code: 1011 }));
+          }
+        },
+      },
+      handshakeMs: 2000,
+    });
+    expect((await closesOther.connect()).kind).toBe("asleep");
+    expect(store.current()).not.toBeNull();
+  });
+});
+
+describe("an old phone app", () => {
+  it("a Hello that asks for a newer build stops the open, keeps the key, and saves nothing", async () => {
+    const computer = await FakeComputer.create({ minPhoneBuild: PHONE_BUILD + 1 });
+    const { device } = await paired({ computer });
+    const before = { ...device };
+    const store = memoryKeyStore(device);
     const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    const state = await engine.connect();
+    expect(state).toEqual({ kind: "outdated", minBuild: PHONE_BUILD + 1 });
+    expect(store.current()).toEqual(before);
+    await expect(engine.status()).rejects.toBeInstanceOf(ConnectionError);
+    engine.close();
+  });
+
+  it("the same build, or an older ask, connects", async () => {
+    for (const min of [undefined, 0, PHONE_BUILD]) {
+      const computer = await FakeComputer.create({ minPhoneBuild: min });
+      const { device } = await paired({ computer });
+      const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+        env: computer.env,
+      });
+      expect((await engine.connect()).kind).toBe("connected");
+      engine.close();
+    }
+  });
+});
+
+describe("the long-poll contract", () => {
+  const poll = async () => {
+    const { computer, device } = await paired();
+    computer.wsAvailable = false;
+    return { computer, device, store: memoryKeyStore(device) };
+  };
+
+  it("a held poll that is busy (409) waits and polls again; the session stays up", async () => {
+    const { computer, device } = await poll();
+    let busy = 0;
+    const env = {
+      ...computer.env,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "GET" && busy < 2) {
+          busy += 1;
+          return new Response(null, { status: 409 });
+        }
+        return computer.env.fetch(input, init);
+      },
+    };
+    const s = await Session.open({ address: host(computer), device, env });
+    const status = await s.request({ cmd: "getStatus" }, (a) =>
+      a.type === "status" ? { done: a.status } : undefined,
+    ).result;
+    expect(status.needsYou).toBe(2);
+    expect(busy).toBe(2);
+    expect(s.isOpen).toBe(true);
+    s.close();
+  });
+
+  it("the computer answers a second poll for the same session with 409", async () => {
+    const { computer, device } = await poll();
+    const s = await Session.open({ address: host(computer), device, env: computer.env });
+    const url = `https://${host(computer)}/s?sid=${toHex(s.sid)}`;
+    const answers = await Promise.all([
+      computer.env.fetch(url, { method: "GET" }),
+      computer.env.fetch(url, { method: "GET" }),
+    ]);
+    expect(answers.map((a) => a.status)).toContain(409);
+    s.close();
+  });
+
+  it("a session the computer ended is 410 on the held poll, and the link ends", async () => {
+    const { computer, device } = await poll();
+    const s = await Session.open({ address: host(computer), device, env: computer.env });
+    const ended: string[] = [];
+    s.onEnd = (why) => ended.push(why);
+    computer.endSession(s.sid);
+    await vi.waitFor(() => expect(ended).toEqual(["link http"]));
+  });
+
+  it("a request for a session the computer no longer has is 410, and the engine opens a new one and goes on", async () => {
+    const { computer, device, store } = await poll();
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    await engine.status();
+    for (const ses of computer.sessions.values()) ses.closed = "ended";
+    expect((await engine.status()).needsYou).toBe(2);
+    expect(computer.opens).toBe(2);
+    engine.close();
+    void device;
+  });
+
+  it("an open that gets 410 is tried again once, and a second 410 is asleep", async () => {
+    const { computer, store } = await poll();
+    let calls = 0;
+    const env = {
+      ...computer.env,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.method === "POST") {
+          calls += 1;
+          return new Response(null, { status: 410 });
+        }
+        return computer.env.fetch(input, init);
+      },
+    };
+    const engine = createPhoneEngine(store, () => host(computer), { env });
     expect((await engine.connect()).kind).toBe("asleep");
+    expect(calls).toBe(2);
+  });
+
+  it("the HELLO of a pairing with no open offer is not answered (204), and a wrong frame ends nothing", async () => {
+    const computer = await FakeComputer.create();
+    const pid = C.randomBytes(16);
+    const frame = C.helloRequest(pid);
+    const body = new Uint8Array([0, 0, 0, frame.length, ...frame]);
+    const res = await computer.env.fetch(`https://${host(computer)}/s`, { method: "POST", body });
+    expect(res.status).toBe(204);
+  });
+
+  it("while off every keyed request is 503, and anything else is a bare 404", async () => {
+    const computer = await FakeComputer.create();
+    computer.off = true;
+    for (const method of ["GET", "POST"]) {
+      const r = await computer.env.fetch(
+        `https://${host(computer)}/s${method === "GET" ? "?sid=00" : ""}`,
+        { method },
+      );
+      expect(r.status).toBe(503);
+    }
+    computer.off = false;
+    expect(
+      (await computer.env.fetch(`https://${host(computer)}/elsewhere`, { method: "GET" })).status,
+    ).toBe(404);
+    expect(
+      (await computer.env.fetch(`https://${host(computer)}/s?sid=nothex`, { method: "GET" }))
+        .status,
+    ).toBe(404);
+  });
+
+  it("a POST of data to a session that is not there is 410, an unknown session id on a GET is 410, and the refusal is 403", async () => {
+    const { computer } = await poll();
+    const ghost = C.header(P.KIND_DATA, C.randomBytes(16), 1);
+    const frame = new Uint8Array([...ghost, ...new Uint8Array(16)]);
+    const post = await computer.env.fetch(`https://${host(computer)}/s`, {
+      method: "POST",
+      body: new Uint8Array([0, 0, 0, frame.length, ...frame]),
+    });
+    expect(post.status).toBe(410);
+    const get = await computer.env.fetch(`https://${host(computer)}/s?sid=${"00".repeat(16)}`, {
+      method: "GET",
+    });
+    expect(get.status).toBe(410);
+    computer.refuseOpens = true;
+    const open = C.header(P.KIND_SESSION_OPEN, C.zeroSid(), 0);
+    const refused = await computer.env.fetch(`https://${host(computer)}/s`, {
+      method: "POST",
+      body: new Uint8Array([0, 0, 0, open.length, ...open]),
+    });
+    expect(refused.status).toBe(403);
+  });
+
+  it("the first Hello rides back with SESSION_ACCEPT on the POST", async () => {
+    const { computer, device } = await poll();
+    const frames: number[] = [];
+    const env = {
+      ...computer.env,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const r = await computer.env.fetch(input, init);
+        if (init?.method === "POST" && r.status === 200) {
+          const body = new Uint8Array(await r.clone().arrayBuffer());
+          let at = 0;
+          let n = 0;
+          while (at < body.length) {
+            at += 4 + new DataView(body.buffer).getUint32(at, false);
+            n += 1;
+          }
+          frames.push(n);
+        }
+        return r;
+      },
+    };
+    const s = await Session.open({ address: host(computer), device, env });
+    expect(frames).toEqual([2]);
+    s.close();
   });
 });
 

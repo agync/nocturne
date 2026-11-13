@@ -158,11 +158,26 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
         {item.kind === "audio" && rendering === "audio" && url && <Voice url={url} item={item} />}
         {item.kind === "document" && rendering === "pdf" && url && (
           <>
-            <a className="ph-btn ph-btn--primary" href={url} target="_blank" rel="noopener">
+            <Button kind="primary" onClick={() => openDocument(url, fileName(item.title, "pdf"))}>
               <Icon name="document" size={20} />
               {t("phone.original.document")}
+            </Button>
+            <a className="ph-btn ph-btn--quiet" href={url} download={fileName(item.title, "pdf")}>
+              {t("phone.original.download")}
             </a>
             <p className="ph-hint ph-hint--ink2">{t("phone.original.document.hint")}</p>
+          </>
+        )}
+        {rendering === "download" && url && (
+          <>
+            <p className="ph-body">{t("phone.original.cantShowHere")}</p>
+            <a
+              className="ph-btn ph-btn--primary"
+              href={url}
+              download={fileName(item.title, "heic")}
+            >
+              {t("phone.original.download")}
+            </a>
           </>
         )}
         {blob && !rendering && (
@@ -184,6 +199,32 @@ export function Original({ engine, itemId, quote, onBack }: OriginalProps) {
       </main>
     </Page>
   );
+}
+
+function fileName(title: string, extension: string): string {
+  const base =
+    title
+      .replace(/[^\p{L}\p{N} ._-]+/gu, "")
+      .trim()
+      .slice(0, 60) || "Nocturne";
+  return `${base}.${extension}`;
+}
+
+/** Opens a document in the browser's viewer; if that is blocked or fails, saves it instead. */
+export function openDocument(url: string, name: string): void {
+  try {
+    const opened = window.open(url, "_blank");
+    if (opened) {
+      opened.opener = null;
+      return;
+    }
+  } catch {
+    // Falls through to the download.
+  }
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
 }
 
 function marked(text: string, quote: string | null) {

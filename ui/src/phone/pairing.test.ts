@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { fromHex, toHex } from "./bytes";
+import { concat, fromHex, toHex } from "./bytes";
 import * as C from "./crypto";
 import { offerFromFragment, Pairing, PairingError } from "./pairing";
 import * as P from "./protocol";
@@ -74,14 +74,17 @@ describe("pairing", () => {
   });
 
   it("pair.expired_code: a code past its five minutes gets no answer", async () => {
-    const { computer, offer, scanned, ctx } = await setup();
+    const { computer, offer, ctx } = await setup();
     computer.now = () => Date.now() + (P.PAIR_TTL_SECS + 1) * 1000;
     const typed = C.codeEncode(offer.s);
-    await expect(Pairing.fromCode(typed, { ...ctx, socketTimeoutMs: 100 })).rejects.toMatchObject({
+    await expect(Pairing.fromCode(typed, { ...ctx, answerWaitMs: 200 })).rejects.toMatchObject({
       kind: "expired",
     });
-    const result = await (await scanned()).connect("Pixel", () => undefined);
-    expect(result.kind).toBe("expired");
+    const late = await Pairing.fromLink(offerFromFragment(new URL(offer.link).hash) ?? fail(), {
+      ...ctx,
+      answerWaitMs: 200,
+    });
+    expect((await late.connect("Pixel", () => undefined)).kind).toBe("expired");
   });
 
   it("pair.spent_code: connecting twice on one page load sends nothing the second time", async () => {
@@ -147,6 +150,39 @@ describe("pairing", () => {
     expect(shown).toHaveLength(1);
   });
 
+  it("a junk or forged PAIR_NONCE, or a junk outcome, is ignored and the pairing goes on", async () => {
+    const { computer, offer, store, ctx } = await setup();
+    const junk = (kind: number) => concat(C.header(kind, offer.pid, 0), C.randomBytes(12 + 60));
+    const env = {
+      ...computer.env,
+      fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+        const real = await computer.env.fetch(input, init);
+        if (init?.method !== "POST" || real.status !== 200) return real;
+        // A forged nonce arrives ahead of the real one.
+        const forged = junk(P.KIND_PAIR_NONCE);
+        const body = new Uint8Array(await real.arrayBuffer());
+        const prefix = new Uint8Array([0, 0, 0, forged.length, ...forged]);
+        return new Response(new Uint8Array([...prefix, ...body]), { status: 200 });
+      },
+    };
+    const pairing = await Pairing.fromLink(offerFromFragment(new URL(offer.link).hash) ?? fail(), {
+      ...ctx,
+      env,
+      preferPoll: true,
+    });
+    const shown: string[][] = [];
+    const running = pairing.connect("Pixel", (w) => shown.push(w));
+    await expect.poll(() => offer.words).not.toBeNull();
+    expect(shown).toHaveLength(1);
+    // A junk outcome and a second junk nonce do nothing either.
+    const sink = offer.sink as { send(f: Uint8Array): void };
+    sink.send(junk(P.KIND_PAIR_OUTCOME) as never);
+    sink.send(junk(P.KIND_PAIR_NONCE) as never);
+    await computer.decide(offer, true);
+    expect((await running).kind).toBe("allowed");
+    expect(store.current()).not.toBeNull();
+  });
+
   it("pair.typed_code_path: the code, typed, makes the same pairing", async () => {
     const { computer, offer, store, ctx } = await setup();
     const typed = C.codeDisplay(C.codeEncode(offer.s)).toLowerCase().replace(/ /g, " - ");
@@ -194,7 +230,7 @@ describe("pairing", () => {
       preferPoll: true,
     });
     const result = await pairing.connect("Pixel", () => undefined);
-    expect(result.kind).toBe("spent");
+    expect(result.kind).toBe("expired");
     expect(offer.words).toBeNull();
     expect(computer.refusals).toContain("pairing");
   });

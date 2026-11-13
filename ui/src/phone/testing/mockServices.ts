@@ -17,7 +17,7 @@ const SCENARIOS = [
   "asleepMostPrivate",
   "cantConnect",
   "turnedOff",
-  "newAddress",
+  "outdated",
   "removed",
   "welcome",
   "welcomeWaiting",
@@ -117,7 +117,7 @@ export async function mockServices(): Promise<Services> {
       : scenario === "asleepMostPrivate"
         ? "asleep"
         : scenario === "turnedOff" ||
-            scenario === "newAddress" ||
+            scenario === "outdated" ||
             scenario === "asleep" ||
             scenario === "cantConnect" ||
             scenario === "connecting"

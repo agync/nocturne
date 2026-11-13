@@ -58,6 +58,8 @@ describe("the worker itself", () => {
       keys: async () => [],
       delete: async () => true,
     });
+    // The one file the worker is allowed to fetch is answered here; the network is never reached.
+    vi.stubGlobal("fetch", async () => new Response("asset", { status: 200 }));
     await import("./sw");
 
     const respond = vi.fn();
