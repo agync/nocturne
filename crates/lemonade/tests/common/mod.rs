@@ -95,3 +95,21 @@ pub fn group_members(pgid: u32) -> Vec<u32> {
     }
     out
 }
+
+/// Live processes whose command line mentions `needle`, for proving nothing was left behind.
+#[cfg(target_os = "linux")]
+pub fn processes_mentioning(needle: &str) -> Vec<u32> {
+    let mut out = Vec::new();
+    for entry in std::fs::read_dir("/proc").unwrap().flatten() {
+        let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        if let Ok(cmd) = std::fs::read(entry.path().join("cmdline"))
+            && String::from_utf8_lossy(&cmd).contains(needle)
+            && alive(pid)
+        {
+            out.push(pid);
+        }
+    }
+    out
+}

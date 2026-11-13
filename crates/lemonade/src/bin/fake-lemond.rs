@@ -5,7 +5,8 @@
 //! environment variable or, because the supervisor scrubs the environment, from a
 //! `fake_mode` key in `config.json`. Modes: `crash-after-ms=N`, `crash-first-after-ms=N`,
 //! `slow-start-ms=N`, `fail-bind`, `fail-bind-first=N`, `no-progress`, `disk-full`,
-//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`.
+//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
+//! `spawn-sleeper` (a helper process that the engine cleans up) and `leak-sleeper` (one it leaves).
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -79,6 +80,8 @@ struct App {
     modes: HashMap<String, String>,
     cache: PathBuf,
     models_dir: String,
+    sleeper: Mutex<Option<std::process::Child>>,
+    leak: bool,
     inner: Mutex<Inner>,
 }
 
@@ -174,6 +177,23 @@ impl App {
     fn persist(&self) {
         let mut inner = self.inner();
         self.persist_locked(&mut inner);
+    }
+
+    /// Ends a helper process the way the real engine ends its backends, unless told to leak it.
+    fn cleanup(&self) {
+        self.persist();
+        if self.leak {
+            return;
+        }
+        if let Some(mut child) = self
+            .sleeper
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 
     fn snapshot(&self, job: &Job) -> Value {
@@ -338,11 +358,19 @@ async fn main() {
         .and_then(|v| v.as_str())
         .unwrap_or("")
         .to_string();
+    let sleeper = if modes.contains_key("spawn-sleeper") || modes.contains_key("leak-sleeper") {
+        std::process::Command::new("sleep").arg("300").spawn().ok()
+    } else {
+        None
+    };
+    let leak = modes.contains_key("leak-sleeper");
     let app: Shared = Arc::new(App {
         key,
         port,
         ws_port,
         modes,
+        sleeper: Mutex::new(sleeper),
+        leak,
         cache,
         models_dir,
         inner: Mutex::new(inner),
@@ -355,7 +383,7 @@ async fn main() {
             let mut buf = [0u8; 256];
             let mut stdin = std::io::stdin();
             while matches!(stdin.read(&mut buf), Ok(n) if n > 0) {}
-            app.persist();
+            app.cleanup();
             std::process::exit(0);
         });
     }
@@ -844,7 +872,7 @@ async fn speech(Json(body): Json<Value>) -> Response {
 }
 
 async fn shutdown(State(app): State<Shared>) -> Json<Value> {
-    app.persist();
+    app.cleanup();
     tokio::spawn(async {
         tokio::time::sleep(Duration::from_millis(100)).await;
         std::process::exit(0);
