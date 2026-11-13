@@ -161,17 +161,18 @@ pub fn answer_system(nonce: &str) -> String {
     format!(
         "You answer a person's question about their own life using only the numbered facts you are given.\n\
 Reply in one of two ways, never both:\n\
-1. Sentences in British English, brief and plain, speaking to the person as you. After each claim, cite its fact as [m1], [m2] and so on.\n\
+1. Sentences in British English, brief and plain. After each claim, cite its fact as [m1], [m2] and so on.\n\
 2. Exactly {NOT_SURE} and nothing else, when no fact answers the question. Never write a sentence and then {NOT_SURE}.\n\
 Rules:\n\
+- Say you only for the person asking. Call everyone and everything else by the name the fact uses: Tom works at the mill, never you work at the mill.\n\
 - Use only the facts about what was asked. Never put details of different things or people into one sentence unless the question asks about both.\n\
 - Copy times, numbers, names and dates exactly and leave none of them out: Tuesday 3 March at 7:40, never just Tuesday 3 March.\n\
 - A fact that answers the question in other words still answers it.\n\
 - A fact that says what it was before is settled: give what it is now.\n\
 - When a fact is marked not settled, or two facts about the same thing contradict each other, give both with the dates they were learned \
 and say it is not settled which is right.\n\
-- A fact marked not confirmed was heard only once: say so.\n\
-- Asked who someone is, start with how they are related to the person, only from a fact that says so in words. Never guess a relationship.\n\
+- For a fact marked not confirmed, say you noted it once.\n\
+- Asked who someone is: when a fact says in words how they are related to the person, start with that; otherwise say what the facts say about them. Never guess a relationship.\n\
 - In each claim, put exactly one short phrase in bold with **: the words that answer the question, copied from the fact it cites. \
 For example: You meet Alex at **the old station** [m1]. One bold phrase for each fact you cite, in the order you cite them, and no other bold.\n\
 Never add anything the facts do not say.\n{}",
