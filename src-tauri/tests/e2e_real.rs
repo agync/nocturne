@@ -2,9 +2,9 @@
 //!
 //! It runs the app's own commands over the mock runtime, with the engine from `vendor/lemonade`
 //! (or `NOCTURNE_LEMOND`), and walks one seeded day: setup of the small mind, a day of kept notes
-//! and files, reading, twelve questions and six held out, the overnight tidy and the morning
-//! page, forgetting, deleting everything and quitting. Each step records what it measured; the
-//! run ends with a table and writes `results.json` and `summary.md`.
+//! and files, reading, twelve questions and ten held out (six, then four), the overnight tidy and
+//! the morning page, forgetting, deleting everything and quitting. Each step records what it
+//! measured; the run ends with a table and writes `results.json` and `summary.md`.
 //!
 //! ```text
 //! make e2e-real                     # downloads the small mind once into target/e2e-real
@@ -166,6 +166,8 @@ struct Question {
     must: &'static [&'static [&'static str]],
     /// The right answer is to say it does not know.
     unknown: bool,
+    /// When not empty, the first sentence of the answer needs one of these words.
+    lead: &'static [&'static str],
 }
 
 const QUESTIONS: &[Question] = &[
@@ -176,6 +178,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["boiler"],
         must: &[&["marek"], &["30 november", "november 30", "30th"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q02",
@@ -184,6 +187,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["dentist_moved", "dentist"],
         must: &[&["19 november", "thursday"], &["14:30", "2:30", "14.30"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q03",
@@ -192,6 +196,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["priya"],
         must: &[&["budget"], &["friday", "20 november"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q04",
@@ -200,6 +205,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["photo"],
         must: &[&["4471"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q05",
@@ -208,6 +214,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["voice", "voice_raw"],
         must: &[&["friday", "20", "twentieth"], &["9", "nine"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q06",
@@ -216,6 +223,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["blood"],
         must: &[&["cholesterol"], &["5.9"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q07",
@@ -224,6 +232,7 @@ const QUESTIONS: &[Question] = &[
         sources: &[],
         must: &[],
         unknown: true,
+        lead: &[],
     },
     Question {
         id: "q08",
@@ -232,6 +241,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["club1", "club2"],
         must: &[&["tuesday"], &["wednesday"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q09",
@@ -240,6 +250,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["gran_moved", "gran"],
         must: &[&["york"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q10",
@@ -248,6 +259,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["doc"],
         must: &[&["17"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q11",
@@ -256,6 +268,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["paint"],
         must: &[&["sage"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "q12",
@@ -264,6 +277,7 @@ const QUESTIONS: &[Question] = &[
         sources: &["cinema"],
         must: &[&["cinema"]],
         unknown: false,
+        lead: &[],
     },
 ];
 
@@ -314,6 +328,7 @@ const HELD_OUT: &[Question] = &[
             &["16:15", "4:15", "16.15"],
         ],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "h02",
@@ -322,6 +337,7 @@ const HELD_OUT: &[Question] = &[
         sources: &["ho_locker"],
         must: &[&["2958"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "h03",
@@ -330,6 +346,7 @@ const HELD_OUT: &[Question] = &[
         sources: &["ho_nadia"],
         must: &[&["stove"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "h04",
@@ -338,6 +355,7 @@ const HELD_OUT: &[Question] = &[
         sources: &["ho_train"],
         must: &[&["31"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "h05",
@@ -346,6 +364,7 @@ const HELD_OUT: &[Question] = &[
         sources: &["ho_tom"],
         must: &[&["kestrel"]],
         unknown: false,
+        lead: &[],
     },
     Question {
         id: "h06",
@@ -354,6 +373,83 @@ const HELD_OUT: &[Question] = &[
         sources: &["ho_bins"],
         must: &[&["24 november", "november 24", "24th"]],
         unknown: false,
+        lead: &[],
+    },
+];
+
+// Held out, second set: four questions and their notes, written before the answer prompt was
+// changed and never used to tune it. Reported on their own.
+
+const HELD_OUT_2_NOTES: &[Note] = &[
+    Note {
+        key: "ho_choir_a",
+        at: "09:30",
+        text: "Choir practice is on Thursday evenings at St Anne's church.",
+    },
+    Note {
+        key: "ho_carver",
+        at: "11:35",
+        text: "Parents' evening for my son Leo is on Thursday 26 November at 18:00 with Mrs Carver.",
+    },
+    Note {
+        key: "ho_window",
+        at: "12:20",
+        text: "The window cleaner comes on Wednesday 2 December at 8:15 in the morning; it costs 18 pounds.",
+    },
+    Note {
+        key: "ho_roof",
+        at: "16:35",
+        text: "The roofer, Dan Price, will fix the loose tiles on Saturday 28 November.",
+    },
+    Note {
+        key: "ho_choir_b",
+        at: "18:40",
+        text: "Ravi thinks choir practice is on Friday evenings, at the school hall.",
+    },
+];
+
+const HELD_OUT_2: &[Question] = &[
+    Question {
+        id: "h07",
+        kind: "who is",
+        text: "Who is Leo?",
+        sources: &["ho_carver"],
+        must: &[&["son"]],
+        unknown: false,
+        lead: &["son"],
+    },
+    Question {
+        id: "h08",
+        kind: "which is right",
+        text: "When is choir practice?",
+        sources: &["ho_choir_a", "ho_choir_b"],
+        must: &[&["thursday"], &["friday"]],
+        unknown: false,
+        lead: &[],
+    },
+    Question {
+        id: "h09",
+        kind: "time copied exactly",
+        text: "When is the window cleaner coming?",
+        sources: &["ho_window"],
+        must: &[
+            &["2 december", "december 2", "wednesday"],
+            &["8:15", "8.15"],
+        ],
+        unknown: false,
+        lead: &[],
+    },
+    Question {
+        id: "h10",
+        kind: "who and when among trades",
+        text: "Who is fixing the roof, and when?",
+        sources: &["ho_roof"],
+        must: &[
+            &["dan", "price"],
+            &["28 november", "november 28", "saturday"],
+        ],
+        unknown: false,
+        lead: &[],
     },
 ];
 
@@ -1313,7 +1409,7 @@ fn the_whole_product_works_with_real_models() {
     // 2. Keep ------------------------------------------------------------------------------
     let mut ids: HashMap<&'static str, String> = HashMap::new();
     let keep_started = Instant::now();
-    for note in NOTES.iter().chain(HELD_OUT_NOTES) {
+    for note in NOTES.iter().chain(HELD_OUT_NOTES).chain(HELD_OUT_2_NOTES) {
         at(&h, DAY, note.at);
         let kept = h.ok(
             "keep_text",
@@ -1397,7 +1493,7 @@ fn the_whole_product_works_with_real_models() {
     run.check(
         "keep.all",
         "every note, the photo, the voice note (twice) and the document are kept",
-        ids.len() == NOTES.len() + HELD_OUT_NOTES.len() + 4,
+        ids.len() == NOTES.len() + HELD_OUT_NOTES.len() + HELD_OUT_2_NOTES.len() + 4,
         format!("{} items in {} ms", ids.len(), ms(keep_started.elapsed())),
     );
 
@@ -1523,14 +1619,15 @@ fn the_whole_product_works_with_real_models() {
 
     // 4. Ask -------------------------------------------------------------------------------
     at(&h, DAY, "22:30");
-    // The twelve, then the held-out six, each counted on its own.
-    let mut rows: [Vec<Value>; 2] = Default::default();
-    let mut tally = [Tally::default(), Tally::default()];
+    // The twelve, then the held-out six, then the second held-out four, each counted on its own.
+    let mut rows: [Vec<Value>; 3] = Default::default();
+    let mut tally = [Tally::default(), Tally::default(), Tally::default()];
     let mut every_terminal = true;
     let asked = QUESTIONS
         .iter()
         .map(|q| (q, 0))
-        .chain(HELD_OUT.iter().map(|q| (q, 1)));
+        .chain(HELD_OUT.iter().map(|q| (q, 1)))
+        .chain(HELD_OUT_2.iter().map(|q| (q, 2)));
     for (q, set) in asked {
         let t = &mut tally[set];
         let wanted: HashSet<String> = q.sources.iter().map(|k| ids[k].clone()).collect();
@@ -1558,10 +1655,12 @@ fn the_whole_product_works_with_real_models() {
         let ok = if q.unknown {
             matches!(a.phase.as_str(), "notSure" | "nothing")
         } else {
+            let first = lower.split_terminator(". ").next().unwrap_or("");
             a.phase == "done"
                 && q.must
                     .iter()
                     .all(|group| group.iter().any(|w| lower.contains(w)))
+                && (q.lead.is_empty() || q.lead.iter().any(|w| first.contains(w)))
         };
         t.correct += usize::from(ok);
         let cited_items: Vec<String> = a
@@ -1663,7 +1762,7 @@ fn the_whole_product_works_with_real_models() {
         ));
         h.ok("get_status", json!({}));
     }
-    let [rows, held_rows] = rows;
+    let [rows, held_rows, held_rows_2] = rows;
     run.check(
         "ask.terminal",
         "every question ends in exactly one terminal phase",
@@ -1689,7 +1788,7 @@ fn the_whole_product_works_with_real_models() {
         unknown_ok,
         "",
     );
-    let receipts_everywhere = rows.iter().chain(&held_rows).all(|r| {
+    let receipts_everywhere = rows.iter().chain(&held_rows).chain(&held_rows_2).all(|r| {
         !matches!(r["phase"].as_str(), Some("done"))
             || r["receipts"].as_array().is_some_and(|x| !x.is_empty())
     });
@@ -1709,8 +1808,14 @@ fn the_whole_product_works_with_real_models() {
     );
     run.put("questions", Value::Array(rows));
     run.put("metrics", metrics);
+    let held_metrics_2 = tally[2].metrics(
+        &held_rows_2,
+        "4 held-out questions, written before the answer prompt changed and never tuned against",
+    );
     run.put("held_out_questions", Value::Array(held_rows));
     run.put("held_out_metrics", held_metrics);
+    run.put("held_out_2_questions", Value::Array(held_rows_2));
+    run.put("held_out_2_metrics", held_metrics_2);
 
     // 5. Tidy and the morning page --------------------------------------------------------
     at(&h, PAGE_DAY, "03:00");
@@ -2255,22 +2360,34 @@ fn summary(run: &Run) -> String {
         m["bold_spans"]["answers_given"],
         m["bold_spans"]["answers_bold_dropped"]
     ));
-    let h = &o["held_out_metrics"];
-    s.push_str(
-        "\n## Held out (6 questions, never tuned against)\n\n| Metric | Measured |\n|---|---|\n",
-    );
-    s.push_str(&format!(
-        "| Recall@5 | {} ({} of {}) |\n| Answer accuracy | {} ({} of {}) |\n| Citation precision | {} ({} of {}) |\n",
-        h["recall_at_5"]["value"], h["recall_at_5"]["hits"], h["recall_at_5"]["of"],
-        h["answer_accuracy"]["value"], h["answer_accuracy"]["correct"], h["answer_accuracy"]["of"],
-        h["citation_precision"]["value"], h["citation_precision"]["supporting"], h["citation_precision"]["cited"],
-    ));
+    for (key, title) in [
+        (
+            "held_out_metrics",
+            "Held out (6 questions, never tuned against)",
+        ),
+        (
+            "held_out_2_metrics",
+            "Held out, second set (4 questions, never tuned against)",
+        ),
+    ] {
+        let h = &o[key];
+        s.push_str(&format!(
+            "\n## {title}\n\n| Metric | Measured |\n|---|---|\n"
+        ));
+        s.push_str(&format!(
+            "| Recall@5 | {} ({} of {}) |\n| Answer accuracy | {} ({} of {}) |\n| Citation precision | {} ({} of {}) |\n",
+            h["recall_at_5"]["value"], h["recall_at_5"]["hits"], h["recall_at_5"]["of"],
+            h["answer_accuracy"]["value"], h["answer_accuracy"]["correct"], h["answer_accuracy"]["of"],
+            h["citation_precision"]["value"], h["citation_precision"]["supporting"], h["citation_precision"]["cited"],
+        ));
+    }
     s.push_str("\n## Questions\n\n| # | Kind | Phase | Correct | Recall rank | First sentence | Total |\n|---|---|---|---|---|---|---|\n");
     let all_questions = o["questions"]
         .as_array()
         .into_iter()
         .flatten()
-        .chain(o["held_out_questions"].as_array().into_iter().flatten());
+        .chain(o["held_out_questions"].as_array().into_iter().flatten())
+        .chain(o["held_out_2_questions"].as_array().into_iter().flatten());
     for q in all_questions {
         s.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} ms | {} ms |\n",
