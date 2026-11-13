@@ -2,9 +2,9 @@
 //!
 //! It runs the app's own commands over the mock runtime, with the engine from `vendor/lemonade`
 //! (or `NOCTURNE_LEMOND`), and walks one seeded day: setup of the small mind, a day of kept notes
-//! and files, reading, twelve questions, the overnight tidy and the morning page, forgetting,
-//! deleting everything and quitting. Each step records what it measured; the run ends with a
-//! table and writes `results.json` and `summary.md`.
+//! and files, reading, twelve questions and six held out, the overnight tidy and the morning
+//! page, forgetting, deleting everything and quitting. Each step records what it measured; the
+//! run ends with a table and writes `results.json` and `summary.md`.
 //!
 //! ```text
 //! make e2e-real                     # downloads the small mind once into target/e2e-real
@@ -263,6 +263,96 @@ const QUESTIONS: &[Question] = &[
         text: "What did I tell Sam I would book this weekend?",
         sources: &["cinema"],
         must: &[&["cinema"]],
+        unknown: false,
+    },
+];
+
+// Held out: six questions and their notes, written before the extraction prompt was changed and
+// never used to tune it. They are reported on their own, next to the twelve above.
+
+const HELD_OUT_NOTES: &[Note] = &[
+    Note {
+        key: "ho_vet",
+        at: "08:20",
+        text: "The vet, Dr Amara Lind, says Biscuit needs his booster jab on Tuesday 1 December at 16:15.",
+    },
+    Note {
+        key: "ho_locker",
+        at: "10:50",
+        text: "Gym locker code is 2958. My locker is number 44 in the east changing room.",
+    },
+    Note {
+        key: "ho_nadia",
+        at: "13:40",
+        text: "Nadia lent me her blue camping stove. I said I would give it back after the half-term trip.",
+    },
+    Note {
+        key: "ho_train",
+        at: "15:05",
+        text: "Booked the 07:42 train to Bristol Temple Meads for Friday 27 November, coach D, seat 31.",
+    },
+    Note {
+        key: "ho_tom",
+        at: "17:45",
+        text: "Tom started a new job at Kestrel Labs this week. He works on their water sensor project.",
+    },
+    Note {
+        key: "ho_bins",
+        at: "20:15",
+        text: "Recycling bins go out every other Tuesday; the next collection is on 24 November.",
+    },
+];
+
+const HELD_OUT: &[Question] = &[
+    Question {
+        id: "h01",
+        kind: "appointment",
+        text: "When is Biscuit's booster jab?",
+        sources: &["ho_vet"],
+        must: &[
+            &["1 december", "december 1", "tuesday"],
+            &["16:15", "4:15", "16.15"],
+        ],
+        unknown: false,
+    },
+    Question {
+        id: "h02",
+        kind: "number among numbers",
+        text: "What is my gym locker code?",
+        sources: &["ho_locker"],
+        must: &[&["2958"]],
+        unknown: false,
+    },
+    Question {
+        id: "h03",
+        kind: "borrowed thing",
+        text: "What did Nadia lend me?",
+        sources: &["ho_nadia"],
+        must: &[&["stove"]],
+        unknown: false,
+    },
+    Question {
+        id: "h04",
+        kind: "detail among details",
+        text: "Which seat do I have on the Bristol train?",
+        sources: &["ho_train"],
+        must: &[&["31"]],
+        unknown: false,
+    },
+    Question {
+        id: "h05",
+        kind: "pronoun subject",
+        text: "Where does Tom work now?",
+        sources: &["ho_tom"],
+        must: &[&["kestrel"]],
+        unknown: false,
+    },
+    Question {
+        id: "h06",
+        kind: "next date",
+        text: "When is the next recycling collection?",
+        sources: &["ho_bins"],
+        must: &[&["24 november", "november 24", "24th"]],
         unknown: false,
     },
 ];
@@ -1223,7 +1313,7 @@ fn the_whole_product_works_with_real_models() {
     // 2. Keep ------------------------------------------------------------------------------
     let mut ids: HashMap<&'static str, String> = HashMap::new();
     let keep_started = Instant::now();
-    for note in NOTES {
+    for note in NOTES.iter().chain(HELD_OUT_NOTES) {
         at(&h, DAY, note.at);
         let kept = h.ok(
             "keep_text",
@@ -1307,7 +1397,7 @@ fn the_whole_product_works_with_real_models() {
     run.check(
         "keep.all",
         "every note, the photo, the voice note (twice) and the document are kept",
-        ids.len() == NOTES.len() + 4,
+        ids.len() == NOTES.len() + HELD_OUT_NOTES.len() + 4,
         format!("{} items in {} ms", ids.len(), ms(keep_started.elapsed())),
     );
 
@@ -1439,13 +1529,16 @@ fn the_whole_product_works_with_real_models() {
 
     // 4. Ask -------------------------------------------------------------------------------
     at(&h, DAY, "22:30");
-    let mut rows = Vec::new();
-    let (mut recall_hits, mut recall_total) = (0, 0);
-    let (mut correct, mut cited_ok, mut cited_all) = (0, 0, 0);
-    let (mut first_sentence, mut totals) = (Vec::new(), Vec::new());
-    let (mut bold_total, mut bold_mapped, mut bold_answers, mut bold_dropped) = (0, 0, 0, 0);
+    // The twelve, then the held-out six, each counted on its own.
+    let mut rows: [Vec<Value>; 2] = Default::default();
+    let mut tally = [Tally::default(), Tally::default()];
     let mut every_terminal = true;
-    for q in QUESTIONS {
+    let asked = QUESTIONS
+        .iter()
+        .map(|q| (q, 0))
+        .chain(HELD_OUT.iter().map(|q| (q, 1)));
+    for (q, set) in asked {
+        let t = &mut tally[set];
         let wanted: HashSet<String> = q.sources.iter().map(|k| ids[k].clone()).collect();
         // Retrieval on its own: is the source in the top five?
         let query_vec = block_on(mind.embed(&[q.text.to_string()]))
@@ -1462,8 +1555,8 @@ fn the_whole_product_works_with_real_models() {
                 .any(|r| wanted.contains(&r.item_id))
         });
         if !q.unknown {
-            recall_total += 1;
-            recall_hits += usize::from(rank.is_some());
+            t.recall_total += 1;
+            t.recall_hits += usize::from(rank.is_some());
         }
         let a = asks.ask(&h, q.text);
         every_terminal &= a.phase != "timeout";
@@ -1476,7 +1569,7 @@ fn the_whole_product_works_with_real_models() {
                     .iter()
                     .all(|group| group.iter().any(|w| lower.contains(w)))
         };
-        correct += usize::from(ok);
+        t.correct += usize::from(ok);
         let cited_items: Vec<String> = a
             .receipts
             .iter()
@@ -1484,8 +1577,8 @@ fn the_whole_product_works_with_real_models() {
             .collect();
         let supporting = cited_items.iter().filter(|i| wanted.contains(*i)).count();
         if !q.unknown {
-            cited_all += cited_items.len();
-            cited_ok += supporting;
+            t.cited_all += cited_items.len();
+            t.cited_ok += supporting;
         }
         let spans = bold_spans(&a.text);
         let cited_sentences: Vec<String> = a
@@ -1508,18 +1601,18 @@ fn the_whole_product_works_with_real_models() {
                     .is_some_and(|sentence| sentence.contains(&s.to_lowercase()))
             })
             .count();
-        bold_total += spans.len();
-        bold_mapped += mapped;
+        t.bold_total += spans.len();
+        t.bold_mapped += mapped;
         if a.phase == "done" {
-            bold_dropped += usize::from(a.plain);
-            bold_answers += usize::from(
+            t.bold_dropped += usize::from(a.plain);
+            t.bold_answers += usize::from(
                 !spans.is_empty() && spans.len() == a.memory_ids.len() && mapped == spans.len(),
             );
         }
-        if let Some(t) = a.first_sentence_ms {
-            first_sentence.push(t);
+        if let Some(ms_first) = a.first_sentence_ms {
+            t.first_sentence.push(ms_first);
         }
-        totals.push(a.total_ms);
+        t.totals.push(a.total_ms);
         let cited_quotes: Vec<Value> = a
             .memory_ids
             .iter()
@@ -1562,7 +1655,7 @@ fn the_whole_product_works_with_real_models() {
             a.total_ms
         );
         println!("    {}", plain(&a.text).replace('\n', " "));
-        rows.push(answer_json(
+        rows[set].push(answer_json(
             q,
             &a,
             json!({
@@ -1576,6 +1669,7 @@ fn the_whole_product_works_with_real_models() {
         ));
         h.ok("get_status", json!({}));
     }
+    let [rows, held_rows] = rows;
     run.check(
         "ask.terminal",
         "every question ends in exactly one terminal phase",
@@ -1601,7 +1695,7 @@ fn the_whole_product_works_with_real_models() {
         unknown_ok,
         "",
     );
-    let receipts_everywhere = rows.iter().all(|r| {
+    let receipts_everywhere = rows.iter().chain(&held_rows).all(|r| {
         !matches!(r["phase"].as_str(), Some("done"))
             || r["receipts"].as_array().is_some_and(|x| !x.is_empty())
     });
@@ -1611,19 +1705,18 @@ fn the_whole_product_works_with_real_models() {
         receipts_everywhere,
         "",
     );
-    let answered_asks = rows.iter().filter(|r| r["phase"] == "done").count();
-    let metrics = json!({
-        "sample": "12 questions on one seeded day; a tiny sample, not the 100-question benchmark",
-        "recall_at_5": {"hits": recall_hits, "of": recall_total, "value": ratio(recall_hits, recall_total), "target": "> 0.8"},
-        "answer_accuracy": {"correct": correct, "of": QUESTIONS.len(), "value": ratio(correct, QUESTIONS.len()), "target": "> 0.75"},
-        "citation_precision": {"supporting": cited_ok, "cited": cited_all, "value": ratio(cited_ok, cited_all), "target": "> 0.9"},
-        "first_sentence_ms": {"p50": percentile(&first_sentence, 50.0), "p95": percentile(&first_sentence, 95.0), "max": first_sentence.iter().max(), "target_p95": "< 3000"},
-        "total_ms": {"p50": percentile(&totals, 50.0), "p95": percentile(&totals, 95.0), "max": totals.iter().max()},
-        "bold_spans": {"in_answers": bold_total, "supported_by_cited_memory": bold_mapped, "answers_given": answered_asks,
-                       "answers_fully_covered": bold_answers, "answers_bold_dropped": bold_dropped},
-    });
+    let metrics = tally[0].metrics(
+        &rows,
+        "12 questions on one seeded day; a tiny sample, not the 100-question benchmark",
+    );
+    let held_metrics = tally[1].metrics(
+        &held_rows,
+        "6 held-out questions, written before the extraction prompt changed and never tuned against",
+    );
     run.put("questions", Value::Array(rows));
     run.put("metrics", metrics);
+    run.put("held_out_questions", Value::Array(held_rows));
+    run.put("held_out_metrics", held_metrics);
 
     // 5. Tidy and the morning page --------------------------------------------------------
     at(&h, PAGE_DAY, "03:00");
@@ -2040,6 +2133,39 @@ fn the_whole_product_works_with_real_models() {
     );
 }
 
+/// What one set of questions measured.
+#[derive(Default)]
+struct Tally {
+    recall_hits: usize,
+    recall_total: usize,
+    correct: usize,
+    cited_ok: usize,
+    cited_all: usize,
+    first_sentence: Vec<u64>,
+    totals: Vec<u64>,
+    bold_total: usize,
+    bold_mapped: usize,
+    bold_answers: usize,
+    bold_dropped: usize,
+}
+
+impl Tally {
+    fn metrics(&self, rows: &[Value], sample: &str) -> Value {
+        let answered = rows.iter().filter(|r| r["phase"] == "done").count();
+        let (fs, tt) = (&self.first_sentence, &self.totals);
+        json!({
+            "sample": sample,
+            "recall_at_5": {"hits": self.recall_hits, "of": self.recall_total, "value": ratio(self.recall_hits, self.recall_total), "target": "> 0.8"},
+            "answer_accuracy": {"correct": self.correct, "of": rows.len(), "value": ratio(self.correct, rows.len()), "target": "> 0.75"},
+            "citation_precision": {"supporting": self.cited_ok, "cited": self.cited_all, "value": ratio(self.cited_ok, self.cited_all), "target": "> 0.9"},
+            "first_sentence_ms": {"p50": percentile(fs, 50.0), "p95": percentile(fs, 95.0), "max": fs.iter().max(), "target_p95": "< 3000"},
+            "total_ms": {"p50": percentile(tt, 50.0), "p95": percentile(tt, 95.0), "max": tt.iter().max()},
+            "bold_spans": {"in_answers": self.bold_total, "supported_by_cited_memory": self.bold_mapped, "answers_given": answered,
+                           "answers_fully_covered": self.bold_answers, "answers_bold_dropped": self.bold_dropped},
+        })
+    }
+}
+
 fn ratio(a: usize, b: usize) -> Value {
     if b == 0 {
         Value::Null
@@ -2135,8 +2261,23 @@ fn summary(run: &Run) -> String {
         m["bold_spans"]["answers_given"],
         m["bold_spans"]["answers_bold_dropped"]
     ));
+    let h = &o["held_out_metrics"];
+    s.push_str(
+        "\n## Held out (6 questions, never tuned against)\n\n| Metric | Measured |\n|---|---|\n",
+    );
+    s.push_str(&format!(
+        "| Recall@5 | {} ({} of {}) |\n| Answer accuracy | {} ({} of {}) |\n| Citation precision | {} ({} of {}) |\n",
+        h["recall_at_5"]["value"], h["recall_at_5"]["hits"], h["recall_at_5"]["of"],
+        h["answer_accuracy"]["value"], h["answer_accuracy"]["correct"], h["answer_accuracy"]["of"],
+        h["citation_precision"]["value"], h["citation_precision"]["supporting"], h["citation_precision"]["cited"],
+    ));
     s.push_str("\n## Questions\n\n| # | Kind | Phase | Correct | Recall rank | First sentence | Total |\n|---|---|---|---|---|---|---|\n");
-    for q in o["questions"].as_array().into_iter().flatten() {
+    let all_questions = o["questions"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .chain(o["held_out_questions"].as_array().into_iter().flatten());
+    for q in all_questions {
         s.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} ms | {} ms |\n",
             q["id"].as_str().unwrap_or(""),
