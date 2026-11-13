@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
+import { patch } from "../settings/patch";
 
 beforeEach(() => setViewport(1280));
 afterEach(() => {
@@ -42,14 +43,37 @@ describe("Fading & let go", () => {
     expect(within(letGo).getByText("Let go 13 Nov · not used since August")).toBeInTheDocument();
   });
 
-  it("keeps a fading memory, announces it, and moves focus to the next row", async () => {
+  it.each([
+    ["gentle", 45, 120],
+    ["normal", 30, 90],
+    ["brisk", 14, 45],
+  ] as const)("says the real days for the %s pace", async (pace, fade, letGo) => {
     motion(true);
-    const { engine } = await open();
-    const spy = vi.spyOn(engine, "snooze");
+    const engine = createMockEngine();
+    await engine.updateSettings(patch({ lettingGo: pace }));
+    await open("#/fading", engine);
+    expect(
+      await screen.findByText(
+        `Things you haven’t used fade after ${fade} days and are let go after ${letGo}. Nothing here is deleted. Bring anything back with one click.`,
+      ),
+    ).toBeInTheDocument();
     await userEvent.click(
       screen.getByRole("button", { name: "Keep it: Ava’s old swimming teacher is called Jo." }),
     );
-    expect(spy).toHaveBeenCalledWith("mem-jo", 30);
+    expect(await screen.findByText(`Kept. It will not fade for ${fade} days.`)).toBeInTheDocument();
+  });
+
+  it("keeps a fading memory, announces it, and moves focus to the next row", async () => {
+    motion(true);
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "restore");
+    const snooze = vi.spyOn(engine, "snooze");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Keep it: Ava’s old swimming teacher is called Jo." }),
+    );
+    // Hiding it from the page would not stop it fading; using it again does.
+    expect(spy).toHaveBeenCalledWith(["mem-jo"]);
+    expect(snooze).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(screen.queryByText("Ava’s old swimming teacher is called Jo.")).toBeNull(),
     );
@@ -98,7 +122,7 @@ describe("Fading & let go", () => {
     motion(true);
     const { engine } = await open();
     let release: () => void = () => undefined;
-    const spy = vi.spyOn(engine, "snooze").mockImplementation(
+    const spy = vi.spyOn(engine, "restore").mockImplementation(
       () =>
         new Promise<void>((resolve) => {
           release = resolve;
@@ -238,7 +262,7 @@ describe("Fading & let go", () => {
   it("tells the person when an action fails and keeps the row", async () => {
     motion(true);
     const { engine } = await open();
-    vi.spyOn(engine, "snooze").mockRejectedValue(new Error("no"));
+    vi.spyOn(engine, "restore").mockRejectedValue(new Error("no"));
     await userEvent.click(
       screen.getByRole("button", { name: "Keep it: Ava’s old swimming teacher is called Jo." }),
     );

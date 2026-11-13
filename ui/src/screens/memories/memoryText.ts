@@ -20,10 +20,10 @@ export function memoryWhen(m: MemoryView): string {
 }
 
 /** How soon a fading memory is let go, as words, or null when that is not known. */
-export function letGoIn(m: MemoryView, today: string | null): string | null {
+export function letGoIn(m: MemoryView, today: string | null, letGoDays = 90): string | null {
   let target: string | null = null;
   if (m.letGoAt) target = localDay(m.letGoAt);
-  else if (m.lastUsed) target = addDays(localDay(m.lastUsed), 90);
+  else if (m.lastUsed) target = addDays(localDay(m.lastUsed), letGoDays);
   if (!target || !today) return null;
   const days = Math.round(
     (new Date(`${target}T12:00:00`).getTime() - new Date(`${today}T12:00:00`).getTime()) /
@@ -35,11 +35,11 @@ export function letGoIn(m: MemoryView, today: string | null): string | null {
 }
 
 /** "Fading · last used 7 Sep · let go in 3 weeks" */
-export function fadingMeta(m: MemoryView, today: string | null): string {
+export function fadingMeta(m: MemoryView, today: string | null, letGoDays = 90): string {
   return [
     t("memory.status.fading"),
     m.lastUsed ? t("memory.when.lastUsed", { day: formatDayMonth(m.lastUsed) }) : null,
-    letGoIn(m, today),
+    letGoIn(m, today, letGoDays),
   ]
     .filter(Boolean)
     .join(" · ");

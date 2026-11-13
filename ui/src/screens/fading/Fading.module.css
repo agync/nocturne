@@ -73,17 +73,29 @@
   gap: var(--s-4);
   padding: var(--s-2) 0;
   border-bottom: 1px solid var(--rule);
-  overflow: hidden;
-  transition:
-    opacity var(--m-fade-away-duration) var(--m-act-easing),
-    max-height var(--m-fade-away-duration) var(--m-act-easing);
-  max-height: 8rem;
+  transition: opacity var(--m-fade-away-duration) var(--m-act-easing);
 }
 
+/* Only a row that is leaving is ever clipped, so long text, large type and text spacing stay whole. */
 .row[data-leaving="true"] {
-  max-height: 0;
   opacity: 0;
   border-bottom-color: transparent;
+}
+
+@supports (interpolate-size: allow-keywords) {
+  .row {
+    interpolate-size: allow-keywords;
+    transition:
+      opacity var(--m-fade-away-duration) var(--m-act-easing),
+      height var(--m-fade-away-duration) var(--m-act-easing),
+      padding var(--m-fade-away-duration) var(--m-act-easing);
+  }
+
+  .row[data-leaving="true"] {
+    height: 0;
+    padding-block: 0;
+    overflow: hidden;
+  }
 }
 
 .text {

@@ -5,14 +5,14 @@ import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
 import { useToast } from "../../components/Toast/Toast";
+import { paceDays } from "../../copy/pace";
 import { t } from "../../copy/t";
 import type { MemoryView } from "../../engine/bindings";
-import { useEngine, usePage, useRefresh } from "../../engine/context";
+import { useEngine, usePage, useRefresh, useSettings } from "../../engine/context";
 import { fadingMeta, letGoMeta } from "../memories/memoryText";
 import styles from "./Fading.module.css";
 
 const FADE_MS = 400;
-const KEEP_DAYS = 30;
 
 function reducedMotion(): boolean {
   if (typeof matchMedia !== "function") return true;
@@ -34,6 +34,8 @@ export default function Fading() {
   const toast = useToast();
   const refresh = useRefresh();
   const { data: page } = usePage();
+  const { data: settings } = useSettings();
+  const days = paceDays(settings?.lettingGo);
   const show = useQueryParam("show");
   const query = useQuery({ queryKey: ["fading"], queryFn: () => engine.listFading() });
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
@@ -142,11 +144,16 @@ export default function Fading() {
     [toast, leave],
   );
 
+  // Using a memory again starts its clock again, which is what keeping it means.
   const keepIt = (m: MemoryView) =>
-    act(() => engine.snooze(m.id, KEEP_DAYS), [m.id], t("fading.announce.kept"));
+    act(() => engine.restore([m.id]), [m.id], t("fading.announce.kept", { days: days.fade }));
 
   const bringBack = (ids: string[]) =>
-    act(() => engine.restore(ids), ids, t("fading.announce.broughtBack", { count: ids.length }));
+    act(
+      () => engine.restore(ids),
+      ids,
+      t("fading.announce.broughtBack", { count: ids.length, days: days.fade }),
+    );
 
   const toggle = (id: string, on: boolean) =>
     setSelected((previous) => {
@@ -183,7 +190,9 @@ export default function Fading() {
         <h1 ref={title} tabIndex={-1} className={`t-page-title ${styles.title}`}>
           {t("fading.title")}
         </h1>
-        <p className={`t-ui-body ${styles.explain}`}>{t("fading.explain")}</p>
+        <p className={`t-ui-body ${styles.explain}`}>
+          {t("fading.explain", { fade: days.fade, letGo: days.letGo })}
+        </p>
         <hr className={styles.rule} />
 
         {nothing ? <p className={styles.empty}>{t("fading.empty.all")}</p> : null}
@@ -208,7 +217,7 @@ export default function Fading() {
                   >
                     <div className={styles.text}>
                       <span className={styles.sentence}>{m.sentence}</span>
-                      <span className={styles.meta}>{fadingMeta(m, today)}</span>
+                      <span className={styles.meta}>{fadingMeta(m, today, days.letGo)}</span>
                     </div>
                     <Button
                       variant="quiet"

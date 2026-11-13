@@ -1,6 +1,6 @@
 {
   "fading.title": "Fading & let go",
-  "fading.explain": "Things you haven’t used fade after 30 days and are let go after 90. Nothing here is deleted. Bring anything back with one tap.",
+  "fading.explain": "Things you haven’t used fade after {fade} days and are let go after {letGo}. Nothing here is deleted. Bring anything back with one click.",
   "fading.section.fading": "Fading · will be let go soon",
   "fading.section.letGo": "Let go · {count}",
   "fading.section.letGo.selected": "Let go · {count} selected",
@@ -19,8 +19,8 @@
   "fading.empty.letGo": "Nothing has been let go.",
   "fading.loading": "Looking at what is fading…",
   "fading.error": "I couldn’t open this list. What you kept is safe.",
-  "fading.announce.kept": "Kept. It will not fade for 30 days.",
-  "fading.announce.broughtBack": "{count, plural, one {Brought back. It will not fade for 30 days.} other {Brought back # things. They will not fade for 30 days.}}",
+  "fading.announce.kept": "Kept. It will not fade for {days, plural, one {# day} other {# days}}.",
+  "fading.announce.broughtBack": "{count, plural, one {Brought back. It will not fade for {days, plural, one {# day} other {# days}}.} other {Brought back # things. They will not fade for {days, plural, one {# day} other {# days}}.}}",
   "fading.announce.forgotten": "{count, plural, one {Forgotten.} other {# things forgotten.}}",
   "fading.announce.failed": "That didn’t work. Nothing was changed."
 }

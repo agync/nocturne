@@ -118,3 +118,38 @@ test.describe("using the list", () => {
     await expect(page.getByRole("heading", { name: /^Let go · 2/ })).toBeFocused();
   });
 });
+
+test.describe("text spacing at 400 px (WCAG 1.4.12)", () => {
+  test.use({ viewport: { width: 400, height: 800 } });
+
+  test("no row hides any of its text or its button", async ({ page }) => {
+    await ready(page);
+    await page.addStyleTag({
+      content: `* { line-height: 1.5 !important; letter-spacing: 0.12em !important;
+        word-spacing: 0.16em !important; }
+        p { margin-bottom: 2em !important; }`,
+    });
+    // A long sentence, as a person's own words can be.
+    await page
+      .locator("li[data-row-id] span[class*=sentence]")
+      .first()
+      .evaluate((el) => {
+        el.textContent = `${"Everything the council said about the garden fence and the bins. ".repeat(5)}`;
+      });
+    const clipped = await page
+      .locator("li[data-row-id]")
+      .evaluateAll((rows) =>
+        rows
+          .filter((row) => row.scrollHeight > row.clientHeight + 1)
+          .map((row) => row.textContent?.slice(0, 30)),
+      );
+    expect(clipped).toEqual([]);
+    const first = page.locator("li[data-row-id]").first();
+    const row = await first.boundingBox();
+    const button = await first.getByRole("button").boundingBox();
+    expect((button?.y ?? 0) + (button?.height ?? 0)).toBeLessThanOrEqual(
+      (row?.y ?? 0) + (row?.height ?? 0) + 1,
+    );
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
+  });
+});
