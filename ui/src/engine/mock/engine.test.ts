@@ -441,12 +441,22 @@ describe("MockEngine editions", () => {
     expect(spoken.path.length).toBeGreaterThan(0);
   });
 
-  it("notes that printing and the sound settings were asked for", async () => {
+  it("notes that the sound settings were asked for", async () => {
     const engine = createMockEngine({ now: NOW });
-    await engine.printPage();
     await engine.openSoundSettings();
-    expect(engine.printed).toBe(1);
     expect(engine.soundSettingsOpened).toBe(1);
     expect(await engine.quickKeepCommand()).toContain("--quick-capture");
+  });
+});
+
+describe("MockEngine print check page", () => {
+  it("has a heaviest page for the one-sheet check, which is not one of the pages", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const page = await engine.getEdition("2026-01-01", "print");
+    expect(page.edition).toBe("print");
+    expect(page.needsYou.length).toBeGreaterThan(6);
+    expect(page.changed.length).toBeGreaterThan(6);
+    expect(page.question).not.toBeNull();
+    expect((await engine.listPages()).map((p) => p.date)).not.toContain("2026-01-01");
   });
 });

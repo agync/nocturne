@@ -24,6 +24,11 @@ describe("TauriPlatform shared pieces", () => {
     expect(calls[0]).toEqual({ cmd: "pick_folder", args: {} });
   });
 
+  it("asks the app to print the screen", async () => {
+    await new TauriPlatform().print();
+    expect(calls[0]).toEqual({ cmd: "print_page", args: {} });
+  });
+
   it("asks the app for files", async () => {
     await new TauriPlatform().pickFiles();
     expect(calls[0]?.cmd).toBe("pick_files");

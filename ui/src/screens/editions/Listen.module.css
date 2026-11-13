@@ -91,6 +91,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.scrub .time {
+  color: var(--ink2);
+}
+
 .skipped {
   margin: 0;
   padding: var(--s-3) var(--s-6);
@@ -164,7 +168,7 @@
 
 .keys {
   margin: 0;
-  color: var(--ink3);
+  color: var(--ink2);
   font-size: 0.75rem;
 }
 

@@ -87,3 +87,12 @@ describe("WebPlatform shared pieces", () => {
     await expect(platform.openPath("x")).resolves.toBeUndefined();
   });
 });
+
+describe("WebPlatform printing", () => {
+  it("opens the browser's own print dialog", async () => {
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+    await new WebPlatform().print();
+    expect(print).toHaveBeenCalledOnce();
+    print.mockRestore();
+  });
+});

@@ -147,7 +147,6 @@ export class TauriEngine implements EngineClient {
   speakPage: EngineClient["speakPage"] = (date) => this.call("speak_page", { date });
   getEdition: EngineClient["getEdition"] = (date, edition) =>
     this.call("get_edition", { date, edition });
-  printPage: EngineClient["printPage"] = () => this.call("print_page");
   openSoundSettings: EngineClient["openSoundSettings"] = () => this.call("open_sound_settings");
   quickKeepCommand: EngineClient["quickKeepCommand"] = () => this.call("quick_keep_command");
 }

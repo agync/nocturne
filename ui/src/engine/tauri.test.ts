@@ -100,7 +100,6 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["getAdvanced", [], "get_advanced", []],
   ["speakPage", ["2026-11-13"], "speak_page", ["date"]],
   ["getEdition", ["2026-11-13", "print"], "get_edition", ["date", "edition"]],
-  ["printPage", [], "print_page", []],
   ["openSoundSettings", [], "open_sound_settings", []],
   ["quickKeepCommand", [], "quick_keep_command", []],
   ["cancelAsk", ["ask_1"], "cancel_ask", ["askId"]],

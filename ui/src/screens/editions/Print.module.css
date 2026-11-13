@@ -1,0 +1,276 @@
+/* On screen the sheet is a preview on a grey desk. The sheet is black on white whatever the
+   theme, because it is paper; nothing on it relies on a tint. */
+
+.screen {
+  min-height: 100vh;
+  padding: var(--s-4);
+  background: var(--bg);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-4);
+  max-width: 210mm;
+  margin: 0 auto var(--s-4);
+  color: var(--ink);
+}
+
+.back {
+  color: var(--accent);
+}
+
+.sizes {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  margin: 0 0 0 auto;
+  padding: 0;
+  border: 0;
+}
+
+.sizesLabel {
+  float: left;
+  margin-right: var(--s-3);
+  padding: 0;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-1);
+  min-height: var(--size-touch);
+  font-size: 0.875rem;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  max-width: 32rem;
+  margin: var(--s-7) auto;
+  padding: 0 var(--s-4);
+  color: var(--ink2);
+}
+
+.sheet {
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: 14mm;
+  background: #fff;
+  color: #000;
+  box-shadow: 0 0 0 1px var(--rule);
+  font: 400 10.5pt / 1.3 var(--font-sans);
+  overflow-wrap: anywhere;
+}
+
+.sheet[data-size="a4"] {
+  width: 210mm;
+  min-height: 297mm;
+}
+
+.sheet[data-size="letter"] {
+  width: 8.5in;
+  min-height: 11in;
+  padding: 0.6in;
+  font-size: 10pt;
+}
+
+.sheet[data-size="receipt"] {
+  width: 80mm;
+  padding: 4mm;
+  font: 400 9pt / 1.25 var(--font-mono);
+}
+
+.masthead {
+  padding-bottom: 3mm;
+  border-bottom: 1.5pt solid #000;
+}
+
+.brand {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.date {
+  margin: 0;
+  font-size: 0.85em;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.headline {
+  margin: 2mm 0 1mm;
+  font: 700 1.7em / 1.15 var(--font-serif);
+}
+
+.sheet[data-size="receipt"] .headline {
+  font: 700 1.15em / 1.2 var(--font-mono);
+}
+
+.dek {
+  margin: 0;
+}
+
+.part {
+  margin-top: 4mm;
+  break-inside: avoid;
+}
+
+.partTitle {
+  margin: 0 0 1.5mm;
+  font-size: 0.8em;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.lines,
+.choices,
+.answers {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.line,
+.change {
+  display: flex;
+  gap: 2.5mm;
+  margin-bottom: 2mm;
+}
+
+.line strong,
+.lineText strong {
+  font-weight: 700;
+}
+
+.lineBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.lineText {
+  margin: 0;
+}
+
+.needText {
+  font-weight: 700;
+}
+
+.box {
+  flex: none;
+  width: 3.2mm;
+  height: 3.2mm;
+  margin-top: 1mm;
+  border: 1pt solid #000;
+}
+
+.dash {
+  flex: none;
+  width: 2.5mm;
+  height: 0;
+  margin-top: 2.4mm;
+  border-top: 1.5pt solid #000;
+}
+
+.receipt {
+  font-size: 0.85em;
+}
+
+.choices {
+  margin-top: 1mm;
+}
+
+.choice {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  margin-bottom: 1mm;
+}
+
+.answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 6mm;
+  margin-top: 1.5mm;
+}
+
+.circle {
+  flex: none;
+  width: 3mm;
+  height: 3mm;
+  border: 1pt solid #000;
+  border-radius: 50%;
+}
+
+.more {
+  margin: 0;
+  font-style: italic;
+}
+
+.footer {
+  margin-top: 5mm;
+  padding-top: 2mm;
+  border-top: 0.75pt solid #000;
+  font-size: 0.8em;
+}
+
+.footer p {
+  margin: 0;
+}
+
+/* Receipts are text: brackets and plain marks stand in for boxes. */
+.sheet[data-size="receipt"] .box,
+.sheet[data-size="receipt"] .circle {
+  width: auto;
+  height: auto;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+.sheet[data-size="receipt"] .box::before {
+  content: "[ ]";
+}
+
+.sheet[data-size="receipt"] .circle::before {
+  content: "( )";
+}
+
+.sheet[data-size="receipt"] .dash {
+  width: auto;
+  margin: 0;
+  border: 0;
+}
+
+.sheet[data-size="receipt"] .dash::before {
+  content: "-";
+}
+
+@media print {
+  .screen {
+    min-height: 0;
+    padding: 0;
+    background: none;
+  }
+
+  .toolbar {
+    display: none;
+  }
+
+  .sheet {
+    width: auto !important;
+    min-height: 0 !important;
+    margin: 0;
+    padding: 0 !important;
+    box-shadow: none;
+    print-color-adjust: exact;
+  }
+}

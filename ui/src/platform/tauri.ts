@@ -92,6 +92,10 @@ export class TauriPlatform implements Platform {
     return lazyUnlisten(listen<string>(OPEN_IN_MAIN, (event) => cb(event.payload)));
   }
 
+  async print(): Promise<void> {
+    await invoke("print_page");
+  }
+
   async pickFiles(): Promise<string[]> {
     return (await invoke<string[] | null>("pick_files")) ?? [];
   }

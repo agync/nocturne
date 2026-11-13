@@ -35,6 +35,7 @@ import type {
 } from "../bindings";
 import type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "../client";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
+import { PRINT_STRESS_DATE } from "./seed/print";
 import { privacySeed } from "./seed/privacy";
 import { advancedSeed } from "./seed/setup";
 
@@ -163,14 +164,14 @@ export class MockEngine implements EngineClient {
   private memories: MemoryView[];
   private readonly entities: EntityView[];
   private pages: PageView[];
+  private readonly printStress: PageView;
   private settings: SettingsView;
   private status: EngineStatus;
   private setup: SetupView;
   private readonly listeners = new Map<EngineEventName, Set<(payload: never) => void>>();
   private readonly previews = new Map<string, { ids: string[]; includeOriginals: boolean }>();
   private counter = 0;
-  /** How many times printing and the sound settings were asked for, for tests. */
-  printed = 0;
+  /** How many times the sound settings were asked for, for tests. */
   soundSettingsOpened = 0;
   private readonly snoozed = new Set<string>();
   private tierOffer: Tier | null;
@@ -185,6 +186,7 @@ export class MockEngine implements EngineClient {
     this.memories = seed.memories;
     this.entities = seed.entities;
     this.pages = seed.pages;
+    this.printStress = seed.printStress;
     this.settings = seed.settings;
     this.status = {
       state: "resting",
@@ -995,7 +997,7 @@ export class MockEngine implements EngineClient {
   }
 
   async getEdition(date: string, edition: Edition): Promise<PageView> {
-    const page = await this.getPage(date);
+    const page = date === PRINT_STRESS_DATE ? clone(this.printStress) : await this.getPage(date);
     page.edition = edition;
     if (edition === "screen") return page;
     const hidden = new Set(this.memories.filter((m) => m.private).map((m) => m.id));
@@ -1035,10 +1037,6 @@ export class MockEngine implements EngineClient {
       durationMs,
       privateSkipped: page.privateSkipped,
     };
-  }
-
-  async printPage(): Promise<void> {
-    this.printed += 1;
   }
 
   async openSoundSettings(): Promise<void> {

@@ -115,6 +115,10 @@ export class WebPlatform implements Platform {
     return () => undefined;
   }
 
+  async print(): Promise<void> {
+    window.print();
+  }
+
   pickFiles(): Promise<string[]> {
     return new Promise((resolve) => {
       const input = document.createElement("input");

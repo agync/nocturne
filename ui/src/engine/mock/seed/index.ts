@@ -10,6 +10,7 @@ import { captureSeed } from "./capture";
 import { makeBase, makeReceipt, type SeedContext } from "./common";
 import { memoriesSeed } from "./memories";
 import { pagesSeed } from "./pages";
+import { printStressPage } from "./print";
 import { settingsSeed } from "./settings";
 import { setupSeed } from "./setup";
 
@@ -20,6 +21,8 @@ export interface SeedData {
   memories: MemoryView[];
   entities: EntityView[];
   pages: PageView[];
+  /** The heaviest page, asked for by date only; it is not one of the pages. */
+  printStress: PageView;
   settings: SettingsView;
   setup: SetupView;
 }
@@ -34,5 +37,13 @@ export function buildSeed(now: Date): SeedData {
   const ctx: SeedContext = { ...base, receipt: makeReceipt(items) };
   const { memories, entities } = memoriesSeed(ctx);
   const pages = pagesSeed(ctx, memories);
-  return { items, memories, entities, pages, settings: settingsSeed(), setup: setupSeed() };
+  return {
+    items,
+    memories,
+    entities,
+    pages,
+    printStress: printStressPage(ctx),
+    settings: settingsSeed(),
+    setup: setupSeed(),
+  };
 }

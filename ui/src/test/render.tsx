@@ -11,6 +11,8 @@ export interface FakePlatform extends Platform {
   handOff(question: string): void;
   /** What the quick-capture window last asked the main window to show. */
   opened(): string | null;
+  /** How many times the print dialog was asked for. */
+  printed(): number;
 }
 
 export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
@@ -20,6 +22,7 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
   let onHandOff: (question: string) => void = () => undefined;
   let onOpen: (path: string) => void = () => undefined;
   let lastOpened: string | null = null;
+  let printed = 0;
   return {
     onFileDrop(drop, hover) {
       onDrop = drop;
@@ -51,6 +54,10 @@ export function fakePlatform(initial: SystemTheme | null = null): FakePlatform {
       onOpen = cb;
       return () => undefined;
     },
+    print: async () => {
+      printed += 1;
+    },
+    printed: () => printed,
     opened: () => lastOpened,
     hover: (count) => {
       onHover(count);

@@ -28,6 +28,7 @@ function fakePlatform(initial: SystemTheme | null) {
     handOffAsk: async () => undefined,
     openInMain: async () => undefined,
     onOpenInMain: () => () => undefined,
+    print: async () => undefined,
     onAskHandOff: () => () => undefined,
   };
   return { platform, change: (t: SystemTheme) => listener?.(t) };

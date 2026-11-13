@@ -31,4 +31,6 @@ export interface Platform {
   openInMain(path: string): Promise<void>;
   /** Hears screens the quick-capture window asked the main window to show. */
   onOpenInMain(cb: (path: string) => void): Unsubscribe;
+  /** Opens the system's print dialog for the screen being shown. */
+  print(): Promise<void>;
 }

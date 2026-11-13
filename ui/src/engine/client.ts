@@ -150,8 +150,6 @@ export interface EngineClient {
   speakPage(date: string): Promise<SpokenPage>;
   /** A saved page in another edition (audio and print leave private lines out). */
   getEdition(date: string, edition: Edition): Promise<PageView>;
-  /** Opens the system's print dialog for the page on screen. */
-  printPage(): Promise<void>;
   /** Opens the system's sound settings, where the microphone is allowed. */
   openSoundSettings(): Promise<void>;
   /** The command line that opens quick capture, for a desktop shortcut. */
