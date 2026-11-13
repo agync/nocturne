@@ -267,7 +267,8 @@ pub enum Mode {
 pub struct Wire {
     addr: Addr,
     ws: Option<Ws>,
-    poll: Option<String>,
+    /// Long-poll: whether this wire polls, and the session or pairing id it polls under.
+    poll: Option<Option<[u8; SID_LEN]>>,
     inbox: std::collections::VecDeque<Vec<u8>>,
     pub sent: Vec<Vec<u8>>,
     pub received: Vec<Vec<u8>>,
@@ -311,7 +312,7 @@ impl Wire {
                         .unwrap_or_else(|h| panic!("no WebSocket: {}", h.status)),
                 )
             }
-            Mode::LongPoll => w.poll = Some(crypto::b64(&crypto::random::<12>())),
+            Mode::LongPoll => w.poll = Some(None),
         }
         w
     }
@@ -328,24 +329,41 @@ impl Wire {
         if let Some(ws) = self.ws.as_mut() {
             return ws.send(frame).await.map_err(|_| End::Closed);
         }
-        let name = self.poll.clone().unwrap();
+        if let Ok(h) = crypto::parse_header(frame)
+            && h.sid != [0u8; SID_LEN]
+        {
+            self.poll = Some(Some(h.sid));
+        }
         let mut body = (frame.len() as u32).to_be_bytes().to_vec();
         body.extend_from_slice(frame);
-        let hdrs = self.hdrs();
-        let res = http(
-            &self.addr,
-            "POST",
-            &format!("{PATH_SESSION}?c={name}&d=up"),
-            &hdrs,
-            &body,
-        )
-        .await
-        .map_err(|_| End::Closed)?;
+        let mut hdrs = self.hdrs();
+        hdrs.push(("content-type", "text/plain"));
+        let res = http(&self.addr, "POST", PATH_SESSION, &hdrs, &body)
+            .await
+            .map_err(|_| End::Closed)?;
         self.last_status = res.status;
         match res.status {
+            200 => {
+                let frames =
+                    super::super::listener::split_frames(&res.body).expect("a batch of frames");
+                for f in frames {
+                    self.take_sid(f);
+                    self.inbox.push_back(f.to_vec());
+                }
+                Ok(())
+            }
             204 => Ok(()),
             403 => Err(End::Refused),
             _ => Err(End::Closed),
+        }
+    }
+
+    /// A SESSION_ACCEPT names the session to poll under from then on.
+    fn take_sid(&mut self, frame: &[u8]) {
+        if frame.get(1) == Some(&KIND_SESSION_ACCEPT)
+            && let Ok(h) = crypto::parse_header(frame)
+        {
+            self.poll = Some(Some(h.sid));
         }
     }
 
@@ -372,13 +390,16 @@ impl Wire {
                 _ => Err(End::Closed),
             };
         }
-        let name = self.poll.clone().unwrap();
+        let Some(Some(sid)) = self.poll else {
+            return Err(End::Closed);
+        };
+        let hex: String = sid.iter().map(|b| format!("{b:02x}")).collect();
         loop {
             let hdrs = self.hdrs();
             let res = http(
                 &self.addr,
-                "POST",
-                &format!("{PATH_SESSION}?c={name}&d=down"),
+                "GET",
+                &format!("{PATH_SESSION}?sid={hex}"),
                 &hdrs,
                 &[],
             )
@@ -497,12 +518,7 @@ impl PhoneClient {
         {
             Ok(()) => {}
             Err(End::Refused) => return Opened::Refused,
-            Err(End::Closed) => {
-                // A long-poll open that ended may still have a REVOKED waiting.
-                if wire.poll.is_none() {
-                    return Opened::Closed;
-                }
-            }
+            Err(End::Closed) => return Opened::Closed,
         }
         let first = match wire.recv_within(Duration::from_secs(5)).await {
             Ok(f) => f,

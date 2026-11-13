@@ -5,14 +5,18 @@
 //! Routes: the phone app's files (see `static_files`) and one sealed path, `/s`:
 //! - WebSocket (`GET /s` with an upgrade): each binary message is one frame, at most
 //!   `MAX_FRAME`. The unsealed refusal is a close with code 4403 and no reason.
-//! - Long-poll, for when WebSockets do not get through. The phone names its conversation with
-//!   `c` (an id from `ID_ALPHABET`). `POST /s?c=<id>&d=up` carries up to `MAX_LONG_POLL_BATCH`
-//!   frames, each as a 4-byte big-endian length then the frame; it answers 204, or 403 empty
-//!   (the unsealed refusal), or 410 when the conversation has ended. `POST /s?c=<id>&d=down` is
-//!   held up to `LONG_POLL_HOLD_SECS` and answers 200 with frames in the same layout, 204 when
-//!   nothing came, 410 once the conversation has ended. One outstanding POST per direction:
-//!   a second answers 409.
+//! - Long-poll, for when WebSockets do not get through. Bodies are a run of frames, each a
+//!   4-byte big-endian length then the frame. `POST /s` carries up to `MAX_LONG_POLL_BATCH`
+//!   frames (any content type, so a browser sends it without a preflight); it answers 200 with
+//!   the replies to handshake frames (HELLO, the pairing nonce, SESSION_ACCEPT with the first
+//!   `Hello`, or a REVOKED), 204 when there are none, 403 empty for the unsealed refusal, 410
+//!   when the session it names has ended. `GET /s?sid=<32 hex>` names a session id or a pairing
+//!   id and is held up to `LONG_POLL_HOLD_SECS`: 200 with what came down (`PAIR_OUTCOME` comes
+//!   this way under the pairing id), 204 when nothing did, 410 once it has ended, 409 while
+//!   another poll for it is held.
 //!
+//! While Away from home is off every keyed request gets a bare 503 (the phone reads it as
+//! "turned off").
 //! Everything else is a bare 404. Without the helper key (Windows) every request is a bare
 //! 404 before routing. The key is never echoed, redirected or logged; logs say only "no key".
 
@@ -196,7 +200,7 @@ async fn handle(ctx: Arc<Ctx>, req: Request<Body>) -> Response<Body> {
         return bare(StatusCode::NOT_FOUND);
     };
     if !ctx.core.is_on() {
-        return bare(StatusCode::NOT_FOUND);
+        return bare(StatusCode::SERVICE_UNAVAILABLE);
     }
     let Ok(permit) = ctx.permits.clone().try_acquire_owned() else {
         return bare(StatusCode::SERVICE_UNAVAILABLE);
@@ -282,7 +286,7 @@ async fn session(
             let h = res.headers_mut();
             h.insert(
                 header::ACCESS_CONTROL_ALLOW_METHODS,
-                HeaderValue::from_static("POST"),
+                HeaderValue::from_static("GET, POST"),
             );
             h.insert(
                 header::ACCESS_CONTROL_ALLOW_HEADERS,
@@ -293,6 +297,9 @@ async fn session(
                 HeaderValue::from_static("600"),
             );
             with_cors(res, &origin)
+        }
+        Method::GET if req.uri().query().is_some() => {
+            with_cors(poll_down(&ctx, req).await, &origin)
         }
         Method::GET => {
             let (mut parts, _) = req.into_parts();
@@ -306,7 +313,7 @@ async fn session(
                 .on_upgrade(move |socket| websocket(socket, core, permit));
             with_cors(res, &origin)
         }
-        Method::POST => with_cors(long_poll(&ctx, req).await, &origin),
+        Method::POST => with_cors(poll_up(&ctx, req).await, &origin),
         _ => bare(StatusCode::NOT_FOUND),
     }
 }
@@ -363,19 +370,6 @@ async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemapho
     core.end_conv(&conv);
 }
 
-fn query(req: &Request<Body>) -> (Option<String>, Option<String>) {
-    let mut c = None;
-    let mut d = None;
-    for pair in req.uri().query().unwrap_or_default().split('&') {
-        match pair.split_once('=') {
-            Some(("c", v)) => c = Some(v.to_string()),
-            Some(("d", v)) => d = Some(v.to_string()),
-            _ => {}
-        }
-    }
-    (c, d)
-}
-
 /// Clears a busy flag when the request ends, however it ends.
 struct Busy<'a>(&'a std::sync::atomic::AtomicBool);
 
@@ -385,90 +379,136 @@ impl Drop for Busy<'_> {
     }
 }
 
-async fn long_poll(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
-    let (Some(name), Some(dir)) = query(&req) else {
+fn frames_body(frames: &[Vec<u8>]) -> Vec<u8> {
+    let mut body = Vec::new();
+    for f in frames {
+        body.extend_from_slice(&(f.len() as u32).to_be_bytes());
+        body.extend_from_slice(f);
+    }
+    body
+}
+
+fn frames_response(core: &Core, frames: &[Vec<u8>]) -> Response<Body> {
+    let body = frames_body(frames);
+    core.count_sent(body.len());
+    Response::builder()
+        .status(StatusCode::OK)
+        .header(header::CONTENT_TYPE, "application/octet-stream")
+        .header(header::CONTENT_LENGTH, body.len())
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(body))
+        .expect("a frames response")
+}
+
+fn is_pairing_kind(kind: u8) -> bool {
+    matches!(kind, KIND_HELLO | KIND_PAIR_COMMIT | KIND_PAIR_REVEAL)
+}
+
+/// Frames up. Each finds its conversation by its sid: zeros (a SESSION_OPEN) start one, a
+/// pairing frame starts one under its pairing id, anything else must name a live one.
+async fn poll_up(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
+    let core = &ctx.core;
+    let limit = MAX_LONG_POLL_BATCH * (LEN_PREFIX + MAX_FRAME);
+    let declared = req
+        .headers()
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<usize>().ok());
+    match declared {
+        Some(n) if n <= limit => {}
+        _ => return bare(StatusCode::PAYLOAD_TOO_LARGE),
+    }
+    let Ok(body) = axum::body::to_bytes(req.into_body(), limit).await else {
+        return bare(StatusCode::PAYLOAD_TOO_LARGE);
+    };
+    let Some(frames) = split_frames(&body) else {
+        return bare(StatusCode::PAYLOAD_TOO_LARGE);
+    };
+    let mut handshakes: Vec<std::sync::Arc<Conv>> = Vec::new();
+    for frame in frames {
+        let Ok(h) = crypto::parse_header(frame) else {
+            return bare(StatusCode::NOT_FOUND);
+        };
+        let conv = match core.conv_for_sid(&h.sid) {
+            Some(c) => c,
+            None if h.sid == [0u8; SID_LEN] || is_pairing_kind(h.kind) => core.new_conv(),
+            None => return bare(StatusCode::GONE),
+        };
+        let handshake = conv.in_handshake();
+        match core.inbound(&conv, frame) {
+            Inbound::Continue => {}
+            Inbound::Refuse => {
+                core.end_conv(&conv);
+                return bare(StatusCode::FORBIDDEN);
+            }
+            Inbound::Close => conv.close(),
+        }
+        if handshake && !handshakes.iter().any(|c| c.id == conv.id) {
+            handshakes.push(conv);
+        }
+    }
+    let mut out = Vec::new();
+    for conv in &handshakes {
+        if let Ok(mut rx) = conv.rx.try_lock() {
+            while out.len() < MAX_LONG_POLL_BATCH
+                && let Ok(f) = rx.try_recv()
+            {
+                out.push(f);
+            }
+        }
+        // Ended, or nothing answered (no offer open, a wrong code): nothing to keep.
+        if conv.closed.is_cancelled() || !core.has_sid(conv.id) {
+            core.end_conv(conv);
+        }
+    }
+    if out.is_empty() {
+        bare(StatusCode::NO_CONTENT)
+    } else {
+        frames_response(core, &out)
+    }
+}
+
+/// A held poll for what comes down under a session id or a pairing id.
+async fn poll_down(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
+    let core = &ctx.core;
+    let sid = req
+        .uri()
+        .query()
+        .unwrap_or_default()
+        .split('&')
+        .find_map(|p| p.strip_prefix("sid="))
+        .and_then(parse_sid);
+    let Some(sid) = sid else {
         return bare(StatusCode::NOT_FOUND);
     };
-    if crypto::check_id(&name).is_err() {
-        return bare(StatusCode::NOT_FOUND);
+    let Some(conv) = core.conv_for_sid(&sid) else {
+        return bare(StatusCode::GONE);
+    };
+    if conv.down_busy.swap(true, Ordering::SeqCst) {
+        return bare(StatusCode::CONFLICT);
     }
-    let core = &ctx.core;
-    match dir.as_str() {
-        "up" => {
-            let limit = MAX_LONG_POLL_BATCH * (LEN_PREFIX + MAX_FRAME);
-            let declared = req
-                .headers()
-                .get(header::CONTENT_LENGTH)
-                .and_then(|v| v.to_str().ok())
-                .and_then(|v| v.parse::<usize>().ok());
-            match declared {
-                Some(n) if n <= limit => {}
-                _ => return bare(StatusCode::PAYLOAD_TOO_LARGE),
-            }
-            let Ok(body) = axum::body::to_bytes(req.into_body(), limit).await else {
-                return bare(StatusCode::PAYLOAD_TOO_LARGE);
-            };
-            let Some(frames) = split_frames(&body) else {
-                return bare(StatusCode::PAYLOAD_TOO_LARGE);
-            };
-            let Some(conv) = core.poll_conv(&name, true) else {
-                return bare(StatusCode::GONE);
-            };
-            if conv.closed.is_cancelled() {
-                return bare(StatusCode::GONE);
-            }
-            if conv.up_busy.swap(true, Ordering::SeqCst) {
-                return bare(StatusCode::CONFLICT);
-            }
-            let _busy = Busy(&conv.up_busy);
-            for frame in frames {
-                match core.inbound(&conv, frame) {
-                    Inbound::Continue => {}
-                    Inbound::Refuse => {
-                        core.end_conv(&conv);
-                        return bare(StatusCode::FORBIDDEN);
-                    }
-                    Inbound::Close => {
-                        conv.close();
-                        return bare(StatusCode::GONE);
-                    }
-                }
-            }
-            bare(StatusCode::NO_CONTENT)
+    let _busy = Busy(&conv.down_busy);
+    *conv.last_seen.lock().unwrap_or_else(|e| e.into_inner()) = core.now();
+    let frames = hold(&conv).await;
+    if frames.is_empty() {
+        if conv.closed.is_cancelled() {
+            core.end_conv(&conv);
+            return bare(StatusCode::GONE);
         }
-        "down" => {
-            let Some(conv) = core.poll_conv(&name, false) else {
-                return bare(StatusCode::GONE);
-            };
-            if conv.down_busy.swap(true, Ordering::SeqCst) {
-                return bare(StatusCode::CONFLICT);
-            }
-            let _busy = Busy(&conv.down_busy);
-            *conv.last_seen.lock().unwrap_or_else(|e| e.into_inner()) = core.now();
-            let frames = hold(&conv).await;
-            if frames.is_empty() {
-                if conv.closed.is_cancelled() {
-                    core.end_conv(&conv);
-                    return bare(StatusCode::GONE);
-                }
-                return bare(StatusCode::NO_CONTENT);
-            }
-            let mut body = Vec::new();
-            for f in &frames {
-                body.extend_from_slice(&(f.len() as u32).to_be_bytes());
-                body.extend_from_slice(f);
-            }
-            core.count_sent(body.len());
-            Response::builder()
-                .status(StatusCode::OK)
-                .header(header::CONTENT_TYPE, "application/octet-stream")
-                .header(header::CONTENT_LENGTH, body.len())
-                .header(header::CACHE_CONTROL, "no-store")
-                .body(Body::from(body))
-                .expect("a frames response")
-        }
-        _ => bare(StatusCode::NOT_FOUND),
+        return bare(StatusCode::NO_CONTENT);
     }
+    frames_response(core, &frames)
+}
+
+fn parse_sid(hex: &str) -> Option<[u8; SID_LEN]> {
+    if hex.len() != SID_LEN * 2 {
+        return None;
+    }
+    let mut out = [0u8; SID_LEN];
+    for (i, b) in out.iter_mut().enumerate() {
+        *b = u8::from_str_radix(hex.get(2 * i..2 * i + 2)?, 16).ok()?;
+    }
+    Some(out)
 }
 
 /// Wait for frames (or the end, or the hold), then take up to a batch.

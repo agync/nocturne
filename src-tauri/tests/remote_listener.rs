@@ -287,9 +287,15 @@ async fn cors_echoes_exact_origin_with_vary() {
         Some(origin.as_str())
     );
     assert_eq!(res.header("vary"), Some("Origin"));
-    let res = http(&r.addr, "POST", "/s?c=abc&d=down", &h, &[])
-        .await
-        .unwrap();
+    let res = http(
+        &r.addr,
+        "GET",
+        "/s?sid=00000000000000000000000000000000",
+        &h,
+        &[],
+    )
+    .await
+    .unwrap();
     assert_eq!(
         res.header("access-control-allow-origin"),
         Some(origin.as_str())
@@ -304,7 +310,7 @@ async fn cors_never_wildcard_or_credentials() {
     for origin in [Some(origin.as_str()), Some("https://evil.example"), None] {
         for (method, path) in [
             ("OPTIONS", "/s"),
-            ("POST", "/s?c=abc&d=down"),
+            ("GET", "/s?sid=00000000000000000000000000000000"),
             ("GET", "/p"),
             ("GET", "/sw.js"),
         ] {
@@ -470,14 +476,12 @@ async fn oversized_frame_refused_before_read() {
     let big = (limit + 1).to_string();
     let mut h = keyed(&r);
     h.push(("content-length", &big));
-    let res = http(&r.addr, "POST", "/s?c=abc&d=up", &h, b"")
-        .await
-        .unwrap();
+    let res = http(&r.addr, "POST", "/s", &h, b"").await.unwrap();
     assert_eq!(res.status, 413);
     // One frame over MAX_FRAME in a long-poll batch.
     let mut body = ((MAX_FRAME + 1) as u32).to_be_bytes().to_vec();
     body.resize(4 + MAX_FRAME + 1, 0);
-    let res = http(&r.addr, "POST", "/s?c=abc&d=up", &keyed(&r), &body)
+    let res = http(&r.addr, "POST", "/s", &keyed(&r), &body)
         .await
         .unwrap();
     assert_eq!(res.status, 413);
@@ -492,35 +496,48 @@ async fn oversized_frame_refused_before_read() {
 #[tokio::test(flavor = "multi_thread")]
 async fn long_poll_one_outstanding_per_direction() {
     let r = local().await;
+    let keys = r.bench.paired("Pixel");
+    let wire = Wire::open_with(&r.addr, Mode::LongPoll, &keyed(&r)).await;
+    let Opened::Session(mut phone, _) = PhoneClient::open_on(wire, &keys).await else {
+        panic!("a session")
+    };
+    let hex: String = phone.sid().iter().map(|b| format!("{b:02x}")).collect();
+    let path = format!("/s?sid={hex}");
     let h: Vec<(String, String)> = keyed(&r)
         .iter()
         .map(|(a, b)| (a.to_string(), b.to_string()))
         .collect();
-    let post = |q: &'static str, body: Vec<u8>| {
+    let get = |path: String| {
         let (addr, h) = (r.addr.clone(), h.clone());
         async move {
             let hh: Vec<(&str, &str)> = h.iter().map(|(a, b)| (a.as_str(), b.as_str())).collect();
-            http(&addr, "POST", q, &hh, &body).await.unwrap().status
+            http(&addr, "GET", &path, &hh, &[]).await.unwrap()
         }
     };
-    // A pairing HELLO while no offer is open names the conversation and gets no answer.
-    let mut hello = 26u32.to_be_bytes().to_vec();
-    hello.extend_from_slice(&[VERSION, KIND_HELLO]);
-    hello.extend_from_slice(&[7u8; 24]);
-    assert_eq!(post("/s?c=held&d=up", hello.clone()).await, 204);
-    let first = tokio::spawn(post("/s?c=held&d=down", Vec::new()));
+    let first = tokio::spawn(get(path.clone()));
     tokio::time::sleep(Duration::from_millis(300)).await;
-    assert!(!first.is_finished(), "the first down poll is held");
-    assert_eq!(post("/s?c=held&d=down", Vec::new()).await, 409);
+    assert!(!first.is_finished(), "the first poll is held");
     assert_eq!(
-        post("/s?c=held&d=up", hello).await,
-        204,
-        "the other way is free"
+        get(path.clone()).await.status,
+        409,
+        "one held poll per session"
     );
+    // Up is free while down is held; the answer comes on the held poll.
+    phone.request(RemoteCall::GetStatus).await.unwrap();
+    let answered = tokio::time::timeout(Duration::from_secs(5), first)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(answered.status, 200);
+    let held = tokio::spawn(get(path.clone()));
+    tokio::time::sleep(Duration::from_millis(200)).await;
     r.bench.core.close_all();
-    let ended = tokio::time::timeout(Duration::from_secs(1), first).await;
-    assert_eq!(ended.expect("the held poll ends at once").unwrap(), 410);
-    assert_eq!(post("/s?c=held&d=down", Vec::new()).await, 410);
+    let ended = tokio::time::timeout(Duration::from_secs(1), held).await;
+    assert_eq!(
+        ended.expect("the held poll ends at once").unwrap().status,
+        410
+    );
+    assert_eq!(get(path).await.status, 410);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -532,7 +549,7 @@ async fn long_poll_batch_cap() {
         body.extend_from_slice(&(frame.len() as u32).to_be_bytes());
         body.extend_from_slice(&frame);
     }
-    let res = http(&r.addr, "POST", "/s?c=batch&d=up", &keyed(&r), &body)
+    let res = http(&r.addr, "POST", "/s", &keyed(&r), &body)
         .await
         .unwrap();
     assert_eq!(res.status, 413);
@@ -630,4 +647,18 @@ async fn sent_bytes_counted_once() {
     let sent = engine.remote_state().unwrap().sent_bytes as usize;
     assert_eq!(sent, page.body.len() + frames);
     let _ = End::Closed;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn off_answers_503() {
+    let r = local().await;
+    r.bench.core.set_on(None);
+    for (method, path) in [
+        ("GET", "/p"),
+        ("POST", "/s"),
+        ("GET", "/s?sid=00000000000000000000000000000000"),
+    ] {
+        let res = http(&r.addr, method, path, &keyed(&r), &[]).await.unwrap();
+        assert_eq!(res.status, 503, "{method} {path}");
+    }
 }

@@ -319,14 +319,7 @@ fn unknown_device_gets_unsealed_refusal() {
         );
         let mut body = (frame.len() as u32).to_be_bytes().to_vec();
         body.extend_from_slice(&frame);
-        let res = block(testing::client::http(
-            &p.addr(),
-            "POST",
-            &format!("/s?c={}&d=up", crypto::b64(&crypto::random::<9>())),
-            &[],
-            &body,
-        ))
-        .unwrap();
+        let res = block(testing::client::http(&p.addr(), "POST", "/s", &[], &body)).unwrap();
         raw.push((res.status, res.body));
     }
     assert_eq!(raw[0], (403, Vec::new()));
@@ -1462,4 +1455,38 @@ fn disconnect_ends_the_session() {
         block(c.next_within(Duration::from_secs(1))),
         Err(End::Closed)
     ));
+}
+
+#[test]
+fn pairing_over_long_poll() {
+    let p = on();
+    for typed in [false, true] {
+        let offer = p.h.ok("begin_pairing", json!({}));
+        let phone = if typed {
+            PhonePair::typed(
+                offer["typedCode"].as_str().unwrap(),
+                testing::TEST_HOST,
+                "Pixel",
+            )
+        } else {
+            PhonePair::scanned(offer["link"].as_str().unwrap(), "Pixel")
+        };
+        let run = block(Pairing::start(&p.addr(), phone, Mode::LongPoll)).unwrap();
+        wait_for("asked", || {
+            matches!(
+                block(p.hub.view()).pairing.map(|x| x.phase),
+                Some(nocturne_contract::PairingPhase::WaitingForYou { .. })
+            )
+        });
+        p.h.ok(
+            "decide_pairing",
+            json!({"pairingId": offer["pairingId"], "allow": true}),
+        );
+        let keys = block(run.outcome()).unwrap().expect("allowed");
+        let mut c = p.open(&keys, Mode::LongPoll);
+        assert!(matches!(
+            call(&mut c, RemoteCall::GetStatus),
+            RemoteAnswer::Status { .. }
+        ));
+    }
 }

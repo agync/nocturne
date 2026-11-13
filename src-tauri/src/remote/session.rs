@@ -83,7 +83,6 @@ pub struct Conv {
     role: Mutex<Role>,
     created: Instant,
     pub last_seen: Mutex<Instant>,
-    pub up_busy: AtomicBool,
     pub down_busy: AtomicBool,
     /// Set when the conversation ended with the unsealed refusal.
     pub refused: AtomicBool,
@@ -113,6 +112,11 @@ impl Conv {
 
     pub fn is_live(&self) -> bool {
         matches!(&*self.role(), Role::Session(s) if s.live)
+    }
+
+    /// Still in a handshake: fresh, or pairing.
+    pub fn in_handshake(&self) -> bool {
+        matches!(&*self.role(), Role::Fresh | Role::Pairing)
     }
 
     pub fn is_fresh(&self) -> bool {
@@ -158,7 +162,9 @@ pub struct Core {
     on: RwLock<Option<OnState>>,
     pub pairings: Mutex<Pairings>,
     convs: Mutex<HashMap<ConvId, Arc<Conv>>>,
-    polls: Mutex<HashMap<String, ConvId>>,
+    /// Session ids and pairing ids to the conversation they belong to (long-poll finds its
+    /// conversation this way).
+    sids: Mutex<HashMap<[u8; SID_LEN], ConvId>>,
     pub phones: Mutex<HashMap<String, PhoneState>>,
     pub incoming: Incoming,
     next_conv: AtomicU64,
@@ -180,7 +186,7 @@ impl Core {
             on: RwLock::new(None),
             pairings: Mutex::new(Pairings::default()),
             convs: Mutex::new(HashMap::new()),
-            polls: Mutex::new(HashMap::new()),
+            sids: Mutex::new(HashMap::new()),
             phones: Mutex::new(HashMap::new()),
             next_conv: AtomicU64::new(1),
             sent: AtomicU64::new(0),
@@ -276,7 +282,6 @@ impl Core {
             role: Mutex::new(Role::Fresh),
             created: now,
             last_seen: Mutex::new(now),
-            up_busy: AtomicBool::new(false),
             down_busy: AtomicBool::new(false),
             refused: AtomicBool::new(false),
         });
@@ -284,26 +289,25 @@ impl Core {
         conv
     }
 
-    /// The long-poll conversation the phone named, made on its first use.
-    pub fn poll_conv(&self, name: &str, create: bool) -> Option<Arc<Conv>> {
-        let mut polls = lock(&self.polls);
-        if let Some(id) = polls.get(name)
-            && let Some(c) = lock(&self.convs).get(id)
-        {
-            return Some(c.clone());
-        }
-        if !create {
-            return None;
-        }
-        let conv = self.new_conv();
-        polls.insert(name.to_string(), conv.id);
-        Some(conv)
+    /// The conversation a session id or pairing id belongs to.
+    pub fn conv_for_sid(&self, sid: &[u8; SID_LEN]) -> Option<Arc<Conv>> {
+        let id = *lock(&self.sids).get(sid)?;
+        lock(&self.convs).get(&id).cloned()
+    }
+
+    /// Whether a session id or pairing id leads to this conversation.
+    pub fn has_sid(&self, conv: ConvId) -> bool {
+        lock(&self.sids).values().any(|c| *c == conv)
+    }
+
+    fn register_sid(&self, sid: [u8; SID_LEN], conv: ConvId) {
+        lock(&self.sids).insert(sid, conv);
     }
 
     pub fn end_conv(&self, conv: &Conv) {
         conv.close();
         lock(&self.convs).remove(&conv.id);
-        lock(&self.polls).retain(|_, id| *id != conv.id);
+        lock(&self.sids).retain(|_, id| *id != conv.id);
     }
 
     fn convs(&self) -> Vec<Arc<Conv>> {
@@ -369,8 +373,7 @@ impl Core {
             };
             let idle = now.duration_since(*lock(&c.last_seen))
                 >= Duration::from_secs(LONG_POLL_HOLD_SECS * 2 + HANDSHAKE_TIMEOUT_SECS)
-                && !c.down_busy.load(Ordering::SeqCst)
-                && !c.up_busy.load(Ordering::SeqCst);
+                && !c.down_busy.load(Ordering::SeqCst);
             if stale || idle {
                 self.end_conv(&c);
             }
@@ -429,6 +432,11 @@ impl Core {
             return Inbound::Close;
         }
         let step = lock(&self.pairings).handle(frame, conv.id, self.now(), self.shell.wall_now());
+        if (!step.reply.is_empty() || step.request.is_some())
+            && let Ok(h) = crypto::parse_header(frame)
+        {
+            self.register_sid(h.sid, conv.id);
+        }
         for f in step.reply {
             conv.push(f);
         }
@@ -506,6 +514,7 @@ impl Core {
         let first = channel
             .seal(&crypto::envelope_json(&body))
             .expect("a new channel is open");
+        self.register_sid(sid, conv.id);
         conv.push(crypto::session_accept(&sid, &fpub));
         conv.push(first);
         *conv.role() = Role::Session(Box::new(Session {
