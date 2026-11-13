@@ -12,15 +12,28 @@ const CSP = [
 ].join("; ");
 
 export default defineConfig(({ mode }) => {
+  // `preview-real` is the development build served by the preview server: the real engine over
+  // HTTP, in its own output folder so it is never mistaken for the packaged interface.
+  const preview = mode === "preview-real";
   const engine =
-    process.env.VITE_ENGINE ?? (mode === "production" || mode === "tauri" ? "tauri" : "mock");
+    process.env.VITE_ENGINE ??
+    (preview ? "http" : mode === "production" || mode === "tauri" ? "tauri" : "mock");
+  if (engine === "http" && !preview) {
+    // An interface that talks to the preview server must never be packaged by accident.
+    throw new Error("VITE_ENGINE=http is for `--mode preview-real` only");
+  }
   return {
     plugins: [react()],
     define: {
       "import.meta.env.VITE_ENGINE": JSON.stringify(engine),
       "import.meta.env.VITE_MOCK_NOW": JSON.stringify(process.env.VITE_MOCK_NOW ?? ""),
     },
-    build: { assetsInlineLimit: 0, target: "es2022", sourcemap: false },
+    build: {
+      assetsInlineLimit: 0,
+      target: "es2022",
+      sourcemap: false,
+      ...(preview ? { outDir: "dist-preview" } : {}),
+    },
     preview: { headers: { "Content-Security-Policy": CSP } },
     server: { port: 5173, strictPort: true },
     test: {

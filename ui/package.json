@@ -7,6 +7,7 @@
     "dev": "vite --mode mock",
     "dev:tauri": "vite --mode tauri",
     "build": "tsc --noEmit && vite build --mode tauri",
+    "build:preview-real": "vite build --mode preview-real",
     "build:mock": "vite build --mode mock",
     "preview": "vite preview --mode mock --port 4174 --strictPort",
     "test": "vitest run",

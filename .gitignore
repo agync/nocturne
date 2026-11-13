@@ -47,3 +47,6 @@ Thumbs.db
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+
+# The development preview build (make preview-real)
+ui/dist-preview/

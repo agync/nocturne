@@ -4,6 +4,7 @@
     "includes": [
       "**",
       "!dist",
+      "!dist-preview",
       "!test-results",
       "!playwright-report",
       "!node_modules",

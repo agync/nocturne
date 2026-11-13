@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 interface ImportMetaEnv {
-  readonly VITE_ENGINE: "mock" | "tauri";
+  readonly VITE_ENGINE: "mock" | "tauri" | "http";
   readonly VITE_MOCK_NOW: string;
 }
 
