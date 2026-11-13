@@ -45,11 +45,12 @@ fn kept_order(new: &str, old: &str) -> Option<std::cmp::Ordering> {
     }
 }
 
-/// When the existing memory's newest source was kept.
+/// When the newest trusted item behind an existing memory was kept. Only trusted items put
+/// values in order: an untrusted one agreeing late with an old value does not make it newer.
 fn last_kept(tx: &Transaction<'_>, memory: &str) -> Result<Option<String>> {
     Ok(tx.query_row(
         "SELECT MAX(i.kept_at) FROM memory_sources s JOIN items i ON i.id = s.item_id \
-         WHERE s.memory_id = ?1",
+         WHERE s.memory_id = ?1 AND i.trust = 'trusted'",
         [memory],
         |r| r.get(0),
     )?)
@@ -592,7 +593,8 @@ fn apply_one(
                 _ => false,
             };
             // A dated appointment kept again later with another date has moved; one with no
-            // date (a club that meets monthly) said two ways is a contradiction.
+            // date (a club that meets monthly) said two ways is a contradiction. This loop runs
+            // only for a trusted item: an untrusted one makes an unconfirmed memory instead.
             let moved = predicate == "scheduled"
                 && due.as_ref().or(vf.as_ref()).is_some()
                 && e.due.as_ref().or(e.valid_from.as_ref()).is_some();

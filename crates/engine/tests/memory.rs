@@ -361,6 +361,78 @@ fn an_older_appointment_read_late_becomes_history() {
     );
 }
 
+/// A later untrusted item (pasted from the web, sent by someone else) never moves a person's own
+/// appointment: like any untrusted disagreement it waits as unconfirmed, and the trusted value
+/// stays current.
+#[test]
+fn an_untrusted_later_item_does_not_move_an_appointment() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, wed) = learn(
+        &f.engine,
+        "Dentist on Wednesday 18 November at 10:00",
+        appointment("Wednesday 18 November at 10:00", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let web = keep_as(&f.engine, "Dentist moved to Thursday", Source::PastedWeb);
+    let r = f
+        .engine
+        .apply(
+            &web,
+            vec![appointment("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty() && r.replaced.is_empty());
+    assert_eq!(r.unconfirmed.len(), 1);
+    let current: Vec<_> = all(&f)
+        .into_iter()
+        .filter(|m| m.status == MemoryStatus::Active)
+        .collect();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].id, wed);
+    assert_eq!(current[0].was, None);
+}
+
+/// Only trusted items put values in order. An untrusted item agreeing late with the old value
+/// does not make it the newer one: the person's own later note still moves the appointment.
+#[test]
+fn an_untrusted_echo_of_the_old_value_does_not_make_it_newer() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Dentist on Wednesday 18 November at 10:00",
+        appointment("Wednesday 18 November at 10:00", "2026-11-18"),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let moved = keep(
+        &f.engine,
+        "The dentist moved to Thursday 19 November at 14:30",
+    );
+    f.clock.set_str("2026-11-12T13:00:00Z");
+    let echo = keep_as(&f.engine, "Dentist Wednesday 10:00", Source::PastedWeb);
+    f.engine
+        .apply(
+            &echo,
+            vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
+        )
+        .unwrap();
+    f.clock.set_str("2026-11-12T22:00:00Z");
+    let r = f
+        .engine
+        .apply(
+            &moved,
+            vec![appointment("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty());
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].object, "Thursday 19 November at 14:30");
+    assert_eq!(
+        rows[0].was.as_deref(),
+        Some("Wednesday 18 November at 10:00")
+    );
+}
+
 /// Two notes kept within a few minutes of each other cannot be put in order: ask.
 #[test]
 fn appointments_kept_too_close_together_to_order_ask_which_is_right() {
