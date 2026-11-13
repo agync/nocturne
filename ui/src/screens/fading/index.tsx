@@ -39,8 +39,11 @@ export default function Fading() {
   const [gone, setGone] = useState<ReadonlySet<string>>(new Set());
   const [leaving, setLeaving] = useState<ReadonlySet<string>>(new Set());
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
+  /** Rows with an action under way: they are locked so one press cannot run twice. */
+  const [working, setWorking] = useState<ReadonlySet<string>>(new Set());
   const [forgetting, setForgetting] = useState<string[] | null>(null);
   const forgotten = useRef<string[]>([]);
+  const inflight = useRef(new Set<string>());
   const pendingFocus = useRef<string | null>(null);
   const title = useRef<HTMLHeadingElement>(null);
   const letGoHeading = useRef<HTMLHeadingElement>(null);
@@ -121,11 +124,17 @@ export default function Fading() {
 
   const act = useCallback(
     async (work: () => Promise<unknown>, ids: string[], message: string) => {
+      if (ids.some((id) => inflight.current.has(id))) return;
+      for (const id of ids) inflight.current.add(id);
+      setWorking(new Set(inflight.current));
       try {
         await work();
       } catch {
         toast.show({ message: t("fading.announce.failed") });
         return;
+      } finally {
+        for (const id of ids) inflight.current.delete(id);
+        if (alive.current) setWorking(new Set(inflight.current));
       }
       toast.show({ message });
       leave(ids);
@@ -204,6 +213,7 @@ export default function Fading() {
                     <Button
                       variant="quiet"
                       aria-label={t("fading.keepIt.named", { sentence: m.sentence })}
+                      aria-disabled={working.has(m.id) || leaving.has(m.id)}
                       onClick={() => void keepIt(m)}
                     >
                       {t("fading.keepIt")}
@@ -230,7 +240,11 @@ export default function Fading() {
               </h2>
               {chosen.length > 0 ? (
                 <div className={styles.bulk}>
-                  <Button variant="primary" onClick={() => void bringBack(chosen)}>
+                  <Button
+                    variant="primary"
+                    aria-disabled={chosen.some((id) => working.has(id) || leaving.has(id))}
+                    onClick={() => void bringBack(chosen)}
+                  >
                     {t("fading.bulk.bringBack", { count: chosen.length })}
                   </Button>
                   <Button variant="forget" onClick={() => setForgetting(chosen)}>
@@ -259,6 +273,7 @@ export default function Fading() {
                     <Button
                       variant="quiet"
                       aria-label={t("fading.bringBack.named", { sentence: m.sentence })}
+                      aria-disabled={working.has(m.id) || leaving.has(m.id)}
                       onClick={() => void bringBack([m.id])}
                     >
                       {t("button.bringBack")}

@@ -94,6 +94,32 @@ describe("Fading & let go", () => {
     );
   });
 
+  it("runs an action once however many times the button is pressed", async () => {
+    motion(true);
+    const { engine } = await open();
+    let release: () => void = () => undefined;
+    const spy = vi.spyOn(engine, "snooze").mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const button = screen.getByRole("button", {
+      name: "Keep it: Ava’s old swimming teacher is called Jo.",
+    });
+    await userEvent.click(button);
+    await userEvent.click(button);
+    await userEvent.click(button);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await act(async () => {
+      release();
+    });
+    await waitFor(() =>
+      expect(screen.queryByText("Ava’s old swimming teacher is called Jo.")).toBeNull(),
+    );
+  });
+
   it("brings one back with its own button", async () => {
     motion(true);
     const { engine } = await open();
