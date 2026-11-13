@@ -18,7 +18,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/today", "Two things need you today."],
   ["#/pages/2026-11-12", "One thing needs you today."],
   ["#/needs-you", "Needs you"],
-  ["#/ask", "Ask"],
+  ["#/ask", "Ask about anything you’ve kept."],
   ["#/recent", "Recently kept"],
   ["#/quick-capture", "Keep something"],
   ["#/memories", "What Nocturne remembers"],
@@ -240,7 +240,9 @@ describe("keeping and asking from the bar", () => {
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await userEvent.type(bar, "When is the dentist?{Enter}");
     await waitFor(() => expect(window.location.hash).toBe("#/ask"));
-    expect(askRequests.peek()?.question).toBe("When is the dentist?");
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "“When is the dentist?”" }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -291,7 +293,9 @@ describe("a question handed off from quick capture", () => {
     await screen.findByRole("textbox", { name: "Keep something, or ask" });
     act(() => platform.handOff("Where did I park?"));
     await waitFor(() => expect(window.location.hash).toBe("#/ask"));
-    expect(askRequests.peek()?.question).toBe("Where did I park?");
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "“Where did I park?”" }),
+    ).toBeInTheDocument();
   });
 });
 
