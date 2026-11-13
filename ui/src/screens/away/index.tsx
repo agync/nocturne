@@ -1,6 +1,7 @@
 import { useRoute } from "wouter";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
+import { AddPhone } from "./AddPhone";
 import styles from "./Away.module.css";
 import { AwayPage } from "./AwayPage";
 import { SetupFlow } from "./SetupFlow";
@@ -9,6 +10,7 @@ import { useRemote } from "./useRemote";
 /** Serves #/settings/away and the pages under it. */
 export default function Away() {
   const [setup] = useRoute("/settings/away/setup");
+  const [add] = useRoute("/settings/away/add");
   const query = useRemote();
 
   if (query.isError) {
@@ -30,5 +32,6 @@ export default function Away() {
     );
   }
   if (setup) return <SetupFlow view={view} />;
+  if (add) return <AddPhone view={view} />;
   return <AwayPage view={view} />;
 }
