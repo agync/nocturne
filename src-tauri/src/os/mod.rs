@@ -211,7 +211,12 @@ pub async fn apply_settings<R: Runtime>(
     if let Some(want) = patch.start_at_login {
         set_start_at_login(app, &os, want).map_err(|e| {
             tracing::warn!("start with this computer was not changed: {e}");
-            CommandError::unavailable("start with this computer could not be changed")
+            // The one refusal the person can act on keeps its reason, for the settings screen.
+            if e == autostart::MOVE_FIRST {
+                CommandError::unavailable(autostart::MOVE_FIRST)
+            } else {
+                CommandError::unavailable("start with this computer could not be changed")
+            }
         })?;
     }
     Ok(())

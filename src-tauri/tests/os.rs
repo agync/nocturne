@@ -414,6 +414,27 @@ fn a_start_at_login_that_cannot_be_written_is_refused_and_not_saved() {
     assert!(!h.engine().settings().unwrap().start_at_login);
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn from_a_mounted_disk_start_at_login_is_refused_and_says_why() {
+    use nocturne_app_lib::os::autostart::{MOVE_FIRST, Target};
+    let h = harness();
+    let root = tempfile::tempdir().unwrap();
+    let dir = root.path().join("LaunchAgents");
+    h.app.manage(OsState::new(h.dir.path()));
+    h.app.state::<OsState>().set_autostart(Target {
+        dir: dir.clone(),
+        exec: "/Volumes/Nocturne/Nocturne.app/Contents/MacOS/Nocturne".into(),
+    });
+    let err = h
+        .call("update_settings", json!({"patch": {"startAtLogin": true}}))
+        .unwrap_err();
+    assert_eq!(err["code"], "unavailable");
+    assert_eq!(err["detail"], MOVE_FIRST);
+    assert!(!dir.exists(), "nothing was written");
+    assert!(!h.engine().settings().unwrap().start_at_login);
+}
+
 mod inbox {
     use std::path::Path;
     use std::time::{Duration, Instant};

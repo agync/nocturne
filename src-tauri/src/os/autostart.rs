@@ -21,6 +21,18 @@ pub const ENTRY: &str = "app.nocturne.desktop.plist";
 #[cfg(not(target_os = "macos"))]
 pub const ENTRY: &str = "app.nocturne.desktop.desktop";
 
+/// The reason `apply` gives when the program sits somewhere that will not be there at the next
+/// login (a mounted disk image, or the temporary place macOS runs a downloaded app from). The
+/// settings screen turns it into a plain sentence.
+pub const MOVE_FIRST: &str = "move-to-applications";
+
+/// Whether a program path is somewhere that goes away: a mounted volume (a disk image the person
+/// opened the app from) or an App Translocation folder.
+pub fn needs_move(exec: &Path) -> bool {
+    let s = exec.to_string_lossy();
+    s.starts_with("/Volumes/") || s.contains("/AppTranslocation/")
+}
+
 /// The entry's text for a program, in the form this platform reads.
 pub fn entry_text(exec: &Path) -> String {
     if cfg!(target_os = "macos") {
@@ -88,7 +100,8 @@ pub struct Target {
 impl Target {
     /// From the environment. Linux: `$XDG_CONFIG_HOME/autostart` (else `~/.config/autostart`)
     /// and the AppImage or the running executable. macOS: `~/Library/LaunchAgents` and the
-    /// canonical path of the running executable (`None` when it cannot be resolved).
+    /// canonical path of the running executable (empty when it cannot be resolved, so nothing is
+    /// written but an existing entry can still be removed).
     pub fn from_env() -> Option<Target> {
         let home = || {
             std::env::var_os("HOME")
@@ -98,7 +111,9 @@ impl Target {
         if cfg!(target_os = "macos") {
             return Some(Target {
                 dir: home()?.join("Library").join("LaunchAgents"),
-                exec: std::env::current_exe().ok()?.canonicalize().ok()?,
+                exec: std::env::current_exe()
+                    .and_then(|exe| exe.canonicalize())
+                    .unwrap_or_default(),
             });
         }
         let config = std::env::var_os("XDG_CONFIG_HOME")
@@ -165,6 +180,30 @@ pub fn reconcile(want: bool, dir: &Path, exec: &Path) -> Action {
     }
 }
 
+/// Write `text` to `path` through a temporary file in the same folder, readable by everyone and
+/// writable only by the owner (launchd refuses an agent others can write), then rename it into
+/// place, so a reader never sees half a file.
+fn write_atomic(path: &Path, text: &str) -> std::io::Result<()> {
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned());
+    let tmp = path.with_file_name(format!(
+        ".{}.{}.tmp",
+        name.unwrap_or_default(),
+        std::process::id()
+    ));
+    let written = std::fs::write(&tmp, text).and_then(|()| {
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o644))?;
+        }
+        std::fs::rename(&tmp, path)
+    });
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
+}
+
 /// Make the entry in `target.dir` match `want`. Touches that folder and nothing else.
 pub fn apply(want: bool, target: &Target) -> std::io::Result<Action> {
     if want && !exec_is_safe(&target.exec) {
@@ -173,12 +212,18 @@ pub fn apply(want: bool, target: &Target) -> std::io::Result<Action> {
             "the program path cannot be written to an autostart entry",
         ));
     }
+    if want && cfg!(target_os = "macos") && needs_move(&target.exec) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            MOVE_FIRST,
+        ));
+    }
     let action = reconcile(want, &target.dir, &target.exec);
     let path = target.dir.join(ENTRY);
     match action {
         Action::Write => {
             std::fs::create_dir_all(&target.dir)?;
-            std::fs::write(&path, entry_text(&target.exec))?;
+            write_atomic(&path, &entry_text(&target.exec))?;
         }
         Action::Remove => std::fs::remove_file(&path)?,
         Action::Nothing => {}
@@ -306,6 +351,67 @@ mod tests {
         assert!(t.dir.ends_with("Library/LaunchAgents"), "{:?}", t.dir);
         assert_eq!(t.exec, t.exec.canonicalize().unwrap());
         assert!(exec_is_safe(&t.exec));
+    }
+
+    #[test]
+    fn a_program_on_a_mounted_disk_or_in_translocation_needs_moving() {
+        assert!(needs_move(Path::new(
+            "/Volumes/Nocturne/Nocturne.app/Contents/MacOS/Nocturne"
+        )));
+        assert!(needs_move(Path::new(
+            "/private/var/folders/ab/cd/T/AppTranslocation/1234/d/Nocturne.app/Contents/MacOS/Nocturne"
+        )));
+        assert!(!needs_move(Path::new(
+            "/Applications/Nocturne.app/Contents/MacOS/Nocturne"
+        )));
+        assert!(!needs_move(Path::new("/Applications/Spare/Nocturne")));
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn on_a_mac_a_program_that_needs_moving_is_refused_with_the_reason() {
+        let root = tempfile::tempdir().unwrap();
+        let t = Target {
+            dir: root.path().join("LaunchAgents"),
+            exec: PathBuf::from("/Volumes/Nocturne/Nocturne.app/Contents/MacOS/Nocturne"),
+        };
+        let err = apply(true, &t).unwrap_err();
+        assert_eq!(err.to_string(), MOVE_FIRST);
+        assert!(!t.dir.exists(), "nothing was written");
+        assert!(apply(false, &t).is_ok(), "removing is always allowed");
+    }
+
+    #[test]
+    fn an_empty_path_removes_but_never_writes() {
+        let root = tempfile::tempdir().unwrap();
+        let t = Target {
+            dir: root.path().join("LaunchAgents"),
+            exec: PathBuf::new(),
+        };
+        assert!(apply(true, &t).is_err());
+        assert!(!t.dir.exists());
+        std::fs::create_dir_all(&t.dir).unwrap();
+        std::fs::write(t.dir.join(ENTRY), "old").unwrap();
+        assert_eq!(apply(false, &t).unwrap(), Action::Remove);
+        assert!(!enabled(&t.dir));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_entry_is_written_whole_and_readable_by_all_whatever_the_umask() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = tempfile::tempdir().unwrap();
+        let t = target(root.path());
+        apply(true, &t).unwrap();
+        let path = t.dir.join(ENTRY);
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o644);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), entry_text(&t.exec));
+        let names: Vec<_> = std::fs::read_dir(&t.dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, [ENTRY], "no temporary file is left");
     }
 
     #[test]
