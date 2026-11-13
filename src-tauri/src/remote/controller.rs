@@ -93,8 +93,8 @@ pub const RESTARTS_AN_HOUR: usize = 5;
 pub const IDLE_PERIOD: Duration = Duration::from_secs(30);
 /// ... and while one is.
 pub const BUSY_PERIOD: Duration = Duration::from_secs(1);
-/// How often auto-off is checked while on.
-pub const AUTO_OFF_PERIOD: Duration = Duration::from_secs(600);
+/// How often old activity is pruned while on.
+pub const PRUNE_PERIOD: Duration = Duration::from_secs(600);
 
 #[derive(Default)]
 struct Ctl {
@@ -114,7 +114,7 @@ struct Rt {
     origin: Option<nocturne_helpers::Origin>,
     helper_checked: bool,
     started: Option<Instant>,
-    last_auto_off: Option<Instant>,
+    last_prune: Option<Instant>,
 }
 
 impl Default for Rt {
@@ -129,7 +129,7 @@ impl Default for Rt {
             origin: None,
             helper_checked: false,
             started: None,
-            last_auto_off: None,
+            last_prune: None,
         }
     }
 }
@@ -693,21 +693,22 @@ impl RemoteHub {
         let due = {
             let mut rt = self.rt();
             let due = rt
-                .last_auto_off
-                .is_none_or(|t| now.duration_since(t) >= AUTO_OFF_PERIOD);
+                .last_prune
+                .is_none_or(|t| now.duration_since(t) >= PRUNE_PERIOD);
             if due {
-                rt.last_auto_off = Some(now);
+                rt.last_prune = Some(now);
             }
             due
         };
         if due {
             super::audit::prune(&self.core);
-            if self.auto_off_due() {
-                let me = self.clone();
-                tauri::async_runtime::spawn(async move {
-                    let _ = me.stop(false).await;
-                });
-            }
+        }
+        // Every round, so a computer waking after the due time turns off at once.
+        if self.auto_off_due() && self.core.is_on() {
+            let me = self.clone();
+            tauri::async_runtime::spawn(async move {
+                let _ = me.stop(false).await;
+            });
         }
     }
 
@@ -773,7 +774,6 @@ impl RemoteHub {
             if let Some(t) = t {
                 let _ = t.sign_out().await;
             }
-            let _ = std::fs::remove_dir_all(self.dir.join("tailscale"));
         }
         if let Some(t) = ctl.transport.take()
             && let Err(e) = t.stop().await
@@ -997,16 +997,21 @@ impl RemoteHub {
             && to != before.connection
         {
             self.unpair_all(&engine, RemoteAction::SwitchedConnection)?;
-            let running = self.ctl.lock().await.transport.is_some();
+            let (running, downloading) = {
+                let ctl = self.ctl.lock().await;
+                (ctl.transport.is_some(), ctl.download.is_some())
+            };
             let leaving_tailscale = before.connection == RemoteConnection::MostPrivate;
-            if running || leaving_tailscale {
+            if running || downloading || leaving_tailscale {
                 self.stop_inner(leaving_tailscale, false).await;
             }
-            if running {
+            if running || downloading {
                 engine
                     .update_remote_state(|r| r.connection = to)
                     .map_err(failed)?;
-                return self.start(to, false).await;
+                // Mid-download the person is turning on: fetching the other connection's
+                // helper is the same yes, given for the connection now chosen.
+                return self.start(to, downloading).await;
             }
             engine
                 .update_remote_state(|r| r.connection = to)

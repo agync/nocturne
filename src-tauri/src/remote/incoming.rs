@@ -113,7 +113,8 @@ impl Incoming {
         }
         let size = decl.size as u64;
         let allowed = MIME_MAGIC.iter().any(|m| m.mime == decl.mime);
-        if !allowed || (decl.recording && !decl.mime.starts_with("audio/")) {
+        // The phone records WAV, the one sound the speech model reads.
+        if !allowed || (decl.recording && decl.mime != "audio/wav") {
             return Err(PhoneError::Invalid);
         }
         {
@@ -127,6 +128,7 @@ impl Incoming {
                 return Err(PhoneError::TooLarge);
             }
         }
+        // The day is charged by the keep itself, once admitted (see `charge_day`).
         let mut uploads = self.uploads();
         if let Some(old) = uploads.get(device) {
             if core.conv_alive(old.conv) {
@@ -161,12 +163,30 @@ impl Incoming {
                 done: Some(tx),
             },
         );
-        drop(uploads);
+        Ok(rx)
+    }
+
+    /// Count `size` bytes against a phone's day, once the keep is admitted.
+    pub fn charge_day(&self, core: &Core, device: &str, size: u64) -> Result<(), PhoneError> {
+        let today = core.shell.wall_now().strftime("%Y-%m-%d").to_string();
+        let mut phones = core.phones.lock().unwrap_or_else(|e| e.into_inner());
+        let p = phones.entry(device.to_string()).or_default();
+        if p.day.0 != today {
+            p.day = (today, 0);
+        }
+        if p.day.1 + size > MAX_DAY {
+            return Err(PhoneError::TooLarge);
+        }
+        p.day.1 += size;
+        Ok(())
+    }
+
+    /// Give back what a keep that did not happen was charged.
+    pub fn refund_day(&self, core: &Core, device: &str, size: u64) {
         let mut phones = core.phones.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(p) = phones.get_mut(device) {
-            p.day.1 += size;
+            p.day.1 = p.day.1.saturating_sub(size);
         }
-        Ok(rx)
     }
 
     /// One chunk of `device`'s upload, written straight to its file.

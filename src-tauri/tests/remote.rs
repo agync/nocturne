@@ -340,6 +340,12 @@ fn failed_opens_have_their_own_bucket() {
     assert!(!p.hub.core.limits.has(Bucket::FailedOpen, ""));
     assert!(p.hub.core.limits.has(Bucket::PairingFrames, ""));
     assert!(p.hub.core.limits.has(Bucket::Static, ""));
+    // While the bucket is empty every open is refused before any work, even a good one.
+    assert!(matches!(
+        block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)),
+        Opened::Refused
+    ));
+    p.mono.advance(Duration::from_secs(60));
     let mut c = p.open(&keys, Mode::WebSocket);
     assert!(matches!(
         call(&mut c, RemoteCall::GetStatus),
@@ -352,7 +358,6 @@ fn verified_open_not_counted_against_shared_buckets() {
     let p = on();
     let keys = p.pair("Pixel");
     use nocturne_app_lib::remote::limits::Bucket;
-    while p.hub.core.limits.take(Bucket::FailedOpen, "") {}
     while p.hub.core.limits.take(Bucket::PairingFrames, "") {}
     while p.hub.core.limits.take(Bucket::NoKey, "") {}
     for _ in 0..3 {
@@ -362,6 +367,14 @@ fn verified_open_not_counted_against_shared_buckets() {
             RemoteAnswer::Status { .. }
         ));
     }
+    let mut left = 0;
+    while p.hub.core.limits.take(Bucket::FailedOpen, "") {
+        left += 1;
+    }
+    assert_eq!(
+        left, LIMIT_FAILED_SESSION_OPEN,
+        "verified opens took nothing from it"
+    );
 }
 
 #[test]
@@ -861,36 +874,26 @@ fn item_over_50mb_refused_before_chunks() {
 #[test]
 fn day_cap_500mb() {
     let p = on();
-    let keys = p.pair("Pixel");
-    for i in 0..(MAX_DAY / MAX_ITEM) {
-        let mut c = p.open(&keys, Mode::WebSocket);
-        let id = block(c.request(RemoteCall::KeepBytes {
-            mime: "image/jpeg".into(),
-            size: MAX_ITEM as f64,
-            client_id: format!("c-{i}"),
-            caption: None,
-        }))
+    let (keys, mut c) = p.session("Pixel");
+    p.hub
+        .core
+        .incoming
+        .charge_day(&p.hub.core, &keys.id(), MAX_DAY - 150)
         .unwrap();
-        assert!(
-            block(c.next_within(Duration::from_millis(200))).is_err(),
-            "accepted, waiting"
-        );
-        let _ = id;
-        block(c.wire.close_ref());
-        wait_for("closed", || p.hub.core.live_devices().is_empty());
-        p.mono.advance(Duration::from_secs(11));
-    }
-    let mut c = p.open(&keys, Mode::WebSocket);
-    let a = call(
-        &mut c,
-        RemoteCall::KeepBytes {
-            mime: "image/jpeg".into(),
-            size: 1.0,
-            client_id: "c-last".into(),
-            caption: None,
-        },
-    );
+    let a = keep_bytes(&mut c, &jpeg(200), "image/jpeg", "c-big", None, 100);
     assert_eq!(error_of(&a), Some(PhoneError::TooLarge));
+    // A keep that fails gives its bytes back.
+    let png = [0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a].repeat(13);
+    let a = keep_bytes(&mut c, &png[..100], "image/jpeg", "c-bad", None, 100);
+    assert_eq!(error_of(&a), Some(PhoneError::Invalid));
+    let a = keep_bytes(&mut c, &jpeg(100), "image/jpeg", "c-ok", None, 100);
+    assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
+    let a = keep_bytes(&mut c, &jpeg(100), "image/jpeg", "c-over", None, 100);
+    assert_eq!(
+        error_of(&a),
+        Some(PhoneError::TooLarge),
+        "50 bytes left today"
+    );
 }
 
 #[test]
@@ -1223,10 +1226,11 @@ fn outbound_filter_catches_a_leak() {
     );
     // Any answer naming a private memory is held back.
     p.h.engine().set_private(&mem, true).unwrap();
-    let leak = RemoteAnswer::AskStarted {
-        ask_id: format!("see {mem}"),
-    };
-    assert_eq!(dispatch::named_ids(&leak), vec![mem.clone()]);
+    let mut delta = deltas.last().unwrap().1.clone();
+    delta.memory_ids = vec![mem.clone()];
+    delta.receipts.clear();
+    let leak = RemoteAnswer::AskDelta { delta };
+    assert_eq!(dispatch::cited_ids(&leak), vec![mem.clone()]);
     assert_eq!(
         p.h.engine()
             .private_ids(std::slice::from_ref(&mem))
@@ -1297,18 +1301,37 @@ fn pages_today_and_7_back_only() {
         p.h.save_todays_page();
         p.h.clock.advance_days(1);
     }
+    let state = p.h.state();
+    let today = state.now().to_zoned(state.clock.tz()).date();
+    let oldest = today
+        .checked_sub(jiff::Span::new().days(PAGES_BACK as i64))
+        .unwrap();
     let saved = e.pages().unwrap();
     let (_, mut c) = p.session("Pixel");
     let RemoteAnswer::Pages { pages } = call(&mut c, RemoteCall::ListPages) else {
         panic!("pages")
     };
-    assert_eq!(pages.len(), PAGES_BACK as usize + 1);
-    let oldest = saved.last().unwrap().date.clone();
+    let in_window: Vec<String> = saved
+        .iter()
+        .filter(|s| s.date.parse::<jiff::civil::Date>().unwrap() >= oldest)
+        .map(|s| s.date.clone())
+        .collect();
+    assert!(!in_window.is_empty() && in_window.len() < saved.len());
     assert_eq!(
-        error_of(&call(&mut c, RemoteCall::GetPage { date: Some(oldest) })),
+        pages.iter().map(|p| p.date.clone()).collect::<Vec<_>>(),
+        in_window
+    );
+    let too_old = saved.last().unwrap().date.clone();
+    assert_eq!(
+        error_of(&call(
+            &mut c,
+            RemoteCall::GetPage {
+                date: Some(too_old)
+            }
+        )),
         Some(PhoneError::NotFound)
     );
-    let ok = pages.last().unwrap().date.clone();
+    let ok = in_window.last().unwrap().clone();
     assert!(matches!(
         call(&mut c, RemoteCall::GetPage { date: Some(ok) }),
         RemoteAnswer::Page { .. }
@@ -1516,4 +1539,162 @@ fn junk_before_established_changes_nothing() {
     let _ = block(c.send_raw(&junk));
     let r = block(c.request(RemoteCall::GetStatus)).and_then(|id| block(c.answer(id)));
     assert!(r.is_err());
+}
+
+#[test]
+fn original_streams_within_budget() {
+    use nocturne_app_lib::remote::session::OUT_BUDGET;
+    let p = on();
+    let keys = p.pair("Pixel");
+    let mut c = p.open(&keys, Mode::LongPoll);
+    call(&mut c, RemoteCall::GetStatus);
+    let big = jpeg(CHUNK * 12);
+    let id = match p
+        .h
+        .engine()
+        .keep_bytes(&big, "jpg", Source::QuickCapture)
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    p.hub.core.cite(&keys.id(), [id.clone()]);
+    let rid = block(c.request(RemoteCall::GetOriginal { id: id.clone() })).unwrap();
+    // Nobody polls for a while: what waits stays within about two frames.
+    std::thread::sleep(Duration::from_millis(500));
+    let conv = p.hub.core.conv_for_sid(&c.sid()).unwrap();
+    assert!(conv.queued() <= OUT_BUDGET + MAX_FRAME, "{}", conv.queued());
+    // One original at a time for a phone.
+    let second = block(c.request(RemoteCall::GetOriginal { id: id.clone() })).unwrap();
+    let mut got = Vec::new();
+    let mut busy = false;
+    let mut started = false;
+    while !(busy && got.len() == big.len()) {
+        match block(c.next_within(Duration::from_secs(10))).unwrap() {
+            Down::Chunk(ch) => {
+                got.extend_from_slice(&ch.bytes);
+                assert!(conv.queued() <= OUT_BUDGET + MAX_FRAME);
+            }
+            Down::Reply(r) if r.id == rid => {
+                assert!(matches!(r.answer, RemoteAnswer::OriginalStart { .. }));
+                started = true;
+            }
+            Down::Reply(r) if r.id == second => {
+                assert_eq!(error_of(&r.answer), Some(PhoneError::Busy));
+                busy = true;
+            }
+            Down::Reply(r) => panic!("{r:?}"),
+        }
+    }
+    assert!(started);
+    assert_eq!(got, big);
+}
+
+#[test]
+fn quiet_websocket_session_and_pairing_survive() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    call(&mut c, RemoteCall::GetStatus);
+    p.mono.advance(Duration::from_secs(120));
+    p.hub.core.sweep();
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetStatus),
+        RemoteAnswer::Status { .. }
+    ));
+    let offer = p.h.ok("begin_pairing", json!({}));
+    let run = block(Pairing::start(
+        &p.addr(),
+        PhonePair::scanned(offer["link"].as_str().unwrap(), "Slow"),
+        Mode::WebSocket,
+    ))
+    .unwrap();
+    wait_for("asked", || {
+        matches!(
+            block(p.hub.view()).pairing.map(|x| x.phase),
+            Some(nocturne_contract::PairingPhase::WaitingForYou { .. })
+        )
+    });
+    p.mono.advance(Duration::from_secs(90));
+    p.hub.core.sweep();
+    p.h.ok(
+        "decide_pairing",
+        json!({"pairingId": offer["pairingId"], "allow": true}),
+    );
+    assert!(
+        block(run.outcome()).unwrap().is_some(),
+        "the phone learns its id"
+    );
+}
+
+#[test]
+fn duplicate_of_a_desktop_item_is_not_the_phones() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    p.h.engine()
+        .keep_text("Bin day moved to Thursday", Source::QuickCapture)
+        .unwrap();
+    let a = keep_text(&mut c, "Bin day moved to Thursday", "c-1");
+    assert!(matches!(&a, RemoteAnswer::Kept { kept } if kept.duplicate));
+    let id = kept_id(&a);
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::Unkeep { id: id.clone() })),
+        Some(PhoneError::NotYours)
+    );
+    assert!(p.h.engine().get_item(&id).is_ok());
+    assert_eq!(p.h.engine().get_item(&id).unwrap().from_device, None);
+}
+
+#[test]
+fn removal_racing_an_open_ends_it() {
+    let p = on();
+    let keys = p.pair("Pixel");
+    // The hub has dropped the phone but the store has not caught up yet.
+    p.hub.core.drop_device(&keys.id());
+    assert!(matches!(
+        block(PhoneClient::open(&p.addr(), &keys, Mode::WebSocket)),
+        Opened::Revoked
+    ));
+}
+
+#[test]
+fn kept_text_naming_an_id_is_kept() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let a = keep_text(
+        &mut c,
+        "Look up mem_0123456789abcdef and itm_fedcba9876543210",
+        "c-1",
+    );
+    assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
+}
+
+#[test]
+fn recording_must_be_wav() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let webm = [0x1a, 0x45, 0xdf, 0xa3, 0, 0, 0, 0];
+    let id = block(c.request(RemoteCall::KeepRecording {
+        mime: "audio/webm".into(),
+        size: webm.len() as f64,
+        client_id: "c-1".into(),
+    }))
+    .unwrap();
+    assert_eq!(
+        error_of(&block(c.answer(id)).unwrap()),
+        Some(PhoneError::Invalid)
+    );
+    let mut wav = b"RIFF\x24\x00\x00\x00WAVEfmt ".to_vec();
+    wav.resize(64, 0);
+    let id = block(c.request(RemoteCall::KeepRecording {
+        mime: "audio/wav".into(),
+        size: wav.len() as f64,
+        client_id: "c-2".into(),
+    }))
+    .unwrap();
+    block(c.chunk(id, 0, true, &wav)).unwrap();
+    assert!(matches!(
+        block(c.answer(id)).unwrap(),
+        RemoteAnswer::Kept { .. }
+    ));
 }

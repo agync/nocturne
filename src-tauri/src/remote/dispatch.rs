@@ -104,22 +104,60 @@ pub fn phone_item(v: &ItemView) -> PhoneItem {
     }
 }
 
-/// Every item and memory id an answer names.
-pub fn named_ids(answer: &RemoteAnswer) -> Vec<String> {
-    let text = serde_json::to_string(answer).unwrap_or_default();
-    let mut out = Vec::new();
-    for prefix in ["itm_", "mem_"] {
-        let mut rest = text.as_str();
-        while let Some(at) = rest.find(prefix) {
-            let id: String = rest[at..]
-                .chars()
-                .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
-                .collect();
-            if id.len() > prefix.len() && !out.contains(&id) {
-                out.push(id.clone());
-            }
-            rest = &rest[at + prefix.len()..];
+/// Every item and memory id an answer cites, from its id fields only: text the phone sent
+/// (a question echoed back, a note) is never read as an id.
+pub fn cited_ids(answer: &RemoteAnswer) -> Vec<String> {
+    use nocturne_contract::{PageLine, Receipt};
+    let mut out: Vec<String> = Vec::new();
+    let mut add = |id: &str| {
+        if !out.iter().any(|o| o == id) {
+            out.push(id.to_string());
         }
+    };
+    let receipts = |rs: &[Receipt], add: &mut dyn FnMut(&str)| {
+        for r in rs {
+            add(&r.item_id);
+        }
+    };
+    let line = |l: &PageLine, add: &mut dyn FnMut(&str)| {
+        l.memory_ids.iter().for_each(|m| add(m));
+        receipts(&l.receipts, add);
+        for c in &l.choices {
+            add(&c.memory_id);
+            add(&c.receipt.item_id);
+        }
+    };
+    match answer {
+        RemoteAnswer::AskDelta { delta } => {
+            receipts(&delta.receipts, &mut add);
+            delta.memory_ids.iter().for_each(|m| add(m));
+            for n in &delta.near {
+                add(&n.receipt.item_id);
+            }
+        }
+        RemoteAnswer::Page { page } => {
+            for l in page
+                .needs_you
+                .iter()
+                .chain(&page.changed)
+                .chain(&page.let_go)
+                .chain(&page.upcoming)
+                .chain(&page.learned)
+            {
+                line(l, &mut add);
+            }
+            if let Some(q) = &page.question {
+                if let Some(m) = &q.memory_id {
+                    add(m);
+                }
+                if let Some(r) = &q.receipt {
+                    add(&r.item_id);
+                }
+            }
+        }
+        RemoteAnswer::Item { item } => add(&item.id),
+        RemoteAnswer::Kept { kept } => add(&kept.item.id),
+        _ => {}
     }
     out
 }
@@ -136,7 +174,7 @@ impl<R: Runtime> Call<R> {
     /// The outbound filter: an answer naming anything private does not leave. Whatever it
     /// names that is public, the phone may open for the next hour.
     async fn send(&self, answer: RemoteAnswer) -> bool {
-        let ids = named_ids(&answer);
+        let ids = cited_ids(&answer);
         if !ids.is_empty() {
             let Some(engine) = self.engine() else {
                 return false;
@@ -191,17 +229,19 @@ impl<R: Runtime> Call<R> {
             }
             RemoteCall::KeepBytes {
                 mime,
+                size,
                 client_id,
                 caption,
-                ..
             } => {
-                self.keep_upload(upload, &mime, &client_id, caption, false)
+                self.keep_upload(upload, &mime, size, &client_id, caption, false)
                     .await
             }
             RemoteCall::KeepRecording {
-                mime, client_id, ..
+                mime,
+                size,
+                client_id,
             } => {
-                self.keep_upload(upload, &mime, &client_id, None, true)
+                self.keep_upload(upload, &mime, size, &client_id, None, true)
                     .await
             }
             RemoteCall::Unkeep { id } => self.unkeep(id).await,
@@ -222,7 +262,10 @@ impl<R: Runtime> Call<R> {
                     .await
                     .ok()?;
                 Some(RemoteAnswer::Pages {
-                    pages: pages.into_iter().take(PAGES_BACK as usize + 1).collect(),
+                    pages: pages
+                        .into_iter()
+                        .filter(|p| self.in_window(&p.date))
+                        .collect(),
                 })
             }
             RemoteCall::GetItem { id } => match self.cited_item(&id).await {
@@ -314,7 +357,8 @@ impl<R: Runtime> Call<R> {
             Kept::New { item } => (item.clone(), false),
             Kept::Duplicate { item } => (item.clone(), true),
         };
-        if let Some(e) = self.engine() {
+        // Only a new item is this phone's: a duplicate may be someone else's keep.
+        if !duplicate && let Some(e) = self.engine() {
             let (id, me, cid) = (
                 item.id.clone(),
                 self.device.id.clone(),
@@ -338,6 +382,7 @@ impl<R: Runtime> Call<R> {
         &self,
         upload: Option<super::incoming::UploadDone>,
         mime: &str,
+        size: f64,
         client_id: &str,
         caption: Option<String>,
         recording: bool,
@@ -362,6 +407,28 @@ impl<R: Runtime> Call<R> {
             self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
             return err(PhoneError::TooMany);
         }
+        // Admitted: the day is charged now and given back if the keep does not happen.
+        let size = size as u64;
+        if let Err(code) = self.core.incoming.charge_day(&self.core, &me, size) {
+            return err(code);
+        }
+        let answer = self
+            .receive_upload(upload, mime, client_id, caption, recording)
+            .await;
+        if !matches!(answer, Some(RemoteAnswer::Kept { .. })) {
+            self.core.incoming.refund_day(&self.core, &me, size);
+        }
+        answer
+    }
+
+    async fn receive_upload(
+        &self,
+        upload: super::incoming::UploadDone,
+        mime: &str,
+        client_id: &str,
+        caption: Option<String>,
+        recording: bool,
+    ) -> Option<RemoteAnswer> {
         let done = tokio::select! {
             d = upload => d,
             () = self.out.closed() => return None,
@@ -520,17 +587,24 @@ impl<R: Runtime> Call<R> {
         None
     }
 
+    /// A phone reads today's page and the seven days before it, by the local date.
+    fn in_window(&self, date: &str) -> bool {
+        let state = self.app.state::<AppState>();
+        let today = state.now().to_zoned(state.clock.tz()).date();
+        let Ok(day) = date.parse::<jiff::civil::Date>() else {
+            return false;
+        };
+        let oldest = today
+            .checked_sub(jiff::Span::new().days(i64::from(PAGES_BACK)))
+            .unwrap_or(today);
+        (oldest..=today).contains(&day)
+    }
+
     async fn page(&self, date: Option<String>) -> Option<RemoteAnswer> {
         let day = match date.as_deref() {
             None => None,
             Some(d) if is_date(d) => {
-                let allowed = crate::commands::page::pages_for(&self.app, Edition::Phone)
-                    .await
-                    .ok()?
-                    .into_iter()
-                    .take(PAGES_BACK as usize + 1)
-                    .any(|p| p.date == d);
-                if !allowed {
+                if !self.in_window(d) {
                     return err(PhoneError::NotFound);
                 }
                 d.parse().ok()
@@ -590,6 +664,12 @@ impl<R: Runtime> Call<R> {
             return err(PhoneError::NotFound);
         };
         let size = file.metadata().await.map(|m| m.len()).unwrap_or(0);
+        if size > MAX_ITEM {
+            return err(PhoneError::TooLarge);
+        }
+        let Some(_slot) = self.core.original_slot(&self.device.id) else {
+            return err(PhoneError::Busy);
+        };
         if !self.out.send(RemoteAnswer::OriginalStart {
             mime: mime.to_string(),
             size: size as f64,
@@ -612,7 +692,7 @@ impl<R: Runtime> Call<R> {
             }
             sent += n as u64;
             let last = sent >= size || n < CHUNK;
-            if !self.out.chunk(seq, last, &buf[..n]) || last {
+            if !self.out.chunk(seq, last, &buf[..n]).await || last {
                 return None;
             }
             seq += 1;
@@ -684,17 +764,19 @@ mod tests {
     }
 
     #[test]
-    fn ids_are_found_in_any_answer() {
-        let answer = RemoteAnswer::Error {
-            code: PhoneError::NotFound,
-        };
-        assert!(named_ids(&answer).is_empty());
-        let a = RemoteAnswer::AskStarted {
+    fn only_id_fields_are_cited() {
+        let echoed = RemoteAnswer::AskStarted {
             ask_id: "see itm_0123456789abcdef and mem_fedcba9876543210".into(),
         };
+        assert!(cited_ids(&echoed).is_empty(), "text is not an id");
+        let delta = AskDelta {
+            memory_ids: vec!["mem_fedcba9876543210".into()],
+            text_delta: Some("itm_1111111111111111".into()),
+            ..blank("ask_1", AskPhase::Done)
+        };
         assert_eq!(
-            named_ids(&a),
-            vec!["itm_0123456789abcdef", "mem_fedcba9876543210"]
+            cited_ids(&RemoteAnswer::AskDelta { delta }),
+            vec!["mem_fedcba9876543210"]
         );
     }
 }

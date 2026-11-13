@@ -7,9 +7,9 @@
 //! renews with a fresh SESSION_OPEN, which checks revocation again. Keys and counters live here
 //! in memory only.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant};
 
@@ -74,9 +74,25 @@ struct Session {
     opened: Instant,
 }
 
+/// How a conversation reaches the phone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Carrier {
+    /// A socket: it ends when the socket does, however quiet it is.
+    WebSocket,
+    /// Posts and held polls: it ends when the phone stops polling.
+    LongPoll,
+}
+
+/// Bytes that may wait for the transport before a chunk going down waits for room: at most
+/// about two frames of an original are in memory at once.
+pub const OUT_BUDGET: usize = MAX_FRAME;
+
 /// One conversation: the frames going out wait in `out` for the transport.
 pub struct Conv {
     pub id: ConvId,
+    pub carrier: Carrier,
+    queued: AtomicUsize,
+    drained: tokio::sync::Notify,
     out: mpsc::UnboundedSender<Vec<u8>>,
     pub rx: tokio::sync::Mutex<mpsc::UnboundedReceiver<Vec<u8>>>,
     pub closed: CancellationToken,
@@ -94,7 +110,44 @@ impl Conv {
     }
 
     fn push(&self, frame: Vec<u8>) {
-        let _ = self.out.send(frame);
+        let len = frame.len();
+        if self.out.send(frame).is_ok() {
+            self.queued.fetch_add(len, Ordering::SeqCst);
+        }
+    }
+
+    /// The transport took a frame of `len` bytes.
+    pub fn took(&self, len: usize) {
+        let _ = self
+            .queued
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |q| {
+                Some(q.saturating_sub(len))
+            });
+        self.drained.notify_waiters();
+    }
+
+    /// Bytes waiting for the transport.
+    pub fn queued(&self) -> usize {
+        self.queued.load(Ordering::SeqCst)
+    }
+
+    /// Wait until fewer than `budget` bytes wait for the transport. False once closed.
+    pub async fn room(&self, budget: usize) -> bool {
+        loop {
+            let drained = self.drained.notified();
+            tokio::pin!(drained);
+            drained.as_mut().enable();
+            if self.closed.is_cancelled() {
+                return false;
+            }
+            if self.queued() < budget {
+                return true;
+            }
+            tokio::select! {
+                () = drained => {}
+                () = self.closed.cancelled() => return false,
+            }
+        }
     }
 
     pub fn close(&self) {
@@ -152,6 +205,8 @@ pub struct PhoneState {
     pub cited: HashMap<String, Instant>,
     /// Bytes kept from this phone today, by local date.
     pub day: (String, u64),
+    /// An original is on its way down to this phone.
+    pub sending_original: bool,
 }
 
 pub struct Core {
@@ -166,6 +221,9 @@ pub struct Core {
     /// conversation this way).
     sids: Mutex<HashMap<[u8; SID_LEN], ConvId>>,
     pub phones: Mutex<HashMap<String, PhoneState>>,
+    /// Phones removed while on: checked again once a session is set up and on every frame,
+    /// so an open racing a removal never carries on.
+    revoked: Mutex<HashSet<String>>,
     pub incoming: Incoming,
     next_conv: AtomicU64,
     sent: AtomicU64,
@@ -188,6 +246,7 @@ impl Core {
             convs: Mutex::new(HashMap::new()),
             sids: Mutex::new(HashMap::new()),
             phones: Mutex::new(HashMap::new()),
+            revoked: Mutex::new(HashSet::new()),
             next_conv: AtomicU64::new(1),
             sent: AtomicU64::new(0),
         })
@@ -271,11 +330,14 @@ impl Core {
 
     // Conversations ------------------------------------------------------------------------
 
-    pub fn new_conv(&self) -> Arc<Conv> {
+    pub fn new_conv(&self, carrier: Carrier) -> Arc<Conv> {
         let (tx, rx) = mpsc::unbounded_channel();
         let now = self.now();
         let conv = Arc::new(Conv {
             id: self.next_conv.fetch_add(1, Ordering::Relaxed),
+            carrier,
+            queued: AtomicUsize::new(0),
+            drained: tokio::sync::Notify::new(),
             out: tx,
             rx: tokio::sync::Mutex::new(rx),
             closed: CancellationToken::new(),
@@ -343,6 +405,7 @@ impl Core {
     /// A removed phone: close its sessions (their sockets and held polls end now) and stop
     /// its answers and its upload.
     pub fn drop_device(&self, device_id: &str) {
+        lock(&self.revoked).insert(device_id.to_string());
         for c in self.convs() {
             if c.device().as_deref() == Some(device_id) {
                 self.end_conv(&c);
@@ -371,8 +434,9 @@ impl Core {
                     _ => false,
                 }
             };
-            let idle = now.duration_since(*lock(&c.last_seen))
-                >= Duration::from_secs(LONG_POLL_HOLD_SECS * 2 + HANDSHAKE_TIMEOUT_SECS)
+            let idle = c.carrier == Carrier::LongPoll
+                && now.duration_since(*lock(&c.last_seen))
+                    >= Duration::from_secs(LONG_POLL_HOLD_SECS * 2 + HANDSHAKE_TIMEOUT_SECS)
                 && !c.down_busy.load(Ordering::SeqCst);
             if stale || idle {
                 self.end_conv(&c);
@@ -458,6 +522,10 @@ impl Core {
         let (Some(computer), Some(engine)) = (self.computer(), self.shell.engine()) else {
             return Inbound::Close;
         };
+        // Too many opens failed this minute: refuse before any work, the same way.
+        if !self.limits.has(Bucket::FailedOpen, "") {
+            return self.refuse(conv);
+        }
         let lookup = |id: &crypto::DeviceId| {
             let row = engine.device(&crypto::b64(id)).ok().flatten()?;
             Some((row.public_key.clone(), row))
@@ -470,7 +538,7 @@ impl Core {
             }
         };
         let device = open.device;
-        if device.revoked_at.is_some() {
+        if device.revoked_at.is_some() || self.removed(&device.id) {
             conv.push(crypto::revoked(&open.kd, &open.device_id, &open.on));
             *conv.role() = Role::Closed;
             return Inbound::Close;
@@ -519,13 +587,24 @@ impl Core {
         self.register_sid(sid, conv.id);
         conv.push(crypto::session_accept(&sid, &fpub));
         conv.push(first);
+        let id = device.id.clone();
         *conv.role() = Role::Session(Box::new(Session {
             device,
             channel,
             live: false,
             opened: self.now(),
         }));
+        // Removed while this open was being answered: end it.
+        if self.removed(&id) {
+            self.end_conv(conv);
+            return Inbound::Close;
+        }
         Inbound::Continue
+    }
+
+    /// Removed while Away from home is on.
+    pub fn removed(&self, device: &str) -> bool {
+        lock(&self.revoked).contains(device)
     }
 
     fn refuse(&self, conv: &Arc<Conv>) -> Inbound {
@@ -564,6 +643,10 @@ impl Core {
                 *role = Role::Closed;
                 return Inbound::Close;
             };
+            if self.removed(&s.device.id) {
+                *role = Role::Closed;
+                return Inbound::Close;
+            }
             let went_live = !s.live;
             s.live = true;
             (env, s.device.clone(), went_live)
@@ -701,12 +784,40 @@ impl Core {
         }
     }
 
+    /// Claim the one original a phone may have on its way down. None while another is.
+    pub fn original_slot(self: &Arc<Self>, device: &str) -> Option<OriginalSlot> {
+        let mut phones = lock(&self.phones);
+        let p = phones.entry(device.to_string()).or_default();
+        if p.sending_original {
+            return None;
+        }
+        p.sending_original = true;
+        Some(OriginalSlot {
+            core: self.clone(),
+            device: device.to_string(),
+        })
+    }
+
     pub fn was_cited(&self, device: &str, id: &str) -> bool {
         let now = self.now();
         lock(&self.phones)
             .get(device)
             .and_then(|p| p.cited.get(id))
             .is_some_and(|at| now.duration_since(*at) < Duration::from_secs(CITED_TTL_SECS))
+    }
+}
+
+/// The one original a phone has on its way down; released when dropped.
+pub struct OriginalSlot {
+    core: Arc<Core>,
+    device: String,
+}
+
+impl Drop for OriginalSlot {
+    fn drop(&mut self) {
+        if let Some(p) = lock(&self.core.phones).get_mut(&self.device) {
+            p.sending_original = false;
+        }
     }
 }
 
@@ -732,9 +843,10 @@ impl ReplySink {
         self.send(RemoteAnswer::Error { code })
     }
 
-    /// One piece of an original going down.
-    pub fn chunk(&self, seq: u32, last: bool, bytes: &[u8]) -> bool {
-        if self.conv.closed.is_cancelled() {
+    /// One piece of an original going down, once the transport has taken enough of what
+    /// went before. False once the session has closed.
+    pub async fn chunk(&self, seq: u32, last: bool, bytes: &[u8]) -> bool {
+        if !self.conv.room(OUT_BUDGET).await {
             return false;
         }
         self.core.seal_out(

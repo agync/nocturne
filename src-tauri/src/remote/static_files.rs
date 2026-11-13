@@ -59,7 +59,10 @@ pub fn mime_for(name: &str) -> Option<&'static str> {
     })
 }
 
-/// Who the phone page may talk to: the current address only, by connection.
+/// Who the phone page may talk to. A pattern, not the current address: a paired phone runs the
+/// app its service worker cached at its home origin (headers included) and must reach the
+/// computer at a new address after a Simple restart, which a fixed address would block. The
+/// listener's exact-origin rule and the sealed channel decide who it can actually talk to.
 pub fn connect_pattern(connection: RemoteConnection) -> &'static str {
     match connection {
         RemoteConnection::Simple => "https://*.trycloudflare.com wss://*.trycloudflare.com",

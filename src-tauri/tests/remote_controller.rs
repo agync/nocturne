@@ -529,7 +529,6 @@ fn auto_off_stops_when_due() {
     std::thread::sleep(Duration::from_millis(100));
     assert!(a.helpers.transport.running(), "not yet");
     a.h.clock.advance_days(1);
-    a.mono.advance(Duration::from_secs(601));
     a.hub.tick();
     wait_for("off by itself", || a.hub.state() == RemoteState::Off);
     assert!(!a.helpers.transport.running());
@@ -565,11 +564,15 @@ fn remove_all_revokes_and_signs_out() {
     a.start("mostPrivate", false).unwrap();
     a.settle();
     a.pair("Pixel");
-    std::fs::create_dir_all(a.remote_dir().join("tailscale")).unwrap();
     a.h.ok("stop_remote", json!({"removeAll": true}));
     assert!(a.h.engine().devices(false).unwrap().is_empty());
     assert_eq!(a.helpers.transport.sign_outs.load(Ordering::SeqCst), 1);
-    assert!(!a.remote_dir().join("tailscale").exists());
+    assert!(
+        a.helpers
+            .transport
+            .signed_out_running
+            .load(Ordering::SeqCst)
+    );
 }
 
 #[test]
@@ -724,4 +727,39 @@ fn leaving_most_private_signs_out_first() {
             .signed_out_running
             .load(Ordering::SeqCst)
     );
+}
+
+#[test]
+fn switching_during_download_starts_the_right_helper() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailscaled);
+    *a.helpers.transport.addresses.lock().unwrap() =
+        vec!["https://nocturne-ab12.tail1234.ts.net".into()];
+    a.start("simple", true).unwrap();
+    wait_for("downloading", || {
+        matches!(a.hub.state(), RemoteState::Downloading { .. })
+    });
+    a.h.ok(
+        "update_remote_settings",
+        json!({"patch": {"connection": "mostPrivate"}}),
+    );
+    a.settle();
+    assert!(
+        matches!(a.view().state, RemoteState::On { .. }),
+        "{:?}",
+        a.view().state
+    );
+    assert_eq!(
+        *a.helpers.transport.kind.lock().unwrap(),
+        HelperKind::Tailscaled
+    );
+    assert_eq!(
+        a.helpers.installs.load(Ordering::SeqCst),
+        1,
+        "the first download stopped"
+    );
+    // The cancelled download does not come back to start anything.
+    a.helpers.finish.notify_one();
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(a.helpers.transport.starts.load(Ordering::SeqCst), 1);
 }

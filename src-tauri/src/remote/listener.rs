@@ -36,7 +36,7 @@ use tokio_util::sync::CancellationToken;
 use super::crypto;
 use super::limits::Bucket;
 use super::protocol::*;
-use super::session::{Conv, Core, Inbound};
+use super::session::{Carrier, Conv, Core, Inbound};
 use super::static_files::{self, PhoneFiles};
 
 /// The close code of the unsealed refusal.
@@ -320,7 +320,7 @@ async fn session(
 }
 
 async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemaphorePermit) {
-    let conv = core.new_conv();
+    let conv = core.new_conv(Carrier::WebSocket);
     let mut rx = conv.rx.lock().await;
     let handshake = tokio::time::sleep(Duration::from_secs(HANDSHAKE_TIMEOUT_SECS));
     tokio::pin!(handshake);
@@ -330,6 +330,7 @@ async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemapho
             biased;
             out = rx.recv() => match out {
                 Some(frame) => {
+                    conv.took(frame.len());
                     core.count_sent(frame.len());
                     if socket.send(Message::Binary(frame.into())).await.is_err() {
                         break;
@@ -355,6 +356,7 @@ async fn websocket(mut socket: WebSocket, core: Arc<Core>, _permit: OwnedSemapho
     }
     // What was queued before the end (a REVOKED, a last answer) still goes out.
     while let Ok(frame) = rx.try_recv() {
+        conv.took(frame.len());
         core.count_sent(frame.len());
         if socket.send(Message::Binary(frame.into())).await.is_err() {
             break;
@@ -432,7 +434,9 @@ async fn poll_up(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
         };
         let conv = match core.conv_for_sid(&h.sid) {
             Some(c) => c,
-            None if h.sid == [0u8; SID_LEN] || is_pairing_kind(h.kind) => core.new_conv(),
+            None if h.sid == [0u8; SID_LEN] || is_pairing_kind(h.kind) => {
+                core.new_conv(Carrier::LongPoll)
+            }
             None => return bare(StatusCode::GONE),
         };
         let handshake = conv.in_handshake();
@@ -454,6 +458,7 @@ async fn poll_up(ctx: &Ctx, req: Request<Body>) -> Response<Body> {
             while out.len() < MAX_LONG_POLL_BATCH
                 && let Ok(f) = rx.try_recv()
             {
+                conv.took(f.len());
                 out.push(f);
             }
         }
@@ -529,6 +534,9 @@ async fn hold(conv: &Conv) -> Vec<Vec<u8>> {
         && let Ok(f) = rx.try_recv()
     {
         out.push(f);
+    }
+    for f in &out {
+        conv.took(f.len());
     }
     out
 }
