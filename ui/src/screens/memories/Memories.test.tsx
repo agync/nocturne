@@ -62,6 +62,7 @@ describe("What Nocturne remembers", () => {
     await openLeo();
     expect(screen.getByText("Son · 6 memories from 5 things you kept")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mark all private" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Rename" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Leo/ })).toHaveAttribute("aria-current", "page");
   });
 
@@ -106,7 +107,13 @@ describe("What Nocturne remembers", () => {
       within(bar)
         .getAllByRole("button")
         .map((b) => b.textContent),
-    ).toEqual(["Correct", "Keep forever", "Mark private", "Delete…"]);
+    ).toEqual([
+      "Correct",
+      "Keep forever",
+      "Mark private",
+      "Is this about something else?",
+      "Delete…",
+    ]);
     expect(within(bar).getByText(/health, money or ID information/)).toBeInTheDocument();
     await userEvent.keyboard("{Escape}");
     expect(row).toHaveAttribute("aria-expanded", "false");
@@ -252,5 +259,181 @@ describe("What Nocturne remembers", () => {
     expect(
       await screen.findByText("Nocturne couldn’t open this. What you kept is safe."),
     ).toBeInTheDocument();
+  });
+
+  it("offers to move a memory to something else once it has been corrected", async () => {
+    const { engine } = await openLeo();
+    const spy = vi.spyOn(engine, "refileMemory");
+    await userEvent.click(screen.getByRole("button", { name: /^Leo is allergic to nuts\./ }));
+    await userEvent.click(screen.getByRole("button", { name: "Correct" }));
+    const field = screen.getByRole("textbox", { name: "What should it say?" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "Ava is allergic to nuts.{Enter}");
+    await screen.findByText("Corrected.");
+    const toast = document.querySelector('[data-region="toast"]') as HTMLElement;
+    await userEvent.click(
+      within(toast).getByRole("button", { name: "Is this about something else?" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Is this about something else?" });
+    expect(within(dialog).getByText("Ava is allergic to nuts.")).toBeInTheDocument();
+    await userEvent.click(await within(dialog).findByRole("radio", { name: /^Ava/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Move it" }));
+    expect(spy).toHaveBeenCalledWith("mem-nut", { type: "existing", entityId: "ent-ava" });
+    expect(await screen.findByText("Moved to Ava.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Ava is allergic to nuts.")).toBeNull());
+  });
+
+  it("moves one memory from its actions, and undoes it", async () => {
+    await openLeo();
+    await userEvent.click(screen.getByRole("button", { name: /^Leo needs a packed lunch/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Is this about something else?" }));
+    const dialog = await screen.findByRole("dialog", { name: "Is this about something else?" });
+    const move = within(dialog).getByRole("button", { name: "Move it" });
+    expect(move).toBeDisabled();
+    expect(within(dialog).queryByRole("radio", { name: /^Leo/ })).toBeNull();
+    await userEvent.type(
+      within(dialog).getByRole("textbox", { name: "Find a person, place or thing" }),
+      "okaf",
+    );
+    await userEvent.click(await within(dialog).findByRole("radio", { name: /^Mrs Okafor/ }));
+    const okafor = within(dialog).getByRole("radio", { name: "Mrs Okafor Person · Leo’s teacher" });
+    expect(okafor).toBeChecked();
+    expect(within(dialog).getByRole("group", { name: "People, places and things" })).toBeVisible();
+    await userEvent.click(move);
+    expect(await screen.findByText("Moved to Mrs Okafor.")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("Leo needs a packed lunch on the trip day.")).toBeNull(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByText("Moved back.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Leo needs a packed lunch on the trip day."),
+    ).toBeInTheDocument();
+  });
+
+  it("moves a memory to something new", async () => {
+    const { engine } = await openLeo();
+    const spy = vi.spyOn(engine, "refileMemory");
+    await userEvent.click(screen.getByRole("button", { name: /^Leo needs a packed lunch/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Is this about something else?" }));
+    const dialog = await screen.findByRole("dialog", { name: "Is this about something else?" });
+    await userEvent.click(within(dialog).getByRole("radio", { name: "Someone or something new" }));
+    const name = within(dialog).getByRole("textbox", { name: "What is it called?" });
+    await userEvent.type(name, "School trip");
+    await userEvent.click(within(dialog).getByRole("radio", { name: "A place" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Move it" }));
+    expect(spy).toHaveBeenCalledWith("mem-trip-lunch", {
+      type: "new",
+      name: "School trip",
+      kind: "place",
+    });
+    expect(await screen.findByText("Moved to School trip.")).toBeInTheDocument();
+  });
+
+  it("says so when a memory cannot be moved, and keeps the dialog open", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "refileMemory").mockRejectedValueOnce(new Error("no"));
+    await openLeo(engine);
+    await userEvent.click(screen.getByRole("button", { name: /^Leo needs a packed lunch/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Is this about something else?" }));
+    const dialog = await screen.findByRole("dialog", { name: "Is this about something else?" });
+    await userEvent.click(await within(dialog).findByRole("radio", { name: /^Ava/ }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "Move it" }));
+    expect(
+      await within(dialog).findByText("That didn’t work. Nothing was changed."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Is this about something else?" })).toBeVisible();
+  });
+
+  it("renames a person everywhere, keeps the old name, and undoes it", async () => {
+    const { engine } = await openLeo();
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const dialog = await screen.findByRole("dialog", { name: "Rename" });
+    const field = within(dialog).getByRole("textbox", { name: "What is it called?" });
+    expect(field).toHaveFocus();
+    expect(field).toHaveValue("Leo");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Leopold{Enter}");
+    expect(await screen.findByText("Renamed to Leopold.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Leopold" })).toBeInTheDocument();
+    expect(await screen.findByText("Also called Leo.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Leopold’s swimming is on Mondays at 17:30."),
+    ).toBeInTheDocument();
+    expect((await engine.getEntity("ent-leo")).name).toBe("Leopold");
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Leopold" })).toHaveFocus(),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Leo" })).toBeInTheDocument();
+    expect(screen.queryByText(/Also called/)).toBeNull();
+    expect(await screen.findByText("Leo’s swimming is on Mondays at 17:30.")).toBeInTheDocument();
+  });
+
+  it("goes back to the old name from the page, long after the toast has gone", async () => {
+    const engine = createMockEngine();
+    await engine.renameEntity("ent-leo", "Leopold");
+    await browse("#/memories/ent-leo", engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Go back to Leo" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Leo" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Go back to/ })).toBeNull();
+  });
+
+  it("offers a merge when the new name is one it already knows, and merges on a clear yes", async () => {
+    const { engine } = await openLeo();
+    const merge = vi.spyOn(engine, "mergeEntities");
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "What is it called?" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "ava{Enter}");
+    const dialog = await screen.findByRole("dialog", { name: "Is this the same as Ava?" });
+    expect(within(dialog).getByText(/Nothing is deleted, and you can undo it/)).toBeInTheDocument();
+    expect(merge).not.toHaveBeenCalled();
+    expect((await engine.getEntity("ent-leo")).name).toBe("Leo");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Merge them" }));
+    expect(merge).toHaveBeenCalledWith("ent-leo", "ent-ava");
+    expect(await screen.findByText("Merged into Ava.")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Ava" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/memories/ent-ava");
+    expect(await screen.findByText("Also called Leo.")).toBeInTheDocument();
+    // What was said about Leo now says Ava, the name that remains.
+    expect(await screen.findByText("Ava is allergic to nuts.")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Leo" })).toBeInTheDocument();
+    expect(window.location.hash).toBe("#/memories/ent-leo");
+    expect(await screen.findByText("Leo is allergic to nuts.")).toBeInTheDocument();
+  });
+
+  it("lets the person keep two things apart instead of merging", async () => {
+    const { engine } = await openLeo();
+    const merge = vi.spyOn(engine, "mergeEntities");
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "What is it called?" });
+    await userEvent.clear(field);
+    await userEvent.type(field, "Ava{Enter}");
+    const dialog = await screen.findByRole("dialog", { name: "Is this the same as Ava?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Keep them separate" }));
+    expect(await screen.findByRole("dialog", { name: "Rename" })).toBeVisible();
+    expect(merge).not.toHaveBeenCalled();
+    expect(screen.getByRole("textbox", { name: "What is it called?" })).toHaveValue("Ava");
+  });
+
+  it("asks for a name and says when renaming did not work", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "renameEntity").mockRejectedValueOnce(new Error("no"));
+    await openLeo(engine);
+    await userEvent.click(screen.getByRole("button", { name: "Rename" }));
+    const field = screen.getByRole("textbox", { name: "What is it called?" });
+    await userEvent.clear(field);
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText("Type a name.")).toBeInTheDocument();
+    await userEvent.type(field, "Leopold{Enter}");
+    expect(await screen.findByText("That didn’t work. Nothing was changed.")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Rename" })).toBeVisible();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByRole("heading", { level: 1, name: "Leo" })).toBeInTheDocument();
   });
 });

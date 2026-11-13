@@ -3,11 +3,13 @@ import styles from "./Memories.module.css";
 import { MemoryList } from "./MemoryList";
 import { useMemories } from "./queries";
 import { useForget } from "./useForget";
+import { useRefile } from "./useRefile";
 
 /** What matches a search of everything kept. */
 export function Results({ query }: { query: string }) {
   const found = useMemories({ query });
   const forget = useForget();
+  const refile = useRefile();
   if (found.isError) {
     return (
       <p className={styles.message} role="alert">
@@ -32,11 +34,16 @@ export function Results({ query }: { query: string }) {
         <p className={styles.empty}>{t("memories.empty.search", { query })}</p>
       ) : (
         <>
-          <MemoryList memories={found.data} onForget={(m) => forget.open([m.id])} />
+          <MemoryList
+            memories={found.data}
+            onForget={(m) => forget.open([m.id])}
+            onRefile={refile.open}
+          />
           <p className={styles.hint}>{t("memories.hint")}</p>
         </>
       )}
       {forget.dialog}
+      {refile.dialog}
     </div>
   );
 }

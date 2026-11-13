@@ -1,0 +1,120 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.note {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.problem {
+  color: var(--ember);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
+.sentence {
+  margin: 0;
+  padding-left: var(--s-3);
+  border-left: 2px solid var(--rule2);
+}
+
+.modes,
+.kinds {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.kinds {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--s-4);
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--s-1);
+  font: 500 0.875rem / 1.4 var(--font-sans);
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--size-touch);
+}
+
+.choice input {
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  max-height: 14rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  border: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  min-height: var(--size-touch);
+  padding: var(--s-2) var(--s-3);
+  border-bottom: 1px solid var(--rule);
+  font: 400 0.9375rem / 1.47 var(--font-sans);
+  cursor: pointer;
+}
+
+.option input {
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.option:hover {
+  background: var(--bg);
+}
+
+.option:has(input:checked) {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--ink);
+}
+
+.option:has(input:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
+
+.optionName {
+  flex: 1;
+  min-width: 0;
+}
+
+.optionRole {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  text-align: right;
+}

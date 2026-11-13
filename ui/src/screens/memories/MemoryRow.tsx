@@ -19,13 +19,15 @@ interface MemoryRowProps {
   onSelect: (id: string | null) => void;
   /** Opens the forget dialog for this memory; the screen owns the dialog so it outlives the row. */
   onForget: (memory: MemoryView) => void;
+  /** Opens "Is this about something else?"; the screen owns the dialog for the same reason. */
+  onRefile: (memory: MemoryView) => void;
 }
 
 /**
  * One memory: its sentence, certainty, receipts and words for its state. The row is a button;
  * choosing it opens a bar of actions underneath.
  */
-export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRowProps) {
+export function MemoryRow({ memory: m, selected, onSelect, onForget, onRefile }: MemoryRowProps) {
   const engine = useEngine();
   const toast = useToast();
   const refresh = useRefresh();
@@ -68,7 +70,22 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
       return;
     }
     // A failed save keeps what was typed, so it can be sent again.
-    if (!(await run(() => engine.correctMemory(m.id, text), t("memory.correct.saved")))) return;
+    setBusy(true);
+    try {
+      const corrected = await engine.correctMemory(m.id, text);
+      refresh(...MEMORY_KEYS);
+      // The correction may mean the memory is filed under the wrong person, place or thing.
+      toast.show({
+        message: t("memory.correct.saved"),
+        action: { label: t("memory.refile.offer"), onAction: () => onRefile(corrected) },
+        duration: 12_000,
+      });
+    } catch {
+      toast.show({ message: t("memories.failed") });
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
     setEditing(false);
     button.current?.focus();
   };
@@ -110,6 +127,9 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
           />
         ))}
         {m.was ? <span className={styles.changed}>{t("memory.flag.changed")}</span> : null}
+        {m.movedFrom ? (
+          <span className={styles.changed}>{t("memory.movedFrom", { name: m.movedFrom })}</span>
+        ) : null}
         {m.status === "unconfirmed" ? <StatusLabel status="unconfirmed" /> : null}
         {m.status === "fading" ? <StatusLabel status="fading" /> : null}
         {m.status === "letGo" ? <StatusLabel status="letGo" /> : null}
@@ -192,6 +212,9 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget }: MemoryRow
                 }
               >
                 {t("memory.action.private")}
+              </Button>
+              <Button variant="secondary" onClick={() => onRefile(m)}>
+                {t("memory.action.refile")}
               </Button>
               <Button variant="forget" onClick={() => onForget(m)}>
                 {t("memory.action.forget")}

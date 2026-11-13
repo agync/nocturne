@@ -175,6 +175,14 @@
   outline-offset: 4px;
 }
 
+.headActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--s-1) var(--s-3);
+}
+
 .summary {
   margin-top: var(--s-1);
   color: var(--ink2);
