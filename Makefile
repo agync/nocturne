@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch
 
 UI_PRESENT := $(wildcard ui/package.json)
 
@@ -59,6 +59,11 @@ ui/lint: ## Lint and type-check the interface
 
 ui/fmt: ## Format the interface
 	cd ui && npm run fmt
+
+##@ Lemonade
+
+lemonade/fetch: ## Download the pinned embedded Lemonade for this machine
+	scripts/fetch-lemonade.sh
 
 ##@ Contract
 

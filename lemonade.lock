@@ -1,0 +1,9 @@
+# Pinned Lemonade embeddable release. Update deliberately and re-run the runtime tests.
+version = "2026.46.2"
+base_url = "https://github.com/lemonade-sdk/lemonade/releases/download/v2026.46.2"
+
+[assets]
+linux-x86_64 = { file = "lemonade-embeddable-2026.46.2-ubuntu-x64.tar.gz", sha256 = "67869b1a4fb128dfeb636d50417fee54bf25a7f61a7c97e8be234f1fe2444eaf" }
+linux-aarch64 = { file = "lemonade-embeddable-2026.46.2-ubuntu-arm64.tar.gz", sha256 = "894b88864c29e63c9104ed40ac75548d4b5babf7298b234324d69481d3140f0a" }
+macos-aarch64 = { file = "lemonade-embeddable-2026.46.2-macos-arm64.tar.gz", sha256 = "089bc2377bb55d12d7b2966f2472d49987517adbc1ed7bc2181bd9fa213548a0" }
+windows-x86_64 = { file = "lemonade-embeddable-2026.46.2-windows-x64.zip", sha256 = "8037d7a2d79fb7898802d7f4e4c7f605b91951328ee29d82d893e29ba1c87b00" }
