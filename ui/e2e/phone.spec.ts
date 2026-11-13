@@ -130,6 +130,8 @@ for (const scheme of ["light", "dark"] as const) {
     page,
     phoneUrl,
   }) => {
+    // Fifteen screens, each with an accessibility scan: slow on a shared machine.
+    test.setTimeout(150_000);
     const seen = await watch(page, new URL(phoneUrl).origin);
     await page.emulateMedia({ colorScheme: scheme });
     for (const [scenario, text] of SCENARIOS) {
