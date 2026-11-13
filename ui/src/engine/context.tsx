@@ -31,6 +31,8 @@ export const EVENT_INVALIDATIONS: Readonly<Partial<Record<EngineEventName, Query
 
 const EngineContext = createContext<EngineClient | null>(null);
 
+const READY_FALLBACK_MS = 150;
+
 export function createQueryClient(): QueryClient {
   return new QueryClient({
     defaultOptions: {
@@ -61,20 +63,26 @@ export function EngineProvider({ engine, queryClient, children }: ProviderProps)
     };
   }, [engine, client]);
 
-  // The window stays hidden until the first screen has painted; then the shell shows it.
+  // The window stays hidden until the first screen has painted; then the shell shows it. A hidden
+  // web view may never run animation frames, so a short timer stands in for them.
   useEffect(() => {
     let frame = 0;
+    let sent = false;
     const ready = () => {
+      if (sent) return;
+      sent = true;
       void engine.appReady().catch((error: unknown) => console.error("app_ready failed", error));
     };
+    const timer = setTimeout(ready, READY_FALLBACK_MS);
     if (typeof requestAnimationFrame === "function") {
       frame = requestAnimationFrame(() => {
         frame = requestAnimationFrame(ready);
       });
-      return () => cancelAnimationFrame(frame);
     }
-    ready();
-    return undefined;
+    return () => {
+      clearTimeout(timer);
+      if (typeof cancelAnimationFrame === "function") cancelAnimationFrame(frame);
+    };
   }, [engine]);
 
   return (

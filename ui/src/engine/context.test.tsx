@@ -226,6 +226,18 @@ describe("shell hand-offs", () => {
     await waitFor(() => expect(ready).toHaveBeenCalledTimes(1));
   });
 
+  it("tells the shell even when a hidden window runs no animation frames", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const ready = vi.spyOn(engine, "appReady");
+    const raf = vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation(() => 0);
+    try {
+      renderHook(() => useStatus(), { wrapper: wrapper(engine) });
+      await waitFor(() => expect(ready).toHaveBeenCalledTimes(1));
+    } finally {
+      raf.mockRestore();
+    }
+  });
+
   it("stops the answer on screen before the next question starts", async () => {
     const engine = createMockEngine({ now: NOW });
     const cancel = vi.spyOn(engine, "cancelAsk");
