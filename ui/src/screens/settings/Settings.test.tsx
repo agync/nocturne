@@ -293,6 +293,25 @@ describe("Advanced details", () => {
     return { engine, platform };
   };
 
+  it("counts one memory or one item in the singular", async () => {
+    const engine = createMockEngine();
+    const real = engine.getAdvanced.bind(engine);
+    vi.spyOn(engine, "getAdvanced").mockImplementation(async () => {
+      const view = await real();
+      return {
+        ...view,
+        memoryCount: 1,
+        itemCount: 1,
+        lastTidy: view.lastTidy && { ...view.lastTidy, items: 1 },
+      };
+    });
+    renderApp({ hash: "#/settings/advanced", engine });
+    expect(
+      await screen.findByText(/schema .* · 1 memory · 1 item · integrity/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/ · 1 item · \d+ merged/)).toBeInTheDocument();
+  });
+
   it("shows the technical details, and only here", async () => {
     await openAdvanced();
     expect(screen.getByText("For the curious. Nothing here needs changing.")).toBeInTheDocument();
