@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  ChevronDown,
   EyeOff,
   FileText,
   FolderInput,
@@ -8,6 +9,7 @@ import {
   type LucideIcon,
   Mic,
   Moon,
+  Paperclip,
   Pause,
   Play,
   Printer,
@@ -40,6 +42,8 @@ const ICONS = {
   trash: Trash,
   settings: Settings,
   x: X,
+  "chevron-down": ChevronDown,
+  paperclip: Paperclip,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
