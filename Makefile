@@ -45,25 +45,30 @@ rust/fmt: ## Format Rust code
 ui/install: ## Install UI dependencies
 	cd ui && npm ci
 
-ui/build: ## Build the interface
+ui/build: ui/node_modules ## Build the interface
 	cd ui && npm run build
 
-ui/test: ## Unit-test the interface
+ui/test: ui/node_modules ## Unit-test the interface
 	cd ui && npm test
 
-ui/e2e: ## Browser tests against the mock engine
+ui/e2e: ui/node_modules ## Browser tests against the mock engine
 	cd ui && npm run e2e
 
-ui/lint: ## Lint and type-check the interface
+ui/lint: ui/node_modules ## Lint and type-check the interface
 	cd ui && npm run lint
 
-ui/fmt: ## Format the interface
+ui/fmt: ui/node_modules ## Format the interface
 	cd ui && npm run fmt
 
 ##@ Lemonade
 
 lemonade/fetch: ## Download the pinned embedded Lemonade for this machine
 	scripts/fetch-lemonade.sh
+
+# Installs UI dependencies when missing or older than the lockfile.
+ui/node_modules: ui/package-lock.json
+	cd ui && npm ci
+	@touch ui/node_modules
 
 ##@ Contract
 
