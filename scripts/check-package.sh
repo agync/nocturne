@@ -40,8 +40,19 @@ if [[ -n "$manifest" && ! -f "$manifest" ]]; then
 fi
 
 scratch=$(mktemp -d)
+# A disk image is detached before the scratch folder goes, and the folder is only removed once
+# it is: rm -rf must never walk into a mounted image. A busy mount is detached by force.
+mounted() { mount | grep -qF " on $mnt_real ("; }
+mnt_real=""
 cleanup() {
-    [[ -d "$scratch/mnt" ]] && hdiutil detach -quiet "$scratch/mnt" > /dev/null 2>&1
+    if [[ -n "$mnt_real" ]] && mounted; then
+        hdiutil detach -quiet "$mnt_real" > /dev/null 2>&1 \
+            || { sleep 1; hdiutil detach -force -quiet "$mnt_real" > /dev/null 2>&1; }
+        if mounted; then
+            printf 'could not detach %s; leaving %s in place\n' "$mnt_real" "$scratch" >&2
+            return
+        fi
+    fi
     rm -rf "$scratch"
 }
 trap cleanup EXIT
@@ -60,8 +71,9 @@ else
         *.dmg)
             kind=app
             mkdir "$scratch/mnt"
-            hdiutil attach -quiet -nobrowse -readonly -noverify -noautoopen -mountpoint "$scratch/mnt" "$input"
-            root=$(find "$scratch/mnt" -maxdepth 1 -name '*.app' | head -1)
+            mnt_real=$(cd "$scratch/mnt" && pwd -P)
+            hdiutil attach -quiet -nobrowse -readonly -noverify -noautoopen -mountpoint "$mnt_real" "$input"
+            root=$(find "$mnt_real" -maxdepth 1 -name '*.app' | head -1)
             [[ -n "$root" ]] || { printf 'no .app inside %s\n' "$input" >&2; exit 1; }
             pkg_version=$(basename "$input" | sed -n 's/^[^_]*_\([0-9][^_]*\)_.*/\1/p')
             ;;

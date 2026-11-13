@@ -67,7 +67,7 @@ fetch and verify lemonade $platform into $pkg/lemonade/$platform (manifest $pkg/
 interface: npm --prefix ui ci && npm --prefix ui run build (or the ui/dist copied from a machine with Node)
 scripts/notices.py --target $rust_target --lemonade $pkg/lemonade/$platform (or the notices copied the same way)
 cargo build --release -p nocturne-app --features custom-protocol
-scripts/macos-app.sh target/release/nocturne-app $pkg/lemonade/$platform $pkg/notices $pkg/macos
+scripts/macos-app.sh --manifest $pkg/lemonade/$platform.manifest target/release/nocturne-app $pkg/lemonade/$platform $pkg/notices $pkg/macos
 copy the .dmg to $pkg and write $pkg/SHA256SUMS
 STEPS
     exit 0
@@ -189,7 +189,7 @@ if [[ "$kind" == macos ]]; then
     say "assemble: Nocturne.app and the .dmg"
     rm -rf "$pkg/macos"
     mkdir -p "$pkg/macos"
-    scripts/macos-app.sh target/release/nocturne-app "$pkg/lemonade/$platform" "$pkg/notices" "$pkg/macos"
+    scripts/macos-app.sh --manifest "$pkg/lemonade/$platform.manifest" target/release/nocturne-app "$pkg/lemonade/$platform" "$pkg/notices" "$pkg/macos"
     say "collect"
     rm -f "$pkg"/*.dmg
     cp "$pkg"/macos/*.dmg "$pkg/"
