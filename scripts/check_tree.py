@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Inspect an unpacked Nocturne package tree. Used by scripts/check-package.sh.
 
-Usage: scripts/check_tree.py ROOT --version V [--kind appimage|deb|rpm|tree] [--manifest FILE]
+Usage: scripts/check_tree.py ROOT --version V [--kind appimage|deb|rpm|app|tree] [--manifest FILE]
                              [--requires FILE] [--builder-home DIR] [--sources FILE]
 
 Prints one line per check and exits non-zero when any check failed.
@@ -11,6 +11,7 @@ import argparse
 import fnmatch
 import hashlib
 import os
+import plistlib
 import re
 import struct
 import sys
@@ -26,6 +27,8 @@ REQUIRED_DEPENDS = {
 ICON_SIZES = (32, 128, 256)
 FORBIDDEN_PARTS = (".agents", "vendor/", "/home/")
 HOME_PATTERN = re.compile(rb"/home/")
+MAC_HOME_PATTERN = re.compile(rb"/Users/[^/\s]")
+APP_IDENTIFIER = "app.nocturne.desktop"
 
 
 def walk(root):
@@ -84,15 +87,22 @@ class Report:
         print(f"FAIL  {message}")
 
 
-def check(root, kind, manifest, requires, report, builder_home=None, sources=None):
+def check(root, kind, manifest, requires, report, builder_home=None, sources=None, version=None):
     files = [p for p in walk(root)]
     rel = {os.path.relpath(p, root): p for p in files}
 
-    binaries = [r for r in rel if r.endswith("usr/bin/nocturne")]
-    if binaries:
-        report.ok(f"binary present: {binaries[0]}")
+    if kind == "app":
+        binaries = [r for r in rel if r == os.path.join("Contents", "MacOS", "Nocturne")]
+        if binaries and os.stat(rel[binaries[0]]).st_mode & 0o111 == 0o111:
+            report.ok(f"binary present and executable: {binaries[0]}")
+        else:
+            report.fail("no executable Contents/MacOS/Nocturne")
     else:
-        report.fail("no usr/bin/nocturne binary")
+        binaries = [r for r in rel if r.endswith("usr/bin/nocturne")]
+        if binaries:
+            report.ok(f"binary present: {binaries[0]}")
+        else:
+            report.fail("no usr/bin/nocturne binary")
 
     lemond = [r for r in rel if r.endswith("lemonade/lemond")]
     if not lemond:
@@ -126,7 +136,10 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
                 report.fail("notices/BUNDLED-LIBRARIES.txt missing (the AppImage carries system libraries)")
 
     desktops = [r for r in rel if r.endswith(".desktop")]
-    if not desktops:
+    if kind == "app":
+        desktops = []
+        check_app_bundle(root, rel, version, report)
+    elif not desktops:
         report.fail("no desktop entry")
     for d in desktops:
         text = read_text(rel[d])
@@ -145,7 +158,9 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
             if dims and dims[0] == dims[1]:
                 sizes.add(dims[0])
     missing = [s for s in ICON_SIZES if s not in sizes]
-    if missing:
+    if kind == "app":
+        pass
+    elif missing:
         report.fail(f"icons missing at {missing} (found {sorted(sizes)})")
     else:
         report.ok(f"icons at {list(ICON_SIZES)}")
@@ -174,6 +189,21 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
         report.fail(f"text files naming a home directory: {leaks[:5]}")
     else:
         report.ok("no text file names a home directory")
+
+    if kind == "app":
+        lemon_prefix = (lemon_dir + os.sep) if lemon_dir else None
+        mac_leaks = []
+        for r, p in rel.items():
+            if os.path.islink(p) or not os.path.isfile(p) or (lemon_prefix and r.startswith(lemon_prefix)):
+                continue
+            with open(p, "rb") as handle:
+                data = handle.read()
+            if is_text(data) and MAC_HOME_PATTERN.search(data):
+                mac_leaks.append(r)
+        if mac_leaks:
+            report.fail(f"text files naming a Mac home folder: {mac_leaks[:5]}")
+        else:
+            report.ok("no text file outside the engine names a Mac home folder")
 
     if builder_home:
         needle = builder_home.encode()
@@ -231,6 +261,50 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
             report.fail(f"{kind} does not declare: {missing}")
         else:
             report.ok(f"{kind} declares {', '.join(REQUIRED_DEPENDS[kind])}")
+
+
+def check_app_bundle(root, rel, version, report):
+    """Info.plist: identifier, executable, icon, version, minimum system and the microphone text."""
+    info = rel.get(os.path.join("Contents", "Info.plist"))
+    if not info:
+        report.fail("no Contents/Info.plist")
+        return
+    try:
+        with open(info, "rb") as handle:
+            plist = plistlib.load(handle)
+    except Exception as error:  # a damaged property list is the finding
+        report.fail(f"Info.plist does not parse: {error}")
+        return
+    if plist.get("CFBundleIdentifier") == APP_IDENTIFIER:
+        report.ok(f"bundle identifier {APP_IDENTIFIER}")
+    else:
+        report.fail(f"bundle identifier is {plist.get('CFBundleIdentifier')!r}, want {APP_IDENTIFIER}")
+    exe = plist.get("CFBundleExecutable", "")
+    if exe and os.path.join("Contents", "MacOS", exe) in rel:
+        report.ok(f"CFBundleExecutable {exe} exists")
+    else:
+        report.fail(f"CFBundleExecutable {exe!r} is not in Contents/MacOS")
+    icon = plist.get("CFBundleIconFile", "")
+    icon = icon if icon.endswith(".icns") else icon + ".icns"
+    if icon != ".icns" and os.path.join("Contents", "Resources", icon) in rel:
+        report.ok(f"icon {icon} present")
+    else:
+        report.fail(f"CFBundleIconFile {plist.get('CFBundleIconFile')!r} is not in Contents/Resources")
+    if version:
+        got = plist.get("CFBundleShortVersionString")
+        if got == version:
+            report.ok(f"bundle version {got} equals the workspace version")
+        else:
+            report.fail(f"bundle version {got!r} differs from workspace version {version}")
+    if re.match(r"^\d+(\.\d+)*$", str(plist.get("LSMinimumSystemVersion", ""))):
+        report.ok(f"minimum macOS {plist['LSMinimumSystemVersion']}")
+    else:
+        report.fail("LSMinimumSystemVersion is missing")
+    mic = str(plist.get("NSMicrophoneUsageDescription", "")).strip()
+    if mic:
+        report.ok(f"microphone sentence: {mic}")
+    else:
+        report.fail("NSMicrophoneUsageDescription is missing")
 
 
 def parse_bundled(text):
@@ -305,7 +379,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("root")
     parser.add_argument("--version")
-    parser.add_argument("--kind", default="tree", choices=["appimage", "deb", "rpm", "tree"])
+    parser.add_argument("--kind", default="tree", choices=["appimage", "deb", "rpm", "app", "tree"])
     parser.add_argument("--manifest")
     parser.add_argument("--requires")
     parser.add_argument("--package-version", help="version read from the package itself")
@@ -318,7 +392,7 @@ def main(argv=None):
             report.ok(f"package version {args.package_version} equals the workspace version")
         else:
             report.fail(f"package version {args.package_version} differs from workspace version {args.version}")
-    check(args.root, args.kind, args.manifest, args.requires, report, args.builder_home, args.sources)
+    check(args.root, args.kind, args.manifest, args.requires, report, args.builder_home, args.sources, args.version)
     if report.failures:
         print(f"\n{len(report.failures)} check(s) failed")
         return 1

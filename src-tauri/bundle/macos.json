@@ -1,0 +1,30 @@
+{
+  "mainBinaryName": "Nocturne",
+  "bundle": {
+    "active": true,
+    "targets": [
+      "app",
+      "dmg"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Remembers your day and hands you one page each morning.",
+    "longDescription": "Nocturne is a private desktop app that remembers your day, tidies its memory overnight, and hands you one page each morning. Everything stays on this computer.",
+    "licenseFile": "../LICENSE",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "resources": {
+      "../target/package/lemonade/macos-aarch64/": "lemonade/",
+      "../target/package/notices/": "notices/",
+      "../LICENSE": "LICENSE"
+    },
+    "macOS": {
+      "minimumSystemVersion": "26.0",
+      "signingIdentity": "-",
+      "entitlements": "macos/Entitlements.plist"
+    }
+  }
+}

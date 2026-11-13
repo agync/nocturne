@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Open a Nocturne package (AppImage, deb or rpm, or an unpacked tree) and inspect it.
+# Open a Nocturne package (AppImage, deb, rpm, a macOS .app or .dmg, or an unpacked tree) and
+# inspect it.
 #
 # Usage: scripts/check-package.sh [--manifest FILE | --no-manifest] <artefact | directory>
 #
@@ -8,17 +9,20 @@
 # entry, icons, forbidden paths, host paths in text files and the builder's home folder in any
 # file (binaries too), the package version and, for deb and rpm, the declared libraries. For an
 # AppImage it also checks the bundled libraries against the copyleft policy and the SOURCES
-# manifest. Unpacks into a scratch folder and removes it.
+# manifest. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
+# .dmg, mounted read-only) is checked for its Info.plist (identifier, executable, icon, version,
+# minimum system, microphone sentence) and, on a Mac, its code signature.
 #   NOCTURNE_BUILDER_HOME   the home folder to look for (default $HOME)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-manifest=target/package/lemonade/linux-x86_64.manifest
+manifest=""
+manifest_set=0
 sources=target/package/SOURCES.txt
 while (($#)); do
     case "$1" in
-        --manifest) manifest="${2:?--manifest needs a file}"; shift ;;
-        --no-manifest) manifest="" ;;
+        --manifest) manifest="${2:?--manifest needs a file}"; manifest_set=1; shift ;;
+        --no-manifest) manifest=""; manifest_set=1 ;;
         -h | --help) sed -n '2,9p' "$0"; exit 0 ;;
         *) break ;;
     esac
@@ -27,13 +31,20 @@ done
 [[ $# -eq 1 ]] || { printf 'usage: scripts/check-package.sh [--manifest FILE | --no-manifest] <artefact>\n' >&2; exit 2; }
 input=$(realpath -- "$1")
 [[ -e "$input" ]] || { printf 'not found: %s\n' "$1" >&2; exit 2; }
+platform=linux-x86_64
+case "$input" in *.app | *.app/ | *.dmg) platform=macos-aarch64 ;; esac
+((manifest_set)) || manifest=target/package/lemonade/$platform.manifest
 if [[ -n "$manifest" && ! -f "$manifest" ]]; then
     printf 'manifest not found: %s (run scripts/package.sh first, or pass --no-manifest)\n' "$manifest" >&2
     exit 2
 fi
 
 scratch=$(mktemp -d)
-trap 'rm -rf "$scratch"' EXIT
+cleanup() {
+    [[ -d "$scratch/mnt" ]] && hdiutil detach -quiet "$scratch/mnt" > /dev/null 2>&1
+    rm -rf "$scratch"
+}
+trap cleanup EXIT
 version=$(python3 -I -c 'import sys; sys.path.insert(0, "scripts"); import bundle_config; print(bundle_config.workspace_version())')
 root="$scratch/root"
 mkdir -p "$root"
@@ -43,8 +54,17 @@ requires=""
 
 if [[ -d "$input" ]]; then
     root="$input"
+    if [[ "$input" == *.app ]]; then kind=app; fi
 else
     case "$input" in
+        *.dmg)
+            kind=app
+            mkdir "$scratch/mnt"
+            hdiutil attach -quiet -nobrowse -readonly -noverify -noautoopen -mountpoint "$scratch/mnt" "$input"
+            root=$(find "$scratch/mnt" -maxdepth 1 -name '*.app' | head -1)
+            [[ -n "$root" ]] || { printf 'no .app inside %s\n' "$input" >&2; exit 1; }
+            pkg_version=$(basename "$input" | sed -n 's/^[^_]*_\([0-9][^_]*\)_.*/\1/p')
+            ;;
         *.AppImage)
             kind=appimage
             cp -- "$input" "$scratch/app.AppImage"
@@ -82,3 +102,9 @@ args=("$root" --kind "$kind" --builder-home "${NOCTURNE_BUILDER_HOME:-$HOME}")
 [[ -n "$requires" ]] && args+=(--requires "$requires")
 printf 'checking %s (%s)\n' "$(basename "$input")" "$kind"
 python3 -I scripts/check_tree.py "${args[@]}"
+if [[ "$kind" == app && "$(uname -s)" == Darwin ]]; then
+    codesign --verify --deep --strict "$root"
+    printf 'ok    code signature verifies (%s)\n' "$(codesign -dv "$root" 2>&1 | sed -n 's/^Signature=//p;s/^Authority=//p' | head -1)"
+elif [[ "$kind" == app ]]; then
+    printf 'note: the code signature is only checked on a Mac\n'
+fi

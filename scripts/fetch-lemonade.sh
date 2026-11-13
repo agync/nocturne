@@ -3,6 +3,7 @@
 # Usage: scripts/fetch-lemonade.sh [platform]   (default: this machine)
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+source scripts/sha256.sh
 
 platform="${1:-}"
 if [[ -z "$platform" ]]; then
@@ -31,7 +32,7 @@ fi
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 curl --fail --location --silent --show-error -o "$tmp/$file" "$base_url/$file"
-printf '%s  %s\n' "$sum" "$tmp/$file" | sha256sum --check --quiet
+[[ "$(sha256_of "$tmp/$file")" == "$sum" ]] || { printf 'sha256 mismatch for %s\n' "$file" >&2; exit 1; }
 
 rm -rf "$dest"
 mkdir -p "$dest"

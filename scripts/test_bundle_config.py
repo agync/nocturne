@@ -31,7 +31,7 @@ class Merge(unittest.TestCase):
 
 class Overlays(unittest.TestCase):
     def test_both_files_parse(self):
-        for name in ("linux", "windows"):
+        for name in ("linux", "windows", "macos"):
             path = os.path.join(ROOT, "src-tauri", "bundle", f"{name}.json")
             with open(path, encoding="utf-8") as handle:
                 json.load(handle)
@@ -55,8 +55,27 @@ class Overlays(unittest.TestCase):
         self.assertEqual(merged["bundle"]["windows"]["nsis"]["installMode"], "currentUser")
         self.assertEqual(sorted(merged["bundle"]["targets"]), ["msi", "nsis"])
 
+    def test_macos_resources_icon_and_minimum_version(self):
+        merged = bundle_config.effective("macos")
+        self.assertEqual(bundle_config.problems("macos", merged), [])
+        bundle = merged["bundle"]
+        self.assertEqual(sorted(bundle["targets"]), ["app", "dmg"])
+        self.assertIn("icons/icon.icns", bundle["icon"])
+        self.assertTrue(os.path.isfile(os.path.join(ROOT, "src-tauri", "icons", "icon.icns")))
+        self.assertEqual(bundle["macOS"]["signingIdentity"], "-")
+        self.assertRegex(bundle["macOS"]["minimumSystemVersion"], r"^\d+\.\d+$")
+        entitlements = os.path.join(ROOT, "src-tauri", bundle["macOS"]["entitlements"])
+        self.assertTrue(os.path.isfile(entitlements))
+
+    def test_the_microphone_sentence_is_plain(self):
+        path = os.path.join(ROOT, "src-tauri", "Info.plist")
+        with open(path, encoding="utf-8") as handle:
+            text = handle.read()
+        self.assertIn("<key>NSMicrophoneUsageDescription</key>", text)
+        self.assertIn("Nocturne listens only while you hold to talk.", text)
+
     def test_licence_ships_in_every_package_and_the_engine_libraries_are_declared(self):
-        for kind in ("linux", "windows"):
+        for kind in ("linux", "windows", "macos"):
             self.assertEqual(bundle_config.effective(kind)["bundle"]["resources"]["../LICENSE"], "LICENSE")
         deb = bundle_config.effective("linux")["bundle"]["linux"]["deb"]["depends"]
         rpm = bundle_config.effective("linux")["bundle"]["linux"]["rpm"]["depends"]
@@ -86,6 +105,25 @@ class DryRun(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("../target/package/lemonade/windows-x86_64/", proc.stdout)
         self.assertNotIn("linux-x86_64", proc.stdout)
+
+    def test_macos_dry_run_prints_macos_resources_and_the_assembly_step(self):
+        proc = dry_run("--config", "macos")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("../target/package/lemonade/macos-aarch64/", proc.stdout)
+        self.assertIn("scripts/macos-app.sh", proc.stdout)
+        self.assertNotIn("linux-x86_64", proc.stdout)
+
+    def test_macos_build_is_refused_off_apple_silicon(self):
+        if subprocess.run(["uname", "-sm"], capture_output=True, text=True).stdout.strip() == "Darwin arm64":
+            self.skipTest("this is the machine that builds it")
+        proc = subprocess.run(
+            [os.path.join(HERE, "package.sh"), "--config", "macos"],
+            capture_output=True,
+            text=True,
+            cwd=ROOT,
+        )
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn("Apple Silicon", proc.stderr)
 
     def test_windows_build_is_refused_here(self):
         proc = subprocess.run(

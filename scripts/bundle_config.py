@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Merge a bundle overlay into src-tauri/tauri.conf.json the way `tauri build --config` does.
 
-Usage: scripts/bundle_config.py <linux|windows> [--extra FILE]
+Usage: scripts/bundle_config.py <linux|windows|macos> [--extra FILE]
 
 Prints the merged configuration as JSON. Exits non-zero when the packaging rules are broken:
 the base file carries a version that differs from the workspace version, or the resources do
@@ -14,7 +14,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PLATFORMS = {"linux": "linux-x86_64", "windows": "windows-x86_64"}
+PLATFORMS = {"linux": "linux-x86_64", "windows": "windows-x86_64", "macos": "macos-aarch64"}
 
 
 def merge(base, patch):

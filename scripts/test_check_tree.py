@@ -3,6 +3,7 @@
 import hashlib
 import sys
 import os
+import plistlib
 import shutil
 import struct
 import subprocess
@@ -53,6 +54,32 @@ def make_tree(root, lemond_mode=0o755, exec_line="nocturne"):
     for size in (32, 128, 256):
         write(os.path.join(root, f"usr/share/icons/hicolor/{size}x{size}/apps/nocturne.png"), png(size))
     return lib
+
+
+MAC_BUILDER = "/" + "Users" + "/builder"
+
+
+def make_app(root, **plist):
+    """A Nocturne.app tree: returns the Resources folder."""
+    info = {
+        "CFBundleIdentifier": "app.nocturne.desktop",
+        "CFBundleExecutable": "Nocturne",
+        "CFBundleIconFile": "icon",
+        "CFBundleShortVersionString": "0.1.0",
+        "LSMinimumSystemVersion": "26.0",
+        "NSMicrophoneUsageDescription": "Nocturne listens only while you hold to talk.",
+    }
+    info.update(plist)
+    info = {k: v for k, v in info.items() if v is not None}
+    write(os.path.join(root, "Contents/Info.plist"), plistlib.dumps(info))
+    write(os.path.join(root, "Contents/MacOS/Nocturne"), b"\xcf\xfa\xed\xfe\0", 0o755)
+    res = os.path.join(root, "Contents/Resources")
+    write(os.path.join(res, "icon.icns"), b"icns")
+    write(os.path.join(res, "LICENSE"), "Apache")
+    write(os.path.join(res, "lemonade/lemond"), b"\xcf\xfa\xed\xfe\0engine", 0o755)
+    write(os.path.join(res, "lemonade/LICENSE"), "Apache")
+    write(os.path.join(res, "notices/THIRD-PARTY-NOTICES.txt"), "notices")
+    return res
 
 
 def run_check(root, *extra):
@@ -148,6 +175,71 @@ class FixtureTrees(unittest.TestCase):
         )
         self.assertEqual(bad.returncode, 1)
         self.assertIn("changed resources/defaults.json", bad.stdout)
+
+
+class AppBundles(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+
+    def check(self, *extra):
+        return run_tree(self.tmp, "--kind", "app", "--version", "0.1.0", *extra)
+
+    def test_a_good_app_passes(self):
+        make_app(self.tmp)
+        code, out = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertIn("microphone sentence: Nocturne listens only while you hold to talk.", out)
+        self.assertIn("minimum macOS 26.0", out)
+
+    def test_a_missing_microphone_sentence_fails(self):
+        make_app(self.tmp, NSMicrophoneUsageDescription=None)
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("NSMicrophoneUsageDescription is missing", out)
+
+    def test_wrong_identifier_version_and_missing_minimum_fail(self):
+        make_app(self.tmp, CFBundleIdentifier="com.example.x", CFBundleShortVersionString="9.9.9", LSMinimumSystemVersion=None)
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("bundle identifier is 'com.example.x'", out)
+        self.assertIn("bundle version '9.9.9' differs", out)
+        self.assertIn("LSMinimumSystemVersion is missing", out)
+
+    def test_the_icon_and_the_executable_must_exist(self):
+        res = make_app(self.tmp, CFBundleExecutable="Other")
+        os.remove(os.path.join(res, "icon.icns"))
+        code, out = self.check()
+        self.assertEqual(code, 1)
+        self.assertIn("CFBundleExecutable 'Other' is not in Contents/MacOS", out)
+        self.assertIn("CFBundleIconFile 'icon' is not in Contents/Resources", out)
+
+    def test_a_mac_home_folder_in_a_binary_or_a_text_file_fails_but_not_inside_the_engine(self):
+        res = make_app(self.tmp)
+        write(os.path.join(res, "lemonade/blob.bin"), b"\0" + MAC_BUILDER.encode() + b"/x\0")
+        write(os.path.join(res, "lemonade/note.txt"), MAC_BUILDER + "/x")
+        self.assertEqual(self.check("--builder-home", MAC_BUILDER)[0], 0)
+        write(os.path.join(self.tmp, "Contents/MacOS/Nocturne"), b"\xcf\xfa\xed\xfe\0" + MAC_BUILDER.encode() + b"/.cargo\0", 0o755)
+        code, out = self.check("--builder-home", MAC_BUILDER)
+        self.assertEqual(code, 1)
+        self.assertIn("builder's home directory", out)
+        write(os.path.join(res, "notices/THIRD-PARTY-NOTICES.txt"), "built in " + MAC_BUILDER + "/src")
+        code, out = self.check()
+        self.assertIn("naming a Mac home folder", out)
+
+    def test_engine_files_must_match_the_manifest(self):
+        res = make_app(self.tmp)
+        manifest = os.path.join(self.tmp, "m.manifest")
+        digest = hashlib.sha256(b"\xcf\xfa\xed\xfe\0engine").hexdigest()
+        other = hashlib.sha256(b"Apache").hexdigest()
+        with open(manifest, "w") as handle:
+            handle.write(f"{digest}  ./lemond\n{other}  ./LICENSE\n")
+        code, out = self.check("--manifest", manifest)
+        self.assertEqual(code, 0, out)
+        write(os.path.join(res, "lemonade/lemond"), b"tampered", 0o755)
+        code, out = self.check("--manifest", manifest)
+        self.assertEqual(code, 1)
+        self.assertIn("changed lemond", out)
 
 
 class Review(unittest.TestCase):

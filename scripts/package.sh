@@ -1,30 +1,39 @@
 #!/usr/bin/env bash
 # Build Nocturne's installable packages with the pinned private engine inside.
 #
-# Usage: scripts/package.sh [--dry-run] [--config linux|windows] [appimage|deb|rpm|nsis|msi ...]
+# Usage: scripts/package.sh [--dry-run] [--config linux|windows|macos] [--inputs-only]
+#                           [appimage|deb|rpm|nsis|msi|app|dmg ...]
 #
 # Everything lands under target/package/: the verified Lemonade bundle, its sha256 manifest, the
 # third-party notices, the packages and SHA256SUMS. Nothing is installed, pushed or uploaded.
 # The only network use is the developer-time download of the pinned Lemonade archive (checked
 # against lemonade.lock) and of the packaging tools the Tauri CLI fetches into its own cache.
 # --dry-run prints the merged configuration and the steps without building or downloading.
+#
+# macOS (Apple Silicon, built on a Mac) needs no Node there: the app is assembled by
+# scripts/macos-app.sh. The interface (ui/dist) and the notices come from a machine with Node:
+# run `scripts/package.sh --config macos --inputs-only` there and copy ui/dist and
+# target/package/notices to the Mac; with Node present the Mac builds them itself.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+source scripts/sha256.sh
 
 kind=linux
 dry=0
+inputs_only=0
 targets=()
 while (($#)); do
     case "$1" in
         --dry-run) dry=1 ;;
-        --config) kind="${2:?--config needs linux or windows}"; shift ;;
-        appimage | deb | rpm | nsis | msi) targets+=("$1") ;;
-        -h | --help) sed -n '2,10p' "$0"; exit 0 ;;
+        --inputs-only) inputs_only=1 ;;
+        --config) kind="${2:?--config needs linux, windows or macos}"; shift ;;
+        appimage | deb | rpm | nsis | msi | app | dmg) targets+=("$1") ;;
+        -h | --help) sed -n '2,15p' "$0"; exit 0 ;;
         *) printf 'unknown argument: %s\n' "$1" >&2; exit 2 ;;
     esac
     shift
 done
-[[ "$kind" == linux || "$kind" == windows ]] || { printf 'unknown config: %s\n' "$kind" >&2; exit 2; }
+[[ "$kind" == linux || "$kind" == windows || "$kind" == macos ]] || { printf 'unknown config: %s\n' "$kind" >&2; exit 2; }
 platform=linux-x86_64
 rust_target=x86_64-unknown-linux-gnu
 defaults=(appimage deb rpm)
@@ -32,6 +41,10 @@ if [[ "$kind" == windows ]]; then
     platform=windows-x86_64
     rust_target=x86_64-pc-windows-msvc
     defaults=(nsis msi)
+elif [[ "$kind" == macos ]]; then
+    platform=macos-aarch64
+    rust_target=aarch64-apple-darwin
+    defaults=(app dmg)
 fi
 ((${#targets[@]})) || targets=("${defaults[@]}")
 bundles=$(IFS=,; printf '%s' "${targets[*]}")
@@ -46,6 +59,19 @@ fi
 
 say "configuration ($kind, version $version)"
 python3 -I scripts/bundle_config.py "$kind"
+
+if ((dry)) && [[ "$kind" == macos ]]; then
+    say "dry run: steps that would run"
+    cat <<STEPS
+fetch and verify lemonade $platform into $pkg/lemonade/$platform (manifest $pkg/lemonade/$platform.manifest)
+interface: npm --prefix ui ci && npm --prefix ui run build (or the ui/dist copied from a machine with Node)
+scripts/notices.py --target $rust_target --lemonade $pkg/lemonade/$platform (or the notices copied the same way)
+cargo build --release -p nocturne-app --features custom-protocol
+scripts/macos-app.sh target/release/nocturne-app $pkg/lemonade/$platform $pkg/notices $pkg/macos
+copy the .dmg to $pkg and write $pkg/SHA256SUMS
+STEPS
+    exit 0
+fi
 
 if ((dry)); then
     say "dry run: steps that would run"
@@ -66,6 +92,11 @@ if [[ "$kind" == windows ]]; then
         MINGW*-x86_64 | MSYS*-x86_64) ;;
         *) printf 'Windows installers are built on a Windows machine (Git Bash): see docs/contribution/building.md\n' >&2; exit 2 ;;
     esac
+elif [[ "$kind" == macos ]]; then
+    if [[ "$host" != Darwin-arm64 ]] && ((!inputs_only)); then
+        printf 'the Mac package is built on Apple Silicon; --inputs-only prepares what it needs anywhere\n' >&2
+        exit 2
+    fi
 elif [[ "$host" != Linux-x86_64 ]]; then
     printf 'Linux packages are built on Linux x86_64\n' >&2
     exit 2
@@ -81,7 +112,7 @@ sum=$(field sha256)
 
 mkdir -p "$pkg/download"
 archive="$pkg/download/$file"
-verified() { [[ -f "$archive" ]] && printf '%s  %s\n' "$sum" "$archive" | sha256sum --check --quiet 2> /dev/null; }
+verified() { [[ -f "$archive" && "$(sha256_of "$archive")" == "$sum" ]]; }
 if ! verified; then
     say "download $file"
     curl --fail --location --silent --show-error -o "$archive.part" "$base_url/$file"
@@ -113,17 +144,29 @@ mkdir -p "$pkg/lemonade/$platform"
 cp -a "$inner/." "$pkg/lemonade/$platform/"
 rm -f "$pkg/lemonade/$platform/.sha256"
 [[ -f "$pkg/lemonade/$platform/lemond" ]] && chmod +x "$pkg/lemonade/$platform/lemond"
-(cd "$pkg/lemonade/$platform" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) \
-    > "$pkg/lemonade/$platform.manifest"
+sha256_manifest "$pkg/lemonade/$platform" > "$pkg/lemonade/$platform.manifest"
 say "lemonade manifest: $(wc -l < "$pkg/lemonade/$platform.manifest") files"
 
-say "interface"
-npm --prefix ui ci
-npm --prefix ui run build
+if [[ "$kind" == macos ]] && ! command -v npm > /dev/null 2>&1; then
+    [[ -f ui/dist/index.html && -f "$pkg/notices/THIRD-PARTY-NOTICES.txt" ]] || {
+        printf 'no Node here: copy ui/dist and %s/notices from a machine that ran\n' "$pkg" >&2
+        printf '  scripts/package.sh --config macos --inputs-only\n' >&2
+        exit 1
+    }
+    say "interface and notices: the copies already here"
+else
+    say "interface"
+    npm --prefix ui ci
+    npm --prefix ui run build
 
-say "third-party notices"
-rm -rf "$pkg/notices"
-python3 -I scripts/notices.py --target "$rust_target" --lemonade "$pkg/lemonade/$platform"
+    say "third-party notices"
+    rm -rf "$pkg/notices"
+    python3 -I scripts/notices.py --target "$rust_target" --lemonade "$pkg/lemonade/$platform"
+fi
+if ((inputs_only)); then
+    say "inputs ready: ui/dist, $pkg/notices and $pkg/lemonade/$platform"
+    exit 0
+fi
 
 # Run from src-tauri, as the Makefile's dev target does: the CLI runs the interface build hook
 # relative to the project it finds there.
@@ -139,6 +182,22 @@ rustup_home=${RUSTUP_HOME:-$HOME/.rustup}
 remaps=(--remap-path-prefix="$HOME=/builder" --remap-path-prefix="$cargo_home=/cargo" \
     --remap-path-prefix="$rustup_home=/rustup" --remap-path-prefix="$PWD=/source")
 export RUSTFLAGS="${RUSTFLAGS:-} ${remaps[*]}"
+
+if [[ "$kind" == macos ]]; then
+    say "build: the app binary"
+    cargo build --release -p nocturne-app --features custom-protocol
+    say "assemble: Nocturne.app and the .dmg"
+    rm -rf "$pkg/macos"
+    mkdir -p "$pkg/macos"
+    scripts/macos-app.sh target/release/nocturne-app "$pkg/lemonade/$platform" "$pkg/notices" "$pkg/macos"
+    say "collect"
+    rm -f "$pkg"/*.dmg
+    cp "$pkg"/macos/*.dmg "$pkg/"
+    (cd "$pkg" && "${sha256_tool[@]}" -- *.dmg > SHA256SUMS)
+    ls -l "$pkg"/*.dmg
+    cat "$pkg/SHA256SUMS"
+    exit 0
+fi
 
 if [[ "$kind" == windows ]]; then
     rm -rf target/release/bundle/nsis target/release/bundle/msi "$pkg/windows"
