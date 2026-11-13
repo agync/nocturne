@@ -84,7 +84,7 @@
 }
 
 .input::placeholder {
-  color: var(--ink3);
+  color: var(--ink2);
   opacity: 1;
 }
 
