@@ -208,7 +208,12 @@ export function createPhoneEngine(
         if (!dead) throw e;
         s.close("replaced");
         if (session === s) session = null;
-        if (!retry || attempt >= 1) throw new ConnectionError("asleep");
+        if (!retry || attempt >= 1) {
+          // A call that cannot be sent again still finds out why the session ended: a phone that
+          // was removed is told by the refusal to its next open, and says so now, not on a later tap.
+          void ensure().catch(() => undefined);
+          throw new ConnectionError("asleep");
+        }
       }
     }
   }

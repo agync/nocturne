@@ -292,6 +292,25 @@ describe("revocation", () => {
     expect(store.current()).toBeNull();
   });
 
+  it("a removal that only drops the answer is found out at once, not on the next tap", async () => {
+    const { computer, device } = await paired();
+    const store = memoryKeyStore(device);
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    computer.handler = async (ctx) => {
+      if (ctx.request.call.cmd === "ask") await ctx.reply({ type: "askStarted", askId: "ask-1" });
+    };
+    const asked = engine.ask("When is it?", () => undefined);
+    await vi.waitFor(() => expect(computer.sessions.size).toBe(1));
+    // The real computer ends the session without a word when a phone is removed; the phone
+    // learns the reason from the sealed refusal to its next open.
+    const known = computer.devices.get(toHex(device.deviceId));
+    if (known) known.revoked = true;
+    computer.dropAll();
+    await expect(asked).rejects.toBeInstanceOf(ConnectionError);
+    await vi.waitFor(() => expect(engine.connection().kind).toBe("removed"));
+    expect(store.current()).toBeNull();
+  });
+
   it("unsealed_revoked_keeps_keys: a refusal, an HTTP error, a forged REVOKED and silence all keep the key", async () => {
     const { computer, device } = await paired();
     const store = memoryKeyStore(device);
