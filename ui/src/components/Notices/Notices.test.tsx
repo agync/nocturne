@@ -1,0 +1,75 @@
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { describe, expect, it, vi } from "vitest";
+import { copyDeck } from "../../copy/t";
+import type { Notice, NoticeCode } from "../../engine/bindings";
+import { Notices, noticeAction, noticeText } from "./Notices";
+
+const CODES: Record<NoticeCode, true> = {
+  downloadStalled: true,
+  diskFull: true,
+  tierDropped: true,
+  restarts: true,
+  couldntRead: true,
+  micDenied: true,
+  printFailed: true,
+  catchingUp: true,
+  repairNeeded: true,
+  notReady: true,
+  tidyPausedBattery: true,
+  updateRolledBack: true,
+  reReading: true,
+};
+
+const make = (code: NoticeCode, extra: Partial<Notice> = {}): Notice => ({
+  id: `n-${code}`,
+  code,
+  itemId: null,
+  etaSeconds: null,
+  bytes: null,
+  ...extra,
+});
+
+describe("Notices", () => {
+  it("has one sentence and one action in the copy deck for every code", () => {
+    for (const code of Object.keys(CODES) as NoticeCode[]) {
+      expect(
+        copyDeck[`notice.${code}.text`] ?? copyDeck[`notice.${code}.text.unknown`],
+        code,
+      ).toBeTruthy();
+      expect(noticeText(make(code)).length, code).toBeGreaterThan(10);
+      expect(noticeAction(code).length, code).toBeGreaterThan(1);
+    }
+  });
+
+  it("never shows an error code", () => {
+    for (const code of Object.keys(CODES) as NoticeCode[]) {
+      expect(noticeText(make(code))).not.toMatch(/E-\d\d/);
+    }
+  });
+
+  it("says how much space is needed and how long a catch-up will take", () => {
+    expect(noticeText(make("diskFull", { bytes: 6_000_000_000 }))).toBe(
+      "This computer needs 6 GB more free space to finish setting up.",
+    );
+    expect(noticeText(make("catchingUp", { etaSeconds: 40 }))).toBe(
+      "The computer was off overnight. Catching up now, about 40 seconds.",
+    );
+    expect(noticeText(make("catchingUp", { etaSeconds: 300 }))).toContain("about 5 min");
+  });
+
+  it("shows a button only when something can be done, and runs it", async () => {
+    const onRetry = vi.fn();
+    const notices = [make("couldntRead", { itemId: "i1" }), make("restarts")];
+    render(<Notices notices={notices} handlers={{ couldntRead: onRetry }} />);
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledWith(notices[0]);
+  });
+
+  it("renders nothing for no notices", () => {
+    const { container } = render(<Notices notices={[]} />);
+    expect(container).toBeEmptyDOMElement();
+  });
+});

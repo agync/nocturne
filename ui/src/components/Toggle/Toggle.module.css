@@ -1,0 +1,83 @@
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4);
+  min-height: var(--size-touch);
+  cursor: pointer;
+}
+
+.row[data-disabled="true"] {
+  cursor: not-allowed;
+  color: var(--ink3);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.label {
+  font: 500 0.9375rem / 1.4 var(--font-sans);
+}
+
+.hint {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.38 var(--font-sans);
+}
+
+.control {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.state {
+  min-width: 2ch;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+  text-align: right;
+}
+
+.switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--ink3);
+  border-radius: var(--r-full);
+  background: transparent;
+  transition: background var(--m-act-duration) var(--m-act-easing);
+}
+
+.switch[data-state="on"] {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+
+.knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--ink3);
+  transition: transform var(--m-act-duration) var(--m-act-easing);
+}
+
+.switch[data-state="on"] .knob {
+  background: var(--sheet);
+  transform: translateX(20px);
+}
+
+.switch:disabled {
+  border-color: var(--rule);
+}
+
+.switch:disabled .knob {
+  background: var(--rule);
+}

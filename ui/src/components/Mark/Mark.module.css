@@ -1,0 +1,12 @@
+.mark {
+  flex: none;
+  color: var(--ink);
+}
+
+.mark[data-state="needsYou"] {
+  color: var(--ember);
+}
+
+.mark[data-state="paused"] {
+  color: var(--ink3);
+}

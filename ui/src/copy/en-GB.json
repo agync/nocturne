@@ -55,6 +55,7 @@
   "bar.ask": "Ask",
   "bar.talk": "Hold to talk",
   "bar.hint": "A question mark or a question word makes Ask the default; anything else defaults to Keep. Both are always visible so the guess is never a trap.",
+  "bar.listening": "Listening {time}",
   "bar.keys.keep": "Ctrl Enter",
   "bar.keys.ask": "Alt Enter",
   "bar.keys.default": "Enter",

@@ -1,0 +1,39 @@
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.words {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s-1) var(--s-4);
+  font: 400 0.875rem / 1.4 var(--font-sans);
+}
+
+.detail {
+  font: 400 0.75rem / 1.33 var(--font-mono);
+  color: var(--ink2);
+}
+
+.track {
+  height: 4px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: var(--rule);
+}
+
+.fill {
+  height: 100%;
+  background: var(--ink);
+  transition: width var(--m-settle-duration) var(--m-settle-easing);
+}
+
+.progress[data-paused="true"] .words {
+  color: var(--ink2);
+}
+
+.progress[data-paused="true"] .fill {
+  background: repeating-linear-gradient(90deg, var(--ink3) 0 4px, transparent 4px 7px);
+}

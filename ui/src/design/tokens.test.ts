@@ -71,6 +71,7 @@ describe("contrast rules (B6)", () => {
     ["ink", "accentSoft"],
     ["ink", "emberSoft"],
     ["onAccent", "accent"],
+    ["ember", "emberSoft"],
   ];
   const edges: Array<[string, string]> = [
     ["rule2", "sheet"],

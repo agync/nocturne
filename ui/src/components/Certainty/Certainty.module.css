@@ -1,0 +1,22 @@
+.certainty {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font: 400 0.875rem / 1.4 var(--font-sans);
+  color: var(--ink);
+}
+
+.bars {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.bar {
+  width: 14px;
+  height: 4px;
+  background: var(--rule);
+}
+
+.bar[data-filled="true"] {
+  background: var(--ink);
+}
