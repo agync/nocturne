@@ -21,6 +21,11 @@ export interface ToastOptions {
    */
   key?: string;
   action?: { label: string; onAction: () => void };
+  /**
+   * Called once when the toast closes without its action: by timeout, by Escape, by being pushed
+   * off the stack or replaced, or by `dismiss`. Use it to commit what the action would undo.
+   */
+  onExpire?: () => void;
   /** Milliseconds on screen. Default 6000, long enough to press Undo. */
   duration?: number;
 }
@@ -46,21 +51,23 @@ const DEFAULT_DURATION = 6000;
 /** A toast with something to press stays longer, and while the pointer or focus is on it. */
 const ACTION_DURATION = 10_000;
 
-function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: number) => void }) {
+type Close = (id: number, expired: boolean) => void;
+
+function ToastView({ toast, onClose }: { toast: ToastItem; onClose: Close }) {
   const [paused, setPaused] = useState(false);
   const duration = toast.duration ?? (toast.action ? ACTION_DURATION : DEFAULT_DURATION);
   const returnTo = useRef<HTMLElement | null>(null);
 
-  const finish = () => {
+  const finish = (expired: boolean) => {
     const back = returnTo.current;
-    onDismiss(toast.id);
+    onClose(toast.id, expired);
     if (back?.isConnected) back.focus();
   };
   useEffect(() => {
     if (paused) return;
-    const timer = setTimeout(() => onDismiss(toast.id), duration);
+    const timer = setTimeout(() => onClose(toast.id, true), duration);
     return () => clearTimeout(timer);
-  }, [paused, duration, onDismiss, toast.id]);
+  }, [paused, duration, onClose, toast.id]);
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus only pause the timer
@@ -78,7 +85,7 @@ function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
       }}
       onBlur={() => setPaused(false)}
       onKeyDown={(event) => {
-        if (event.key === "Escape") finish();
+        if (event.key === "Escape") finish(true);
       }}
     >
       {toast.lead ? <strong className={styles.lead}>{toast.lead}</strong> : null}
@@ -89,7 +96,7 @@ function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
           className={styles.action}
           onClick={() => {
             toast.action?.onAction();
-            finish();
+            finish(false);
           }}
         >
           {toast.action.label}
@@ -101,22 +108,48 @@ function ToastView({ toast, onDismiss }: { toast: ToastItem; onDismiss: (id: num
 
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
+  const current = useRef<ToastItem[]>([]);
   const next = useRef(1);
 
-  const dismiss = useCallback((id: number) => {
-    setToasts((all) => all.filter((x) => x.id !== id));
+  const replaceAll = useCallback((all: ToastItem[]) => {
+    current.current = all;
+    setToasts(all);
   }, []);
 
-  const show = useCallback((options: ToastOptions) => {
-    const id = next.current++;
-    const key = options.key ?? options.message;
-    setToasts((all) => {
+  const close = useCallback<Close>(
+    (id, expired) => {
+      const gone = current.current.find((x) => x.id === id);
+      if (!gone) return;
+      replaceAll(current.current.filter((x) => x.id !== id));
+      if (expired) gone.onExpire?.();
+    },
+    [replaceAll],
+  );
+
+  const dismiss = useCallback((id: number) => close(id, true), [close]);
+
+  const show = useCallback(
+    (options: ToastOptions) => {
+      const id = next.current++;
+      const key = options.key ?? options.message;
+      const all = current.current;
       const at = all.findIndex((x) => (x.key ?? x.message) === key);
-      if (at === -1) return [...all.slice(-2), { ...options, id }];
-      return all.map((x, i) => (i === at ? { ...options, id } : x));
-    });
-    return id;
-  }, []);
+      let kept: ToastItem[];
+      let dropped: ToastItem[];
+      if (at === -1) {
+        kept = all.slice(-2);
+        dropped = all.slice(0, all.length - kept.length);
+        kept = [...kept, { ...options, id }];
+      } else {
+        kept = all.map((x, i) => (i === at ? { ...options, id } : x));
+        dropped = [all[at] as ToastItem];
+      }
+      replaceAll(kept);
+      for (const toast of dropped) toast.onExpire?.();
+      return id;
+    },
+    [replaceAll],
+  );
 
   const api = useMemo(() => ({ show, dismiss }), [show, dismiss]);
 
@@ -126,7 +159,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       <section className={styles.region} aria-label={t("toast.region")}>
         <output className={styles.stack} aria-live="polite" aria-atomic="false">
           {toasts.map((toast) => (
-            <ToastView key={toast.id} toast={toast} onDismiss={dismiss} />
+            <ToastView key={toast.id} toast={toast} onClose={close} />
           ))}
         </output>
       </section>

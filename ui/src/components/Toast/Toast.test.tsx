@@ -197,4 +197,70 @@ describe("Toast", () => {
     expect(screen.getByText("Four")).toBeInTheDocument();
     expect(screen.getByText("Two")).toBeInTheDocument();
   });
+
+  describe("onExpire", () => {
+    function Holder({ onExpire, onAction }: { onExpire: () => void; onAction: () => void }) {
+      const { show, dismiss } = useToast();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={() =>
+              show({ message: "Marked as done.", action: { label: "Undo", onAction }, onExpire })
+            }
+          >
+            Open
+          </button>
+          <button type="button" onClick={() => dismiss(1)}>
+            Dismiss
+          </button>
+        </>
+      );
+    }
+    const setup = async () => {
+      const onExpire = vi.fn();
+      const onAction = vi.fn();
+      render(
+        <ToastProvider>
+          <Holder onExpire={onExpire} onAction={onAction} />
+        </ToastProvider>,
+      );
+      await userEvent.click(screen.getByRole("button", { name: "Open" }));
+      return { onExpire, onAction };
+    };
+
+    it("fires once on timeout", async () => {
+      const { onExpire, onAction } = await setup();
+      expect(onExpire).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_500);
+      });
+      expect(onExpire).toHaveBeenCalledTimes(1);
+      expect(onAction).not.toHaveBeenCalled();
+    });
+
+    it("fires on dismissal", async () => {
+      const { onExpire } = await setup();
+      await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+      expect(onExpire).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText("Marked as done.")).toBeNull();
+    });
+
+    it("fires on Escape", async () => {
+      const { onExpire } = await setup();
+      screen.getByRole("button", { name: "Undo" }).focus();
+      await userEvent.keyboard("{Escape}");
+      expect(onExpire).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not fire when the action is pressed", async () => {
+      const { onExpire, onAction } = await setup();
+      await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(onAction).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_500);
+      });
+      expect(onExpire).not.toHaveBeenCalled();
+    });
+  });
 });
