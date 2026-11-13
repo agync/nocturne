@@ -13,8 +13,11 @@ setup: ## Install git hooks, the scratch area and UI dependencies
 
 ##@ Development
 
-dev: ## Run the desktop app in development
-	cd src-tauri && cargo tauri dev
+DEV_DATA_DIR ?= $(CURDIR)/target/dev-data
+
+dev: ui/node_modules ## Run the desktop app with a scripted mind and a scratch data dir
+	cd src-tauri && NOCTURNE_FAKE_MIND=1 NOCTURNE_DATA_DIR=$(DEV_DATA_DIR) \
+		../ui/node_modules/.bin/tauri dev --features fake-mind
 
 ##@ Build & Quality
 

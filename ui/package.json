@@ -13,7 +13,8 @@
     "e2e": "playwright test",
     "lint": "biome check . && tsc --noEmit",
     "fmt": "biome format --write .",
-    "tokens": "node scripts/build-tokens.mjs"
+    "tokens": "node scripts/build-tokens.mjs",
+    "tauri": "tauri"
   },
   "dependencies": {
     "@fontsource-variable/newsreader": "^5.3.0",
@@ -31,6 +32,7 @@
     "@axe-core/playwright": "^4.14.0",
     "@biomejs/biome": "^2.6.7",
     "@playwright/test": "^1.65.0",
+    "@tauri-apps/cli": "2.12.4",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.10",
