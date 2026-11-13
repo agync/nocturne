@@ -392,7 +392,7 @@ fn secret_only_after_the_fragment_mark() {
     let offer = b.begin();
     let (before, after) = offer.link.split_once('#').unwrap();
     assert_eq!(before, format!("https://{HOST}{PATH_PAIR}"));
-    let s = b.p.secret_for_tests().unwrap();
+    let s = PhonePair::scanned(&offer.link, "Pixel").s;
     assert!(after.contains(&crypto::b64(&s)));
     assert!(!before.contains(&crypto::b64(&s)));
     assert_eq!(offer.typed_address, format!("{HOST}{PATH_PAIR}"));

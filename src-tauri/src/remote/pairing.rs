@@ -67,7 +67,6 @@ struct Revealed {
 }
 
 struct Offer {
-    s: Zeroizing<[u8; S_LEN]>,
     pid: PairingId,
     keys: PairKeys,
     cpub: Vec<u8>,
@@ -178,7 +177,6 @@ impl Pairings {
             expires_at: fmt_wall(expires_at),
         };
         self.offer = Some(Offer {
-            s,
             pid,
             keys,
             cpub,
@@ -425,12 +423,6 @@ impl Pairings {
             self.wrong = 0;
         }
         Some((conv, frame))
-    }
-
-    /// The secret of the open offer, for tests that play the phone.
-    #[cfg(debug_assertions)]
-    pub fn secret_for_tests(&self) -> Option<[u8; S_LEN]> {
-        self.offer.as_ref().map(|o| *o.s)
     }
 }
 
