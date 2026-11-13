@@ -9,6 +9,7 @@ import { t } from "../../copy/t";
 import type { ExportProgress, ExportReport, LedgerEntry } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { useOnline } from "../online/useOnline";
 import { AwaySection } from "./AwaySection";
 import { DeleteEverythingDialog } from "./DeleteEverythingDialog";
 import { OnlineSection, onlineKnown } from "./OnlineSection";
@@ -61,6 +62,7 @@ export default function Privacy() {
   const [now, setNow] = useState(() => Date.now());
   const [exporting, setExporting] = useState<Exporting>({ state: "idle" });
   const [deleting, setDeleting] = useState(false);
+  const { data: onlineView } = useOnline();
   const exportBox = useRef<HTMLDivElement>(null);
 
   // Only the words "checked N seconds ago" change with time; they are not a live region.
@@ -336,7 +338,7 @@ export default function Privacy() {
         <DeleteEverythingDialog
           title={t("privacy.delete.dialog.title")}
           body={t("privacy.delete.dialog.body")}
-          online={view.onlineHost}
+          online={onlineView && !onlineView.keyStorage ? null : view.onlineHost}
           confirmLabel={t("privacy.delete.confirm")}
           onClose={() => setDeleting(false)}
           onDeleted={() => {

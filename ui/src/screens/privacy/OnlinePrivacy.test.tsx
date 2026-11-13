@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LedgerEntry, PrivacyView } from "../../engine/bindings";
 import { createMockEngine } from "../../engine/mock/engine";
+import type { OnlineScenario } from "../../engine/mock/online";
 import { renderApp, setViewport } from "../../test/render";
 
 beforeEach(() => setViewport(1280));
@@ -43,8 +44,9 @@ const OFF_AFTER_ON: Partial<PrivacyView> = {
   ledger: [ledger("onlineOnOff", "off", 0, "2026-11-12T20:00:00Z"), ...(ON.ledger ?? [])],
 };
 
-async function open(patch: Partial<PrivacyView> | null) {
+async function open(patch: Partial<PrivacyView> | null, scenario: OnlineScenario = "off") {
   const engine = createMockEngine({ sentMeasured: false });
+  engine.online.setScenario(scenario);
   if (patch) {
     const real = engine.getPrivacy.bind(engine);
     vi.spyOn(engine, "getPrivacy").mockImplementation(async () => ({
@@ -152,11 +154,17 @@ describe("delete everything", () => {
   };
 
   it("delete.mentions_key_and_log_only_when_set_up: names the key and the log once online answers was set up", async () => {
-    await open(ON);
+    await open(ON, "on");
     const dialog = await openDialog();
     expect(dialog).toHaveTextContent(
       "This also forgets the key for your provider (api.example.com) on this computer, and the list of what was sent online.",
     );
+  });
+
+  it("leaves the key out when none is stored, even after a set-up", async () => {
+    await open(ON);
+    const dialog = await openDialog();
+    expect(dialog).not.toHaveTextContent(/This also forgets the key/);
   });
 
   it("does not mention a key or a log when online answers was never set up", async () => {

@@ -259,7 +259,7 @@ export function Advanced() {
           title={t("advanced.reset.title")}
           body={t("advanced.reset.body")}
           confirmLabel={t("advanced.reset.confirm")}
-          online={view.online?.host ?? null}
+          online={view.online?.keyStorage ? view.online.host : null}
           onClose={() => setResetting(false)}
           onDeleted={() => {
             refresh(
