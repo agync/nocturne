@@ -87,9 +87,13 @@ export function usePages() {
   return useQuery({ queryKey: ["pages"], queryFn: () => engine.listPages() });
 }
 
-export function useItems(filter: ItemFilter) {
+export function useItems(filter: ItemFilter, enabled = true) {
   const engine = useEngine();
-  return useQuery({ queryKey: ["items", filter], queryFn: () => engine.listItems(filter) });
+  return useQuery({
+    queryKey: ["items", filter],
+    queryFn: () => engine.listItems(filter),
+    enabled,
+  });
 }
 
 export function useNeedsYou() {

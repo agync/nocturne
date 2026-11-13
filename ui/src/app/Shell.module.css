@@ -1,0 +1,147 @@
+.shell {
+  display: flex;
+  height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+.skip {
+  position: absolute;
+  top: var(--s-2);
+  left: var(--s-2);
+  z-index: 70;
+  min-height: var(--size-control);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--ink);
+  border-radius: var(--r-sm);
+  background: var(--raised);
+  color: var(--ink);
+  font-weight: 500;
+  transform: translateY(-300%);
+}
+
+.skip:focus-visible {
+  transform: none;
+}
+
+.railColumn {
+  width: var(--size-rail);
+  flex: none;
+  overflow-y: auto;
+  border-right: 1px solid var(--rule);
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: var(--s-4);
+  padding: var(--s-4) 28px;
+  border-bottom: 1px solid var(--rule);
+}
+
+.bar {
+  flex: 1;
+  max-width: 680px;
+  min-width: 0;
+}
+
+.dropHint {
+  color: var(--ink3);
+  font-size: 0.8125rem;
+}
+
+.content {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+}
+
+.main:focus-visible {
+  outline-offset: -2px;
+}
+
+.aside {
+  width: 280px;
+  flex: none;
+  overflow: auto;
+}
+
+.content[data-size="medium"] {
+  flex-direction: column;
+  overflow: auto;
+}
+
+.content[data-size="medium"] .main {
+  flex: none;
+  overflow: visible;
+}
+
+.content[data-size="medium"] .aside {
+  width: auto;
+  max-width: 42rem;
+}
+
+.content[data-size="narrow"] .main {
+  background: var(--sheet);
+}
+
+.narrowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-3);
+  padding: var(--s-2) var(--s-4);
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+}
+
+.narrowTitle {
+  display: flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-width: 0;
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+.menuButton {
+  min-height: var(--size-touch);
+  padding: 0 var(--s-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.menuButton:hover {
+  color: var(--ink);
+}
+
+.bottomBar {
+  padding: 10px var(--s-3);
+  border-top: 1px solid var(--rule);
+  background: var(--bg);
+}
+
+.bottomBar .bar {
+  max-width: none;
+}
+
+.loading {
+  padding: var(--s-5);
+  color: var(--ink2);
+}

@@ -5,7 +5,6 @@
   "rail.label": "Main",
   "rail.today": "Today",
   "rail.needsYou": "Needs you",
-  "rail.needsYou.count": "{count, plural, one {# thing needs you} other {# things need you}}",
   "rail.memories": "What Nocturne remembers",
   "rail.recent": "Recently kept",
   "rail.fading": "Fading & let go",
@@ -103,6 +102,7 @@
   "kept.status.couldntRead": "couldn't read",
   "kept.status.needsYou": "needs you",
   "kept.status.unconfirmed": "unconfirmed",
+  "kept.audioTitle": "“{title}”",
   "kept.tonight": "Tonight, from about {time} while this computer is plugged in and idle.",
   "kept.tonight.unknown": "Tonight, while this computer is plugged in and idle.",
 

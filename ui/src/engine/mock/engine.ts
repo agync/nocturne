@@ -209,9 +209,7 @@ export class MockEngine implements EngineClient {
     if (this.status.state !== "paused") {
       this.status.state = this.items.some((i) => i.status === "reading" && i.id.startsWith("new-"))
         ? "reading"
-        : this.status.needsYou > 0
-          ? "needsYou"
-          : "resting";
+        : "resting";
     }
     if (emit) this.emit("status-changed", this.status);
   }

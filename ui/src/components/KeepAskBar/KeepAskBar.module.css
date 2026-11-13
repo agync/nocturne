@@ -40,6 +40,10 @@
   field-sizing: content;
 }
 
+.input:focus-visible {
+  outline: 0;
+}
+
 .input::placeholder {
   color: var(--ink2);
   opacity: 1;

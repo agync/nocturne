@@ -9,8 +9,8 @@ describe("t()", () => {
   });
 
   it("pluralises", () => {
-    expect(t("rail.needsYou.count", { count: 1 })).toBe("1 thing needs you");
-    expect(t("rail.needsYou.count", { count: 2 })).toBe("2 things need you");
+    expect(t("page.more.changed", { count: 1 })).toBe("1 smaller change");
+    expect(t("page.more.changed", { count: 2 })).toBe("2 smaller changes");
   });
 
   it("throws on an unknown id under test rather than rendering the id", () => {
