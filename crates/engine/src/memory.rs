@@ -146,7 +146,8 @@ fn appointment_meets(
 }
 
 /// The current memory this reading made or kept in the same slot as `row`, to take over the
-/// history `row` held.
+/// history `row` held: only a settled one (active, or confirmed by the person) that a trusted
+/// item stands behind.
 fn successor_in_slot(
     tx: &Transaction<'_>,
     row: &MemRow,
@@ -158,10 +159,13 @@ fn successor_in_slot(
          ORDER BY m.recorded_at DESC, m.id",
         params![row.subject_key, row.predicate, row.id],
     )?;
-    Ok(candidates
-        .into_iter()
-        .find(|m| touched.contains(&m.id))
-        .map(|m| m.id))
+    for m in candidates {
+        let settled = m.status == MemoryStatus::Active || m.confirmed;
+        if settled && touched.contains(&m.id) && m.trusted_sources > 0 {
+            return Ok(Some(m.id));
+        }
+    }
+    Ok(None)
 }
 
 /// The first word of an object, casefolded: "Metformin 500mg" and "metformin 850mg" are one drug.
@@ -517,20 +521,22 @@ fn apply(
             [mid],
             |r| r.get(0),
         )?;
-        let successor = if replaced_others {
+        // Decided before anything moves: a row that stays (protected, confirmed, already
+        // history) keeps its links.
+        let may_go = row.superseded_at.is_none() && !protected;
+        let successor = if may_go && replaced_others {
             successor_in_slot(tx, &row, &touched)?
         } else {
             None
         };
-        if let Some(next) = &successor {
-            tx.execute(
-                "UPDATE memories SET superseded_by = ?2 \
-                 WHERE superseded_by = ?1 AND superseded_at IS NOT NULL",
-                params![mid, next],
-            )?;
-        }
-        let removable = !replaced_others || successor.is_some();
-        if row.superseded_at.is_none() && !protected && removable {
+        if may_go && (!replaced_others || successor.is_some()) {
+            if let Some(next) = &successor {
+                tx.execute(
+                    "UPDATE memories SET superseded_by = ?2 \
+                     WHERE superseded_by = ?1 AND superseded_at IS NOT NULL",
+                    params![mid, next],
+                )?;
+            }
             delete_memory(tx, mid)?;
             report.removed.push(mid.clone());
         } else {

@@ -520,6 +520,139 @@ fn reading_a_move_again_keeps_one_current_value() {
     assert!(f.engine.needs_you().unwrap().is_empty());
 }
 
+/// The dentist moved: A says Wednesday, B moves it to Thursday. Returns (A, B, Wed, Thu).
+fn moved_world(f: &Fixture) -> (String, String, String, String) {
+    let a = keep(&f.engine, "Dentist on Wednesday 18 November at 10:00");
+    let wed = f
+        .engine
+        .apply(
+            &a,
+            vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let b = keep(
+        &f.engine,
+        "The dentist moved to Thursday 19 November at 14:30",
+    );
+    let thu = f
+        .engine
+        .apply(
+            &b,
+            vec![moved_to("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    f.clock.set_str("2026-11-13T12:00:00Z");
+    (a, b, wed, thu)
+}
+
+fn superseded_by(f: &Fixture, id: &str, by: &str) -> bool {
+    sql_count(
+        f.dir.path(),
+        &format!("SELECT COUNT(*) FROM memories WHERE id = '{id}' AND superseded_by = '{by}'"),
+    ) == 1
+}
+
+/// A memory the person confirmed keeps its history, whatever a re-read of its note says.
+#[test]
+fn a_reread_never_moves_history_away_from_a_confirmed_memory() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, b, wed, thu) = moved_world(&f);
+    f.engine.confirm(&thu, true).unwrap();
+    f.engine
+        .apply(&b, vec![moved_to("Thu 19 Nov, 2:30pm", "2026-11-19")])
+        .unwrap();
+    assert!(superseded_by(&f, &wed, &thu));
+    assert!(all(&f).iter().any(|m| m.id == thu));
+}
+
+/// A memory something depends on (used in an answer) is kept by a re-read, and so is its
+/// history.
+#[test]
+fn a_reread_never_moves_history_away_from_a_protected_memory() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let (_, b, wed, thu) = moved_world(&f);
+    f.engine
+        .mark_used(std::slice::from_ref(&thu), nocturne_engine::UseKind::Answer)
+        .unwrap();
+    f.engine
+        .apply(&b, vec![moved_to("Thu 19 Nov, 2:30pm", "2026-11-19")])
+        .unwrap();
+    assert!(superseded_by(&f, &wed, &thu));
+}
+
+/// History is never handed to a memory that is not settled: an unconfirmed one, even when the
+/// re-read note now agrees with it, does not take it over.
+#[test]
+fn history_is_never_handed_to_an_unconfirmed_memory() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let a = keep(&f.engine, "Dentist on Wednesday 18 November at 10:00");
+    let wed = f
+        .engine
+        .apply(
+            &a,
+            vec![appointment("Wednesday 18 November at 10:00", "2026-11-18")],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let b = match f
+        .engine
+        .keep_text_from(
+            "The dentist moved to Thursday 19 November at 14:30",
+            Source::QuickCapture,
+            Some("same-sender"),
+        )
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let thu = f
+        .engine
+        .apply(
+            &b,
+            vec![moved_to("Thursday 19 November at 14:30", "2026-11-19")],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    f.clock.set_str("2026-11-12T13:00:00Z");
+    let web = match f
+        .engine
+        .keep_text_from("Dentist Thu 2:30pm", Source::PastedWeb, Some("same-sender"))
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let unsure = f
+        .engine
+        .apply(&web, vec![appointment("Thu 19 Nov, 2:30pm", "2026-11-19")])
+        .unwrap()
+        .unconfirmed[0]
+        .clone();
+    f.clock.set_str("2026-11-13T12:00:00Z");
+    f.engine
+        .apply(&b, vec![moved_to("Thu 19 Nov, 2:30pm", "2026-11-19")])
+        .unwrap();
+    assert_eq!(
+        f.engine.get_memory(&unsure).unwrap().status,
+        MemoryStatus::Unconfirmed
+    );
+    assert!(
+        superseded_by(&f, &wed, &thu),
+        "the history stays where it was"
+    );
+}
+
 /// A later trusted note never silently undoes what the person chose: it is asked about.
 #[test]
 fn a_move_never_overrides_the_persons_choice() {
