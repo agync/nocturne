@@ -41,6 +41,7 @@ const QUICK_CAPTURE_COMMANDS: &[&str] = &[
     "keep_recording",
     "unkeep",
     "get_item",
+    "open_sound_settings",
     "app_ready",
 ];
 

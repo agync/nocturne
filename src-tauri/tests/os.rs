@@ -26,6 +26,7 @@ const CAPTURE_ALLOWED: &[&str] = &[
     "keep_recording",
     "unkeep",
     "get_item",
+    "open_sound_settings",
     "app_ready",
 ];
 
