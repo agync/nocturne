@@ -1,6 +1,10 @@
+import { statSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AskDelta, ItemView } from "../bindings";
+import recorded from "./assets/spoken-today.json";
 import { createMockEngine } from "./engine";
+import { audioScript } from "./script";
 import { SAFETY_PREDICATES } from "./seed";
 
 const NOW = new Date("2026-11-13T07:02:00Z");
@@ -609,5 +613,52 @@ describe("MockEngine fidelity for ask, needs you and capture", () => {
     expect(seen).toHaveLength(1);
     expect(seen[0]?.id).toBe(kept.type === "new" ? kept.item.id : "");
     expect(seen[0]?.status).toBe("kept");
+  });
+});
+
+describe("MockEngine spoken page", () => {
+  it("reads today's page from the recording, with the real section starts", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const spoken = await engine.speakPage("2026-11-13");
+    expect(spoken.sections.map((s) => s.kind)).toEqual([
+      "opening",
+      "needsYou",
+      "changed",
+      "letGo",
+      "question",
+    ]);
+    expect(spoken.sections[0]?.startMs).toBe(0);
+    const starts = spoken.sections.map((s) => s.startMs);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(new Set(starts).size).toBe(starts.length);
+    expect(starts.at(-1) as number).toBeLessThan(spoken.durationMs);
+    // The recording is far longer than the four-second placeholder parts.
+    expect(spoken.durationMs).toBeGreaterThan(30_000);
+  });
+
+  it("recorded exactly the words the real script says for today's page", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const page = await engine.getEdition("2026-11-13", "audio");
+    const script = audioScript(page);
+    expect(recorded.sections.map((s) => ({ kind: s.kind, text: s.text }))).toEqual(script);
+  });
+
+  it("keeps the recording small and its length in step with the file", () => {
+    const file = resolve(process.cwd(), "src/engine/mock/assets/spoken-today.ogg");
+    expect(statSync(file).size).toBeLessThan(300_000);
+    expect(recorded.voice).toBe("bf_emma");
+    const gaps = recorded.sections.map((s, i, all) => {
+      const next = all[i + 1]?.startMs ?? recorded.durationMs;
+      return next - s.startMs;
+    });
+    expect(gaps.every((g) => g > recorded.gapMs)).toBe(true);
+  });
+
+  it("leaves a page it has no recording of silent, with parts in order", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const spoken = await engine.speakPage("2026-11-12");
+    const starts = spoken.sections.map((s) => s.startMs);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
+    expect(starts.at(-1) as number).toBeLessThan(spoken.durationMs);
   });
 });

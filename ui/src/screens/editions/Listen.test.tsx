@@ -49,7 +49,10 @@ const open = async (engine: MockEngine = createMockEngine()) => {
   renderApp({ hash: "#/listen/2026-11-13", engine });
   await screen.findByRole("list", { name: "Sections" });
   const audio = document.querySelector("audio") as HTMLAudioElement;
-  return { engine, audio };
+  const spoken = await engine.speakPage("2026-11-13");
+  /** Where each section starts, in seconds. */
+  const starts = spoken.sections.map((x) => x.startMs / 1000);
+  return { engine, audio, starts };
 };
 
 const at = (audio: HTMLAudioElement, seconds: number) => {
@@ -100,7 +103,7 @@ describe("Listen", () => {
   });
 
   it("keys_drive_the_player", async () => {
-    const { audio } = await open();
+    const { audio, starts } = await open();
     const play = vi.mocked(HTMLMediaElement.prototype.play);
     const pause = vi.mocked(HTMLMediaElement.prototype.pause);
     await userEvent.keyboard(" ");
@@ -120,41 +123,42 @@ describe("Listen", () => {
     const second = within(screen.getAllByRole("listitem")[1] as HTMLElement).getByRole("button");
     await userEvent.keyboard("{Shift>}{ArrowRight}{/Shift}");
     expect(second).toHaveAttribute("aria-current", "true");
-    expect(audio.currentTime).toBe(4);
+    expect(audio.currentTime).toBe(starts[1]);
     await userEvent.keyboard("{Shift>}{ArrowLeft}{/Shift}");
     expect(audio.currentTime).toBe(0);
   });
 
   it("previous restarts a section that has been playing, then goes back", async () => {
-    const { audio } = await open();
-    at(audio, 7.5);
+    const { audio, starts } = await open();
+    at(audio, (starts[1] as number) + 3.5);
     await userEvent.click(screen.getByRole("button", { name: "Previous section" }));
-    expect(audio.currentTime).toBe(4);
+    expect(audio.currentTime).toBe(starts[1]);
     await userEvent.click(screen.getByRole("button", { name: "Previous section" }));
     expect(audio.currentTime).toBe(0);
   });
 
   it("a section can be chosen from the list", async () => {
-    const { audio } = await open();
+    const { audio, starts } = await open();
     const rows = screen.getAllByRole("listitem");
     await userEvent.click(within(rows[2] as HTMLElement).getByRole("button"));
-    expect(audio.currentTime).toBe(8);
+    expect(audio.currentTime).toBe(starts[2]);
   });
 
   it("section_change_announced_once", async () => {
-    const { audio } = await open();
+    const { audio, starts } = await open();
+    const second = starts[1] as number;
     await userEvent.keyboard(" ");
     expect(status()).toHaveTextContent("Now reading: The night in one line");
     const text = status().textContent;
     at(audio, 1);
     at(audio, 2);
-    at(audio, 3.5);
+    at(audio, second - 0.5);
     expect(status().textContent).toBe(text);
-    at(audio, 4.5);
+    at(audio, second + 0.5);
     expect(status()).toHaveTextContent("Now reading: Needs you");
     const next = status().textContent;
-    at(audio, 5);
-    at(audio, 6);
+    at(audio, second + 1);
+    at(audio, second + 2);
     expect(status().textContent).toBe(next);
   });
 

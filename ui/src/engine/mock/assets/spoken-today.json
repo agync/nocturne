@@ -1,0 +1,33 @@
+{
+  "recording": "The page's real script read by the bundled voice (Kokoro, Apache-2.0), one call per section, joined with gaps, Ogg Opus mono at 32 kbps. Made once; it is data, not code.",
+  "voice": "bf_emma",
+  "gapMs": 600,
+  "durationMs": 47050,
+  "sections": [
+    {
+      "kind": "opening",
+      "startMs": 0,
+      "text": "Two things need you today. Overnight Nocturne read 14 things you kept, noticed 3 changes and let 3 go."
+    },
+    {
+      "kind": "needsYou",
+      "startMs": 8300,
+      "text": "The Year 4 trip form is due next Friday. It needs a signature and £12. Your dentist appointment changed. Which is right? Was it Tuesday 17 Nov, 14:00, or Thursday 19 Nov, 10:00?"
+    },
+    {
+      "kind": "changed",
+      "startMs": 22925,
+      "text": "Leo’s swimming moved from Wednesday to Monday, same time. You decided to book the Lake District cottage for half term. Gran’s new number ends 4471."
+    },
+    {
+      "kind": "letGo",
+      "startMs": 35250,
+      "text": "Nocturne let go of The old gym door code, The pizza place on Elm Street and 1 more."
+    },
+    {
+      "kind": "question",
+      "startMs": 41750,
+      "text": "Is Leo still doing swimming with Coach Sam? You can answer it on today’s page."
+    }
+  ]
+}

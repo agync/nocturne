@@ -34,6 +34,9 @@ import type {
   WhichResolved,
 } from "../bindings";
 import type { EngineClient, EngineEventName, EngineEvents, Unsubscribe } from "../client";
+import recorded from "./assets/spoken-today.json";
+import recordedUrl from "./assets/spoken-today.ogg";
+import { audioScript } from "./script";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
 import { PRINT_STRESS_DATE } from "./seed/print";
 import { privacySeed } from "./seed/privacy";
@@ -97,8 +100,28 @@ function emphasise(sentence: string, value: string): string {
   );
 }
 
-/** The mock voice is silence: each section lasts this long. */
+/** Where the mock has no recording, the voice is silence and each section lasts this long. */
 const MOCK_SECTION_MS = 4000;
+
+let recordedBlob: Promise<string | null> | null = null;
+
+/**
+ * The recorded page as a `blob:` URL, which the player accepts as it does a freshly made one.
+ * Null where the file cannot be fetched (a test run), when the page is silent instead.
+ */
+function recordedPageUrl(): Promise<string | null> {
+  recordedBlob ??= (async () => {
+    try {
+      const response = await fetch(recordedUrl);
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      return typeof URL.createObjectURL === "function" ? URL.createObjectURL(blob) : null;
+    } catch {
+      return null;
+    }
+  })();
+  return recordedBlob;
+}
 
 /** A silent 8 kHz mono 16-bit WAV of `ms` milliseconds, as a `blob:` URL (the CSP allows it). */
 function mockSpokenUrl(ms: number): string {
@@ -1188,14 +1211,26 @@ export class MockEngine implements EngineClient {
     return page;
   }
 
+  /**
+   * Today's page is read by the real voice, recorded once with the real script and kept as data
+   * beside the mock. Any other page is silence with the same parts, so the player still works.
+   */
   async speakPage(date: string): Promise<SpokenPage> {
     const page = await this.getEdition(date, "audio");
-    const kinds: SpokenKind[] = ["opening"];
-    if (page.needsYou.length > 0) kinds.push("needsYou");
-    if (page.changed.length > 0) kinds.push("changed");
-    if (page.upcoming.length > 0) kinds.push("comingUp");
-    if (page.letGo.length > 0) kinds.push("letGo");
-    if (page.question) kinds.push("question");
+    const kinds = audioScript(page).map((s) => s.kind);
+    const known = recorded.sections.map((s) => s.kind);
+    const isRecorded = date === this.today() && kinds.join() === known.join();
+    if (isRecorded) {
+      return {
+        path: (await recordedPageUrl()) ?? mockSpokenUrl(recorded.durationMs),
+        sections: recorded.sections.map((s) => ({
+          kind: s.kind as SpokenKind,
+          startMs: s.startMs,
+        })),
+        durationMs: recorded.durationMs,
+        privateSkipped: page.privateSkipped,
+      };
+    }
     const durationMs = kinds.length * MOCK_SECTION_MS;
     return {
       path: mockSpokenUrl(durationMs),

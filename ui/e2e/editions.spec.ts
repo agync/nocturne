@@ -34,6 +34,18 @@ test.describe("Listen", () => {
     await page.evaluate(() => document.fonts.ready);
   };
 
+  test("loads the recorded voice, as long as the player says", async ({ page }) => {
+    await ready(page);
+    const audio = page.locator("audio");
+    await expect
+      .poll(() => audio.evaluate((a: HTMLAudioElement) => a.readyState), { timeout: 10_000 })
+      .toBeGreaterThanOrEqual(1);
+    const heard = await audio.evaluate((a: HTMLAudioElement) => a.duration);
+    const shown = await page.getByRole("slider", { name: "Position" }).getAttribute("max");
+    expect(Math.abs(heard - Number(shown))).toBeLessThan(0.5);
+    expect(heard).toBeGreaterThan(30);
+  });
+
   test("plays the spoken page and keeps the keys", async ({ page }) => {
     await ready(page);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
