@@ -200,20 +200,44 @@ async fn failures_carry_a_code_and_the_desktop_commands_are_unavailable() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_recording_is_kept_from_the_raw_body() {
     let r = rig();
-    let raw = |mime: Option<&str>| {
+    let raw = |mime: Option<&str>, bytes: Vec<u8>| {
         let mut b = authed(Method::POST, "/api/invoke/keep_recording")
             .header("content-type", "application/octet-stream");
         if let Some(m) = mime {
             b = b.header("x-nocturne-mime", m);
         }
-        b.body(Body::from(vec![1u8, 2, 3, 4, 5, 6, 7, 8])).unwrap()
+        b.body(Body::from(bytes)).unwrap()
     };
-    let response = send(&r, raw(Some("audio/webm;codecs=opus"))).await;
+    let response = send(&r, raw(Some("audio/wav"), short_wav())).await;
     assert_eq!(response.status(), StatusCode::OK);
     let kept = json_of(response).await;
     assert_eq!(kept["item"]["kind"], "audio", "{kept}");
-    let response = send(&r, raw(None)).await;
+    // The app records WAV itself; anything else is refused plainly rather than kept unreadable.
+    let response = send(&r, raw(Some("audio/webm;codecs=opus"), vec![1u8; 8])).await;
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    let response = send(&r, raw(None, short_wav())).await;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+/// A tenth of a second of silence as 16 kHz mono 16-bit WAV.
+fn short_wav() -> Vec<u8> {
+    let samples = 1600u32;
+    let data_len = samples * 2;
+    let mut b = Vec::with_capacity(44 + data_len as usize);
+    b.extend_from_slice(b"RIFF");
+    b.extend_from_slice(&(36 + data_len).to_le_bytes());
+    b.extend_from_slice(b"WAVEfmt ");
+    b.extend_from_slice(&16u32.to_le_bytes());
+    b.extend_from_slice(&1u16.to_le_bytes());
+    b.extend_from_slice(&1u16.to_le_bytes());
+    b.extend_from_slice(&16_000u32.to_le_bytes());
+    b.extend_from_slice(&32_000u32.to_le_bytes());
+    b.extend_from_slice(&2u16.to_le_bytes());
+    b.extend_from_slice(&16u16.to_le_bytes());
+    b.extend_from_slice(b"data");
+    b.extend_from_slice(&data_len.to_le_bytes());
+    b.resize(44 + data_len as usize, 0);
+    b
 }
 
 async fn read_event(body: &mut Body, name: &str) -> String {
