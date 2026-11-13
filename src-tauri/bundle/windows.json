@@ -1,0 +1,27 @@
+{
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Remembers your day and hands you one page each morning.",
+    "longDescription": "Nocturne is a private desktop app that remembers your day, tidies its memory overnight, and hands you one page each morning. Everything stays on this computer.",
+    "licenseFile": "../LICENSE",
+    "resources": {
+      "../target/package/lemonade/windows-x86_64/": "lemonade/",
+      "../target/package/notices/": "notices/",
+      "../LICENSE": "LICENSE"
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    }
+  }
+}
