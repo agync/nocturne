@@ -788,6 +788,15 @@ fn strip_stale(
             |r| r.get(0),
         )?)
     };
+    // An item that was undone (or is being) is cited by nothing.
+    let item_live = |id: &str| -> Result<bool> {
+        let exists: bool = conn.query_row(
+            "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
+            [id],
+            |r| r.get(0),
+        )?;
+        Ok(exists && !crate::capture::in_forget_job(conn, id)?)
+    };
     let mut changed = false;
     for list in [
         &mut page.needs_you,
@@ -801,6 +810,13 @@ fn strip_stale(
                 continue;
             }
             let mut gone = false;
+            for r in line
+                .receipts
+                .iter()
+                .chain(line.choices.iter().map(|c| &c.receipt))
+            {
+                gone |= !item_live(&r.item_id)?;
+            }
             for m in line
                 .memory_ids
                 .iter()

@@ -586,7 +586,9 @@ fn pending(
     sql.push_str(if only.is_some() {
         "id = ?1"
     } else {
-        "status = 'kept' ORDER BY priority DESC, kept_at, id LIMIT ?1"
+        "status = 'kept' \
+         AND NOT EXISTS (SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || items.id || '\"') > 0) \
+         ORDER BY priority DESC, kept_at, id LIMIT ?1"
     });
     let mut stmt = conn.prepare(&sql)?;
     let map = |r: &rusqlite::Row<'_>| {

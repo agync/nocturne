@@ -792,3 +792,399 @@ fn export_to_is_the_same_export_without_a_callback() {
     let calls = calls.into_inner();
     assert_eq!((calls[0], *calls.last().unwrap()), ((0, 3), (3, 3)));
 }
+
+// ---- unkeep ----
+
+const SECRET: &str = "zebrafish47";
+
+fn dir_mentions_secret(dir: &std::path::Path) -> Vec<String> {
+    let mut hits = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            hits.extend(dir_mentions_secret(&path));
+        } else {
+            let lower: Vec<u8> = std::fs::read(&path)
+                .unwrap()
+                .iter()
+                .map(u8::to_ascii_lowercase)
+                .collect();
+            if lower.windows(SECRET.len()).any(|w| w == SECRET.as_bytes()) {
+                hits.push(path.file_name().unwrap().to_string_lossy().into_owned());
+            }
+        }
+    }
+    hits
+}
+
+fn secret(object: &str) -> nocturne_engine::Candidate {
+    let mut c = cand(
+        "Dr Zebrafish47",
+        Predicate::Knows,
+        object,
+        &format!("Dr Zebrafish47 sees you {object}."),
+    );
+    c.subject_kind = Some(EntityKind::Person);
+    c
+}
+
+fn kept_id(k: Kept) -> String {
+    kept_item(k).id
+}
+
+#[test]
+fn unkeep_removes_the_item_its_original_text_and_memories_without_a_trace() {
+    let f = fixture();
+    let photo = kept_id(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+    );
+    let lease = f
+        .engine
+        .lease_item(&photo, std::time::Duration::from_secs(60))
+        .unwrap();
+    f.engine
+        .record_understanding(
+            &photo,
+            &lease.lease,
+            nocturne_engine::Understanding {
+                title: "Appointment card".into(),
+                text: "Dr Zebrafish47 on Tuesday".into(),
+                summary: Some("A card from Dr Zebrafish47".into()),
+                language: Some("en".into()),
+                pages: None,
+            },
+        )
+        .unwrap();
+    let r = f
+        .engine
+        .apply_candidates(&photo, &lease.lease, vec![secret("on Tuesday")])
+        .unwrap();
+    let mem = r.created[0].clone();
+    f.engine
+        .store_embeddings(vec![(mem.clone(), vec![1.0, 0.0])])
+        .unwrap();
+    let original =
+        std::path::PathBuf::from(f.engine.get_item(&photo).unwrap().original_path.unwrap());
+    assert!(original.exists());
+    assert!(
+        !dir_mentions_secret(f.dir.path()).is_empty(),
+        "the fixture holds the secret"
+    );
+    // Another item that is not touched.
+    let other = keep(&f.engine, "Bins go out on Thursday");
+
+    f.engine.unkeep(&photo).unwrap();
+
+    assert!(matches!(
+        f.engine.get_item(&photo),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+    assert!(f.engine.get_item(&other).is_ok());
+    assert!(!original.exists());
+    assert_eq!(
+        std::fs::read_dir(f.dir.path().join("originals"))
+            .unwrap()
+            .count(),
+        0
+    );
+    assert!(f.engine.get_memory(&mem).is_err());
+    assert!(
+        f.engine
+            .memories(MemoryFilter::default())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(f.engine.entities(None).unwrap().is_empty());
+    let q = |sql: &str| sql_count(f.dir.path(), sql);
+    assert_eq!(q("SELECT COUNT(*) FROM items"), 1);
+    assert_eq!(q("SELECT COUNT(*) FROM memories"), 0);
+    assert_eq!(q("SELECT COUNT(*) FROM memory_sources"), 0);
+    assert_eq!(q("SELECT COUNT(*) FROM embeddings"), 0);
+    assert_eq!(q("SELECT COUNT(*) FROM forget_jobs"), 0);
+    assert_eq!(
+        q("SELECT COUNT(*) FROM items_fts WHERE items_fts MATCH 'zebrafish47'"),
+        0
+    );
+    assert_eq!(
+        q("SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH 'zebrafish47'"),
+        0
+    );
+    assert!(
+        dir_mentions_secret(f.dir.path()).is_empty(),
+        "{:?}",
+        dir_mentions_secret(f.dir.path())
+    );
+    // The same bytes can be kept again as a new item.
+    assert!(matches!(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+        Kept::New { .. }
+    ));
+}
+
+#[test]
+fn unkeep_is_allowed_for_ten_minutes_only() {
+    let f = fixture();
+    let a = keep(&f.engine, "note a");
+    f.clock.set_str("2026-11-13T07:10:00Z");
+    f.engine.unkeep(&a).unwrap();
+    assert!(f.engine.get_item(&a).is_err());
+
+    let b = keep(&f.engine, "note b");
+    f.clock.set_str("2026-11-13T07:20:01Z");
+    assert!(matches!(
+        f.engine.unkeep(&b),
+        Err(nocturne_engine::Error::TooLate)
+    ));
+    assert!(
+        f.engine.get_item(&b).is_ok(),
+        "a refused undo changes nothing"
+    );
+
+    assert!(matches!(
+        f.engine.unkeep("itm_nope"),
+        Err(nocturne_engine::Error::NotFound(_))
+    ));
+}
+
+#[test]
+fn a_memory_with_another_source_stays_and_loses_only_this_link() {
+    let f = fixture();
+    let (older, m) = learn(&f.engine, "Dr Zebrafish47 on Tuesday", secret("on Tuesday"));
+    let newer = keep(&f.engine, "Dr Zebrafish47 again, Tuesday");
+    f.engine.apply(&newer, vec![secret("on Tuesday")]).unwrap();
+    assert_eq!(f.engine.get_memory(&m).unwrap().receipts.len(), 2);
+
+    f.engine.unkeep(&newer).unwrap();
+
+    let got = f.engine.get_memory(&m).unwrap();
+    assert_eq!(got.receipts.len(), 1);
+    assert_eq!(got.receipts[0].item_id, older);
+    assert!(f.engine.get_item(&older).is_ok());
+    assert!(f.engine.get_item(&newer).is_err());
+    assert_eq!(
+        f.engine.entities(None).unwrap().len(),
+        1,
+        "the person is still known"
+    );
+    assert_eq!(f.engine.get_item(&older).unwrap().memory_count, 1);
+}
+
+#[test]
+fn a_memory_left_with_only_untrusted_sources_goes_back_to_unconfirmed() {
+    let f = fixture();
+    let (web, m) = {
+        let item = keep_as(&f.engine, "web page: Clinic opens at 9", Source::PastedWeb);
+        f.engine
+            .apply(
+                &item,
+                vec![cand(
+                    "Clinic",
+                    Predicate::Knows,
+                    "opens at 9",
+                    "The clinic opens at 9.",
+                )],
+            )
+            .unwrap();
+        let m = f.engine.memories(MemoryFilter::default()).unwrap()[0]
+            .id
+            .clone();
+        (item, m)
+    };
+    let note = keep(&f.engine, "I rang: clinic opens at 9");
+    let r = f
+        .engine
+        .apply(
+            &note,
+            vec![cand(
+                "Clinic",
+                Predicate::Knows,
+                "opens at 9",
+                "The clinic opens at 9.",
+            )],
+        )
+        .unwrap();
+    assert!(r.promoted.contains(&m));
+    assert_eq!(
+        f.engine.get_memory(&m).unwrap().status,
+        nocturne_contract::MemoryStatus::Active
+    );
+
+    f.engine.unkeep(&note).unwrap();
+    let got = f.engine.get_memory(&m).unwrap();
+    assert_eq!(got.status, nocturne_contract::MemoryStatus::Unconfirmed);
+    assert_eq!(got.receipts[0].item_id, web);
+}
+
+#[test]
+fn a_memory_the_item_replaced_comes_back() {
+    let f = fixture();
+    let mut old = cand("Leo", Predicate::LivesIn, "Leeds", "Leo lives in Leeds.");
+    old.valid_from = Some(date("2020-01-01"));
+    let (_, m_old) = learn(&f.engine, "Leo lives in Leeds", old);
+    let mut new = cand("Leo", Predicate::LivesIn, "York", "Leo lives in York.");
+    new.valid_from = Some(date("2026-11-01"));
+    let (moved, m_new) = learn(&f.engine, "Leo moved to York", new);
+    let now = f.engine.get_memory(&m_old).unwrap();
+    assert_eq!(now.valid_to.as_deref(), Some("2026-11-01"));
+
+    f.engine.unkeep(&moved).unwrap();
+
+    assert!(f.engine.get_memory(&m_new).is_err());
+    let back = f.engine.get_memory(&m_old).unwrap();
+    assert_eq!(back.valid_to, None);
+    let current = f.engine.memories(MemoryFilter::default()).unwrap();
+    assert_eq!(current.len(), 1);
+    assert_eq!(current[0].id, m_old);
+}
+
+#[test]
+fn unkeep_redacts_pages_and_drops_audio_and_keeps_shared_lines_free_of_the_item() {
+    let f = fixture();
+    let (_, shared) = learn(
+        &f.engine,
+        "Mia likes chess",
+        cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+    );
+    let (item, sole) = learn(&f.engine, "Dr Zebrafish47 on Tuesday", secret("on Tuesday"));
+    // The item also backs the shared memory, so its receipt appears on that line.
+    f.engine
+        .apply(
+            &item,
+            vec![
+                secret("on Tuesday"),
+                cand("Mia", Predicate::Prefers, "chess", "Mia likes chess."),
+            ],
+        )
+        .unwrap();
+    f.clock.set_str("2026-11-14T06:00:00Z");
+    let page = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    f.engine
+        .cache("2026-11-14", "af_heart", b"spoken Zebrafish47")
+        .unwrap();
+    f.clock.set_str("2026-11-14T06:05:00Z");
+    // The undo window has passed for the real kept_at, so move the item's time forward for
+    // this scenario by keeping inside the window: re-stamp it.
+    {
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.execute("UPDATE items SET kept_at = '2026-11-14T06:01:00.000Z'", [])
+            .unwrap();
+    }
+
+    let stale = f
+        .engine
+        .compose_page(date("2026-11-14"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.unkeep(&item).unwrap();
+
+    assert!(
+        f.engine
+            .cached_audio("2026-11-14", "af_heart")
+            .unwrap()
+            .is_none()
+    );
+    let saved = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    let json = serde_json::to_string(&saved).unwrap();
+    assert!(!json.to_lowercase().contains(SECRET), "{json}");
+    assert!(!json.contains(&item));
+    assert!(!json.contains(&sole));
+    assert!(
+        saved
+            .learned
+            .iter()
+            .chain(&saved.changed)
+            .all(|l| l.forgotten || !l.memory_ids.contains(&shared))
+    );
+    assert!(f.engine.get_memory(&shared).is_ok());
+    // A page composed before the undo cannot bring any of it back.
+    f.engine.save_page(&stale).unwrap();
+    let saved = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    let json = serde_json::to_string(&saved).unwrap();
+    assert!(!json.to_lowercase().contains(SECRET), "{json}");
+    assert!(!json.contains(&item));
+    assert!(dir_mentions_secret(f.dir.path()).is_empty());
+}
+
+#[test]
+fn an_unkeep_that_was_interrupted_is_finished_on_open_and_hides_everything_at_once() {
+    let f = fixture();
+    let photo = kept_id(
+        f.engine
+            .keep_bytes(b"JPEG card for Dr Zebrafish47", "jpg", Source::Paste)
+            .unwrap(),
+    );
+    let r = f.engine.apply(&photo, vec![secret("on Tuesday")]).unwrap();
+    let mem = r.created[0].clone();
+    let original =
+        std::path::PathBuf::from(f.engine.get_item(&photo).unwrap().original_path.unwrap());
+
+    f.engine.unkeep_begin_only(&photo).unwrap();
+    // Hidden from the moment the first phase commits.
+    assert!(f.engine.get_memory(&mem).is_err());
+    assert!(
+        f.engine
+            .memories(MemoryFilter::default())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        f.engine
+            .lease_pending(5, std::time::Duration::from_secs(60))
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        f.engine
+            .lease_item(&photo, std::time::Duration::from_secs(60))
+            .is_err()
+    );
+    assert_eq!(
+        sql_count(f.dir.path(), "SELECT COUNT(*) FROM forget_jobs"),
+        1
+    );
+
+    let clock = f.clock.clone();
+    let dir = f.dir.path().to_path_buf();
+    drop(f.engine);
+    let engine = nocturne_engine::Engine::open(&dir, clock).unwrap();
+    assert!(engine.get_item(&photo).is_err());
+    assert!(!original.exists());
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM forget_jobs"), 0);
+    assert_eq!(sql_count(&dir, "SELECT COUNT(*) FROM memories"), 0);
+    assert!(dir_mentions_secret(&dir).is_empty());
+}
+
+#[test]
+fn a_worker_holding_the_read_loses_it_when_the_keep_is_undone() {
+    let f = fixture();
+    let item = keep(&f.engine, "Dr Zebrafish47 on Tuesday");
+    let lease = f
+        .engine
+        .lease_item(&item, std::time::Duration::from_secs(60))
+        .unwrap();
+    f.engine.unkeep(&item).unwrap();
+    let err = f
+        .engine
+        .apply_candidates(&item, &lease.lease, vec![secret("on Tuesday")])
+        .unwrap_err();
+    assert!(
+        matches!(
+            err,
+            nocturne_engine::Error::NotFound(_) | nocturne_engine::Error::LeaseLost
+        ),
+        "{err:?}"
+    );
+    assert!(
+        f.engine
+            .memories(MemoryFilter::default())
+            .unwrap()
+            .is_empty()
+    );
+}

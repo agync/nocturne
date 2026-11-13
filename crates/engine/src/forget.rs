@@ -19,12 +19,15 @@ use crate::audio::{drop_audio_rows, pages_citing, shred_all};
 use crate::capture::original_path;
 use crate::error::{Error, Result};
 use crate::fsutil;
+use crate::memory::restore_replaced;
 use crate::page::{template_dek, template_headline};
 use crate::types::ForgetOutcome;
 use crate::util::{fmt_ts, new_id_hex, parse_enum, parse_ts};
 
 /// A preview is good for ten minutes.
 const TOKEN_MINUTES: i64 = 10;
+/// A keep can be undone for ten minutes.
+const UNKEEP_MINUTES: i64 = 10;
 
 /// The requested memories plus every earlier version they replaced or ended.
 fn closure(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
@@ -239,7 +242,7 @@ impl Engine {
                     params![id, stamp_now],
                 )?;
             }
-            redact_pages(tx, &all, &pages)?;
+            redact_pages(tx, &all, &pages, None)?;
             let files = drop_audio_rows(tx, &pages)?;
             // Recorded before the commit, so a crash before the files are shredded still
             // finds them.
@@ -249,6 +252,115 @@ impl Engine {
         self.invalidate_vectors();
         shred_all(files);
         Ok((job, pages_redacted))
+    }
+
+    /// Undo a keep: the person's Undo right after keeping something. Allowed within ten minutes
+    /// of `kept_at`, otherwise `Error::TooLate`.
+    ///
+    /// The item, its original, transcript, summary and search rows go, and so does every
+    /// memory whose only source is this item, with its earlier versions that came from it
+    /// alone, the pages that cited it and their cached audio. A memory with other sources
+    /// stays and loses only the link to this item. A memory this item had replaced or ended
+    /// comes back as it was. It runs as a forget job, so a crash part way is finished on the
+    /// next open.
+    pub fn unkeep(&self, item_id: &str) -> Result<()> {
+        let job = self.unkeep_begin(item_id)?;
+        self.finish_forget(job)?;
+        Ok(())
+    }
+
+    /// Phase 1 of `unkeep` only, for tests that simulate stopping part way.
+    #[cfg(any(test, feature = "fake"))]
+    pub fn unkeep_begin_only(&self, item_id: &str) -> Result<()> {
+        self.unkeep_begin(item_id).map(|_| ())
+    }
+
+    fn unkeep_begin(&self, item_id: &str) -> Result<i64> {
+        let now = self.clock().now();
+        let stamp_now = fmt_ts(now);
+        let (job, files) = self.write(|tx| {
+            let kept_at: Option<String> = tx
+                .query_row("SELECT kept_at FROM items WHERE id = ?1", [item_id], |r| {
+                    r.get(0)
+                })
+                .optional()?;
+            let kept_at = kept_at.ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
+            if crate::capture::in_forget_job(tx, item_id)? {
+                return Err(Error::not_found(format!("item {item_id}")));
+            }
+            let window = jiff::SignedDuration::from_mins(UNKEEP_MINUTES);
+            if now.duration_since(parse_ts(&kept_at)?) > window {
+                return Err(Error::TooLate);
+            }
+
+            // Memories this item alone supports go; the rest only lose the link.
+            let sole: Vec<String> = {
+                let mut stmt = tx.prepare(
+                    "SELECT memory_id FROM memory_sources GROUP BY memory_id \
+                     HAVING COUNT(*) = 1 AND MIN(item_id) = ?1 ORDER BY memory_id",
+                )?;
+                stmt.query_map([item_id], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?
+            };
+            let shared: Vec<String> = {
+                let mut stmt = tx.prepare(
+                    "SELECT memory_id FROM memory_sources WHERE item_id = ?1 ORDER BY memory_id",
+                )?;
+                let all: Vec<String> = stmt
+                    .query_map([item_id], |r| r.get(0))?
+                    .collect::<rusqlite::Result<_>>()?;
+                all.into_iter().filter(|m| !sole.contains(m)).collect()
+            };
+            for id in &sole {
+                restore_replaced(tx, id)?;
+            }
+            tx.execute("DELETE FROM memory_sources WHERE item_id = ?1", [item_id])?;
+            for id in &shared {
+                // Without a trusted source left, only the person's word keeps it active.
+                tx.execute(
+                    "UPDATE memories SET status = 'unconfirmed', let_go_at = NULL \
+                     WHERE id = ?1 AND confirmed = 0 AND superseded_at IS NULL \
+                       AND status IN ('active', 'fading') \
+                       AND NOT EXISTS (SELECT 1 FROM memory_sources s JOIN items i ON i.id = s.item_id \
+                                       WHERE s.memory_id = ?1 AND i.trust = 'trusted')",
+                    [id],
+                )?;
+            }
+
+            let mut pages = pages_citing(tx, &sole)?;
+            {
+                let mut stmt = tx.prepare("SELECT date FROM pages WHERE instr(body, ?1) > 0")?;
+                for d in stmt.query_map([item_id], |r| r.get::<_, String>(0))? {
+                    let d = d?;
+                    if !pages.contains(&d) {
+                        pages.push(d);
+                    }
+                }
+            }
+            tx.execute(
+                "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, 1)",
+                params![
+                    serde_json::to_string(&sole)?,
+                    serde_json::to_string(&[item_id])?,
+                ],
+            )?;
+            let job = tx.last_insert_rowid();
+            self.bump_audio();
+            for id in &sole {
+                tx.execute(
+                    "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \
+                     WHERE id = ?1",
+                    params![id, stamp_now],
+                )?;
+            }
+            redact_pages(tx, &sole, &pages, Some(item_id))?;
+            let files = drop_audio_rows(tx, &pages)?;
+            append_job_files(tx, job, &files)?;
+            Ok((job, files))
+        })?;
+        self.invalidate_vectors();
+        shred_all(files);
+        Ok(job)
     }
 
     /// Finish forgets that were started and not completed (the app stopped part way).
@@ -288,7 +400,7 @@ impl Engine {
                 let files = if pages.is_empty() {
                     Vec::new()
                 } else {
-                    redact_pages(tx, &closure_ids, &pages)?;
+                    redact_pages(tx, &closure_ids, &pages, None)?;
                     let files = drop_audio_rows(tx, &pages)?;
                     append_job_files(tx, job, &files)?;
                     files
@@ -425,7 +537,14 @@ pub(crate) fn redact_line(line: &mut nocturne_contract::PageLine) {
     line.done = false;
 }
 
-fn redact_pages(tx: &Transaction<'_>, ids: &[String], pages: &[String]) -> Result<()> {
+/// `item` also redacts every line whose receipts name that item (the lines of memories that
+/// outlive an undone keep still must not name it).
+fn redact_pages(
+    tx: &Transaction<'_>,
+    ids: &[String],
+    pages: &[String],
+    item: Option<&str>,
+) -> Result<()> {
     let mut lines: BTreeSet<String> = BTreeSet::new();
     for id in ids {
         let mut stmt =
@@ -455,8 +574,16 @@ fn redact_pages(tx: &Transaction<'_>, ids: &[String], pages: &[String]) -> Resul
             for line in list.iter_mut() {
                 let hit = lines.contains(&line.id)
                     || line.memory_ids.iter().any(|m| ids.contains(m))
-                    || line.choices.iter().any(|c| ids.contains(&c.memory_id));
+                    || line.choices.iter().any(|c| ids.contains(&c.memory_id))
+                    || item.is_some_and(|i| {
+                        line.receipts.iter().any(|r| r.item_id == i)
+                            || line.choices.iter().any(|c| c.receipt.item_id == i)
+                    });
                 if hit {
+                    tx.execute(
+                        "UPDATE page_lines SET forgotten = 1, text = '' WHERE id = ?1",
+                        [&line.id],
+                    )?;
                     redact_line(line);
                 }
             }

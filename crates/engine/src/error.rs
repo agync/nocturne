@@ -23,6 +23,9 @@ pub enum Error {
     /// The forget token is unknown, used, expired, or what it covers has changed since.
     #[error("the forget preview is no longer valid")]
     StaleToken,
+    /// The window for undoing a keep has passed.
+    #[error("it is too late to undo this")]
+    TooLate,
 }
 
 impl Error {
