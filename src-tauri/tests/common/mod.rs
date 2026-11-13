@@ -104,8 +104,36 @@ impl Harness {
 
     /// Call a command with JSON arguments; `Err` carries what the interface would see rejected.
     pub fn call(&self, cmd: &str, args: Value) -> Result<Value, Value> {
+        self.call_from(&self.webview, cmd, args)
+    }
+
+    /// A call made from another window.
+    pub fn call_from(
+        &self,
+        from: &WebviewWindow<MockRuntime>,
+        cmd: &str,
+        args: Value,
+    ) -> Result<Value, Value> {
         let req = request(cmd, InvokeBody::Json(args), Default::default());
-        tauri::test::get_ipc_response(&self.webview, req).map(|b| b.deserialize::<Value>().unwrap())
+        tauri::test::get_ipc_response(from, req).map(|b| b.deserialize::<Value>().unwrap())
+    }
+
+    /// Open another window with this label.
+    pub fn window(&self, label: &str) -> WebviewWindow<MockRuntime> {
+        WebviewWindowBuilder::new(&self.app, label, Default::default())
+            .build()
+            .unwrap()
+    }
+
+    /// The error code of a command that must fail when called from another window.
+    pub fn code_from(&self, from: &WebviewWindow<MockRuntime>, cmd: &str, args: Value) -> String {
+        match self.call_from(from, cmd, args) {
+            Ok(v) => panic!("{cmd} should have failed, got {v}"),
+            Err(e) => e["code"]
+                .as_str()
+                .unwrap_or_else(|| panic!("{e}"))
+                .to_string(),
+        }
     }
 
     pub fn ok(&self, cmd: &str, args: Value) -> Value {

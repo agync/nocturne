@@ -12,9 +12,11 @@
 
 pub mod ask;
 pub mod commands;
+pub mod editions;
 pub mod error;
 pub mod fsutil;
 pub mod logging;
+pub mod os;
 pub mod state;
 pub mod status;
 pub mod window;
@@ -146,6 +148,9 @@ pub fn paths_from_args(args: &[String], cwd: &str) -> Vec<PathBuf> {
 /// A second launch: bring the window forward first (the person is waiting), then keep any files
 /// it was given. If files were named and none could be kept, say so in the status.
 pub async fn handle_second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>, cwd: String) {
+    if os::on_second_launch(app, &args) {
+        return;
+    }
     window::show_main(app);
     let named = args.iter().skip(1).filter(|a| !a.starts_with('-')).count();
     let paths = paths_from_args(&args, &cwd);
@@ -159,6 +164,9 @@ pub async fn handle_second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<Stri
             tracing::warn!("files from a second launch could not be kept: {:?}", e.code);
         })
     };
+    if let Ok(files) = &kept {
+        tracing::info!("second launch: kept {} files", files.len());
+    }
     if kept.is_err() {
         app.state::<AppState>().status.add_notice(Notice {
             id: commands::NOT_KEPT_NOTICE.to_string(),
@@ -196,21 +204,32 @@ pub fn exit_prevented(last_window_closed: bool, tray_available: bool) -> bool {
 
 /// Run the app.
 pub fn run() {
-    let app = configure(tauri::Builder::default())
+    let builder = configure(tauri::Builder::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 handle_second_launch(&app, args, cwd).await;
             });
         }))
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_opener::init());
+    #[cfg(windows)]
+    let builder = builder.plugin(tauri_plugin_autostart::init(
+        tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+        Some(vec!["--hidden"]),
+    ));
+    let app = builder
         .build(tauri::generate_context!())
         .expect("the Nocturne window could not start");
     app.run(|app, event| {
         // The setup hook, which manages `AppState`, runs inside `run` before `Ready`.
         if matches!(event, RunEvent::Ready) {
             install_opener(app);
+            if let Err(e) = os::install(app) {
+                tracing::warn!("the desktop integrations did not start: {e}");
+            }
         }
         handle_run_event(app, &event);
     });

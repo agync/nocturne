@@ -12,11 +12,13 @@ use crate::error::{CommandError, blocking, guard};
 use crate::state::{AppState, refresh_status};
 
 mod capture;
+mod editions;
 mod files;
 pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_paths};
 mod forget;
 mod memories;
 mod needs;
+mod os;
 mod page;
 mod settings;
 mod system;
@@ -68,6 +70,10 @@ pub const COMMAND_NAMES: &[&str] = &[
     "resume",
     "get_advanced",
     "speak_page",
+    "get_edition",
+    "print_page",
+    "open_sound_settings",
+    "quick_keep_command",
     "app_ready",
     "pick_folder",
     "pick_files",
@@ -76,11 +82,12 @@ pub const COMMAND_NAMES: &[&str] = &[
     "open_logs",
 ];
 
-/// The handler for every command above. `configure` installs it; tests that add a command of
-/// their own wrap it.
+/// The handler for every command above, behind the per-window guard (see
+/// [`crate::os::window_may_call`]). `configure` installs it; tests that add a command of their
+/// own wrap it.
 pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static
 {
-    tauri::generate_handler![
+    let handler = handler_of::<R>(tauri::generate_handler![
         system::get_status,
         system::get_setup,
         system::start_setup,
@@ -125,14 +132,35 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         settings::pause,
         settings::resume,
         settings::get_advanced,
-        page::speak_page,
+        editions::speak_page,
+        editions::get_edition,
+        editions::print_page,
+        os::open_sound_settings,
+        os::quick_keep_command,
         system::app_ready,
         files::pick_folder,
         files::pick_files,
         files::open_original,
         files::open_export,
         files::open_logs,
-    ]
+    ]);
+    move |invoke| {
+        let from = invoke.message.webview_ref().label();
+        if !crate::os::window_may_call(from, invoke.message.command()) {
+            invoke
+                .resolver
+                .reject(CommandError::invalid("not from this window"));
+            return true;
+        }
+        handler(invoke)
+    }
+}
+
+/// Fixes the runtime of the closure `generate_handler!` makes, which it cannot infer alone.
+fn handler_of<R: Runtime>(
+    f: impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static,
+) -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    f
 }
 
 /// The engine, or `unavailable`.

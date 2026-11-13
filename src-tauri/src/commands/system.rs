@@ -41,11 +41,18 @@ pub async fn resume_setup<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandEr
     Err(not_yet("setup"))
 }
 
-/// The interface has drawn its first frame: show the window.
+/// The main interface has drawn its first frame: show the window. Another window being ready
+/// shows nothing.
 #[tauri::command]
-pub async fn app_ready<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+pub async fn app_ready<R: Runtime>(
+    app: AppHandle<R>,
+    webview: tauri::Webview<R>,
+) -> Result<(), CommandError> {
+    if webview.label() != crate::window::MAIN {
+        return Ok(());
+    }
     run(app, |app| async move {
-        crate::window::show_when_ready(&app);
+        crate::window::show_when_ready(&app, crate::window::ShowReason::InterfaceReady);
         Ok(())
     })
     .await

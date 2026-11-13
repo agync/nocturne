@@ -875,7 +875,10 @@ fn speak_page_makes_the_spoken_edition_once_and_never_speaks_private_lines() {
     h.save_todays_page();
     h.ok("set_private", json!({"id": created2[0], "private": true}));
     let _ = created;
-    let path = h.ok("speak_page", json!({"date": "2026-11-13"}));
+    let page = h.ok("speak_page", json!({"date": "2026-11-13"}));
+    assert_eq!(page["privateSkipped"], 1);
+    assert_eq!(page["sections"], json!([]));
+    let path = page["path"].clone();
     let spoken = std::fs::read_to_string(path.as_str().unwrap()).unwrap();
     assert!(spoken.contains("Rent is due on Saturday."), "{spoken}");
     assert!(
@@ -883,7 +886,7 @@ fn speak_page_makes_the_spoken_edition_once_and_never_speaks_private_lines() {
         "a private line was spoken: {spoken}"
     );
     let again = h.ok("speak_page", json!({"date": "2026-11-13"}));
-    assert_eq!(again, path, "kept, not made again");
+    assert_eq!(again["path"], path, "kept, not made again");
     assert_eq!(
         h.code("speak_page", json!({"date": "2026-01-01"})),
         "notFound"
@@ -893,6 +896,83 @@ fn speak_page_makes_the_spoken_edition_once_and_never_speaks_private_lines() {
         quiet.code("speak_page", json!({"date": "2026-11-13"})),
         "notFound"
     );
+}
+
+#[test]
+fn get_edition_serves_a_saved_page_in_the_edition_asked_for() {
+    let h = harness();
+    h.save_todays_page();
+    let print = h.ok(
+        "get_edition",
+        json!({"date": "2026-11-13", "edition": "print"}),
+    );
+    assert_eq!(print["edition"], "print");
+    assert_eq!(
+        h.code(
+            "get_edition",
+            json!({"date": "2026-01-01", "edition": "audio"})
+        ),
+        "notFound"
+    );
+    assert_eq!(
+        h.code("get_edition", json!({"date": "soon", "edition": "audio"})),
+        "invalid"
+    );
+}
+
+#[test]
+fn the_os_commands_say_they_are_not_available_yet() {
+    let h = harness();
+    for cmd in ["print_page", "open_sound_settings", "quick_keep_command"] {
+        assert_eq!(h.code(cmd, json!({})), "unavailable", "{cmd}");
+    }
+}
+
+#[test]
+fn quick_capture_window_cannot_delete() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    let phrase = json!({"confirmPhrase": "delete everything"});
+    assert_eq!(h.code_from(&quick, "delete_everything", phrase), "invalid");
+    assert_eq!(
+        h.code_from(&quick, "forget", json!({"token": "x"})),
+        "invalid"
+    );
+    assert_eq!(
+        h.code_from(&quick, "update_settings", json!({"patch": {}})),
+        "invalid"
+    );
+    let kept = h
+        .call_from(
+            &quick,
+            "keep_text",
+            json!({"text": "milk is on the list", "source": "quickCapture"}),
+        )
+        .unwrap();
+    assert!(kept["item"]["id"].is_string());
+}
+
+#[test]
+fn unknown_label_refused() {
+    let h = harness();
+    let other = h.window("somewhere-else");
+    for cmd in ["get_status", "keep_text", "app_ready"] {
+        assert_eq!(
+            h.code_from(&other, cmd, json!({"text": "x", "source": "paste"})),
+            "invalid",
+            "{cmd}"
+        );
+    }
+}
+
+#[test]
+fn app_ready_from_quick_capture_keeps_main_hidden() {
+    let h = harness();
+    let quick = h.window("quick-capture");
+    h.call_from(&quick, "app_ready", json!({})).unwrap();
+    assert!(!h.state().window_shown(), "main must stay hidden");
+    h.ok("app_ready", json!({}));
+    assert!(h.state().window_shown());
 }
 
 #[test]

@@ -15,7 +15,8 @@ use crate::state::{AppState, refresh_status};
 
 #[tauri::command]
 pub async fn get_settings<R: Runtime>(app: AppHandle<R>) -> Result<SettingsView, CommandError> {
-    read(app, |e| e.settings()).await
+    let view = read(app.clone(), |e| e.settings()).await?;
+    Ok(crate::os::adjust_settings(&app, view))
 }
 
 #[tauri::command]
@@ -23,7 +24,13 @@ pub async fn update_settings<R: Runtime>(
     app: AppHandle<R>,
     patch: SettingsPatch,
 ) -> Result<SettingsView, CommandError> {
-    change(app, move |e| e.update_settings(patch)).await
+    run(app, move |app| async move {
+        let before = read(app.clone(), |e| e.settings()).await?;
+        crate::os::apply_settings(&app, &before, &patch).await?;
+        let view = change(app.clone(), move |e| e.update_settings(patch)).await?;
+        Ok(crate::os::adjust_settings(&app, view))
+    })
+    .await
 }
 
 /// What the privacy screen shows. The shell supplies what the engine cannot know: bytes sent
@@ -82,6 +89,7 @@ pub async fn delete_everything<R: Runtime>(
     // Nothing in flight may answer from what is about to go.
     app.state::<AppState>().asks.cancel_all();
     change(app.clone(), move |e| e.delete_everything(&confirm_phrase)).await?;
+    crate::os::on_delete_everything(&app);
     let state = app.state::<AppState>();
     let handle = app.clone();
     blocking_cmd(move || {

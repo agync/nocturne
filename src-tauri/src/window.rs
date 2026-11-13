@@ -27,13 +27,24 @@ pub fn show_main<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
+/// Why the main window is being shown at startup.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ShowReason {
+    InterfaceReady,
+    Grace,
+}
+
 /// Show the window because the interface is ready (or the grace period ran out): unless
 /// something showed it already, or the app was asked to start in the tray.
-pub fn show_when_ready<R: Runtime>(app: &AppHandle<R>) {
+pub fn show_when_ready<R: Runtime>(app: &AppHandle<R>, reason: ShowReason) {
     let skip = app
         .try_state::<AppState>()
         .is_some_and(|s| s.window_shown() || s.start_hidden());
     if !skip {
+        match reason {
+            ShowReason::InterfaceReady => tracing::info!("window shown: interface ready"),
+            ShowReason::Grace => tracing::info!("window shown: grace"),
+        }
         show_main(app);
     }
 }
@@ -57,7 +68,7 @@ pub fn show_after_grace<R: Runtime>(app: &AppHandle<R>) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(READY_GRACE).await;
-        show_when_ready(&app);
+        show_when_ready(&app, ShowReason::Grace);
     });
 }
 
