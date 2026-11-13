@@ -10,6 +10,8 @@ use std::sync::Mutex;
 
 use tauri::{AppHandle, Manager, Runtime};
 
+pub mod crypto;
+pub mod frame;
 pub mod protocol;
 
 /// Called once the app is ready. Starts nothing unless the person turned Away from home on.
