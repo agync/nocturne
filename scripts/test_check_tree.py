@@ -162,6 +162,24 @@ class FixtureTrees(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("app.js", proc.stdout)
 
+    def test_the_preview_interface_is_caught_in_the_plain_build_not_the_embedded_one(self):
+        marker = b'sessionStorage.getItem("nocturne.preview.token")'
+        dist = os.path.join(self.tmp, "dist")
+        write(os.path.join(dist, "index.html"), "<html></html>")
+        write(os.path.join(dist, "assets/app.js"), marker)
+        script = os.path.join(HERE, "check_ui_dist.py")
+        proc = subprocess.run([sys.executable, "-I", script, dist], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("app.js", proc.stdout)
+        # Embedded as the release build does, the text is no longer there to find.
+        tree = os.path.join(self.tmp, "tree")
+        make_tree(tree)
+        write(os.path.join(tree, "usr/bin/nocturne"), b"\x7fELF\0" + zlib.compress(marker * 4), 0o755)
+        self.assertEqual(run_check(tree).returncode, 0)
+        write(os.path.join(dist, "assets/app.js"), "console.log(1)")
+        proc = subprocess.run([sys.executable, "-I", script, dist], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stdout)
+
     def test_missing_icon_size_fails(self):
         make_tree(self.tmp)
         os.remove(os.path.join(self.tmp, "usr/share/icons/hicolor/256x256/apps/nocturne.png"))

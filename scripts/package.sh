@@ -163,6 +163,9 @@ else
     rm -rf "$pkg/notices"
     python3 -I scripts/notices.py --target "$rust_target" --lemonade "$pkg/lemonade/$platform"
 fi
+# The app embeds the interface compressed, so only the plain files can be checked for the
+# development-only preview, and they are checked before they are embedded.
+python3 -I scripts/check_ui_dist.py ui/dist
 if ((inputs_only)); then
     say "inputs ready: ui/dist, $pkg/notices and $pkg/lemonade/$platform"
     exit 0
