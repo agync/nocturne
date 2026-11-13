@@ -350,12 +350,13 @@ fn host_registered() -> bool {
 #[cfg(target_os = "linux")]
 fn query_host() -> zbus::Result<bool> {
     let connection = zbus::blocking::Connection::session()?;
-    let watcher = zbus::blocking::Proxy::new(
-        &connection,
-        "org.kde.StatusNotifierWatcher",
-        "/StatusNotifierWatcher",
-        "org.kde.StatusNotifierWatcher",
-    )?;
+    // Not cached: the cache asks for every property at once, and warns when there is no watcher.
+    let watcher = zbus::blocking::proxy::Builder::<zbus::blocking::Proxy>::new(&connection)
+        .destination("org.kde.StatusNotifierWatcher")?
+        .path("/StatusNotifierWatcher")?
+        .interface("org.kde.StatusNotifierWatcher")?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()?;
     watcher.get_property("IsStatusNotifierHostRegistered")
 }
 
