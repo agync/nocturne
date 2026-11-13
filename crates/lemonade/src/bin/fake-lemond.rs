@@ -8,11 +8,13 @@
 //! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
-//! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms),
+//! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
+//! (the first request with a wrong key gets a 503 instead of a 401),
 //! `load-oom`, `load-error`. `POST /fake/crash` kills it on demand.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock};
 use std::time::{Duration, Instant};
 
@@ -91,6 +93,8 @@ struct App {
     sleeper: Mutex<Option<std::process::Child>>,
     leak: bool,
     crash_ms: Mutex<Option<u64>>,
+    /// Set once the first refused request has been answered with a busy error.
+    flaked: AtomicBool,
     inner: Mutex<Inner>,
 }
 
@@ -433,6 +437,7 @@ async fn main() {
         sleeper: Mutex::new(sleeper),
         leak,
         crash_ms: Mutex::new(None),
+        flaked: AtomicBool::new(false),
         cache,
         models_dir,
         inner: Mutex::new(inner),
@@ -449,8 +454,9 @@ async fn main() {
             std::process::exit(0);
         });
     }
-    // The crash clock starts when the engine is first asked for its health, that is, when the
-    // supervisor has taken it as ready, so a slow start cannot be mistaken for a crash at launch.
+    // The crash clock starts at the first request that carries the right key to `/v1/health`.
+    // That is a convenience of this fake, not something the real engine does: the supervisor makes
+    // that request last in its readiness checks, so a slow start is not mistaken for a crash.
     *app.crash_ms.lock().unwrap_or_else(|e| e.into_inner()) =
         app.mode_u64("crash-after-ms").or_else(|| {
             (launches == 1)
@@ -530,6 +536,9 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
         }));
     }
     if !authorised {
+        if app.flag("busy-on-first-refusal") && !app.flaked.swap(true, Ordering::SeqCst) {
+            return err(503, "busy", "still loading");
+        }
         return err(401, "unauthorized", "invalid or missing API key");
     }
     next.run(Request::from_parts(parts, Body::from(bytes)))

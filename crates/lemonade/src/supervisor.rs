@@ -503,24 +503,27 @@ impl Actor {
                 return Err(Launch::Retry(format!("exited early with {status}")));
             }
             if probe.live().await.is_ok() {
-                // The key check comes first so that the request carrying the right key, which an
-                // engine takes as the sign it is in use, is the last one made here.
+                // The wrong key is tried first and the right one last. A busy or half-started
+                // engine can fail the first for other reasons, which only means try again.
                 let wrong = Client::new(port, "not-the-key");
-                if wrong.health().await != Err(RuntimeError::Unauthorized) {
-                    return Err(Launch::Retry("the engine does not enforce its key".into()));
-                }
-                match probe.health().await {
-                    Ok(h) => {
-                        if h.websocket_port != Some(ws_port) {
-                            return Err(Launch::Retry(format!(
-                                "the engine reports websocket port {:?}, not {ws_port}",
-                                h.websocket_port
-                            )));
+                match wrong.health().await {
+                    Err(RuntimeError::Unauthorized) => match probe.health().await {
+                        Ok(h) => {
+                            if h.websocket_port != Some(ws_port) {
+                                return Err(Launch::Retry(format!(
+                                    "the engine reports websocket port {:?}, not {ws_port}",
+                                    h.websocket_port
+                                )));
+                            }
+                            return Ok(h.version);
                         }
-                        return Ok(h.version);
-                    }
-                    Err(RuntimeError::Unauthorized) => {
-                        return Err(Launch::Retry("something else holds the port".into()));
+                        Err(RuntimeError::Unauthorized) => {
+                            return Err(Launch::Retry("something else holds the port".into()));
+                        }
+                        Err(_) => {}
+                    },
+                    Ok(_) => {
+                        return Err(Launch::Retry("the engine does not enforce its key".into()));
                     }
                     Err(_) => {}
                 }

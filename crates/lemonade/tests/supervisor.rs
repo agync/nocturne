@@ -237,6 +237,16 @@ async fn a_crash_loop_backs_off_then_fails_after_three_restarts() {
 }
 
 #[tokio::test]
+async fn a_busy_answer_to_the_key_check_is_waited_out_not_taken_for_a_port_clash() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some("busy-on-first-refusal")).await;
+    assert!(ready_port(&sup.state().borrow()).is_some());
+    assert_eq!(common::launch_count(&dirs), 1, "no new port was tried");
+    sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
 async fn a_taken_port_is_retried_with_a_new_one() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
