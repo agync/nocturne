@@ -64,6 +64,24 @@ const UNKEEP_MINUTES = 10;
 
 const clone = <T>(value: T): T => structuredClone(value);
 
+/** Lets go of the sound or picture held for an item that is gone. */
+function release(item: ItemView): void {
+  if (item.originalPath?.startsWith("blob:") && typeof URL.revokeObjectURL === "function") {
+    URL.revokeObjectURL(item.originalPath);
+  }
+}
+
+/**
+ * A recording or photo kept in the browser is held in memory and played from where it is, so the
+ * item's page can play it back. Without a browser to hold it, the item keeps its placeholder.
+ */
+function heldOriginal(bytes: Uint8Array, mime: string): Partial<ItemView> {
+  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") return {};
+  if (!mime.startsWith("audio/") && !mime.startsWith("image/")) return {};
+  const copy = new Uint8Array(bytes);
+  return { originalPath: URL.createObjectURL(new Blob([copy], { type: mime })) };
+}
+
 /** The engine's plain dek, used when the written one could mention something private. */
 function templateDek(kept: number, needs: number, letGo: number): string {
   const things = kept === 1 ? "thing" : "things";
@@ -460,7 +478,8 @@ export class MockEngine implements EngineClient {
     };
     this.items.unshift(item);
     this.emit("item-changed", clone(item));
-    this.scheduleReading(item.id, source === "pastedWeb");
+    // The preview has no mind. Only a pasted web page is "read", and it leaves a memory to show for it.
+    if (source === "pastedWeb") this.scheduleReading(item.id, true);
     return item;
   }
 
@@ -474,19 +493,27 @@ export class MockEngine implements EngineClient {
     };
     setTimeout(() => change({ status: "reading" }), 1500);
     setTimeout(() => {
+      if (web) this.learn(id, true);
+      else if (this.items.find((i) => i.id === id)?.text) this.learn(id, false);
+      const memoryCount = this.memories.filter((m) =>
+        m.receipts.some((r) => r.itemId === id),
+      ).length;
       change({
-        status: web ? "unconfirmed" : "understood",
-        understoodInMs: 3000,
-        memoryCount: 1,
+        status: web ? "unconfirmed" : memoryCount > 0 ? "understood" : "kept",
+        understoodInMs: memoryCount > 0 ? 3000 : null,
+        memoryCount,
       });
-      if (web) this.learnUnconfirmed(id);
     }, 4500);
   }
 
-  /** What was read from a pasted web page is remembered as unconfirmed and waits on Needs you. */
-  private learnUnconfirmed(itemId: string): void {
+  /**
+   * What was read from a note is remembered in the person's own words. A pasted web page is
+   * remembered as unconfirmed and waits on Needs you. Sound and pictures need a mind to read
+   * them, so the preview learns nothing from them.
+   */
+  private learn(itemId: string, unconfirmed: boolean): void {
     const item = this.items.find((i) => i.id === itemId);
-    if (!item) return;
+    if (!item || this.memories.some((m) => m.id === `mem-new-${itemId}`)) return;
     const first = (item.text ?? item.title).trim().split("\n")[0] ?? item.title;
     const sentence = /[.!?]$/.test(first) ? first : `${first}.`;
     this.memories.push({
@@ -496,8 +523,8 @@ export class MockEngine implements EngineClient {
       entityId: null,
       predicate: "says",
       object: item.title,
-      certainty: "notSure",
-      status: "unconfirmed",
+      certainty: unconfirmed ? "notSure" : "sure",
+      status: unconfirmed ? "unconfirmed" : "active",
       validFrom: null,
       validTo: null,
       due: null,
@@ -517,12 +544,12 @@ export class MockEngine implements EngineClient {
           keptAt: item.keptAt,
           durationMs: null,
           span: null,
-          unconfirmed: true,
+          unconfirmed,
         },
       ],
     });
     this.refreshStatus(true);
-    this.emit("needs-you-changed", this.status.needsYou);
+    if (unconfirmed) this.emit("needs-you-changed", this.status.needsYou);
   }
 
   private firstLine(text: string): string {
@@ -570,6 +597,7 @@ export class MockEngine implements EngineClient {
     }[kind];
     const item = this.newItem(kind, title, source, {
       durationMs: kind === "audio" ? Math.max(1000, Math.round(bytes.length / 16)) : null,
+      ...heldOriginal(bytes, mime),
     });
     return { type: "new", item: clone(item) };
   }
@@ -581,6 +609,7 @@ export class MockEngine implements EngineClient {
     if (this.clock.getTime() - new Date(found.keptAt).getTime() > UNKEEP_MINUTES * 60_000) {
       throw new Error(`Item ${id} was kept too long ago to take back`);
     }
+    release(found);
     this.items = this.items.filter((i) => i.id !== id);
     this.memories = this.memories.filter(
       (m) => !(m.receipts.length > 0 && m.receipts.every((r) => r.itemId === id)),
@@ -609,9 +638,10 @@ export class MockEngine implements EngineClient {
     }
   }
 
-  async keepRecording(bytes: Uint8Array, _mime: string): Promise<Kept> {
+  async keepRecording(bytes: Uint8Array, mime: string): Promise<Kept> {
     const item = this.newItem("audio", "Voice note", "recording", {
       durationMs: Math.max(1000, Math.round(bytes.length / 16)),
+      ...heldOriginal(bytes, mime),
     });
     return { type: "new", item: clone(item) };
   }
@@ -1053,6 +1083,7 @@ export class MockEngine implements EngineClient {
       for (const itemId of itemIds) {
         const stillUsed = this.memories.some((m) => m.receipts.some((r) => r.itemId === itemId));
         if (!stillUsed) {
+          for (const gone of this.items.filter((i) => i.id === itemId)) release(gone);
           this.items = this.items.filter((i) => i.id !== itemId);
           originals += 1;
         }
@@ -1135,6 +1166,7 @@ export class MockEngine implements EngineClient {
 
   async deleteEverything(confirmPhrase: string): Promise<void> {
     if (confirmPhrase !== "delete everything") throw new Error("The confirmation did not match");
+    for (const item of this.items) release(item);
     this.items = [];
     this.memories = [];
     for (const p of this.pages) {

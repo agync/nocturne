@@ -23,7 +23,24 @@ function collectAsk(engine: ReturnType<typeof createMockEngine>) {
 }
 
 describe("MockEngine capture", () => {
-  it("acknowledges a kept note in under 100 ms and reads it later", async () => {
+  it("keeps a voice note from any browser and holds the sound to play back", async () => {
+    const create = vi.fn(() => "blob:held");
+    const before = URL.createObjectURL;
+    URL.createObjectURL = create;
+    const engine = createMockEngine({ now: NOW });
+    for (const mime of ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus"]) {
+      const kept = await engine.keepRecording(new Uint8Array(32_000), mime);
+      expect(kept.type).toBe("new");
+      expect(kept.item.kind).toBe("audio");
+      expect(kept.item.source).toBe("recording");
+      expect(kept.item.originalPath).toBe("blob:held");
+      expect((await engine.getItem(kept.item.id)).originalPath).toBe("blob:held");
+    }
+    expect(create).toHaveBeenCalledTimes(3);
+    URL.createObjectURL = before;
+  });
+
+  it("acknowledges a kept note in under 100 ms and leaves it waiting for tonight", async () => {
     const engine = createMockEngine({ now: NOW });
     const changes: ItemView[] = [];
     engine.on("item-changed", (item) => changes.push(item));
@@ -35,11 +52,61 @@ describe("MockEngine capture", () => {
     expect(kept.item.status).toBe("kept");
     expect(kept.item.title).toBe("Ask Sam about Saturday");
 
-    await vi.advanceTimersByTimeAsync(2000);
-    expect(changes.at(-1)?.status).toBe("reading");
-    await vi.advanceTimersByTimeAsync(6000);
-    expect(changes.at(-1)?.status).toBe("understood");
-    expect(changes.every((c) => c.id === kept.item.id)).toBe(true);
+    // There is no mind in the preview: nothing is read, so nothing is claimed.
+    await vi.advanceTimersByTimeAsync(10_000);
+    const later = await engine.getItem(kept.item.id);
+    expect(later).toMatchObject({ status: "kept", memoryCount: 0, understoodInMs: null });
+    expect((await engine.getStatus()).state).not.toBe("reading");
+  });
+
+  it("claims only the memories it holds: a pasted web page leaves one unconfirmed", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const kept = await engine.keepText("Free parking on Sundays.", "pastedWeb");
+    await vi.advanceTimersByTimeAsync(10_000);
+    const later = await engine.getItem(kept.item.id);
+    expect(later.status).toBe("unconfirmed");
+    const held = await engine.listMemories({
+      entityId: null,
+      itemId: kept.item.id,
+      status: null,
+      query: null,
+      limit: null,
+    });
+    expect(later.memoryCount).toBe(held.length);
+    expect(held.length).toBeGreaterThan(0);
+  });
+
+  it("lets go of the held sound when a voice note is taken back", async () => {
+    const revoke = vi.fn();
+    const before = [URL.createObjectURL, URL.revokeObjectURL];
+    URL.createObjectURL = () => "blob:held-1";
+    URL.revokeObjectURL = revoke;
+    const engine = createMockEngine({ now: NOW });
+    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    await engine.unkeep(kept.item.id);
+    expect(revoke).toHaveBeenCalledWith("blob:held-1");
+    [URL.createObjectURL, URL.revokeObjectURL] = before as [
+      typeof URL.createObjectURL,
+      typeof URL.revokeObjectURL,
+    ];
+  });
+
+  it("lets go of every held sound when everything is deleted", async () => {
+    const revoke = vi.fn();
+    const before = [URL.createObjectURL, URL.revokeObjectURL];
+    let n = 0;
+    URL.createObjectURL = () => `blob:held-${++n}`;
+    URL.revokeObjectURL = revoke;
+    const engine = createMockEngine({ now: NOW });
+    await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    await engine.keepBytes(new Uint8Array([1, 2]), "image/png", "paste");
+    await engine.deleteEverything("delete everything");
+    expect(revoke).toHaveBeenCalledWith("blob:held-1");
+    expect(revoke).toHaveBeenCalledWith("blob:held-2");
+    [URL.createObjectURL, URL.revokeObjectURL] = before as [
+      typeof URL.createObjectURL,
+      typeof URL.revokeObjectURL,
+    ];
   });
 
   it("says kindly when something was already kept", async () => {
@@ -406,10 +473,36 @@ describe("MockEngine, shared by the screen lanes", () => {
     expect(note.item.durationMs).toBeGreaterThan(1000);
   });
 
-  it("reads an item now and says it is reading", async () => {
+  it("reads a note now and remembers it in the person's own words", async () => {
     const engine = createMockEngine({ now: NOW });
     const kept = await engine.keepText("Read me now", "quickCapture");
     await expect(engine.readNow(kept.item.id)).resolves.toMatchObject({ status: "reading" });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await engine.getItem(kept.item.id)).toMatchObject({
+      status: "understood",
+      memoryCount: 1,
+    });
+    const held = await engine.listMemories({
+      entityId: null,
+      itemId: kept.item.id,
+      status: null,
+      query: null,
+      limit: null,
+    });
+    expect(held.map((m) => m.sentence)).toEqual(["Read me now."]);
+  });
+
+  it("reads a voice note now and claims nothing, because the preview cannot hear it", async () => {
+    const engine = createMockEngine({ now: NOW });
+    const kept = await engine.keepRecording(new Uint8Array(32_000), "audio/webm");
+    await engine.readNow(kept.item.id);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await engine.getItem(kept.item.id)).toMatchObject({
+      status: "kept",
+      memoryCount: 0,
+      understoodInMs: null,
+      text: null,
+    });
   });
 
   it("withdraws a standing offer of a smaller mind when it is declined or taken", async () => {

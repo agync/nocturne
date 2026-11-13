@@ -62,6 +62,24 @@ describe("WebPlatform shared pieces", () => {
     expect(src).not.toMatch(/https?:\/\//);
   });
 
+  it("plays what the preview holds in memory from where it is", () => {
+    expect(new WebPlatform().originalSrc("blob:http://localhost/abc")).toBe(
+      "blob:http://localhost/abc",
+    );
+  });
+
+  it("opens a held original in a new tab, and only says what it would open for a path", async () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    const info = vi.spyOn(console, "info").mockImplementation(() => undefined);
+    await new WebPlatform().openPath("blob:http://localhost/abc");
+    expect(open).toHaveBeenCalledWith("blob:http://localhost/abc", "_blank", "noopener");
+    await new WebPlatform().openPath("exports/today");
+    expect(open).toHaveBeenCalledOnce();
+    expect(info).toHaveBeenCalledOnce();
+    open.mockRestore();
+    info.mockRestore();
+  });
+
   it("hands a question to listeners in the same window, until they stop", async () => {
     const platform = new WebPlatform();
     const heard: string[] = [];

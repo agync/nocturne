@@ -76,6 +76,11 @@ export class WebPlatform implements Platform {
   }
 
   async openPath(path: string): Promise<void> {
+    // What the preview holds in memory opens in a new tab, where the browser plays or shows it.
+    if (path.startsWith("blob:")) {
+      window.open(path, "_blank", "noopener");
+      return;
+    }
     console.info(`Would open ${path}`);
   }
 
@@ -87,8 +92,9 @@ export class WebPlatform implements Platform {
     console.info("Would open the logs");
   }
 
-  originalSrc(_path: string): string {
-    return PLACEHOLDER;
+  originalSrc(path: string): string {
+    // The preview holds what was just kept in memory and points at it with a blob address.
+    return path.startsWith("blob:") ? path : PLACEHOLDER;
   }
 
   inQuickCapture(): boolean {

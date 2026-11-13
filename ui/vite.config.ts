@@ -2,14 +2,16 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 // The production policy, also sent by `vite preview` so tests catch what the real app would block.
-const CSP = [
-  "default-src 'self'",
-  "img-src 'self' asset: http://asset.localhost blob: data:",
-  "media-src 'self' asset: http://asset.localhost blob:",
-  "style-src 'self' 'unsafe-inline'",
-  "font-src 'self'",
-  "connect-src 'self' ipc: http://ipc.localhost",
-].join("; ");
+// The preview with the mock engine also lets the page read the recordings it holds in memory.
+const csp = (mock: boolean) =>
+  [
+    "default-src 'self'",
+    "img-src 'self' asset: http://asset.localhost blob: data:",
+    "media-src 'self' asset: http://asset.localhost blob:",
+    "style-src 'self' 'unsafe-inline'",
+    "font-src 'self'",
+    `connect-src 'self' ipc: http://ipc.localhost${mock ? " blob:" : ""}`,
+  ].join("; ");
 
 export default defineConfig(({ mode }) => {
   // `preview-real` is the development build served by the preview server: the real engine over
@@ -34,7 +36,7 @@ export default defineConfig(({ mode }) => {
       sourcemap: false,
       ...(preview ? { outDir: "dist-preview" } : {}),
     },
-    preview: { headers: { "Content-Security-Policy": CSP } },
+    preview: { headers: { "Content-Security-Policy": csp(engine === "mock") } },
     server: { port: 5173, strictPort: true },
     test: {
       environment: "jsdom",
