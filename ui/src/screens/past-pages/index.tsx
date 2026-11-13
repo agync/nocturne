@@ -1,4 +1,5 @@
 import { Button } from "../../components/Button/Button";
+import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { formatDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PageSummary } from "../../engine/bindings";
@@ -45,46 +46,44 @@ export default function PastPages() {
   }
 
   return (
-    <div className={styles.frame}>
-      <div className={styles.card}>
-        <h1 className="t-page-title">{t("pages.title")}</h1>
-        <p className={`t-ui-body ${styles.dek}`}>{t("pages.dek")}</p>
-        <hr className={styles.rule} />
-        {pages.data.length === 0 ? (
-          <p className={styles.empty}>{t("pages.empty")}</p>
-        ) : (
-          groups(pages.data).map((group) => (
-            <section key={group.month} aria-labelledby={`month-${group.month}`}>
-              <h2 id={`month-${group.month}`} className={`t-section ${styles.month}`}>
-                {group.month}
-              </h2>
-              <ul className={styles.list}>
-                {group.pages.map((page) => (
-                  <li key={page.date}>
-                    <a className={styles.page} href={`#/pages/${page.date}`}>
-                      <span className={styles.date}>
-                        {today?.date === page.date ? (
-                          <span className={styles.today}>{t("pages.today")}</span>
-                        ) : null}
-                        <span>{formatDay(page.date)}</span>
-                      </span>
-                      <span className={styles.headline}>{page.headline}</span>
-                      <span className={styles.side}>
-                        <span>{t("pages.number", { number: page.pageNumber })}</span>
-                        {page.needsYou > 0 ? (
-                          <span className={styles.needs}>
-                            {t("pages.needsYou", { count: page.needsYou })}
-                          </span>
-                        ) : null}
-                      </span>
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          ))
-        )}
-      </div>
-    </div>
+    <ScreenSheet>
+      <h1 className="t-page-title">{t("pages.title")}</h1>
+      <p className={`t-ui-body ${styles.dek}`}>{t("pages.dek")}</p>
+      <hr className={styles.rule} />
+      {pages.data.length === 0 ? (
+        <p className={styles.empty}>{t("pages.empty")}</p>
+      ) : (
+        groups(pages.data).map((group) => (
+          <section key={group.month} aria-labelledby={`month-${group.month}`}>
+            <h2 id={`month-${group.month}`} className={`t-section ${styles.month}`}>
+              {group.month}
+            </h2>
+            <ul className={styles.list}>
+              {group.pages.map((page) => (
+                <li key={page.date}>
+                  <a className={styles.page} href={`#/pages/${page.date}`}>
+                    <span className={styles.date}>
+                      {today?.date === page.date ? (
+                        <span className={styles.today}>{t("pages.today")}</span>
+                      ) : null}
+                      <span>{formatDay(page.date)}</span>
+                    </span>
+                    <span className={styles.headline}>{page.headline}</span>
+                    <span className={styles.side}>
+                      <span>{t("pages.number", { number: page.pageNumber })}</span>
+                      {page.needsYou > 0 ? (
+                        <span className={styles.needs}>
+                          {t("pages.needsYou", { count: page.needsYou })}
+                        </span>
+                      ) : null}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
+      )}
+    </ScreenSheet>
   );
 }
