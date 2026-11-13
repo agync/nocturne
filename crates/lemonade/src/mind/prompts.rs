@@ -40,10 +40,7 @@ pub const PREDICATES: [(&str, &str); 10] = [
     ("lives_in", "where someone lives"),
     ("takes", "a medicine"),
     ("prefers", "a liking"),
-    (
-        "knows",
-        "how someone is related to the person or to someone else: my son, Ana's brother",
-    ),
+    ("knows", "two people who know each other"),
     ("works_on", "a job or work project"),
     ("happened", "something that took place"),
 ];
@@ -89,10 +86,9 @@ pub fn extraction_schema() -> Value {
 /// A worked example for the extraction prompt: a short note and the reply it should get. Made
 /// up, and about nothing the evaluation asks.
 pub const EXAMPLE_NOTE: &str = "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12. \
-She will send the results by 13 March. My cousin Ana lives in Hull now, since 1 March, and works at \
-the harbour office.";
+She will send the results by 13 March. My cousin Ana lives in Hull now, since 1 March.";
 pub const EXAMPLE_KEPT: &str = "2026-03-02";
-pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "validFrom": null, "validTo": null, "due": "2026-03-06", "confidence": 0.95, "span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "tags": ["health", "appointment"], "moved": true}, {"sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "validFrom": null, "validTo": null, "due": "2026-03-13", "confidence": 0.9, "span": {"quote": "She will send the results by 13 March"}, "tags": ["health"], "moved": false}, {"sentence": "Ana is my cousin.", "subject": "Ana", "subjectKind": "person", "predicate": "knows", "object": "my cousin", "validFrom": null, "validTo": null, "due": null, "confidence": 0.95, "span": {"quote": "My cousin Ana"}, "tags": ["family"], "moved": false}, {"sentence": "Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "validFrom": "2026-03-01", "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "Ana lives in Hull now, since 1 March"}, "tags": ["home"], "moved": false}, {"sentence": "Ana works at the harbour office.", "subject": "Ana", "subjectKind": "person", "predicate": "works_on", "object": "the harbour office", "validFrom": null, "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "works at the harbour office"}, "tags": ["work"], "moved": false}]}"#;
+pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "validFrom": null, "validTo": null, "due": "2026-03-06", "confidence": 0.95, "span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "tags": ["health", "appointment"], "moved": true}, {"sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "validFrom": null, "validTo": null, "due": "2026-03-13", "confidence": 0.9, "span": {"quote": "She will send the results by 13 March"}, "tags": ["health"], "moved": false}, {"sentence": "My cousin Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "validFrom": "2026-03-01", "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "My cousin Ana lives in Hull now, since 1 March"}, "tags": ["home", "family"], "moved": false}]}"#;
 
 pub fn extraction_system(nonce: &str) -> String {
     format!(
@@ -100,8 +96,7 @@ pub fn extraction_system(nonce: &str) -> String {
 Reply with JSON only, shaped {{\"memories\": [...]}}.\n\
 Rules:\n\
 - One memory per fact. One note often holds several: a name, a date, a time, a place, a number, a code. Give each fact its own memory and leave none out.\n\
-- One sentence can hold more than one fact, joined by and, a semicolon or a comma. Split it: each fact gets its own memory and its own quote.\n\
-- How someone is related, even when said in passing (my cousin Ana, Ana's brother Rui), is a fact of its own: subject the person, predicate knows, object the relationship as written.\n\
+- Keep the words that say who someone is to the person (my cousin Ana, our neighbour Rui) in the sentence.\n\
 - What the text says is not so, or no longer so (not on Wednesday, no longer in Leeds), is not a memory: keep only the value that holds now.\n\
 - Copy names, numbers, codes, dates and times exactly as written, into the sentence and the object. Never round them, reword them or swap one for another.\n\
 - subject: who or what the fact is about, by name. Never a pronoun such as he, she, it or they: write the name it stands for, or leave the fact out. subjectKind: person, place or thing.\n\
