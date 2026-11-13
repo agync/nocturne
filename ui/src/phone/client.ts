@@ -112,7 +112,9 @@ export function createPhoneEngine(
   };
 
   async function openNew(): Promise<Session> {
+    if (closed) throw new ConnectionError("asleep");
     const device = await store.device();
+    if (closed) throw new ConnectionError("asleep");
     if (!device) {
       set({ kind: "cantConnect" });
       throw new ConnectionError("cantConnect");
@@ -151,8 +153,15 @@ export function createPhoneEngine(
           if (!closed && state.kind === "connected") set({ kind: "connecting" });
         }
       };
-      // The address is stored only now: a session to it has opened and Hello has been read.
-      const latest = (await store.device()) ?? device;
+      // The address is stored only now: a session to it has opened and Hello has been read. A
+      // record that is gone (the person disconnected, or removed the phone) stays gone.
+      const latest = await store.device();
+      if (closed || !latest) {
+        opened.close("forgotten");
+        if (session === opened) session = null;
+        set({ kind: "cantConnect" });
+        throw new ConnectionError(closed ? "asleep" : "cantConnect");
+      }
       await store.save({
         ...latest,
         address: host,
@@ -208,12 +217,7 @@ export function createPhoneEngine(
         if (!dead) throw e;
         s.close("replaced");
         if (session === s) session = null;
-        if (!retry || attempt >= 1) {
-          // A call that cannot be sent again still finds out why the session ended: a phone that
-          // was removed is told by the refusal to its next open, and says so now, not on a later tap.
-          void ensure().catch(() => undefined);
-          throw new ConnectionError("asleep");
-        }
+        if (!retry || attempt >= 1) throw new ConnectionError("asleep");
       }
     }
   }
@@ -318,6 +322,13 @@ export function createPhoneEngine(
       if (utf8(question).length > P.MAX_QUESTION) throw new PhoneRequestError("invalid");
       if (question.trim() === "") throw new PhoneRequestError("invalid");
       return call(async (s) => {
+        // An answer that cannot be sent again still finds out why its session ended: a phone that
+        // was removed is told by the refusal to its next open, and says so now, not on a later tap.
+        // Nothing starts once the phone has disconnected or the tab has closed.
+        const learn = (e: unknown) => {
+          if (e instanceof SessionClosed && !closed) void ensure().catch(() => undefined);
+          return e;
+        };
         let askId = "";
         const { result } = s.request({ cmd: "ask", question }, (answer) => {
           if (answer.type === "askStarted") askId = answer.askId;
@@ -328,7 +339,9 @@ export function createPhoneEngine(
           }
           return undefined;
         });
-        const id = await result;
+        const id = await result.catch((e: unknown) => {
+          throw learn(e);
+        });
         return askId || id;
       }, false);
     },
@@ -387,14 +400,15 @@ export function createPhoneEngine(
       });
     },
     async disconnect() {
+      // Closed first: nothing that is still opening may save the device again.
+      const live = session;
+      closed = true;
       try {
-        if (state.kind === "connected" || session?.isOpen) {
-          await once({ cmd: "disconnect" }, "done", false);
-        }
+        if (live?.isOpen) await live.request({ cmd: "disconnect" }, type("done")).result;
       } catch {
         // The computer could not be reached: the phone forgets its keys all the same.
       }
-      session?.close("disconnected");
+      live?.close("disconnected");
       session = null;
       await store.clear();
     },

@@ -311,6 +311,72 @@ describe("revocation", () => {
     expect(store.current()).toBeNull();
   });
 
+  it("disconnect while a background open is in flight leaves no device record and no key", async () => {
+    const { computer, device } = await paired();
+    const inner = memoryKeyStore(device);
+    // Reads the record at once, hands it over late: a stale copy, as an open in flight holds.
+    let hold: Promise<void> | null = null;
+    let release: () => void = () => undefined;
+    let saves = 0;
+    const store = {
+      ...inner,
+      async device() {
+        const d = await inner.device();
+        if (hold) await hold;
+        return d;
+      },
+      async save(d: PairedDevice) {
+        saves += 1;
+        await inner.save(d);
+      },
+    };
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    computer.handler = async (ctx) => {
+      if (ctx.request.call.cmd === "ask") await ctx.reply({ type: "askStarted", askId: "ask-1" });
+    };
+    const asked = engine.ask("When is it?", () => undefined);
+    await vi.waitFor(() => expect(computer.sessions.size).toBe(1));
+    const opensBefore = computer.opens;
+    saves = 0;
+    hold = new Promise((done) => {
+      release = done;
+    });
+    computer.dropAll();
+    await expect(asked).rejects.toBeInstanceOf(ConnectionError);
+    await engine.disconnect();
+    expect(inner.current()).toBeNull();
+    release();
+    await new Promise((done) => setTimeout(done, 50));
+    expect(inner.current()).toBeNull();
+    expect(saves).toBe(0);
+    expect(computer.opens).toBe(opensBefore);
+    expect(engine.connection().kind).not.toBe("connected");
+  });
+
+  it("an open never saves over a record that was cleared meanwhile", async () => {
+    const { computer, device } = await paired();
+    const inner = memoryKeyStore(device);
+    let reads = 0;
+    let saves = 0;
+    const store = {
+      ...inner,
+      async device() {
+        reads += 1;
+        // The record is read for the open, then found gone when the address is to be saved.
+        return reads === 1 ? inner.device() : null;
+      },
+      async save(d: PairedDevice) {
+        saves += 1;
+        await inner.save(d);
+      },
+    };
+    const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
+    await expect(engine.hello()).rejects.toBeInstanceOf(ConnectionError);
+    expect(saves).toBe(0);
+    expect(engine.connection().kind).toBe("cantConnect");
+    engine.close();
+  });
+
   it("unsealed_revoked_keeps_keys: a refusal, an HTTP error, a forged REVOKED and silence all keep the key", async () => {
     const { computer, device } = await paired();
     const store = memoryKeyStore(device);
