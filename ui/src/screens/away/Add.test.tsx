@@ -68,15 +68,6 @@ describe("add", () => {
     expect(writeText).toHaveBeenCalledWith("7KQ2M9XDR4TB0HJ5WCP8N3VA");
   });
 
-  it("paused_after_wrong_codes: says adding phones is paused and until when", async () => {
-    const { engine } = await openAway(ADD, "onAlone", "Add a phone");
-    await screen.findByRole("timer");
-    act(() => engine.remote.pauseForWrongCodes());
-    expect(await screen.findByText("Adding phones is paused.")).toBeInTheDocument();
-    expect(screen.getByText(/starts again at \d\d:\d\d/)).toBeInTheDocument();
-    expect(screen.queryByRole("img")).toBeNull();
-  });
-
   it("not reachable: says it has to be on first", async () => {
     await openAway(ADD, "offBefore", "Add a phone");
     expect(

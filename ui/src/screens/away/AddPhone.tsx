@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { goTo, useQueryParam } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
-import { formatDuration, formatTime } from "../../copy/format";
+import { formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PairingOffer, PairingPhase, RemoteView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
@@ -17,15 +17,7 @@ const OFFER_MS = 5 * 60_000;
 /** The typed code, in the four groups of six it is read out in. */
 export const groups = (code: string): string[] => code.match(/.{1,6}/g) ?? [];
 
-type Shown =
-  | "waiting"
-  | "added"
-  | "expired"
-  | "refused"
-  | "timedOut"
-  | "spent"
-  | "paused"
-  | "unavailable";
+type Shown = "waiting" | "added" | "expired" | "refused" | "timedOut" | "spent" | "unavailable";
 
 function shownFor(phase: PairingPhase | null, expired: boolean): Shown {
   switch (phase?.type) {
@@ -39,8 +31,6 @@ function shownFor(phase: PairingPhase | null, expired: boolean): Shown {
       return "timedOut";
     case "spent":
       return "spent";
-    case "paused":
-      return "paused";
     default:
       return expired ? "expired" : "waiting";
   }
@@ -186,22 +176,6 @@ export function AddPhone({ view }: { view: RemoteView }) {
             }}
           >
             {t("away.add.another")}
-          </Button>
-        </div>
-      </div>
-    );
-  } else if (shown === "paused" && phase?.type === "paused") {
-    body = (
-      <div className={styles.panel} role="alert">
-        <h2 className={styles.statement} tabIndex={-1} ref={resultHeading}>
-          {t("away.add.paused.title")}
-        </h2>
-        <p className={styles.body}>
-          {t("away.add.paused.body", { time: formatTime(phase.until) })}
-        </p>
-        <div className={styles.buttons}>
-          <Button variant="primary" onClick={cancel}>
-            {t("away.add.back")}
           </Button>
         </div>
       </div>

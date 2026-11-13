@@ -85,7 +85,6 @@ export const HANDSHAKE_TIMEOUT_SECS = 10;
 export const LONG_POLL_HOLD_SECS = 25;
 export const TAKE_BACK_SECS = 600;
 export const CITED_TTL_SECS = 3600;
-export const PAUSE_SECS = 900;
 
 export const CHUNK = 262144;
 export const MAX_FRAME = 270336;
@@ -119,7 +118,6 @@ export const LIMIT_SESSION_OPENS_PER_DEVICE = 6;
 export const LIMIT_REQUESTS = 60;
 export const LIMIT_ASKS = 10;
 export const LIMIT_KEEPS = 30;
-export const WRONG_CODES = 5;
 export const PAGES_BACK = 7;
 export const EVENTS_KEPT_DAYS = 90;
 

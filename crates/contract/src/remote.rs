@@ -142,9 +142,6 @@ pub enum PairingPhase {
     Expired,
     /// A second commit, or a reveal too late, used the code up.
     Spent,
-    Paused {
-        until: String,
-    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

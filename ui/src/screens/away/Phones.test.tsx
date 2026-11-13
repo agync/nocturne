@@ -108,6 +108,7 @@ describe("activity", () => {
       await screen.findByText(/Someone tried 5 wrong pairing codes at 03:41 today\./),
     ).toBeInTheDocument();
     expect(screen.getByText(/Nobody got in/)).toBeInTheDocument();
+    expect(screen.queryByText(/paused|15 minutes/i)).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "OK" }));
     expect(screen.queryByText(/Nobody got in/)).toBeNull();
     expect((await engine.getRemote()).state.type).toBe("on");

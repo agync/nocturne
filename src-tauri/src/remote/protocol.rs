@@ -85,7 +85,6 @@ pub const HANDSHAKE_TIMEOUT_SECS: u64 = 10;
 pub const LONG_POLL_HOLD_SECS: u64 = 25;
 pub const TAKE_BACK_SECS: u64 = 600;
 pub const CITED_TTL_SECS: u64 = 3600;
-pub const PAUSE_SECS: u64 = 900;
 
 pub const CHUNK: usize = 262_144;
 pub const MAX_FRAME: usize = 270_336;
@@ -117,7 +116,6 @@ pub const LIMIT_SESSION_OPENS_PER_DEVICE: u32 = 6;
 pub const LIMIT_REQUESTS: u32 = 60;
 pub const LIMIT_ASKS: u32 = 10;
 pub const LIMIT_KEEPS: u32 = 30;
-pub const WRONG_CODES: u32 = 5;
 pub const PAGES_BACK: u32 = 7;
 pub const EVENTS_KEPT_DAYS: u32 = 90;
 
@@ -285,7 +283,6 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         LONG_POLL_HOLD_SECS,
         TAKE_BACK_SECS,
         CITED_TTL_SECS,
-        PAUSE_SECS,
         CHUNK,
         MAX_FRAME,
         MAX_TEXT,
@@ -308,7 +305,6 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         LIMIT_REQUESTS,
         LIMIT_ASKS,
         LIMIT_KEEPS,
-        WRONG_CODES,
         PAGES_BACK,
         EVENTS_KEPT_DAYS,
         PHONE_BUILD,

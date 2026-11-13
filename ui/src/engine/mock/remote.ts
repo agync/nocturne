@@ -23,7 +23,6 @@ const HOUR = 3_600_000;
 /** An offer lives this long, and a phone's request waits this long for a decision. */
 const OFFER_MS = 5 * MINUTE;
 const DECIDE_MS = 2 * MINUTE;
-const PAUSE_MS = 15 * MINUTE;
 
 const DOWNLOAD_BYTES: Record<RemoteConnection, number> = { simple: 40e6, mostPrivate: 50e6 };
 const HOST = "amber-otter-lamp-quiet.trycloudflare.com";
@@ -632,13 +631,6 @@ export class RemoteSim {
     if (t !== "waitingForScan") return;
     this.offer = null;
     this.setPhase({ type: "expired" });
-  }
-
-  /** Five wrong codes: adding phones pauses for fifteen minutes. */
-  pauseForWrongCodes(): void {
-    if (!this.v.pairing) return;
-    this.record(null, "wrongCode", "refused", 5);
-    this.setPhase({ type: "paused", until: iso(this.now() + PAUSE_MS) });
   }
 
   async decide(pairingId: string, allow: boolean): Promise<void> {

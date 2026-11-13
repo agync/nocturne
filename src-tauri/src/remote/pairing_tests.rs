@@ -4,6 +4,8 @@ use super::super::testing::PhonePair;
 use super::*;
 
 const HOST: &str = "amber-otter-lamp-quiet.trycloudflare.com";
+/// Far more wrong frames than any limit would let through in a minute.
+const TRIES: u32 = 15;
 
 struct Bench {
     p: Pairings,
@@ -82,7 +84,7 @@ fn code_expires_after_5_minutes() {
 fn wrong_tries_are_noted_and_never_pause() {
     let mut b = bench();
     let offer = b.begin();
-    for i in 1..=WRONG_CODES * 3 {
+    for i in 1..=TRIES {
         let wrong = crypto::code_encode(&crypto::random());
         let phone = PhonePair::typed(&wrong, HOST, "Pixel");
         let step = b.send(&phone.hello());
@@ -104,7 +106,7 @@ fn junk_before_the_commit_leaves_the_offer_open() {
     let mut bad = good.commit();
     let last = bad.len() - 1;
     bad[last] ^= 1;
-    for _ in 0..WRONG_CODES * 3 {
+    for _ in 0..TRIES {
         assert!(b.send(&bad).wrong);
     }
     assert_eq!(b.phase(), PairingPhase::WaitingForScan);
@@ -421,7 +423,7 @@ fn offer_waiting_for_you_survives_foreign_frames() {
     let mut junk = phone.reveal();
     let last = junk.len() - 1;
     junk[last] ^= 1;
-    for _ in 0..WRONG_CODES * 3 {
+    for _ in 0..TRIES {
         let other = PhonePair::typed(&crypto::code_encode(&crypto::random()), HOST, "X");
         for frame in [other.hello(), other.commit(), junk.clone(), phone.commit()] {
             let step = b.send(&frame);

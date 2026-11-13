@@ -50,8 +50,9 @@ is a link whose secret sits in the fragment and never leaves the phone's browser
 characters carrying the same secret, so both ways are one protocol. The phone commits to its name and
 nonce, the computer replies with its own nonce, and the phone reveals within ten seconds or the
 offer is spent. Both sides then derive three words that bind the address, both keys, the name and
-both nonces. The person compares them and presses Allow on the computer. Five frames that fail to
-open pause pairing for 15 minutes. A refused or abandoned pairing leaves no device behind.
+both nonces. The person compares them and presses Allow on the computer. A frame that fails to
+open is refused and noted in the activity list, and pairing frames are rate limited, but a wrong
+guess never closes the offer. A refused or abandoned pairing leaves no device behind.
 
 ## The sealed channel
 
