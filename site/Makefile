@@ -1,0 +1,56 @@
+.DEFAULT_GOAL := help
+
+.PHONY: help site docs serve check shots clean
+
+# The public origin, used for the canonical and Open Graph links. Set it when the domain is known.
+SITE_URL ?= https://nocturne.example
+
+# The docs renderer. The pinned image is the default; OKF_WIKI names a local okf-wiki binary
+# instead, with OKF_WIKI_VENDOR pointing at its built Mermaid bundle.
+OKF_WIKI_IMAGE ?= ghcr.io/abn/okf-wiki@sha256:c6a3844ad2f6f1c453146d145ea1893c8d038b2d8dc6647ef328866bcb123264
+OKF_WIKI ?=
+OKF_WIKI_VENDOR ?=
+PODMAN ?= podman
+
+PORT ?= 4180
+MOCK ?= http://127.0.0.1:4173
+BUILD := build
+DIST := dist
+
+RENDER_FLAGS = --base /docs/ --brand Nocturne --brand-sub docs --title "Nocturne docs" \
+	--sections "guide:Using Nocturne,design:Design,architecture:Architecture,adr:Decisions,contribution:Contribution"
+
+ifeq ($(strip $(OKF_WIKI)),)
+RENDER = $(PODMAN) run --rm --network=none --user 0:0 --security-opt label=disable \
+	-v "$(abspath ../docs):/content:ro" -v "$(abspath $(BUILD)/theme):/theme:ro" \
+	-v "$(abspath $(BUILD)/render):/out" \
+	$(OKF_WIKI_IMAGE) render --content /content --out /out --theme /theme $(RENDER_FLAGS)
+else
+RENDER = $(OKF_WIKI) render --content ../docs --out $(BUILD)/render --theme $(BUILD)/theme \
+	$(if $(OKF_WIKI_VENDOR),--vendor $(OKF_WIKI_VENDOR)) $(RENDER_FLAGS)
+endif
+
+help: ## Show this help
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-8s\033[0m %s\n", $$1, $$2}'
+
+site: docs ## Build the landing page and the docs into dist/ (the deploy directory)
+	python3 -I scripts/build.py assemble --site-url "$(SITE_URL)" --render $(BUILD)/render \
+		--lock ../lemonade.lock . $(DIST)
+
+docs: ## Render ../docs with the Nocturne theme into build/render
+	rm -rf $(BUILD)
+	mkdir -p $(BUILD)/render
+	python3 -I scripts/build.py theme docs-theme assets/fonts $(BUILD)/theme
+	$(RENDER)
+
+serve: ## Serve dist/ on 127.0.0.1:$(PORT) with the _headers applied
+	python3 -I scripts/serve.py $(DIST) $(PORT)
+
+check: ## Run axe and take screenshots of the served site (needs make serve and ../ui/node_modules)
+	node scripts/check.mjs http://127.0.0.1:$(PORT)
+
+shots: ## Recapture the app screenshots from a mock interface at $(MOCK)
+	node scripts/shots.mjs $(MOCK)
+
+clean: ## Remove build output
+	rm -rf $(BUILD) $(DIST)

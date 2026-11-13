@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // The Worker name is the owner's choice; it becomes part of the workers.dev address.
+  "name": "nocturne-site",
+  "compatibility_date": "2026-11-01",
+
+  // Static assets only, no Worker script. `make site` (from the repository root) writes the
+  // landing page, the rendered docs under docs/ and the generated _headers into dist/.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

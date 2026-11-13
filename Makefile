@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models preview-real helpers-pin phone tailnet/test
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models preview-real helpers-pin phone tailnet/test \
+	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
 GO ?= go
@@ -137,6 +138,17 @@ contract/check: contract/ts
 
 docs/check: ## Validate the OKF docs bundle
 	okf validate docs > /dev/null
+
+##@ Site
+
+site: ## Build the landing page and the docs into site/dist (SITE_URL=<origin>)
+	$(MAKE) -C site site
+
+site/serve: ## Serve site/dist on loopback with its headers
+	$(MAKE) -C site serve
+
+site/clean: ## Remove the built site
+	$(MAKE) -C site clean
 
 ##@ Utilities
 
