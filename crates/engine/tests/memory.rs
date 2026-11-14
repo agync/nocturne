@@ -1554,3 +1554,131 @@ fn a_date_only_match_never_promotes_an_unconfirmed_memory() {
         MemoryStatus::Unconfirmed
     );
 }
+
+/// Book club as the smallest mind read it: each note's `due` is the day it was kept, so the
+/// two contradicting notes share a date.
+fn club(object: &str, sentence: &str, quote: &str) -> nocturne_engine::Candidate {
+    let mut c = cand("Book club", Predicate::Scheduled, object, sentence);
+    c.due = Some(date("2026-11-12"));
+    c.span = Some(nocturne_contract::Span::Quote {
+        text: quote.to_string(),
+    });
+    c
+}
+
+/// A note that contradicts a memory is never filed as its receipt because the dates match:
+/// the two ways of saying it are asked about, each with its own note behind it.
+#[test]
+fn a_date_only_match_never_merges_values_that_disagree() {
+    let f = fixture_at("2026-11-12T11:15:00Z", "Europe/London");
+    let club1 = "Book club meets on the first Tuesday of the month at the library.";
+    let (first, tuesday) = learn(
+        &f.engine,
+        club1,
+        club(
+            "the first Tuesday of the month",
+            "Book club meets on the first Tuesday of the month at the library.",
+            club1,
+        ),
+    );
+    f.clock.set_str("2026-11-12T16:10:00Z");
+    let club2 = "Sam says book club is actually on the second Wednesday of the month at the \
+                 community hall.";
+    let second = keep(&f.engine, club2);
+    let r = f
+        .engine
+        .apply(
+            &second,
+            vec![club(
+                "second Wednesday of the month",
+                "Book club is scheduled on the second Wednesday of the month at the community \
+                 hall.",
+                club2,
+            )],
+        )
+        .unwrap();
+    assert!(r.reinforced.is_empty(), "{r:?}");
+    assert_eq!(r.created.len(), 1);
+    assert_eq!(r.conflicts.len(), 1);
+
+    let tue = f.engine.get_memory(&tuesday).unwrap();
+    assert_eq!(tue.receipts.len(), 1, "{:?}", tue.receipts);
+    assert_eq!(tue.receipts[0].item_id, first);
+    let wed = f.engine.get_memory(&r.created[0]).unwrap();
+    assert_eq!(wed.object, "second Wednesday of the month");
+    assert_eq!(wed.receipts.len(), 1);
+    assert_eq!(wed.receipts[0].item_id, second);
+    assert!(
+        f.engine
+            .needs_you()
+            .unwrap()
+            .iter()
+            .any(|e| matches!(e, NeedsYouEntry::Which { .. }))
+    );
+}
+
+/// Words that agree on the date and say no other day, time or number still agree: the second
+/// note is a second receipt for the same appointment.
+#[test]
+fn a_date_only_match_still_joins_words_that_agree() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let mut wed = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wednesday 18 November at 10:00",
+        "The dentist appointment is on Wednesday 18 November at 10:00.",
+    );
+    wed.due = Some(date("2026-11-18"));
+    let (_, id) = learn(&f.engine, "Dentist Wednesday 18 November at 10:00", wed);
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(&f.engine, "Reminder: dentist Wed 18 Nov, 10am");
+    let mut again = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wed 18 Nov, 10am",
+        "The dentist appointment is on Wed 18 Nov at 10am.",
+    );
+    again.due = Some(date("2026-11-18"));
+    let r = f.engine.apply(&item, vec![again]).unwrap();
+    assert_eq!(r.reinforced, vec![id.clone()]);
+    assert!(r.created.is_empty() && r.conflicts.is_empty());
+    assert_eq!(f.engine.get_memory(&id).unwrap().receipts.len(), 2);
+}
+
+/// On the same day at another time, a note that says it moved is a move, with the old time
+/// kept as what it was.
+#[test]
+fn a_same_day_move_to_another_time_replaces_the_old_time() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let mut wed = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wednesday 18 November at 10:00",
+        "The dentist appointment is on Wednesday 18 November at 10:00.",
+    );
+    wed.due = Some(date("2026-11-18"));
+    let (_, old) = learn(&f.engine, "Dentist Wednesday 18 November at 10:00", wed);
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "The dentist moved to 14:30 on Wednesday 18 November",
+    );
+    let mut later = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wednesday 18 November at 14:30",
+        "The dentist appointment is on Wednesday 18 November at 14:30.",
+    );
+    later.due = Some(date("2026-11-18"));
+    later.moved = true;
+    let r = f.engine.apply(&item, vec![later]).unwrap();
+    assert_eq!(r.replaced, vec![old.clone()], "{r:?}");
+    assert!(r.reinforced.is_empty() && r.conflicts.is_empty());
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(
+        rows[0].was.as_deref(),
+        Some("Wednesday 18 November at 10:00")
+    );
+    assert_eq!(rows[0].receipts.len(), 1);
+}
