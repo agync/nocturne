@@ -215,10 +215,13 @@ impl Lab {
                         .bearer_auth(&endpoint.key)
                         .send()
                         .await;
+                    // A relaunch under way ends the connection, at its start or part way.
                     match sent {
-                        Ok(r) => return r.json::<Vec<Value>>().await.unwrap(),
-                        Err(e) if e.is_connect() => last = e.to_string(),
-                        Err(e) => panic!("{e}"),
+                        Ok(r) => match r.json::<Vec<Value>>().await {
+                            Ok(log) => return log,
+                            Err(e) => last = e.to_string(),
+                        },
+                        Err(e) => last = e.to_string(),
                     }
                 }
                 tokio::time::sleep(Duration::from_millis(100)).await;
