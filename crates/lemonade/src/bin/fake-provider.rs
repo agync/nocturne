@@ -12,7 +12,9 @@
 //!   as 401, 402, 403, 404, 429 or 500, `null` for none), `marker` (a string the error body
 //!   carries beside the echoed `Authorization` header), `multiline` (an error body over several
 //!   lines), `delay_ms`, `usage` (send `usage`), `cost` (a number for `usage.cost`, `null` for
-//!   none), `empty` (an empty reply), `model`.
+//!   none), `empty` (an empty reply), `model`, `redirect` (a path such as `/v1/elsewhere`
+//!   that chat answers with a 307 to; `null` for none). `POST /v1/elsewhere` records what
+//!   reaches it, so a test can see whether a redirect was followed with the key.
 //! - `POST /fake/relay` with `{"url": "http://127.0.0.1:<port>/v1", "key": "..."}` forwards chat
 //!   to a local OpenAI-compatible engine; `{"url": null}` stops relaying.
 
@@ -44,6 +46,7 @@ struct Script {
     cost: Option<f64>,
     empty: bool,
     model: String,
+    redirect: Option<String>,
 }
 
 impl Default for Script {
@@ -58,6 +61,7 @@ impl Default for Script {
             cost: None,
             empty: false,
             model: DEFAULT_MODEL.into(),
+            redirect: None,
         }
     }
 }
@@ -118,6 +122,7 @@ async fn main() {
     let router = Router::new()
         .route("/v1/models", get(models))
         .route("/v1/chat/completions", post(chat))
+        .route("/v1/elsewhere", post(elsewhere))
         .route("/fake/requests", get(requests))
         .route("/fake/script", post(script))
         .route("/fake/relay", post(relay))
@@ -189,7 +194,20 @@ async fn script(State(app): State<Shared>, Json(body): Json<Value>) -> Json<Valu
     if let Some(v) = body.get("model").and_then(Value::as_str) {
         s.model = v.to_string();
     }
+    if let Some(v) = body.get("redirect") {
+        s.redirect = v.as_str().map(str::to_string);
+    }
     Json(json!({"ok": true}))
+}
+
+/// Where a redirect points. It answers like a provider so a client that follows it would not
+/// notice; the record shows whether anything came.
+async fn elsewhere() -> Json<Value> {
+    Json(json!({
+        "id": "chatcmpl-elsewhere", "object": "chat.completion", "model": DEFAULT_MODEL,
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": "Redirected [m1]."},
+                     "finish_reason": "stop"}],
+    }))
 }
 
 async fn relay(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
@@ -231,6 +249,14 @@ async fn chat(State(app): State<Shared>, headers: HeaderMap, body: Bytes) -> Res
     }
     if let Some(status) = script.status {
         return error_reply(status, &script, &headers);
+    }
+    if let Some(to) = &script.redirect {
+        let mut resp = Response::new(Body::empty());
+        *resp.status_mut() = StatusCode::TEMPORARY_REDIRECT;
+        if let Ok(v) = HeaderValue::from_str(to) {
+            resp.headers_mut().insert(header::LOCATION, v);
+        }
+        return resp;
     }
     if let Some((url, key)) = relay {
         return relay_chat(&url, &key, body).await;

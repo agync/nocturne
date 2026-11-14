@@ -1,6 +1,10 @@
 //! The engine route for Online answers: one provider entry in the engine's `config.json`, one
 //! static model row in its `user_models.json`, and the key in `lemond`'s spawn environment only.
 //! While Online answers is off none of the three exists.
+//!
+//! The engine posts to the provider without following redirects (`utils/http_client.cpp:798`
+//! passes `follow_redirects = false` to `apply_http_security_policy`, `:645`), so a redirect
+//! from the provider never carries the key elsewhere; it comes back as a failed request.
 
 use std::fmt;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -287,26 +291,113 @@ fn in_net(ip: IpAddr, net: &str) -> bool {
     }
 }
 
-/// Adds or removes the static row in `<engine_dir>/user_models.json`, keeping every other row.
-/// For now it only removes the row.
-pub fn write_row(engine_dir: &Path, route: Option<&CloudRoute>) -> Result<(), RuntimeError> {
-    let _ = route;
-    let path = engine_dir.join(USER_MODELS);
-    let Ok(bytes) = std::fs::read(&path) else {
-        return Ok(());
-    };
-    let Ok(Value::Object(mut rows)) = serde_json::from_slice::<Value>(&bytes) else {
-        return Ok(());
-    };
-    if rows.remove(ROW).is_none() {
-        return Ok(());
+/// The provider entry `config.json` carries for `route`.
+pub fn entry(route: &CloudRoute) -> crate::config::CloudEntry<'_> {
+    crate::config::CloudEntry {
+        base_url: route.base_url().as_str(),
+        allow_insecure_http: route.allow_insecure_http(),
     }
+}
+
+/// The static row for `route`: a model served by the provider, never downloaded.
+fn row(route: &CloudRoute) -> Value {
+    serde_json::json!({
+        "recipe": "cloud",
+        "cloud_provider": PROVIDER,
+        "checkpoint": route.model,
+        "labels": ["chat"],
+        "suggested": false,
+    })
+}
+
+/// Adds or removes the static row in `<engine_dir>/user_models.json`, keeping every other row.
+/// Called only from the supervisor's launch, beside the `config.json` entry.
+pub fn write_row(engine_dir: &Path, route: Option<&CloudRoute>) -> Result<(), RuntimeError> {
+    let path = engine_dir.join(USER_MODELS);
+    let mut rows = match std::fs::read(&path) {
+        Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+            Ok(Value::Object(rows)) => rows,
+            // A file the engine could not read either: with no route there is nothing to take
+            // out of it, and a route replaces it.
+            _ if route.is_none() => return Ok(()),
+            _ => serde_json::Map::new(),
+        },
+        Err(_) if route.is_none() => return Ok(()),
+        Err(_) => serde_json::Map::new(),
+    };
+    match route {
+        Some(r) => {
+            let wanted = row(r);
+            if rows.get(ROW) == Some(&wanted) {
+                return Ok(());
+            }
+            rows.insert(ROW.to_string(), wanted);
+        }
+        None => {
+            if rows.remove(ROW).is_none() {
+                return Ok(());
+            }
+        }
+    }
+    std::fs::create_dir_all(engine_dir)?;
     let tmp = engine_dir.join(format!("{USER_MODELS}.tmp"));
     let text = serde_json::to_string_pretty(&Value::Object(rows))
         .map_err(|e| RuntimeError::Io(e.to_string()))?;
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, &path)?;
     Ok(())
+}
+
+/// The provider as the person knows it: the address's host, with its port when one was given.
+pub fn host_of(url: &Url) -> String {
+    let host = url.host_str().unwrap_or_default();
+    match url.port() {
+        Some(p) => format!("{host}:{p}"),
+        None => host.to_string(),
+    }
+}
+
+/// Phrases of the engine's own network errors (libcurl's, behind "CURL error:") that mean this
+/// computer has no way out.
+const NO_INTERNET: &[&str] = &[
+    "could not resolve",
+    "couldn't resolve",
+    "resolve host",
+    "network is unreachable",
+    "no route to host",
+];
+
+/// Phrases that mean the provider's address was found but did not answer.
+const NOT_REACHED: &[&str] = &[
+    "couldn't connect",
+    "could not connect",
+    "connection refused",
+    "timeout was reached",
+    "timed out",
+    "ssl",
+    "certificate",
+    "network error",
+    "curl error",
+];
+
+/// What a failed online request means, from the engine's status and its own error text (the
+/// `error.message` it wrote, never the provider's body). `None` means the engine itself did
+/// not answer.
+pub fn classify(status: Option<u16>, engine_error: &str) -> OnlineFailure {
+    let text = engine_error.to_ascii_lowercase();
+    let says = |words: &[&str]| words.iter().any(|w| text.contains(w));
+    match status {
+        None => OnlineFailure::Unreachable,
+        Some(401 | 403) => OnlineFailure::KeyRefused,
+        Some(402) => OnlineFailure::NoCredit,
+        Some(404) => OnlineFailure::ModelMissing,
+        Some(429) => OnlineFailure::Busy,
+        Some(_) if says(NO_INTERNET) => OnlineFailure::NoInternet,
+        Some(_) if says(NOT_REACHED) => OnlineFailure::Unreachable,
+        Some(400) if text.contains("model") => OnlineFailure::ModelMissing,
+        Some(s @ 500..=599) => OnlineFailure::Other(s),
+        Some(_) => OnlineFailure::Refused,
+    }
 }
 
 #[cfg(test)]

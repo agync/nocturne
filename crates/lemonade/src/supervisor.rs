@@ -17,7 +17,8 @@ use crate::bundle::{self, Dirs};
 use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
 use crate::error::RuntimeError;
-use crate::online::CloudRoute;
+use crate::logpipe::{self, Redactor};
+use crate::online::{self, CloudRoute, RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON};
 use crate::{residency, selection};
 
 const PORT_TRIES: u32 = 5;
@@ -92,7 +93,51 @@ const QUICK_AFTER_TERM: Duration = Duration::from_millis(500);
 enum Cmd {
     Shutdown(oneshot::Sender<Result<(), RuntimeError>>, Stop),
     /// Stop the engine and start it again, so launch-time settings take effect.
-    Relaunch(oneshot::Sender<Result<(), RuntimeError>>),
+    Relaunch(Relaunch),
+}
+
+/// The answer to a relaunch, and what to put back if it fails.
+struct Relaunch {
+    reply: oneshot::Sender<Result<(), RuntimeError>>,
+    /// Set when this relaunch opens the download window: a relaunch that fails closes it
+    /// again, so a window that did not open never opens at a later restart. A failed close is
+    /// never undone: the window stays closed.
+    closes_on_failure: bool,
+    /// Set when this relaunch gives the engine a route: a relaunch that fails takes the route
+    /// away again, so no later restart launches the engine with the key unasked.
+    drops_cloud_on_failure: bool,
+}
+
+impl Relaunch {
+    fn new(reply: oneshot::Sender<Result<(), RuntimeError>>, closes_on_failure: bool) -> Self {
+        Relaunch {
+            reply,
+            closes_on_failure,
+            drops_cloud_on_failure: false,
+        }
+    }
+
+    fn with_route(reply: oneshot::Sender<Result<(), RuntimeError>>) -> Self {
+        Relaunch {
+            reply,
+            closes_on_failure: false,
+            drops_cloud_on_failure: true,
+        }
+    }
+
+    fn succeeded(self) {
+        let _ = self.reply.send(Ok(()));
+    }
+
+    fn failed(self, shared: &Shared, e: RuntimeError) {
+        if self.closes_on_failure {
+            shared.online.store(false, Ordering::SeqCst);
+        }
+        if self.drops_cloud_on_failure {
+            *shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        }
+        let _ = self.reply.send(Err(e));
+    }
 }
 
 struct Shared {
@@ -100,8 +145,11 @@ struct Shared {
     pid: AtomicU32,
     online: AtomicBool,
     ready_since: Mutex<Option<Instant>>,
-    /// The route for Online answers the next launch is to use. Not applied yet.
+    /// The route for Online answers every launch outside the download window uses.
     cloud: Mutex<Option<CloudRoute>>,
+    /// How long a relaunch for Online answers waits for model requests in flight to end: when
+    /// turning off, and when turning on or checking.
+    idle_waits: Mutex<(Duration, Duration)>,
     /// Holders of the download window, and the lock that keeps opening and closing it in order.
     holds: tokio::sync::Mutex<u32>,
 }
@@ -138,24 +186,72 @@ impl Control {
             return Ok(());
         }
         let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Relaunch(tx))
+        if self
+            .cmd
+            .send(Cmd::Relaunch(Relaunch::new(tx, online)))
             .await
-            .map_err(|_| RuntimeError::Unavailable)?;
+            .is_err()
+        {
+            if online {
+                self.shared.online.store(false, Ordering::SeqCst);
+            }
+            return Err(RuntimeError::Unavailable);
+        }
         rx.await.map_err(|_| RuntimeError::Unavailable)?
     }
 
     /// Sets the route for Online answers (`None` for off) and relaunches the engine, which reads
     /// providers only when it starts. Returns once the new one answers. A relaunch is not a
-    /// restart: it never counts toward the restart limit.
+    /// restart: it never counts toward the restart limit. It first waits, up to a limit, for
+    /// the model requests in flight (reading, the tidy, the voice) to end.
     pub async fn set_cloud(&self, route: Option<CloudRoute>) -> Result<(), RuntimeError> {
+        let (off, on) = *self
+            .shared
+            .idle_waits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let cap = if route.is_some() { on } else { off };
+        let until = Instant::now() + cap;
+        while self.client.busy_total() > 0 && Instant::now() < until {
+            tokio::time::sleep(LIVE_POLL).await;
+        }
+        let with_route = route.is_some();
         *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = route;
         let (tx, rx) = oneshot::channel();
-        self.cmd
-            .send(Cmd::Relaunch(tx))
-            .await
-            .map_err(|_| RuntimeError::Unavailable)?;
+        let relaunch = if with_route {
+            Relaunch::with_route(tx)
+        } else {
+            Relaunch::new(tx, false)
+        };
+        if self.cmd.send(Cmd::Relaunch(relaunch)).await.is_err() {
+            *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            return Err(RuntimeError::Unavailable);
+        }
         rx.await.map_err(|_| RuntimeError::Unavailable)?
+    }
+
+    /// Shorter waits for [`Control::set_cloud`], for tests.
+    #[doc(hidden)]
+    pub fn set_idle_waits(&self, off: Duration, on: Duration) {
+        *self
+            .shared
+            .idle_waits
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = (off, on);
+    }
+
+    /// Whether the download window is open: the engine then runs without the route.
+    pub fn download_window_open(&self) -> bool {
+        self.shared.online.load(Ordering::SeqCst)
+    }
+
+    /// Whether a route for Online answers is set for the launches outside the download window.
+    pub fn has_cloud(&self) -> bool {
+        self.shared
+            .cloud
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
     }
 
     /// Opens the download window for as long as the returned hold lives. Holds are counted: the
@@ -224,6 +320,8 @@ struct Running {
     child: Box<dyn ChildWrapper>,
     stdin: Option<ChildStdin>,
     pgid: u32,
+    /// Reads the engine's output into its log; ends with the process.
+    _log: Option<tokio::task::JoinHandle<()>>,
 }
 
 struct Actor {
@@ -259,6 +357,7 @@ impl Supervisor {
             online: AtomicBool::new(false),
             ready_since: Mutex::new(None),
             cloud: Mutex::new(cloud),
+            idle_waits: Mutex::new((RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON)),
             holds: tokio::sync::Mutex::new(0),
         });
         let (cmd_tx, cmd_rx) = mpsc::channel(4);
@@ -447,15 +546,13 @@ impl Actor {
         let mut first = Some(first);
         let mut crashes: VecDeque<Instant> = VecDeque::new();
         let mut attempt = 0u32;
-        let mut relaunch: Option<oneshot::Sender<Result<(), RuntimeError>>> = None;
+        let mut relaunch: Option<Relaunch> = None;
         loop {
             let launched = tokio::select! {
                 r = self.launch() => r,
                 c = cmd.recv() => {
                     match c {
-                        Some(Cmd::Relaunch(reply)) => {
-                            let _ = reply.send(Err(RuntimeError::Unavailable));
-                        }
+                        Some(Cmd::Relaunch(r)) => r.failed(&self.shared, RuntimeError::Unavailable),
                         Some(Cmd::Shutdown(reply, _)) => {
                             let _ = reply.send(Ok(()));
                         }
@@ -470,8 +567,8 @@ impl Actor {
                     if let Some(f) = first.take() {
                         let _ = f.send(Ok(()));
                     }
-                    if let Some(reply) = relaunch.take() {
-                        let _ = reply.send(Ok(()));
+                    if let Some(r) = relaunch.take() {
+                        r.succeeded();
                     }
                     match self.supervise(running, &mut cmd).await {
                         Exit::Shutdown => return,
@@ -485,8 +582,8 @@ impl Actor {
                     }
                 }
                 Err(e) => {
-                    if let Some(reply) = relaunch.take() {
-                        let _ = reply.send(Err(e.clone()));
+                    if let Some(r) = relaunch.take() {
+                        r.failed(&self.shared, e.clone());
                     }
                     if let Some(f) = first.take() {
                         self.set_state(RuntimeState::Stopped);
@@ -545,9 +642,7 @@ impl Actor {
                     let _ = reply.send(Ok(()));
                     return;
                 }
-                Cmd::Relaunch(reply) => {
-                    let _ = reply.send(Err(RuntimeError::Unavailable));
-                }
+                Cmd::Relaunch(r) => r.failed(&self.shared, RuntimeError::Unavailable),
             }
         }
     }
@@ -578,9 +673,16 @@ impl Actor {
             let ws_port = free_port(Some(port))?;
             let keys = Keys::new(new_key()?, new_key()?)?;
             let online = self.shared.online.load(Ordering::SeqCst);
-            // A download-window launch never carries the route. Until the route lands, no launch
-            // does: the stored route is not applied yet.
-            let cloud: Option<config::CloudEntry<'_>> = None;
+            // A download-window launch never carries the route: no entry, no row, no key.
+            let route: Option<CloudRoute> = if online {
+                None
+            } else {
+                self.shared
+                    .cloud
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone()
+            };
             let (llama, whisper) = read_backends(&self.dirs.config());
             let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
             config::write(
@@ -593,10 +695,10 @@ impl Actor {
                     llamacpp_backend: llama.as_deref(),
                     whispercpp_backend: whisper.as_deref(),
                     llamacpp_args: installed.map(config::llamacpp_args).unwrap_or(""),
-                    cloud,
+                    cloud: route.as_ref().map(online::entry),
                 },
             )?;
-            crate::online::write_row(&self.dirs.config(), None)?;
+            online::write_row(&self.dirs.config(), route.as_ref())?;
             let saved = residency::saved_options_for(&selection::read(&self.dirs.config()));
             let saved: Vec<(&str, _)> =
                 saved.iter().map(|(m, o)| (m.as_str(), o.clone())).collect();
@@ -605,7 +707,7 @@ impl Actor {
                 tracing::warn!("could not save the models' load options: {e}");
             }
             self.client.set_saved_options(saved);
-            let mut running = self.spawn(port, &keys)?;
+            let mut running = self.spawn(port, &keys, route.as_ref())?;
             match self
                 .await_ready(&mut running, port, ws_port, &keys.api)
                 .await
@@ -649,14 +751,19 @@ impl Actor {
         let _ = self.admin.set_endpoint(None);
     }
 
-    fn spawn(&self, port: u16, keys: &Keys) -> Result<Running, RuntimeError> {
+    /// Starts the engine. Its log goes to standard output, which the log pipe redacts into
+    /// `lemond.log`; the key, when there is a route, is in its environment and nowhere else.
+    fn spawn(
+        &self,
+        port: u16,
+        keys: &Keys,
+        route: Option<&CloudRoute>,
+    ) -> Result<Running, RuntimeError> {
         let mut cmd = Command::new(&self.exe);
         cmd.arg(self.dirs.cache())
             .arg(self.dirs.config())
             .args(["--port", &port.to_string()])
-            .args(["--host", "127.0.0.1", "--no-broadcast"])
-            .arg("--log-file")
-            .arg(self.dirs.logs().join("lemond.log"));
+            .args(["--host", "127.0.0.1", "--no-broadcast"]);
         #[cfg(unix)]
         cmd.args(["--watchdog-fd", "0"]);
         cmd.env_clear()
@@ -666,12 +773,18 @@ impl Actor {
             .env("LANG", "C.UTF-8")
             .env("LEMONADE_API_KEY", &keys.api)
             .env("LEMONADE_ADMIN_API_KEY", &keys.admin);
+        if let Some(r) = route {
+            cmd.env(online::KEY_ENV, r.key.expose());
+        }
+        // A redactor of its own for each launch: the key it hides is this launch's.
+        let redact = Arc::new(Redactor::new());
+        redact.set_key(route.map(|r| &r.key));
         #[cfg(windows)]
         if let Some(root) = std::env::var_os("SystemRoot") {
             cmd.env("SystemRoot", root);
         }
         cmd.stdin(Stdio::piped())
-            .stdout(Stdio::null())
+            .stdout(Stdio::piped())
             .stderr(Stdio::null());
         let mut wrap = CommandWrap::from(cmd);
         #[cfg(unix)]
@@ -684,7 +797,16 @@ impl Actor {
             .map_err(|e| RuntimeError::Start(format!("could not run lemond: {e}")))?;
         let pgid = child.id().unwrap_or(0);
         let stdin = child.stdin().take();
-        Ok(Running { child, stdin, pgid })
+        let log = child
+            .stdout()
+            .take()
+            .map(|out| logpipe::spawn(out, self.dirs.logs().join("lemond.log"), redact));
+        Ok(Running {
+            child,
+            stdin,
+            pgid,
+            _log: log,
+        })
     }
 
     async fn await_ready(
@@ -821,7 +943,7 @@ impl Actor {
 
 enum Exit {
     Shutdown,
-    Relaunch(oneshot::Sender<Result<(), RuntimeError>>),
+    Relaunch(Relaunch),
     Crashed(String),
 }
 

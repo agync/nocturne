@@ -61,6 +61,8 @@ impl Default for Timeouts {
 struct Shared {
     http: reqwest::Client,
     stream_http: reqwest::Client,
+    /// For online answers: never follows a redirect.
+    online_http: reqwest::Client,
     timeouts: Timeouts,
     endpoint: RwLock<Option<Endpoint>>,
     generation: AtomicU64,
@@ -161,10 +163,18 @@ impl Client {
             .no_proxy()
             .build()
             .expect("http client");
+        let online_http = reqwest::Client::builder()
+            .connect_timeout(timeouts.connect)
+            .timeout(timeouts.request)
+            .redirect(reqwest::redirect::Policy::none())
+            .no_proxy()
+            .build()
+            .expect("http client");
         Client {
             shared: Arc::new(Shared {
                 http,
                 stream_http,
+                online_http,
                 timeouts,
                 endpoint: RwLock::new(None),
                 generation: AtomicU64::new(0),
@@ -247,6 +257,17 @@ impl Client {
             }
         }
         unloaded
+    }
+
+    /// Requests to any model in flight now.
+    pub fn busy_total(&self) -> u32 {
+        self.shared
+            .activity
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .values()
+            .map(|a| a.busy)
+            .sum()
     }
 
     /// What this client last did with `model`, if anything since it was made.
@@ -594,6 +615,39 @@ impl ChatRequest {
     }
 }
 
+/// The body of an online question, and nothing more.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct OnlineRequest {
+    pub model: String,
+    pub messages: Vec<Message>,
+    pub temperature: f32,
+    pub max_tokens: u32,
+    /// Overall limit for this call.
+    #[serde(skip)]
+    pub timeout: Option<Duration>,
+}
+
+/// What came back from an online question that the engine answered with success.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OnlineReply {
+    pub status: u16,
+    pub text: String,
+    pub bytes_up: u64,
+    pub bytes_down: u64,
+    /// `usage.cost`, only when the provider reported it as a number.
+    pub cost_usd: Option<f64>,
+}
+
+/// A failed online question. `message` is the engine's own `error.message`; the provider's body
+/// is never kept. `status` is `None` when the engine itself did not answer.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OnlineCallError {
+    pub status: Option<u16>,
+    pub message: String,
+    pub bytes_up: u64,
+    pub bytes_down: u64,
+}
+
 /// The text of an answer as it arrives. A stream that ends before the engine says it is
 /// finished yields `RuntimeError::StreamCut` and then stops.
 pub type ChatStream = BoxStream<'static, Result<String, RuntimeError>>;
@@ -754,6 +808,61 @@ impl Client {
             .as_str()
             .map(str::to_string)
             .ok_or_else(|| RuntimeError::BadResponse("no message in the answer".into()))
+    }
+
+    /// One online question through the engine route: a non-streaming chat with exactly
+    /// `model`, `messages`, `temperature` and `max_tokens`, nothing else. The engine passes the
+    /// provider's status through; on failure only the engine's own `error.message` is kept,
+    /// never the provider's body (`error.details.response`), which can echo the key.
+    pub async fn chat_online(&self, req: &OnlineRequest) -> Result<OnlineReply, OnlineCallError> {
+        let body = serde_json::to_vec(req).unwrap_or_default();
+        let bytes_up = body.len() as u64;
+        let fail = |status: Option<u16>, message: String, bytes_down: u64| OnlineCallError {
+            status,
+            message,
+            bytes_up,
+            bytes_down,
+        };
+        let rb = self
+            .build(
+                &self.shared.online_http,
+                Method::POST,
+                "/v1/chat/completions",
+                true,
+            )
+            .map_err(|_| fail(None, String::new(), 0))?
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
+        let rb = match req.timeout {
+            Some(t) => rb.timeout(t),
+            None => rb,
+        };
+        let response = rb.send().await.map_err(|e| {
+            let message = if e.is_timeout() { "timed out" } else { "" };
+            fail(None, message.into(), 0)
+        })?;
+        let status = response.status().as_u16();
+        let bytes = response
+            .bytes()
+            .await
+            .map_err(|_| fail(Some(status), String::new(), 0))?;
+        let bytes_down = bytes.len() as u64;
+        if !(200..300).contains(&status) {
+            let (_, message) = parse_error(&String::from_utf8_lossy(&bytes));
+            return Err(fail(Some(status), message, bytes_down));
+        }
+        let v: Value = serde_json::from_slice(&bytes)
+            .map_err(|_| fail(Some(status), String::new(), bytes_down))?;
+        Ok(OnlineReply {
+            status,
+            text: v["choices"][0]["message"]["content"]
+                .as_str()
+                .unwrap_or_default()
+                .to_string(),
+            bytes_up,
+            bytes_down,
+            cost_usd: v["usage"]["cost"].as_f64(),
+        })
     }
 
     /// An answer constrained to `schema` and parsed into `T`.
@@ -1003,10 +1112,16 @@ fn map_transport(e: reqwest::Error) -> RuntimeError {
     }
 }
 
-/// Reads `{"error": "text"}` and `{"error": {"message", "code"}}` alike.
+/// How much of an error body that is not JSON is kept: enough to tell what kind of failure it
+/// was, never a whole body.
+const UNPARSED_KEPT: usize = 120;
+
+/// Reads `{"error": "text"}` and `{"error": {"message", "code"}}` alike. Only `code` and
+/// `message` are kept: `details` can carry an upstream body. A body that is not JSON keeps only
+/// the start of its first line.
 fn parse_error(text: &str) -> (String, String) {
     let Ok(v) = serde_json::from_str::<Value>(text) else {
-        return (String::new(), text.trim().to_string());
+        return (String::new(), unparsed_start(text));
     };
     match &v["error"] {
         Value::String(s) => (v["code"].as_str().unwrap_or("").to_string(), s.clone()),
@@ -1020,8 +1135,17 @@ fn parse_error(text: &str) -> (String, String) {
                 .unwrap_or("")
                 .to_string(),
         ),
-        _ => (String::new(), text.trim().to_string()),
+        _ => (String::new(), String::new()),
     }
+}
+
+fn unparsed_start(text: &str) -> String {
+    let line = text.trim().lines().next().unwrap_or_default();
+    let mut end = line.len().min(UNPARSED_KEPT);
+    while !line.is_char_boundary(end) {
+        end -= 1;
+    }
+    line[..end].to_string()
 }
 
 /// What a failed `/v1/load` means: a model that would not load (and whether it ran out of
@@ -1080,6 +1204,36 @@ mod tests {
 
     fn body(code: &str, message: &str) -> String {
         json!({"error": {"code": code, "message": message}}).to_string()
+    }
+
+    #[test]
+    fn an_error_keeps_its_message_and_never_the_details() {
+        let echoed = "sk-or-v1-0123456789abcdef0123456789abcdef";
+        let body = json!({"error": {
+            "message": "cloud (nocturne_online) request failed",
+            "type": "backend_error",
+            "details": {"status_code": 401, "response": {"error": {"message": echoed}}},
+        }})
+        .to_string();
+        let (_, message) = parse_error(&body);
+        assert_eq!(message, "cloud (nocturne_online) request failed");
+        let shown = map_status(500, &body).to_string();
+        assert!(!shown.contains("0123456789abcdef"), "{shown}");
+        let (_, other) = parse_error(&json!({"detail": echoed}).to_string());
+        assert!(other.is_empty());
+    }
+
+    #[test]
+    fn a_body_that_is_not_json_keeps_only_the_start_of_its_first_line() {
+        let long = format!(
+            "out of memory {}\nsecond line {}",
+            "x".repeat(400),
+            "sk-secret"
+        );
+        let (_, message) = parse_error(&long);
+        assert!(message.starts_with("out of memory"));
+        assert!(message.len() <= UNPARSED_KEPT);
+        assert!(!message.contains("sk-secret"));
     }
 
     #[test]
