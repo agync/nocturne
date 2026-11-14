@@ -647,6 +647,65 @@ fn download_window_answers_here() {
     assert!(l.questions().is_empty());
 }
 
+/// An engine that restarted and did not take its route (its key request failed): nothing goes
+/// out, the question is answered here, and Online answers shows a problem until a launch takes
+/// the route again.
+#[test]
+fn a_route_the_engine_did_not_take_sends_nothing() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    let before = l.chats().len();
+    l.port.set_route_taken(Some(false));
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, here(LocalReason::Problem));
+    assert_eq!(l.chats().len(), before, "nothing reached the provider");
+    let view = l.h.ok("get_online", json!({}));
+    assert_eq!(view["state"]["type"], "problem", "{view}");
+    assert_eq!(view["state"]["code"], "unreachable", "{view}");
+    // A later launch took it: the problem lifts and the next question goes online.
+    l.port.set_route_taken(Some(true));
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
+    assert_eq!(l.chats().len(), before + 1);
+}
+
+/// Turning on with a route the engine refuses: no question goes out, and "Try again" gives the
+/// engine the route again.
+#[test]
+fn a_refused_key_request_keeps_the_gate_closed() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    let calls = l.port.calls();
+    l.port
+        .refuse
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    l.h.ok("turn_off_online", json!({"forget": false}));
+    let view = l.h.ok(
+        "turn_on_online",
+        json!({"settings": {"phones": true, "sendSensitive": false,
+                            "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
+    );
+    assert_eq!(view["state"]["type"], "problem", "{view}");
+    let before = l.chats().len();
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, here(LocalReason::Problem));
+    assert_eq!(l.chats().len(), before, "nothing reached the provider");
+    l.port
+        .refuse
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    let view = l.h.ok(
+        "turn_on_online",
+        json!({"settings": {"phones": true, "sendSensitive": false,
+                            "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
+    );
+    assert_eq!(view["state"]["type"], "on", "{view}");
+    assert!(l.port.calls() > calls + 2, "each try relaunched the engine");
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
+}
+
 /// Turned off after the question's route was chosen and before it was sent: nothing goes out,
 /// and this computer answers.
 #[test]
