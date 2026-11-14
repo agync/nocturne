@@ -122,29 +122,39 @@ never started by a push.
 
 | Input | Default | Meaning |
 |---|---|---|
-| `ref` | the triggering ref | The tag, branch or commit to build |
+| `ref` | the triggering ref | The tag, branch or commit to build; resolved to one commit that every job builds |
+| `tag` | none (called only) | The release tag `ref` came from, needed to publish to stable |
 | `channel` | `stable` when called, `beta` by hand | The Flatpak branch |
-| `publish` | `false` | Push the images and deploy the index; without it the build is checked and a `.flatpak` bundle is uploaded as a workflow artefact |
+| `publish` | `false` | Push the images and deploy the index; without it the build is checked and a `.flatpak` bundle is uploaded as a workflow artefact. Publishing to `stable` needs a `v*` release tag that points at the commit; any other publish goes to `beta` |
 
 Its jobs:
 
-1. `sources` generates the offline sources and hands them on as an artefact.
-2. `build` runs AetherPak's build (with `flatpak-builder-lint`) in the AetherPak builder
-   container, which is privileged and pinned by digest. It sees no secret and cannot push; it
-   hands the unsigned repository on as an artefact.
-3. `publish`, when publishing, runs in the `release-signing` environment in the same container
-   image without privileges. It signs the images with the key and pushes them, and records them.
-4. `site` merges the records with the index already live at `https://nocturne.is/flatpak` and
-   uploads the site as a Pages artefact. It also runs in `release-signing`.
-5. `deploy` deploys it to GitHub Pages.
+1. `resolve` turns `ref` into one commit and refuses a stable publish that is not a release tag
+   pointing at it. Every later job checks out that commit.
+2. `sources` generates the offline sources and hands them on as an artefact.
+3. `build` runs AetherPak's build (with `flatpak-builder-lint`) in the AetherPak builder
+   container, which is privileged and pinned by digest. It sees no secret and cannot push. When
+   publishing, it hands the unsigned repository on as an artefact and turns the build cache off.
+   It still uses the AetherPak build action, whose own setup and cache actions are not pinned;
+   that is acceptable only because nothing secret is reachable from this job.
+4. `publish`, when publishing, runs in the `release-signing` environment in the same container
+   image without privileges. It fails if the key is empty, then signs the images and pushes them
+   with the image's own `aetherpak push-oci`, so no third-party action sees the key.
+5. `site` runs in `release-signing` in the same image. It merges the records with the index live
+   at `https://nocturne.is/flatpak`, signs it with `aetherpak build-site` and hands the site on
+   as an artefact.
+6. `deploy` publishes that artefact to GitHub Pages.
 
-A caller grants `contents: read`, `packages: write`, `pages: write` and `id-token: write`, and
-passes the two optional secrets by name: `FLATPAK_GPG_PRIVATE_KEY` and `FLATPAK_GPG_PASSPHRASE`.
-Only `publish` and `site` read them. With a key, every image is signed and the index carries the
-public key and signature lookaside; without one, the repository is unsigned.
+A caller grants `contents: read`, `packages: write`, `pages: write` and `id-token: write`. The two
+secrets, `FLATPAK_GPG_PRIVATE_KEY` and `FLATPAK_GPG_PASSPHRASE`, live in the `release-signing`
+environment and are read only by `publish` and `site`; no caller passes them. Publishing without
+a key fails, so the repository is never unsigned. Unprivileged jobs in the pinned image need no
+extra runner setup.
 
 Before the first publish, a maintainer:
 
+- runs the workflow by hand once with channel `beta` and publish on, to prove signing, the push
+  and the index against the real registry before a release depends on them;
 - allows public packages for the organisation, then makes `nocturne-flatpak` public after the
   first push, so people can install without signing in to GitHub;
 - points `nocturne.is` at this repository's GitHub Pages, or replaces the `deploy` job with a copy

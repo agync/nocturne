@@ -8,8 +8,8 @@ tags: [contribution, release, checklist, ci]
 
 # Releasing
 
-Releases are cut by release-please and built by the release workflow
-(`.github/workflows/release.yml`). A human still runs the checklist below against the release pull
+Releases are cut by release-please (`.github/workflows/release-please.yml`) and built by the
+release workflow (`.github/workflows/release.yml`). A human still runs the checklist below against the release pull
 request and approves it; merging that pull request is the decision to publish.
 
 ## How a release is cut
@@ -17,13 +17,20 @@ request and approves it; merging that pull request is the decision to publish.
 1. Every push to `main` runs release-please. It reads the Conventional Commits since the last
    release and opens or updates one release pull request. That pull request moves the version in
    the workspace `Cargo.toml` and `ui/package.json`, brings `Cargo.lock` and `ui/package-lock.json`
-   to it, and adds the release notes to `CHANGELOG.md`. Before 1.0 a `feat` moves the minor version
+   to it, adds a release entry to the Flatpak metainfo (the same job does that, since
+   release-please does not know the file) and adds the release notes to `CHANGELOG.md`. Before 1.0 a `feat` moves the minor version
    and anything else the patch version.
 2. A human runs the checklist below on the release pull request's branch, then merges it.
-3. release-please tags the merge (`v<version>`) and creates the release page with the notes.
-4. The same run builds the packages, checks them and attaches them to the release with one
-   `SHA256SUMS`. It also calls `tailnet.yml` for the Most private helper and, for a release only,
-   `flatpak.yml` for the Flatpak, which publishes to its own repository.
+3. release-please tags the merge (`v<version>`) and creates the release page with the notes as a
+   draft.
+4. The tag push starts the release workflow, which builds the packages, checks them and attaches
+   them to the draft with one `SHA256SUMS`. It also calls `tailnet.yml` for the Most private helper
+   and, for a tag push only, `flatpak.yml` for the Flatpak, which publishes to its own repository.
+5. When every file is attached and the Flatpak is published, the last job publishes the draft.
+   A failed run leaves the draft in place.
+
+release-please runs in its own workflow, so the release workflow, which can wait days for a signing
+approval, never blocks or cancels it.
 
 The configuration is `release-please-config.json` (release type `simple`, the version files it
 moves and the changelog path) and `.release-please-manifest.json` (the current version, which only
@@ -31,7 +38,8 @@ release-please changes). The version keeps one source for the app: the workspace
 `tauri.conf.json` carries none, and the packaging script refuses to run if it ever does.
 
 The release pull request and the tags are made by a GitHub App, not by the workflow's own token,
-so that its events start the other workflows. The release workflow can also be run by hand. With
+so that its events (the tag push) start the other workflows. The upload and publish jobs ask the
+App for a token limited to contents write; the workflow's own token is read-only there. The release workflow can also be run by hand. With
 `tag` set to an existing release tag (`vX.Y.Z`, with a release page) it builds that tag, signs when
 signing is on and attaches the files to its release; any other value fails. With `tag` empty it
 builds the chosen branch unsigned, runs no signing job and the helper workflow not at all, and
@@ -79,6 +87,8 @@ set to `true`. When one is on, its signing job must succeed or nothing is attach
 |---|---|---|---|
 | `RELEASE_APP_ID` | repository | the release bot: the GitHub App's id | release-please and the upload fail |
 | `RELEASE_APP_PRIVATE_KEY` | repository | the release bot: the App's private key | release-please and the upload fail |
+| `FLATPAK_GPG_PRIVATE_KEY` | `release-signing` | the ASCII-armoured key that signs the Flatpak images and index | the Flatpak publish fails; it never publishes unsigned |
+| `FLATPAK_GPG_PASSPHRASE` | `release-signing` | the key's passphrase, if it has one | signing fails for a protected key |
 | `MACOS_DEVELOPER_ID_CERTIFICATE` | `release-signing` | the Developer ID Application certificate, a base64 `.p12` | with `MACOS_SIGNING` on, the signing job fails |
 | `MACOS_DEVELOPER_ID_PASSWORD` | `release-signing` | the `.p12` password | as above |
 | `MACOS_DEVELOPER_ID_IDENTITY` | `release-signing` | the identity name, `Developer ID Application: <name> (<team>)` | as above |
