@@ -23,7 +23,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc};
 
-use crate::client::{ChatRequest, Client, LoadOptions, Message};
+use crate::client::{ChatReply, ChatRequest, Client, LoadOptions, Message};
 use crate::error::RuntimeError;
 use crate::selection::Picks;
 
@@ -32,6 +32,14 @@ use cite::CiteFilter;
 const MAX_IMAGE_EDGE: u32 = 2048;
 const MAX_AUDIO_SECONDS: f64 = 2.0 * 3600.0;
 const EXTRACT_ATTEMPTS: usize = 2;
+/// How many times a reading cut off at its token ceiling is halved and read again in parts.
+const MAX_SPLITS: u32 = 2;
+
+/// The token ceiling for reading `text`: room for a memory or two per sentence, and no more,
+/// so a reply that loops stops early.
+fn extract_tokens(text: &str) -> u32 {
+    (512 + text.chars().count() * 3 / 2).clamp(1024, 3072) as u32
+}
 
 /// What has been checked or loaded since the engine last (re)started.
 #[derive(Default)]
@@ -135,9 +143,9 @@ impl LemonadeMind {
         self.seen.lock().await.loaded.clear();
     }
 
-    async fn chat_text(&self, req: &ChatRequest) -> Result<String, MindError> {
-        match self.client.chat_complete(req).await {
-            Ok(t) => Ok(t),
+    async fn chat_whole(&self, req: &ChatRequest) -> Result<ChatReply, MindError> {
+        match self.client.chat_reply(req).await {
+            Ok(r) => Ok(r),
             Err(e) => {
                 if matches!(e, RuntimeError::Unavailable | RuntimeError::StreamCut) {
                     self.forget_loaded().await;
@@ -145,6 +153,15 @@ impl LemonadeMind {
                 Err(e.into())
             }
         }
+    }
+
+    /// A reading request: the item's grammar, and a ceiling that suits `text`.
+    fn extract_request(&self, model: &str, messages: Vec<Message>, text: &str) -> ChatRequest {
+        let mut req = ChatRequest::new(model, messages).sampled(&self.sampling.extract);
+        req.max_tokens = Some(extract_tokens(text));
+        req.timeout = Some(self.client.timeouts().json);
+        req.grammar = Some(prompts::extraction_grammar());
+        req
     }
 
     async fn extract_impl(
@@ -156,59 +173,162 @@ impl LemonadeMind {
             return Ok(Vec::new());
         }
         let model = self.warm_mind().await?;
-        let nonce = prompts::nonce();
-        let source = normalise(text);
-        let mut messages = vec![
-            Message::system(&prompts::extraction_system(&nonce)),
-            Message::user(&prompts::extraction_user(text, cx, &nonce)),
-        ];
-        let mut last_error = String::new();
-        // What a reply got right is kept; a retry asks again only for what was wrong.
-        let mut kept: Vec<Candidate> = Vec::new();
-        for attempt in 0..EXTRACT_ATTEMPTS {
-            let mut req = ChatRequest::new(&model, messages.clone());
-            req.temperature = Some(0.0);
-            req.max_tokens = Some(2048);
-            req.timeout = Some(self.client.timeouts().json);
-            req.response_format = Some(crate::client::json_schema_format(
-                &prompts::extraction_schema(),
-            ));
-            let reply = self.chat_text(&req).await?;
-            match parse_candidates(&reply, &source) {
-                Ok((items, invalid)) if invalid.is_empty() => return Ok(merged(kept, items)),
-                Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
-                    tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
-                    return Ok(merged(kept, items));
+        let found = self.extract_part(&model, text, cx, 0).await?;
+        self.second_look(&model, text, cx, found).await
+    }
+
+    /// One reading of `text`, asked again once for the memories that were not valid. A reply
+    /// cut off at its ceiling is read again in halves, `depth` times at most, and after that
+    /// keeps the whole memories it holds.
+    fn extract_part<'a>(
+        &'a self,
+        model: &'a str,
+        text: &'a str,
+        cx: &'a ExtractContext,
+        depth: u32,
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        Box::pin(async move {
+            let nonce = prompts::nonce();
+            let source = normalise(text);
+            let mut messages = vec![
+                Message::system(&prompts::extraction_system(&nonce)),
+                Message::user(&prompts::extraction_user(text, cx, &nonce)),
+            ];
+            let mut last_error = String::new();
+            // What a reply got right is kept; a retry asks again only for what was wrong.
+            let mut kept: Vec<Candidate> = Vec::new();
+            for attempt in 0..EXTRACT_ATTEMPTS {
+                let req = self.extract_request(model, messages.clone(), text);
+                let reply = self.chat_whole(&req).await?;
+                let parsed = parse_candidates(&reply.text, &source);
+                let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
+                if cut {
+                    return self
+                        .read_in_parts(model, text, cx, depth, kept, &reply.text)
+                        .await;
                 }
-                Ok((items, invalid)) => {
-                    kept = merged(kept, items);
-                    last_error = invalid.join("; ");
-                }
-                Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
-                    if !kept.is_empty() {
-                        tracing::warn!("the retry was unreadable; keeping the first answer");
-                        return Ok(kept);
+                match parsed {
+                    Ok((items, invalid)) if invalid.is_empty() => return Ok(merged(kept, items)),
+                    Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                        tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
+                        return Ok(merged(kept, items));
                     }
-                    return Err(MindError::Failed(format!("unusable extraction: {e}")));
+                    Ok((items, invalid)) => {
+                        kept = merged(kept, items);
+                        last_error = invalid.join("; ");
+                    }
+                    Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                        if !kept.is_empty() {
+                            tracing::warn!("the retry was unreadable; keeping the first answer");
+                            return Ok(kept);
+                        }
+                        return Err(MindError::Failed(format!("unusable extraction: {e}")));
+                    }
+                    Err(e) => {
+                        // The parser's words can quote the model; the retry names none of them.
+                        tracing::warn!("an unreadable extraction: {e}");
+                        last_error = "the reply did not match the format".into();
+                    }
                 }
-                Err(e) => {
-                    // The parser's words can quote the model; the retry names none of them.
-                    tracing::warn!("an unreadable extraction: {e}");
-                    last_error = "the reply did not match the format".into();
-                }
+                messages.push(Message {
+                    role: "assistant".into(),
+                    content: Value::String(reply.text),
+                });
+                messages.push(Message::user(&format!(
+                    "That was not valid: {last_error}. Reply again with JSON only, matching the schema, \
+                     with just those memories corrected; the others are kept."
+                )));
             }
-            messages.push(Message {
-                role: "assistant".into(),
-                content: Value::String(reply),
-            });
-            messages.push(Message::user(&format!(
-                "That was not valid: {last_error}. Reply again with JSON only, matching the schema, \
-                 with just those memories corrected; the others are kept."
-            )));
+            Err(MindError::Failed(format!(
+                "unusable extraction: {last_error}"
+            )))
+        })
+    }
+
+    /// A reply to `text` was cut off: each half of `text` is read on its own, or, when it
+    /// cannot be split again, the whole memories the cut reply holds are kept.
+    async fn read_in_parts(
+        &self,
+        model: &str,
+        text: &str,
+        cx: &ExtractContext,
+        depth: u32,
+        kept: Vec<Candidate>,
+        cut_reply: &str,
+    ) -> Result<Vec<Candidate>, MindError> {
+        let halves = if depth < MAX_SPLITS {
+            halves(text)
+        } else {
+            None
+        };
+        let Some((first, second)) = halves else {
+            let whole = merged(kept, salvage(cut_reply, &normalise(text)));
+            tracing::warn!("a reading was cut off; kept {} whole memories", whole.len());
+            if whole.is_empty() {
+                return Err(MindError::Failed("the reading was cut off".into()));
+            }
+            return Ok(whole);
+        };
+        tracing::warn!("a reading was cut off; reading the item in two parts");
+        let mut out = kept;
+        let mut failed = None;
+        for part in [first, second] {
+            match self.extract_part(model, part, cx, depth + 1).await {
+                Ok(found) => out = merged(out, found),
+                Err(MindError::Failed(why)) => failed = Some(why),
+                Err(e) => return Err(e),
+            }
         }
-        Err(MindError::Failed(format!(
-            "unusable extraction: {last_error}"
-        )))
+        match failed {
+            Some(why) if out.is_empty() => Err(MindError::Failed(why)),
+            _ => Ok(out),
+        }
+    }
+
+    /// One more look at the item, when the memories leave out a number or name it gives, or
+    /// lose who someone is to the person: the mind is shown those lines and asked for their
+    /// facts. Asked once; whatever goes wrong with it, the first reading stands.
+    async fn second_look(
+        &self,
+        model: &str,
+        text: &str,
+        cx: &ExtractContext,
+        found: Vec<Candidate>,
+    ) -> Result<Vec<Candidate>, MindError> {
+        let said: Vec<String> = found.iter().map(said_by).collect();
+        // A role in the quote alone is lost: the quote is not what the answer is given.
+        let told: Vec<String> = found
+            .iter()
+            .map(|c| format!("{} | {} | {}", c.subject, c.sentence, c.object))
+            .collect();
+        let mut lines = guard::uncovered(text, &said);
+        for line in guard::lost_roles(text, &told) {
+            if !lines.contains(&line) {
+                lines.push(line);
+            }
+        }
+        if lines.is_empty() {
+            return Ok(found);
+        }
+        let nonce = prompts::nonce();
+        let messages = vec![
+            Message::system(&prompts::extraction_system(&nonce)),
+            Message::user(&prompts::focus_user(text, cx, &nonce, &lines)),
+        ];
+        let req = self.extract_request(model, messages, &lines.join("\n"));
+        let reply = match self.chat_whole(&req).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("the second look at an item failed: {e}");
+                return Ok(found);
+            }
+        };
+        let source = normalise(text);
+        let more = match parse_candidates(&reply.text, &source) {
+            Ok((items, _)) => items,
+            Err(_) => salvage(&reply.text, &source),
+        };
+        Ok(with_roles_kept(found, more))
     }
 
     async fn answer_impl(
@@ -500,6 +620,100 @@ fn merged(mut kept: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
     kept
 }
 
+/// What a memory says, for telling whether the item's words were kept: its quote, subject,
+/// sentence and object.
+fn said_by(c: &Candidate) -> String {
+    let quote = match &c.span {
+        Some(Span::Quote { text }) => text.as_str(),
+        _ => "",
+    };
+    format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
+}
+
+/// `more` added to `found`. A memory `found` already has is taken from `more` instead only when
+/// it keeps who someone is to the person and the one found did not.
+fn with_roles_kept(mut found: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
+    let key = |c: &Candidate| {
+        (
+            normalise(&c.subject),
+            c.predicate.as_str().to_string(),
+            normalise(&c.object),
+        )
+    };
+    let role_count = |c: &Candidate| guard::role_words(&format!("{} {}", c.sentence, c.object));
+    for c in more {
+        match found.iter_mut().find(|k| key(k) == key(&c)) {
+            Some(old) if role_count(&c) > role_count(old) => *old = c,
+            Some(_) => {}
+            None => found.push(c),
+        }
+    }
+    found
+}
+
+/// `text` in two parts of about the same length, split between lines or else between
+/// sentences. `None` for a single sentence.
+fn halves(text: &str) -> Option<(&str, &str)> {
+    let middle = text.len() / 2;
+    let mut cuts: Vec<usize> = text.match_indices('\n').map(|(i, _)| i + 1).collect();
+    if cuts.iter().all(|&c| c >= text.trim_end().len()) {
+        cuts = text
+            .match_indices(['.', '!', '?'])
+            .map(|(i, _)| i + 1)
+            .filter(|&i| text[i..].starts_with(char::is_whitespace))
+            .collect();
+    }
+    let cut = cuts
+        .into_iter()
+        .filter(|&c| !text[..c].trim().is_empty() && !text[c..].trim().is_empty())
+        .min_by_key(|&c| c.abs_diff(middle))?;
+    Some((text[..cut].trim(), text[cut..].trim()))
+}
+
+/// The whole, valid and grounded memories in a reply that was cut off part way.
+fn salvage(reply: &str, source: &str) -> Vec<Candidate> {
+    let Some(start) = reply.find('[') else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    let (mut depth, mut in_string, mut escaped, mut open) = (0usize, false, false, None);
+    for (i, ch) in reply[start + 1..].char_indices() {
+        let at = start + 1 + i;
+        if in_string {
+            match (escaped, ch) {
+                (true, _) => escaped = false,
+                (false, '\\') => escaped = true,
+                (false, '"') => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        match ch {
+            '"' => in_string = true,
+            '{' => {
+                if depth == 0 {
+                    open = Some(at);
+                }
+                depth += 1;
+            }
+            '}' if depth > 0 => {
+                depth -= 1;
+                if depth == 0
+                    && let Some(from) = open.take()
+                    && let Ok(raw) = serde_json::from_str::<Value>(&reply[from..=at])
+                    && let Ok(c) = candidate(&raw)
+                    && grounded(&c, source)
+                {
+                    out.push(c);
+                }
+            }
+            ']' if depth == 0 => break,
+            _ => {}
+        }
+    }
+    out
+}
+
 /// Lower case, with every run of non-alphanumeric characters made one space.
 fn normalise(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -617,7 +831,13 @@ fn candidate(raw: &Value) -> Result<Candidate, String> {
         sentence,
         valid_from: date_field(raw, "validFrom")?,
         valid_to: date_field(raw, "validTo")?,
-        due: date_field(raw, "due")?,
+        due: date_field(raw, "due")?.filter(|d| {
+            let quote = match &span {
+                Some(Span::Quote { text }) => text.as_str(),
+                _ => "",
+            };
+            guard::day_supported(*d, quote)
+        }),
         confidence,
         span,
         tags,
@@ -859,6 +1079,7 @@ impl Mind for LemonadeMind {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn the_worked_example_is_a_reply_the_mind_would_keep_whole() {
@@ -882,6 +1103,100 @@ mod tests {
         );
         let system = prompts::extraction_system("n");
         assert!(system.contains("Keep the words that say who someone is to the person"));
+    }
+
+    /// The grammar writes each memory's keys in reading order, the quote first, and the worked
+    /// example the prompt shows is written the same way.
+    #[test]
+    fn memories_are_written_in_reading_order_within_bounds() {
+        let grammar = prompts::extraction_grammar();
+        let memory = grammar
+            .lines()
+            .find(|l| l.starts_with("memory ::="))
+            .unwrap();
+        let at: Vec<usize> = prompts::MEMORY_KEYS
+            .iter()
+            .map(|k| memory.find(&format!("\"\\\"{k}\\\"\"")).unwrap())
+            .collect();
+        assert!(at.windows(2).all(|w| w[0] < w[1]), "{memory}");
+        assert!(grammar.contains("char{1,300}"), "{grammar}");
+        assert!(grammar.contains("(\",\" ws memory){0,15}"), "{grammar}");
+        let example: Value = serde_json::from_str(prompts::EXAMPLE_REPLY).unwrap();
+        let reply = prompts::EXAMPLE_REPLY;
+        let first = &example["memories"][0];
+        let mut last = 0;
+        for k in prompts::MEMORY_KEYS {
+            assert!(first.get(k).is_some(), "{k}");
+            let pos = reply.find(&format!("\"{k}\":")).unwrap();
+            assert!(pos > last || k == "span", "{k} out of order");
+            last = pos;
+        }
+    }
+
+    #[test]
+    fn a_day_the_quote_does_not_name_is_dropped_and_the_memory_kept() {
+        let raw = |due: &str, quote: &str| {
+            json!({"span": {"quote": quote}, "sentence": "Book club meets.", "subject": "Book club",
+                "subjectKind": "thing", "predicate": "scheduled", "object": "first Tuesday",
+                "due": due, "validFrom": null, "validTo": null, "moved": false,
+                "confidence": 0.9, "tags": []})
+        };
+        let c = candidate(&raw("2026-11-12", "book club is on the first Tuesday")).unwrap();
+        assert_eq!(c.due, None);
+        let c = candidate(&raw("2026-11-17", "book club is on Tuesday 17 November")).unwrap();
+        assert_eq!(c.due, Some("2026-11-17".parse().unwrap()));
+    }
+
+    #[test]
+    fn the_whole_memories_of_a_cut_reply_are_kept() {
+        let source = normalise(prompts::EXAMPLE_NOTE);
+        let cut = &prompts::EXAMPLE_REPLY[..prompts::EXAMPLE_REPLY.len() - 60];
+        assert!(parse_candidates(cut, &source).is_err());
+        let kept = salvage(cut, &source);
+        assert_eq!(kept.len(), 2, "{kept:?}");
+        assert_eq!(kept[1].subject, "Dr Patel");
+        assert!(salvage("{\"memories\": [{\"span\": {\"quote\": \"a}b", &source).is_empty());
+    }
+
+    #[test]
+    fn an_item_halves_between_lines_or_else_between_sentences() {
+        assert_eq!(
+            halves("one\ntwo\nthree\nfour"),
+            Some(("one\ntwo", "three\nfour"))
+        );
+        assert_eq!(
+            halves("First fact here. Second fact. Third fact here."),
+            Some(("First fact here. Second fact.", "Third fact here."))
+        );
+        assert_eq!(halves("One sentence only."), None);
+        assert_eq!(halves("One line\n"), None);
+    }
+
+    #[test]
+    fn a_second_look_adds_new_memories_and_restores_a_lost_role() {
+        let c = |sentence: &str, object: &str| {
+            Candidate::new("Hughes", Predicate::Scheduled, object, sentence, 0.9)
+        };
+        let found = vec![c("Mr Hughes is coming on Friday.", "Friday")];
+        let more = vec![
+            c("The plumber, Mr Hughes, is coming on Friday.", "Friday"),
+            c("Mr Hughes will fix the tap.", "fix the tap"),
+        ];
+        let out = with_roles_kept(found.clone(), more);
+        assert_eq!(out.len(), 2);
+        assert!(out[0].sentence.starts_with("The plumber"));
+        let out = with_roles_kept(out, found);
+        assert!(
+            out[0].sentence.starts_with("The plumber"),
+            "never swapped back"
+        );
+    }
+
+    #[test]
+    fn the_token_ceiling_grows_with_the_item_and_stays_bounded() {
+        assert_eq!(extract_tokens("Sam likes tea"), 1024);
+        assert_eq!(extract_tokens(&"x".repeat(1000)), 2012);
+        assert_eq!(extract_tokens(&"x".repeat(6000)), 3072);
     }
 
     #[test]

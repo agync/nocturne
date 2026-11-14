@@ -88,42 +88,79 @@ pub const PREDICATES: [(&str, &str); 10] = [
     ("happened", "something that took place"),
 ];
 
-pub fn extraction_schema() -> Value {
-    let date = json!({"type": ["string", "null"], "description": "YYYY-MM-DD or null"});
-    json!({
-        "type": "object",
-        "properties": {
-            "memories": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "sentence": {"type": "string"},
-                        "subject": {"type": "string"},
-                        "subjectKind": {"type": ["string", "null"], "enum": ["person", "place", "thing", null]},
-                        "predicate": {"type": "string"},
-                        "object": {"type": "string"},
-                        "validFrom": date,
-                        "validTo": date,
-                        "due": date,
-                        "confidence": {"type": "number"},
-                        "span": {
-                            "type": "object",
-                            "properties": {"quote": {"type": "string", "minLength": 1}},
-                            "required": ["quote"]
-                        },
-                        "tags": {"type": "array", "items": {"type": "string"}},
-                        "moved": {"type": "boolean"}
-                    },
-                    "required": [
-                        "sentence", "subject", "subjectKind", "predicate", "object", "validFrom",
-                        "validTo", "due", "confidence", "span", "tags", "moved"
-                    ]
-                }
-            }
-        },
-        "required": ["memories"]
-    })
+/// The longest a memory's sentence, subject, object or quote may be, in characters.
+pub const MAX_TEXT: usize = 300;
+/// The most memories one reply may hold.
+pub const MAX_MEMORIES: usize = 16;
+const MAX_PREDICATE: usize = 40;
+const MAX_TAG: usize = 30;
+const MAX_TAGS: usize = 6;
+
+/// The keys of a memory, in the order the reply must write them: the item's own words first,
+/// then the sentence made from them, who or what it is about, what is said of it, its dates,
+/// and the judgements last. A model writes each key with all the keys before it in view, so
+/// the quote comes before anything it supports.
+pub const MEMORY_KEYS: [&str; 12] = [
+    "span",
+    "sentence",
+    "subject",
+    "subjectKind",
+    "predicate",
+    "object",
+    "due",
+    "validFrom",
+    "validTo",
+    "moved",
+    "confidence",
+    "tags",
+];
+
+/// The rule (in [`extraction_grammar`]) that each memory key's value follows.
+fn value_rule(key: &str) -> &'static str {
+    match key {
+        "span" => "span",
+        "sentence" | "subject" | "object" => "text",
+        "subjectKind" => "kind",
+        "predicate" => "predicate",
+        "due" | "validFrom" | "validTo" => "date",
+        "moved" => "boolean",
+        "confidence" => "confidence",
+        _ => "tags",
+    }
+}
+
+/// The GBNF grammar an extraction reply must follow: `{"memories": [...]}` with every key of
+/// every memory present, in [`MEMORY_KEYS`] order, every text at most [`MAX_TEXT`] characters
+/// and at most [`MAX_MEMORIES`] memories. Sent as a grammar rather than a JSON schema because
+/// the engine sorts a schema's keys on the way to llama.cpp.
+pub fn extraction_grammar() -> String {
+    let fields: Vec<String> = MEMORY_KEYS
+        .iter()
+        .map(|k| format!(r#""\"{k}\"" ws ":" ws {}"#, value_rule(k)))
+        .collect();
+    format!(
+        r#"root ::= "{{" ws "\"memories\"" ws ":" ws "[" ws memories? "]" ws "}}"
+memories ::= memory ("," ws memory){{0,{more}}}
+memory ::= "{{" ws {fields} "}}" ws
+span ::= "{{" ws "\"quote\"" ws ":" ws text "}}" ws
+text ::= "\"" char{{1,{text}}} "\"" ws
+predicate ::= "\"" char{{1,{predicate}}} "\"" ws
+tags ::= "[" ws (tag ("," ws tag){{0,{tags}}})? "]" ws
+tag ::= "\"" char{{1,{tag}}} "\"" ws
+kind ::= ("\"person\"" | "\"place\"" | "\"thing\"" | "null") ws
+date ::= ("\"" [0-9]{{4}} "-" [0-9]{{2}} "-" [0-9]{{2}} "\"" | "null") ws
+boolean ::= ("true" | "false") ws
+confidence ::= [01] ("." [0-9]{{1,3}})? ws
+char ::= [^"\\\x7F\x00-\x1F] | "\\" (["\\/bfnrt] | "u" [0-9a-fA-F]{{4}})
+ws ::= | " " | "\n"{{1,2}} [ \t]{{0,20}}
+"#,
+        more = MAX_MEMORIES - 1,
+        fields = fields.join(r#" "," ws "#),
+        text = MAX_TEXT,
+        predicate = MAX_PREDICATE,
+        tags = MAX_TAGS - 1,
+        tag = MAX_TAG,
+    )
 }
 
 /// A worked example for the extraction prompt: a short note and the reply it should get. Made
@@ -131,7 +168,7 @@ pub fn extraction_schema() -> Value {
 pub const EXAMPLE_NOTE: &str = "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12. \
 She will send the results by 13 March. My cousin Ana lives in Hull now, since 1 March.";
 pub const EXAMPLE_KEPT: &str = "2026-03-02";
-pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "validFrom": null, "validTo": null, "due": "2026-03-06", "confidence": 0.95, "span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "tags": ["health", "appointment"], "moved": true}, {"sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "validFrom": null, "validTo": null, "due": "2026-03-13", "confidence": 0.9, "span": {"quote": "She will send the results by 13 March"}, "tags": ["health"], "moved": false}, {"sentence": "My cousin Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "validFrom": "2026-03-01", "validTo": null, "due": null, "confidence": 0.9, "span": {"quote": "My cousin Ana lives in Hull now, since 1 March"}, "tags": ["home", "family"], "moved": false}]}"#;
+pub const EXAMPLE_REPLY: &str = r#"{"memories": [{"span": {"quote": "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12"}, "sentence": "The eye test with Dr Patel is on Friday 6 March at 11:20 in room 12.", "subject": "Eye test", "subjectKind": "thing", "predicate": "scheduled", "object": "Friday 6 March at 11:20, room 12", "due": "2026-03-06", "validFrom": null, "validTo": null, "moved": true, "confidence": 0.95, "tags": ["health", "appointment"]}, {"span": {"quote": "She will send the results by 13 March"}, "sentence": "Dr Patel will send the eye test results by 13 March.", "subject": "Dr Patel", "subjectKind": "person", "predicate": "promised", "object": "send the eye test results by 13 March", "due": "2026-03-13", "validFrom": null, "validTo": null, "moved": false, "confidence": 0.9, "tags": ["health"]}, {"span": {"quote": "My cousin Ana lives in Hull now, since 1 March"}, "sentence": "My cousin Ana has lived in Hull since 1 March.", "subject": "Ana", "subjectKind": "person", "predicate": "lives_in", "object": "Hull", "due": null, "validFrom": "2026-03-01", "validTo": null, "moved": false, "confidence": 0.9, "tags": ["home", "family"]}]}"#;
 
 pub fn extraction_system(nonce: &str) -> String {
     format!(
@@ -139,17 +176,18 @@ pub fn extraction_system(nonce: &str) -> String {
 Reply with JSON only, shaped {{\"memories\": [...]}}.\n\
 Rules:\n\
 - One memory per fact. One note often holds several: a name, a date, a time, a place, a number, a code. Give each fact its own memory and leave none out.\n\
-- Keep the words that say who someone is to the person (my cousin Ana, our neighbour Rui) in the sentence.\n\
+- Keep the words that say who someone is to the person or what they do for them (my cousin Ana, our neighbour Rui, the plumber Mr Hughes) in the sentence and the object.\n\
+- When someone says or thinks something is so (Sam says the club meets on Tuesday), the subject is what it is about (the club), not who said it; keep who said it in the sentence.\n\
 - What the text says is not so, or no longer so (not on Wednesday, no longer in Leeds), is not a memory: keep only the value that holds now.\n\
 - Copy names, numbers, codes, dates and times exactly as written, into the sentence and the object. Never round them, reword them or swap one for another.\n\
 - subject: who or what the fact is about, by name. Never a pronoun such as he, she, it or they: write the name it stands for, or leave the fact out. subjectKind: person, place or thing.\n\
 - sentence: one plain British English sentence that stands alone and keeps every detail of the fact.\n\
 - predicate, by meaning: {}. When none fits, write other:<one word>.\n\
 - object: the value of the fact, in the item's own words. It never just repeats the subject.\n\
-- due: whenever the text names the day something happens or must be done by, that date as YYYY-MM-DD, taking the year (and days such as Friday) from the day the item was kept. null only when no day is named.\n\
+- due: whenever the text names the day something happens or must be done by, that date as YYYY-MM-DD, taking the year (and days such as Friday) from the day the item was kept. null when no day is named: never work one out from a word such as first, second or every.\n\
 - validFrom, validTo: the dates from or until which the fact holds, when the text says so (as of, from, until); otherwise null.\n\
 - confidence: 0 to 1, how sure the text makes it.\n\
-- span: {{\"quote\": the words of the item that support it, copied character for character}}. A memory without one is thrown away.\n\
+- span, written first: {{\"quote\": the words of the item that support it, copied character for character}}. A memory without one is thrown away.\n\
 - tags: a few lower-case words.\n\
 - moved: true only when the text says this value replaces an earlier one (moved, changed, rescheduled, now instead of); otherwise false.\n\
 Skip small talk and anything that will not matter later. Never invent facts. An empty list is fine.\n\
@@ -170,6 +208,19 @@ fn kind_word(kind: EntityKind) -> &'static str {
         EntityKind::Place => "place",
         EntityKind::Thing => "thing",
     }
+}
+
+/// A second look at an item: the item again, then the `lines` of it that have a fact no
+/// memory holds yet, or a memory that lost who someone is to the person. The lines are the
+/// item's own words, so they are fenced like it.
+pub fn focus_user(text: &str, cx: &ExtractContext, nonce: &str, lines: &[String]) -> String {
+    format!(
+        "{}\n\nThese lines of it have a fact that no memory holds yet, or a memory that lost who \
+someone is to the person (my son, the plumber). List the facts in these lines only, one memory \
+each, keeping those words in the sentence:\n{}",
+        extraction_user(text, cx, nonce),
+        fence("item", nonce, &lines.join("\n"))
+    )
 }
 
 pub fn extraction_user(text: &str, cx: &ExtractContext, nonce: &str) -> String {

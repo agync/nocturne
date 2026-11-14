@@ -1110,6 +1110,12 @@ async fn chat_online(app: &App, body: &Value) -> Response {
 }
 
 fn default_chat_content(body: &Value) -> String {
+    if body["grammar"]
+        .as_str()
+        .is_some_and(|g| g.contains("memories"))
+    {
+        return json!({"memories": []}).to_string();
+    }
     let fmt = &body["response_format"];
     if fmt["type"] == "json_schema" {
         let schema = fmt["json_schema"]["schema"].to_string();

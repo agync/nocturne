@@ -890,6 +890,11 @@ impl Client {
 
     /// The whole answer at once.
     pub async fn chat_complete(&self, req: &ChatRequest) -> Result<String, RuntimeError> {
+        self.chat_reply(req).await.map(|r| r.text)
+    }
+
+    /// The whole answer at once, saying whether it was cut off at `max_tokens`.
+    pub async fn chat_reply(&self, req: &ChatRequest) -> Result<ChatReply, RuntimeError> {
         let _busy = self.busy(&req.model);
         let mut req = req.clone();
         req.stream = false;
@@ -900,10 +905,15 @@ impl Client {
             rb = rb.timeout(limit);
         }
         let v: Value = Self::json(rb).await?;
-        v["choices"][0]["message"]["content"]
+        let choice = &v["choices"][0];
+        let text = choice["message"]["content"]
             .as_str()
             .map(str::to_string)
-            .ok_or_else(|| RuntimeError::BadResponse("no message in the answer".into()))
+            .ok_or_else(|| RuntimeError::BadResponse("no message in the answer".into()))?;
+        Ok(ChatReply {
+            text,
+            cut: choice["finish_reason"] == "length",
+        })
     }
 
     /// One online question through the engine route: a non-streaming chat with exactly

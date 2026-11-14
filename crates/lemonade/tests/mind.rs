@@ -138,7 +138,7 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
     assert_eq!(c.subject_kind, Some(EntityKind::Person));
     assert_eq!(c.valid_from, Some("2026-11-10".parse().unwrap()));
     assert_eq!(c.valid_to, None);
-    assert_eq!(c.due, Some("2026-11-20".parse().unwrap()));
+    assert_eq!(c.due, None, "the quote names no day");
     assert!((c.confidence - 0.9).abs() < 1e-6);
     assert_eq!(
         c.span,
@@ -163,7 +163,8 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
 
     let req = &r.seen("/v1/chat/completions").await[0]["body"];
     assert_eq!(req["temperature"], 0.0);
-    assert_eq!(req["response_format"]["type"], "json_schema");
+    assert!(req["grammar"].as_str().unwrap().contains("memories"));
+    assert!(req.get("response_format").is_none());
     assert_eq!(req["stream"], false);
     let user = req["messages"][1]["content"].as_str().unwrap();
     assert!(
@@ -173,39 +174,51 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
     );
 }
 
-/// A memory without a quote is thrown away, so the schema the model must fill makes the quote
-/// part of every memory rather than something it may leave out.
+/// A memory without a quote is thrown away, so the grammar the model must follow makes the
+/// quote part of every memory, written first, rather than something it may leave out. It goes
+/// as a grammar, not a JSON schema: the engine sorts a schema's keys, and the reply would have
+/// to start with the confidence and end with the quote.
 #[tokio::test]
-async fn the_extraction_schema_requires_a_quote_for_every_memory() {
+async fn every_memory_must_open_with_its_quote_and_decide_every_key() {
     let r = rig().await;
     r.mind.extract("Sam likes tea", &context()).await.unwrap();
     let req = &r.seen("/v1/chat/completions").await[0]["body"];
-    let item = &req["response_format"]["json_schema"]["schema"]["properties"]["memories"]["items"];
-    let required: Vec<&str> = item["required"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .filter_map(Value::as_str)
-        .collect();
-    assert!(required.contains(&"span"), "{required:?}");
-    // A field the grammar may leave out, the small model does leave out: every date must be
+    assert!(req.get("response_format").is_none());
+    let grammar = req["grammar"].as_str().unwrap();
+    let memory = grammar
+        .lines()
+        .find(|l| l.starts_with("memory ::="))
+        .unwrap();
+    // A key the grammar may leave out, the small model does leave out: every date must be
     // decided, even if only as null.
-    for key in [
+    let keys = [
+        "span",
+        "sentence",
+        "subject",
+        "subjectKind",
+        "predicate",
+        "object",
+        "due",
         "validFrom",
         "validTo",
-        "due",
-        "subjectKind",
-        "tags",
         "moved",
-    ] {
-        assert!(required.contains(&key), "{key} in {required:?}");
-    }
-    assert_eq!(item["properties"]["span"]["type"], "object");
-    assert_eq!(item["properties"]["moved"]["type"], "boolean");
-    assert_eq!(item["properties"]["span"]["required"], json!(["quote"]));
-    assert_eq!(
-        item["properties"]["span"]["properties"]["quote"]["minLength"],
-        1
+        "confidence",
+        "tags",
+    ];
+    let at: Vec<usize> = keys
+        .iter()
+        .map(|k| {
+            memory
+                .find(&format!("\"\\\"{k}\\\"\""))
+                .unwrap_or_else(|| panic!("{k} in {memory}"))
+        })
+        .collect();
+    assert!(at.windows(2).all(|w| w[0] < w[1]), "{memory}");
+    assert!(!memory.contains('?'), "nothing optional: {memory}");
+    assert!(grammar.contains("span ::= \"{\" ws \"\\\"quote\\\"\" ws \":\" ws text"));
+    assert!(
+        grammar.contains("text ::= \"\\\"\" char{1,"),
+        "a quote is never empty"
     );
 }
 
@@ -1615,7 +1628,7 @@ async fn every_call_has_a_token_ceiling_and_json_calls_a_long_limit() {
         .collect();
     assert_eq!(
         ceilings,
-        [json!(2048), json!(200), json!(1024), json!(1024)]
+        [json!(1024), json!(200), json!(1024), json!(1024)]
     );
 }
 
@@ -1721,6 +1734,152 @@ async fn long_audio_in_any_container_is_refused_before_upload() {
     let short = put(dir, "short.mp3", &vec![0u8; 32_000]);
     assert!(r.mind.transcribe(&short).await.is_ok());
     assert_eq!(r.seen("/v1/audio/transcriptions").await.len(), 1);
+}
+
+fn memory_about(quote: &str, subject: &str, sentence: &str, object: &str) -> Value {
+    json!({
+        "span": {"quote": quote}, "sentence": sentence, "subject": subject,
+        "subjectKind": "person", "predicate": "scheduled", "object": object, "due": null,
+        "validFrom": null, "validTo": null, "moved": false, "confidence": 0.9, "tags": [],
+    })
+}
+
+fn user_turn(call: &Value) -> String {
+    let messages = call["body"]["messages"].as_array().unwrap();
+    messages.last().unwrap()["content"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+/// A reply cut off at its token ceiling is not a failed reading: the item is read again in
+/// two parts, and what each part gives is kept.
+#[tokio::test]
+async fn a_cut_reading_is_read_again_in_halves() {
+    let r = rig().await;
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let coffee = memory_about("Sam likes coffee", "Sam", "Sam likes coffee.", "coffee");
+    r.script(json!([
+        {"content": "{\"memories\": [{\"span\": {\"quote\": \"Sam li"},
+        reply(vec![tea]),
+        reply(vec![coffee]),
+    ]))
+    .await;
+    let got = r
+        .mind
+        .extract("Sam likes tea.\nSam likes coffee.", &context())
+        .await
+        .unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(objects, ["tea", "coffee"]);
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 3);
+    assert!(
+        user_turn(&calls[1]).contains("Sam likes tea.") && !user_turn(&calls[1]).contains("coffee")
+    );
+    assert!(user_turn(&calls[2]).contains("Sam likes coffee."));
+}
+
+/// A single sentence cannot be split: the whole memories in the cut reply are kept, and a cut
+/// reply with none is a failure, never an empty reading.
+#[tokio::test]
+async fn a_cut_sentence_keeps_the_whole_memories_it_has() {
+    let r = rig().await;
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let cut = format!("{{\"memories\": [{tea}, {{\"span\": {{\"quote\": \"Sam");
+    r.script(json!([{"content": cut}])).await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+
+    r.script(json!([{"content": "{\"memories\": [{\"span\""}]))
+        .await;
+    let err = r
+        .mind
+        .extract("Sam likes tea", &context())
+        .await
+        .unwrap_err();
+    assert!(matches!(err, MindError::Failed(_)), "{err:?}");
+}
+
+/// A name or number in the item that no memory keeps sends those lines back to the mind once,
+/// fenced like the item; what comes back is added. Never a third time.
+#[tokio::test]
+async fn a_line_no_memory_covers_is_asked_about_once() {
+    let r = rig().await;
+    let text = "Boiler service is booked for Monday 30 November. The engineer is called Marek.";
+    let boiler = memory_about(
+        "Boiler service is booked for Monday 30 November",
+        "Boiler service",
+        "Boiler service is booked for Monday 30 November.",
+        "Monday 30 November",
+    );
+    let marek = memory_about(
+        "The engineer is called Marek",
+        "Marek",
+        "The engineer for the boiler service is called Marek.",
+        "the engineer",
+    );
+    r.script(json!([reply(vec![boiler.clone()]), reply(vec![marek])]))
+        .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    let subjects: Vec<&str> = got.iter().map(|c| c.subject.as_str()).collect();
+    assert_eq!(subjects, ["Boiler service", "Marek"]);
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 2);
+    let focus = user_turn(&calls[1]);
+    let nonce = nonce_in(calls[1]["body"]["messages"][0]["content"].as_str().unwrap());
+    let fenced = format!("<item-{nonce}>\nThe engineer is called Marek.\n</item-{nonce}>");
+    assert!(
+        focus.contains("no memory holds yet") && focus.ends_with(&fenced),
+        "{focus}"
+    );
+
+    r.script(json!([reply(vec![boiler.clone()]), reply(vec![])]))
+        .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(
+        r.seen("/v1/chat/completions").await.len(),
+        4,
+        "asked once only"
+    );
+
+    r.script(json!([reply(vec![boiler]), {"content": "not JSON"}]))
+        .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(
+        got.len(),
+        1,
+        "a second look that fails leaves the first reading"
+    );
+}
+
+/// "The plumber" dropped from the only memory about Mr Hughes is asked for again, and the
+/// memory that keeps it takes the place of the one that lost it.
+#[tokio::test]
+async fn a_lost_role_is_asked_for_and_kept() {
+    let r = rig().await;
+    let text = "The plumber, Mister Hughes, is coming on Friday.";
+    let quote = "The plumber, Mister Hughes, is coming on Friday";
+    let lost = memory_about(
+        quote,
+        "Hughes",
+        "Mister Hughes is coming on Friday.",
+        "Friday",
+    );
+    let kept = memory_about(
+        quote,
+        "Hughes",
+        "The plumber, Mister Hughes, is coming on Friday.",
+        "Friday",
+    );
+    r.script(json!([reply(vec![lost]), reply(vec![kept])]))
+        .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert!(got[0].sentence.starts_with("The plumber"), "{got:?}");
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 2);
 }
 
 fn preset(tier: Tier) -> nocturne_lemonade::selection::Picks {
