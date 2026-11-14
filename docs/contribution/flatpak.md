@@ -130,15 +130,18 @@ Its jobs:
 
 1. `sources` generates the offline sources and hands them on as an artefact.
 2. `build` runs AetherPak's build (with `flatpak-builder-lint`) in the AetherPak builder
-   container, then, when publishing, pushes the images and records them.
-3. `site` merges the records with the index already live at `https://nocturne.is/flatpak` and
-   uploads the site as a Pages artefact.
-4. `deploy` deploys it to GitHub Pages.
+   container, which is privileged and pinned by digest. It sees no secret and cannot push; it
+   hands the unsigned repository on as an artefact.
+3. `publish`, when publishing, runs in the `release-signing` environment in the same container
+   image without privileges. It signs the images with the key and pushes them, and records them.
+4. `site` merges the records with the index already live at `https://nocturne.is/flatpak` and
+   uploads the site as a Pages artefact. It also runs in `release-signing`.
+5. `deploy` deploys it to GitHub Pages.
 
 A caller grants `contents: read`, `packages: write`, `pages: write` and `id-token: write`, and
 passes the two optional secrets by name: `FLATPAK_GPG_PRIVATE_KEY` and `FLATPAK_GPG_PASSPHRASE`.
-With a key, every image is signed and the index carries the public key and signature lookaside;
-without one, the repository is unsigned.
+Only `publish` and `site` read them. With a key, every image is signed and the index carries the
+public key and signature lookaside; without one, the repository is unsigned.
 
 Before the first publish, a maintainer:
 

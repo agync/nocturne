@@ -443,6 +443,8 @@ jobs:
     uses: ./.github/workflows/flatpak.yml
     with:
       ref: ${{ needs.plan.outputs.ref }}
+      channel: stable
+      publish: true
     secrets: inherit
 
   # A signing job that was asked for must have succeeded; one that was not runs as skipped, and the
