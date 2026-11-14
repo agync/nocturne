@@ -891,7 +891,7 @@ fn salvage(reply: &str, text: &str) -> Vec<Candidate> {
         .filter_map(|r| serde_json::from_str::<Value>(&reply[r]).ok())
         .filter_map(|raw| candidate(&raw).ok())
         .filter(|c| grounded(c, &source))
-        .map(|c| dated(c, text))
+        .map(|c| own_dates(dated(c, text), text))
         .collect()
 }
 
@@ -926,7 +926,7 @@ fn parse_candidates(reply: &str, text: &str) -> Result<Parsed, String> {
     let mut invalid = Vec::new();
     for (i, raw) in parsed.memories.iter().enumerate() {
         match candidate(raw) {
-            Ok(c) if grounded(&c, &source) => items.push(dated(c, text)),
+            Ok(c) if grounded(&c, &source) => items.push(own_dates(dated(c, text), text)),
             Ok(c) => tracing::warn!("dropped an ungrounded memory about {}", c.subject),
             Err(why) => invalid.push(format!("memory {}: {why}", i + 1)),
         }
@@ -936,6 +936,43 @@ fn parse_candidates(reply: &str, text: &str) -> Result<Parsed, String> {
         invalid,
         total: parsed.memories.len(),
     })
+}
+
+/// `c` with each date its sentence writes as YYYY-MM-DD, where the item does not, put back in
+/// the words the item writes that day in ("1 December"): the person's own words are what an
+/// answer gives and a search finds. The object is left as it is: the store tells memories
+/// apart by it, and one object for a day must not become two.
+fn own_dates(mut c: Candidate, text: &str) -> Candidate {
+    c.sentence = restored(&c.sentence, text);
+    c
+}
+
+fn restored(words: &str, text: &str) -> String {
+    let mut out = words.to_string();
+    let bytes = words.as_bytes();
+    let digit = |i: usize| bytes.get(i).is_some_and(u8::is_ascii_digit);
+    for at in (0..bytes.len().saturating_sub(9)).rev() {
+        let shaped = (0..10).all(|k| {
+            if k == 4 || k == 7 {
+                bytes[at + k] == b'-'
+            } else {
+                digit(at + k)
+            }
+        });
+        if !shaped || (at > 0 && digit(at - 1)) || digit(at + 10) {
+            continue;
+        }
+        let iso = &words[at..at + 10];
+        if text.contains(iso) {
+            continue;
+        }
+        if let Ok(date) = iso.parse::<Date>()
+            && let Some(own) = guard::written_day(date, text)
+        {
+            out.replace_range(at..at + 10, &own);
+        }
+    }
+    out
 }
 
 /// `c` without a `due` that neither its quote nor the line it stands in (with the heading
@@ -1380,6 +1417,42 @@ mod tests {
             assert!(pos > last || k == "span", "{k} out of order");
             last = pos;
         }
+    }
+
+    #[test]
+    fn a_date_rewritten_by_the_mind_is_put_back_in_the_items_words() {
+        // Tiny's reading of the allotment newsletter in a real run.
+        let text = "Riverside Allotment Society, autumn newsletter\n\nOur plot is number 17, next \
+                    to the water tap.\n\nThe water is switched off for winter on 1 December.\n\n\
+                    The annual fee of 30 pounds is due by 15 January.";
+        assert_eq!(
+            restored("The water is switched off for winter on 2026-12-01.", text),
+            "The water is switched off for winter on 1 December."
+        );
+        assert_eq!(restored("by 2026-01-15", text), "by 15 January");
+        assert_eq!(
+            restored("Kept on 2026-11-12, due 2026-01-15.", text),
+            "Kept on 2026-11-12, due 15 January.",
+            "a day the item does not write stays as it is"
+        );
+        assert_eq!(restored("on 2026-01-150", text), "on 2026-01-150");
+    }
+
+    #[test]
+    fn only_the_sentence_gets_the_items_words_for_a_day() {
+        let text = "The water is switched off for winter on 1 December.";
+        let raw = serde_json::json!({
+            "span": {"quote": "The water is switched off for winter on 1 December"},
+            "sentence": "The water is switched off on 2026-12-01.", "subject": "Water",
+            "predicate": "scheduled", "object": "2026-12-01", "due": "2026-12-01",
+            "confidence": 0.9,
+        });
+        let c = own_dates(candidate(&raw).unwrap(), text);
+        assert_eq!(c.sentence, "The water is switched off on 1 December.");
+        assert_eq!(
+            c.object, "2026-12-01",
+            "the object the store tells memories apart by"
+        );
     }
 
     #[test]

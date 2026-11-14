@@ -378,6 +378,43 @@ fn holds(words: &str, key: &str) -> bool {
     !key.is_empty() && format!(" {words} ").contains(&format!(" {key} "))
 }
 
+/// How `text` writes the day `date` as a day and a month ("1 December", "December 1st", "1st of
+/// December"), in its own words, when it does.
+pub fn written_day(date: Date, text: &str) -> Option<String> {
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    let bare = |t: &str| {
+        t.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    let is_day = |t: &str| {
+        let t = bare(t);
+        let digits = t.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+        digits.parse::<i8>() == Ok(date.day())
+    };
+    let is_month = |t: &str| MONTHS[date.month() as usize - 1].contains(&bare(t).as_str());
+    let span = |from: usize, to: usize| {
+        let words = tokens[from..=to].join(" ");
+        words
+            .trim_end_matches(|c: char| !c.is_alphanumeric())
+            .to_string()
+    };
+    for i in 0..tokens.len() {
+        let next = |k: usize| tokens.get(i + k).copied().unwrap_or("");
+        if is_day(tokens[i]) {
+            if is_month(next(1)) {
+                return Some(span(i, i + 1));
+            }
+            if bare(next(1)) == "of" && is_month(next(2)) {
+                return Some(span(i, i + 2));
+            }
+        }
+        if is_month(tokens[i]) && is_day(next(1)) {
+            return Some(span(i, i + 1));
+        }
+    }
+    None
+}
+
 /// Whether `context` (a memory's quote, the line it stands in and the heading above) names the
 /// day `due` falls on: by its day of the month, its weekday, or a word such as tomorrow that
 /// counts from another day. When no day number matches, a weekday the context names that is
@@ -615,6 +652,30 @@ mod tests {
         let ravi = "Ravi thinks the choir practice is on Friday evenings at the school hall.";
         assert!(carries("Thursday evenings at St Anne's.", anne, &[ravi]));
         assert!(carries("Friday evenings.", ravi, &[anne]));
+    }
+
+    #[test]
+    fn a_day_is_found_in_the_words_it_is_written_in() {
+        let day = |s: &str| s.parse::<Date>().unwrap();
+        let text = "The water is switched off for winter on 1 December.\n\nThe annual fee of 30 \
+                    pounds is due by 15 January.";
+        assert_eq!(
+            written_day(day("2026-12-01"), text).as_deref(),
+            Some("1 December")
+        );
+        assert_eq!(
+            written_day(day("2027-01-15"), text).as_deref(),
+            Some("15 January")
+        );
+        assert_eq!(written_day(day("2026-12-15"), text), None);
+        assert_eq!(
+            written_day(day("2026-11-20"), "on the 20th of November, or November 21").as_deref(),
+            Some("20th of November")
+        );
+        assert_eq!(
+            written_day(day("2026-11-21"), "on the 20th of November, or November 21").as_deref(),
+            Some("November 21")
+        );
     }
 
     #[test]
