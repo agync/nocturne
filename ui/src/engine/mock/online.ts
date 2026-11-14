@@ -269,6 +269,8 @@ export class OnlineSim {
       bytesUp: sent ? 1400 : 0,
       bytesDown: sent ? 600 : 0,
       costUsd: null,
+      // Reached only when bytes went up: a failed entry with nothing sent never left.
+      reached: sent,
       result: !sent
         ? { type: "notSent", reason: "keptHere" }
         : ending === "notSure"

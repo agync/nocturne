@@ -70,6 +70,7 @@ describe("the mark on an answer", () => {
     ["keptHere", "these stay on this computer"],
     ["problem", "online answers needs a look"],
     ["downloading", "online answers wait while a download finishes"],
+    ["turnedOff", "online answers was turned off"],
   ];
 
   it.each(REASONS)("says why on this computer: %s", async (reason, words) => {

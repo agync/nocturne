@@ -32,6 +32,7 @@ const send = (over: Partial<OnlineSend> & Pick<OnlineSend, "id">): OnlineSend =>
   bytesDown: 600,
   costUsd: null,
   result: { type: "answered", receipts: 2 },
+  reached: true,
   ...over,
 });
 
@@ -146,6 +147,7 @@ describe("what was sent", () => {
         instructions: "",
         bytesUp: 0,
         bytesDown: 0,
+        reached: false,
         result: { type: "notSent", reason: "noInternet" },
       }),
     ]);

@@ -25,6 +25,7 @@
   "sent.reason.keptHere": "nothing was left to send",
   "sent.reason.problem": "online answers needed a look",
   "sent.reason.downloading": "a download was running",
+  "sent.reason.turnedOff": "online answers was turned off",
   "sent.field.sent": "Sent",
   "sent.field.when": "When",
   "sent.field.to": "To",

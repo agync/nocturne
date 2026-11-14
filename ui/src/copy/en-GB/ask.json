@@ -63,6 +63,7 @@
   "ask.reason.keptHere": "these stay on this computer",
   "ask.reason.problem": "online answers needs a look",
   "ask.reason.downloading": "online answers wait while a download finishes",
+  "ask.reason.turnedOff": "online answers was turned off",
   "ask.announce.done.online": "Answer ready. Answered online by your provider, {host}. {answer}",
   "ask.announce.done.local": "Answer ready. Answered on this computer, {reason}. {answer}",
   "ask.announce.notSure.online": "Not sure. Asked online, your provider, {host}. {count, plural, one {# thing comes} other {# things come}} close.",

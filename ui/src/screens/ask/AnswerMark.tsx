@@ -27,6 +27,8 @@ export function reasonText(reason: LocalReason, host: string | null): string {
       return t("ask.reason.problem");
     case "downloading":
       return t("ask.reason.downloading");
+    case "turnedOff":
+      return t("ask.reason.turnedOff");
   }
 }
 

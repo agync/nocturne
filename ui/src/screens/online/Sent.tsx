@@ -41,6 +41,8 @@ function reasonOf(reason: LocalReason): string {
       return t("sent.reason.problem");
     case "downloading":
       return t("sent.reason.downloading");
+    case "turnedOff":
+      return t("sent.reason.turnedOff");
   }
 }
 
