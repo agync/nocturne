@@ -87,7 +87,10 @@ impl Mind for Reporting {
     }
 }
 
-/// The tap, installed once for this test binary.
+/// The tap, installed once for this test binary. It hears every test's replies, so the tests that
+/// read it hold this lock while they run.
+static TAPPED: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn tap() -> &'static ReplyTap {
     static TAP: OnceLock<ReplyTap> = OnceLock::new();
     TAP.get_or_init(|| {
@@ -283,6 +286,7 @@ fn check_runs(result: &Value) {
 
 #[test]
 fn the_answer_step_alone_gets_only_the_frozen_facts_and_keeps_the_raw_replies() {
+    let _alone = TAPPED.lock().unwrap_or_else(|e| e.into_inner());
     let tap = tap();
     let mind: Arc<dyn Mind> = Arc::new(Reporting(FakeMind::new()));
     let (h, ids) = fixture_world(mind.clone());
@@ -317,6 +321,7 @@ fn the_answer_step_alone_gets_only_the_frozen_facts_and_keeps_the_raw_replies() 
 
 #[test]
 fn the_frozen_store_asked_through_the_app_repeats_and_keeps_the_raw_replies() {
+    let _alone = TAPPED.lock().unwrap_or_else(|e| e.into_inner());
     let tap = tap();
     let (h, ids) = fixture_world(Arc::new(Reporting(FakeMind::new())));
     let result = answer_only(2, &ids, Some(tap), |q| ask(&h, q.text));
