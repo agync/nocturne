@@ -15,7 +15,7 @@ repository by a command. Publishing is the owner's decision.
 | Path | What it is |
 |---|---|
 | `site/index.html`, `site/404.html` | The landing page and the not-found page, plain HTML with no inline script or style |
-| `site/assets/` | The stylesheet, the theme switch script, the self-hosted fonts and the screenshots |
+| `site/assets/` | The stylesheet, the theme switch and tour scripts, the self-hosted fonts and the screenshots |
 | `site/docs-theme/` | The okf-wiki theme for `/docs/`: the app's colours and faces, and a link back to the landing page |
 | `site/_headers` | Response headers, including the content security policies; the build fills in the docs' script hashes |
 | `site/wrangler.jsonc` | A Cloudflare Worker with static assets only, serving `site/dist/` |
@@ -48,14 +48,27 @@ they are reported as warnings because the theme cannot change them.
 
 ## Screenshots
 
-The screenshots are the app's own screens on its demo data. To refresh them, run the mock
-interface and capture again:
+The screenshots are the app's own screens on its demo data. The whole window appears once; the
+other desktop pictures crop to the column where the page changes, so the reader does not have to
+spot the difference between two full windows. To refresh them, run the mock interface, and for
+the phone picture the phone app's scripted build, and capture again:
 
 ```bash
 cd ui && npx vite --mode mock --port 4173  # in another terminal
-make -C site shots                         # writes site/assets/img/*.webp in both themes
+cd ui && VITE_ENGINE=phone-mock PHONE_OUT_DIR=/tmp/phone npx vite build --config vite.phone.config.ts
+python3 -m http.server -d /tmp/phone --bind 127.0.0.1 4174   # in another terminal
+make -C site shots PHONE=http://127.0.0.1:4174   # writes site/assets/img/*.webp in both themes
 node site/scripts/og.mjs http://127.0.0.1:4180   # the Open Graph image, from the served site
 ```
+
+`make shots` prints where the highlighted part of each tour picture sits. When a recapture moves
+it, copy the numbers into that step's `data-mark` in `site/index.html`.
+
+On wide screens, when the reader has not asked for reduced motion, `assets/js/tour.js` turns the
+Keep, Ask and morning page steps into one still frame beside the text: as each step reaches the
+middle of the screen only the page in the frame cross-fades, and a short highlighter pass shows
+where to look. Without the script, with reduced motion or on narrow screens, each step keeps its
+own picture.
 
 ## Deploy
 
