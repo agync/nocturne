@@ -77,6 +77,25 @@ touches the real internet.
   helper memory and the phone checks, is established only by trials the owner approves. Until then
   release notes do not claim it.
 
+## Online answers checks
+
+These use a stand-in provider on loopback and a reserved test address; none reaches a real provider.
+
+- **Net check, `online` mode.** A prepared data folder has Online answers on, the key in the fallback
+  file and an address that is a documentation-range IP literal (no DNS). A scripted driver asks
+  questions, idles for 10 minutes, turns Online answers off and asks again, with one approved model
+  download while on. A non-loopback connect passes only for the engine, only to that address, at most
+  once per question, never while idle, never after the off mark, never during the download window.
+  The app never connects. The existing `off` mode also runs with a key stored and Online answers off
+  and must stay at zero.
+- **Probe at each engine bump.** Before moving the pinned engine version, re-run the route probe:
+  a fixed model row answers with `offline` on, the key comes only from the environment, no discovery
+  request is made, and redirects are not followed. A change to `cloud_providers` in the engine
+  blocks the bump until the route, the log pipe and decision 0011 are checked again.
+- **Fit table.** Refresh the shipped memory figures in the fit table when the catalogue or a backend
+  changes, and check that every tier preset still fits at its own minimum.
+- **Package check.** `scripts/check-package.sh` fails a package that carries the stand-in marker.
+
 ## Desktop checks
 
 Run each on the installed or extracted package, with a scratch home so nothing touches your own
