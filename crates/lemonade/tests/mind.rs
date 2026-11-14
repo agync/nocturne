@@ -165,7 +165,7 @@ async fn extract_parses_candidates_and_loads_the_model_once() {
     assert_eq!(req["temperature"], 0.0);
     assert!(req["grammar"].as_str().unwrap().contains("memories"));
     assert!(req.get("response_format").is_none());
-    assert_eq!(req["stream"], false);
+    assert_eq!(req["stream"], true, "read as it arrives");
     let user = req["messages"][1]["content"].as_str().unwrap();
     assert!(
         user.contains("2026-11-10")
@@ -1943,6 +1943,123 @@ async fn a_cut_reply_that_kept_every_fact_is_not_read_again() {
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 4);
 }
 
+/// A small mind can write the same memory again and again until its ceiling. The reading is
+/// streamed and ended at the first repeat: the memories before it are kept, and the item is
+/// not read again in parts.
+#[tokio::test]
+async fn a_reading_that_repeats_itself_is_stopped_and_kept() {
+    let r = rig().await;
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let coffee = memory_about("Sam likes coffee", "Sam", "Sam likes coffee.", "coffee");
+    let later = memory_about(
+        "Sam likes tea",
+        "Sam",
+        "Sam likes tea a lot.",
+        "lots of tea",
+    );
+    let mut looping = vec![tea.clone(), coffee];
+    looping.extend(std::iter::repeat_n(tea, 13));
+    looping.push(later);
+    r.script(json!([reply(looping)])).await;
+    let got = r
+        .mind
+        .extract("Sam likes tea.\nSam likes coffee.", &context())
+        .await
+        .unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(
+        objects,
+        ["tea", "coffee"],
+        "nothing after the repeat is read"
+    );
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 1, "no reading in parts");
+    assert_eq!(calls[0]["body"]["stream"], true);
+}
+
+/// One memory quoting the lines about the item is left out and the reading goes on; a second
+/// ends it. With nothing whole before that, the item is read in parts as for a cut reply.
+#[tokio::test]
+async fn a_reading_that_copies_its_instructions_is_stopped() {
+    let r = rig().await;
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let coffee = memory_about("Sam likes coffee", "Sam", "Sam likes coffee.", "coffee");
+    let names = memory_about(
+        "Names already known, reuse them exactly",
+        "Names",
+        "Names are known.",
+        "known",
+    );
+    let kept = memory_about(
+        "This is a note, kept on 2026-11-10T09:30:00Z",
+        "Note",
+        "The note was kept.",
+        "kept",
+    );
+    r.script(json!([
+        reply(vec![tea.clone(), names.clone(), coffee.clone()]),
+        reply(vec![names.clone(), kept, tea.clone()]),
+        reply(vec![tea.clone()]),
+        reply(vec![coffee]),
+    ]))
+    .await;
+    let text = "Sam likes tea.\nSam likes coffee.";
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(
+        objects,
+        ["tea", "coffee"],
+        "one echo does not end the reading"
+    );
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(objects, ["tea", "coffee"]);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 4);
+}
+
+/// The context of the probe that recorded Tiny's replies below.
+fn recorded_context() -> ExtractContext {
+    ExtractContext {
+        item_kind: nocturne_contract::ItemKind::Text,
+        kept_at: "2026-11-12T09:30:00Z".parse().unwrap(),
+        today: "2026-11-12".parse().unwrap(),
+        known_entities: vec![
+            ("Leo".into(), EntityKind::Person),
+            ("Gran".into(), EntityKind::Person),
+            ("Dr Okafor".into(), EntityKind::Person),
+            ("Biscuit".into(), EntityKind::Thing),
+        ],
+    }
+}
+
+/// Tiny's own replies, recorded from the real model: one that repeats its two memories until
+/// its ceiling, and one that goes on to copy the lines about the note. Each is read in one
+/// request and keeps the note's facts.
+#[tokio::test]
+async fn tinys_recorded_loop_and_echo_are_each_read_in_one_request() {
+    let r = rig().await;
+    let looped = include_str!("fixtures/tiny-reply-loop.txt").trim();
+    let echoed = include_str!("fixtures/tiny-reply-echo.txt").trim();
+    r.script(json!([{"content": looped}, {"content": echoed}]))
+        .await;
+    let blood = "My blood test showed high cholesterol, 5.9. The doctor wants a recheck in March.";
+    let got = r.mind.extract(blood, &recorded_context()).await.unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(
+        objects,
+        ["high cholesterol with a value of 5.9", "a recheck in March"]
+    );
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+
+    let dentist = "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00.";
+    let got = r.mind.extract(dentist, &recorded_context()).await.unwrap();
+    assert_eq!(got.len(), 1, "{got:?}");
+    assert_eq!(got[0].object, "Wednesday 18 November at 10:00");
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 2);
+}
+
 /// A cut reply whose memories hold every name and number is still read in parts when a
 /// sentence with neither was never quoted: the names alone do not show it was read.
 #[tokio::test]
@@ -1967,6 +2084,24 @@ async fn a_cut_reply_that_never_quoted_a_sentence_is_read_in_parts() {
     let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
     assert_eq!(objects, ["tea", "a packed lunch"]);
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 3);
+}
+
+/// An engine that refuses the grammar inside the stream, after it began, is treated as one
+/// that refused it before: asked again by the schema.
+#[tokio::test]
+async fn a_grammar_refused_inside_the_stream_falls_back_to_a_schema() {
+    let r = rig().await;
+    r.script(json!([
+        {"stream_error": {"code": 400, "message": "parse error at 1:12", "type": "invalid_request_error"}},
+        reply(vec![good_memory()]),
+    ]))
+    .await;
+    let got = r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 2);
+    assert!(calls[1]["body"].get("grammar").is_none());
+    assert!(calls[1]["body"]["response_format"].is_object());
 }
 
 /// An engine that refuses the grammar is asked again by a JSON schema, and every later reading

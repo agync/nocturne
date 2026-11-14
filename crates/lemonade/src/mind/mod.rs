@@ -7,6 +7,7 @@ mod guard;
 pub mod online;
 mod prompts;
 mod sampling;
+mod watch;
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -26,7 +27,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc};
 
-use crate::client::{ChatReply, ChatRequest, Client, LoadOptions, Message};
+use crate::client::{ChatRequest, Client, LoadOptions, Message};
 use crate::error::RuntimeError;
 use crate::selection::Picks;
 
@@ -50,6 +51,18 @@ struct Seen {
     generation: u64,
     installed: HashSet<String>,
     loaded: HashSet<String>,
+}
+
+/// A reading reply.
+struct Reading {
+    /// What to read memories from: the whole reply, or the part before it began to loop.
+    text: String,
+    /// The whole reply as it came, for the reply trace.
+    full: String,
+    /// The engine stopped it at the token ceiling.
+    cut: bool,
+    /// It was ended early because it began to loop.
+    looped: bool,
 }
 
 pub struct LemonadeMind {
@@ -187,14 +200,14 @@ impl LemonadeMind {
         self.seen.lock().await.loaded.clear();
     }
 
-    /// One request to read: by the grammar, or by a JSON schema once the engine refused the
-    /// grammar. A refusal is asked again once, by the schema, and remembered.
-    async fn reading_reply(&self, mut req: ChatRequest) -> Result<ChatReply, MindError> {
+    /// One request to read `item`: by the grammar, or by a JSON schema once the engine refused
+    /// the grammar. A refusal is asked again once, by the schema, and remembered. The reply is
+    /// watched as it arrives and ended as soon as it begins to loop.
+    async fn reading_reply(&self, mut req: ChatRequest, item: &str) -> Result<Reading, MindError> {
         if self.grammar_refused.load(Ordering::Relaxed) {
             by_schema(&mut req);
         }
-        self.reading_calls.fetch_add(1, Ordering::Relaxed);
-        let first = self.client.chat_reply(&req).await;
+        let first = self.watched(&req, item).await;
         let refused = match &first {
             Err(RuntimeError::Rejected {
                 status,
@@ -213,8 +226,7 @@ impl LemonadeMind {
                 tracing::warn!("the engine refused the reading grammar ({kind}); using a schema");
                 self.grammar_refused.store(true, Ordering::Relaxed);
                 by_schema(&mut req);
-                self.reading_calls.fetch_add(1, Ordering::Relaxed);
-                self.client.chat_reply(&req).await
+                self.watched(&req, item).await
             }
             None => first,
         };
@@ -222,6 +234,39 @@ impl LemonadeMind {
             Ok(r) => Ok(r),
             Err(e) => Err(self.map_chat_error(e).await),
         }
+    }
+
+    async fn watched(&self, req: &ChatRequest, item: &str) -> Result<Reading, RuntimeError> {
+        self.reading_calls.fetch_add(1, Ordering::Relaxed);
+        let prompt: Vec<&str> = req
+            .messages
+            .iter()
+            .filter_map(|m| m.content.as_str())
+            .collect();
+        let mut watch = watch::Watch::new(item, &prompt.join("\n"));
+        let reply = self
+            .client
+            .chat_watched(req, |so_far| watch.looping(so_far))
+            .await?;
+        let text = match watch.why {
+            Some(why) => {
+                tracing::info!(
+                    "stopped a reading that began to {}",
+                    match why {
+                        watch::Loop::Repeat => "repeat itself",
+                        watch::Loop::Echo => "copy its instructions",
+                    }
+                );
+                watch.kept(&reply.text).to_string()
+            }
+            None => reply.text.clone(),
+        };
+        Ok(Reading {
+            text,
+            full: reply.text,
+            cut: reply.cut,
+            looped: watch.why.is_some(),
+        })
     }
 
     /// A reading request: the item's grammar, and a ceiling that suits `text`.
@@ -249,9 +294,9 @@ impl LemonadeMind {
     }
 
     /// One reading of `text`, asked again once for the memories that were not valid. A reply
-    /// cut off at its ceiling, or as full as a reply may be, is kept when its whole memories
-    /// keep every fact of `text`; otherwise `text` is read again in halves, `depth` times at
-    /// most.
+    /// that loops, is cut off at its ceiling, or is as full as a reply may be, is kept when its
+    /// whole memories keep every fact of `text`; otherwise `text` is read again in halves,
+    /// `depth` times at most.
     fn extract_part<'a>(
         &'a self,
         model: &'a str,
@@ -270,26 +315,27 @@ impl LemonadeMind {
             let mut kept: Vec<Candidate> = Vec::new();
             for attempt in 0..EXTRACT_ATTEMPTS {
                 let req = self.extract_request(model, messages.clone(), text);
-                let reply = self.reading_reply(req).await?;
+                let reply = self.reading_reply(req, text).await?;
                 raw_reply(
                     if depth == 0 {
                         "extract"
                     } else {
                         "extract_half"
                     },
-                    &reply.text,
+                    &reply.full,
                 );
                 let parsed = parse_candidates(&reply.text, text);
-                let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
+                let cut = !reply.looped
+                    && (reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while")));
                 let full = match &parsed {
                     Ok(p) if p.total >= prompts::MAX_MEMORIES => Some(p.items.clone()),
                     _ => None,
                 };
-                if cut || full.is_some() {
+                if reply.looped || cut || full.is_some() {
                     let whole = merged(kept, full.unwrap_or_else(|| salvage(&reply.text, text)));
                     if covered(text, &whole, cx) {
                         tracing::info!(
-                            "a reading that was cut off or full kept every fact; \
+                            "a reading that looped, was cut off or was full kept every fact; \
                              not reading it in parts"
                         );
                         return Ok(whole);
@@ -325,7 +371,7 @@ impl LemonadeMind {
                 }
                 messages.push(Message {
                     role: "assistant".into(),
-                    content: Value::String(reply.text),
+                    content: Value::String(reply.full),
                 });
                 messages.push(Message::user(&format!(
                     "That was not valid: {last_error}. Reply again with JSON only, matching the schema, \
@@ -338,7 +384,7 @@ impl LemonadeMind {
         })
     }
 
-    /// A reply to `text` was cut off, or held as many memories as a reply may, and
+    /// A reply to `text` looped, was cut off, or held as many memories as a reply may, and
     /// left a fact out: each half of `text` is read on its own, or, when it cannot be split
     /// again, `whole` (the complete memories the reply held) is kept.
     async fn read_in_parts(
@@ -416,8 +462,11 @@ impl LemonadeMind {
                 Message::user(&prompts::focus_user(text, cx, &nonce, lines)),
             ];
             let req = self.extract_request(model, messages, &lines.join("\n"));
-            let reply = self.reading_reply(req).await?;
-            raw_reply("extract_second_look", &reply.text);
+            let reply = self.reading_reply(req, text).await?;
+            raw_reply("extract_second_look", &reply.full);
+            if reply.looped {
+                return Ok(salvage(&reply.text, text));
+            }
             let parsed = parse_candidates(&reply.text, text);
             let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
             let full = parsed
@@ -806,46 +855,14 @@ fn halves(text: &str) -> Option<(&str, &str)> {
 /// The whole, valid and grounded memories in a reply that was cut off part way.
 fn salvage(reply: &str, text: &str) -> Vec<Candidate> {
     let source = normalise(text);
-    let Some(start) = reply.find('[') else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    let (mut depth, mut in_string, mut escaped, mut open) = (0usize, false, false, None);
-    for (i, ch) in reply[start + 1..].char_indices() {
-        let at = start + 1 + i;
-        if in_string {
-            match (escaped, ch) {
-                (true, _) => escaped = false,
-                (false, '\\') => escaped = true,
-                (false, '"') => in_string = false,
-                _ => {}
-            }
-            continue;
-        }
-        match ch {
-            '"' => in_string = true,
-            '{' => {
-                if depth == 0 {
-                    open = Some(at);
-                }
-                depth += 1;
-            }
-            '}' if depth > 0 => {
-                depth -= 1;
-                if depth == 0
-                    && let Some(from) = open.take()
-                    && let Ok(raw) = serde_json::from_str::<Value>(&reply[from..=at])
-                    && let Ok(c) = candidate(&raw)
-                    && grounded(&c, &source)
-                {
-                    out.push(dated(c, text));
-                }
-            }
-            ']' if depth == 0 => break,
-            _ => {}
-        }
-    }
-    out
+    watch::Memories::default()
+        .whole(reply)
+        .into_iter()
+        .filter_map(|r| serde_json::from_str::<Value>(&reply[r]).ok())
+        .filter_map(|raw| candidate(&raw).ok())
+        .filter(|c| grounded(c, &source))
+        .map(|c| dated(c, text))
+        .collect()
 }
 
 /// A memory must be able to point at the words it came from.

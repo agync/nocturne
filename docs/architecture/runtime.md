@@ -96,10 +96,15 @@ that sorts keys, so a schema would make the mind write each memory's confidence 
 last. The grammar has it write the quote first, then the sentence, who or what it is about, what is
 said, the dates, and its judgements; every text is at most 300 characters and a reply at most 16
 memories. An engine that refuses the grammar is asked again by a JSON schema with the same bounds,
-and from then on every reading goes that way. A reply cut off at its token ceiling, or holding 16
-memories, is kept as it is when its whole memories keep every number, name and role in the item
-(the check below) and quote every sentence of it, or reach its last sentence; otherwise it is read
-again in halves, twice at most, and after that keeps the whole memories it holds. A day that
+and from then on every reading goes that way. The reply is read as it arrives, because a small mind
+can fall into a loop until its token ceiling: writing again a memory it already gave, or copying
+out the lines about the item ("Today is ..."). A memory that says again what an earlier valid one
+said, from the same words (its quote, sentence, subject, predicate and object), ends the request
+there. A memory whose quote is three or more whole words of the instructions, and not the item's,
+is left out; a second one ends the request. A reply that loops, is cut off at its token ceiling, or
+holds 16 memories is kept as it is when its whole memories keep every number, name and role in the
+item (the check below) and quote every sentence of it, or reach its last sentence; otherwise it is
+read again in halves, twice at most, and after that keeps the whole memories it holds. A day that
 neither the quote nor its line (with the heading above it) names, by day of the month, weekday or a
 phrase such as tomorrow or in three weeks, is dropped from the memory; a weekday or month that does
 not match rules a day out only when no day number does.

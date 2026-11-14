@@ -1172,7 +1172,12 @@ async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         delay = delay.max(Duration::from_millis(30));
     }
     let reasoning = spec["reasoning"].as_str().map(String::from);
-    let stream = paced(sse_items(deltas, cut, reasoning), delay);
+    let items = match spec.get("stream_error") {
+        // An error the engine reports inside the stream, after it has begun.
+        Some(e) => vec![Ok(format!("data: {}\n\n", json!({"error": e})))],
+        None => sse_items(deltas, cut, reasoning),
+    };
+    let stream = paced(items, delay);
     let mut resp = Response::new(Body::from_stream(stream));
     resp.headers_mut().insert(
         header::CONTENT_TYPE,
