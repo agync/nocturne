@@ -48,7 +48,8 @@ upload is fixed by deleting the partial files by hand first.
 
 The tag is resolved to its commit once, at the start of the run. Every build, the helper workflow
 and the Flatpak workflow check out that commit, never the tag's name, and the upload stops if the
-tag has moved since. The owner should also add a repository ruleset that protects `v*` tags and
+tag has moved since. The plan job also fails unless that commit is on `main`, and so does the
+Flatpak workflow before a stable publish, so a tag on a side branch is never built or signed. The owner should also add a repository ruleset that protects `v*` tags and
 `v*` branches: only the release App may create them, and nobody may move or delete them.
 
 ## What the workflow builds
