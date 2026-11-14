@@ -292,6 +292,40 @@ impl Engine {
     }
 }
 
+/// `hits` ordered by `scores` (one for each hit, higher is more relevant), the best `k` kept.
+/// What a question about who someone is brought to the front stays there, in its order. Scores
+/// that do not match the hits one for one change nothing but the count.
+pub fn reranked(query: &str, hits: Vec<Hit>, scores: &[f32], k: usize) -> Vec<Hit> {
+    if scores.len() != hits.len() {
+        return hits.into_iter().take(k).collect();
+    }
+    let name = who_is(query);
+    let pinned = |h: &Hit| {
+        name.as_deref().is_some_and(|n| {
+            key_of(&h.memory.subject) == n
+                && RELATION_PREDICATES.contains(&h.memory.predicate.as_str())
+        })
+    };
+    let mut scored: Vec<(bool, f32, usize, Hit)> = hits
+        .into_iter()
+        .zip(scores)
+        .enumerate()
+        .map(|(at, (h, s))| (pinned(&h), *s, at, h))
+        .collect();
+    scored.sort_by(|a, b| {
+        b.0.cmp(&a.0)
+            .then_with(|| {
+                if a.0 {
+                    a.2.cmp(&b.2)
+                } else {
+                    b.1.total_cmp(&a.1)
+                }
+            })
+            .then_with(|| a.2.cmp(&b.2))
+    });
+    scored.into_iter().take(k).map(|(_, _, _, h)| h).collect()
+}
+
 /// The id of a line offered from an original starts with this; it names no memory.
 pub const SOURCE_LINE: &str = "line:";
 /// Originals looked at for lines, best match first.
@@ -647,6 +681,21 @@ mod tests {
         );
         assert_eq!(place_lines(hits, lines, 2).len(), 2);
         assert!(is_source_line("line:itm_2:0") && !is_source_line("mem_a"));
+    }
+
+    #[test]
+    fn reranking_orders_by_score_and_keeps_who_someone_is_in_front() {
+        let hits = vec![
+            hit("mem_a", "itm_1", "Leo", "knows"),
+            hit("mem_b", "itm_2", "Leo", "scheduled"),
+            hit("mem_c", "itm_3", "Swim", "scheduled"),
+        ];
+        let by_score = reranked("When does Leo swim?", hits.clone(), &[0.1, 0.5, 0.9], 2);
+        assert_eq!(ids(&by_score), ["mem_c", "mem_b"]);
+        let who = reranked("Who is Leo?", hits.clone(), &[0.1, 0.5, 0.9], 3);
+        assert_eq!(ids(&who), ["mem_a", "mem_c", "mem_b"]);
+        let mismatched = reranked("When does Leo swim?", hits, &[0.9], 2);
+        assert_eq!(ids(&mismatched), ["mem_a", "mem_b"]);
     }
 
     #[test]

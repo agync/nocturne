@@ -13,6 +13,7 @@ pub mod logpipe;
 pub mod mind;
 pub mod online;
 pub mod record;
+pub mod rerank;
 pub mod residency;
 pub mod selection;
 pub mod setup;

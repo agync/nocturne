@@ -33,6 +33,31 @@ pub const RECALL: Component = c(
 /// engine raises anything smaller than 8192 to 8192, and takes a saved 4096 for its old default.
 pub const RECALL_CONTEXT: u32 = 8192;
 
+/// The reranking model: it orders what the search found by how well each memory answers the
+/// question. It works beside the recall model, so it carries that role.
+pub const RERANK: Component = c(
+    ComponentRole::Recall,
+    "bge-reranker-v2-m3-GGUF",
+    636_000_000,
+);
+
+/// Models a tier uses when they are on disk and does without otherwise. They are not part of
+/// what makes a tier installed, so a tier installed before one was added keeps working.
+pub fn extras(tier: Tier) -> Vec<Component> {
+    match tier {
+        Tier::Large | Tier::Standard => vec![RERANK],
+        Tier::Small | Tier::Tiny | Tier::Unsupported => Vec::new(),
+    }
+}
+
+/// The reranking model `tier` uses, if any.
+pub fn reranker(tier: Tier) -> Option<&'static str> {
+    extras(tier)
+        .into_iter()
+        .find(|c| c.model == RERANK.model)
+        .map(|c| c.model)
+}
+
 pub fn components(tier: Tier) -> Vec<Component> {
     match tier {
         Tier::Large => vec![
@@ -267,6 +292,23 @@ mod tests {
             short_disk[0].download_bytes,
             download_bytes(Tier::Large) as f64
         );
+    }
+
+    #[test]
+    fn only_standard_and_large_rerank_and_it_is_never_required() {
+        assert_eq!(reranker(Tier::Large), Some("bge-reranker-v2-m3-GGUF"));
+        assert_eq!(reranker(Tier::Standard), Some("bge-reranker-v2-m3-GGUF"));
+        for t in [Tier::Small, Tier::Tiny, Tier::Unsupported] {
+            assert_eq!(reranker(t), None, "{t:?}");
+            assert!(extras(t).is_empty());
+        }
+        for t in [Tier::Large, Tier::Standard] {
+            assert!(
+                components(t).iter().all(|c| c.model != RERANK.model),
+                "{t:?} is installed without it"
+            );
+            assert_eq!(model_for(t, ComponentRole::Recall), Some(RECALL.model));
+        }
     }
 
     #[test]

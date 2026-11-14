@@ -29,6 +29,7 @@ use nocturne_contract::{
 use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, MindError, UseKind, is_source_line};
 use nocturne_lemonade::mind::online::OnlineMind;
 use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
+use nocturne_lemonade::rerank::Reranker;
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -40,6 +41,10 @@ use crate::state::AppState;
 
 /// Memories handed to the mind.
 const RETRIEVE_K: usize = 12;
+/// What is kept of those once a reranking model has ordered them (Standard and Large).
+const RERANKED_K: usize = 8;
+/// A reranking model that does not answer in this time leaves the search's own order.
+const RERANK_LIMIT: Duration = Duration::from_secs(15);
 /// At most this many memories on the other side of an open question are brought in.
 const MAX_SIDES: usize = 4;
 /// How many near matches an "I'm not sure" shows.
@@ -372,6 +377,45 @@ fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// On a tier with a reranking model that is on disk, the search's hits ordered by it and cut to
+/// [`RERANKED_K`]. Anything that goes wrong leaves the search's own order.
+async fn rerank(state: &AppState, question: &str, hits: Vec<Hit>) -> Vec<Hit> {
+    let Some(services) = state.services() else {
+        return hits;
+    };
+    let Some(model) = services.tier().and_then(nocturne_lemonade::tier::reranker) else {
+        return hits;
+    };
+    let Some(client) = services.client().await else {
+        return hits;
+    };
+    rerank_with(&Reranker::new(client, model), question, hits).await
+}
+
+/// [`rerank`] with a given reranker: the scores of the hits' sentences, if the model is there
+/// and answers in time.
+pub async fn rerank_with(reranker: &Reranker, question: &str, hits: Vec<Hit>) -> Vec<Hit> {
+    if hits.len() < 2 {
+        return hits;
+    }
+    let sentences: Vec<String> = hits.iter().map(|h| h.memory.sentence.clone()).collect();
+    let scored = tokio::time::timeout(RERANK_LIMIT, async {
+        if !reranker.present().await {
+            return None;
+        }
+        reranker.scores(question, &sentences).await.ok()
+    })
+    .await;
+    match scored {
+        Ok(Some(scores)) => nocturne_engine::reranked(question, hits, &scores, RERANKED_K),
+        Ok(None) => hits,
+        Err(_) => {
+            tracing::warn!("the reranking model took too long; keeping the search's order");
+            hits
+        }
+    }
+}
+
 async fn answer<R: Runtime>(
     sink: &Sink<R>,
     question: String,
@@ -431,6 +475,7 @@ async fn answer<R: Runtime>(
         .into_iter()
         .filter(|h| !h.let_go && !(public_only && h.memory.private))
         .collect();
+    let hits = rerank(&state, &question, hits).await;
     // Lines of the originals that reading missed; a phone never gets them (`phone_safe`).
     let (q, e) = (question.clone(), engine.clone());
     let hits = match blocking(move || {

@@ -1,6 +1,6 @@
 //! What helps an answer when reading was imperfect or something had to stay here: lines of an
-//! original that no memory says, and this computer answering when an online "not sure" lacked
-//! what was kept back.
+//! original that no memory says, the reranking step falling back to the search's own order, and
+//! this computer answering when an online "not sure" lacked what was kept back.
 
 mod common;
 
@@ -9,7 +9,9 @@ use std::sync::Arc;
 use common::*;
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
 use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, LocalReason, Span};
-use nocturne_engine::{Candidate, Mind, Predicate, is_source_line};
+use nocturne_engine::{Candidate, Hit, Mind, Predicate, is_source_line};
+use nocturne_lemonade::Client;
+use nocturne_lemonade::rerank::Reranker;
 use serde_json::{Value, json};
 use tauri::async_runtime::block_on;
 
@@ -99,6 +101,34 @@ fn an_original_with_no_memory_can_still_answer() {
     assert!(done.receipts.iter().all(|r| r.item_id == item));
     let text: String = d.iter().filter_map(|x| x.text_delta.clone()).collect();
     assert!(text.contains("number 17"), "{text}");
+}
+
+#[test]
+fn the_search_order_stands_when_the_reranking_model_cannot_be_reached() {
+    let h = harness_with_mind(TestMind::new(AnswerMode::Normal));
+    for n in 0..10 {
+        h.learn(
+            &format!("note {n}"),
+            &format!("The swimming lesson {n} is on Monday."),
+            "Swimming",
+            &format!("lesson {n}"),
+        );
+    }
+    let hits: Vec<Hit> = h.engine().retrieve("swimming lesson", None, 12).unwrap();
+    assert_eq!(hits.len(), 10);
+    let closed = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let reranker = Reranker::new(Client::new(closed, "k"), "bge-reranker-v2-m3-GGUF");
+    let kept = block_on(nocturne_app_lib::ask::rerank_with(
+        &reranker,
+        "swimming lesson",
+        hits.clone(),
+    ));
+    let ids = |v: &[Hit]| v.iter().map(|h| h.memory.id.clone()).collect::<Vec<_>>();
+    assert_eq!(ids(&kept), ids(&hits));
 }
 
 // Online answers and what was kept back ----------------------------------------------------

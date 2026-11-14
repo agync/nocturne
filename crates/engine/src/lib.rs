@@ -49,7 +49,7 @@ pub use online::{NewSend, OnlineRow};
 pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count, phone_view};
 pub use reindex::ReindexRow;
 pub use remote::{DeviceRow, RemoteRow};
-pub use retrieve::{SOURCE_LINE, is_source_line};
+pub use retrieve::{SOURCE_LINE, is_source_line, reranked};
 pub use types::*;
 
 use std::path::{Path, PathBuf};
