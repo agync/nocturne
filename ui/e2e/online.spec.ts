@@ -152,6 +152,7 @@ test.describe("O2 to O6, setting up", () => {
         await press(page, "button", "Continue");
         await connectAndCheck(page);
         await press(page, "button", "Continue");
+        await expect(page.getByText("Online answers · step 3 of 5")).toBeVisible();
         await press(page, "button", "Continue");
         await expect(page.getByText("Online answers · step 4 of 5")).toBeVisible();
       },
@@ -162,7 +163,9 @@ test.describe("O2 to O6, setting up", () => {
         await press(page, "button", "Continue");
         await connectAndCheck(page);
         await press(page, "button", "Continue");
+        await expect(page.getByText("Online answers · step 3 of 5")).toBeVisible();
         await press(page, "button", "Continue");
+        await expect(page.getByText("Online answers · step 4 of 5")).toBeVisible();
         await press(page, "button", "Continue");
         await expect(page.getByText("Online answers · step 5 of 5")).toBeVisible();
       },
