@@ -2563,6 +2563,8 @@ fn the_whole_product_works_with_real_models() {
         .as_array()
         .map(Vec::len)
         .unwrap_or(0);
+    // Online answers writes its own entries (connected, on, off); no download is one of them.
+    let online_entries = if stand_in.is_some() { 3 } else { 0 };
     let downloads = block_on(async {
         let client = services.client().await?;
         client.downloads().await.ok()
@@ -2571,7 +2573,7 @@ fn the_whole_product_works_with_real_models() {
         "offline.after",
         "nothing was downloaded after setup (models folder and ledger unchanged, no download jobs)",
         models_bytes_end == models_bytes_after_setup
-            && ledger_end == ledger_after_setup
+            && ledger_end == ledger_after_setup + online_entries
             && downloads.as_ref().is_some_and(Vec::is_empty),
         format!(
             "models {models_bytes_after_setup} -> {models_bytes_end} bytes; ledger {ledger_after_setup} -> {ledger_end}"
