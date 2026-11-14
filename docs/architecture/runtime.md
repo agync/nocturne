@@ -226,14 +226,17 @@ the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home
 
 The second exception is Online answers, which is also off until the person turns it on, and only
 after a passed check and consent. While it is on, the engine, not the app, reaches the one address
-the person entered, only when a question is asked, with that question and the few remembered
-sentences needed to answer it, never anything marked private, and once for the connection check,
-which sends one fixed test question and no memories. The app has no connection to the
-provider, the engine makes one model-listing request to it at each start while Online answers is on
-and otherwise reaches it only for questions and the check, and while it is off the engine has no
-provider and no key. The release check is to allow a non-loopback connection only from the engine, only to
-that address and only during questions and the start-up listing; that `online` mode is not written yet ([online answers](online.md),
-[decision 0011](/adr/0011-online-answers.md)).
+the person entered, with a question and the few remembered sentences needed to answer it, never
+anything marked private, and for the connection check, which sends one fixed test question and no
+memories. The app has no connection to the provider. The key is never in the engine's environment:
+after each engine start Nocturne loads the online entry and hands the key over in memory on
+loopback, and the engine makes one request to the provider's list of models at that moment. Turning
+off, forgetting the key, Delete everything and an abandoned check clear the key from the engine at
+once. If the engine refuses the key or loses the route, nothing is sent and questions are answered on
+this computer until "Try again" or a check brings it back. While it is off the engine has no provider
+and no key. The release check allows a non-loopback connection only from the engine, only to that
+address and only for questions, the check and the start-up listing (`make netcheck-online`;
+[online answers](online.md), [decision 0011](/adr/0011-online-answers.md)).
 
 ## Choosing models
 

@@ -42,7 +42,7 @@ not make Nocturne depend on any one company.
 | Part | Choice |
 |---|---|
 | Provider entry | One entry in the engine's `config.json` and one fixed model row in its user models, written at launch from one function. With Online answers off, `cloud_providers` is an empty list, the row is removed and no key is in the environment. A launch for a download the person agreed to leaves the provider out, and online questions are answered on this computer until the download window closes |
-| The key | Handed to the engine at run time through its own cloud authentication endpoint on loopback, after each start while Online answers is on. Never argv, never the spawn environment, never a file the engine reads. Turning off relaunches the engine without it. The key is kept in the system keychain, or in an owner-only file when there is none |
+| The key | After each engine start while Online answers is on, Nocturne loads the online entry, then hands the key to the engine in memory through its own cloud authentication endpoint on loopback, and confirms the engine holds it. Never argv, never the spawn environment, never a file the engine reads. Turning off, forgetting the key, Delete everything and an abandoned check clear it from the running engine at once, before the relaunch. If the engine refuses it or loses the route, nothing is sent, questions are answered on this computer, and "Try again" recovers. The key is kept in the system keychain, or in an owner-only file when there is none |
 | Reach to the provider | While Online answers is on, the engine makes one model-listing request to the provider each time it starts, a cost the owner accepted for keeping the key out of the environment. Otherwise it reaches the provider only when Nocturne sends a question or the one check question. With Online answers off it never does |
 | Requests | One non-streaming chat request per question with a short reply limit, no tools and nothing else. The check sends one fixed word-reply question and no memories |
 | Addresses | Release builds accept only `https://` addresses with a host, and refuse user names, query strings, fragments, loopback, link-local (including metadata addresses), unspecified, private network, shared, multicast, reserved, unique-local, site-local, NAT64 and 6to4 addresses, and the names `localhost`, `.local`, `.home.arpa`, `.internal`, `.ts.net` and any one-label name. Redirects are not followed, by the engine or by the app's own client |
@@ -72,21 +72,17 @@ bump re-checks them.
 - Windows is untested for the core-dump measure; Windows writes no core files by default.
 - The provider sees one model-listing request, with the key and no question or memory, each time the
   engine starts while Online answers is on.
-- On Linux, `systemd-coredump` records the environment of a crashing process in the journal even
-  when no core file is saved. Putting the key in the engine's spawn environment would have left it
-  there after an engine crash, beyond the reach of "Forget the key". The owner chose to hand the key
-  over at run time instead (route B), at the cost of the listing request above; the alternative of
-  the environment is recorded as the rejected option. Rotating a key at the provider remains good
-  practice after any suspected exposure.
-- Sensitive details (health, money and ID signals, checked in every version of a memory) are left
-  out unless the person allows them. The detection is being reworked; this page describes the
-  behaviour, not the patterns, and the filter is a best effort, not a guarantee.
+- The engine's environment, which system crash records can hold, never holds the key; it is in the
+  engine's memory only. Rotate the key at the provider if you think it was exposed.
+- Sensitive details: a memory with health, money or ID signals, checked in every version of it, is
+  left out unless the person allows them. The check errs towards leaving a memory out, and it can
+  still miss some, so it is a best effort and not a guarantee.
 
 ## Consequences
 
 - Invariant 2 gains a second exception, described in the architecture notes.
-- The release check is to gain an `online` network mode that allows a non-loopback connect only from
-  the engine, only to the entered address, only during questions and never after turning off. It is
-  not written yet ([releasing](/contribution/release.md)).
+- The release check has an `online` network mode (`make netcheck-online`) that allows a non-loopback
+  connect only from the engine, only to the entered address, only during questions and the start-up
+  listing, and never after turning off ([releasing](/contribution/release.md)).
 - A change to Lemonade's `cloud_providers` behaviour or its cloud authentication endpoint is a release blocker until the route is probed again.
 - Whether providers behave as expected over the real internet is not claimed until an owner-approved trial.

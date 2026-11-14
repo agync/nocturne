@@ -12,12 +12,10 @@ The design lives in `docs/` (start at `docs/overview.md` and `docs/design/`).
 2. **Local only.** No telemetry, no cloud calls, no network traffic other than consented model and app
    downloads; while the person has turned on Away from home, sealed traffic to their own paired
    phones through the connection they chose, plus that connection's own traffic to its company's
-   servers and relays to stay connected; and, while the person has turned on Online answers, each
-   question they ask with the few remembered sentences needed to answer it, never anything marked
-   private, sent by the embedded engine to the one address they entered (and one fixed test question,
-   with no memories, when they check the connection). The embedded `lemond` binds loopback with a
-   per-launch key and reaches the internet only for those, for one model-listing request to that address
-   each time it starts while Online answers is on, and for downloads the person agreed to.
+   servers and relays to stay connected; and, while the person has turned on Online answers, the
+   embedded engine's requests to the one provider they chose for answers (a question with the few
+   remembered sentences it needs, never anything marked private), plus one look at that provider's
+   list of models each time the engine starts. The embedded `lemond` binds loopback with a per-launch key.
 3. **No jargon in the interface.** Model, inference, token, NPU, GPU, embedding and graph appear only
    in advanced details views. See `docs/design/experience-principles.md`.
 4. **Receipts or it did not happen.** Every answer and page line cites the original it came from.

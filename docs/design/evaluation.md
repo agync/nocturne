@@ -50,10 +50,10 @@ before building more.
 | The embedded server is reachable by other apps | No: per-launch key, loopback only |
 | Away from home off: listeners, helper processes and outbound traffic | None; no helper file unless a download was agreed to |
 | Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale helper |
-| Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored (check planned) |
-| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off (`online` mode of the network check, planned) |
+| Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored |
+| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off (`online` mode of the network check) |
 | Private and sensitive markers in captured online traffic | 0 |
-| Online answer accuracy against the Tiny tier on the same questions | Reported as one table from the measurement with a stand-in provider; no target is set until it is measured |
+| Online answer accuracy against the Tiny tier on the same questions | Measured (S1b), see below; no target is set |
 | Plaintext in a relay recording after a scanned pairing | 0 bytes |
 | Bytes sent to phones | Counted at the listener and shown on Privacy |
 | Private items reaching a phone | 0 |
@@ -64,3 +64,12 @@ under a virtual display): with Away from home on, the app's resident memory grew
 peak grew by 2.5 MB during a 50 MB upload, and after turning it off and after quitting no process
 or listener of Nocturne was left. These are the app's own figures, not the real helper's, and Mac
 and Windows are not measured.
+
+## Online answers on the smallest tier (S1b)
+
+Measured against a stand-in provider with a larger model, on the smallest tier, with the same
+questions answered locally and through the online path. Answering through the online path scored a
+median of 6 of 12 against 7 of 12 locally, and took about 3 s against 0.8 s to answer. No private or
+sensitive test markers reached the stand-in provider. Online answers are not claimed to be better on
+small computers; the value is that a person can choose a service they already trust, and the cost is
+a slower answer.

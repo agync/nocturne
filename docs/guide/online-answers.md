@@ -26,7 +26,7 @@ tidy and your morning page never use it.
    of your memories. If the check fails, it says why in plain words, and nothing was sent for an
    address it refuses.
 4. Choose which questions may go online (the ones you ask here, and, when Away from home is on,
-   the ones from your phones), whether health, money and ID details may go with them, and a monthly
+   the ones from your phones), whether details about health, money or ID may go with them (they stay out unless you allow them, and the check can miss some), and a monthly
    limit.
 5. Read what will be sent, then press "Turn on online answers". Until you do, nothing is saved and the
    key is forgotten, and leaving the setup drops what you entered.
@@ -101,6 +101,8 @@ export includes the log as readable text (`online/sent.md`) but never the key.
 ## Where the key is kept
 
 In your computer's keychain. If there is none, in a file only you can read in Nocturne's folder, and
-Nocturne tells you which. It is never shown, logged or exported, and it is not put in the private engine's start-up
-settings, so a crash record of the engine does not hold it. Rotating a key at your provider is still
-good practice after any suspected exposure.
+Nocturne tells you which. It is never shown, logged or exported. Nocturne hands it to the private engine in its memory each
+time the engine starts, and takes it back from the engine when you turn off, forget the key, delete
+everything or leave the setup. If the engine does not take it, nothing is sent: questions are answered
+on this computer, a note says so, and "Try again" brings the route back. If you think the key was
+exposed, rotate it on your provider's site.

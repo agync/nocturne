@@ -30,10 +30,16 @@ flowchart LR
   key: it holds only the two per-launch keys beside a few basics (home folder, path, locale, runtime
   folder), and it is cleared first, so nothing of the person's own is passed on.
 - The key reaches `lemond` at run time, through the engine's own endpoint on loopback, after each
-  start while Online answers is on. It is not in argv, in the environment, in `config.json`, in a
-  file the engine reads or in any request Nocturne makes to a provider. Because it is not in the
-  environment, a crash record of the engine's environment does not hold it and the engine's model
+  start while Online answers is on. Nocturne loads the online entry, hands the key over in memory,
+  and confirms the engine holds it. It is not in argv, in the environment, in `config.json`, in a
+  file the engine reads or in any request Nocturne makes to a provider, and the engine's model
   servers do not inherit it.
+- Turning off, forgetting the key, Delete everything and an abandoned check clear the key from the
+  running engine at once, before the relaunch waits for requests in flight. A launch that was reading
+  the route when it changed hands over nothing. If the engine refuses the key or loses the route
+  (a failed local load can unload the online entry), nothing is sent, questions are answered on this
+  computer, a problem is shown, and "Try again" or a passed check relaunches the engine with the
+  route.
 - The price of that is one model-listing request to the provider each time the engine starts while
   Online answers is on, made by the engine itself. Besides that request, the engine reaches the
   provider only for a question or for the one connection check, and never while Online answers is
@@ -186,6 +192,5 @@ made undumpable; the engine and its children inherit the limit.
 ## Verification
 
 Tests use a stand-in provider on loopback (`fake-provider`) and never a real one. The `online` mode
-of the network check and the engine route probe are release checks still to be added
-([releasing](/contribution/release.md)); the Makefile already names `make netcheck-online`, whose
-mode is not written yet. The privacy targets are in [evaluation](/design/evaluation.md).
+of the network check (`make netcheck-online`) and the package check for the stand-in marker exist;
+the route probe at each engine bump is repeated by hand ([releasing](/contribution/release.md)). The privacy targets are in [evaluation](/design/evaluation.md).

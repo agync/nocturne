@@ -80,29 +80,27 @@ touches the real internet.
 ## Online answers checks
 
 These use a stand-in provider on loopback and a reserved test address; none reaches a real provider.
-Status: the unit and integration tests run in `make check`. The checks below are release checks still
-to be added. The Makefile already names `make netcheck-online`, `make e2e-online` and
-`make e2e-models`, but `scripts/net-check.sh` knows only `launch`, `prepared`, `remote` and `attach`,
-and `scripts/e2e-real.sh` only `run`, `offline` and `all`; until the modes exist, those targets fail
-with "unknown mode".
+The unit and integration tests run in `make check`. `make e2e-online` and `make e2e-models` run
+the real models with `scripts/e2e-real.sh`.
 
-- **Net check, `online` mode (planned).** A prepared data folder has Online answers on, the key in the fallback
-  file and an address that is a documentation-range IP literal (no DNS). A scripted driver asks
-  questions, idles for 10 minutes, turns Online answers off and asks again, with one approved model
-  download while on. A non-loopback connect passes only for the engine, only to that address, at most
-  once per question, never while idle, never after the off mark, never during the download window.
-  The app never connects. The existing `off` judgement of `scripts/netlog.py` must also be run with
-  a key stored and Online answers off, and stay at zero.
-- **Probe at each engine bump (planned).** No probe script exists yet. Before moving the pinned engine version, re-run the route probe:
-  a fixed model row answers, the key arrives only at run time through the engine's own endpoint and
-  never in the environment, the only discovery request is the one model-listing request at start,
-  and redirects are not followed. A change to `cloud_providers` in the engine
-  blocks the bump until the route, the log pipe and decision 0011 are checked again.
+- **Net check, `online` mode.** `make netcheck-online` runs `scripts/net-check.sh online`. A prepared
+  data folder has Online answers on, the key in the fallback file and an address that is a
+  documentation-range IP literal (no DNS). A scripted driver asks questions, idles for 10 minutes,
+  turns Online answers off and asks again. A non-loopback connect passes only for the engine, only to
+  that address, at most once per question plus the one model-listing request at each engine start,
+  never while idle and never after the off mark. The app never connects. The existing `off` judgement
+  of `scripts/netlog.py` must also be run with a key stored and Online answers off, and stay at zero.
+- **Probe at each engine bump.** Before moving the pinned engine version, repeat the route B probe
+  (the load, then key handover, sequence against a stand-in provider on loopback with no other
+  network): a fixed model row answers, the key arrives only at run time through the engine's own
+  endpoint and never in the environment, the only discovery request is the one model-listing request
+  at start, clearing the key stops the next question before any request, and redirects are not
+  followed. A change to `cloud_providers` or the cloud authentication endpoint in the engine blocks
+  the bump until the route, the log pipe and decision 0011 are checked again.
 - **Fit table.** Refresh the shipped memory figures in the fit table when the catalogue or a backend
   changes, and check that every tier preset still fits at its own minimum.
-- **Package check (planned).** `scripts/check-package.sh` fails today only on the helper stand-in
-  marker. The `online-stand-in` feature will carry its own marker, and the script will fail a package
-  that holds it.
+- **Package check.** `scripts/check-package.sh` fails a package whose program carries the
+  `online-stand-in` marker (`STAND_IN_MARKER`), as it does for the helper stand-in marker.
 
 ## Desktop checks
 
