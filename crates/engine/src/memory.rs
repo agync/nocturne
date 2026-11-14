@@ -249,8 +249,177 @@ fn values_disagree(a: &str, b: &str) -> bool {
 }
 
 /// Whether a candidate and a memory say different things, in their values or their sentences.
-fn says_otherwise(c: &Candidate, e: &MemRow) -> bool {
-    values_disagree(&c.object, &e.object) || values_disagree(&c.sentence, &e.sentence)
+fn says_otherwise(c: &Candidate, object: &str, sentence: &str) -> bool {
+    values_disagree(&c.object, object) || values_disagree(&c.sentence, sentence)
+}
+
+/// Words that name nothing on their own: articles, pronouns, titles, small joining words.
+const PLAIN_WORDS: &[&str] = &[
+    "the", "a", "an", "my", "our", "your", "his", "her", "their", "its", "of", "and", "to", "for",
+    "at", "on", "in", "with", "dr", "mr", "mrs", "ms", "miss", "i", "me", "we", "us", "you", "he",
+    "she", "it", "they", "them",
+];
+
+/// Words that say whose words a claim is: "Ravi thinks choir practice is on Friday".
+const REPORT_WORDS: [&str; 15] = [
+    "says",
+    "said",
+    "thinks",
+    "thought",
+    "reckons",
+    "reckoned",
+    "believes",
+    "believed",
+    "claims",
+    "claimed",
+    "insists",
+    "insisted",
+    "tells",
+    "told",
+    "mentioned",
+];
+
+/// Words that may follow the thing a reported claim is about: "says book club is ...".
+const CLAUSE_WORDS: [&str; 20] = [
+    "is", "are", "was", "were", "has", "have", "had", "will", "would", "meets", "meet", "starts",
+    "start", "runs", "run", "moved", "now", "actually", "on", "at",
+];
+
+fn naming_words(subject: &str) -> Vec<String> {
+    words_of(subject)
+        .into_iter()
+        .filter(|w| {
+            w.chars().count() > 1
+                && !PLAIN_WORDS.contains(&w.as_str())
+                && !w.chars().all(|c| c.is_ascii_digit())
+        })
+        .collect()
+}
+
+/// Whether `sentence` names every naming word of `subject`.
+fn names_all(sentence: &str, subject: &str) -> bool {
+    let words = words_of(sentence);
+    let naming = naming_words(subject);
+    !naming.is_empty() && naming.iter().all(|w| words.contains(w))
+}
+
+/// Whether `sentence` passes on what `teller` says about `about`: "Ravi thinks choir practice is
+/// on Friday" is about choir practice, but "Sam says Leo's party is on Friday" is not about Leo.
+fn reports_on(sentence: &str, teller: &str, about: &str) -> bool {
+    let words = words_of(sentence);
+    let about = words_of(&key_of(about));
+    let Some(last) = words_of(teller).pop() else {
+        return false;
+    };
+    if about.is_empty() {
+        return false;
+    }
+    (0..words.len().saturating_sub(1)).any(|i| {
+        if words[i] != last || !REPORT_WORDS.contains(&words[i + 1].as_str()) {
+            return false;
+        }
+        let mut rest = &words[i + 2..];
+        while let Some((first, tail)) = rest.split_first()
+            && matches!(first.as_str(), "that" | "the" | "a" | "an" | "my" | "our")
+        {
+            rest = tail;
+        }
+        rest.starts_with(&about)
+            && rest
+                .get(about.len())
+                .is_none_or(|w| CLAUSE_WORDS.contains(&w.as_str()))
+    })
+}
+
+/// Whether `word` is the name of something else the store knows on its own.
+fn names_something(tx: &Transaction<'_>, word: &str) -> Result<bool> {
+    let subject: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM memories WHERE subject_key = ?1 AND superseded_at IS NULL)",
+        [word],
+        |r| r.get(0),
+    )?;
+    Ok(subject || find_by_key(tx, word, None)?.is_some())
+}
+
+/// Whether the claim (`b_subject`, `b_sentence`) is about the memory `a` filed under another
+/// name. Its sentence names all of `a`'s subject, and either it passes on what its own subject
+/// says about `a` ("Ravi thinks choir practice is ..."), or the last word of its subject is in
+/// `a`'s words and no other word of it names something else the store knows ("Dentist
+/// appointment" and "Dr Okafor's appointment", never "Leo's appointment").
+fn about_other_subject(
+    tx: &Transaction<'_>,
+    a_subject: &str,
+    a_sentence: &str,
+    b_subject: &str,
+    b_sentence: &str,
+) -> Result<bool> {
+    if !names_all(b_sentence, a_subject) {
+        return Ok(false);
+    }
+    if reports_on(b_sentence, b_subject, a_subject) {
+        return Ok(true);
+    }
+    let a_words: HashSet<String> = words_of(a_subject)
+        .into_iter()
+        .chain(words_of(a_sentence))
+        .collect();
+    let naming = naming_words(b_subject);
+    if !naming.last().is_some_and(|w| a_words.contains(w)) {
+        return Ok(false);
+    }
+    for w in naming.iter().filter(|w| !a_words.contains(*w)) {
+        if names_something(tx, w)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+/// Appointments filed under another subject that this candidate changes or disputes: the same
+/// one said with a different name ("Dr Okafor" and "Dentist appointment"), or someone's view of
+/// it filed under them ("Ravi thinks choir practice is ..."). Only a value that differs links
+/// them, and only when the candidate points at one other subject: a missed link costs a
+/// question, a wrong one rewrites the wrong thing. A memory the person moved away from this
+/// subject is never linked back to it.
+fn drifted_appointments(
+    tx: &Transaction<'_>,
+    c: &Candidate,
+    subject_key: &str,
+    current: &[MemRow],
+) -> Result<Vec<MemRow>> {
+    let others: Vec<(String, String, String, String, String)> = {
+        let mut stmt = tx.prepare(
+            "SELECT id, subject, subject_key, object, sentence FROM memories \
+             WHERE predicate = 'scheduled' AND subject_key != ?1 AND superseded_at IS NULL \
+             AND status IN ('active', 'fading') AND moved_from_key IS NOT ?1 \
+             ORDER BY recorded_at, id",
+        )?;
+        stmt.query_map([subject_key], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?
+    };
+    let mut linked = Vec::new();
+    let mut subjects = HashSet::new();
+    for (id, subject, key, object, sentence) in others {
+        if current.iter().any(|m| m.id == id) || !says_otherwise(c, &object, &sentence) {
+            continue;
+        }
+        if about_other_subject(tx, &subject, &sentence, &c.subject, &c.sentence)?
+            || about_other_subject(tx, &c.subject, &c.sentence, &subject, &sentence)?
+        {
+            linked.push(id);
+            subjects.insert(key);
+        }
+    }
+    if subjects.len() > 1 {
+        return Ok(Vec::new());
+    }
+    let mut rows = Vec::new();
+    for id in linked {
+        rows.extend(load_mem(tx, &id)?);
+    }
+    Ok(rows)
 }
 
 /// Whether a trusted item behind a memory quotes words that say it moved to its value.
@@ -878,7 +1047,7 @@ fn apply_one(
         matches!(predicate.as_str(), "due" | "scheduled")
             && due.is_some()
             && e.due == due
-            && !says_otherwise(c, e)
+            && !says_otherwise(c, &e.object, &e.sentence)
     };
     // A date-only match (same due date, different words) is a convenience for trusted items
     // agreeing with settled memories. It never matches an unconfirmed memory, so it can never
@@ -991,7 +1160,12 @@ fn apply_one(
     let mut to_replace: Vec<String> = Vec::new();
     let mut in_conflict: Vec<String> = Vec::new();
     if status == MemoryStatus::Active {
-        for e in &current {
+        let drifted = if predicate == "scheduled" {
+            drifted_appointments(tx, c, &subject_key, &current)?
+        } else {
+            Vec::new()
+        };
+        for e in current.iter().chain(&drifted) {
             if !matches!(e.status, MemoryStatus::Active | MemoryStatus::Fading)
                 || e.object_key == object_key
                 || !same_slot(&predicate, &c.object, &c.tags, e)
@@ -1747,7 +1921,29 @@ fn new_memory_id() -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::values_disagree;
+    use super::{reports_on, values_disagree};
+
+    #[test]
+    fn a_report_is_about_what_follows_the_word_that_says_so() {
+        let ravi = "Ravi thinks choir practice is on Friday evenings at the school hall.";
+        assert!(reports_on(ravi, "Ravi", "Choir practice"));
+        assert!(reports_on(
+            "Sam says that the book club is actually on Wednesdays.",
+            "Sam",
+            "Book club"
+        ));
+        assert!(!reports_on(
+            "Sam says Leo's party is on Friday.",
+            "Sam",
+            "Leo"
+        ));
+        assert!(!reports_on(ravi, "Sam", "Choir practice"));
+        assert!(!reports_on(
+            "Choir practice is on Thursday evenings.",
+            "Choir practice",
+            "Choir practice"
+        ));
+    }
 
     #[test]
     fn values_that_differ_disagree() {

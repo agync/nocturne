@@ -1682,3 +1682,241 @@ fn a_same_day_move_to_another_time_replaces_the_old_time() {
     );
     assert_eq!(rows[0].receipts.len(), 1);
 }
+
+fn scheduled(
+    subject: &str,
+    object: &str,
+    sentence: &str,
+    due: Option<&str>,
+) -> nocturne_engine::Candidate {
+    let mut c = cand(subject, Predicate::Scheduled, object, sentence);
+    c.due = due.map(date);
+    c
+}
+
+fn okafor_on_wednesday(f: &Fixture) -> String {
+    learn(
+        &f.engine,
+        "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00.",
+        scheduled(
+            "Dr Okafor",
+            "Wednesday 18 November at 10:00",
+            "Dr Okafor's appointment is on Wednesday 18 November at 10:00.",
+            Some("2026-11-18"),
+        ),
+    )
+    .1
+}
+
+/// The move filed under another name than the appointment it moves still moves it.
+#[test]
+fn a_move_filed_under_another_name_replaces_the_appointment() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let wed = okafor_on_wednesday(&f);
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let note = "The dentist appointment has moved. Dr Okafor's receptionist called: it is now \
+                Thursday 19 November at 14:30, not Wednesday 18 November.";
+    let item = keep(&f.engine, note);
+    let mut thu = scheduled(
+        "Dentist appointment",
+        "Thursday 19 November at 14:30",
+        "The dentist appointment with Dr Okafor is on Thursday 19 November at 14:30.",
+        Some("2026-11-19"),
+    );
+    thu.moved = true;
+    thu.span = Some(nocturne_contract::Span::Quote {
+        text: note.to_string(),
+    });
+    let r = f.engine.apply(&item, vec![thu]).unwrap();
+    assert_eq!(r.replaced, vec![wed.clone()], "{r:?}");
+    assert!(r.conflicts.is_empty());
+    let rows = all(&f);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        rows[0].was.as_deref(),
+        Some("Wednesday 18 November at 10:00")
+    );
+    assert!(
+        f.engine
+            .history(&rows[0].id)
+            .unwrap()
+            .iter()
+            .any(|m| m.id == wed)
+    );
+}
+
+fn choir_on_thursday() -> nocturne_engine::Candidate {
+    scheduled(
+        "Choir practice",
+        "Thursday evenings at St Anne's church",
+        "Choir practice is on Thursday evenings at St Anne's church.",
+        Some("2026-11-12"),
+    )
+}
+
+fn ravi_says_friday() -> nocturne_engine::Candidate {
+    scheduled(
+        "Ravi",
+        "Friday evenings at the school hall",
+        "Ravi thinks choir practice is on Friday evenings at the school hall.",
+        None,
+    )
+}
+
+/// Someone's view of an arrangement, filed under them, disputes what is known about it, in
+/// whichever order the two notes are read.
+#[test]
+fn a_view_filed_under_the_person_who_holds_it_is_asked_about() {
+    for ravi_first in [false, true] {
+        let f = fixture_at("2026-11-12T09:00:00Z", "Europe/London");
+        let (first, second) = if ravi_first {
+            (ravi_says_friday(), choir_on_thursday())
+        } else {
+            (choir_on_thursday(), ravi_says_friday())
+        };
+        learn(&f.engine, &first.sentence.clone(), first);
+        f.clock.set_str("2026-11-12T15:00:00Z");
+        let item = keep(&f.engine, &second.sentence.clone());
+        let r = f.engine.apply(&item, vec![second]).unwrap();
+        assert_eq!(r.conflicts.len(), 1, "ravi first {ravi_first}: {r:?}");
+        assert!(r.replaced.is_empty());
+        assert!(
+            f.engine
+                .needs_you()
+                .unwrap()
+                .iter()
+                .any(|e| matches!(e, NeedsYouEntry::Which { .. }))
+        );
+    }
+}
+
+/// What someone says about a thing that only starts with another subject's name is not about
+/// that subject: Sam's word on Leo's party says nothing about Leo's swimming.
+#[test]
+fn a_view_of_something_else_is_not_linked() {
+    let f = fixture_at("2026-11-12T09:00:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Leo swims on Mondays with Coach Dee after school.",
+        scheduled(
+            "Leo",
+            "Mondays with Coach Dee",
+            "Leo swims on Mondays with Coach Dee after school.",
+            None,
+        ),
+    );
+    f.clock.set_str("2026-11-12T15:00:00Z");
+    let item = keep(&f.engine, "Sam says Leo's party is on Friday.");
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![scheduled(
+                "Sam",
+                "Friday",
+                "Sam says Leo's party is on Friday.",
+                None,
+            )],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty() && r.replaced.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// Someone else's appointment with the same dentist on the same day is not the person's own,
+/// even though it names the dentist and is an appointment too.
+#[test]
+fn an_appointment_naming_someone_else_is_not_linked() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    okafor_on_wednesday(&f);
+    learn(
+        &f.engine,
+        "Leo swims on Mondays.",
+        scheduled("Leo", "Mondays", "Leo swims on Mondays.", None),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "Leo's dentist appointment with Dr Okafor is on Wednesday 18 November at 15:00.",
+    );
+    let r = f
+        .engine
+        .apply(
+            &item,
+            vec![scheduled(
+                "Leo's dentist appointment",
+                "Wednesday 18 November at 15:00",
+                "Leo's dentist appointment with Dr Okafor is on Wednesday 18 November at 15:00.",
+                Some("2026-11-18"),
+            )],
+        )
+        .unwrap();
+    assert!(r.conflicts.is_empty() && r.replaced.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 3);
+}
+
+/// A shared word alone links nothing: the vet appointment moving does not move the dentist.
+#[test]
+fn a_shared_word_alone_is_not_a_link() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    learn(
+        &f.engine,
+        "Dentist appointment on Wednesday 18 November at 10:00.",
+        scheduled(
+            "Dentist appointment",
+            "Wednesday 18 November at 10:00",
+            "The dentist appointment is on Wednesday 18 November at 10:00.",
+            Some("2026-11-18"),
+        ),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "The vet appointment moved to Thursday 19 November.",
+    );
+    let mut vet = scheduled(
+        "Vet appointment",
+        "Thursday 19 November",
+        "The vet appointment is on Thursday 19 November.",
+        Some("2026-11-19"),
+    );
+    vet.moved = true;
+    let r = f.engine.apply(&item, vec![vet]).unwrap();
+    assert!(r.conflicts.is_empty() && r.replaced.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 2);
+}
+
+/// A move that could belong to either of two appointments filed under other names moves
+/// neither: guessing could move the wrong one.
+#[test]
+fn a_move_that_could_be_either_of_two_moves_neither() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    okafor_on_wednesday(&f);
+    learn(
+        &f.engine,
+        "Hygienist appointment on Wednesday 25 November at 9:00.",
+        scheduled(
+            "Hygienist",
+            "Wednesday 25 November at 9:00",
+            "The hygienist appointment is on Wednesday 25 November at 9:00.",
+            Some("2026-11-25"),
+        ),
+    );
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "The dentist appointment with Dr Okafor and the hygienist has moved to Thursday 19 \
+         November at 14:30.",
+    );
+    let mut thu = scheduled(
+        "Dentist appointment",
+        "Thursday 19 November at 14:30",
+        "The dentist appointment with Dr Okafor and the hygienist is now Thursday 19 November \
+         at 14:30.",
+        Some("2026-11-19"),
+    );
+    thu.moved = true;
+    let r = f.engine.apply(&item, vec![thu]).unwrap();
+    assert!(r.conflicts.is_empty() && r.replaced.is_empty(), "{r:?}");
+    assert_eq!(all(&f).len(), 3);
+}
