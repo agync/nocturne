@@ -342,7 +342,14 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
             "The signed slip and £12 are due tomorrow. Bring a packed lunch in a bag you won’t need back.",
           ),
         );
-        await emit(delta("done", null, { receipts: [MOCK_RECEIPTS.letter, MOCK_RECEIPTS.chat] }));
+        const answeredBy: AskDelta["answeredBy"] = q.includes("online")
+          ? { type: "online", host: "api.example.test" }
+          : q.includes("on my computer")
+            ? { type: "computer", reason: null }
+            : null;
+        await emit(
+          delta("done", null, { receipts: [MOCK_RECEIPTS.letter, MOCK_RECEIPTS.chat], answeredBy }),
+        );
       }
       return "ask-1";
     },

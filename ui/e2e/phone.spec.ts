@@ -347,6 +347,23 @@ test("ask: not sure shows both, nothing and too many say so, stop cancels", asyn
   await expect(page.getByText("That’s a lot of questions at once.")).toBeVisible();
 });
 
+for (const scheme of ["light", "dark"] as const) {
+  test(`ask: the online mark is accessible (${scheme})`, async ({ page, phoneUrl }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(`${phoneUrl}/?s=connected&pace=20`);
+    await page.getByRole("button", { name: /^Ask/ }).click();
+    await page.getByLabel("Your question").fill("What do I need for the trip, online?");
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(
+      page.getByText("Answered online by your provider (api.example.test)"),
+    ).toBeVisible();
+    await expect(
+      page.getByText("What was sent is listed on your computer, under Online answers."),
+    ).toBeVisible();
+    await axeClean(page);
+  });
+}
+
 test("ask: Stop ends the answer where it is", async ({ page, phoneUrl }) => {
   await page.goto(`${phoneUrl}/?s=connected&pace=600`);
   await page.getByRole("button", { name: /^Ask/ }).click();

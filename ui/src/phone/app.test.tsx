@@ -595,6 +595,32 @@ describe("ask", () => {
     expect(screen.getByText("Something wrong? Correct it on your computer.")).toBeInTheDocument();
   });
 
+  it("phone.ask.online_mark", async () => {
+    render(<AskHarness engine={engineWith({ pace: 5 })} />);
+    await question("Trip online please");
+    expect(
+      await screen.findByText("Answered online by your provider (api.example.test)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("What was sent is listed on your computer, under Online answers."),
+    ).toBeInTheDocument();
+  });
+
+  it("phone.ask.computer_mark", async () => {
+    render(<AskHarness engine={engineWith({ pace: 5 })} />);
+    await question("Trip on my computer");
+    expect(await screen.findByText("Answered on your computer")).toBeInTheDocument();
+    expect(screen.queryByText(/listed on your computer/)).not.toBeInTheDocument();
+  });
+
+  it("phone.ask.no_mark_when_off", async () => {
+    render(<AskHarness engine={engineWith({ pace: 5 })} />);
+    await question("What do I need for Leo’s school trip?");
+    expect(await screen.findByText("From 2 things you kept")).toBeInTheDocument();
+    expect(screen.queryByText(/Answered (online|on your)/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Online answers/)).not.toBeInTheDocument();
+  });
+
   it("ask.unsure_shows_both", async () => {
     render(<AskHarness engine={engineWith({ pace: 5 })} />);
     await question("When is the dentist?");

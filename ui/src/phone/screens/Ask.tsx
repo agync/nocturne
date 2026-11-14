@@ -1,7 +1,7 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { richText } from "../../components/PageLine/richText";
 import { t } from "../../copy/t";
-import type { AskDelta, AskPhase, NearMatch, Receipt } from "../../engine/bindings";
+import type { AnsweredBy, AskDelta, AskPhase, NearMatch, Receipt } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
 import { receiptMeta } from "../labels";
 import { MAX_QUESTION } from "../protocol";
@@ -16,6 +16,7 @@ export interface AskModel {
   receipts: Receipt[];
   near: NearMatch[];
   failure: AskFailure | null;
+  answeredBy: AnsweredBy | null;
 }
 
 const EMPTY: AskModel = {
@@ -25,6 +26,7 @@ const EMPTY: AskModel = {
   receipts: [],
   near: [],
   failure: null,
+  answeredBy: null,
 };
 
 const encoder = new TextEncoder();
@@ -56,7 +58,15 @@ export function useAskSession(engine: PhoneEngine) {
     async (question: string) => {
       const run = { id: current.current.id + 1, askId: null as string | null, stopped: false };
       current.current = run;
-      setModel({ question, phase: "starting", text: "", receipts: [], near: [], failure: null });
+      setModel({
+        question,
+        phase: "starting",
+        text: "",
+        receipts: [],
+        near: [],
+        failure: null,
+        answeredBy: null,
+      });
       const onDelta = (d: AskDelta) => {
         if (current.current.id !== run.id || run.stopped) return;
         run.askId = d.askId;
@@ -66,6 +76,7 @@ export function useAskSession(engine: PhoneEngine) {
           text: m.text + (d.textDelta ?? ""),
           receipts: d.receipts.length > 0 ? d.receipts : m.receipts,
           near: d.near.length > 0 ? d.near : m.near,
+          answeredBy: d.answeredBy ?? m.answeredBy,
         }));
       };
       try {
@@ -297,6 +308,16 @@ export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProp
               <p className="ph-rc" style={{ color: "var(--ink2)" }}>
                 {t("phone.ask.cameLater")}
               </p>
+            )}
+            {done && model.answeredBy && (
+              <p className="ph-hint ph-hint--ink2" data-place={model.answeredBy.type}>
+                {model.answeredBy.type === "online"
+                  ? t("phone.ask.mark.online", { host: model.answeredBy.host })
+                  : t("phone.ask.mark.computer")}
+              </p>
+            )}
+            {done && model.answeredBy?.type === "online" && (
+              <p className="ph-hint ph-hint--ink2">{t("phone.ask.mark.sent")}</p>
             )}
             {done && <p className="ph-hint ph-hint--ink2">{t("phone.ask.wrong")}</p>}
           </>
