@@ -922,3 +922,54 @@ fn a_money_limit_without_reported_cost_falls_back_to_the_count() {
         json!({"type": "computer", "reason": "limit"})
     );
 }
+
+/// A check cancelled while the engine relaunches with the route being checked: the engine has
+/// taken that route already, so it is always handed back, to the route in use while on and to
+/// none while off. Questions go only where the mark says.
+#[test]
+fn a_check_cancelled_mid_relaunch_hands_the_engine_back() {
+    for on in [false, true] {
+        let l = lab();
+        if on {
+            l.turn_on(200);
+        }
+        assert_eq!(l.route_at_launch(), on, "on={on}");
+        let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
+        let hold = l.port.hold_next_relaunch();
+        let form: nocturne_contract::OnlineForm = serde_json::from_value(json!({
+            "baseUrl": "https://new.example.com/v1", "key": "sk-new-0001112223", "model": "m"
+        }))
+        .unwrap();
+        let checking = {
+            let hub = hub.clone();
+            tauri::async_runtime::spawn(async move { hub.check(form).await })
+        };
+        block_on(hold.reached.notified());
+        assert_eq!(
+            l.port.current().map(|r| r.base_url),
+            Some("https://new.example.com/v1".to_string()),
+            "on={on}: the engine took the route being checked"
+        );
+        l.h.ok("cancel_online_check", json!({}));
+        let out = block_on(checking).unwrap().unwrap();
+        assert_eq!(out, nocturne_contract::CheckOutcome::Cancelled);
+        if on {
+            assert_eq!(
+                l.port.current(),
+                stand_in_route(),
+                "back to the route in use"
+            );
+            assert!(hub.still_on());
+            let d = dentist_ask(&l);
+            assert_eq!(
+                serde_json::to_value(&d.answered_by).unwrap(),
+                json!({"type": "online", "host": "api.example.com"})
+            );
+            assert_eq!(l.port.current(), stand_in_route());
+        } else {
+            assert_eq!(l.port.current(), None, "no route and no key while off");
+            assert!(!l.route_at_launch());
+            assert_eq!(l.view()["state"]["type"], "off");
+        }
+    }
+}

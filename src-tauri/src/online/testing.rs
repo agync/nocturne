@@ -4,8 +4,8 @@
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use nocturne_engine::BoxFuture;
 use nocturne_lemonade::Client;
@@ -80,6 +80,16 @@ pub struct RouteSeen {
     pub with_key: bool,
 }
 
+/// Holds one relaunch after the engine took its route, as the supervisor does while the new
+/// engine starts.
+#[derive(Default)]
+pub struct RelaunchHold {
+    /// Notified once the engine has the route and the relaunch waits.
+    pub reached: tokio::sync::Notify,
+    /// Lets the relaunch finish.
+    pub go: tokio::sync::Notify,
+}
+
 /// An engine port whose client talks to the stand-in provider directly, as the engine would.
 /// A route to `http://127.0.0.1:<port>` (builds with the stand-in feature) moves the client to
 /// the stand-in on that port.
@@ -93,6 +103,7 @@ pub struct StandInPort {
     /// supervisor leaves it.
     pub fail: AtomicBool,
     calls: std::sync::atomic::AtomicUsize,
+    hold: Mutex<Option<Arc<RelaunchHold>>>,
     /// The engine key this port's client sends, its own, so a test can tell its requests from
     /// those of another test's port that once used the same loopback port.
     key: String,
@@ -149,6 +160,14 @@ impl StandInPort {
         self.calls.load(Ordering::SeqCst)
     }
 
+    /// Holds the next relaunch once the engine has its route, until `go` or until the hub
+    /// stops waiting for it.
+    pub fn hold_next_relaunch(&self) -> Arc<RelaunchHold> {
+        let hold = Arc::new(RelaunchHold::default());
+        *self.hold.lock().unwrap_or_else(|e| e.into_inner()) = Some(hold.clone());
+        hold
+    }
+
     /// What the running engine reports about its route, for a launch the hub did not make.
     pub fn set_has_cloud(&self, has: Option<bool>) {
         *self.has.lock().unwrap_or_else(|e| e.into_inner()) = has;
@@ -184,7 +203,14 @@ impl EnginePort for StandInPort {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .push(seen);
-        Box::pin(async { Ok(()) })
+        let hold = self.hold.lock().unwrap_or_else(|e| e.into_inner()).take();
+        Box::pin(async move {
+            if let Some(h) = hold {
+                h.reached.notify_one();
+                h.go.notified().await;
+            }
+            Ok(())
+        })
     }
 
     fn client(&self) -> BoxFuture<'_, Option<Client>> {

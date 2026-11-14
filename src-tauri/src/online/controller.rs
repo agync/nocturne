@@ -175,11 +175,12 @@ impl<R: Runtime> OnlineHub<R> {
     }
 
     /// Whether a question may go out now: a route is in use, no check is running, and the
-    /// engine holds exactly that route. Checked just before a send.
+    /// engine is known to hold exactly that route. Checked just before a send.
     pub fn still_on(&self) -> bool {
         let r = self.routes();
         r.active.is_some()
             && r.checking.is_none()
+            && r.engine_known
             && same_route(r.engine.as_ref(), r.active.as_ref())
     }
 
@@ -263,13 +264,17 @@ impl<R: Runtime> OnlineHub<R> {
         }
     }
 
-    /// Gives the engine `route` unless it already has it.
+    /// Gives the engine `route` unless it already has it. While the relaunch runs, what the
+    /// engine holds is unknown: the engine takes the route before it answers, so a caller
+    /// that stops waiting (a check cancelled) leaves it unknown, and the next call always
+    /// reaches the engine.
     async fn give_engine(&self, route: Option<CloudRoute>) -> Result<(), String> {
         {
-            let r = self.routes();
+            let mut r = self.routes();
             if r.engine_known && same_route(r.engine.as_ref(), route.as_ref()) {
                 return Ok(());
             }
+            r.engine_known = false;
         }
         // A route that is not the one in use: questions on their way out stop first and are
         // answered here, so none reaches a provider the person has not agreed to.
@@ -292,6 +297,7 @@ impl<R: Runtime> OnlineHub<R> {
 
     /// After launch: an engine that started before the route was known is relaunched once.
     pub async fn settle_after_launch(&self) {
+        let _ops = self.ops.lock().await;
         self.load();
         let want = self.routes().active.clone();
         let has = self.port.has_cloud().await;
@@ -787,13 +793,20 @@ impl<R: Runtime> OnlineHub<R> {
         let Some(route) = self.routes().active.clone() else {
             return RouteChoice::Computer(LocalReason::Problem);
         };
-        // A route found after the engine started (a keychain that came back) is given to it.
+        // A route found after the engine started (a keychain that came back), or one a
+        // cancelled change left unknown, is given to it, never while a change is under way.
         let given = {
             let r = self.routes();
             r.engine_known && same_route(r.engine.as_ref(), Some(&route))
         };
-        if !given && self.give_engine(Some(route.clone())).await.is_err() {
-            return RouteChoice::Computer(LocalReason::Problem);
+        if !given {
+            let Ok(_ops) = self.ops.try_lock() else {
+                return RouteChoice::Computer(LocalReason::Problem);
+            };
+            let still = same_route(self.routes().active.as_ref(), Some(&route));
+            if !still || self.give_engine(Some(route.clone())).await.is_err() {
+                return RouteChoice::Computer(LocalReason::Problem);
+            }
         }
         if self.port.downloading().await {
             return RouteChoice::Computer(LocalReason::Downloading);
