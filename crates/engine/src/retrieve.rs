@@ -242,13 +242,28 @@ impl Engine {
     /// `hits` with the lines of matching originals that no memory says, for when reading missed
     /// something. A line goes right after the first hit from the same original, or, from an
     /// original no hit came from, after the first hit; the lowest memory hits make room so that
-    /// at most `k` are returned. See the module notes for which originals may give lines.
+    /// at most `k` are returned. A line that shares no word with the question is offered only
+    /// from the original of the first hit. See the module notes for which originals may give
+    /// lines.
     pub fn with_source_lines(&self, query: &str, hits: Vec<Hit>, k: usize) -> Result<Vec<Hit>> {
+        let first: Vec<String> = hits
+            .first()
+            .map(|h| {
+                h.memory
+                    .receipts
+                    .iter()
+                    .map(|r| r.item_id.clone())
+                    .collect()
+            })
+            .unwrap_or_default();
         let lines: Vec<(String, Hit)> = self.read(|conn| {
             let mut out = Vec::new();
             for source in line_sources(conn, query)? {
+                let top = first.contains(&source.id);
                 for (n, line) in uncovered_lines(conn, &source, query)?
                     .into_iter()
+                    .filter(|(shared, _)| *shared > 0 || top)
+                    .map(|(_, line)| line)
                     .take(LINES_PER_ITEM)
                     .enumerate()
                 {
@@ -470,8 +485,13 @@ fn line_sources(conn: &Connection, query: &str) -> Result<Vec<LineSource>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-/// The lines of `source` no memory of it says, those sharing most words with `query` first.
-fn uncovered_lines(conn: &Connection, source: &LineSource, query: &str) -> Result<Vec<String>> {
+/// The lines of `source` no memory of it says, each with how many words it shares with
+/// `query`, those sharing most first.
+fn uncovered_lines(
+    conn: &Connection,
+    source: &LineSource,
+    query: &str,
+) -> Result<Vec<(usize, String)>> {
     let mut stmt = conn.prepare_cached(
         "SELECT m.sentence, m.subject, m.object, s.span FROM memory_sources s \
          JOIN memories m ON m.id = s.memory_id WHERE s.item_id = ?1",
@@ -495,7 +515,7 @@ fn uncovered_lines(conn: &Connection, source: &LineSource, query: &str) -> Resul
         })
         .collect();
     lines.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    Ok(lines.into_iter().map(|(_, _, l)| l).collect())
+    Ok(lines.into_iter().map(|(n, _, l)| (n, l)).collect())
 }
 
 fn line_hit(source: &LineSource, n: usize, line: String) -> Hit {

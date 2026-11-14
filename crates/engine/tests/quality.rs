@@ -299,3 +299,22 @@ fn lines_that_link_somewhere_are_never_offered() {
     );
     assert!(lines(&with_lines(&f, "What is the garage door code?")).is_empty());
 }
+
+#[test]
+fn a_line_sharing_no_word_with_the_question_comes_only_from_the_first_hit() {
+    let f = fixture();
+    learn(&f.engine, BOILER, boiler_date());
+    let manual = keep(
+        &f.engine,
+        "The boiler manual is in the hall drawer. Ask Sam about it.",
+    );
+    f.engine.apply(&manual, Vec::new()).unwrap();
+    let offered = with_lines(&f, BOILER_ASKED);
+    let said = lines(&offered);
+    assert!(said.contains(&"The engineer is called Marek."), "{said:?}");
+    assert!(
+        said.contains(&"The boiler manual is in the hall drawer."),
+        "{said:?}"
+    );
+    assert!(!said.contains(&"Ask Sam about it."), "{said:?}");
+}
