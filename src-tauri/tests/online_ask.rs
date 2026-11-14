@@ -32,7 +32,8 @@ fn lab_with(mind: Arc<dyn Mind>) -> Lab {
         port.clone(),
         Arc::new(MemoryKeychain::default()),
     )
-    .unwrap();
+    .unwrap()
+    .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
     Lab { h, s, port }
 }
 

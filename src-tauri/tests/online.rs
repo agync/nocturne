@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use common::*;
 use nocturne_app_lib::online::testing::{
-    MemoryKeychain, RouteSeen, StandIn, StandInPort, fake_provider,
+    MemoryKeychain, RouteSeen, StandIn, StandInPort, agree, confirm_with, fake_provider,
 };
 use nocturne_contract::EVENT_ONLINE;
 use nocturne_engine::FakeMind;
@@ -24,6 +24,8 @@ struct Lab {
     s: StandIn,
     port: Arc<StandInPort>,
     keychain: Arc<MemoryKeychain>,
+    /// The hosts the person was asked about in the app's own window.
+    asked: Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 fn lab_with(keychain: MemoryKeychain) -> Lab {
@@ -31,12 +33,16 @@ fn lab_with(keychain: MemoryKeychain) -> Lab {
     let s = StandIn::start(&fake_provider());
     let port = Arc::new(StandInPort::new(Some(s.port)));
     let keychain = Arc::new(keychain);
-    nocturne_app_lib::online::manage_hub(h.app.handle(), port.clone(), keychain.clone()).unwrap();
+    let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    nocturne_app_lib::online::manage_hub(h.app.handle(), port.clone(), keychain.clone())
+        .unwrap()
+        .set_confirm(agree(asked.clone()));
     Lab {
         h,
         s,
         port,
         keychain,
+        asked,
     }
 }
 
@@ -1006,4 +1012,60 @@ fn a_check_cancelled_mid_relaunch_hands_the_engine_back() {
             assert_eq!(l.view()["state"]["type"], "off");
         }
     }
+}
+
+/// Turning on for a host it was not on for is asked about in the app's own window, naming the
+/// host: a no turns nothing on. The same host again is not asked about.
+#[test]
+fn a_new_host_is_confirmed_outside_the_web_view() {
+    let l = lab();
+    let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
+    let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
+    hub.set_confirm(confirm_with(asked.clone(), false));
+    assert_eq!(l.check(KEY)["type"], "works");
+    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(*asked.lock().unwrap(), ["api.example.com"]);
+    assert_eq!(l.view()["state"]["type"], "off");
+    assert!(!l.keychain.holds_a_key(), "nothing kept after a no");
+    hub.set_confirm(agree(l.asked.clone()));
+    assert_eq!(l.h.ok("turn_on_online", settings())["state"]["type"], "on");
+    assert_eq!(*l.asked.lock().unwrap(), ["api.example.com"]);
+    l.h.ok("turn_off_online", json!({"forget": false}));
+    assert_eq!(l.h.ok("turn_on_online", settings())["state"]["type"], "on");
+    assert_eq!(
+        l.asked.lock().unwrap().len(),
+        1,
+        "the same host is not asked again"
+    );
+    l.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://new.example.com/v1", "key": "sk-new-key-0000111122",
+                        "model": "other-model"}}),
+    );
+    l.h.ok("turn_on_online", settings());
+    assert_eq!(
+        *l.asked.lock().unwrap(),
+        ["api.example.com", "new.example.com"]
+    );
+}
+
+/// With no way to ask in the app's own window, nothing is turned on for a new host.
+#[test]
+fn without_a_way_to_ask_nothing_is_turned_on() {
+    let h = harness_with_mind(Arc::new(FakeMind::new()));
+    let s = StandIn::start(&fake_provider());
+    let port = Arc::new(StandInPort::new(Some(s.port)));
+    nocturne_app_lib::online::manage_hub(
+        h.app.handle(),
+        port.clone(),
+        Arc::new(MemoryKeychain::default()),
+    )
+    .unwrap();
+    let out = h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": URL, "key": KEY, "model": "stand-in-model"}}),
+    );
+    assert_eq!(out["type"], "works");
+    assert_eq!(h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(h.ok("get_online", json!({}))["state"]["type"], "off");
 }

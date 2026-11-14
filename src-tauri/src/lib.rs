@@ -260,6 +260,7 @@ pub fn run() {
             if let Err(e) = remote::install(app) {
                 tracing::warn!("Away from home did not start: {e}");
             }
+            online::install_confirm(app);
             if let Err(e) = online::install(app) {
                 tracing::warn!("Online answers did not start: {e}");
             }

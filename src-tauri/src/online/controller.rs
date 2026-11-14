@@ -11,7 +11,7 @@ use nocturne_contract::{
     OnlinePause, OnlineProblem, OnlineSettings, OnlineSettingsPatch, OnlineState, OnlineView,
     SendKind, SendResult, SentLine,
 };
-use nocturne_engine::{Engine, NewSend, OnlineFailure, OnlineReceipt, OnlineRow};
+use nocturne_engine::{BoxFuture, Engine, NewSend, OnlineFailure, OnlineReceipt, OnlineRow};
 use nocturne_lemonade::mind::online::{OnlineMind, check};
 use nocturne_lemonade::online::{CloudRoute, OnlineKey, UrlProblem, host_of};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -75,6 +75,9 @@ struct Routes {
     loaded: bool,
 }
 
+/// Asks the person, outside the web view, whether Online answers may be turned on for a host.
+pub type ConfirmFn = Arc<dyn Fn(&str) -> BoxFuture<'static, bool> + Send + Sync>;
+
 pub struct OnlineHub<R: Runtime> {
     app: AppHandle<R>,
     port: Arc<dyn EnginePort>,
@@ -84,6 +87,8 @@ pub struct OnlineHub<R: Runtime> {
     /// Bumped when Online answers turns off: questions on their way online stop at once.
     gate: watch::Sender<u64>,
     send_hold: Mutex<Option<Arc<SendHold>>>,
+    /// Asks before turning on for a new host. Without it, nothing is turned on for one.
+    confirm: Mutex<Option<ConfirmFn>>,
 }
 
 /// Holds a question just before it is sent, for a test that turns Online answers off then.
@@ -118,6 +123,17 @@ fn route_from(base_url: &str, model: &str, key: OnlineKey) -> Result<CloudRoute,
     CloudRoute::new(base_url, model.to_string(), key)
 }
 
+/// Whether `route` goes to a host other than the one Online answers was last agreed for.
+fn new_host(row: &OnlineRow, route: &CloudRoute) -> bool {
+    let agreed = row
+        .base_url
+        .as_deref()
+        .filter(|_| row.set_up)
+        .and_then(|u| url::Url::parse(u).ok())
+        .map(|u| host_of(&u));
+    agreed.as_deref() != Some(host_of(route.base_url()).as_str())
+}
+
 /// Why a question fell back to this computer, from why the online answer did not come.
 pub fn reason_for(f: OnlineFailure) -> LocalReason {
     match f {
@@ -143,6 +159,7 @@ impl<R: Runtime> OnlineHub<R> {
             ops: tokio::sync::Mutex::new(()),
             gate: watch::channel(0).0,
             send_hold: Mutex::new(None),
+            confirm: Mutex::new(None),
         }
     }
 
@@ -182,6 +199,25 @@ impl<R: Runtime> OnlineHub<R> {
             && r.checking.is_none()
             && r.engine_known
             && same_route(r.engine.as_ref(), r.active.as_ref())
+    }
+
+    /// How the person is asked before Online answers is turned on for a host it was not on
+    /// for: the app's own window, which script in the web view cannot answer.
+    pub fn set_confirm(&self, confirm: ConfirmFn) {
+        *self.confirm.lock().unwrap_or_else(|e| e.into_inner()) = Some(confirm);
+    }
+
+    /// Whether the person agrees to turn on for `host`; no way to ask is a no.
+    async fn confirmed(&self, host: &str) -> bool {
+        let confirm = self
+            .confirm
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        match confirm {
+            Some(ask) => ask(host).await,
+            None => false,
+        }
     }
 
     #[doc(hidden)]
@@ -567,12 +603,37 @@ impl<R: Runtime> OnlineHub<R> {
     /// Turns Online answers on after the person agreed (O6): the key is kept, the settings
     /// saved, and the checked route stays with the engine.
     pub async fn turn_on(&self, settings: OnlineSettings) -> Result<OnlineView, CommandError> {
-        let _ops = self.ops.lock().await;
         self.load();
         let engine = self.engine()?;
+        // A host it was not last agreed for is asked about in the app's own window first,
+        // before the lock, so turning off is never kept waiting on the person.
+        let asked = {
+            let row = engine.online_state().map_err(internal)?;
+            let r = self.routes();
+            r.provisional
+                .clone()
+                .filter(|p| r.passed && new_host(&row, p))
+        };
+        if let Some(route) = &asked
+            && !self.confirmed(&host_of(route.base_url())).await
+        {
+            return Err(CommandError::unavailable(
+                "Online answers was not turned on: the person did not agree in the app's window",
+            ));
+        }
+        let _ops = self.ops.lock().await;
         let row = engine.online_state().map_err(internal)?;
         let (provisional, passed) = {
             let mut r = self.routes();
+            // A route that passed its check while the person was asked is asked about too.
+            if let Some(p) = r.provisional.as_ref().filter(|_| r.passed)
+                && new_host(&row, p)
+                && !same_route(asked.as_ref(), Some(p))
+            {
+                return Err(CommandError::unavailable(
+                    "the connection changed while waiting; turn on again",
+                ));
+            }
             (
                 r.provisional.take(),
                 std::mem::replace(&mut r.passed, false),

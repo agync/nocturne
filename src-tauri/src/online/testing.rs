@@ -80,6 +80,22 @@ pub struct RouteSeen {
     pub with_key: bool,
 }
 
+/// A confirmation that always agrees, and notes the hosts it was asked about.
+pub fn agree(asked: Arc<Mutex<Vec<String>>>) -> super::controller::ConfirmFn {
+    confirm_with(asked, true)
+}
+
+/// A confirmation that answers `yes`, and notes the hosts it was asked about.
+pub fn confirm_with(asked: Arc<Mutex<Vec<String>>>, yes: bool) -> super::controller::ConfirmFn {
+    Arc::new(move |host: &str| {
+        asked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(host.to_string());
+        Box::pin(async move { yes })
+    })
+}
+
 /// Holds one relaunch after the engine took its route, as the supervisor does while the new
 /// engine starts.
 #[derive(Default)]

@@ -62,7 +62,9 @@ fn lab_with(keychain: MemoryKeychain) -> Lab {
     let s = StandIn::start(&fake_provider());
     let port = Arc::new(StandInPort::new(Some(s.port)));
     let keychain = Arc::new(keychain);
-    nocturne_app_lib::online::manage_hub(h.app.handle(), port, keychain.clone()).unwrap();
+    nocturne_app_lib::online::manage_hub(h.app.handle(), port, keychain.clone())
+        .unwrap()
+        .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
     Lab { h, s, keychain }
 }
 
