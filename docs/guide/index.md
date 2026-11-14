@@ -2,7 +2,7 @@
 
 How to install Nocturne, live with it on your desktop, and stay in charge of what it holds.
 
-- [Install and remove](install.md) - Choose a package, set Nocturne up, and take it off again.
+- [Install and remove](install.md) - Choose a package, open it the first time, set Nocturne up, and take it off again.
 - [On your desktop](desktops.md) - The tray, the quick keep shortcut, notifications and starting with your computer.
 - [Away from home](away-from-home.md) - Ask, keep and read your page from a paired phone, and what that lets other companies see.
 - [Online answers](online-answers.md) - Let a service you already use write the answer, what is sent, and how to turn it off.
@@ -27,5 +27,5 @@ Nocturne is deliberately small. These are choices, not missing pieces you need t
 - It has no "Keep anyway". If you have already kept the same thing, Nocturne tells you when and
   keeps nothing new.
 - It does not open password-locked PDFs. Save an unlocked copy and drop that in instead.
-- It has no Windows installer yet, and no Mac package yet. Linux comes as an AppImage, an rpm, a
-  deb and a Flatpak.
+- It is not signed by Apple or Microsoft, so a Mac or Windows computer warns you the first time you
+  open it. [Install and remove](install.md) shows what to click.
