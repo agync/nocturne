@@ -104,7 +104,7 @@ impl ModelsHub {
                     hub.finished(&app, &model, &from).await;
                     ReindexPhase::Done
                 }
-                ReindexEnd::Stopped => ReindexPhase::Cancelled,
+                ReindexEnd::Stopped | ReindexEnd::Failed => ReindexPhase::Cancelled,
             };
             let (done, total) = run.map_or((0, 0), |r| (r.done, r.total));
             hub.state().ended = Some(ReindexView {

@@ -45,6 +45,9 @@ pub enum ReindexEnd {
     Done,
     /// Stopped from outside, or cancelled in the store.
     Stopped,
+    /// The new model, or the one in use, kept failing, or too many memories could not be read
+    /// with it: the re-read was cancelled in the store and the old index stays.
+    Failed,
 }
 
 /// Items per second, from the last minute of progress.
@@ -99,12 +102,35 @@ pub async fn embed_as(
 /// on without a vector for it. It stays findable by its words.
 pub const TRIES: u32 = 3;
 
-/// Whether `e` says something about the text rather than the mind's state at the moment.
+/// How many rounds in a row the model may fail (it would not load, the engine refused or took
+/// too long) before the re-read is given up and the old index kept.
+pub const BROKEN_ROUNDS: u32 = 3;
+
+/// Whether `e` is about the text itself. Anything else, a plain failure included (the engine
+/// timing out, refusing, or not loading the model), is about the model and is never pinned on a
+/// memory.
 fn about_the_text(e: &MindError) -> bool {
+    matches!(e, MindError::TooLong | MindError::Language(_))
+}
+
+/// Whether `e` is the mind's state for the moment: wait, do not count it.
+fn passing(e: &MindError) -> bool {
     matches!(
         e,
-        MindError::TooLong | MindError::Language(_) | MindError::Failed(_)
+        MindError::Unavailable
+            | MindError::Busy
+            | MindError::OutOfMemory
+            | MindError::Unsupported(_)
     )
+}
+
+/// How one chunk went.
+enum Round {
+    Stored,
+    /// The mind is away or busy: try again later.
+    Wait,
+    /// The model failed: counts towards giving the re-read up.
+    Broken,
 }
 
 pub struct Reindexer {
@@ -142,17 +168,18 @@ impl Reindexer {
             .unwrap_or_else(|_| Err(EngineError::Invalid("a worker thread failed".into())))
     }
 
-    async fn still_running(&self) -> bool {
+    /// Whether the store's running re-read is still the one for `model`.
+    async fn still_running(&self, model: &str) -> bool {
         self.eng(|e| e.reindex_state())
             .await
             .ok()
             .flatten()
-            .is_some_and(|r| r.phase == ReindexPhase::Running)
+            .is_some_and(|r| r.phase == ReindexPhase::Running && r.model == model)
     }
 
     /// Embeds `rows` with `model` and stores them on `side`. A chunk that fails for a reason
-    /// of its text is tried one memory at a time; a memory that keeps failing is stored with
-    /// no vector, so the re-read can finish. False when the mind could not be used at all.
+    /// of its text is tried one memory at a time; a memory that keeps failing that way is
+    /// stored with no vector, so the re-read can finish.
     async fn embed_chunk(
         &self,
         mind: &dyn Mind,
@@ -160,48 +187,56 @@ impl Reindexer {
         model: &str,
         rows: Vec<(String, String)>,
         tries: &mut HashMap<(Side, String), u32>,
-    ) -> bool {
+    ) -> Round {
         let texts: Vec<String> = rows.iter().map(|r| r.1.clone()).collect();
-        let whole =
-            tokio::time::timeout(self.opts.embed_limit, embed_as(mind, model, &texts)).await;
-        let pairs: Vec<(String, Vec<f32>)> = match whole {
-            Ok(Ok(vecs)) if vecs.len() == rows.len() => {
-                rows.into_iter().map(|r| r.0).zip(vecs).collect()
-            }
-            Ok(Err(e)) if !about_the_text(&e) => return false,
-            Err(_) => return false,
-            _ => {
-                let mut pairs = Vec::new();
-                for (id, text) in rows {
-                    let one = std::slice::from_ref(&text);
-                    let got =
-                        tokio::time::timeout(self.opts.embed_limit, embed_as(mind, model, one))
-                            .await;
-                    match got {
-                        Ok(Ok(mut v)) if v.len() == 1 => pairs.push((id, v.remove(0))),
-                        Ok(Err(e)) if !about_the_text(&e) => return false,
-                        Err(_) => return false,
-                        _ => {
-                            let n = tries.entry((side, id.clone())).or_insert(0);
-                            *n += 1;
-                            if *n >= TRIES {
-                                tracing::info!("a memory is left without a vector of {model}");
-                                pairs.push((id, Vec::new()));
+        let limit = self.opts.embed_limit;
+        let pairs: Vec<(String, Vec<f32>)> =
+            match tokio::time::timeout(limit, embed_as(mind, model, &texts)).await {
+                Ok(Ok(vecs)) if vecs.len() == rows.len() => {
+                    rows.into_iter().map(|r| r.0).zip(vecs).collect()
+                }
+                Ok(Err(e)) if passing(&e) => return Round::Wait,
+                Ok(Err(e)) if about_the_text(&e) => {
+                    let mut pairs = Vec::new();
+                    for (id, text) in rows {
+                        let one = std::slice::from_ref(&text);
+                        match tokio::time::timeout(limit, embed_as(mind, model, one)).await {
+                            Ok(Ok(mut v)) if v.len() == 1 => pairs.push((id, v.remove(0))),
+                            Ok(Err(e)) if about_the_text(&e) => {
+                                let n = tries.entry((side, id.clone())).or_insert(0);
+                                *n += 1;
+                                if *n >= TRIES {
+                                    tracing::info!("a memory is left without a vector of {model}");
+                                    pairs.push((id, Vec::new()));
+                                }
                             }
+                            Ok(Err(e)) if passing(&e) => return Round::Wait,
+                            _ => return Round::Broken,
                         }
                     }
+                    pairs
                 }
-                pairs
-            }
-        };
+                _ => return Round::Broken,
+            };
         let model = model.to_string();
-        match side {
+        let stored = match side {
             Side::Old => self
                 .eng(move |e| e.store_embeddings_from(&model, pairs))
                 .await
                 .is_ok(),
-            Side::New => self.eng(move |e| e.store_reindexed(pairs)).await.is_ok(),
-        }
+            Side::New => self
+                .eng(move |e| e.store_reindexed(&model, pairs))
+                .await
+                .is_ok(),
+        };
+        if stored { Round::Stored } else { Round::Wait }
+    }
+
+    /// Cancels the re-read in the store: the old index stays, nothing is swapped.
+    async fn give_up(&self, why: &str) -> ReindexEnd {
+        tracing::warn!("the re-read was given up: {why}");
+        let _ = self.eng(|e| e.cancel_reindex()).await;
+        ReindexEnd::Failed
     }
 
     /// Reads every memory with `model` until the store swaps, or `stop` fires. `progress` hears
@@ -214,6 +249,7 @@ impl Reindexer {
         progress: impl Fn(u32, u32) + Send,
     ) -> ReindexEnd {
         let mut tries: HashMap<(Side, String), u32> = HashMap::new();
+        let mut broken = 0u32;
         loop {
             if stop.is_cancelled() {
                 return ReindexEnd::Stopped;
@@ -226,8 +262,11 @@ impl Reindexer {
                 self.nap(&stop, self.opts.retry).await;
                 continue;
             };
-            if !self.still_running().await {
+            if !self.still_running(model).await {
                 return ReindexEnd::Stopped;
+            }
+            if broken >= BROKEN_ROUNDS {
+                return self.give_up("the model kept failing").await;
             }
             let chunk = self.opts.chunk;
             let in_use = self.engine.recall_model();
@@ -235,37 +274,44 @@ impl Reindexer {
                 .eng(move |e| e.memories_without_embedding(chunk))
                 .await
                 .unwrap_or_default();
-            if !old.is_empty() {
-                if !self
-                    .embed_chunk(mind.as_ref(), Side::Old, &in_use, old, &mut tries)
-                    .await
-                {
+            let (side, rows, with) = if !old.is_empty() {
+                (Side::Old, old, in_use)
+            } else {
+                let Ok(todo) = self.eng(move |e| e.reindex_todo(chunk)).await else {
                     self.nap(&stop, self.opts.retry).await;
+                    continue;
+                };
+                if todo.is_empty() {
+                    if self.eng(|e| e.reindex_too_sparse()).await.unwrap_or(false) {
+                        return self.give_up("too many memories without a vector").await;
+                    }
+                    if let Ok(true) = self.eng(|e| e.finish_reindex()).await {
+                        return ReindexEnd::Done;
+                    }
+                    self.nap(&stop, self.opts.pause).await;
+                    continue;
                 }
-                continue;
-            }
-            let Ok(todo) = self.eng(move |e| e.reindex_todo(chunk)).await else {
-                self.nap(&stop, self.opts.retry).await;
-                continue;
+                (Side::New, todo, model.to_string())
             };
-            if todo.is_empty() {
-                if let Ok(true) = self.eng(|e| e.finish_reindex()).await {
-                    return ReindexEnd::Done;
-                }
-                self.nap(&stop, self.opts.pause).await;
-                continue;
-            }
-            if !self
-                .embed_chunk(mind.as_ref(), Side::New, model, todo, &mut tries)
+            match self
+                .embed_chunk(mind.as_ref(), side, &with, rows, &mut tries)
                 .await
             {
-                self.nap(&stop, self.opts.retry).await;
-                continue;
+                Round::Stored => {
+                    broken = 0;
+                    if side == Side::New
+                        && let Ok((done, total)) = self.eng(|e| e.reindex_progress()).await
+                    {
+                        progress(done, total);
+                    }
+                    self.nap(&stop, self.opts.pause).await;
+                }
+                Round::Wait => self.nap(&stop, self.opts.retry).await,
+                Round::Broken => {
+                    broken += 1;
+                    self.nap(&stop, self.opts.retry).await;
+                }
             }
-            if let Ok((done, total)) = self.eng(|e| e.reindex_progress()).await {
-                progress(done, total);
-            }
-            self.nap(&stop, self.opts.pause).await;
         }
     }
 

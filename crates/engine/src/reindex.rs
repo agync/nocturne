@@ -71,6 +71,26 @@ fn current_count(conn: &Connection) -> Result<i64> {
     )?)
 }
 
+/// At most this share of the memories (or one memory, in a small store) may end a re-read
+/// without a vector; above it the new index would find much less by meaning than the old.
+pub const MOST_WITHOUT_A_VECTOR: f64 = 0.05;
+
+/// How many current memories the running re-read stored with no vector, of how many.
+fn without_a_vector(conn: &Connection) -> Result<(i64, i64)> {
+    let empty: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM embeddings_next n JOIN memories m ON m.id = n.memory_id \
+         WHERE m.superseded_at IS NULL AND n.dim = 0",
+        [],
+        |r| r.get(0),
+    )?;
+    Ok((empty, current_count(conn)?))
+}
+
+fn too_many_without_a_vector(conn: &Connection) -> Result<bool> {
+    let (empty, total) = without_a_vector(conn)?;
+    Ok(empty > 1 && empty as f64 > total as f64 * MOST_WITHOUT_A_VECTOR)
+}
+
 fn running_model(conn: &Connection) -> Result<Option<String>> {
     Ok(load(conn)?
         .filter(|r| r.phase == ReindexPhase::Running)
@@ -142,14 +162,15 @@ impl Engine {
         })
     }
 
-    /// Keeps vectors made with the running re-read's model. Unknown ids are ignored; nothing is
-    /// kept when no re-read is running (it was cancelled meanwhile).
-    pub fn store_reindexed(&self, rows: Vec<(String, Vec<f32>)>) -> Result<()> {
+    /// Keeps vectors `model` made for the re-read. Unknown ids are ignored; nothing is kept
+    /// unless a re-read for `model` is running (it was cancelled, or another began meanwhile),
+    /// so a vector is never filed under a model that did not make it.
+    pub fn store_reindexed(&self, model: &str, rows: Vec<(String, Vec<f32>)>) -> Result<()> {
         for chunk in rows.chunks(200) {
             self.write(|tx| {
-                let Some(model) = running_model(tx)? else {
+                if running_model(tx)?.as_deref() != Some(model) {
                     return Ok(());
-                };
+                }
                 for (id, vec) in chunk {
                     let blob: Vec<u8> = vec.iter().flat_map(|f| f.to_le_bytes()).collect();
                     tx.execute(
@@ -188,7 +209,7 @@ impl Engine {
                 [recall.as_str()],
                 |r| r.get(0),
             )?;
-            if waiting > 0 {
+            if waiting > 0 || too_many_without_a_vector(tx)? {
                 return Ok(None);
             }
             tx.execute("DELETE FROM embeddings", [])?;
@@ -211,6 +232,12 @@ impl Engine {
         drop(recall);
         self.invalidate_vectors();
         Ok(true)
+    }
+
+    /// Whether so many memories have ended the running re-read without a vector that it must
+    /// not swap.
+    pub fn reindex_too_sparse(&self) -> Result<bool> {
+        self.read(too_many_without_a_vector)
     }
 
     /// Stops the re-read and drops what it built. The old vectors were never touched.

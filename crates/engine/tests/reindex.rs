@@ -61,7 +61,7 @@ fn read_all(engine: &Engine, tooth: &str) {
             (id, v)
         })
         .collect();
-    engine.store_reindexed(rows).unwrap();
+    engine.store_reindexed(NEW, rows).unwrap();
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn swap_is_atomic() {
     let first = f.engine.reindex_todo(1).unwrap();
     let id = first[0].0.clone();
     f.engine
-        .store_reindexed(vec![(id.clone(), swapped(&id, &tooth))])
+        .store_reindexed(NEW, vec![(id.clone(), swapped(&id, &tooth))])
         .unwrap();
     assert!(!f.engine.finish_reindex().unwrap());
     assert_eq!(
@@ -179,7 +179,7 @@ fn cancel_keeps_old() {
     assert!(!f.engine.finish_reindex().unwrap());
     assert!(f.engine.reindex_todo(10).unwrap().is_empty());
     f.engine
-        .store_reindexed(vec![(tooth.clone(), vec![1.0, 0.0, 0.0])])
+        .store_reindexed(NEW, vec![(tooth.clone(), vec![1.0, 0.0, 0.0])])
         .unwrap();
     assert_eq!(
         sql_count(f.dir.path(), "SELECT COUNT(*) FROM embeddings_next"),
@@ -210,7 +210,7 @@ fn memories_added_during_reindex_included() {
     assert_eq!(todo.len(), 1);
     assert_eq!(todo[0].0, bins);
     f.engine
-        .store_reindexed(vec![(bins.clone(), vec![0.0, 0.0, 1.0])])
+        .store_reindexed(NEW, vec![(bins.clone(), vec![0.0, 0.0, 1.0])])
         .unwrap();
     // The old index still lacks it, as a backfill would give it.
     assert!(!f.engine.finish_reindex().unwrap());
@@ -221,7 +221,7 @@ fn memories_added_during_reindex_included() {
     // Storing an old-model vector drops the new one: it is read again.
     assert_eq!(f.engine.reindex_todo(10).unwrap().len(), 1);
     f.engine
-        .store_reindexed(vec![(bins.clone(), vec![0.0, 0.0, 1.0])])
+        .store_reindexed(NEW, vec![(bins.clone(), vec![0.0, 0.0, 1.0])])
         .unwrap();
     assert!(f.engine.finish_reindex().unwrap());
     f.engine.set_recall_model(NEW);
@@ -266,7 +266,7 @@ fn crash_resumes() {
     let first = f.engine.reindex_todo(1).unwrap();
     let id = first[0].0.clone();
     f.engine
-        .store_reindexed(vec![(id.clone(), swapped(&id, &tooth))])
+        .store_reindexed(NEW, vec![(id.clone(), swapped(&id, &tooth))])
         .unwrap();
     drop(f.engine);
     let engine = Engine::open(f.dir.path(), f.clock.clone()).unwrap();
@@ -402,14 +402,75 @@ fn a_memory_without_a_vector_is_still_found_by_its_words() {
     f.engine.begin_reindex(NEW, Some(3)).unwrap();
     // The worker gave up on one memory: it is stored with no vector.
     f.engine
-        .store_reindexed(vec![
-            (tooth.clone(), Vec::new()),
-            (swim.clone(), vec![1.0, 0.0, 0.0]),
-        ])
+        .store_reindexed(
+            NEW,
+            vec![
+                (tooth.clone(), Vec::new()),
+                (swim.clone(), vec![1.0, 0.0, 0.0]),
+            ],
+        )
         .unwrap();
     assert!(f.engine.finish_reindex().unwrap());
     let hits = f.engine.retrieve("dentist", None, 5).unwrap();
     assert_eq!(hits[0].memory.id, tooth);
     assert_eq!(top(&f.engine, &[1.0, 0.0, 0.0]), Some(swim));
     assert!(f.engine.memories_without_embedding(10).unwrap().is_empty());
+}
+
+#[test]
+fn vectors_of_another_re_read_are_never_kept() {
+    let f = fixture();
+    let (tooth, swim) = two(&f.engine);
+    f.engine.begin_reindex(NEW, Some(3)).unwrap();
+    // A second change began another re-read while the first was embedding.
+    f.engine
+        .begin_reindex("nomic-embed-text-v1-GGUF", Some(768))
+        .unwrap();
+    f.engine
+        .store_reindexed(NEW, vec![(tooth.clone(), vec![1.0, 0.0, 0.0])])
+        .unwrap();
+    assert_eq!(
+        sql_count(f.dir.path(), "SELECT COUNT(*) FROM embeddings_next"),
+        0
+    );
+    // Forgotten mid-embed: the memory is gone and its vector is not kept either.
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&swim), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    f.engine
+        .store_reindexed(
+            "nomic-embed-text-v1-GGUF",
+            vec![(swim, vec![0.5; 4]), (tooth, vec![0.5; 4])],
+        )
+        .unwrap();
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM embeddings_next WHERE model = 'nomic-embed-text-v1-GGUF'"
+        ),
+        1
+    );
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM embeddings_next WHERE model != 'nomic-embed-text-v1-GGUF'"
+        ),
+        0
+    );
+}
+
+#[test]
+fn a_re_read_that_left_many_memories_without_a_vector_never_swaps() {
+    let f = fixture();
+    let (tooth, swim) = two(&f.engine);
+    f.engine.begin_reindex(NEW, Some(3)).unwrap();
+    f.engine
+        .store_reindexed(NEW, vec![(tooth.clone(), Vec::new()), (swim, Vec::new())])
+        .unwrap();
+    assert!(f.engine.reindex_too_sparse().unwrap());
+    assert!(!f.engine.finish_reindex().unwrap());
+    assert_eq!(f.engine.recall_model(), DEFAULT_RECALL_MODEL);
+    assert_eq!(top(&f.engine, &[1.0, 0.0]), Some(tooth));
 }

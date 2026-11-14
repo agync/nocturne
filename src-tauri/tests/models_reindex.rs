@@ -30,6 +30,8 @@ const NEW: &str = "Qwen3-Embedding-4B-GGUF";
 struct ReMind {
     inner: FakeMind,
     with: AtomicU32,
+    /// The new model fails the way an engine that cannot load it does.
+    broken: bool,
 }
 
 impl Mind for ReMind {
@@ -67,8 +69,11 @@ impl Mind for ReMind {
             if model != NEW {
                 return self.inner.embed(texts).await;
             }
+            if self.broken {
+                return Err(MindError::Failed("the engine took too long".into()));
+            }
             if texts.iter().any(|t| t.contains("unreadable")) {
-                return Err(MindError::Failed("the text could not be embedded".into()));
+                return Err(MindError::TooLong);
             }
             self.with.fetch_add(texts.len() as u32, Ordering::SeqCst);
             Ok(texts.iter().map(|_| vec![0.0, 0.0, 1.0]).collect())
@@ -104,9 +109,14 @@ struct Rig {
 }
 
 fn rig(memories: usize) -> Rig {
+    rig_with(memories, false)
+}
+
+fn rig_with(memories: usize, broken: bool) -> Rig {
     let mind = Arc::new(ReMind {
         inner: FakeMind::new(),
         with: AtomicU32::new(0),
+        broken,
     });
     let h = harness_with_mind(mind.clone());
     for i in 0..memories {
@@ -302,4 +312,36 @@ fn a_mind_that_is_away_never_skips_a_memory() {
     });
     assert!(ended.is_err(), "the re-read waits for the mind");
     assert_eq!(r.h.engine().reindex_progress().unwrap().0, 0);
+}
+
+#[test]
+fn a_new_model_that_fails_for_every_memory_never_swaps() {
+    let r = rig_with(4, true);
+    let e = r.h.engine();
+    let end = block_on(async {
+        // Let the old index have its vectors first.
+        let warm = Reindexer::new(
+            e.clone(),
+            r.h.state().mind.shared(),
+            r.services.reader.clone(),
+            opts(),
+        );
+        e.begin_reindex(NEW, Some(3)).unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(30),
+            warm.run(NEW, CancellationToken::new(), |_, _| {}),
+        )
+        .await
+    });
+    assert_eq!(end.expect("the re-read ends"), ReindexEnd::Failed);
+    let row = e.reindex_state().unwrap().unwrap();
+    assert_eq!(row.phase, ReindexPhase::Cancelled);
+    // The old index stays whole and in use.
+    assert_eq!(e.recall_model(), nocturne_engine::DEFAULT_RECALL_MODEL);
+    assert_eq!(
+        e.indexed_model().unwrap().as_deref(),
+        Some(nocturne_engine::DEFAULT_RECALL_MODEL)
+    );
+    assert!(e.memories_without_embedding(10).unwrap().is_empty());
+    assert_eq!(r.mind.with.load(Ordering::SeqCst), 0);
 }
