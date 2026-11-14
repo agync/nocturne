@@ -235,6 +235,9 @@ export function Advanced() {
           </dl>
         </section>
       ) : null}
+      <a className={`${styles.advanced} hit`} href="#/settings/advanced/online">
+        {t("advanced.online.connect.link")}
+      </a>
       {models ? (
         <a className={`${styles.advanced} hit`} href="#/settings/models">
           {t("advanced.models.link")}

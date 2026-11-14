@@ -5,7 +5,7 @@ import type { CheckOutcome, OnlineForm } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
 import styles from "./Online.module.css";
 import { Frame, LockNote } from "./parts";
-import { StepAside, StepLabel } from "./SetupBits";
+import { StepAside } from "./SetupBits";
 import { sentence } from "./when";
 
 /** What the person has typed. The key lives here and in the check's call, nowhere else. */
@@ -17,49 +17,53 @@ const FAILURE: Record<
   { title: CopyId; detail: CopyId; field: "baseUrl" | "key" | "model" | null }
 > = {
   unreachable: {
-    title: "online.connect.unreachable",
-    detail: "online.connect.unreachable.detail",
+    title: "advanced.online.connect.unreachable",
+    detail: "advanced.online.connect.unreachable.detail",
     field: "baseUrl",
   },
   keyRefused: {
-    title: "online.connect.keyRefused",
-    detail: "online.connect.keyRefused.detail",
+    title: "advanced.online.connect.keyRefused",
+    detail: "advanced.online.connect.keyRefused.detail",
     field: "key",
   },
   noCredit: {
-    title: "online.connect.noCredit",
-    detail: "online.connect.noCredit.detail",
+    title: "advanced.online.connect.noCredit",
+    detail: "advanced.online.connect.noCredit.detail",
     field: "key",
   },
   modelMissing: {
-    title: "online.connect.modelMissing",
-    detail: "online.connect.modelMissing.detail",
+    title: "advanced.online.connect.modelMissing",
+    detail: "advanced.online.connect.modelMissing.detail",
     field: "model",
   },
   noInternet: {
-    title: "online.connect.noInternet",
-    detail: "online.connect.noInternet.detail",
+    title: "advanced.online.connect.noInternet",
+    detail: "advanced.online.connect.noInternet.detail",
     field: null,
   },
   notHttps: {
-    title: "online.connect.notHttps",
-    detail: "online.connect.notHttps.detail",
+    title: "advanced.online.connect.notHttps",
+    detail: "advanced.online.connect.notHttps.detail",
     field: "baseUrl",
   },
   addressNotAllowed: {
-    title: "online.connect.addressNotAllowed",
-    detail: "online.connect.addressNotAllowed.detail",
+    title: "advanced.online.connect.addressNotAllowed",
+    detail: "advanced.online.connect.addressNotAllowed.detail",
     field: "baseUrl",
   },
-  busy: { title: "online.connect.busy", detail: "online.connect.busy.detail", field: null },
+  busy: {
+    title: "advanced.online.connect.busy",
+    detail: "advanced.online.connect.busy.detail",
+    field: null,
+  },
   serverError: {
-    title: "online.connect.serverError",
-    detail: "online.connect.serverError.detail",
+    title: "advanced.online.connect.serverError",
+    detail: "advanced.online.connect.serverError.detail",
     field: null,
   },
   emptyReply: {
-    title: "online.connect.emptyReply",
-    detail: "online.connect.emptyReply.detail",
+    title: "advanced.online.connect.emptyReply",
+    detail: "advanced.online.connect.emptyReply.detail",
     field: "model",
   },
 };
@@ -82,9 +86,13 @@ interface Props {
   onChecking: () => void;
   onNext: () => void;
   onLeave: () => void;
+  back: { to: string; label: string };
 }
 
-/** O4: the address, the key and the name to use, with a check that must pass before going on. */
+/**
+ * O4, under Advanced details: the address, the key and the name to use, with a check that must
+ * pass before going on.
+ */
 export function Connect({
   form,
   setForm,
@@ -93,6 +101,7 @@ export function Connect({
   onChecking,
   onNext,
   onLeave,
+  back,
 }: Props) {
   const engine = useEngine();
   const id = useId();
@@ -108,7 +117,7 @@ export function Connect({
     outcome && outcome.type !== "works" && outcome.type !== "cancelled"
       ? FAILURE[outcome.type]
       : null;
-  const named = host || sentence(t("online.connect.thatAddress"));
+  const named = host || sentence(t("advanced.online.connect.thatAddress"));
 
   const edit = (patch: Partial<ConnectForm>) => {
     setForm({ ...form, ...patch });
@@ -154,27 +163,29 @@ export function Connect({
 
   return (
     <Frame
-      back={{ to: "/settings/online", label: t("screen.online.title") }}
+      back={back}
       aside={
         <>
           <StepAside
-            heading={t("online.connect.aside.heading")}
-            paragraphs={[t("online.connect.aside.any"), t("online.connect.aside.neutral")]}
+            heading={t("advanced.online.connect.aside.heading")}
+            paragraphs={[
+              t("advanced.online.connect.aside.any"),
+              t("advanced.online.connect.aside.neutral"),
+            ]}
           />
-          <LockNote>{t("online.connect.aside.lock")}</LockNote>
+          <LockNote>{t("advanced.online.connect.aside.lock")}</LockNote>
         </>
       }
     >
-      <StepLabel step={2} />
       <h1 className={styles.stepTitle} tabIndex={-1}>
-        {t("online.connect.title")}
+        {t("advanced.online.connect.title")}
       </h1>
-      <p className={styles.body}>{t("online.connect.lead")}</p>
+      <p className={styles.body}>{t("advanced.online.connect.lead")}</p>
       <form className={styles.fields} onSubmit={(event) => void check(event)} noValidate>
         <div className={styles.field}>
           <label className={styles.fieldLabel} htmlFor={`${id}-address`}>
-            {t("online.connect.address")}
-            <small>{t("online.connect.address.word")}</small>
+            {t("advanced.online.connect.address")}
+            <small>{t("advanced.online.connect.address.word")}</small>
           </label>
           <input
             id={`${id}-address`}
@@ -190,13 +201,13 @@ export function Connect({
             onChange={(event) => edit({ baseUrl: event.target.value })}
           />
           <span id={`${id}-address-hint`} className={styles.sub}>
-            {t("online.connect.address.hint")}
+            {t("advanced.online.connect.address.hint")}
           </span>
         </div>
         <div className={styles.field}>
           <label className={styles.fieldLabel} htmlFor={`${id}-key`}>
-            {t("online.connect.key")}
-            <small>{t("online.connect.key.word")}</small>
+            {t("advanced.online.connect.key")}
+            <small>{t("advanced.online.connect.key.word")}</small>
           </label>
           <div className={styles.fieldRow}>
             <input
@@ -213,17 +224,17 @@ export function Connect({
               onChange={(event) => edit({ key: event.target.value })}
             />
             <Button variant="secondary" touch aria-pressed={shown} onClick={() => setShown(!shown)}>
-              {t(shown ? "online.connect.key.hide" : "online.connect.key.show")}
+              {t(shown ? "advanced.online.connect.key.hide" : "advanced.online.connect.key.show")}
             </Button>
           </div>
           <span id={`${id}-key-hint`} className={styles.sub}>
-            {t("online.connect.key.hint")}
+            {t("advanced.online.connect.key.hint")}
           </span>
         </div>
         <div className={styles.field}>
           <label className={styles.fieldLabel} htmlFor={`${id}-model`}>
-            {t("online.connect.name")}
-            <small>{t("online.connect.name.word")}</small>
+            {t("advanced.online.connect.name")}
+            <small>{t("advanced.online.connect.name.word")}</small>
           </label>
           <input
             id={`${id}-model`}
@@ -232,7 +243,7 @@ export function Connect({
             autoComplete="off"
             autoCapitalize="off"
             spellCheck={false}
-            placeholder={t("online.connect.name.placeholder")}
+            placeholder={t("advanced.online.connect.name.placeholder")}
             value={form.model}
             aria-invalid={invalid("model")}
             aria-describedby={describe("model")}
@@ -250,10 +261,10 @@ export function Connect({
             <span className={styles.resultText}>
               <span className={styles.resultTitle}>
                 {host
-                  ? t("online.connect.checkingWith", { host })
-                  : t("online.connect.checkingNoHost")}
+                  ? t("advanced.online.connect.checkingWith", { host })
+                  : t("advanced.online.connect.checkingNoHost")}
               </span>
-              <span className={styles.sub}>{t("online.connect.checkingDetail")}</span>
+              <span className={styles.sub}>{t("advanced.online.connect.checkingDetail")}</span>
             </span>
           </div>
         ) : null}
@@ -261,10 +272,10 @@ export function Connect({
           <div className={styles.result} data-kind="ok">
             <span className={styles.resultText}>
               <span className={styles.resultTitle}>
-                {t("online.connect.works", { host: outcome.host, used: outcome.model })}
+                {t("advanced.online.connect.works", { host: outcome.host, used: outcome.model })}
               </span>
               <span className={styles.sub}>
-                {t("online.connect.works.detail", { host: outcome.host })}
+                {t("advanced.online.connect.works.detail", { host: outcome.host })}
               </span>
             </span>
           </div>
@@ -285,23 +296,25 @@ export function Connect({
         {checking ? (
           <>
             <Button variant="secondary" disabled>
-              {t("online.connect.checking")}
+              {t("advanced.online.connect.checking")}
             </Button>
             <Button variant="quiet" onClick={() => void engine.cancelOnlineCheck()}>
-              {t("online.connect.cancel")}
+              {t("advanced.online.connect.cancel")}
             </Button>
           </>
         ) : (
           <>
             {works ? null : (
               <Button variant="secondary" disabled={!filled} onClick={() => void check()}>
-                {t(failure ? "online.connect.checkAgain" : "online.connect.check")}
+                {t(
+                  failure ? "advanced.online.connect.checkAgain" : "advanced.online.connect.check",
+                )}
               </Button>
             )}
             {works ? (
               <>
                 <Button variant="quiet" disabled={!filled} onClick={() => void check()}>
-                  {t("online.connect.checkAgain")}
+                  {t("advanced.online.connect.checkAgain")}
                 </Button>
                 <Button variant="primary" onClick={onNext}>
                   {t("online.continue")}
@@ -319,7 +332,7 @@ export function Connect({
         </Button>
         {works || checking ? null : (
           <span id={`${id}-why`} className={styles.footerHint}>
-            {t("online.connect.needsCheck")}
+            {t("advanced.online.connect.needsCheck")}
           </span>
         )}
       </div>

@@ -27,6 +27,7 @@ describe("route table", () => {
       "/settings/online": "online",
       "/settings/online/setup": "online",
       "/settings/online/sent": "online",
+      "/settings/advanced/online": "online",
       "/settings/models": "models",
       "/settings/models/answering": "models",
       "/settings/models/recordings": "models",

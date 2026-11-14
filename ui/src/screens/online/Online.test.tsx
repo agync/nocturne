@@ -113,7 +113,9 @@ describe("online", () => {
     await openOnline(PAGE, "refused");
     expect(screen.getByText("Your provider refused the key")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Check the key…" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/settings/online/setup?step=connect"));
+    await waitFor(() =>
+      expect(window.location.hash).toBe("#/settings/advanced/online?from=online"),
+    );
     const key = await screen.findByLabelText(/^Key/);
     expect(key).toHaveValue("");
     expect(key).toHaveAttribute("type", "password");

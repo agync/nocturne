@@ -167,6 +167,13 @@ export const routes: readonly AppRoute[] = [
     Component: online,
   },
   {
+    path: "/settings/advanced/online",
+    folder: "online",
+    title: "screen.advanced.online.title",
+    shell: true,
+    Component: online,
+  },
+  {
     path: "/settings/online/sent",
     folder: "online",
     title: "screen.online.sent.title",

@@ -12,7 +12,9 @@ afterEach(() => {
 
 const SETUP = "/settings/online/setup";
 const STEP1 = /Have your answers written by a larger mind/;
-const STEP2 = "Connect to the service you chose.";
+const STEP2 = "Choose the online service.";
+const CONNECT = "Connect to the service you chose.";
+const ADVANCED = "/settings/advanced/online?from=online";
 const STEP3 = "Choose which questions may go online.";
 const STEP4 = "Set a monthly limit.";
 const STEP5 = /Before you turn this on, here is exactly what happens/;
@@ -34,10 +36,7 @@ async function fill(patch: { url?: string; key?: string; model?: string } = {}) 
 }
 
 async function toConnect(scenario: OnlineScenario = "off") {
-  const opened = await openOnline(SETUP, scenario, STEP1);
-  await click("Continue");
-  await heading(STEP2);
-  return opened;
+  return openOnline(ADVANCED, scenario, CONNECT);
 }
 
 async function toSend(scenario: OnlineScenario = "off") {
@@ -64,6 +63,43 @@ describe("setup", () => {
     await click("Continue");
     await heading(STEP2);
     expect(screen.getByText("Online answers · step 2 of 5")).toBeInTheDocument();
+  });
+
+  it("service_step: the plain steps send the person to Advanced details for the form", async () => {
+    await openOnline(SETUP, "off", STEP1);
+    await click("Continue");
+    await heading(STEP2);
+    expect(screen.getByText(/added under Advanced details/)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Address/)).toBeNull();
+    expect(screen.queryByLabelText(/^Key/)).toBeNull();
+    expect(screen.queryByText(/API/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Continue" })).toBeNull();
+    await click("Open Advanced details");
+    await heading(CONNECT);
+    expect(window.location.hash).toBe("#/settings/advanced/online?from=online");
+  });
+
+  it("service_step: without a passed check, going straight to a later step asks for one", async () => {
+    await openOnline(`${SETUP}?step=send`, "off", STEP2);
+    expect(screen.getByRole("button", { name: "Open Advanced details" })).toBeInTheDocument();
+  });
+
+  it("service_step: a passed check in Advanced details carries on at what to send, without dropping it", async () => {
+    const { engine } = await toConnect();
+    const abandon = vi.spyOn(engine, "abandonOnlineSetup");
+    await fill();
+    await click("Check");
+    await screen.findByText(/It works\./);
+    await click("Continue");
+    await heading(STEP3);
+    expect(window.location.hash).toBe("#/settings/online/setup?step=send");
+    expect(abandon).not.toHaveBeenCalled();
+    await click("Back");
+    await heading(STEP2);
+    expect(
+      screen.getByText(/Connected to api\.example\.com\. To use a different service/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
   it("explainer: shows exactly what is sent on request", async () => {
@@ -152,8 +188,8 @@ describe("setup", () => {
     [{ type: "notHttps" }, /That address doesn’t start with https:\/\//, /stays locked on the way/],
     [
       { type: "addressNotAllowed" },
-      /points at this computer or your own network/,
-      /Nothing was sent/,
+      /That address can’t be used\./,
+      /plain https address your provider gives, with nothing after it/,
     ],
     [{ type: "busy" }, /api\.example\.com is busy right now\./, /Wait a moment/],
     [
@@ -179,6 +215,16 @@ describe("setup", () => {
       expect(screen.getByRole("button", { name: "Check again" })).toBeEnabled();
     });
   }
+
+  it("each_check_outcome_copy: a refused address never claims to be a local one", async () => {
+    const { engine } = await toConnect();
+    engine.online.forceOutcome({ type: "addressNotAllowed" });
+    await fill({ url: "https://user@api.example.com/v1?x=1" });
+    await click("Check");
+    await screen.findByText(/That address can’t be used\./);
+    expect(document.body.textContent).not.toMatch(/this computer or your own network/);
+    expect(screen.getByLabelText(/^Address/)).toHaveAttribute("aria-invalid", "true");
+  });
 
   it("each_check_outcome_copy: marks the field that is wrong", async () => {
     const { engine } = await toConnect();
@@ -334,7 +380,7 @@ describe("setup", () => {
     expect(screen.queryByText("That didn’t work. Nothing was changed.")).toBeNull();
     expect(on).toHaveBeenCalledTimes(1);
     expect(engine.online.view().state).toEqual({ type: "off" });
-    expect(window.location.hash).toBe("#/settings/online/setup");
+    expect(window.location.hash).toBe("#/settings/online/setup?step=send");
     expect(screen.queryByRole("switch", { name: "Online answers are on" })).toBeNull();
     await click("Try again");
     await waitFor(() => expect(on).toHaveBeenCalledTimes(2));
@@ -364,7 +410,6 @@ describe("setup", () => {
     await click("Back");
     await heading(STEP2);
     keyAbsent();
-    expect(screen.getByLabelText(/^Key/)).toHaveValue("");
     await click("Continue");
     await heading(STEP3);
     await click("Continue");
@@ -467,8 +512,8 @@ describe("setup", () => {
     expect(abandon).not.toHaveBeenCalled();
   });
 
-  it("Change… opens the connect step with the address and name filled in, and no key", async () => {
-    await openOnline(`${SETUP}?step=connect`, "on", STEP2);
+  it("Change… opens the form in Advanced details with the address and name filled in, and no key", async () => {
+    await openOnline(ADVANCED, "on", CONNECT);
     expect(screen.getByLabelText(/^Address/)).toHaveValue("https://api.example.com/v1");
     expect(screen.getByLabelText(/^Which one to use/)).toHaveValue("llama-3.3-70b-instruct");
     expect(screen.getByLabelText(/^Key/)).toHaveValue("");

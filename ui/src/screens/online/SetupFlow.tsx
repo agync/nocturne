@@ -1,33 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
-import type { CheckOutcome, OnlineView } from "../../engine/bindings";
+import type { OnlineView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
-import { Connect, type ConnectForm } from "./Connect";
 import { Consent } from "./Consent";
+import { keepPassedCheck, passedCheck } from "./connection";
 import type { Draft, Provider, StepProps } from "./draft";
 import { Explainer } from "./Explainer";
 import { LimitStep } from "./Limit";
+import { ServiceStep } from "./ServiceStep";
 import { WhatToSend } from "./WhatToSend";
 
-type Step = "explainer" | "connect" | "send" | "limit" | "consent";
+export type Step = "explainer" | "connect" | "send" | "limit" | "consent";
 const ORDER: Step[] = ["explainer", "connect", "send", "limit", "consent"];
 
 /** Setting Online answers up, one step at a time. Nothing is turned on until the last button. */
-export function SetupFlow({ view, start }: { view: OnlineView; start: "connect" | null }) {
+export function SetupFlow({ view, start }: { view: OnlineView; start: Step | null }) {
   const engine = useEngine();
   const [step, setStep] = useState<Step>(start ?? "explainer");
-  const [form, setForm] = useState<ConnectForm>({
-    baseUrl: view.baseUrl ?? "",
-    key: "",
-    model: view.model ?? "",
-  });
-  const [outcome, setOutcome] = useState<CheckOutcome | null>(null);
+  const [passed] = useState<Provider | null>(passedCheck);
   const [draft, setDraft] = useState<Draft>({
     phones: view.phonesAvailable ? view.phones : false,
     sendSensitive: view.sendSensitive,
     limit: view.limit,
   });
-  const checked = useRef(false);
+  const checked = useRef(passed !== null);
   const handedOver = useRef(false);
   const first = useRef(true);
 
@@ -35,6 +31,7 @@ export function SetupFlow({ view, start }: { view: OnlineView; start: "connect" 
   // connection it was given for the check. Turning on keeps them, so it hands over first.
   useEffect(
     () => () => {
+      keepPassedCheck(null);
       if (checked.current && !handedOver.current) {
         void engine.abandonOnlineSetup().catch(() => undefined);
       }
@@ -53,8 +50,7 @@ export function SetupFlow({ view, start }: { view: OnlineView; start: "connect" 
   }, [step]);
 
   const leave = () => goTo("/settings/online");
-  const works = outcome?.type === "works" ? outcome : null;
-  const provider: Provider | null = works ? { host: works.host, model: works.model } : null;
+  const provider = passed;
   const at = provider ? step : step === "explainer" ? "explainer" : "connect";
   const move = (delta: number) => {
     const next = ORDER[Math.min(ORDER.length - 1, Math.max(0, ORDER.indexOf(at) + delta))];
@@ -64,17 +60,7 @@ export function SetupFlow({ view, start }: { view: OnlineView; start: "connect" 
   if (at === "explainer") return <Explainer onNext={() => setStep("connect")} onLeave={leave} />;
   if (at === "connect" || !provider) {
     return (
-      <Connect
-        form={form}
-        setForm={setForm}
-        outcome={outcome}
-        setOutcome={setOutcome}
-        onChecking={() => {
-          checked.current = true;
-        }}
-        onNext={() => setStep("send")}
-        onLeave={leave}
-      />
+      <ServiceStep host={provider?.host ?? null} onNext={() => setStep("send")} onLeave={leave} />
     );
   }
 

@@ -15,7 +15,8 @@ import { useOnlineAct } from "./useOnline";
 import { dayText, sentence, whenText } from "./when";
 
 type Back = { to: string; label: string };
-const toSetup = (step?: "connect") => goTo("/settings/online/setup", { step });
+const toSetup = () => goTo("/settings/online/setup");
+const toConnect = () => goTo("/settings/advanced/online", { from: "online" });
 
 function Title({ tag, trouble }: { tag: string; trouble?: boolean }) {
   return (
@@ -143,7 +144,7 @@ function ProviderRow({ view, kept }: { view: OnlineView; kept: boolean }) {
         kept ? "online.provider.kept" : "online.provider.engine",
       )}`}
     >
-      <Button variant="quiet" onClick={() => toSetup("connect")}>
+      <Button variant="quiet" onClick={() => toConnect()}>
         {t("online.change")}
       </Button>
     </Row>
@@ -288,7 +289,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
         title={sentence(t("online.refused.title"))}
         body={t("online.refused.body", { host: view.host ?? "" })}
       >
-        <Button variant="secondary" onClick={() => toSetup("connect")}>
+        <Button variant="secondary" onClick={() => toConnect()}>
           {t("online.refused.action")}
         </Button>
       </Warning>
@@ -296,7 +297,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
   } else if (state.type === "paused") {
     warning = (
       <Warning title={sentence(t("online.noCredit.title"))} body={t("online.noCredit.body")}>
-        <Button variant="secondary" onClick={() => toSetup("connect")}>
+        <Button variant="secondary" onClick={() => toConnect()}>
           {t("online.noCredit.action")}
         </Button>
       </Warning>
@@ -316,7 +317,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
     const check = (
       action: "online.problem.modelMissing.action" | "online.problem.keyUnavailable.action",
     ) => (
-      <Button variant="secondary" onClick={() => toSetup("connect")}>
+      <Button variant="secondary" onClick={() => toConnect()}>
         {t(action)}
       </Button>
     );

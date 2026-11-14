@@ -2,6 +2,7 @@ import { useRoute } from "wouter";
 import { useQueryParam } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
+import { AdvancedConnect } from "./AdvancedConnect";
 import styles from "./Online.module.css";
 import { OnlinePage } from "./OnlinePage";
 import Sent from "./Sent";
@@ -12,6 +13,7 @@ import { useOnline } from "./useOnline";
 export default function Online() {
   const [setup] = useRoute("/settings/online/setup");
   const [sent] = useRoute("/settings/online/sent");
+  const [connect] = useRoute("/settings/advanced/online");
   const step = useQueryParam("step");
   const { data, isError, refetch } = useOnline();
 
@@ -30,6 +32,10 @@ export default function Online() {
       </p>
     );
   }
-  if (setup) return <SetupFlow view={data} start={step === "connect" ? "connect" : null} />;
+  if (connect) return <AdvancedConnect view={data} />;
+  if (setup) {
+    const start = step === "connect" || step === "send" ? step : null;
+    return <SetupFlow view={data} start={start} />;
+  }
   return <OnlinePage view={data} />;
 }

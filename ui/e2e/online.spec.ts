@@ -36,6 +36,10 @@ const typeInto = async (page: Page, label: RegExp, text: string) => {
 };
 
 const connectAndCheck = async (page: Page) => {
+  await press(page, "button", "Open Advanced details");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Connect to the service you chose." }),
+  ).toBeVisible();
   await typeInto(page, /^Address/, "https://api.example.com/v1");
   await typeInto(page, /^Key/, "sk-example-not-a-real-key");
   await typeInto(page, /^Which one to use/, "llama-3.3-70b-instruct");
@@ -110,10 +114,20 @@ test.describe("O2 to O6, setting up", () => {
   const steps: Array<[string, (page: Page) => Promise<void>]> = [
     ["O2", async () => undefined],
     [
-      "O4-empty",
+      "O4-service",
       async (page) => {
         await press(page, "button", "Continue");
         await expect(page.getByText("Online answers · step 2 of 5")).toBeVisible();
+        await expect(page.getByLabel(/^Address/)).toHaveCount(0);
+      },
+    ],
+    [
+      "O4-advanced-empty",
+      async (page) => {
+        await press(page, "button", "Continue");
+        await press(page, "button", "Open Advanced details");
+        await expect(page.getByLabel(/^Address/)).toBeVisible();
+        await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
       },
     ],
     [
@@ -180,6 +194,7 @@ test.describe("O2 to O6, setting up", () => {
   test("a failed check is axe clean and keeps Continue off", async ({ page }) => {
     await open(page, "/settings/online/setup");
     await press(page, "button", "Continue");
+    await press(page, "button", "Open Advanced details");
     await typeInto(page, /^Address/, "https://api.example.com/v1");
     await typeInto(page, /^Key/, "sk-refused");
     await typeInto(page, /^Which one to use/, "llama-3.3-70b-instruct");
@@ -208,6 +223,7 @@ test.describe("O2 to O6, setting up", () => {
   test("Tab alone: through the form, the check and on to Continue", async ({ page }) => {
     await open(page, "/settings/online/setup");
     await press(page, "button", "Continue");
+    await press(page, "button", "Open Advanced details");
     const address = page.getByLabel(/^Address/);
     await address.focus();
     await page.keyboard.type("https://api.example.com/v1");
@@ -232,7 +248,27 @@ test.describe("O2 to O6, setting up", () => {
     await expect(page.getByText("Online answers · step 3 of 5")).toBeVisible();
   });
 
-  test("leaving at the connect step goes back to the page", async ({ page }) => {
+  test("Advanced details: reached from Advanced details, in light and dark", async ({
+    browser,
+  }) => {
+    for (const scheme of ["light", "dark"] as const) {
+      const context = await browser.newContext({
+        colorScheme: scheme,
+        locale: "en-GB",
+        timezoneId: "Europe/London",
+        viewport: { width: 1280, height: 800 },
+      });
+      const page = await context.newPage();
+      await open(page, "/settings/advanced");
+      await press(page, "link", "Connect an online service");
+      await expect(page).toHaveURL(/#\/settings\/advanced\/online$/);
+      await expect(page.getByLabel(/^Address/)).toBeVisible();
+      expect(await axe(page), scheme).toEqual([]);
+      await context.close();
+    }
+  });
+
+  test("leaving at the service step goes back to the page", async ({ page }) => {
     await open(page, "/settings/online/setup");
     await press(page, "button", "Continue");
     await press(page, "button", "Not now");
