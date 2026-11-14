@@ -210,8 +210,8 @@ fn check_sets_provisional_route_and_logs_a_check() {
     );
     assert_eq!(l.port.current(), stand_in_route());
     assert!(
-        l.route_at_launch(),
-        "a relaunch keeps the route being set up"
+        !l.route_at_launch(),
+        "a route being set up is never launched with"
     );
     assert!(
         !l.keychain.holds_a_key(),
@@ -921,6 +921,40 @@ fn a_money_limit_without_reported_cost_falls_back_to_the_count() {
         serde_json::to_value(&d.answered_by).unwrap(),
         json!({"type": "computer", "reason": "limit"})
     );
+}
+
+/// Only the route in use is launched with: never one being set up, never one whose check
+/// failed.
+#[test]
+fn only_the_route_in_use_is_launched_with() {
+    let l = lab();
+    let at_launch = || {
+        nocturne_app_lib::online::route_at_launch(l.h.app.handle())
+            .map(|r| (r.base_url().to_string(), r.model.clone()))
+    };
+    assert_eq!(l.check(KEY)["type"], "works");
+    assert_eq!(at_launch(), None, "a route that passed its check");
+    l.script(json!({"status": 401}));
+    assert_eq!(l.check(KEY)["type"], "keyRefused");
+    assert_eq!(at_launch(), None, "a route whose check failed");
+    l.script(json!({"status": null}));
+    l.turn_on(200);
+    let in_use = Some((URL.to_string(), "stand-in-model".to_string()));
+    assert_eq!(at_launch(), in_use);
+    let out = l.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://new.example.com/v1", "key": "sk-new-key-0000111122",
+                        "model": "other-model"}}),
+    );
+    assert_eq!(out["type"], "works");
+    assert_eq!(at_launch(), in_use, "a change not yet agreed to");
+    l.script(json!({"status": 401}));
+    l.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://new.example.com/v1", "key": "sk-new-key-0000111122",
+                        "model": "other-model"}}),
+    );
+    assert_eq!(at_launch(), in_use, "a change whose check failed");
 }
 
 /// A check cancelled while the engine relaunches with the route being checked: the engine has

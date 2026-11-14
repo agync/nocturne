@@ -203,11 +203,12 @@ impl<R: Runtime> OnlineHub<R> {
         }
     }
 
-    /// The route the engine's next launch uses: the one in use, else one being set up.
+    /// The route the engine's next launch uses: only the one in use. A route being set up or
+    /// one whose check failed is never launched with; a check gives it to the engine itself.
     pub fn route_at_launch(&self) -> Option<CloudRoute> {
         self.load();
         let mut r = self.routes();
-        let route = r.active.clone().or_else(|| r.provisional.clone());
+        let route = r.active.clone();
         r.engine = route.clone();
         r.engine_known = true;
         route
