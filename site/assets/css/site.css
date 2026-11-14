@@ -506,33 +506,16 @@ figcaption,
 
 /* In the app */
 
-/* The whole window, shown once. The outline marks the column the later pictures crop to; the
-   rest of the window is dimmed so the eye goes to it. */
+/* The whole window, shown once, with all its furniture. */
 .frame-map {
   margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
 }
 
 .frame-map-shot {
-  position: relative;
   overflow: hidden;
   border-radius: 10px;
   box-shadow: var(--shadow);
   background: var(--sheet);
-}
-
-.frame-map-column {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 18.125%;
-  width: 60%;
-  border: 2px solid var(--accent);
-  border-radius: 4px;
-  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--bg) 52%, transparent);
-  pointer-events: none;
 }
 
 .feature {
