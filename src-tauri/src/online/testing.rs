@@ -121,6 +121,8 @@ pub struct StandInPort {
     /// While set, the engine starts but does not take a route: its key request fails, and the
     /// relaunch says so, as the supervisor does.
     pub refuse: AtomicBool,
+    /// While set, the engine is between launches.
+    pub starting: AtomicBool,
     taken: Mutex<Option<bool>>,
     calls: std::sync::atomic::AtomicUsize,
     hold: Mutex<Option<Arc<RelaunchHold>>>,
@@ -283,6 +285,11 @@ impl EnginePort for StandInPort {
     fn route_taken(&self) -> BoxFuture<'_, Option<bool>> {
         let t = *self.taken.lock().unwrap_or_else(|e| e.into_inner());
         Box::pin(async move { t })
+    }
+
+    fn starting(&self) -> BoxFuture<'_, bool> {
+        let s = self.starting.load(Ordering::SeqCst);
+        Box::pin(async move { s })
     }
 }
 

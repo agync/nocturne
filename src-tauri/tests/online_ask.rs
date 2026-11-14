@@ -663,11 +663,62 @@ fn a_route_the_engine_did_not_take_sends_nothing() {
     let view = l.h.ok("get_online", json!({}));
     assert_eq!(view["state"]["type"], "problem", "{view}");
     assert_eq!(view["state"]["code"], "unreachable", "{view}");
-    // A later launch took it: the problem lifts and the next question goes online.
+    // A later launch took it: the problem lifts and the next question goes online, without
+    // another relaunch (which would read the provider's list again).
     l.port.set_route_taken(Some(true));
+    let calls = l.port.calls();
     let d = l.ask("When is the dentist?", None);
     assert_eq!(last(&d).answered_by, online());
     assert_eq!(l.chats().len(), before + 1);
+    assert_eq!(l.port.calls(), calls, "no relaunch");
+}
+
+/// While the engine is between launches, what it holds is not known: the question is answered
+/// here, and no problem is raised.
+#[test]
+fn a_question_while_the_engine_starts_is_answered_here_quietly() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    let before = l.chats().len();
+    l.port
+        .starting
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    l.port.set_route_taken(Some(false));
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, here(LocalReason::Problem));
+    assert_eq!(l.chats().len(), before);
+    let view = l.h.ok("get_online", json!({}));
+    assert_eq!(view["state"]["type"], "on", "{view}");
+    l.port
+        .starting
+        .store(false, std::sync::atomic::Ordering::SeqCst);
+    l.port.set_route_taken(Some(true));
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
+}
+
+/// The engine unloaded the online model (a local model failed to load): checking again with the
+/// same connection relaunches the engine instead of trusting what it was once given.
+#[test]
+fn a_check_after_the_engine_lost_its_route_relaunches_it() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    l.port.set_route_taken(Some(false));
+    let calls = l.port.calls();
+    let out = l.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://api.example.com/v1", "key": KEY,
+                        "model": "stand-in-model"}}),
+    );
+    assert_eq!(out["type"], "works", "{out}");
+    assert!(
+        l.port.calls() > calls,
+        "the engine was given the route again"
+    );
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
 }
 
 /// Turning on with a route the engine refuses: no question goes out, and "Try again" gives the

@@ -320,13 +320,16 @@ impl<R: Runtime> OnlineHub<R> {
     /// that stops waiting (a check cancelled) leaves it unknown, and the next call always
     /// reaches the engine.
     async fn give_engine(&self, route: Option<CloudRoute>) -> Result<(), String> {
-        {
-            let mut r = self.routes();
-            if r.engine_known && same_route(r.engine.as_ref(), route.as_ref()) {
-                return Ok(());
-            }
-            r.engine_known = false;
+        let known = {
+            let r = self.routes();
+            r.engine_known && same_route(r.engine.as_ref(), route.as_ref())
+        };
+        // An engine that was given this route but no longer holds it (a failed local load
+        // unloads the online model too) is relaunched, so a check or "Try again" recovers it.
+        if known && (route.is_none() || !self.engine_lost_route().await) {
+            return Ok(());
         }
+        self.routes().engine_known = false;
         // A route that is not the one in use: questions on their way out stop first and are
         // answered here, so none reaches a provider the person has not agreed to.
         if !same_route(self.routes().active.as_ref(), route.as_ref()) {
@@ -355,7 +358,7 @@ impl<R: Runtime> OnlineHub<R> {
     /// problem, and questions are answered here until a later launch takes it. Says nothing
     /// while a download holds the window open: the engine runs without the route then.
     async fn note_route_taken(&self) {
-        if self.port.downloading().await {
+        if self.port.downloading().await || self.port.starting().await {
             return;
         }
         match self.port.route_taken().await {
@@ -368,6 +371,10 @@ impl<R: Runtime> OnlineHub<R> {
     /// Raises or lifts the problem of an engine that did not take its route. Another problem
     /// already shown is left as it is.
     fn set_not_taken(&self, raised: bool) {
+        if raised {
+            // The next change always reaches the engine, so "Try again" relaunches it.
+            self.routes().engine_known = false;
+        }
         let Ok(engine) = self.engine() else {
             return;
         };
@@ -382,9 +389,13 @@ impl<R: Runtime> OnlineHub<R> {
         if !change {
             return;
         }
-        if raised {
-            // The next change always reaches the engine, so "Try again" relaunches it.
-            self.routes().engine_known = false;
+        if !raised {
+            // The engine holds the route again: what it was given is known once more, so the
+            // next question does not relaunch it (and read the provider's list again).
+            let mut r = self.routes();
+            if r.engine.is_some() && same_route(r.engine.as_ref(), r.active.as_ref()) {
+                r.engine_known = true;
+            }
         }
         let now = engine.clock_now();
         let _ = engine.update_online_state(|s| {
@@ -392,6 +403,14 @@ impl<R: Runtime> OnlineHub<R> {
             s.problem_since = raised.then_some(now);
         });
         self.emit();
+    }
+
+    /// Whether the engine, running and outside the download window, no longer holds the route it
+    /// was given.
+    async fn engine_lost_route(&self) -> bool {
+        !self.port.downloading().await
+            && !self.port.starting().await
+            && self.port.route_taken().await == Some(false)
     }
 
     /// After launch: an engine that started before the route was known is relaunched once.
@@ -960,8 +979,13 @@ impl<R: Runtime> OnlineHub<R> {
         if self.port.downloading().await {
             return RouteChoice::Computer(LocalReason::Downloading);
         }
-        // The engine was given the route but did not take it (a restart whose key request
-        // failed): nothing can go out.
+        // Between launches what the engine holds is not known yet: this one question is
+        // answered here, and nothing is raised.
+        if self.port.starting().await {
+            return RouteChoice::Computer(LocalReason::Problem);
+        }
+        // The engine was given the route but does not hold it (a restart whose key request
+        // failed, or the online model unloaded with the others): nothing can go out.
         if self.port.route_taken().await == Some(false) {
             self.set_not_taken(true);
             return RouteChoice::Computer(LocalReason::Problem);
@@ -1121,6 +1145,11 @@ impl<R: Runtime> OnlineHub<R> {
             Some(OnlineFailure::NoCredit) => {
                 let _ = engine.update_online_state(|s| s.pause = Some(OnlinePause::NoCredit));
                 notices::raise(&self.app, NoticeCode::OnlineNoCredit, None).await;
+            }
+            // The engine's own 404, for an online model it unloaded, is not the provider
+            // refusing the name.
+            Some(OnlineFailure::ModelMissing) if self.engine_lost_route().await => {
+                self.set_not_taken(true);
             }
             Some(OnlineFailure::ModelMissing) => {
                 let _ = engine.update_online_state(|s| {

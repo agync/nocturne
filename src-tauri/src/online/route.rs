@@ -24,9 +24,11 @@ pub trait EnginePort: Send + Sync {
     fn downloading(&self) -> BoxFuture<'_, bool>;
     /// Whether the running engine was given a route, or `None` with no engine running.
     fn has_cloud(&self) -> BoxFuture<'_, Option<bool>>;
-    /// Whether the running engine holds its route: it took the key and loaded the online model.
-    /// `None` with no engine running.
+    /// Whether the running engine holds its route: it took the key and the online model is
+    /// still loaded. `None` with no engine running.
     fn route_taken(&self) -> BoxFuture<'_, Option<bool>>;
+    /// Whether the engine is between launches, so what it holds is not known yet.
+    fn starting(&self) -> BoxFuture<'_, bool>;
 }
 
 /// Where one question goes.
@@ -84,6 +86,15 @@ impl<R: Runtime> EnginePort for AppPort<R> {
     }
 
     fn route_taken(&self) -> BoxFuture<'_, Option<bool>> {
-        Box::pin(async move { self.control().await.map(|c| c.route_taken()) })
+        Box::pin(async move {
+            match self.control().await {
+                Some(c) => Some(c.route_held().await),
+                None => None,
+            }
+        })
+    }
+
+    fn starting(&self) -> BoxFuture<'_, bool> {
+        Box::pin(async move { self.control().await.is_some_and(|c| c.starting()) })
     }
 }
