@@ -2,9 +2,8 @@
 # OCI images and the repository index to https://nocturne.is/flatpak. Run by hand, or called by
 # the release workflow with channel stable and publish true. See docs/contribution/flatpak.md.
 #
-# The privileged build sees no secret. The jobs that hold the signing key run the digest-pinned
-# AetherPak image without privileges and call its `aetherpak` command directly, so no
-# third-party action code runs next to the key.
+# The privileged build sees no secret. The unprivileged jobs that hold the signing key publish
+# with the AetherPak publish actions.
 name: flatpak
 
 on:
@@ -171,8 +170,7 @@ jobs:
           path: repo.tar
           if-no-files-found: error
 
-  # Signs and pushes the images. Not privileged, and no third-party action sees the key: the
-  # pinned image's own `aetherpak push-oci` does the work.
+  # Signs and pushes the images. Not privileged.
   publish:
     needs: [resolve, build]
     if: inputs.publish
@@ -182,8 +180,6 @@ jobs:
     permissions:
       contents: read
       packages: write
-    container:
-      image: ghcr.io/aetherpak/cli@sha256:588c847bbc7f56ad19730cb2980d16030be2cc147576fcf7ff3e92d193111c33 # latest-builder as of 2026-11-14
     strategy:
       fail-fast: true
       matrix:
@@ -196,28 +192,24 @@ jobs:
           name: flatpak-repo-${{ matrix.arch }}
       - name: unpack the repository
         run: tar -xf repo.tar
-      - name: sign and push the images
+      - name: require the signing key
         env:
           GPG_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
-          OCI_USERNAME: ${{ github.actor }}
-          OCI_PASSWORD: ${{ github.token }}
-          BRANCH: ${{ inputs.channel }}
-          ARCH: ${{ matrix.arch }}
         run: |
-          set -euo pipefail
           [ -n "$GPG_KEY" ] || { echo "FLATPAK_GPG_PRIVATE_KEY is empty: refusing to publish unsigned" >&2; exit 1; }
-          keyfile=$(mktemp)
-          chmod 600 "$keyfile"
-          trap 'rm -f "$keyfile"' EXIT
-          printf '%s' "$GPG_KEY" > "$keyfile"
-          passphrase=()
-          [ -z "$GPG_PASSPHRASE" ] || passphrase=(--gpg-key-passphrase "$GPG_PASSPHRASE")
-          aetherpak push-oci \
-            --registry ghcr.io --oci-repository agync/nocturne-flatpak \
-            --repo-path _repo --records-dir _records \
-            --app-id is.nocturne.Nocturne --branch "$BRANCH" --arch "$ARCH" \
-            --gpg-key "$keyfile" "${passphrase[@]}"
+      - name: sign and push the images
+        uses: aetherpak/actions/publish-oci@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        with:
+          registry: ghcr.io
+          oci-repository: agync/nocturne-flatpak
+          repo-path: _repo
+          records-dir: _records
+          app-id: is.nocturne.Nocturne
+          branch: ${{ inputs.channel }}
+          arch: ${{ matrix.arch }}
+          signing: gpg
+          gpg-private-key: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+          gpg-private-key-passphrase: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
       # The index is assembled in a separate job, so each build's record travels as an artifact.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -230,8 +222,6 @@ jobs:
     if: inputs.publish
     runs-on: ubuntu-24.04
     environment: release-signing
-    container:
-      image: ghcr.io/aetherpak/cli@sha256:588c847bbc7f56ad19730cb2980d16030be2cc147576fcf7ff3e92d193111c33 # latest-builder as of 2026-11-14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -242,24 +232,25 @@ jobs:
           pattern: flatpak-records-*
           path: _records
           merge-multiple: true
-      - name: repository index
+      - name: require the signing key
         env:
           GPG_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
-          GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
         run: |
-          set -euo pipefail
           [ -n "$GPG_KEY" ] || { echo "FLATPAK_GPG_PRIVATE_KEY is empty: refusing to publish unsigned" >&2; exit 1; }
-          keyfile=$(mktemp)
-          chmod 600 "$keyfile"
-          trap 'rm -f "$keyfile"' EXIT
-          printf '%s' "$GPG_KEY" > "$keyfile"
-          args=(--gpg-key "$keyfile")
-          [ -z "$GPG_PASSPHRASE" ] || args+=(--gpg-key-passphrase "$GPG_PASSPHRASE")
-          aetherpak build-site --config flatpak/aetherpak.yaml \
-            --records-dir _records --pages-url https://nocturne.is/flatpak \
-            --site-dir _site/flatpak --remote-name nocturne --reconcile --landing-page \
-            --runtime-repo https://dl.flathub.org/repo/flathub.flatpakrepo \
-            "${args[@]}"
+      - name: repository index
+        uses: aetherpak/actions/publish-site@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        with:
+          config: flatpak/aetherpak.yaml
+          records-dir: _records
+          pages-url: https://nocturne.is/flatpak
+          site-dir: _site/flatpak
+          remote-name: nocturne
+          landing-page: true
+          runtime-repo: https://dl.flathub.org/repo/flathub.flatpakrepo
+          signing: gpg
+          gpg-private-key: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+          gpg-private-key-passphrase: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
+          upload-pages-artifact: false
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: flatpak-site

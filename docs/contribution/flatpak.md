@@ -137,19 +137,18 @@ Its jobs:
    publishing, it hands the unsigned repository on as an artefact and turns the build cache off.
    It still uses the AetherPak build action, whose own setup and cache actions are not pinned;
    that is acceptable only because nothing secret is reachable from this job.
-4. `publish`, when publishing, runs in the `release-signing` environment in the same container
-   image without privileges. It fails if the key is empty, then signs the images and pushes them
-   with the image's own `aetherpak push-oci`, so no third-party action sees the key.
-5. `site` runs in `release-signing` in the same image. It merges the records with the index live
-   at `https://nocturne.is/flatpak`, signs it with `aetherpak build-site` and hands the site on
-   as an artefact.
+4. `publish`, when publishing, runs in the `release-signing` environment without privileges. It
+   fails if the key is empty, then signs the images and pushes them with the AetherPak
+   `publish-oci` action, pinned to the same commit as the build action.
+5. `site` runs in `release-signing`. It merges the records with the index live at
+   `https://flatpak.nocturne.is`, signs it with the AetherPak `publish-site` action and hands the
+   site on as an artefact.
 6. `deploy` publishes that artefact to GitHub Pages.
 
 A caller grants `contents: read`, `packages: write`, `pages: write` and `id-token: write`. The two
 secrets, `FLATPAK_GPG_PRIVATE_KEY` and `FLATPAK_GPG_PASSPHRASE`, live in the `release-signing`
 environment and are read only by `publish` and `site`; no caller passes them. Publishing without
-a key fails, so the repository is never unsigned. Unprivileged jobs in the pinned image need no
-extra runner setup.
+a key fails, so the repository is never unsigned.
 
 The `release-signing` environment must have required reviewers and hold the two secrets, and the
 `v*` tag ruleset described in `release.md` must be in place: the workflow's tag checks assume that
