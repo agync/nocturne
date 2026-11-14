@@ -916,6 +916,54 @@ impl Client {
         })
     }
 
+    /// The whole answer, read as it arrives. After each piece `stop` is shown the text so far;
+    /// once it says so, the request is dropped, which ends it in the engine as well, and the
+    /// reply is what had come. `req.timeout` (or the JSON limit) bounds the whole call.
+    pub async fn chat_watched(
+        &self,
+        req: &ChatRequest,
+        mut stop: impl FnMut(&str) -> bool,
+    ) -> Result<ChatReply, RuntimeError> {
+        let _busy = self.busy(&req.model);
+        let mut req = req.clone();
+        req.stream = true;
+        let limit = req.timeout.unwrap_or(self.shared.timeouts.json);
+        let read = async {
+            let rb = self
+                .build(
+                    &self.shared.stream_http,
+                    Method::POST,
+                    "/v1/chat/completions",
+                    true,
+                )?
+                .json(&req);
+            let first = self.shared.timeouts.first_token;
+            let response = tokio::time::timeout(first, Self::send(rb))
+                .await
+                .map_err(|_| RuntimeError::Timeout)??;
+            let mut pieces = sse_pieces(response, first, self.shared.timeouts.idle);
+            let mut reply = ChatReply {
+                text: String::new(),
+                cut: false,
+            };
+            while let Some(piece) = pieces.next().await {
+                match piece? {
+                    Piece::Text(t) => {
+                        reply.text.push_str(&t);
+                        if stop(&reply.text) {
+                            break;
+                        }
+                    }
+                    Piece::End(why) => reply.cut = why == "length",
+                }
+            }
+            Ok(reply)
+        };
+        tokio::time::timeout(limit, read)
+            .await
+            .map_err(|_| RuntimeError::Timeout)?
+    }
+
     /// One online question through the engine route: a non-streaming chat with exactly
     /// `model`, `messages`, `temperature` and `max_tokens`, nothing else. The engine passes the
     /// provider's status through; on failure only the engine's own `error.message` is kept,
@@ -1001,7 +1049,13 @@ impl Client {
         let response = tokio::time::timeout(first, Self::send(rb))
             .await
             .map_err(|_| RuntimeError::Timeout)??;
-        let deltas = sse_deltas(response, first, self.shared.timeouts.idle);
+        let deltas = sse_pieces(response, first, self.shared.timeouts.idle).filter_map(|p| {
+            std::future::ready(match p {
+                Ok(Piece::Text(t)) => Some(Ok(t)),
+                Ok(Piece::End(_)) => None,
+                Err(e) => Some(Err(e)),
+            })
+        });
         // The model stays busy until the answer is read or dropped.
         Ok(Box::pin(deltas.map(move |d| {
             let _ = &busy;
@@ -1142,10 +1196,16 @@ pub(crate) fn parse_json_text<T: DeserializeOwned>(text: &str) -> Result<T, Runt
     serde_json::from_str(inner).map_err(|e| RuntimeError::BadResponse(e.to_string()))
 }
 
+/// A piece of a streamed reply: some of its text, or the engine's reason for ending it.
+enum Piece {
+    Text(String),
+    End(String),
+}
+
 struct SseState {
     body: BoxStream<'static, Result<bytes::Bytes, reqwest::Error>>,
     buf: Vec<u8>,
-    ready: VecDeque<Result<String, RuntimeError>>,
+    ready: VecDeque<Result<Piece, RuntimeError>>,
     finished: bool,
     complete: bool,
     started: bool,
@@ -1153,7 +1213,11 @@ struct SseState {
     idle: Duration,
 }
 
-fn sse_deltas(response: Response, first: Duration, idle: Duration) -> ChatStream {
+fn sse_pieces(
+    response: Response,
+    first: Duration,
+    idle: Duration,
+) -> BoxStream<'static, Result<Piece, RuntimeError>> {
     let state = SseState {
         body: response.bytes_stream().boxed(),
         buf: Vec::new(),
@@ -1196,10 +1260,10 @@ fn sse_deltas(response: Response, first: Duration, idle: Duration) -> ChatStream
                             continue;
                         };
                         if let Some(e) = v.get("error") {
-                            st.ready.push_back(Err(RuntimeError::Server {
-                                status: e["status_code"].as_u64().unwrap_or(502) as u16,
-                                message: e["message"].as_str().unwrap_or("").to_string(),
-                            }));
+                            // As an error before the stream: a refused request is Rejected.
+                            let status = e["status_code"].as_u64().or(e["code"].as_u64());
+                            let status = status.unwrap_or(502) as u16;
+                            st.ready.push_back(Err(map_status(status, data)));
                             st.finished = true;
                             break;
                         }
@@ -1208,7 +1272,10 @@ fn sse_deltas(response: Response, first: Duration, idle: Duration) -> ChatStream
                             && !text.is_empty()
                         {
                             st.started = true;
-                            st.ready.push_back(Ok(text.to_string()));
+                            st.ready.push_back(Ok(Piece::Text(text.to_string())));
+                        }
+                        if let Some(why) = choice["finish_reason"].as_str() {
+                            st.ready.push_back(Ok(Piece::End(why.to_string())));
                         }
                         if !choice["finish_reason"].is_null() {
                             st.complete = true;
