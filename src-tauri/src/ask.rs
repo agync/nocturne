@@ -45,7 +45,7 @@ const RETRIEVE_K: usize = 12;
 /// What is kept of those once a reranking model has ordered them (Standard and Large).
 const RERANKED_K: usize = 8;
 /// A reranking model that does not answer in this time leaves the search's own order.
-const RERANK_LIMIT: Duration = Duration::from_secs(15);
+const RERANK_LIMIT: Duration = Duration::from_secs(4);
 /// At most this many memories on the other side of an open question are brought in.
 const MAX_SIDES: usize = 4;
 /// How many near matches an "I'm not sure" shows.
@@ -508,7 +508,9 @@ async fn answer<R: Runtime>(
         let e = engine.clone();
         let safe = blocking(move || {
             let mut out = Vec::with_capacity(hits.len());
-            for h in hits {
+            // A phone gets memories only: a line of an original has not been checked for what
+            // may leave this computer.
+            for h in hits.into_iter().filter(|h| !is_source_line(&h.memory.id)) {
                 if phone_safe(&e, &h.memory)? {
                     out.push(h);
                 }

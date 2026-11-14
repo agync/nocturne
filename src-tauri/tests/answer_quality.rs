@@ -74,6 +74,46 @@ fn a_line_reading_missed_answers_with_its_original_as_the_receipt() {
     assert!(h.memory(&memory).last_used.is_some());
 }
 
+/// A phone's question never gets a line of an original: only memories, which have been checked
+/// for what may leave this computer.
+#[test]
+fn no_line_of_an_original_reaches_a_phone() {
+    use nocturne_app_lib::ask::{AskLane, AskOptions, AskSink, start_with};
+    let mind = TestMind::new(AnswerMode::Normal);
+    let h = harness_with_mind(mind.clone());
+    let (_, memory) = boiler(&h);
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let handle = h.app.handle().clone();
+    let opts = AskOptions {
+        public_only: true,
+        lane: AskLane::Phone("phone-1".into()),
+        sink: AskSink::Channel(tx),
+        place: nocturne_contract::AskPlace::Auto,
+    };
+    block_on(async move {
+        start_with(
+            &handle,
+            "Who is coming to service the boiler, and when?".into(),
+            opts,
+        )
+    });
+    let mut got: Vec<AskDelta> = Vec::new();
+    wait_for("the phone's answer", || {
+        while let Ok(d) = rx.try_recv() {
+            got.push(d);
+        }
+        got.last().is_some_and(|d| is_terminal(d.phase))
+    });
+    let done = got.last().unwrap();
+    assert_eq!(done.phase, AskPhase::Done);
+    assert_eq!(done.memory_ids, std::slice::from_ref(&memory));
+    let given = mind.answered_from.lock().unwrap()[0].clone();
+    assert!(given.iter().all(|f| !is_source_line(&f.memory.id)));
+    let text: String = got.iter().filter_map(|x| x.text_delta.clone()).collect();
+    assert!(!text.contains("Marek"), "{text}");
+    assert!(done.near.iter().all(|n| !n.text.contains("Marek")));
+}
+
 #[test]
 fn an_original_with_no_memory_can_still_answer() {
     let h = harness_with_mind(TestMind::new(AnswerMode::Normal));
