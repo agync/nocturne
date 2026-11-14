@@ -227,27 +227,32 @@ the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home
 The second exception is Online answers, which is also off until the person turns it on, and only
 after a passed check and consent. While it is on, the engine, not the app, reaches the one address
 the person entered, only when a question is asked, with that question and the few remembered
-sentences needed to answer it, never anything marked private. The app has no connection to the
-provider, the engine's `offline` setting stays on, and while it is off the engine has no provider
-and no key. The release check allows a non-loopback connection only from the engine, only to that
-address and only during questions ([online answers](online.md),
+sentences needed to answer it, never anything marked private, and once for the connection check,
+which sends one fixed test question and no memories. The app has no connection to the
+provider, the engine makes one model-listing request to it at each start while Online answers is on
+and otherwise reaches it only for questions and the check, and while it is off the engine has no
+provider and no key. The release check is to allow a non-loopback connection only from the engine, only to
+that address and only during questions and the start-up listing; that `online` mode is not written yet ([online answers](online.md),
 [decision 0011](/adr/0011-online-answers.md)).
 
 ## Choosing models
 
-The tier is the preset. An advanced view lets the person pick a model for each job: answering,
-reading recordings, reading aloud and finding memories. Choices come only from the engine's own
+The tier is the preset. Settings ("Choose what runs each job", also linked from the advanced
+details) lets the person pick a model for each job: answering, reading recordings, reading aloud and
+finding memories. Choices come only from the engine's own
 catalogue, never from a pasted address, and a job lists only models that suit it (answering needs a
-model that reads pictures and does not think aloud). A pick that is not on the computer downloads
+model that reads pictures and does not think aloud, and every job needs a model that takes the
+8192-token context Nocturne loads it with, except reading recordings and reading aloud). Only one
+change runs at a time, and none while setup is downloading. A pick that is not on the computer downloads
 only after the person says yes, inside the same download window setup uses.
 
 | Part | Behaviour |
 |---|---|
-| Selection | `selection.json` beside the engine record holds the per-job choice. The supervisor reads it at launch for saved options and the runtime builds its picks from it. "Reset to" the tier clears it. It is part of the export and removed by Delete everything |
-| Fit | Each row is marked Fits, Tight, Won't fit or Can't use, with one reason. The budget is the smaller of 0.55 x RAM + 1.7 GiB and RAM - 1.0 GiB. The need is the busiest moment: reading (mind, recall and speech together) or, where the voice runs alone, the voice. Fits is at most 0.85 of the budget and Tight at most the budget. Every tier preset fits at its own minimum, and a test keeps it so. Models not in the shipped table are estimated from their size and shown as not tested with Nocturne |
-| Switching | The current model keeps working until the new one is present, then one step changes it. The old model is kept unless the person removes it; the offer to free its space never defaults to removal |
-| Finding memories | Changing the finding model re-reads memories in the background into a second table while the old index keeps answering, then swaps in one transaction. Asking and reading go first, memories added meanwhile are caught up, a restart carries on, and cancel drops the second table. Each row records which model made it |
-| Ledger | Every finished model download writes a ledger entry with the model name and size |
+| Selection | `selection.json` beside the engine record holds the per-job choice. The supervisor reads it at launch for saved options and the runtime builds its picks from it. When setup moves to another tier the other jobs' choices go with the old tier; the finding choice stays, because its vectors fill the store. "Reset to" the tier sets every job back to the tier's own model when each is on the computer; the finding job goes back through a re-read. A copy is part of the export (as `models.json`), and Delete everything removes it |
+| Fit | Each row is marked Fits, Tight, Won't fit or Can't use, with one reason. The budget is the smaller of 0.55 x RAM + 1.7 GiB and RAM - 1.0 GiB. The need is the busiest of three moments: reading (mind, recall and speech together, plus the extra a measured tier preset needed at its busiest), speaking (the voice alone where it runs alone, else beside the mind and recall) and an idle floor of 0.5 GB. Fits is at most 0.85 of the budget and Tight at most the budget. Can't use covers a backend this computer lacks, a model larger than the engine accepts, and not enough free disk. Every tier preset fits at its own minimum, and a test keeps it so. Models not in the shipped table are estimated as their size plus 1.2 GB (0.35 GB more for one that drafts); a model is marked not tested with Nocturne unless the table says it was tested |
+| Switching | The current model keeps working until the new one is present, then one step changes it. The old model is kept unless the person removes it; the offer to free its space has "Keep it" first and removes nothing without a click. A change that finds the new model already on the computer switches at once, with no download |
+| Finding memories | Changing the finding model re-reads memories in the background into a second table while the old index keeps answering, then swaps in one transaction. Asking and reading go first, memories added meanwhile are caught up in the old index as well, a restart carries on, and cancel drops the second table. A re-read that keeps failing, or cannot read too many memories, is cancelled the same way and the old index stays. Each row records which model made it |
+| Ledger | Every finished model download writes a ledger entry with the model name and size. A passed connection check and turning Online answers on or off write ledger entries too |
 
 The memory figures behind the budget are the measured peaks in Running on 8 GB, and the larger tiers
 are estimates until measured.

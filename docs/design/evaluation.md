@@ -50,8 +50,8 @@ before building more.
 | The embedded server is reachable by other apps | No: per-launch key, loopback only |
 | Away from home off: listeners, helper processes and outbound traffic | None; no helper file unless a download was agreed to |
 | Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale helper |
-| Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored |
-| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off |
+| Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored (check planned) |
+| Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off (`online` mode of the network check, planned) |
 | Private and sensitive markers in captured online traffic | 0 |
 | Online answer accuracy against the Tiny tier on the same questions | Reported as one table from the measurement with a stand-in provider; no target is set until it is measured |
 | Plaintext in a relay recording after a scanned pairing | 0 bytes |

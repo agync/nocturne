@@ -80,21 +80,29 @@ touches the real internet.
 ## Online answers checks
 
 These use a stand-in provider on loopback and a reserved test address; none reaches a real provider.
+Status: the unit and integration tests run in `make check`. The checks below are release checks still
+to be added. The Makefile already names `make netcheck-online`, `make e2e-online` and
+`make e2e-models`, but `scripts/net-check.sh` knows only `launch`, `prepared`, `remote` and `attach`,
+and `scripts/e2e-real.sh` only `run`, `offline` and `all`; until the modes exist, those targets fail
+with "unknown mode".
 
-- **Net check, `online` mode.** A prepared data folder has Online answers on, the key in the fallback
+- **Net check, `online` mode (planned).** A prepared data folder has Online answers on, the key in the fallback
   file and an address that is a documentation-range IP literal (no DNS). A scripted driver asks
   questions, idles for 10 minutes, turns Online answers off and asks again, with one approved model
   download while on. A non-loopback connect passes only for the engine, only to that address, at most
   once per question, never while idle, never after the off mark, never during the download window.
-  The app never connects. The existing `off` mode also runs with a key stored and Online answers off
-  and must stay at zero.
-- **Probe at each engine bump.** Before moving the pinned engine version, re-run the route probe:
-  a fixed model row answers with `offline` on, the key comes only from the environment, no discovery
-  request is made, and redirects are not followed. A change to `cloud_providers` in the engine
+  The app never connects. The existing `off` judgement of `scripts/netlog.py` must also be run with
+  a key stored and Online answers off, and stay at zero.
+- **Probe at each engine bump (planned).** No probe script exists yet. Before moving the pinned engine version, re-run the route probe:
+  a fixed model row answers, the key arrives only at run time through the engine's own endpoint and
+  never in the environment, the only discovery request is the one model-listing request at start,
+  and redirects are not followed. A change to `cloud_providers` in the engine
   blocks the bump until the route, the log pipe and decision 0011 are checked again.
 - **Fit table.** Refresh the shipped memory figures in the fit table when the catalogue or a backend
   changes, and check that every tier preset still fits at its own minimum.
-- **Package check.** `scripts/check-package.sh` fails a package that carries the stand-in marker.
+- **Package check (planned).** `scripts/check-package.sh` fails today only on the helper stand-in
+  marker. The `online-stand-in` feature will carry its own marker, and the script will fail a package
+  that holds it.
 
 ## Desktop checks
 

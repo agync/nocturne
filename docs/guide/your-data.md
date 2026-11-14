@@ -32,7 +32,8 @@ kinds, never what you kept. Privacy in the app has an "Open folder" button that 
 
 Privacy has "Export everything". It writes a folder of readable files: every memory as text, every
 page, and all your originals exactly as you kept them. If you have used Online answers, it also holds
-the Sent online log as readable text, and your model choices; it never holds the key. Nothing is changed or removed by exporting.
+the Sent online log as readable text and your model choices (as `online/sent.md` and
+`models.json`); it never holds the key. Nothing is changed or removed by exporting.
 
 ## Let go, bring back, forget
 
@@ -52,8 +53,8 @@ Nocturne does not delete anything quietly.
 Privacy has "Delete everything". It removes everything Nocturne holds from this computer: what you
 kept, what it remembers and every page. You have to type the words it shows before it goes ahead,
 and it cannot be undone, so export first if you might want a copy. It keeps the reading setup it
-downloaded and the log files (the Sent online log and the key are removed), turns off "Start with this computer" and resets the quick keep
-shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac,
+downloaded and the log files (the Sent online log, the key and your model choices are removed),
+turns off "Start with this computer" and resets the quick keep shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac,
 the folders named `app.nocturne.desktop` in `~/Library/WebKit` and `~/Library/Caches`, and the saved
 window state; on Linux, the window's storage inside the data folder and `~/.cache/app.nocturne.desktop`.
 Afterwards Nocturne starts again from setup.
