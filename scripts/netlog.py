@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Judge an strace log for outbound traffic. Used by scripts/net-check.sh.
 
-Usage: scripts/netlog.py LOG [LOG ...] [--scratch DIR] [--mode off|remote]
+Usage: scripts/netlog.py LOG [LOG ...] [--scratch DIR] [--mode off|remote|online]
            [--helpers-dir DIR] [--lemond-dir DIR] [--app-exe PATH] [--require-helper-traffic]
+           [--provider HOST:PORT] [--marks FILE] [--require-provider-traffic]
 
 Reads logs written by `strace -f -e trace=%network,io_uring_setup,execve,clone,clone3,fork,vfork`.
 Fails (exit 1) on:
@@ -15,8 +16,9 @@ Fails (exit 1) on:
     (so the real session bus, and the resolver, Avahi and nscd sockets, all fail);
   * io_uring, which can send without a traced network call;
   * a log with no network calls at all, which proves nothing;
-  * in the default `off` mode, any `listen` by the app or a program it started (only lemond may listen) and any exec of a helper (a
-    program under a `remote/helpers` folder): with Away from home off nothing may run or listen.
+  * in the default `off` mode and in `online` mode, any `listen` by the app or a program it
+    started (only lemond may listen) and any exec of a helper (a program under a `remote/helpers`
+    folder): with Away from home off nothing may run or listen.
 The system bus is reported and does not fail.
 
 Calls are attributed to a program: execve traces map each process to its executable, and clone
@@ -27,6 +29,15 @@ the app. In `remote` mode (Away from home on, with stand-in helpers) a helper ma
 loopback and may bind a UDP socket on every interface, the way the tailnet helper does; the app
 and lemond may not, ever. The tailnet helper never listens, in any mode: it serves only on the
 tailnet, inside its own process. cloudflared answers its metrics on a loopback port.
+
+`online` mode (Online answers on, `--provider` names the one address the person entered): the
+`lemond` pid, and only it, may connect to that address, and only in answer to a scripted check or
+ask. That needs `-ttt` timestamps in the log and a marks file of `<epoch seconds> <kind>` lines
+(`check`, `ask`, `idle-start`, `idle-end`, `off`), written by the driver. A connection to the
+provider fails when it comes before any check or ask, when it is a second one for the same check
+or ask, between `idle-start` and `idle-end`, or at or after `off`. Any other non-loopback
+destination, and anything the app pid does, fails as in `off` mode. In every other mode a
+connection to the provider is just another non-loopback destination.
 """
 
 import argparse
@@ -44,7 +55,7 @@ BIND_FD = re.compile(r"^(?:bind|connect|sendto)\((\d+),")
 PRIVATE_BUS = ("/tmp/dbus-", "@/tmp/dbus-")
 DISPLAY = ("/tmp/.X11-unix/", "@/tmp/.X11-unix/")
 FAMILIES_OK = ("AF_UNIX", "AF_NETLINK", "AF_UNSPEC", "AF_INET", "AF_INET6")
-LINE = re.compile(r"^(?:\[pid\s+(\d+)\]\s+|(\d+)\s+)?(.*)$")
+LINE = re.compile(r"^(?:\[pid\s+(\d+)\]\s+|(\d+)\s+)?(?:(\d+\.\d+)\s+)?(.*)$")
 START = re.compile(r"^(\w+)\(")
 RESUMED = re.compile(r"^<\.\.\. (\w+) resumed>(.*)$")
 SOCKADDR = re.compile(r"\{sa_family=(AF_[A-Z0-9_]+)(.*?)\}")
@@ -70,19 +81,20 @@ def join_lines(lines):
         raw = raw.rstrip("\n")
         m = LINE.match(raw)
         pid = m.group(1) or m.group(2) or "?"
-        body = m.group(3)
+        stamp = float(m.group(3)) if m.group(3) else None
+        body = m.group(4)
         resumed = RESUMED.match(body)
         if resumed:
             head = pending.pop((pid, resumed.group(1)), None)
             if head is not None:
-                yield pid, head + resumed.group(2)
+                yield pid, head[0] + resumed.group(2), head[1]
             continue
         if body.endswith("<unfinished ...>"):
             started = START.match(body)
             if started:
-                pending[(pid, started.group(1))] = body[: -len("<unfinished ...>")]
+                pending[(pid, started.group(1))] = (body[: -len("<unfinished ...>")], stamp)
             continue
-        yield pid, body
+        yield pid, body, stamp
 
 
 def judge_inet(family, port, address, binding=False):
@@ -195,12 +207,54 @@ def is_wildcard(address):
         return False
 
 
-def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None):
+def read_marks(path):
+    """`<epoch seconds> <kind>` lines, oldest first."""
+    marks = []
+    with open(path, encoding="utf-8") as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) == 2:
+                marks.append((float(parts[0]), parts[1]))
+    return sorted(marks)
+
+
+def provider_verdict(stamp, marks, taken):
+    """Why a connection to the online provider at `stamp` is not allowed, or None.
+
+    `taken` counts the connections each check or ask has already had."""
+    if stamp is None:
+        return "has no timestamp, so it cannot be tied to an ask (trace with -ttt)"
+    last = None
+    idle_since = None
+    for when, kind in marks:
+        if when > stamp:
+            break
+        if kind == "off":
+            return "came after the off mark"
+        if kind == "idle-start":
+            idle_since = when
+        elif kind == "idle-end":
+            idle_since = None
+        elif kind in ("check", "ask"):
+            last = when
+    if idle_since is not None:
+        return "came while the app was idle"
+    if last is None:
+        return "came before any check or ask"
+    taken[last] = taken.get(last, 0) + 1
+    if taken[last] > 1:
+        return "was a second connection for one check or ask"
+    return None
+
+
+def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None, provider=None, marks=()):
     failures, local, notes, loopback = [], {}, [], {}
     helper_traffic = {}
+    provider_traffic = {}
+    taken = {}
     procs = Processes(helpers, lemond, app_exe)
     calls = 0
-    for pid, body in join_lines(lines):
+    for pid, body, stamp in join_lines(lines):
         started = START.match(body)
         procs.see(pid, body)
         if started and started.group(1) == "io_uring_setup":
@@ -209,13 +263,13 @@ def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None
         who = procs.program(pid)
         if started and started.group(1) == "execve":
             m = EXEC_OK.match(body)
-            if m and mode == "off" and is_helper_path(m.group(1), helpers):
+            if m and mode in ("off", "online") and is_helper_path(m.group(1), helpers):
                 failures.append(f"pid {pid}: executed the helper {m.group(1)} while Away from home is off")
             continue
         if started and started.group(1) == "listen":
             if who == "helper" and is_tailnet_helper(procs.exe.get(procs.group(pid), "")):
                 failures.append(f"pid {pid} (helper): listen, but the tailnet helper must never listen")
-            elif mode == "off" and who in ("app", "other"):
+            elif mode in ("off", "online") and who in ("app", "other"):
                 failures.append(f"pid {pid} ({who}): listen while Away from home is off")
             continue
         if not started or started.group(1) not in CALLS:
@@ -243,6 +297,15 @@ def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None
                         key = f"{address}:{port} (UDP bind)"
                         helper_traffic[key] = helper_traffic.get(key, 0) + 1
                         continue
+                if reason and mode == "online" and provider and who == "lemond" and f"{address}:{port}" == provider:
+                    if call != "connect":
+                        failures.append(f"pid {pid} (lemond): {call} {reason}")
+                        continue
+                    problem = provider_verdict(stamp, marks, taken)
+                    provider_traffic[provider] = provider_traffic.get(provider, 0) + 1
+                    if problem:
+                        failures.append(f"pid {pid} (lemond): connection to the provider {provider} {problem}")
+                    continue
                 if reason:
                     failures.append(f"pid {pid} ({who}): {call} {reason}")
                 else:
@@ -270,6 +333,7 @@ def analyse(lines, scratch=None, mode="off", helpers=(), lemond=(), app_exe=None
         "loopback": loopback,
         "scratch": scratch,
         "helper_traffic": helper_traffic,
+        "provider_traffic": provider_traffic,
         "mode": mode,
     }
 
@@ -301,6 +365,10 @@ def report(result):
         print("helper traffic (allowed for helper programs in remote mode):")
         for key, count in sorted(result["helper_traffic"].items()):
             print(f"  {key}  x{count}")
+    if result["provider_traffic"]:
+        print("provider traffic (the engine, to the one address the person entered, online mode):")
+        for key, count in sorted(result["provider_traffic"].items()):
+            print(f"  {key}  x{count}")
     for note in result["notes"]:
         print(f"note: {note}")
     if result["failures"]:
@@ -316,19 +384,29 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("logs", nargs="+")
     parser.add_argument("--scratch")
-    parser.add_argument("--mode", choices=("off", "remote"), default="off")
+    parser.add_argument("--mode", choices=("off", "remote", "online"), default="off")
     parser.add_argument("--helpers-dir", action="append", default=[])
     parser.add_argument("--lemond-dir", action="append", default=[])
     parser.add_argument("--app-exe")
     parser.add_argument("--require-helper-traffic", action="store_true")
+    parser.add_argument("--provider")
+    parser.add_argument("--marks")
+    parser.add_argument("--require-provider-traffic", action="store_true")
     args = parser.parse_args(argv)
+    if args.mode == "online" and not args.provider:
+        parser.error("online mode needs --provider HOST:PORT")
     lines = []
     for path in args.logs:
         with open(path, encoding="utf-8", errors="replace") as handle:
             lines.extend(handle.readlines())
-    result = analyse(lines, args.scratch, args.mode, args.helpers_dir, args.lemond_dir, args.app_exe)
+    marks = read_marks(args.marks) if args.marks else []
+    result = analyse(
+        lines, args.scratch, args.mode, args.helpers_dir, args.lemond_dir, args.app_exe, args.provider, marks
+    )
     if args.require_helper_traffic and args.mode == "remote" and not result["helper_traffic"]:
         result["failures"].append("no helper made an outbound attempt, so the trace proves nothing about helpers")
+    if args.require_provider_traffic and args.mode == "online" and not result["provider_traffic"]:
+        result["failures"].append("the engine never tried the provider, so the trace proves nothing about asks")
     return report(result)
 
 

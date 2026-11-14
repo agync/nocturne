@@ -140,6 +140,7 @@ impl CloudRoute {
     /// A route to the stand-in provider on loopback, over plain HTTP.
     #[cfg(feature = "online-stand-in")]
     pub fn stand_in(base_url: &str, model: String, key: OnlineKey) -> Result<Self, UrlProblem> {
+        tracing::warn!("{STAND_IN_MARKER}: answers go to a stand-in provider");
         Ok(CloudRoute {
             base_url: validate_url(base_url, true)?,
             model,
@@ -157,6 +158,10 @@ impl CloudRoute {
         cfg!(feature = "online-stand-in") && self.stand_in && self.base_url.scheme() == "http"
     }
 }
+
+/// Present only in builds with the `online-stand-in` feature, so the package check can refuse them.
+#[cfg(feature = "online-stand-in")]
+pub const STAND_IN_MARKER: &str = "nocturne-online-stand-in-marker";
 
 /// Why an address cannot be used.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

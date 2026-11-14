@@ -10,7 +10,8 @@
 # file (binaries too), the package version and, for deb and rpm, the declared libraries. For an
 # AppImage it also checks the bundled libraries against the copyleft policy and the SOURCES
 # manifest. For Away from home it checks that no connection helper (cloudflared, nocturne-tailnet,
-# or the retired tailscaled and tailscale) and no stand-in helper is inside, that the binary embeds
+# or the retired tailscaled and tailscale) and no stand-in helper is inside, that the binary carries neither
+# stand-in marker (helpers, or the online stand-in provider), that the binary embeds
 # the repository's helpers.lock, and that every pinned version has its captured help text; with NOCTURNE_RELEASE=1
 # it also refuses a placeholder pin, a pinned release older than 183 days and help text that was not
 # captured from the pinned binary. Unpacks into a scratch folder and removes it. A macOS .app (or the one inside a
@@ -127,6 +128,7 @@ import tomllib
 root, release = sys.argv[1], sys.argv[2] == "1"
 FORBIDDEN = {"cloudflared", "cloudflared.exe", "tailscaled", "tailscaled.exe", "tailscale", "tailscale.exe", "nocturne-tailnet", "nocturne-tailnet.exe"}
 FAKE_MARKER = b"nocturne-fake-helpers-marker"
+ONLINE_MARKER = b"nocturne-online-stand-in-marker"
 SKIP_DIRS = {"lemonade", "engine", "models"}
 failed = False
 
@@ -158,12 +160,15 @@ with open("helpers.lock", "rb") as handle:
 lock = tomllib.loads(lock_bytes.decode("utf-8"))
 binaries = [f for f in files if os.path.basename(f) in ("nocturne", "nocturne.exe") and os.path.getsize(f) > 1 << 20]
 marker_in = []
+online_in = []
 embeds = []
 different = []
 for path in binaries:
     data = open(path, "rb").read()
     if FAKE_MARKER in data:
         marker_in.append(path)
+    if ONLINE_MARKER in data:
+        online_in.append(path)
     if lock_bytes in data:
         embeds.append(path)
     elif b'kind = "cloudflared"' in data:
@@ -172,6 +177,10 @@ if marker_in:
     bad("a build with stand-in helpers was packaged: " + ", ".join(os.path.relpath(f, root) for f in marker_in))
 else:
     good("no stand-in helper marker in the program")
+if online_in:
+    bad("a build with the online stand-in provider was packaged: " + ", ".join(os.path.relpath(f, root) for f in online_in))
+else:
+    good("no online stand-in marker in the program")
 if binaries and different:
     bad("the program embeds a helpers.lock that differs from the repository's")
 elif binaries and not embeds:

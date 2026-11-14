@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Prove Nocturne talks to nothing outside this computer.
 #
-# Usage: scripts/net-check.sh [launch|prepared|remote|attach] [binary|appimage|deb|rpm]
+# Usage: scripts/net-check.sh [launch|prepared|remote|online|attach] [binary|appimage|deb|rpm]
 #   launch    fresh data folder, no setup: idle NET_SECONDS (default 120), then a second launch
 #             with a text file. Needs no input. This is what `make netcheck` runs on the binary.
 #   prepared  NET_CHECK_DIR names a data folder where setup finished (never the person's own
@@ -19,6 +19,14 @@
 #             every interface. NET_CHECK_PHONE may name a command that plays a scripted phone against
 #             the app's data folder (passed as its argument). The judge allows non-loopback attempts
 #             and the any-interface UDP bind for helper programs only; the app and lemond never.
+#   online    Online answers on, for an address no namespace can reach (`NET_CHECK_PROVIDER`, default
+#             198.51.100.7:8443, TEST-NET-2, an IP literal so nothing is looked up), with the key in the
+#             owner-only file. Runs a scripted driver (src-tauri/tests/netcheck_script.rs, a test build
+#             of the app over the real engine, never packaged) that asks NET_CHECK_ASKS questions
+#             (default 3), idles NET_SECONDS (default 600), turns Online answers off and asks again,
+#             writing a mark for each step. The log is traced with timestamps and netlog.py judges it in
+#             online mode: the engine alone may connect to the one address, once per ask, never while
+#             idle and never after the off mark; the app never reaches outside. The variant is ignored.
 #   attach    wraps a manual session on a real display: ask, listen, print; Ctrl+C ends it and
 #             the report is printed. Pass the display by socket path, because abstract sockets
 #             (the usual X11 form) do not cross the network namespace:
@@ -56,6 +64,8 @@ if [[ "${1:-}" == --inner ]]; then
     seconds=${NET_SECONDS:-120}
     [[ "$mode" == prepared ]] && seconds=${NET_SECONDS:-300}
     [[ "$mode" == remote ]] && seconds=${NET_SECONDS:-60}
+    [[ "$mode" == online ]] && seconds=${NET_SECONDS:-600}
+    provider=${NET_CHECK_PROVIDER:-198.51.100.7:8443}
     # The scratch environment was exported before the namespace and the session bus started.
     mkdir -p "$scratch/stderr"
     result=$scratch/result.txt
@@ -63,10 +73,13 @@ if [[ "${1:-}" == --inner ]]; then
     bad() { printf 'FAIL  %s: %s\n' "$label" "$*" >> "$result"; fail=1; }
     good() { printf 'ok    %s: %s\n' "$label" "$*" >> "$result"; }
     traced=%network,io_uring_setup,execve,clone,clone3,fork,vfork
-    trace() { strace -f -qq -e trace="$traced" -s 256 -o "$1" "${@:2}"; }
+    stamps=()
+    [[ "$mode" == online ]] && stamps=(-ttt)
+    trace() { strace -f -qq "${stamps[@]}" -e trace="$traced" -s 256 -o "$1" "${@:2}"; }
     helpers_dir=$scratch/data/remote/helpers
     on_or_off=off
     [[ "$mode" == remote ]] && on_or_off=remote
+    [[ "$mode" == online ]] && on_or_off=online
 
     if [[ "$mode" == prepared || "$mode" == remote ]]; then
         src=${NET_CHECK_DIR:?this mode needs NET_CHECK_DIR}
@@ -169,11 +182,31 @@ PY
         kill -KILL "$first" 2> /dev/null
     }
 
-    trace "$scratch/trace-1.log" "$launch" > "$scratch/stderr/first.out" 2> "$scratch/stderr/first.err" &
-    first=$!
     logs=$scratch/data/logs
+    if [[ "$mode" == online ]]; then
+        marks=$scratch/marks.txt
+        : > "$marks"
+        export NET_CHECK_MARKS=$marks NET_SECONDS=$seconds NET_CHECK_PROVIDER_URL=https://$provider/v1
+        timeout $((seconds + 1200)) strace -f -qq -ttt -e trace="$traced" -s 256 -o "$scratch/trace-1.log" \
+            "$launch" --ignored --nocapture --test-threads=1 online_answers_in_the_network_check \
+            > "$scratch/stderr/first.out" 2> "$scratch/stderr/first.err" &
+    else
+        trace "$scratch/trace-1.log" "$launch" > "$scratch/stderr/first.out" 2> "$scratch/stderr/first.err" &
+    fi
+    first=$!
 
-    if [[ "$mode" == attach ]]; then
+    if [[ "$mode" == online ]]; then
+        wait "$first"
+        driver=$?
+        reap
+        if ((driver == 0)); then good "the driver finished"; else bad "the driver failed ($driver): $(tail -n 5 "$scratch/stderr/first.out" | tr '\n' ' ')"; fi
+        for step in "engine ready" "ask 1:" "turned off" "ask after off 1:"; do
+            if grep -q "$step" "$scratch/stderr/first.out"; then good "the driver reached '$step'"; else bad "the driver never reached '$step'"; fi
+        done
+        for kind in ask idle-start idle-end off; do
+            if grep -q " $kind\$" "$marks"; then good "mark $kind written"; else bad "mark $kind missing"; fi
+        done
+    elif [[ "$mode" == attach ]]; then
         printf 'attached: use the app, then press Ctrl+C here to end and print the report\n' >&2
         trap 'stop_app' INT TERM
         wait "$first"
@@ -208,7 +241,9 @@ PY
         wait "$first" 2> /dev/null
     fi
 
-    if grep -qh 'window shown: interface ready' "$logs"/*.log 2> /dev/null; then
+    if [[ "$mode" == online ]]; then
+        :
+    elif grep -qh 'window shown: interface ready' "$logs"/*.log 2> /dev/null; then
         good "the app worked: 'window shown: interface ready' logged"
     else
         bad "the app never showed its interface, so the trace proves nothing"
@@ -227,7 +262,9 @@ PY
     fi
     if [[ "$mode" != attach ]]; then
         if grep -qh 'quit: everything stopped' "$logs"/*.log 2> /dev/null; then good "the app quit cleanly"; else bad "no 'quit: everything stopped' in the log"; fi
-        if grep -qh 'second launch: kept' "$logs"/*.log 2> /dev/null; then
+        if [[ "$mode" == online ]]; then
+            :
+        elif grep -qh 'second launch: kept' "$logs"/*.log 2> /dev/null; then
             good "the app worked: a second-launch file was kept"
         else
             bad "no 'second launch: kept' in the log, so the trace proves nothing"
@@ -247,6 +284,7 @@ PY
         --helpers-dir "$helpers_dir/" --app-exe "$procexe")
     [[ -n "$bundle" ]] && judge+=(--lemond-dir "$bundle/")
     [[ "$mode" == remote ]] && judge+=(--require-helper-traffic)
+    [[ "$mode" == online ]] && judge+=(--provider "$provider" --marks "$marks" --require-provider-traffic)
     {
         printf -- '--- outbound report (%s, %s)\n' "$label" "$mode"
         "${judge[@]}" "$scratch"/trace-*.log
@@ -255,9 +293,25 @@ PY
     exit "$fail"
 fi
 
+# The scripted driver for the online mode: a test build of the app, never packaged.
+online_driver() {
+    cargo test -p nocturne-app --test netcheck_script --no-run --message-format=json 2> /dev/null |
+        python3 -I -c '
+import json, sys
+for line in sys.stdin:
+    try:
+        m = json.loads(line)
+    except ValueError:
+        continue
+    if m.get("reason") == "compiler-artifact" and m.get("executable") and m["target"]["name"] == "netcheck_script":
+        print(m["executable"])
+'
+}
+
 mode=${1:-launch}
 variant=${2:-binary}
-case "$mode" in launch | prepared | remote | attach) ;; *) printf 'unknown mode: %s\n' "$mode" >&2; exit 2 ;; esac
+[[ "$mode" == online ]] && variant=binary
+case "$mode" in launch | prepared | remote | online | attach) ;; *) printf 'unknown mode: %s\n' "$mode" >&2; exit 2 ;; esac
 for tool in unshare strace ip xvfb-run dbus-run-session; do
     command -v "$tool" > /dev/null || { printf 'missing tool: %s\n' "$tool" >&2; exit 2; }
 done
@@ -270,7 +324,12 @@ mkdir -p "$scratch"
 bundle=""
 case "$variant" in
     binary)
-        launch=${NET_CHECK_BINARY:-$repo/target/release/nocturne}
+        if [[ "$mode" == online ]]; then
+            launch=$(online_driver)
+            [[ -n "$launch" ]] || { printf 'could not build the scripted driver\n' >&2; exit 2; }
+        else
+            launch=${NET_CHECK_BINARY:-$repo/target/release/nocturne}
+        fi
         procexe=$(realpath -- "$launch")
         bundle=$pkg/lemonade/linux-x86_64
         [[ -d "$bundle" ]] || bundle=$repo/vendor/lemonade/linux-x86_64

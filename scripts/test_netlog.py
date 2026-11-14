@@ -280,5 +280,110 @@ class OffMode(unittest.TestCase):
         self.assertEqual(len(failures), 1)
 
 
+PROVIDER = "198.51.100.7:8443"
+T0 = 1_000_000.0
+
+
+def stamped(pid, at, address, port=8443):
+    return f"{pid} {at:.6f} connect(7, {V4 % (port, address)}, 16) = -1 ENETUNREACH (Network is unreachable)\n"
+
+
+def to_provider(pid, at):
+    return stamped(pid, at, "198.51.100.7")
+
+
+def online(lines, marks, provider=PROVIDER, trace=None):
+    trace = app_and_engine() if trace is None else trace
+    return netlog.analyse(trace + lines, "/tmp/scratch", "online", provider=provider, marks=marks)["failures"]
+
+
+class OnlineMode(unittest.TestCase):
+    def test_lemond_to_configured_provider_passes_in_online_mode(self):
+        marks = [(T0, "check"), (T0 + 10, "ask"), (T0 + 20, "ask")]
+        lines = [to_provider(300, T0 + 0.2), to_provider(300, T0 + 10.3), to_provider(300, T0 + 20.1)]
+        result = netlog.analyse(app_and_engine() + lines, "/tmp/scratch", "online", provider=PROVIDER, marks=marks)
+        self.assertEqual(result["failures"], [])
+        self.assertEqual(result["provider_traffic"], {PROVIDER: 3})
+
+    def test_lemond_to_other_host_fails_in_online_mode(self):
+        marks = [(T0, "ask")]
+        failures = online([stamped(300, T0 + 0.1, "203.0.113.9")], marks)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("203.0.113.9", failures[0])
+        wrong_port = online([stamped(300, T0 + 0.1, "198.51.100.7", 443)], marks)
+        self.assertEqual(len(wrong_port), 1)
+
+    def test_lemond_provider_traffic_fails_in_off_mode(self):
+        for kwargs in ({}, {"provider": PROVIDER, "marks": [(T0, "ask")]}):
+            failures = netlog.analyse(
+                app_and_engine() + [to_provider(300, T0 + 0.1)], "/tmp/scratch", "off", **kwargs
+            )["failures"]
+            self.assertEqual(len(failures), 1, kwargs)
+            self.assertIn("pid 300 (lemond)", failures[0])
+
+    def test_app_pid_non_loopback_fails_in_online_mode(self):
+        marks = [(T0, "ask")]
+        failures = online([to_provider(100, T0 + 0.1), stamped(100, T0 + 0.2, "93.184.216.34", 443)], marks)
+        self.assertEqual(len(failures), 2)
+        self.assertTrue(all("pid 100 (app)" in f for f in failures))
+
+    def test_lemond_connects_bounded_by_asks(self):
+        marks = [(T0, "ask"), (T0 + 10, "ask")]
+        twice = online([to_provider(300, T0 + 0.1), to_provider(300, T0 + 0.2)], marks)
+        self.assertEqual(len(twice), 1)
+        self.assertIn("second connection", twice[0])
+        before = online([to_provider(300, T0 - 5)], marks)
+        self.assertEqual(len(before), 1)
+        self.assertIn("before any check or ask", before[0])
+        self.assertEqual(online([to_provider(300, T0 + 0.1), to_provider(300, T0 + 10.1)], marks), [])
+
+    def test_lemond_connect_after_off_mark_fails(self):
+        marks = [(T0, "ask"), (T0 + 30, "off")]
+        failures = online([to_provider(300, T0 + 0.1), to_provider(300, T0 + 31)], marks)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("after the off mark", failures[0])
+
+    def test_lemond_connect_during_idle_fails(self):
+        marks = [(T0, "ask"), (T0 + 5, "idle-start"), (T0 + 605, "idle-end"), (T0 + 610, "ask")]
+        lines = [to_provider(300, T0 + 0.1), to_provider(300, T0 + 300), to_provider(300, T0 + 610.2)]
+        failures = online(lines, marks)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("idle", failures[0])
+
+    def test_an_unstamped_provider_connection_fails_and_the_log_reads_stamps(self):
+        marks = [(T0, "ask")]
+        unstamped = connect(300, V4 % (8443, "198.51.100.7"))
+        failures = online([unstamped], marks)
+        self.assertEqual(len(failures), 1)
+        self.assertIn("timestamp", failures[0])
+        joined = [
+            f"300 {T0 + 0.1:.6f} connect(7, {V4 % (8443, '198.51.100.7')}, 16 <unfinished ...>\n",
+            f"301 {T0 + 0.2:.6f} getpid() = 301\n",
+            f"300 {T0 + 0.3:.6f} <... connect resumed>) = -1 ENETUNREACH (Network is unreachable)\n",
+        ]
+        self.assertEqual(online(joined, marks), [])
+
+    def test_the_app_may_not_listen_in_online_mode(self):
+        failures = online(["100 listen(5, 128) = 0\n", "300 listen(6, 128) = 0\n", connect(300, V4 % (1, "127.0.0.1"))], [(T0, "ask")])
+        self.assertEqual(len(failures), 1)
+        self.assertIn("pid 100", failures[0])
+
+    def test_provider_traffic_can_be_required(self):
+        log = "/tmp/scratch-netlog-online.log"
+        marks = "/tmp/scratch-netlog-online.marks"
+        with open(log, "w") as handle:
+            handle.writelines(app_and_engine() + [connect(300, V4 % (4100, "127.0.0.1"))])
+        with open(marks, "w") as handle:
+            handle.write(f"{T0} ask\n")
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                args = [log, "--mode", "online", "--provider", PROVIDER, "--marks", marks, "--scratch", "/tmp/scratch"]
+                self.assertEqual(netlog.main(args), 0)
+                self.assertEqual(netlog.main(args + ["--require-provider-traffic"]), 1)
+        finally:
+            os.remove(log)
+            os.remove(marks)
+
+
 if __name__ == "__main__":
     unittest.main()
