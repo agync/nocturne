@@ -1745,9 +1745,13 @@ fn the_whole_product_works_with_real_models() {
     let drained = wait_until(limit, || {
         // The app's clock is a manual one, so the reader's back-off after a failed item would
         // never end by itself: let it move on while the reader works.
-        ticks = (ticks + 10).min(3500);
-        h.clock
-            .set_str(&format!("{DAY}T22:{:02}:{:02}Z", ticks / 60, ticks % 60));
+        ticks = (ticks + 1).min(7190);
+        h.clock.set_str(&format!(
+            "{DAY}T{:02}:{:02}:{:02}Z",
+            22 + ticks / 3600,
+            ticks / 60 % 60,
+            ticks % 60
+        ));
         let items = h.ok("list_items", json!({"filter": {}}));
         for item in items.as_array().unwrap() {
             let status = item["status"].as_str().unwrap_or("");
