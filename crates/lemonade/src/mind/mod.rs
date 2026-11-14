@@ -1058,6 +1058,10 @@ impl Mind for LemonadeMind {
         })
     }
 
+    fn embed_query<'a>(&'a self, question: &'a str) -> BoxFuture<'a, Result<Vec<f32>, MindError>> {
+        LemonadeMind::embed_query(self, question)
+    }
+
     fn answer<'a>(
         &'a self,
         question: &'a str,

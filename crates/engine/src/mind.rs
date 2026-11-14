@@ -157,6 +157,19 @@ pub trait Mind: Send + Sync {
             ))
         })
     }
+    /// The vector to search the memories with for `question`. A recall model trained to read a
+    /// search query apart from a document takes the question its own way; any other mind
+    /// embeds it like any text.
+    fn embed_query<'a>(&'a self, question: &'a str) -> BoxFuture<'a, Result<Vec<f32>, MindError>> {
+        Box::pin(async move {
+            let texts = [question.to_string()];
+            self.embed(&texts)
+                .await?
+                .into_iter()
+                .next()
+                .ok_or_else(|| MindError::Failed("no vector for the question".into()))
+        })
+    }
     fn answer<'a>(
         &'a self,
         question: &'a str,

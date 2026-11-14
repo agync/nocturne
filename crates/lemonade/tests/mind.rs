@@ -1907,7 +1907,8 @@ async fn the_answer_is_told_today() {
 #[tokio::test]
 async fn a_question_is_embedded_as_a_search_query() {
     let r = rig().await;
-    let v = r.mind.embed_query("Who is the plumber?").await.unwrap();
+    let as_mind: &dyn Mind = &r.mind;
+    let v = as_mind.embed_query("Who is the plumber?").await.unwrap();
     assert!(!v.is_empty());
     let body = &r.seen("/v1/embeddings").await[0]["body"];
     assert_eq!(body["model"], "Qwen3-Embedding-0.6B-GGUF");

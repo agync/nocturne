@@ -210,3 +210,14 @@ fn bench_keep_text() {
         "keep_text p95 {p95:?} is over five times the budget"
     );
 }
+
+/// A mind with no way of its own to embed a question embeds it like any text.
+#[tokio::test]
+async fn a_question_is_embedded_like_any_text_by_default() {
+    let mind = FakeMind::new().with_embedding("Who is the plumber?", vec![1.0, 0.0]);
+    let dyn_mind: Arc<dyn Mind> = Arc::new(mind);
+    assert_eq!(
+        dyn_mind.embed_query("Who is the plumber?").await.unwrap(),
+        [1.0, 0.0]
+    );
+}
