@@ -57,6 +57,8 @@
   --marker: #f2d488;
   --focus: #2c4bcf;
   --shadow: 0 0 0 1px var(--rule), 0 30px 80px -40px rgba(23, 24, 28, 0.35);
+  /* The mat behind an app picture: a step off the page, so a screenshot reads as a picture. */
+  --mat: color-mix(in srgb, var(--ink) 6%, var(--bg));
   --mark-blend: multiply;
 
   --serif: "Newsreader", Georgia, serif;
@@ -350,7 +352,7 @@ figcaption,
 
 .intro h2 {
   font-family: var(--serif);
-  font-size: clamp(1.875rem, 4vw, 2.5rem);
+  font-size: clamp(2.25rem, 4.4vw, 2.75rem);
   line-height: 1.1;
   letter-spacing: -0.015em;
 }
@@ -518,12 +520,16 @@ figcaption,
   background: var(--sheet);
 }
 
+#app {
+  gap: 56px;
+}
+
 .feature {
   display: grid;
   grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  gap: 28px 56px;
+  gap: 32px 56px;
   align-items: start;
-  padding-top: 36px;
+  padding-top: 48px;
   border-top: 1px solid var(--rule);
 }
 
@@ -534,11 +540,17 @@ figcaption,
   max-width: 440px;
 }
 
+.feature-text .eyebrow {
+  color: var(--ember);
+}
+
+/* Section headings lead the app's own headings inside the pictures. */
 .feature-text h3 {
   font-family: var(--serif);
-  font-size: clamp(1.625rem, 3vw, 2rem);
-  line-height: 1.15;
-  letter-spacing: -0.01em;
+  font-size: clamp(2.125rem, 3.2vw, 2.375rem);
+  font-weight: 460;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
 }
 
 .feature-text p:not(.eyebrow) {
@@ -548,39 +560,44 @@ figcaption,
   color: var(--ink2);
 }
 
-.feature-shot {
+/* App pictures sit on a mat with a hairline frame and no drop shadow, so they read as pictures
+   of the app rather than as part of this page. */
+.feature-shot,
+.feature-box,
+.tour-stage {
   margin: 0;
+  padding: 10px;
+  border-radius: 14px;
+  background: var(--mat);
+  box-shadow: 0 0 0 1px var(--rule);
 }
 
-.feature-shot .window img,
-.handset img {
-  border-radius: 10px;
-  box-shadow: var(--shadow);
+.feature-shot img,
+.feature-box img,
+.tour-screen {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--rule);
   background: var(--sheet);
 }
 
 .phone-shot {
   justify-self: center;
-  width: min(100%, 300px);
+  width: min(100%, 320px);
+  border-radius: 30px;
 }
 
-.handset img {
+.phone-shot img {
   border-radius: 22px;
 }
 
 .feature-box {
   margin-top: 18px;
+  max-width: 440px;
 }
 
-.feature-box .box {
-  max-width: 420px;
-}
-
-.feature-box .box img {
+.feature-box img {
   width: 100%;
   height: auto;
-  border-radius: 10px;
-  box-shadow: var(--shadow);
 }
 
 .tour {
@@ -611,6 +628,7 @@ figcaption,
 /* The step's own picture stays in the page for screen readers; the frame repeats it for sight. */
 .tour.is-live .feature-shot {
   position: absolute;
+  padding: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -627,12 +645,13 @@ figcaption,
 .tour-stage {
   position: sticky;
   top: 56px;
-  display: grid;
-  width: min(100%, calc((100vh - 112px) * 768 / 900));
+  width: min(100%, calc((100vh - 132px) * 768 / 900 + 20px));
   margin-left: auto;
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  background: var(--sheet);
+}
+
+.tour-screen {
+  position: relative;
+  display: grid;
   overflow: hidden;
 }
 
@@ -904,7 +923,7 @@ figcaption,
   }
 
   .feature-text,
-  .feature-shot .window {
+  .feature-shot {
     max-width: 640px;
   }
 
@@ -916,6 +935,25 @@ figcaption,
 @media (max-width: 640px) {
   :root {
     --gutter: 16px;
+  }
+
+  /* The whole window is too small to read on a phone. */
+  .frame-map {
+    display: none;
+  }
+
+  #app {
+    gap: 40px;
+  }
+
+  .feature {
+    padding-top: 40px;
+    gap: 24px;
+  }
+
+  .feature-shot,
+  .feature-box {
+    padding: 8px;
   }
 
   .hero {

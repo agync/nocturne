@@ -38,9 +38,12 @@
       return slide;
     });
 
+    const screen = document.createElement("div");
+    screen.className = "tour-screen";
     const mark = document.createElement("div");
     mark.className = "tour-mark";
-    stage.append(...slides, mark);
+    screen.append(...slides, mark);
+    stage.append(screen);
     frame.append(stage);
     tour.append(frame);
     tour.classList.add("is-live");
