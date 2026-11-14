@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use reqwest::Method;
 use serde_json::{Value, json};
+use zeroize::Zeroizing;
 
 use crate::client::{Client, Health, Timeouts};
 use crate::error::RuntimeError;
@@ -149,11 +150,14 @@ impl Admin {
         provider: &str,
         key: &OnlineKey,
     ) -> Result<CloudAuth, RuntimeError> {
-        let body = json!({"provider": provider, "api_key": key.expose()});
+        // The body is the only copy of the key made here. It lives in a buffer that is wiped
+        // when the request lets go of it.
+        let body = bytes::Bytes::from_owner(auth_body(provider, key)?);
         let rb = self
             .request(Method::POST, "/v1/cloud/auth")?
             .timeout(CLOUD_AUTH_TIMEOUT)
-            .json(&body);
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(body);
         let v: Value = Client::json(rb).await?;
         let state = &v["auth_state"];
         Ok(CloudAuth {
@@ -212,9 +216,40 @@ impl Admin {
     }
 }
 
+/// The JSON body of `POST /v1/cloud/auth`, in a buffer wiped when dropped. Written straight from
+/// the borrowed key, so no other copy of it is left behind.
+fn auth_body(provider: &str, key: &OnlineKey) -> Result<Zeroizing<Vec<u8>>, RuntimeError> {
+    #[derive(serde::Serialize)]
+    struct Body<'a> {
+        provider: &'a str,
+        api_key: &'a str,
+    }
+    let mut buf = Zeroizing::new(Vec::with_capacity(64 + key.expose().len() * 2));
+    serde_json::to_writer(
+        &mut *buf,
+        &Body {
+            provider,
+            api_key: key.expose(),
+        },
+    )
+    .map_err(|e| RuntimeError::Io(e.to_string()))?;
+    Ok(buf)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_key_body_is_exact_json_in_a_wiped_buffer() {
+        let key = OnlineKey::new("sk-\"quoted\"-\\-key".into());
+        let body: Zeroizing<Vec<u8>> = auth_body("nocturne_online", &key).unwrap();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            v,
+            json!({"provider": "nocturne_online", "api_key": "sk-\"quoted\"-\\-key"})
+        );
+    }
 
     #[test]
     fn an_empty_admin_key_cannot_be_held() {

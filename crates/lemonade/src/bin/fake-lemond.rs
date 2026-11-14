@@ -18,7 +18,10 @@
 //! engine, reads the provider's list of models once with it, but only from a stand-in on
 //! `http://127.0.0.1`, so no test reaches the network; `DELETE /v1/cloud/auth/{provider}` forgets
 //! it. `user.nocturne-online` loads from the static row and its chats go to the provider with that
-//! key. Mode `cloud-auth-fail` makes the key request fail.
+//! key. As in the real engine, handing over a key drops the static row (the model can no longer
+//! be loaded until the next launch), a failed load (`load-oom`) or an unload naming no model
+//! unloads it, and a key in the environment (`LEMONADE_NOCTURNE_ONLINE_API_KEY`) refuses a
+//! handed-over one with 409. Mode `cloud-auth-fail` makes the key request fail.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -64,6 +67,7 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
 
 const SCALE: f64 = 5000.0;
 const ONLINE_MODEL: &str = "user.nocturne-online";
+const ONLINE_KEY_ENV: &str = "LEMONADE_NOCTURNE_ONLINE_API_KEY";
 const BACKEND_BYTES: u64 = 100_000;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -105,6 +109,8 @@ struct Inner {
     cloud_key: Option<String>,
     /// `user.nocturne-online` is loaded.
     cloud_loaded: bool,
+    /// A key was handed over, which dropped the static row from the model list.
+    row_dropped: bool,
 }
 
 struct App {
@@ -695,7 +701,7 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
             json!({
                 "name": p["name"],
                 "base_url": p["base_url"],
-                "env_var_set": false,
+                "env_var_set": std::env::var_os(ONLINE_KEY_ENV).is_some(),
                 "runtime_key_set": inner.cloud_key.is_some(),
             })
         })
@@ -882,6 +888,12 @@ async fn delete(State(app): State<Shared>, Json(body): Json<Value>) -> Response 
 async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     let name = body["model_name"].as_str().unwrap_or("").to_string();
     if app.flag("load-oom") {
+        // The real engine unloads every model after a failed load, the online one too.
+        {
+            let mut inner = app.inner();
+            inner.loaded = None;
+            inner.cloud_loaded = false;
+        }
         return err(
             500,
             "model_load_error",
@@ -911,7 +923,11 @@ async fn unload(State(app): State<Shared>, body: Option<Json<Value>>) -> Json<Va
     let mut inner = app.inner();
     match body.as_ref().and_then(|b| b["model_name"].as_str()) {
         Some(ONLINE_MODEL) => inner.cloud_loaded = false,
-        _ => inner.loaded = None,
+        Some(_) => inner.loaded = None,
+        None => {
+            inner.loaded = None;
+            inner.cloud_loaded = false;
+        }
     }
     Json(json!({"status": "success"}))
 }
@@ -933,7 +949,10 @@ fn load_online(app: &App) -> Response {
         .map(|v| v["nocturne-online"].clone())
         .unwrap_or(Value::Null);
     let provider = row["cloud_provider"].as_str().unwrap_or("");
-    if row["recipe"] != "cloud" || provider_entry(app, provider).is_none() {
+    if row["recipe"] != "cloud"
+        || provider_entry(app, provider).is_none()
+        || app.inner().row_dropped
+    {
         return err(404, "model_not_found", "model is not registered");
     }
     app.inner().cloud_loaded = true;
@@ -952,8 +971,21 @@ async fn cloud_auth(State(app): State<Shared>, Json(body): Json<Value>) -> Respo
     let Some(key) = body["api_key"].as_str().filter(|k| !k.is_empty()) else {
         return err(400, "invalid_request_error", "api_key is required");
     };
+    if std::env::var_os(ONLINE_KEY_ENV).is_some() {
+        return (
+            StatusCode::CONFLICT,
+            Json(json!({"error": {
+                "message": format!("{ONLINE_KEY_ENV} is set in the lemond process"),
+                "type": "auth_conflict", "env_var": ONLINE_KEY_ENV}})),
+        )
+            .into_response();
+    }
     let key = key.to_string();
-    app.inner().cloud_key = Some(key.clone());
+    {
+        let mut inner = app.inner();
+        inner.cloud_key = Some(key.clone());
+        inner.row_dropped = true;
+    }
     let base = entry["base_url"]
         .as_str()
         .unwrap_or("")
@@ -989,7 +1021,10 @@ async fn cloud_forget(
     Json(json!({
         "provider": provider,
         "cleared_runtime_key": cleared,
-        "auth_state": {"env_var_set": false, "runtime_key_set": false},
+        "auth_state": {
+            "env_var_set": std::env::var_os(ONLINE_KEY_ENV).is_some(),
+            "runtime_key_set": false,
+        },
     }))
 }
 

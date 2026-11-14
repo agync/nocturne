@@ -1179,3 +1179,131 @@ async fn a_very_long_line_is_cut_and_the_rest_withheld() {
     assert!(text.contains("kept-after the long one"));
     assert!(text.lines().all(|l| l.len() <= logpipe::MAX_LINE));
 }
+
+/// Turned off while the engine starts with the route: the launch read the route before the
+/// change, yet it hands nothing over, so the provider never sees the list request the key
+/// would cause. The same holds for Delete everything, which turns off the same way.
+#[cfg(feature = "online-stand-in")]
+#[tokio::test]
+async fn turning_off_while_the_engine_starts_hands_nothing_over() {
+    let provider = Provider::start();
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let control = sup.control();
+    common::set_mode(&dirs, "slow-start-ms=800");
+    let on = {
+        let c = control.clone();
+        let route = stand_in_route(provider.port);
+        tokio::spawn(async move { c.set_cloud(Some(route)).await })
+    };
+    // The new engine process exists: the launch has read the route and waits for it.
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while common::launch_count(&dirs) < 2 {
+        assert!(Instant::now() < deadline, "the relaunch never began");
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(starting(&sup.state().borrow()));
+    common::set_mode(&dirs, "");
+    control.set_cloud(None).await.unwrap();
+    on.await.unwrap().unwrap();
+    assert!(!control.route_taken());
+    assert_eq!(provider.listings().await, 0, "no key, so no list");
+    assert!(provider.requests().await.is_empty());
+    assert_off(&sup, &dirs).await;
+    sup.shutdown().await.unwrap();
+}
+
+/// A local model that fails to load makes the engine unload every model, the online one too,
+/// and it cannot load that one again until it restarts. The supervisor notices, and giving the
+/// route again (a check, "Try again") brings it back.
+#[tokio::test]
+async fn an_online_model_unloaded_by_the_engine_is_noticed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some(route())).await;
+    let control = sup.control();
+    assert!(control.route_held().await);
+    let endpoint = sup.client().endpoint().unwrap();
+    let http = reqwest::Client::new();
+    let url = |p: &str| format!("http://127.0.0.1:{}{p}", endpoint.port);
+    http.post(url("/fake/mode"))
+        .bearer_auth(&endpoint.key)
+        .json(&json!({"mode": "load-oom"}))
+        .send()
+        .await
+        .unwrap();
+    let load = http
+        .post(url("/v1/load"))
+        .bearer_auth(&endpoint.key)
+        .json(&json!({"model_name": "Qwen3.5-2B-GGUF"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(load.status(), 500);
+    assert!(control.route_taken(), "the key is still held");
+    assert!(!control.route_held().await, "but the online model is gone");
+    assert!(
+        sup.admin().load(MODEL_ID).await.is_err(),
+        "and cannot come back without a restart"
+    );
+    let ask = ChatRequest::new(MODEL_ID, vec![Message::user("When?")]);
+    assert!(matches!(
+        sup.client().chat_complete(&ask).await,
+        Err(nocturne_lemonade::RuntimeError::NotFound(_))
+    ));
+    http.post(url("/fake/mode"))
+        .bearer_auth(&endpoint.key)
+        .json(&json!({"mode": ""}))
+        .send()
+        .await
+        .unwrap();
+    control.set_cloud(Some(route())).await.unwrap();
+    assert!(control.route_held().await);
+    sup.shutdown().await.unwrap();
+}
+
+/// Like the real engine, the fake refuses a handed-over key while one is in its environment,
+/// and says the environment's key is set.
+#[tokio::test]
+async fn a_key_in_the_environment_refuses_a_handed_over_one() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    std::fs::write(
+        dirs.config().join("config.json"),
+        json!({"cloud_providers": [{"name": PROVIDER, "base_url": "https://api.example.com/v1",
+                                     "allow_insecure_http": false, "wire_format": "openai"}]})
+        .to_string(),
+    )
+    .unwrap();
+    let port = common::free_port();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_fake-lemond"))
+        .arg(dirs.cache())
+        .arg(dirs.config())
+        .args(["--port", &port.to_string(), "--host", "127.0.0.1"])
+        .env_clear()
+        .env("LEMONADE_API_KEY", "k3y")
+        .env("LEMONADE_ADMIN_API_KEY", "adm1n")
+        .env(KEY_ENV, "from-the-environment")
+        .stdin(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
+    let admin = nocturne_lemonade::Admin::new(port, "adm1n").unwrap();
+    let deadline = Instant::now() + Duration::from_secs(10);
+    while admin.health().await.is_err() {
+        assert!(Instant::now() < deadline, "the fake did not start");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    let refused = admin
+        .cloud_auth(PROVIDER, &OnlineKey::new(KEY.into()))
+        .await;
+    assert!(
+        matches!(
+            refused,
+            Err(nocturne_lemonade::RuntimeError::Rejected { status: 409, .. })
+        ),
+        "{refused:?}"
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+}

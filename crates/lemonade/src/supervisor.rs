@@ -4,7 +4,7 @@
 use std::collections::VecDeque;
 use std::path::Path;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -174,6 +174,9 @@ struct Shared {
     cloud: Mutex<Option<CloudRoute>>,
     /// The running engine holds the route: it took the key and has the online model loaded.
     route_taken: AtomicBool,
+    /// Rises whenever the route or the download window changes. A launch notes it when it reads
+    /// the route, and gives the engine the key only while it has not moved.
+    route_gen: AtomicU64,
     /// How long a relaunch for Online answers waits for model requests in flight to end: when
     /// turning off, and when turning on or checking.
     idle_waits: Mutex<(Duration, Duration)>,
@@ -212,6 +215,7 @@ impl Control {
         if before == online {
             return Ok(());
         }
+        self.shared.route_gen.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         if self
             .cmd
@@ -238,6 +242,8 @@ impl Control {
     /// new engine is given it before it answers anyone; one that does not take it runs without
     /// it, and this returns [`RuntimeError::RouteRefused`].
     pub async fn set_cloud(&self, route: Option<CloudRoute>) -> Result<(), RuntimeError> {
+        // A launch under way now hands nothing over: what it read is out of date.
+        self.shared.route_gen.fetch_add(1, Ordering::SeqCst);
         if self.shared.route_taken.swap(false, Ordering::SeqCst) {
             let _ = tokio::time::timeout(TAKE_BACK_WAIT, online::take_back(&self.admin)).await;
         }
@@ -253,6 +259,8 @@ impl Control {
         }
         let with_route = route.is_some();
         *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = route;
+        // Nor does one that started during the wait above, with the route as it was.
+        self.shared.route_gen.fetch_add(1, Ordering::SeqCst);
         let (tx, rx) = oneshot::channel();
         if self
             .cmd
@@ -276,6 +284,29 @@ impl Control {
     /// give it the route.
     pub fn route_taken(&self) -> bool {
         self.shared.route_taken.load(Ordering::SeqCst)
+    }
+
+    /// Whether the route still holds: the engine took the key and the online model is still
+    /// loaded. The engine unloads every model, the online one too, when a local model fails to
+    /// load, and cannot load the online one again until it restarts. An engine that does not
+    /// answer the check is given the benefit of the doubt: a send to it fails on its own.
+    pub async fn route_held(&self) -> bool {
+        if !self.route_taken() {
+            return false;
+        }
+        match self.client.health().await {
+            Ok(h) => h
+                .all_models_loaded
+                .iter()
+                .any(|m| m.model_name == online::MODEL_ID),
+            Err(_) => true,
+        }
+    }
+
+    /// Whether the engine is between launches (starting, restarting, or not running): what it
+    /// holds is not known yet.
+    pub fn starting(&self) -> bool {
+        self.shared.pid.load(Ordering::SeqCst) == 0
     }
 
     /// Shorter waits for [`Control::set_cloud`], for tests.
@@ -406,6 +437,7 @@ impl Supervisor {
             ready_since: Mutex::new(None),
             cloud: Mutex::new(cloud),
             route_taken: AtomicBool::new(false),
+            route_gen: AtomicU64::new(0),
             idle_waits: Mutex::new((RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON)),
             holds: tokio::sync::Mutex::new(0),
         });
@@ -758,6 +790,9 @@ impl Actor {
             let port = free_port(None)?;
             let ws_port = free_port(Some(port))?;
             let keys = Keys::new(new_key()?, new_key()?)?;
+            // Noted before the window and the route are read, so any change after this point
+            // stops the key from being handed over.
+            let read_at = self.shared.route_gen.load(Ordering::SeqCst);
             let online = self.shared.online.load(Ordering::SeqCst);
             // A download-window launch never carries the route: no entry, no row, no key.
             let route: Option<CloudRoute> = if online {
@@ -802,7 +837,7 @@ impl Actor {
                     // Before the endpoints are known to anyone, so nothing is sent with a route
                     // that is half given.
                     if let Some(r) = &route {
-                        let taken = self.give_route(port, &keys, r).await;
+                        let taken = self.give_route(port, &keys, r, read_at).await;
                         self.shared.route_taken.store(taken, Ordering::SeqCst);
                     }
                     self.client.set_endpoint(Some(Endpoint {
@@ -839,27 +874,30 @@ impl Actor {
 
     /// Hands the new engine the route's key; on any failure it is taken back, and the engine
     /// runs without the route. True when the engine holds it.
-    async fn give_route(&self, port: u16, keys: &Keys, route: &CloudRoute) -> bool {
+    /// A route read at generation `read_at` is handed over only while the generation stays there.
+    async fn give_route(&self, port: u16, keys: &Keys, route: &CloudRoute, read_at: u64) -> bool {
         let Ok(admin) = Admin::new(port, keys.admin.clone()) else {
             return false;
         };
-        match online::give(&admin, route).await {
-            Ok(listed) => {
+        let shared = self.shared.clone();
+        let still = move || shared.route_gen.load(Ordering::SeqCst) == read_at;
+        match online::give(&admin, route, &still).await {
+            Ok(Some(listed)) => {
                 tracing::info!(
                     "the engine took the route for Online answers; the provider listed {listed} models"
                 );
                 true
             }
+            Ok(None) => {
+                tracing::info!("the route for Online answers changed while the engine started");
+                online::take_back(&admin).await;
+                false
+            }
             Err(e) => {
-                // The status only: the engine's own words stay out of the app's log.
-                let why = match &e {
-                    RuntimeError::Rejected { status, .. } | RuntimeError::Server { status, .. } => {
-                        format!("status {status}")
-                    }
-                    RuntimeError::NotFound(_) => "status 404".to_string(),
-                    other => other.to_string(),
-                };
-                tracing::warn!("the engine did not take the route for Online answers: {why}");
+                tracing::warn!(
+                    "the engine did not take the route for Online answers: {}",
+                    online::kind_of(&e)
+                );
                 online::take_back(&admin).await;
                 false
             }

@@ -362,11 +362,26 @@ pub fn write_row(engine_dir: &Path, route: Option<&CloudRoute>) -> Result<(), Ru
 /// Gives the engine that `admin` reaches the route's key, before anything else may use it:
 /// loads the static row's model (no request to the provider), hands over the key (the engine
 /// reads the provider's list once), then confirms the key is held in memory and the model still
-/// loaded. Returns how many chat models the provider listed. On an error the caller takes the
-/// route back with [`take_back`].
-pub(crate) async fn give(admin: &crate::Admin, route: &CloudRoute) -> Result<u64, RuntimeError> {
+/// loaded. Returns how many chat models the provider listed, or `None` when `still` said the
+/// route was changed meanwhile (turned off, a new one, Delete everything): the key is then not
+/// handed over, or taken back at once. `still` is asked before the load, between the load and
+/// the key, and after. On an error or `None` the caller takes the route back with [`take_back`].
+pub(crate) async fn give(
+    admin: &crate::Admin,
+    route: &CloudRoute,
+    still: &(dyn Fn() -> bool + Send + Sync),
+) -> Result<Option<u64>, RuntimeError> {
+    if !still() {
+        return Ok(None);
+    }
     admin.load(MODEL_ID).await?;
+    if !still() {
+        return Ok(None);
+    }
     let auth = admin.cloud_auth(PROVIDER, &route.key).await?;
+    if !still() {
+        return Ok(None);
+    }
     if !auth.runtime_key_set || auth.env_var_set {
         return Err(RuntimeError::RouteRefused);
     }
@@ -378,16 +393,36 @@ pub(crate) async fn give(admin: &crate::Admin, route: &CloudRoute) -> Result<u64
     {
         return Err(RuntimeError::RouteRefused);
     }
-    Ok(auth.models_discovered)
+    Ok(Some(auth.models_discovered))
 }
 
 /// Makes the engine forget the key and unload the online model, so nothing can be sent with
 /// it. Best effort: an engine that does not answer is about to be stopped anyway.
 pub(crate) async fn take_back(admin: &crate::Admin) {
     if let Err(e) = admin.cloud_forget(PROVIDER).await {
-        tracing::warn!("the engine did not confirm it forgot the Online answers key: {e}");
+        tracing::warn!(
+            "the engine did not confirm it forgot the Online answers key: {}",
+            kind_of(&e)
+        );
     }
     let _ = admin.unload(MODEL_ID).await;
+}
+
+/// What went wrong, for the app's log: a kind or a status, never the engine's own words, which
+/// may quote what a provider sent.
+pub fn kind_of(e: &RuntimeError) -> String {
+    match e {
+        RuntimeError::Rejected { status, .. } | RuntimeError::Server { status, .. } => {
+            format!("status {status}")
+        }
+        RuntimeError::NotFound(_) => "status 404".into(),
+        RuntimeError::Unauthorized => "the engine refused its key".into(),
+        RuntimeError::Unavailable => "the engine is not running".into(),
+        RuntimeError::Timeout => "the engine took too long".into(),
+        RuntimeError::RouteRefused => "the route was refused".into(),
+        RuntimeError::BadResponse(_) => "an unexpected answer".into(),
+        _ => "another failure".into(),
+    }
 }
 
 /// The provider as the person knows it: the address's host, with its port when one was given.
@@ -603,6 +638,39 @@ mod tests {
             format!("LEMONADE_{}_API_KEY", PROVIDER.to_uppercase())
         );
         assert_eq!(MODEL_ID, format!("user.{ROW}"));
+    }
+
+    #[test]
+    fn errors_are_logged_by_kind_without_the_engines_words() {
+        let words = "sk-or-v1-echoed-by-the-provider";
+        for e in [
+            RuntimeError::Rejected {
+                status: 409,
+                code: "auth_conflict".into(),
+                message: words.into(),
+            },
+            RuntimeError::Server {
+                status: 500,
+                message: words.into(),
+            },
+            RuntimeError::NotFound(words.into()),
+            RuntimeError::BadResponse(words.into()),
+            RuntimeError::Io(words.into()),
+            RuntimeError::Start(words.into()),
+            RuntimeError::LoadFailed {
+                out_of_memory: false,
+                message: words.into(),
+            },
+        ] {
+            assert!(!kind_of(&e).contains(words), "{e:?}");
+        }
+        assert_eq!(
+            kind_of(&RuntimeError::Server {
+                status: 502,
+                message: String::new()
+            }),
+            "status 502"
+        );
     }
 
     #[test]
