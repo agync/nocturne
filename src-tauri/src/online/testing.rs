@@ -118,6 +118,10 @@ pub struct StandInPort {
     /// While set, every relaunch fails, and the engine is left without a route, as the
     /// supervisor leaves it.
     pub fail: AtomicBool,
+    /// While set, the engine starts but does not take a route: its key request fails, and the
+    /// relaunch says so, as the supervisor does.
+    pub refuse: AtomicBool,
+    taken: Mutex<Option<bool>>,
     calls: std::sync::atomic::AtomicUsize,
     hold: Mutex<Option<Arc<RelaunchHold>>>,
     /// The engine key this port's client sends, its own, so a test can tell its requests from
@@ -202,6 +206,13 @@ impl StandInPort {
     /// What the running engine reports about its route, for a launch the hub did not make.
     pub fn set_has_cloud(&self, has: Option<bool>) {
         *self.has.lock().unwrap_or_else(|e| e.into_inner()) = has;
+        *self.taken.lock().unwrap_or_else(|e| e.into_inner()) = has;
+    }
+
+    /// Whether the running engine holds its route, for a launch the hub did not make (a
+    /// restart whose key request failed).
+    pub fn set_route_taken(&self, taken: Option<bool>) {
+        *self.taken.lock().unwrap_or_else(|e| e.into_inner()) = taken;
     }
 }
 
@@ -210,6 +221,7 @@ impl EnginePort for StandInPort {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if self.fail.load(Ordering::SeqCst) {
             *self.has.lock().unwrap_or_else(|e| e.into_inner()) = Some(false);
+            *self.taken.lock().unwrap_or_else(|e| e.into_inner()) = Some(false);
             self.seen
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
@@ -222,6 +234,8 @@ impl EnginePort for StandInPort {
             with_key: !r.key.expose().is_empty(),
         });
         *self.has.lock().unwrap_or_else(|e| e.into_inner()) = Some(seen.is_some());
+        let refused = seen.is_some() && self.refuse.load(Ordering::SeqCst);
+        *self.taken.lock().unwrap_or_else(|e| e.into_inner()) = Some(seen.is_some() && !refused);
         // A route to a stand-in on loopback is followed there, as the engine would.
         if let Some(r) = &route
             && r.base_url().host_str() == Some("127.0.0.1")
@@ -239,6 +253,9 @@ impl EnginePort for StandInPort {
             if let Some(h) = hold {
                 h.reached.notify_one();
                 h.go.notified().await;
+            }
+            if refused {
+                return Err("the engine did not take the route for Online answers".to_string());
             }
             Ok(())
         })
@@ -261,6 +278,11 @@ impl EnginePort for StandInPort {
     fn has_cloud(&self) -> BoxFuture<'_, Option<bool>> {
         let h = *self.has.lock().unwrap_or_else(|e| e.into_inner());
         Box::pin(async move { h })
+    }
+
+    fn route_taken(&self) -> BoxFuture<'_, Option<bool>> {
+        let t = *self.taken.lock().unwrap_or_else(|e| e.into_inner());
+        Box::pin(async move { t })
     }
 }
 

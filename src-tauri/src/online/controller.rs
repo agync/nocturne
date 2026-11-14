@@ -332,7 +332,8 @@ impl<R: Runtime> OnlineHub<R> {
         if !same_route(self.routes().active.as_ref(), route.as_ref()) {
             self.gate.send_modify(|g| *g += 1);
         }
-        match self.port.set_cloud(route.clone()).await {
+        let with_route = route.is_some();
+        let result = match self.port.set_cloud(route.clone()).await {
             Ok(()) => {
                 let mut r = self.routes();
                 r.engine = route;
@@ -343,7 +344,54 @@ impl<R: Runtime> OnlineHub<R> {
                 self.routes().engine_known = false;
                 Err(e)
             }
+        };
+        if with_route {
+            self.note_route_taken().await;
         }
+        result
+    }
+
+    /// Notes whether the engine holds the route it was given: one whose key request failed is a
+    /// problem, and questions are answered here until a later launch takes it. Says nothing
+    /// while a download holds the window open: the engine runs without the route then.
+    async fn note_route_taken(&self) {
+        if self.port.downloading().await {
+            return;
+        }
+        match self.port.route_taken().await {
+            Some(false) => self.set_not_taken(true),
+            Some(true) => self.set_not_taken(false),
+            None => {}
+        }
+    }
+
+    /// Raises or lifts the problem of an engine that did not take its route. Another problem
+    /// already shown is left as it is.
+    fn set_not_taken(&self, raised: bool) {
+        let Ok(engine) = self.engine() else {
+            return;
+        };
+        let Ok(row) = engine.online_state() else {
+            return;
+        };
+        let change = if raised {
+            row.problem.is_none()
+        } else {
+            row.problem == Some(OnlineProblem::Unreachable)
+        };
+        if !change {
+            return;
+        }
+        if raised {
+            // The next change always reaches the engine, so "Try again" relaunches it.
+            self.routes().engine_known = false;
+        }
+        let now = engine.clock_now();
+        let _ = engine.update_online_state(|s| {
+            s.problem = raised.then_some(OnlineProblem::Unreachable);
+            s.problem_since = raised.then_some(now);
+        });
+        self.emit();
     }
 
     /// After launch: an engine that started before the route was known is relaunched once.
@@ -357,6 +405,8 @@ impl<R: Runtime> OnlineHub<R> {
         {
             self.routes().engine_known = false;
             let _ = self.give_engine(want).await;
+        } else if want.is_some() {
+            self.note_route_taken().await;
         }
     }
 
@@ -872,7 +922,12 @@ impl<R: Runtime> OnlineHub<R> {
         if self.routes().checking.is_some() {
             return RouteChoice::Computer(LocalReason::Problem);
         }
-        let row = self.lift_expired(&engine, row);
+        let mut row = self.lift_expired(&engine, row);
+        if row.problem == Some(OnlineProblem::Unreachable) {
+            // An engine that did not take its route: a later launch may have.
+            self.note_route_taken().await;
+            row = engine.online_state().unwrap_or(row);
+        }
         if row.problem.is_some() {
             return RouteChoice::Computer(LocalReason::Problem);
         }
@@ -904,6 +959,12 @@ impl<R: Runtime> OnlineHub<R> {
         }
         if self.port.downloading().await {
             return RouteChoice::Computer(LocalReason::Downloading);
+        }
+        // The engine was given the route but did not take it (a restart whose key request
+        // failed): nothing can go out.
+        if self.port.route_taken().await == Some(false) {
+            self.set_not_taken(true);
+            return RouteChoice::Computer(LocalReason::Problem);
         }
         // The question is counted against the limit now, before it is logged, so questions
         // asked at once (the desktop and a phone) cannot go past it together.
