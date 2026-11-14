@@ -79,8 +79,9 @@ pub fn strip_control(reply: &str) -> String {
 
 /// Whether the mind said it is not sure: the marker, or the marker as it is easily mistyped
 /// (any case, with a dash or no separator, or in capitals with a space), or a refusal as the
-/// first thing it says.
-pub fn not_sure(reply: &str) -> bool {
+/// first thing it says. Talk of the facts holding nothing counts only in an answer that
+/// `cites` none: "his surname is not mentioned" beside a cited fact is still an answer.
+pub fn not_sure(reply: &str, cites: bool) -> bool {
     let lower = reply.to_lowercase();
     if reply.contains(NOT_SURE)
         || reply.contains("NOT SURE")
@@ -91,7 +92,8 @@ pub fn not_sure(reply: &str) -> bool {
         return true;
     }
     let said = words(reply).join(" ");
-    REFUSALS.iter().any(|r| said.starts_with(r)) || ABSENCES.iter().any(|a| said.contains(a))
+    REFUSALS.iter().any(|r| said.starts_with(r))
+        || (!cites && ABSENCES.iter().any(|a| said.contains(a)))
 }
 
 /// The numbers, dates and times written in `sentences` (the facts an answer cites) that the
@@ -503,10 +505,10 @@ mod tests {
             "NOTSURE",
             "It is **Friday** [m1]. NOT_SURE",
         ] {
-            assert!(not_sure(reply), "{reply}");
+            assert!(not_sure(reply, true), "{reply}");
         }
         for reply in ["NOT today: Monday [m1].", "I am sure it is Friday [m1]."] {
-            assert!(!not_sure(reply), "{reply}");
+            assert!(!not_sure(reply, true), "{reply}");
         }
     }
 
@@ -520,9 +522,28 @@ mod tests {
             "None of the facts mention it.",
             "The plumber is not mentioned in the provided facts.",
         ] {
-            assert!(not_sure(reply), "{reply}");
+            assert!(not_sure(reply, false), "{reply}");
         }
-        assert!(!not_sure("Marek is coming on Monday 30 November [m1]."));
+        assert!(!not_sure(
+            "Marek is coming on Monday 30 November [m1].",
+            true
+        ));
+    }
+
+    #[test]
+    fn talk_of_missing_facts_voids_only_an_answer_that_cites_nothing() {
+        let partial =
+            "Marek services the boiler on Monday 30 November [m1]. His surname is not mentioned.";
+        assert!(!not_sure(partial, true));
+        assert!(not_sure("His surname is not mentioned.", false));
+        assert!(
+            not_sure("I do not know [m1].", true),
+            "a refusal stays a refusal"
+        );
+        assert!(
+            not_sure("Monday [m1]. NOT_SURE", true),
+            "and so does the marker"
+        );
     }
 
     #[test]

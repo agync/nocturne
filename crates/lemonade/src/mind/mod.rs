@@ -352,7 +352,13 @@ impl LemonadeMind {
         let system = prompts::answer_system(self.tier, &nonce);
         let mut messages = vec![
             Message::system(&system),
-            Message::user(&prompts::answer_user(self.tier, question, facts, &nonce)),
+            Message::user(&prompts::answer_user(
+                self.tier,
+                question,
+                facts,
+                &nonce,
+                Some(jiff::Zoned::now().date()),
+            )),
         ];
         let mut reply = self.reply_to(&model, &messages).await?;
         let mut judged = judge(&reply, facts, &system);
@@ -972,12 +978,13 @@ fn judge(reply: &str, facts: &[Fact], system: &str) -> Judged {
     let mut filter = CiteFilter::new(facts.len());
     let mut text = filter.push(&reply);
     text.push_str(&filter.finish());
+    let cited = filter.cited().to_vec();
     // Nothing but punctuation, or the instructions read back, is not an answer.
-    let not_sure = guard::not_sure(&reply) || guard::degenerate(&text, system);
+    let not_sure = guard::not_sure(&reply, !cited.is_empty()) || guard::degenerate(&text, system);
     Judged {
         text,
         not_sure,
-        cited: filter.cited().to_vec(),
+        cited,
         spans: filter.bold_facts(),
     }
 }

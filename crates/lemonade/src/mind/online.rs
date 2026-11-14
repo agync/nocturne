@@ -89,8 +89,8 @@ impl OnlineMind {
         let nonce = prompts::nonce();
         let tier = prompts::ONLINE_TIER;
         let system = prompts::answer_system(tier, &nonce);
-        let user = prompts::answer_user(tier, question, &facts, &nonce);
-        let (head, tail) = prompts::answer_frame(question, &nonce);
+        let user = prompts::answer_user(tier, question, &facts, &nonce, None);
+        let (head, tail) = prompts::answer_frame(question, &nonce, None);
         let mut template = vec![SentLine::Text {
             text: system.clone(),
         }];

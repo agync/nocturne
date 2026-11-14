@@ -1882,6 +1882,27 @@ async fn a_lost_role_is_asked_for_and_kept() {
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 2);
 }
 
+/// The answer is told what day it is, so "tomorrow" in a question can be placed.
+#[tokio::test]
+async fn the_answer_is_told_today() {
+    let r = rig().await;
+    r.script(json!([{"deltas": ["Monday [m1]."]}])).await;
+    answer(&r, &[memory("a", "Dentist on Monday.")])
+        .await
+        .0
+        .unwrap();
+    let call = &r.seen("/v1/chat/completions").await[0];
+    let today = jiff::Zoned::now()
+        .date()
+        .strftime("%A %-d %B %Y")
+        .to_string();
+    let user = user_turn(call);
+    assert!(
+        user.contains(&format!("Today is {today}.\nQuestion: ")),
+        "{user}"
+    );
+}
+
 fn preset(tier: Tier) -> nocturne_lemonade::selection::Picks {
     use nocturne_lemonade::selection;
     selection::picks(&selection::Selection::preset(tier))

@@ -1,5 +1,6 @@
 //! The words the model is given, and the schemas its answers must fit.
 
+use jiff::civil::Date;
 use nocturne_contract::{Certainty, EntityKind, ItemKind, MemoryStatus, PageView, Tier};
 use nocturne_engine::{ExtractContext, Fact};
 use serde_json::{Value, json};
@@ -318,7 +319,7 @@ const MONTHS: [&str; 12] = [
 /// the year only when it is not `year`.
 fn spoken_day(iso: &str, year: Option<i16>) -> String {
     let day = iso.get(..10).unwrap_or(iso);
-    match day.parse::<jiff::civil::Date>() {
+    match day.parse::<Date>() {
         Ok(d) if Some(d.year()) == year => d.strftime("%A %-d %B").to_string(),
         Ok(d) => d.strftime("%A %-d %B %Y").to_string(),
         Err(_) => day.to_string(),
@@ -330,7 +331,7 @@ fn spoken_day(iso: &str, year: Option<i16>) -> String {
 fn fact_details(tier: Tier, fact: &Fact, number_of: &dyn Fn(&str) -> Option<usize>) -> Vec<String> {
     let m = &fact.memory;
     let learned = m.learned_at.get(..10).unwrap_or(&m.learned_at);
-    let year = learned.parse::<jiff::civil::Date>().ok().map(|d| d.year());
+    let year = learned.parse::<Date>().ok().map(|d| d.year());
     let mut out = Vec::new();
     let lower = m.sentence.to_lowercase();
     if let Some(due) = m
@@ -390,14 +391,30 @@ pub fn fact_lines(tier: Tier, facts: &[Fact]) -> Vec<(String, String)> {
         .collect()
 }
 
-pub fn answer_user(tier: Tier, question: &str, facts: &[Fact], nonce: &str) -> String {
+/// The day the question is asked, so that "tomorrow" or "this week" in a question or a fact
+/// can be placed.
+fn today_line(today: Date) -> String {
+    format!("Today is {}.", today.strftime("%A %-d %B %Y"))
+}
+
+/// The question's message. `today` is given to a mind on this computer only: an online
+/// question sends the question and the facts, and nothing else.
+pub fn answer_user(
+    tier: Tier,
+    question: &str,
+    facts: &[Fact],
+    nonce: &str,
+    today: Option<Date>,
+) -> String {
     let mut list = String::new();
     for (f, (before, after)) in facts.iter().zip(fact_lines(tier, facts)) {
         list.push_str(&format!("{before}{}{after}\n", f.memory.sentence));
     }
+    let (_, tail) = answer_frame(question, nonce, today);
     format!(
-        "Facts:\n{}\n\nQuestion: {question}",
-        fence("facts", nonce, list.trim_end())
+        "Facts:\n{}\n{}",
+        fence("facts", nonce, list.trim_end()),
+        tail[1..].join("\n")
     )
 }
 
@@ -406,15 +423,15 @@ pub const ONLINE_TIER: Tier = Tier::Standard;
 
 /// The lines around the facts in an answer prompt, as [`answer_user`] writes them: before the
 /// first fact, and after the last.
-pub fn answer_frame(question: &str, nonce: &str) -> (Vec<String>, Vec<String>) {
-    (
-        vec!["Facts:".into(), format!("<facts-{nonce}>")],
-        vec![
-            format!("</facts-{nonce}>"),
-            String::new(),
-            format!("Question: {question}"),
-        ],
-    )
+pub fn answer_frame(
+    question: &str,
+    nonce: &str,
+    today: Option<Date>,
+) -> (Vec<String>, Vec<String>) {
+    let mut tail = vec![format!("</facts-{nonce}>"), String::new()];
+    tail.extend(today.map(today_line));
+    tail.push(format!("Question: {question}"));
+    (vec!["Facts:".into(), format!("<facts-{nonce}>")], tail)
 }
 
 pub fn image_schema() -> Value {
@@ -508,9 +525,11 @@ mod tests {
     }
 
     /// The question's message is the same, byte for byte, as before the online answers shared
-    /// it: the loop it had is kept here as the reference.
+    /// it, but for today's date before the question, added on purpose to local answers only:
+    /// the loop it had is kept here as the reference.
     #[test]
-    fn local_answers_unchanged() {
+    fn local_answers_unchanged_but_for_the_date() {
+        let saturday: Date = "2026-11-14".parse().unwrap();
         let mut facts = vec![
             fact(
                 "a",
@@ -547,18 +566,28 @@ mod tests {
                 fence("facts", "n", list.trim_end()),
                 "When?"
             );
-            assert_eq!(answer_user(tier, "When?", &facts, "n"), before, "{tier:?}");
-            let (head, tail) = answer_frame("When?", "n");
-            let lines: Vec<String> = facts
-                .iter()
-                .zip(fact_lines(tier, &facts))
-                .map(|(f, (b, a))| format!("{b}{}{a}", f.memory.sentence))
-                .collect();
-            assert_eq!(
-                [head, lines, tail].concat().join("\n"),
-                before,
-                "the frame and the lines make the message"
+            let dated = before.replace(
+                "\n\nQuestion: ",
+                "\n\nToday is Saturday 14 November 2026.\nQuestion: ",
             );
+            for (today, want) in [(None, &before), (Some(saturday), &dated)] {
+                assert_eq!(
+                    &answer_user(tier, "When?", &facts, "n", today),
+                    want,
+                    "{tier:?}"
+                );
+                let (head, tail) = answer_frame("When?", "n", today);
+                let lines: Vec<String> = facts
+                    .iter()
+                    .zip(fact_lines(tier, &facts))
+                    .map(|(f, (b, a))| format!("{b}{}{a}", f.memory.sentence))
+                    .collect();
+                assert_eq!(
+                    &[head, lines, tail].concat().join("\n"),
+                    want,
+                    "the frame and the lines make the message"
+                );
+            }
         }
     }
 
