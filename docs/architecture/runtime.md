@@ -87,7 +87,24 @@ in dispute. When its answer leaves out a number, date or time of a fact it cites
 side of a disagreement, it is asked once more and the better answer is kept. Every tier has the
 same guards: a reply that is only punctuation, the instructions read back, a refusal worded as an
 answer, or the not-sure word in any spelling is not shown and ends as not sure; a citation with
-no words before it is not a receipt.
+no words before it is not a receipt. Talk of the facts holding nothing ("not mentioned") voids an
+answer only when it cites no fact. A mind on this computer is told the day's date; an online
+question is not.
+
+Reading follows a GBNF grammar rather than a JSON schema: the engine parses a request into a map
+that sorts keys, so a schema would make the mind write each memory's confidence first and its
+quote last. The grammar has it write the quote first, then the sentence, who or what it is about,
+what is said, the dates, and its judgements; every text is at most 300 characters and a reply at
+most 16 memories. A reply cut off at its token ceiling is read again in halves, twice at most,
+and after that keeps the whole memories it holds. When the memories leave out a number or name
+the item gives, or lose who someone is to the person ("the plumber"), those lines go back to the
+mind once. A day the quote never names, by weekday, day of the month or a word such as tomorrow,
+is dropped from the memory. After the page, the tidy marks up to eight items kept in the past
+day whose memories still leave something out, none of them replaced by a later item and no
+question open on them; the reader reads them again on mains when nothing
+else waits, sentence by sentence where needed, without the re-reading notice. How each job picks
+its words is the same on every tier (a temperature only), and `NOCTURNE_TEST_SAMPLING` changes it
+for tests and evaluation runs.
 
 The backend follows the hardware: Metal on a Mac (the engine offers nothing else there), Vulkan on
 an integrated GPU, ROCm on a discrete AMD GPU, otherwise the CPU. When the machine runs short of
