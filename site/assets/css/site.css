@@ -552,7 +552,12 @@ figcaption,
 }
 
 .feature-shot .box {
-  max-width: 560px;
+  max-width: 518px;
+}
+
+.feature-shot .box img {
+  border-radius: 10px;
+  box-shadow: var(--shadow);
 }
 
 /* Privacy */
