@@ -12,7 +12,7 @@ afterEach(() => {
 });
 
 const SETUP = "/settings/online/setup";
-const STEP1 = /Have your answers written by a larger mind/;
+const STEP1 = /Have your answers written by an online service you choose/;
 const STEP2 = "Choose the online service.";
 const CONNECT = "Connect to the service you chose.";
 const ADVANCED = "/settings/advanced/online?from=online";

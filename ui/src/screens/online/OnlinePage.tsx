@@ -79,11 +79,7 @@ function CheckingPage({ back }: { back: Back }) {
 }
 
 function NeverSetUp({ view, back }: { view: OnlineView; back: Back }) {
-  const features = [
-    { title: t("online.off.fuller.title"), body: t("online.off.fuller.body") },
-    { title: t("online.off.quicker.title"), body: t("online.off.quicker.body") },
-    { title: t("online.off.view.title"), body: t("online.off.view.body") },
-  ];
+  const features = [{ title: t("online.off.view.title"), body: t("online.off.view.body") }];
   const stays = [
     t("online.stays.photos"),
     t("online.stays.private"),
