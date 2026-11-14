@@ -1,29 +1,29 @@
-# Cuts releases with release-please and builds the desktop packages for them.
+# Builds the desktop packages for a release and publishes it.
 #
-# On every push to main, release-please opens or updates the release pull request from the
-# Conventional Commits since the last release. Merging that pull request tags the release and
-# creates the release page; this run then builds the packages for Linux, macOS and Windows,
-# checks each one with scripts/check-package.sh where it applies, and attaches them, with one
-# SHA256SUMS, to the release. The Most private helper (tailnet.yml) and the Flatpak
-# (flatpak.yml) are built by their own workflows, called from here.
+# release-please.yml opens the release pull request and, when it is merged, tags the release and
+# creates its page as a draft. The tag push (vX.Y.Z) starts this workflow: it builds the packages
+# for Linux, macOS and Windows, checks each one with scripts/check-package.sh where it applies,
+# and attaches them, with one SHA256SUMS, to the draft. The Most private helper (tailnet.yml) and
+# the Flatpak (flatpak.yml) are built by their own workflows, called from here. The last job
+# publishes the draft when every one of them has finished.
 #
 # Run by hand (workflow_dispatch) with an existing release tag (vX.Y.Z) in `tag` to build that
 # tag and attach the files to its release. With `tag` empty it builds the chosen commit unsigned
 # and keeps the files as workflow artifacts only; any other value fails.
 #
-# The bot that opens the release pull request and tags releases is a GitHub App, so its events
-# start other workflows: the RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY secrets.
+# The GitHub App of release-please.yml also reads the release and uploads to it here: the
+# RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY secrets.
 #
 # The builds never see a signing secret. They upload unsigned files; separate jobs in the
 # protected release-signing environment download those files and only sign (and notarise) them,
 # when the MACOS_SIGNING or WINDOWS_SIGNING repository variable is `true`. Without them the
-# release carries the unsigned files (macOS signed ad hoc), as the local builds are. See
-# docs/contribution/release.md for every secret and variable.
+# release carries the unsigned files (macOS signed ad hoc), as the local builds are. The Flatpak
+# key is in that environment too. See docs/contribution/release.md for every secret and variable.
 name: release
 
 on:
   push:
-    branches: [main]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_dispatch:
     inputs:
       tag:
@@ -33,104 +33,46 @@ on:
         default: ""
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag || github.ref }}
   cancel-in-progress: false
 
 permissions:
   contents: read
-  issues: read
-  pull-requests: read
 
 jobs:
-  release-please:
-    if: github.event_name == 'push'
-    runs-on: ubuntu-24.04
-    outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
-    steps:
-      # The checkout is done with the app token so the job's git remote is authenticated for the
-      # lock file push below.
-      - name: Get GitHub App installation token
-        id: app-token
-        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
-        with:
-          app-id: ${{ secrets.RELEASE_APP_ID }}
-          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-
-      # Manifest mode is automatic when config-file and manifest-file are set.
-      - name: Release Please
-        id: release
-        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
-        with:
-          token: ${{ steps.app-token.outputs.token }}
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
-
-      # release-please moves the version in Cargo.toml and ui/package.json. The lock files must
-      # follow in the same pull request, or the tagged tree would build with a stale lock.
-      - name: Bring the lock files to the new version
-        if: steps.release.outputs.prs_created == 'true'
-        env:
-          PRS: ${{ steps.release.outputs.prs }}
-        run: |
-          set -euo pipefail
-          branch="$(echo "$PRS" | jq -r '.[0].headBranchName')"
-          git fetch origin "$branch"
-          git checkout "$branch"
-          version=$(python3 -I - << 'PY'
-          import tomllib
-          print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])
-          PY
-          )
-          cargo update --workspace
-          (cd ui && npm version "$version" --no-git-tag-version --allow-same-version --ignore-scripts)
-          git add Cargo.lock ui/package.json ui/package-lock.json
-          if git diff --cached --quiet; then
-            echo "lock files already at $version; nothing to push"
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: lock files at $version"
-          git push origin "$branch"
-
-
   # What to build and where the files go, for both triggers. A hand run accepts only an existing
   # release tag. Every job checks out the commit resolved here, never a name.
   plan:
-    needs: release-please
-    if: ${{ !cancelled() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped') }}
     runs-on: ubuntu-24.04
     outputs:
       build: ${{ steps.plan.outputs.build }}
       ref: ${{ steps.plan.outputs.ref }}
       tag: ${{ steps.plan.outputs.tag }}
     steps:
+      # The release is a draft until the last job, which the workflow token cannot see.
+      - name: Get GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: read
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github
       - id: plan
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           EVENT: ${{ github.event_name }}
-          RELEASED: ${{ needs.release-please.outputs.release_created }}
-          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          PUSHED_TAG: ${{ github.ref_name }}
           INPUT_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           tag=""
           if [ "$EVENT" = workflow_dispatch ]; then
             tag=$INPUT_TAG
-          elif [ "$RELEASED" = true ]; then
-            tag=$RELEASE_TAG
           else
-            echo "build=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            tag=$PUSHED_TAG
           fi
           if [ -z "$tag" ]; then
             echo "no tag: building $GITHUB_SHA unsigned, attaching nothing"
@@ -429,12 +371,11 @@ jobs:
     with:
       tag: ${{ needs.plan.outputs.tag }}
       ref: ${{ needs.plan.outputs.ref }}
-    secrets: inherit
 
   # The Flatpak is built and published to its own repository by flatpak.yml (AetherPak).
   flatpak:
-    needs: [release-please, plan]
-    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' && needs.plan.outputs.tag != '' }}
+    needs: plan
+    if: ${{ !cancelled() && github.event_name == 'push' && needs.plan.outputs.tag != '' }}
     permissions:
       contents: read
       packages: write
@@ -443,9 +384,9 @@ jobs:
     uses: ./.github/workflows/flatpak.yml
     with:
       ref: ${{ needs.plan.outputs.ref }}
+      tag: ${{ needs.plan.outputs.tag }}
       channel: stable
       publish: true
-    secrets: inherit
 
   # A signing job that was asked for must have succeeded; one that was not runs as skipped, and the
   # unsigned files go up instead.
@@ -458,7 +399,7 @@ jobs:
       && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success') }}
     runs-on: ubuntu-24.04
     permissions:
-      contents: write
+      contents: read
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -483,6 +424,7 @@ jobs:
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
       # Never replaces a file already on the release: a rebuild is not byte for byte the same.
       - name: attach to the release
         env:
@@ -499,3 +441,28 @@ jobs:
           fi
           [ "$now" = "$SHA" ] || { echo "$TAG moved from $SHA to $now; not uploading" >&2; exit 1; }
           gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY"
+
+  # The release stays a draft until every file is attached and the Flatpak is published. A Flatpak
+  # that was not asked for (a hand run) is skipped.
+  finish:
+    needs: [plan, publish, tailnet, flatpak]
+    if: >-
+      ${{ !cancelled() && needs.plan.outputs.tag != '' && needs.publish.result == 'success'
+      && needs.tailnet.result == 'success'
+      && (needs.flatpak.result == 'success' || needs.flatpak.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Get GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: publish the release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+        run: gh release edit "$TAG" --draft=false --repo "$GITHUB_REPOSITORY"

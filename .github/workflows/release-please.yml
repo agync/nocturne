@@ -1,0 +1,83 @@
+# Opens and updates the release pull request with release-please, and creates the release.
+#
+# On every push to main, release-please opens or updates the release pull request from the
+# Conventional Commits since the last release. Merging that pull request tags the release and
+# creates its page as a draft. The tag push starts release.yml, which builds the packages and
+# publishes the draft once everything is attached. This is its own workflow so the release
+# workflow, which can wait days for a signing approval, never blocks or cancels a run here.
+#
+# The bot is a GitHub App, so its events (the tag push) start other workflows: the
+# RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY secrets.
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  release-please:
+    runs-on: ubuntu-24.04
+    steps:
+      # The checkout is done with the app token so the job's git remote is authenticated for the
+      # lock file push below.
+      - name: Get GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      # Manifest mode is automatic when config-file and manifest-file are set.
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # release-please moves the version in Cargo.toml and ui/package.json. The lock files must
+      # follow in the same pull request, or the tagged tree would build with a stale lock.
+      - name: Bring the lock files to the new version
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          set -euo pipefail
+          branch="$(echo "$PRS" | jq -r '.[0].headBranchName')"
+          git fetch origin "$branch"
+          git checkout "$branch"
+          version=$(python3 -I - << 'PY'
+          import tomllib
+          print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])
+          PY
+          )
+          cargo update --workspace
+          (cd ui && npm version "$version" --no-git-tag-version --allow-same-version --ignore-scripts)
+          # release-please does not know the metainfo, whose newest release must be the version.
+          metainfo=flatpak/is.nocturne.Nocturne.metainfo.xml
+          if ! grep -q "<release version=\"$version\"" "$metainfo"; then
+            sed -i "s|^  <releases>\$|&\n    <release version=\"$version\" date=\"$(date -u +%F)\"/>|" "$metainfo"
+          fi
+          git add Cargo.lock ui/package.json ui/package-lock.json "$metainfo"
+          if git diff --cached --quiet; then
+            echo "lock files already at $version; nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: lock files at $version"
+          git push origin "$branch"
