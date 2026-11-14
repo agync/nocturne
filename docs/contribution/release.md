@@ -72,6 +72,34 @@ must not be cut without them:
 | Most private helper | `tailnet.yml` | `scripts/build-tailnet.sh`, built twice | four binaries and the licence report | the two builds agree byte for byte |
 | Flatpak | `flatpak.yml` | AetherPak | the Flatpak repository | AetherPak's own checks |
 
+## Fixed download names
+
+The publish job also attaches a copy of each package under a fixed name, so
+`https://github.com/agync/nocturne/releases/latest/download/<name>` always gives the newest
+version. The landing site and the install guide link to these names; do not rename them. The
+versioned originals stay on the release, and `SHA256SUMS` lists both.
+
+| Fixed name | Copy of |
+|---|---|
+| `Nocturne-macos-arm64.dmg` | the Mac disk image |
+| `Nocturne-windows-x64-setup.exe` | the NSIS installer |
+| `Nocturne-windows-x64.msi` | the MSI installer |
+| `Nocturne-linux-x86_64.AppImage` | the AppImage |
+| `Nocturne-linux-amd64.deb` | the deb |
+| `Nocturne-linux-x86_64.rpm` | the rpm |
+
+The job fails if a pattern matches no file or more than one, so a renamed package never ships
+without its fixed name.
+
+## First-open notes
+
+Until a platform is signed, its computer warns the person the first time they open the package. The
+`finish` job adds the steps to the release notes just before it publishes the draft: the text lives
+in `.github/release-notes/` (`first-open.md`, `macos.md`, `windows.md`) and matches the install
+guide. A platform whose `MACOS_SIGNING` or `WINDOWS_SIGNING` variable is `true` gets no steps, and
+when both are `true` nothing is added. The job runs once per release (it looks for the
+`first-open` marker). When signing is turned on, check the install guide's first-open section too.
+
 Each build fetches the engine pinned for its platform in `lemonade.lock` and checks its sha256, as
 the local build does. There is no Intel Mac build, because `lemonade.lock` pins no Intel Mac engine.
 The helper is never inside a package; it is attached beside them.
