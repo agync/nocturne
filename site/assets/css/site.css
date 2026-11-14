@@ -517,9 +517,8 @@ figcaption,
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   grid-template-areas:
     "eyebrow body"
-    "title body"
-    ". note";
-  grid-template-rows: auto 1fr auto;
+    "title body";
+  grid-template-rows: auto 1fr;
   gap: 10px 48px;
 }
 
@@ -535,27 +534,11 @@ figcaption,
   letter-spacing: -0.01em;
 }
 
-.feature-text p:not(.eyebrow):not(.note) {
+.feature-text p:not(.eyebrow) {
   grid-area: body;
   font-size: 1rem;
   line-height: 1.6;
   color: var(--ink2);
-}
-
-.note {
-  grid-area: note;
-  font-size: 0.875rem;
-  line-height: 1.55;
-  color: var(--ink2);
-  background: var(--ember-soft);
-  border-left: 3px solid var(--ember);
-  border-radius: 0 6px 6px 0;
-  padding: 10px 14px;
-}
-
-.note strong {
-  color: var(--ink);
-  font-weight: 500;
 }
 
 .feature-shot {
@@ -792,8 +775,7 @@ figcaption,
     grid-template-areas:
       "eyebrow"
       "title"
-      "body"
-      "note";
+      "body";
     grid-template-rows: auto;
   }
 }
