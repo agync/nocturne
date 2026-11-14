@@ -1741,7 +1741,13 @@ fn the_whole_product_works_with_real_models() {
     let reading_started = Instant::now();
     let mut settled: BTreeMap<String, u64> = BTreeMap::new();
     let limit = env_secs("NOCTURNE_E2E_READ_SECS", 3600);
+    let mut ticks = 0u32;
     let drained = wait_until(limit, || {
+        // The app's clock is a manual one, so the reader's back-off after a failed item would
+        // never end by itself: let it move on while the reader works.
+        ticks = (ticks + 10).min(3500);
+        h.clock
+            .set_str(&format!("{DAY}T22:{:02}:{:02}Z", ticks / 60, ticks % 60));
         let items = h.ok("list_items", json!({"filter": {}}));
         for item in items.as_array().unwrap() {
             let status = item["status"].as_str().unwrap_or("");
