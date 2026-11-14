@@ -657,6 +657,78 @@ async fn log_file_owner_only_and_rotated() {
     }
 }
 
+/// The S1a probe, kept: the real pinned engine calls the static row with `offline` true, and
+/// the stand-in sees exactly the body Nocturne sent. Run with `NOCTURNE_LEMOND` naming a bundle
+/// folder and `NOCTURNE_FAKE_PROVIDER_PORT` a stand-in already listening on loopback.
+#[cfg(feature = "online-stand-in")]
+#[tokio::test]
+#[ignore = "needs the real engine (NOCTURNE_LEMOND) and a stand-in"]
+async fn real_engine_calls_the_static_row_offline() {
+    let bundle = std::path::PathBuf::from(std::env::var("NOCTURNE_LEMOND").unwrap());
+    let port: u16 = std::env::var("NOCTURNE_FAKE_PROVIDER_PORT")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = Dirs::new(bundle, tmp.path().join("root"));
+    let route = CloudRoute::stand_in(
+        &format!("http://127.0.0.1:{port}/v1"),
+        "stand-in-model".into(),
+        OnlineKey::new(KEY.into()),
+    )
+    .unwrap();
+    let sup = Supervisor::start_with(dirs.clone(), SupervisorOptions::default(), Some(route))
+        .await
+        .unwrap();
+    let mind = nocturne_lemonade::mind::online::OnlineMind::new(
+        sup.client(),
+        Arc::new(|ids: &[String]| vec![true; ids.len()]),
+    );
+    let fact = nocturne_engine::Fact::from(
+        serde_json::from_value::<nocturne_contract::MemoryView>(json!({
+            "id": "mem_1", "sentence": "The bins go out on Tuesday.", "subject": "Bins",
+            "entityId": null, "predicate": "scheduled", "object": "Tuesday", "certainty": "sure",
+            "status": "active", "validFrom": null, "validTo": null, "due": null,
+            "learnedAt": "2026-11-10T09:30:00+00:00", "lastUsed": null, "letGoAt": null,
+            "keepForever": false, "private": false, "suggestPrivate": false, "was": null,
+            "receipts": [],
+        }))
+        .unwrap(),
+    );
+    let (tx, _rx) = tokio::sync::mpsc::channel(4);
+    let meta = mind
+        .answer("When do the bins go out?", std::slice::from_ref(&fact), tx)
+        .await
+        .unwrap();
+    assert!(!meta.not_sure);
+    assert_eq!(config(&dirs)["offline"], true);
+    // A redirect from the provider is not followed by the engine's POST.
+    reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{port}/fake/script"))
+        .json(&json!({"redirect": "/v1/elsewhere"}))
+        .send()
+        .await
+        .unwrap();
+    let (tx, _rx) = tokio::sync::mpsc::channel(4);
+    assert!(mind.answer("again?", &[fact], tx).await.is_err());
+    let seen: Vec<Value> = reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{port}/fake/requests"))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert!(seen.iter().all(|r| r["path"] != "/v1/elsewhere"));
+    assert!(
+        seen.iter().all(|r| r["path"] != "/v1/models"),
+        "no discovery"
+    );
+    let log = std::fs::read_to_string(dirs.logs().join("lemond.log")).unwrap_or_default();
+    assert!(!log.contains(KEY));
+    sup.shutdown().await.unwrap();
+}
+
 /// A download window whose relaunch failed is closed again: no later restart opens it without
 /// the person's yes.
 #[tokio::test]

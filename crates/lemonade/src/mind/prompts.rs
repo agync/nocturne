@@ -323,20 +323,46 @@ fn fact_details(tier: Tier, fact: &Fact, number_of: &dyn Fn(&str) -> Option<usiz
     out
 }
 
-pub fn answer_user(tier: Tier, question: &str, facts: &[Fact], nonce: &str) -> String {
+/// Each fact as the answer lists it, around its sentence: the line is `before`, the memory's
+/// own sentence, then `after`.
+pub fn fact_lines(tier: Tier, facts: &[Fact]) -> Vec<(String, String)> {
     let number_of = |id: &str| facts.iter().position(|f| f.memory.id == id).map(|i| i + 1);
+    facts
+        .iter()
+        .enumerate()
+        .map(|(i, f)| {
+            (
+                format!("[m{}] ", i + 1),
+                format!(" ({})", fact_details(tier, f, &number_of).join("; ")),
+            )
+        })
+        .collect()
+}
+
+pub fn answer_user(tier: Tier, question: &str, facts: &[Fact], nonce: &str) -> String {
     let mut list = String::new();
-    for (i, f) in facts.iter().enumerate() {
-        list.push_str(&format!(
-            "[m{}] {} ({})\n",
-            i + 1,
-            f.memory.sentence,
-            fact_details(tier, f, &number_of).join("; ")
-        ));
+    for (f, (before, after)) in facts.iter().zip(fact_lines(tier, facts)) {
+        list.push_str(&format!("{before}{}{after}\n", f.memory.sentence));
     }
     format!(
         "Facts:\n{}\n\nQuestion: {question}",
         fence("facts", nonce, list.trim_end())
+    )
+}
+
+/// Online answers are written by a full-size mind: the full instructions, and every fact.
+pub const ONLINE_TIER: Tier = Tier::Standard;
+
+/// The lines around the facts in an answer prompt, as [`answer_user`] writes them: before the
+/// first fact, and after the last.
+pub fn answer_frame(question: &str, nonce: &str) -> (Vec<String>, Vec<String>) {
+    (
+        vec!["Facts:".into(), format!("<facts-{nonce}>")],
+        vec![
+            format!("</facts-{nonce}>"),
+            String::new(),
+            format!("Question: {question}"),
+        ],
     )
 }
 
@@ -412,6 +438,76 @@ mod tests {
     fn small_standard_and_large_keep_their_answer_instructions_byte_for_byte() {
         for tier in [Tier::Small, Tier::Standard, Tier::Large, Tier::Unsupported] {
             assert_eq!(answer_system(tier, "n"), FULL, "{tier:?}");
+        }
+    }
+
+    fn fact(id: &str, sentence: &str, extra: serde_json::Value) -> Fact {
+        let mut v = json!({
+            "id": id, "sentence": sentence, "subject": "Sam", "entityId": null,
+            "predicate": "scheduled", "object": "x", "certainty": "sure", "status": "active",
+            "validFrom": null, "validTo": null, "due": null,
+            "learnedAt": "2026-11-10T09:30:00+00:00", "lastUsed": null, "letGoAt": null,
+            "keepForever": false, "private": false, "suggestPrivate": false, "was": null,
+            "receipts": [],
+        });
+        for (k, x) in extra.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        Fact::from(serde_json::from_value::<nocturne_contract::MemoryView>(v).unwrap())
+    }
+
+    /// The question's message is the same, byte for byte, as before the online answers shared
+    /// it: the loop it had is kept here as the reference.
+    #[test]
+    fn local_answers_unchanged() {
+        let mut facts = vec![
+            fact(
+                "a",
+                "The dentist is on Thursday at 14:30.",
+                json!({"was": "Wednesday", "due": "2026-11-19"}),
+            ),
+            fact(
+                "b",
+                "The bins go out on Tuesday.",
+                json!({"validFrom": "2026-11-01", "validTo": "2027-01-01"}),
+            ),
+            fact("c", "Ana lives in Porto.", json!({"status": "unconfirmed"})),
+            fact(
+                "d",
+                "Ana lives in Lisbon.",
+                json!({"certainty": "notSure", "learnedAt": "2025-02-01T09:00:00+00:00"}),
+            ),
+        ];
+        facts[2].disputed_by = vec!["d".into()];
+        facts[3].disputed_by = vec!["c".into()];
+        for tier in [Tier::Tiny, Tier::Small, Tier::Standard, Tier::Large] {
+            let number_of = |id: &str| facts.iter().position(|f| f.memory.id == id).map(|i| i + 1);
+            let mut list = String::new();
+            for (i, f) in facts.iter().enumerate() {
+                list.push_str(&format!(
+                    "[m{}] {} ({})\n",
+                    i + 1,
+                    f.memory.sentence,
+                    fact_details(tier, f, &number_of).join("; ")
+                ));
+            }
+            let before = format!(
+                "Facts:\n{}\n\nQuestion: {}",
+                fence("facts", "n", list.trim_end()),
+                "When?"
+            );
+            assert_eq!(answer_user(tier, "When?", &facts, "n"), before, "{tier:?}");
+            let (head, tail) = answer_frame("When?", "n");
+            let lines: Vec<String> = facts
+                .iter()
+                .zip(fact_lines(tier, &facts))
+                .map(|(f, (b, a))| format!("{b}{}{a}", f.memory.sentence))
+                .collect();
+            assert_eq!(
+                [head, lines, tail].concat().join("\n"),
+                before,
+                "the frame and the lines make the message"
+            );
         }
     }
 

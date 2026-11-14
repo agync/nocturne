@@ -272,35 +272,7 @@ impl LemonadeMind {
         {
             judged = judge(&both_sides(n, m, facts), facts, &system);
         }
-        let mut sent_any = false;
-        if !judged.not_sure && !judged.text.is_empty() {
-            sent_any = true;
-            if out.send(judged.text.clone()).await.is_err() {
-                return Err(MindError::Failed("the reader went away".into()));
-            }
-        }
-        let ids = |numbers: &[usize]| -> Vec<String> {
-            numbers
-                .iter()
-                .filter_map(|n| facts.get(n - 1))
-                .map(|f| f.memory.id.clone())
-                .collect()
-        };
-        let (cited, spans) = if judged.not_sure {
-            (Vec::new(), Vec::new())
-        } else {
-            (
-                ids(&judged.cited),
-                judged.spans.as_deref().map(ids).unwrap_or_default(),
-            )
-        };
-        let cited_none = cited.is_empty();
-        Ok(AnswerMeta {
-            cited,
-            not_sure: judged.not_sure || !sent_any || cited_none,
-            spans,
-            online: None,
-        })
+        conclude(judged, facts, &out).await
     }
 
     /// The whole reply to `messages`, read before any of it is shown: a reply that ends in the
@@ -657,6 +629,44 @@ fn predicate(raw: &str) -> Predicate {
         Some(word) => Predicate::Other(word.trim().to_string()),
         None => Predicate::parse(&norm),
     }
+}
+
+/// What both the local and the online answer do with a judged reply: the text goes out only
+/// when the answer stands, and each cited number maps back to the fact it was given as.
+async fn conclude(
+    judged: Judged,
+    facts: &[Fact],
+    out: &mpsc::Sender<String>,
+) -> Result<AnswerMeta, MindError> {
+    let mut sent_any = false;
+    if !judged.not_sure && !judged.text.is_empty() {
+        sent_any = true;
+        if out.send(judged.text.clone()).await.is_err() {
+            return Err(MindError::Failed("the reader went away".into()));
+        }
+    }
+    let ids = |numbers: &[usize]| -> Vec<String> {
+        numbers
+            .iter()
+            .filter_map(|n| facts.get(n - 1))
+            .map(|f| f.memory.id.clone())
+            .collect()
+    };
+    let (cited, spans) = if judged.not_sure {
+        (Vec::new(), Vec::new())
+    } else {
+        (
+            ids(&judged.cited),
+            judged.spans.as_deref().map(ids).unwrap_or_default(),
+        )
+    };
+    let cited_none = cited.is_empty();
+    Ok(AnswerMeta {
+        cited,
+        not_sure: judged.not_sure || !sent_any || cited_none,
+        spans,
+        online: None,
+    })
 }
 
 /// What a reply comes to once its markers are taken out and the guards have looked at it.
