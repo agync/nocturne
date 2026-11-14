@@ -12,6 +12,9 @@ fake-server = ["dep:axum"]
 # Lets the online route reach the stand-in provider over plain HTTP on loopback. Tests, the
 # network check and the S1 measurement only: never in `default`, never packaged.
 online-stand-in = []
+# Lets `NOCTURNE_TEST_SAMPLING` set how each job picks its words, for the sampling sweep. Read
+# only in debug builds; never in `default`, never packaged.
+test-sampling = []
 
 [[bin]]
 name = "fake-lemond"
@@ -60,6 +63,7 @@ nix = { version = "0.31", default-features = false, features = ["resource", "pro
 [dev-dependencies]
 nocturne-lemonade = { workspace = true, features = ["fake-server"] }
 tempfile.workspace = true
+tracing-subscriber.workspace = true
 
 [lints]
 workspace = true

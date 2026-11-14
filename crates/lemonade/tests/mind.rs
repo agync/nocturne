@@ -1802,103 +1802,201 @@ async fn a_cut_sentence_keeps_the_whole_memories_it_has() {
     assert!(matches!(err, MindError::Failed(_)), "{err:?}");
 }
 
-/// A name or number in the item that no memory keeps sends those lines back to the mind once,
-/// fenced like the item; what comes back is added. Never a third time.
+/// A second look shows the mind the whole item again with the lines it left out pointed out,
+/// fenced like the item.
 #[tokio::test]
-async fn a_line_no_memory_covers_is_asked_about_once() {
+async fn a_second_look_shows_the_whole_item_and_the_lines() {
     let r = rig().await;
     let text = "Boiler service is booked for Monday 30 November. The engineer is called Marek.";
-    let boiler = memory_about(
-        "Boiler service is booked for Monday 30 November",
-        "Boiler service",
-        "Boiler service is booked for Monday 30 November.",
-        "Monday 30 November",
-    );
     let marek = memory_about(
         "The engineer is called Marek",
         "Marek",
         "The engineer for the boiler service is called Marek.",
         "the engineer",
     );
-    r.script(json!([reply(vec![boiler.clone()]), reply(vec![marek])]))
-        .await;
-    let got = r.mind.extract(text, &context()).await.unwrap();
-    let subjects: Vec<&str> = got.iter().map(|c| c.subject.as_str()).collect();
-    assert_eq!(subjects, ["Boiler service", "Marek"]);
+    r.script(json!([reply(vec![marek])])).await;
+    let lines = vec!["The engineer is called Marek.".to_string()];
+    let got = r
+        .mind
+        .extract_lines(text, &context(), &lines)
+        .await
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].subject, "Marek");
     let calls = r.seen("/v1/chat/completions").await;
-    assert_eq!(calls.len(), 2);
-    let focus = user_turn(&calls[1]);
-    let nonce = nonce_in(calls[1]["body"]["messages"][0]["content"].as_str().unwrap());
+    assert_eq!(calls.len(), 1);
+    let focus = user_turn(&calls[0]);
+    let nonce = nonce_in(calls[0]["body"]["messages"][0]["content"].as_str().unwrap());
     let fenced = format!("<item-{nonce}>\nThe engineer is called Marek.\n</item-{nonce}>");
+    assert!(
+        focus.contains(&format!("<item-{nonce}>\n{text}\n</item-{nonce}>")),
+        "{focus}"
+    );
     assert!(
         focus.contains("no memory holds yet") && focus.ends_with(&fenced),
         "{focus}"
     );
+    assert!(calls[0]["body"]["grammar"].is_string());
 
-    r.script(json!([reply(vec![boiler.clone()]), reply(vec![])]))
-        .await;
-    let got = r.mind.extract(text, &context()).await.unwrap();
-    assert_eq!(got.len(), 1);
-    assert_eq!(
-        r.seen("/v1/chat/completions").await.len(),
-        4,
-        "asked once only"
-    );
-
-    r.script(json!([reply(vec![boiler]), {"content": "not JSON"}]))
-        .await;
-    let got = r.mind.extract(text, &context()).await.unwrap();
-    assert_eq!(
-        got.len(),
-        1,
-        "a second look that fails leaves the first reading"
+    r.script(json!([{"content": "not JSON"}])).await;
+    assert!(
+        r.mind
+            .extract_lines(text, &context(), &lines)
+            .await
+            .is_err()
     );
 }
 
-/// "The plumber" dropped from the only memory about Mr Hughes is asked for again, and the
-/// memory that keeps it takes the place of the one that lost it.
+/// A reply holding as many memories as a reply may has likely left some out: the item is read
+/// again in halves. The same goes for a second look, whose lines are asked about in halves.
 #[tokio::test]
-async fn a_lost_role_is_asked_for_and_kept() {
+async fn a_full_reply_is_read_again_in_halves() {
     let r = rig().await;
-    let text = "The plumber, Mister Hughes, is coming on Friday.";
-    let quote = "The plumber, Mister Hughes, is coming on Friday";
-    let lost = memory_about(
-        quote,
-        "Hughes",
-        "Mister Hughes is coming on Friday.",
-        "Friday",
-    );
-    let kept = memory_about(
-        quote,
-        "Hughes",
-        "The plumber, Mister Hughes, is coming on Friday.",
-        "Friday",
-    );
-    r.script(json!([reply(vec![lost]), reply(vec![kept])]))
-        .await;
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let coffee = memory_about("Sam likes coffee", "Sam", "Sam likes coffee.", "coffee");
+    let full = reply(vec![tea.clone(); 16]);
+    r.script(json!([
+        full,
+        reply(vec![tea.clone()]),
+        reply(vec![coffee.clone()])
+    ]))
+    .await;
+    let text = "Sam likes tea.\nSam likes coffee.";
     let got = r.mind.extract(text, &context()).await.unwrap();
-    assert_eq!(got.len(), 1);
-    assert!(got[0].sentence.starts_with("The plumber"), "{got:?}");
-    assert_eq!(r.seen("/v1/chat/completions").await.len(), 2);
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(objects, ["tea", "coffee"]);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 3);
+
+    let full = reply(vec![tea.clone(); 16]);
+    r.script(json!([full, reply(vec![tea]), reply(vec![coffee])]))
+        .await;
+    let lines = vec![
+        "Sam likes tea.".to_string(),
+        "Sam likes coffee.".to_string(),
+    ];
+    let got = r
+        .mind
+        .extract_lines(text, &context(), &lines)
+        .await
+        .unwrap();
+    assert_eq!(got.len(), 2);
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 6);
+    let last_fence = |n: usize| {
+        user_turn(&calls[n])
+            .rsplit("<item-")
+            .next()
+            .unwrap()
+            .to_string()
+    };
+    assert!(last_fence(4).contains("Sam likes tea.") && !last_fence(4).contains("coffee"));
+    assert!(last_fence(5).contains("Sam likes coffee.") && !last_fence(5).contains("tea"));
+}
+
+/// An engine that refuses the grammar is asked again by a JSON schema, and every later reading
+/// goes by the schema at once.
+#[tokio::test]
+async fn a_refused_grammar_falls_back_to_a_schema() {
+    let r = rig().await;
+    r.script(json!([
+        {"status": 400, "error": "Failed to parse grammar"},
+        reply(vec![good_memory()]),
+        reply(vec![good_memory()]),
+    ]))
+    .await;
+    assert_eq!(
+        r.mind
+            .extract("Sam likes tea", &context())
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    r.mind.extract("Sam likes tea", &context()).await.unwrap();
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 3);
+    assert!(calls[0]["body"]["grammar"].is_string());
+    for later in &calls[1..] {
+        assert!(later["body"].get("grammar").is_none());
+        let schema = &later["body"]["response_format"]["json_schema"]["schema"];
+        assert_eq!(schema["properties"]["memories"]["maxItems"], 16);
+        let item = &schema["properties"]["memories"]["items"];
+        assert_eq!(item["properties"]["sentence"]["maxLength"], 300);
+        assert_eq!(item["required"].as_array().unwrap().len(), 12);
+    }
+    assert_eq!(r.mind.reading_calls(), 3);
+}
+
+#[derive(Clone, Default)]
+struct Captured(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for Captured {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(buf);
+        Ok(buf.len())
+    }
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+    type Writer = Captured;
+    fn make_writer(&'a self) -> Captured {
+        self.clone()
+    }
+}
+
+/// Raw replies are traced for evaluation runs only: a log kept at info never holds them.
+#[tokio::test]
+async fn raw_replies_are_traced_only_below_info() {
+    for (filter, shown) in [("info", false), ("info,nocturne::reply=trace", true)] {
+        let r = rig().await;
+        let log = Captured::default();
+        let _guard = tracing_subscriber::fmt()
+            .with_writer(log.clone())
+            .with_ansi(false)
+            .with_env_filter(tracing_subscriber::EnvFilter::new(filter))
+            .finish();
+        let _guard = tracing::subscriber::set_default(_guard);
+        r.script(json!([reply(vec![good_memory()]), {"deltas": ["Monday [m1]."]}]))
+            .await;
+        r.mind.extract("Sam likes tea", &context()).await.unwrap();
+        answer(&r, &[memory("a", "Dentist on Monday.")])
+            .await
+            .0
+            .unwrap();
+        let text = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
+        assert_eq!(
+            text.contains("Sam prefers tea in the morning"),
+            shown,
+            "{filter}: {text}"
+        );
+        assert_eq!(text.contains("step=\"extract\""), shown, "{filter}");
+        assert_eq!(text.contains("step=\"answer\""), shown, "{filter}");
+        assert!(!text.contains("Sam prefers tea") || shown);
+    }
 }
 
 /// The answer is told what day it is, so "tomorrow" in a question can be placed.
 #[tokio::test]
 async fn the_answer_is_told_today() {
-    let r = rig().await;
+    let mut r = rig().await;
+    // Late on Sunday evening in London, early on Monday in Tokyo: the engine's own zone counts.
+    let clock = Arc::new(nocturne_engine::ManualClock::at(
+        "2026-11-15T23:30:00Z",
+        "Asia/Tokyo",
+    ));
+    r.mind =
+        LemonadeMind::new(r.sup.client(), preset(Tier::Standard), Tier::Standard).with_clock(clock);
     r.script(json!([{"deltas": ["Monday [m1]."]}])).await;
     answer(&r, &[memory("a", "Dentist on Monday.")])
         .await
         .0
         .unwrap();
-    let call = &r.seen("/v1/chat/completions").await[0];
-    let today = jiff::Zoned::now()
-        .date()
-        .strftime("%A %-d %B %Y")
-        .to_string();
-    let user = user_turn(call);
+    let user = user_turn(&r.seen("/v1/chat/completions").await[0]);
     assert!(
-        user.contains(&format!("Today is {today}.\nQuestion: ")),
+        user.contains("Today is Monday 16 November 2026.\nQuestion: "),
         "{user}"
     );
 }

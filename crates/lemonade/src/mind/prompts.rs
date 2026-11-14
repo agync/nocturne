@@ -164,6 +164,50 @@ ws ::= | " " | "\n"{{1,2}} [ \t]{{0,20}}
     )
 }
 
+/// The JSON schema for a reading, for an engine that refuses the grammar. The same keys and
+/// bounds as [`extraction_grammar`], but the engine sorts the keys on the way, so the quote
+/// comes late in each memory.
+pub fn extraction_schema() -> Value {
+    let text = json!({"type": "string", "minLength": 1, "maxLength": MAX_TEXT});
+    let date = json!({"type": ["string", "null"], "description": "YYYY-MM-DD or null"});
+    json!({
+        "type": "object",
+        "properties": {
+            "memories": {
+                "type": "array",
+                "maxItems": MAX_MEMORIES,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "span": {
+                            "type": "object",
+                            "properties": {"quote": text},
+                            "required": ["quote"]
+                        },
+                        "sentence": text,
+                        "subject": text,
+                        "subjectKind": {"type": ["string", "null"], "enum": ["person", "place", "thing", null]},
+                        "predicate": {"type": "string", "minLength": 1, "maxLength": MAX_PREDICATE},
+                        "object": text,
+                        "due": date,
+                        "validFrom": date,
+                        "validTo": date,
+                        "moved": {"type": "boolean"},
+                        "confidence": {"type": "number"},
+                        "tags": {
+                            "type": "array",
+                            "maxItems": MAX_TAGS,
+                            "items": {"type": "string", "maxLength": MAX_TAG}
+                        }
+                    },
+                    "required": MEMORY_KEYS
+                }
+            }
+        },
+        "required": ["memories"]
+    })
+}
+
 /// A worked example for the extraction prompt: a short note and the reply it should get. Made
 /// up, and about nothing the evaluation asks.
 pub const EXAMPLE_NOTE: &str = "Dr Patel moved my eye test to Friday 6 March at 11:20, room 12. \

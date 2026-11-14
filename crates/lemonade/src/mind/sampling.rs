@@ -1,6 +1,6 @@
 //! How each job picks its words, per tier. The presets are what every request has always sent:
 //! a temperature, and nothing else, so llama.cpp's defaults hold for the rest. A sweep sets
-//! them from [`ENV`], which only tests and evaluation runs set.
+//! them from [`ENV`], read only by a debug build with the `test-sampling` feature.
 
 use nocturne_contract::Tier;
 use serde::Deserialize;
@@ -28,6 +28,10 @@ const TODAY: Presets = Presets {
 
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
+#[cfg_attr(
+    not(all(feature = "test-sampling", debug_assertions)),
+    allow(dead_code)
+)]
 struct Overrides {
     #[serde(default)]
     extract: Sampling,
@@ -46,18 +50,32 @@ impl Presets {
         }
     }
 
-    /// The tier's presets, with what [`ENV`] sets laid over them.
+    /// The tier's presets, with what [`ENV`] sets laid over them. Only a debug build with the
+    /// `test-sampling` feature reads it; any other build ignores the variable.
     pub fn from_env(tier: Tier) -> Presets {
         let presets = Presets::for_tier(tier);
-        match std::env::var(ENV) {
-            Ok(json) => presets.overlaid(&json).unwrap_or_else(|e| {
+        let Ok(json) = std::env::var(ENV) else {
+            return presets;
+        };
+        #[cfg(all(feature = "test-sampling", debug_assertions))]
+        {
+            presets.overlaid(&json).unwrap_or_else(|e| {
                 tracing::warn!("{ENV} is not readable and is ignored: {e}");
                 presets
-            }),
-            Err(_) => presets,
+            })
+        }
+        #[cfg(not(all(feature = "test-sampling", debug_assertions)))]
+        {
+            let _ = json;
+            tracing::warn!("{ENV} is set but this build ignores it");
+            presets
         }
     }
 
+    #[cfg_attr(
+        not(all(feature = "test-sampling", debug_assertions)),
+        allow(dead_code)
+    )]
     fn overlaid(self, json: &str) -> Result<Presets, serde_json::Error> {
         let o: Overrides = serde_json::from_str(json)?;
         Ok(Presets {

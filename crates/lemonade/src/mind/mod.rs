@@ -10,14 +10,16 @@ mod sampling;
 
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use base64::Engine as _;
 use futures_util::StreamExt;
 use jiff::civil::Date;
 use nocturne_contract::{ComponentRole, EntityKind, PageView, Span, Tier};
 use nocturne_engine::{
-    AnswerMeta, BoxFuture, Candidate, ExtractContext, Fact, Mind, MindError, Predicate, Transcript,
-    Understanding,
+    AnswerMeta, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError, Predicate,
+    Transcript, Understanding,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -56,6 +58,11 @@ pub struct LemonadeMind {
     sampling: sampling::Presets,
     overrides: Vec<(ComponentRole, String)>,
     seen: Mutex<Seen>,
+    clock: Option<Arc<dyn Clock>>,
+    /// The engine refused the reading grammar once: reading goes by a JSON schema from then on.
+    grammar_refused: AtomicBool,
+    /// Requests made to read items, retries and second looks included.
+    reading_calls: AtomicU64,
 }
 
 impl LemonadeMind {
@@ -68,6 +75,29 @@ impl LemonadeMind {
             sampling: sampling::Presets::from_env(tier),
             overrides: Vec::new(),
             seen: Mutex::new(Seen::default()),
+            clock: None,
+            grammar_refused: AtomicBool::new(false),
+            reading_calls: AtomicU64::new(0),
+        }
+    }
+
+    /// Takes today's date from `clock` (the engine's, with its time zone) rather than from
+    /// this computer's own clock.
+    pub fn with_clock(mut self, clock: Arc<dyn Clock>) -> Self {
+        self.clock = Some(clock);
+        self
+    }
+
+    /// How many requests reading has made so far, retries and second looks included: what
+    /// reading costs, for measurement runs.
+    pub fn reading_calls(&self) -> u64 {
+        self.reading_calls.load(Ordering::Relaxed)
+    }
+
+    fn today(&self) -> Date {
+        match &self.clock {
+            Some(c) => c.now().to_zoned(c.tz()).date(),
+            None => jiff::Zoned::now().date(),
         }
     }
 
@@ -156,15 +186,40 @@ impl LemonadeMind {
         self.seen.lock().await.loaded.clear();
     }
 
-    async fn chat_whole(&self, req: &ChatRequest) -> Result<ChatReply, MindError> {
-        match self.client.chat_reply(req).await {
-            Ok(r) => Ok(r),
-            Err(e) => {
-                if matches!(e, RuntimeError::Unavailable | RuntimeError::StreamCut) {
-                    self.forget_loaded().await;
-                }
-                Err(e.into())
+    /// One request to read: by the grammar, or by a JSON schema once the engine refused the
+    /// grammar. A refusal is asked again once, by the schema, and remembered.
+    async fn reading_reply(&self, mut req: ChatRequest) -> Result<ChatReply, MindError> {
+        if self.grammar_refused.load(Ordering::Relaxed) {
+            by_schema(&mut req);
+        }
+        self.reading_calls.fetch_add(1, Ordering::Relaxed);
+        let first = self.client.chat_reply(&req).await;
+        let refused = match &first {
+            Err(RuntimeError::Rejected {
+                status,
+                code,
+                message,
+            }) if req.grammar.is_some() => Some(format!("{status} {code} {message}")),
+            Err(RuntimeError::Server { status, message })
+                if req.grammar.is_some() && message.to_lowercase().contains("grammar") =>
+            {
+                Some(format!("{status} {message}"))
             }
+            _ => None,
+        };
+        let reply = match refused {
+            Some(kind) => {
+                tracing::warn!("the engine refused the reading grammar ({kind}); using a schema");
+                self.grammar_refused.store(true, Ordering::Relaxed);
+                by_schema(&mut req);
+                self.reading_calls.fetch_add(1, Ordering::Relaxed);
+                self.client.chat_reply(&req).await
+            }
+            None => first,
+        };
+        match reply {
+            Ok(r) => Ok(r),
+            Err(e) => Err(self.map_chat_error(e).await),
         }
     }
 
@@ -186,13 +241,15 @@ impl LemonadeMind {
             return Ok(Vec::new());
         }
         let model = self.warm_mind().await?;
-        let found = self.extract_part(&model, text, cx, 0).await?;
-        self.second_look(&model, text, cx, found).await
+        let before = self.reading_calls();
+        let found = self.extract_part(&model, text, cx, 0).await;
+        tracing::info!("a reading took {} requests", self.reading_calls() - before);
+        found
     }
 
     /// One reading of `text`, asked again once for the memories that were not valid. A reply
-    /// cut off at its ceiling is read again in halves, `depth` times at most, and after that
-    /// keeps the whole memories it holds.
+    /// cut off at its ceiling, or as full as a reply may be, is read again in halves, `depth`
+    /// times at most; after that it keeps the whole memories it holds.
     fn extract_part<'a>(
         &'a self,
         model: &'a str,
@@ -202,7 +259,6 @@ impl LemonadeMind {
     ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
         Box::pin(async move {
             let nonce = prompts::nonce();
-            let source = normalise(text);
             let mut messages = vec![
                 Message::system(&prompts::extraction_system(&nonce)),
                 Message::user(&prompts::extraction_user(text, cx, &nonce)),
@@ -212,23 +268,41 @@ impl LemonadeMind {
             let mut kept: Vec<Candidate> = Vec::new();
             for attempt in 0..EXTRACT_ATTEMPTS {
                 let req = self.extract_request(model, messages.clone(), text);
-                let reply = self.chat_whole(&req).await?;
-                let parsed = parse_candidates(&reply.text, &source);
+                let reply = self.reading_reply(req).await?;
+                raw_reply(
+                    if depth == 0 {
+                        "extract"
+                    } else {
+                        "extract_half"
+                    },
+                    &reply.text,
+                );
+                let parsed = parse_candidates(&reply.text, text);
                 let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
                 if cut {
+                    let whole = salvage(&reply.text, text);
                     return self
-                        .read_in_parts(model, text, cx, depth, kept, &reply.text)
+                        .read_in_parts(model, text, cx, depth, kept, whole)
                         .await;
                 }
                 match parsed {
-                    Ok((items, invalid)) if invalid.is_empty() => return Ok(merged(kept, items)),
-                    Ok((items, invalid)) if attempt + 1 == EXTRACT_ATTEMPTS => {
-                        tracing::warn!("dropped {} invalid memories: {invalid:?}", invalid.len());
-                        return Ok(merged(kept, items));
+                    Ok(p) if p.total >= prompts::MAX_MEMORIES => {
+                        return self
+                            .read_in_parts(model, text, cx, depth, kept, p.items)
+                            .await;
                     }
-                    Ok((items, invalid)) => {
-                        kept = merged(kept, items);
-                        last_error = invalid.join("; ");
+                    Ok(p) if p.invalid.is_empty() => return Ok(merged(kept, p.items)),
+                    Ok(p) if attempt + 1 == EXTRACT_ATTEMPTS => {
+                        tracing::warn!(
+                            "dropped {} invalid memories: {:?}",
+                            p.invalid.len(),
+                            p.invalid
+                        );
+                        return Ok(merged(kept, p.items));
+                    }
+                    Ok(p) => {
+                        kept = merged(kept, p.items);
+                        last_error = p.invalid.join("; ");
                     }
                     Err(e) if attempt + 1 == EXTRACT_ATTEMPTS => {
                         if !kept.is_empty() {
@@ -258,8 +332,9 @@ impl LemonadeMind {
         })
     }
 
-    /// A reply to `text` was cut off: each half of `text` is read on its own, or, when it
-    /// cannot be split again, the whole memories the cut reply holds are kept.
+    /// A reply to `text` was cut off, or held as many memories as a reply may: each half of
+    /// `text` is read on its own, or, when it cannot be split again, `whole` (the complete
+    /// memories the reply held) is kept.
     async fn read_in_parts(
         &self,
         model: &str,
@@ -267,7 +342,7 @@ impl LemonadeMind {
         cx: &ExtractContext,
         depth: u32,
         kept: Vec<Candidate>,
-        cut_reply: &str,
+        whole: Vec<Candidate>,
     ) -> Result<Vec<Candidate>, MindError> {
         let halves = if depth < MAX_SPLITS {
             halves(text)
@@ -275,14 +350,17 @@ impl LemonadeMind {
             None
         };
         let Some((first, second)) = halves else {
-            let whole = merged(kept, salvage(cut_reply, &normalise(text)));
-            tracing::warn!("a reading was cut off; kept {} whole memories", whole.len());
+            let whole = merged(kept, whole);
+            tracing::warn!(
+                "a reading was cut off or full; kept {} whole memories",
+                whole.len()
+            );
             if whole.is_empty() {
                 return Err(MindError::Failed("the reading was cut off".into()));
             }
             return Ok(whole);
         };
-        tracing::warn!("a reading was cut off; reading the item in two parts");
+        tracing::warn!("a reading was cut off or full; reading the item in two parts");
         let mut out = kept;
         let mut failed = None;
         for part in [first, second] {
@@ -298,50 +376,63 @@ impl LemonadeMind {
         }
     }
 
-    /// One more look at the item, when the memories leave out a number or name it gives, or
-    /// lose who someone is to the person: the mind is shown those lines and asked for their
-    /// facts. Asked once; whatever goes wrong with it, the first reading stands.
-    async fn second_look(
+    /// Another look at `text` for the facts in `lines`: the whole item, with those lines
+    /// pointed out. A reply that is cut off or full has the lines asked about in halves, once.
+    async fn extract_lines_impl(
         &self,
-        model: &str,
         text: &str,
         cx: &ExtractContext,
-        found: Vec<Candidate>,
+        lines: &[String],
     ) -> Result<Vec<Candidate>, MindError> {
-        let said: Vec<String> = found.iter().map(said_by).collect();
-        // A role in the quote alone is lost: the quote is not what the answer is given.
-        let told: Vec<String> = found
-            .iter()
-            .map(|c| format!("{} | {} | {}", c.subject, c.sentence, c.object))
-            .collect();
-        let mut lines = guard::uncovered(text, &said);
-        for line in guard::lost_roles(text, &told) {
-            if !lines.contains(&line) {
-                lines.push(line);
-            }
+        if lines.is_empty() || text.trim().is_empty() {
+            return Ok(Vec::new());
         }
-        if lines.is_empty() {
-            return Ok(found);
-        }
-        let nonce = prompts::nonce();
-        let messages = vec![
-            Message::system(&prompts::extraction_system(&nonce)),
-            Message::user(&prompts::focus_user(text, cx, &nonce, &lines)),
-        ];
-        let req = self.extract_request(model, messages, &lines.join("\n"));
-        let reply = match self.chat_whole(&req).await {
-            Ok(r) => r,
-            Err(e) => {
-                tracing::warn!("the second look at an item failed: {e}");
-                return Ok(found);
+        let model = self.warm_mind().await?;
+        let before = self.reading_calls();
+        let found = self.focused(&model, text, cx, lines, 0).await;
+        tracing::info!(
+            "a second look took {} requests",
+            self.reading_calls() - before
+        );
+        found
+    }
+
+    fn focused<'a>(
+        &'a self,
+        model: &'a str,
+        text: &'a str,
+        cx: &'a ExtractContext,
+        lines: &'a [String],
+        depth: u32,
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        Box::pin(async move {
+            let nonce = prompts::nonce();
+            let messages = vec![
+                Message::system(&prompts::extraction_system(&nonce)),
+                Message::user(&prompts::focus_user(text, cx, &nonce, lines)),
+            ];
+            let req = self.extract_request(model, messages, &lines.join("\n"));
+            let reply = self.reading_reply(req).await?;
+            raw_reply("extract_second_look", &reply.text);
+            let parsed = parse_candidates(&reply.text, text);
+            let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
+            let full = parsed
+                .as_ref()
+                .is_ok_and(|p| p.total >= prompts::MAX_MEMORIES);
+            if (cut || full) && depth == 0 && lines.len() > 1 {
+                let (a, b) = lines.split_at(lines.len() / 2);
+                let mut out = Vec::new();
+                for part in [a, b] {
+                    out = merged(out, self.focused(model, text, cx, part, 1).await?);
+                }
+                return Ok(out);
             }
-        };
-        let source = normalise(text);
-        let more = match parse_candidates(&reply.text, &source) {
-            Ok((items, _)) => items,
-            Err(_) => salvage(&reply.text, &source),
-        };
-        Ok(with_roles_kept(found, more))
+            match parsed {
+                Ok(p) => Ok(p.items),
+                Err(_) if cut => Ok(salvage(&reply.text, text)),
+                Err(e) => Err(MindError::Failed(format!("unusable second look: {e}"))),
+            }
+        })
     }
 
     async fn answer_impl(
@@ -370,10 +461,10 @@ impl LemonadeMind {
                 question,
                 facts,
                 &nonce,
-                Some(jiff::Zoned::now().date()),
+                Some(self.today()),
             )),
         ];
-        let mut reply = self.reply_to(&model, &messages).await?;
+        let mut reply = self.reply_to(&model, &messages, "answer").await?;
         let mut judged = judge(&reply, facts, &system);
         // A small mind often drops the date or number of the fact it cites, or gives one side of a
         // disagreement. It is asked once more, naming what was wrong; the better of the two
@@ -389,7 +480,7 @@ impl LemonadeMind {
                     "{} Answer again in one or two short sentences, with the number of the fact after each sentence, like [m1].",
                     wrong.join(" ")
                 )));
-                if let Ok(second) = self.reply_to(&model, &messages).await {
+                if let Ok(second) = self.reply_to(&model, &messages, "answer_retry").await {
                     let again = judge(&second, facts, &system);
                     if !again.not_sure
                         && !again.cited.is_empty()
@@ -420,7 +511,12 @@ impl LemonadeMind {
     /// The whole reply to `messages`, read before any of it is shown: a reply that ends in the
     /// not-sure marker is an answer the mind did not stand behind, and none of it may reach the
     /// person. Answers are a sentence or two, so this costs little time.
-    async fn reply_to(&self, model: &str, messages: &[Message]) -> Result<String, MindError> {
+    async fn reply_to(
+        &self,
+        model: &str,
+        messages: &[Message],
+        step: &str,
+    ) -> Result<String, MindError> {
         let mut req = ChatRequest::new(model, messages.to_vec()).sampled(&self.sampling.answer);
         req.max_tokens = Some(1024);
         let mut stream = match self.client.chat(&req).await {
@@ -440,6 +536,7 @@ impl LemonadeMind {
                 }
             }
         }
+        raw_reply(step, &reply);
         Ok(reply)
     }
 
@@ -639,35 +736,20 @@ fn merged(mut kept: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
     kept
 }
 
-/// What a memory says, for telling whether the item's words were kept: its quote, subject,
-/// sentence and object.
-fn said_by(c: &Candidate) -> String {
-    let quote = match &c.span {
-        Some(Span::Quote { text }) => text.as_str(),
-        _ => "",
-    };
-    format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
+/// Where a model's raw replies are traced, for evaluation runs: at trace level on a target of
+/// its own, so a log kept at info never holds the words of a memory.
+pub const REPLY_TARGET: &str = "nocturne::reply";
+
+fn raw_reply(step: &str, reply: &str) {
+    tracing::trace!(target: "nocturne::reply", step, reply = %reply);
 }
 
-/// `more` added to `found`. A memory `found` already has is taken from `more` instead only when
-/// it keeps who someone is to the person and the one found did not.
-fn with_roles_kept(mut found: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
-    let key = |c: &Candidate| {
-        (
-            normalise(&c.subject),
-            c.predicate.as_str().to_string(),
-            normalise(&c.object),
-        )
-    };
-    let role_count = |c: &Candidate| guard::role_words(&format!("{} {}", c.sentence, c.object));
-    for c in more {
-        match found.iter_mut().find(|k| key(k) == key(&c)) {
-            Some(old) if role_count(&c) > role_count(old) => *old = c,
-            Some(_) => {}
-            None => found.push(c),
-        }
-    }
-    found
+/// `req` asking for a reply by the JSON schema instead of the grammar.
+fn by_schema(req: &mut ChatRequest) {
+    req.grammar = None;
+    req.response_format = Some(crate::client::json_schema_format(
+        &prompts::extraction_schema(),
+    ));
 }
 
 /// `text` in two parts of about the same length, split between lines or else between
@@ -690,7 +772,8 @@ fn halves(text: &str) -> Option<(&str, &str)> {
 }
 
 /// The whole, valid and grounded memories in a reply that was cut off part way.
-fn salvage(reply: &str, source: &str) -> Vec<Candidate> {
+fn salvage(reply: &str, text: &str) -> Vec<Candidate> {
+    let source = normalise(text);
     let Some(start) = reply.find('[') else {
         return Vec::new();
     };
@@ -721,9 +804,9 @@ fn salvage(reply: &str, source: &str) -> Vec<Candidate> {
                     && let Some(from) = open.take()
                     && let Ok(raw) = serde_json::from_str::<Value>(&reply[from..=at])
                     && let Ok(c) = candidate(&raw)
-                    && grounded(&c, source)
+                    && grounded(&c, &source)
                 {
-                    out.push(c);
+                    out.push(dated(c, text));
                 }
             }
             ']' if depth == 0 => break,
@@ -761,20 +844,71 @@ fn grounded(c: &Candidate, source: &str) -> bool {
     }
 }
 
-/// Valid candidates whose quote is really in `source` (already normalised), and a note for each
-/// item that did not validate. Items quoting words that are not there are dropped quietly.
-fn parse_candidates(reply: &str, source: &str) -> Result<(Vec<Candidate>, Vec<String>), String> {
+/// What a reply came to.
+#[derive(Debug)]
+struct Parsed {
+    /// Valid memories whose quote is really in the item.
+    items: Vec<Candidate>,
+    /// A note for each memory that did not validate.
+    invalid: Vec<String>,
+    /// How many memories the reply held, whatever came of them.
+    total: usize,
+}
+
+/// The memories in `reply` to `text`. Memories quoting words that are not there are dropped
+/// quietly, and a day the item never names is taken off the memory that gives it.
+fn parse_candidates(reply: &str, text: &str) -> Result<Parsed, String> {
     let parsed: Extraction = crate::client::parse_json_text(reply).map_err(|e| e.to_string())?;
+    let source = normalise(text);
     let mut items = Vec::new();
     let mut invalid = Vec::new();
     for (i, raw) in parsed.memories.iter().enumerate() {
         match candidate(raw) {
-            Ok(c) if grounded(&c, source) => items.push(c),
+            Ok(c) if grounded(&c, &source) => items.push(dated(c, text)),
             Ok(c) => tracing::warn!("dropped an ungrounded memory about {}", c.subject),
             Err(why) => invalid.push(format!("memory {}: {why}", i + 1)),
         }
     }
-    Ok((items, invalid))
+    Ok(Parsed {
+        items,
+        invalid,
+        total: parsed.memories.len(),
+    })
+}
+
+/// `c` without a `due` that neither its quote nor the line it stands in (with the heading
+/// above that line) names.
+fn dated(mut c: Candidate, text: &str) -> Candidate {
+    if let Some(due) = c.due {
+        let quote = match &c.span {
+            Some(Span::Quote { text }) => text.as_str(),
+            _ => "",
+        };
+        if !guard::day_supported(due, &around(quote, text)) {
+            c.due = None;
+        }
+    }
+    c
+}
+
+/// `quote` with the line of `text` it stands in and the nearest line with words above that.
+fn around(quote: &str, text: &str) -> String {
+    let q = normalise(quote);
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines.iter().position(|l| {
+        let l = normalise(l);
+        !l.is_empty() && !q.is_empty() && (l.contains(&q) || q.contains(&l))
+    });
+    let mut out = quote.to_string();
+    if let Some(i) = at {
+        out.push_str(" | ");
+        out.push_str(lines[i]);
+        if let Some(heading) = lines[..i].iter().rev().find(|l| !l.trim().is_empty()) {
+            out.push_str(" | ");
+            out.push_str(heading);
+        }
+    }
+    out
 }
 
 fn text_field(raw: &Value, key: &str) -> Result<String, String> {
@@ -850,13 +984,7 @@ fn candidate(raw: &Value) -> Result<Candidate, String> {
         sentence,
         valid_from: date_field(raw, "validFrom")?,
         valid_to: date_field(raw, "validTo")?,
-        due: date_field(raw, "due")?.filter(|d| {
-            let quote = match &span {
-                Some(Span::Quote { text }) => text.as_str(),
-                _ => "",
-            };
-            guard::day_supported(*d, quote)
-        }),
+        due: date_field(raw, "due")?,
         confidence,
         span,
         tags,
@@ -1034,6 +1162,15 @@ impl Mind for LemonadeMind {
         Box::pin(self.extract_impl(text, cx))
     }
 
+    fn extract_lines<'a>(
+        &'a self,
+        text: &'a str,
+        cx: &'a ExtractContext,
+        lines: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        Box::pin(self.extract_lines_impl(text, cx, lines))
+    }
+
     fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
         Box::pin(async move {
             if texts.is_empty() {
@@ -1107,10 +1244,20 @@ mod tests {
 
     #[test]
     fn the_worked_example_is_a_reply_the_mind_would_keep_whole() {
-        let source = normalise(prompts::EXAMPLE_NOTE);
-        let (items, invalid) = parse_candidates(prompts::EXAMPLE_REPLY, &source).unwrap();
-        assert!(invalid.is_empty(), "{invalid:?}");
-        assert_eq!(items.len(), 3, "every memory in it is grounded");
+        let p = parse_candidates(prompts::EXAMPLE_REPLY, prompts::EXAMPLE_NOTE).unwrap();
+        assert!(p.invalid.is_empty(), "{:?}", p.invalid);
+        assert_eq!(p.items.len(), 3, "every memory in it is grounded");
+        assert_eq!(p.total, 3);
+        let dues: Vec<Option<Date>> = p.items.iter().map(|c| c.due).collect();
+        assert_eq!(
+            dues,
+            [
+                Some("2026-03-06".parse().unwrap()),
+                Some("2026-03-13".parse().unwrap()),
+                None
+            ],
+            "every day it gives is one the note names"
+        );
         let system = prompts::extraction_system("n");
         assert!(system.contains(prompts::EXAMPLE_NOTE) && system.contains(prompts::EXAMPLE_REPLY));
     }
@@ -1118,8 +1265,9 @@ mod tests {
     /// Who someone is to the person stays in the memory, so "who is" has something to cite.
     #[test]
     fn who_someone_is_stays_in_the_sentence() {
-        let source = normalise(prompts::EXAMPLE_NOTE);
-        let (items, _) = parse_candidates(prompts::EXAMPLE_REPLY, &source).unwrap();
+        let items = parse_candidates(prompts::EXAMPLE_REPLY, prompts::EXAMPLE_NOTE)
+            .unwrap()
+            .items;
         assert!(
             items
                 .iter()
@@ -1158,28 +1306,32 @@ mod tests {
     }
 
     #[test]
-    fn a_day_the_quote_does_not_name_is_dropped_and_the_memory_kept() {
-        let raw = |due: &str, quote: &str| {
-            json!({"span": {"quote": quote}, "sentence": "Book club meets.", "subject": "Book club",
-                "subjectKind": "thing", "predicate": "scheduled", "object": "first Tuesday",
-                "due": due, "validFrom": null, "validTo": null, "moved": false,
-                "confidence": 0.9, "tags": []})
+    fn a_day_the_item_does_not_name_is_dropped_and_the_memory_kept() {
+        let reply = |due: &str, quote: &str| {
+            json!({"memories": [{"span": {"quote": quote}, "sentence": "Book club meets.",
+                "subject": "Book club", "subjectKind": "thing", "predicate": "scheduled",
+                "object": "first Tuesday", "due": due, "validFrom": null, "validTo": null,
+                "moved": false, "confidence": 0.9, "tags": []}]})
+            .to_string()
         };
-        let c = candidate(&raw("2026-11-12", "book club is on the first Tuesday")).unwrap();
-        assert_eq!(c.due, None);
-        let c = candidate(&raw("2026-11-17", "book club is on Tuesday 17 November")).unwrap();
-        assert_eq!(c.due, Some("2026-11-17".parse().unwrap()));
+        let text = "Book club\nIt meets on the first Tuesday.";
+        let p = parse_candidates(&reply("2026-11-12", "It meets on the first Tuesday"), text);
+        assert_eq!(p.unwrap().items[0].due, None);
+        // The heading above the quoted line names the day.
+        let text = "Tuesday 17 November\nBook club at the library.";
+        let p = parse_candidates(&reply("2026-11-17", "Book club at the library"), text);
+        assert_eq!(p.unwrap().items[0].due, Some("2026-11-17".parse().unwrap()));
     }
 
     #[test]
     fn the_whole_memories_of_a_cut_reply_are_kept() {
-        let source = normalise(prompts::EXAMPLE_NOTE);
+        let note = prompts::EXAMPLE_NOTE;
         let cut = &prompts::EXAMPLE_REPLY[..prompts::EXAMPLE_REPLY.len() - 60];
-        assert!(parse_candidates(cut, &source).is_err());
-        let kept = salvage(cut, &source);
+        assert!(parse_candidates(cut, note).is_err());
+        let kept = salvage(cut, note);
         assert_eq!(kept.len(), 2, "{kept:?}");
         assert_eq!(kept[1].subject, "Dr Patel");
-        assert!(salvage("{\"memories\": [{\"span\": {\"quote\": \"a}b", &source).is_empty());
+        assert!(salvage("{\"memories\": [{\"span\": {\"quote\": \"a}b", note).is_empty());
     }
 
     #[test]
@@ -1194,26 +1346,6 @@ mod tests {
         );
         assert_eq!(halves("One sentence only."), None);
         assert_eq!(halves("One line\n"), None);
-    }
-
-    #[test]
-    fn a_second_look_adds_new_memories_and_restores_a_lost_role() {
-        let c = |sentence: &str, object: &str| {
-            Candidate::new("Hughes", Predicate::Scheduled, object, sentence, 0.9)
-        };
-        let found = vec![c("Mr Hughes is coming on Friday.", "Friday")];
-        let more = vec![
-            c("The plumber, Mr Hughes, is coming on Friday.", "Friday"),
-            c("Mr Hughes will fix the tap.", "fix the tap"),
-        ];
-        let out = with_roles_kept(found.clone(), more);
-        assert_eq!(out.len(), 2);
-        assert!(out[0].sentence.starts_with("The plumber"));
-        let out = with_roles_kept(out, found);
-        assert!(
-            out[0].sentence.starts_with("The plumber"),
-            "never swapped back"
-        );
     }
 
     #[test]
