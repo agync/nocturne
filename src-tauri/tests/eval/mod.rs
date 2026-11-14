@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use jiff::civil::Date;
 use nocturne_contract::{Kept, MemoryFilter, Source};
-use nocturne_engine::{Candidate, Engine, Hit, ManualClock, Mind, Predicate};
+use nocturne_engine::{Candidate, Engine, Fact, Hit, ManualClock, Mind, Predicate};
 use serde_json::{Map, Value, json};
 use tracing::field::{Field, Visit};
 use tracing_subscriber::layer::Context;
@@ -832,13 +832,109 @@ pub fn policy(a: &Asked) -> Option<&'static str> {
     }
 }
 
+/// What the question about something never kept is given instead: other things about Sam.
+const NEAR_UNKNOWN: [&str; 2] = ["cinema", "club2"];
+
+/// The facts a perfect search would give the mind for `q`: the current memories of its source
+/// items (for a question about something never kept, of items about the same person), each with
+/// the open which-is-right questions among them. No search, no reranking, no lines.
+pub fn frozen_facts(
+    engine: &Engine,
+    ids: &HashMap<&'static str, String>,
+    q: &Question,
+) -> Vec<Fact> {
+    let keys: Vec<&str> = if q.unknown {
+        NEAR_UNKNOWN.to_vec()
+    } else {
+        q.sources.to_vec()
+    };
+    let mut memories: Vec<nocturne_contract::MemoryView> = Vec::new();
+    for key in keys {
+        let Some(item) = ids.get(key) else {
+            continue;
+        };
+        for m in engine
+            .memories(MemoryFilter {
+                item_id: Some(item.clone()),
+                limit: Some(50),
+                ..MemoryFilter::default()
+            })
+            .unwrap_or_default()
+        {
+            if !memories.iter().any(|x| x.id == m.id) {
+                memories.push(m);
+            }
+        }
+    }
+    let all: Vec<String> = memories.iter().map(|m| m.id.clone()).collect();
+    let disputes = engine.open_disputes(&all).unwrap_or_default();
+    memories
+        .into_iter()
+        .map(|memory| {
+            let id = memory.id.clone();
+            Fact {
+                memory,
+                disputed_by: disputes
+                    .iter()
+                    .filter_map(|(a, b)| match (a == &id, b == &id) {
+                        (true, _) => Some(b.clone()),
+                        (_, true) => Some(a.clone()),
+                        _ => None,
+                    })
+                    .filter(|other| all.contains(other))
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+/// The answer step alone: `facts` straight to the mind, judged as the app would show it.
+pub async fn answer_alone(mind: &dyn Mind, question: &str, facts: &[Fact]) -> Asked {
+    let (tx, mut rx) = tokio::sync::mpsc::channel::<String>(64);
+    let reading = async {
+        let mut text = String::new();
+        while let Some(t) = rx.recv().await {
+            text.push_str(&t);
+        }
+        text
+    };
+    let (meta, text) = tokio::join!(mind.answer(question, facts, tx), reading);
+    let Ok(meta) = meta else {
+        return Asked {
+            phase: "unavailable".into(),
+            ..Asked::default()
+        };
+    };
+    let cited: Vec<&Fact> = meta
+        .cited
+        .iter()
+        .filter_map(|id| facts.iter().find(|f| &f.memory.id == id))
+        .collect();
+    let phase = if meta.not_sure || cited.is_empty() {
+        "notSure"
+    } else {
+        "done"
+    };
+    Asked {
+        phase: phase.into(),
+        text: if phase == "done" { text } else { String::new() },
+        memory_ids: cited.iter().map(|f| f.memory.id.clone()).collect(),
+        cited_items: cited
+            .iter()
+            .flat_map(|f| f.memory.receipts.iter().map(|r| r.item_id.clone()))
+            .collect(),
+        answered_by: Value::Null,
+        left_out: Value::Null,
+    }
+}
+
 /// The twelve questions asked `runs` times over the same store, through `ask`. Each row keeps
 /// the raw replies the mind reported for it.
 pub fn answer_only(
     runs: usize,
     ids: &HashMap<&'static str, String>,
     tap: Option<&ReplyTap>,
-    mut ask: impl FnMut(&str) -> Asked,
+    mut ask: impl FnMut(&Question) -> Asked,
 ) -> Value {
     let mut rows = Vec::new();
     let mut per_run: Vec<u64> = Vec::new();
@@ -849,7 +945,7 @@ pub fn answer_only(
             if let Some(t) = tap {
                 t.drain();
             }
-            let a = ask(q.text);
+            let a = ask(q);
             let raw = tap.map(ReplyTap::drain).unwrap_or_default();
             let ok = judge(q, &a.phase, &a.text);
             right += u64::from(ok);

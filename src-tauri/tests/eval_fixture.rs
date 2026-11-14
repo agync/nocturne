@@ -238,11 +238,8 @@ fn the_search_puts_every_source_in_the_first_twelve() {
     assert!(at4 <= at12);
 }
 
-#[test]
-fn the_answer_step_alone_repeats_and_keeps_the_raw_replies() {
-    let tap = tap();
-    let (h, ids) = fixture_world(Arc::new(Reporting(FakeMind::new())));
-    let result = answer_only(2, &ids, Some(tap), |q| ask(&h, q));
+/// What a run of [`answer_only`] must hold, whichever way the questions were asked.
+fn check_runs(result: &Value) {
     let rows = result["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 2 * QUESTIONS.len());
     let per_run: Vec<u64> = result["correct_per_run"]
@@ -282,4 +279,46 @@ fn the_answer_step_alone_repeats_and_keeps_the_raw_replies() {
     for id in ["q01", "q02", "q04", "q05", "q10"] {
         assert_eq!(correct(id), 2, "{id}: {result:#}");
     }
+}
+
+#[test]
+fn the_answer_step_alone_gets_only_the_frozen_facts_and_keeps_the_raw_replies() {
+    let tap = tap();
+    let mind: Arc<dyn Mind> = Arc::new(Reporting(FakeMind::new()));
+    let (h, ids) = fixture_world(mind.clone());
+    let q = |id: &str| QUESTIONS.iter().find(|q| q.id == id).unwrap();
+    let boiler = frozen_facts(&h.engine(), &ids, q("q01"));
+    assert_eq!(
+        boiler.len(),
+        2,
+        "the boiler note's two memories, nothing searched"
+    );
+    assert!(
+        boiler
+            .iter()
+            .all(|f| f.memory.receipts.iter().all(|r| r.item_id == ids["boiler"]))
+    );
+    let never = frozen_facts(&h.engine(), &ids, q("q07"));
+    assert!(!never.is_empty());
+    assert!(never.iter().all(|f| {
+        f.memory
+            .receipts
+            .iter()
+            .all(|r| r.item_id == ids["cinema"] || r.item_id == ids["club2"])
+    }));
+    let asked_before = h.state().asks.in_flight();
+    let result = answer_only(2, &ids, Some(tap), |q| {
+        let facts = frozen_facts(&h.engine(), &ids, q);
+        block_on(answer_alone(mind.as_ref(), q.text, &facts))
+    });
+    assert_eq!(h.state().asks.in_flight(), asked_before);
+    check_runs(&result);
+}
+
+#[test]
+fn the_frozen_store_asked_through_the_app_repeats_and_keeps_the_raw_replies() {
+    let tap = tap();
+    let (h, ids) = fixture_world(Arc::new(Reporting(FakeMind::new())));
+    let result = answer_only(2, &ids, Some(tap), |q| ask(&h, q.text));
+    check_runs(&result);
 }

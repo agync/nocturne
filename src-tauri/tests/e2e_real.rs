@@ -38,9 +38,11 @@
 //! with each question.
 //!
 //! Answer only: `NOCTURNE_E2E_ANSWER_ONLY=<runs>` skips keeping and reading. The store gets a
-//! perfect reading of the day (frozen, correct facts), and the twelve questions are asked that
-//! many times, so the answer step is measured without noise from the steps before it
-//! (`answer_only` in the results).
+//! perfect reading of the day (frozen, correct facts), and each of the twelve questions goes
+//! that many times straight to the mind with the facts a perfect search would give it (no search,
+//! reranking or lines), so the answer step is measured on its own (`answer_only` in the results).
+//! `NOCTURNE_E2E_FROZEN_ASK=<runs>` asks them through the app instead, over the same perfect
+//! store, which measures search and answering together (`frozen_ask`).
 
 mod common;
 mod eval;
@@ -1156,12 +1158,17 @@ fn the_whole_product_works_with_real_models() {
     let idle = env_secs("NOCTURNE_E2E_IDLE_SECS", 30);
     let mem = MemWatch::start("setup");
     let h = build_app(&data_dir);
-    let answer_only_runs = std::env::var("NOCTURNE_E2E_ANSWER_ONLY")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .filter(|n| *n > 0);
+    let runs_of = |name: &str| {
+        std::env::var(name)
+            .ok()
+            .and_then(|v| v.parse::<usize>().ok())
+            .filter(|n| *n > 0)
+    };
+    let frozen = runs_of("NOCTURNE_E2E_ANSWER_ONLY")
+        .map(|n| (n, "answer_only"))
+        .or_else(|| runs_of("NOCTURNE_E2E_FROZEN_ASK").map(|n| (n, "frozen_ask")));
     // Before anything reads: the store holds a perfect reading and nothing is waiting.
-    let fixture = answer_only_runs.map(|_| seed_fixture(&h.engine(), &h.clock));
+    let fixture = frozen.map(|_| seed_fixture(&h.engine(), &h.clock));
     let online_model =
         std::env::var("NOCTURNE_E2E_ONLINE_MODEL").unwrap_or_else(|_| "stand-in-model".to_string());
     let stand_in = (std::env::var("NOCTURNE_E2E_ONLINE").as_deref() == Ok("stand-in"))
@@ -1444,23 +1451,31 @@ fn the_whole_product_works_with_real_models() {
         engine_pid = block_on(services.engine_pid());
     }
 
-    if let (Some(runs), Some(ids)) = (answer_only_runs, fixture.as_ref()) {
-        mem.phase("answer_only");
+    if let (Some((runs, mode)), Some(ids)) = (frozen, fixture.as_ref()) {
+        mem.phase(mode);
         let mind = h.state().mind.get().expect("a mind");
         let embedded = block_on(embed_all(&h.engine(), mind.as_ref()));
         at(&h, DAY, "22:30");
-        let result = answer_only(runs, ids, Some(&tap), |q| asked_of(&asks.ask(&h, q)));
+        let result = if mode == "answer_only" {
+            answer_only(runs, ids, Some(&tap), |q| {
+                let facts = frozen_facts(&h.engine(), ids, q);
+                block_on(answer_alone(mind.as_ref(), q.text, &facts))
+            })
+        } else {
+            answer_only(runs, ids, Some(&tap), |q| asked_of(&asks.ask(&h, q.text)))
+        };
         let rows = result["rows"].as_array().cloned().unwrap_or_default();
         run.check(
             "answer_only.terminal",
             "every question on the frozen facts ends in one terminal phase",
-            rows.iter().all(|r| r["phase"] != "timeout"),
+            rows.iter()
+                .all(|r| r["phase"] != "timeout" && r["phase"] != "unavailable"),
             format!("{} answers", rows.len()),
         );
         run.put(
             "answer_only",
             json!({
-                "embedded": embedded, "links": links(&h.engine(), ids),
+                "mode": mode, "embedded": embedded, "links": links(&h.engine(), ids),
                 "extraction": extraction(&h.engine(), ids), "result": result,
             }),
         );
@@ -2774,12 +2789,22 @@ fn answer_only_summary(run: &Run) -> String {
     let o = &run.out["answer_only"];
     let r = &o["result"];
     let mut s = String::new();
-    s.push_str("# Answer step on frozen facts\n\n");
+    let alone = o["mode"] == "answer_only";
+    s.push_str(if alone {
+        "# Answer step alone, on frozen facts\n\n"
+    } else {
+        "# Search and answer, on frozen facts\n\n"
+    });
     s.push_str(&format!(
-        "The {} tier answered the twelve questions {} times over a perfect reading of the day. \
+        "The {} tier answered the twelve questions {} times over a perfect reading of the day{}. \
          Correct per run: {} (median {} of {}).\n\n",
         tier_name(),
         r["runs"],
+        if alone {
+            ", given the facts a perfect search would find"
+        } else {
+            ", asked through the app"
+        },
         r["correct_per_run"],
         r["median"],
         r["of"]
