@@ -151,6 +151,10 @@ environment and are read only by `publish` and `site`; no caller passes them. Pu
 a key fails, so the repository is never unsigned. Unprivileged jobs in the pinned image need no
 extra runner setup.
 
+The `release-signing` environment must have required reviewers and hold the two secrets, and the
+`v*` tag ruleset described in `release.md` must be in place: the workflow's tag checks assume that
+only the release App can create or move a release tag.
+
 Before the first publish, a maintainer:
 
 - runs the workflow by hand once with channel `beta` and publish on, to prove signing, the push

@@ -49,8 +49,18 @@ upload is fixed by deleting the partial files by hand first.
 The tag is resolved to its commit once, at the start of the run. Every build, the helper workflow
 and the Flatpak workflow check out that commit, never the tag's name, and the upload stops if the
 tag has moved since. The plan job also fails unless that commit is on `main`, and so does the
-Flatpak workflow before a stable publish, so a tag on a side branch is never built or signed. The owner should also add a repository ruleset that protects `v*` tags and
-`v*` branches: only the release App may create them, and nobody may move or delete them.
+Flatpak workflow before a stable publish, so a tag on a side branch is never built or signed.
+
+These repository settings are preconditions. The workflows are safe only with them, and a release
+must not be cut without them:
+
+- The `v*` tags have a ruleset that lets only the release App create them and lets nobody move or
+  delete them.
+- `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` are secrets of an environment named
+  `release-app`, not repository secrets. That environment deploys only from `main` and `v*`
+  tags. `release-please.yml` and the plan, publish and finish jobs of `release.yml` run in it.
+- The `release-signing` environment has required reviewers, and holds every signing secret,
+  including the Flatpak key.
 
 ## What the workflow builds
 
@@ -86,8 +96,8 @@ set to `true`. When one is on, its signing job must succeed or nothing is attach
 
 | Secret | Where | Needed for | Without it |
 |---|---|---|---|
-| `RELEASE_APP_ID` | repository | the release bot: the GitHub App's id | release-please and the upload fail |
-| `RELEASE_APP_PRIVATE_KEY` | repository | the release bot: the App's private key | release-please and the upload fail |
+| `RELEASE_APP_ID` | `release-app` | the release bot: the GitHub App's id | release-please and the upload fail |
+| `RELEASE_APP_PRIVATE_KEY` | `release-app` | the release bot: the App's private key | release-please and the upload fail |
 | `FLATPAK_GPG_PRIVATE_KEY` | `release-signing` | the ASCII-armoured key that signs the Flatpak images and index | the Flatpak publish fails; it never publishes unsigned |
 | `FLATPAK_GPG_PASSPHRASE` | `release-signing` | the key's passphrase, if it has one | signing fails for a protected key |
 | `MACOS_DEVELOPER_ID_CERTIFICATE` | `release-signing` | the Developer ID Application certificate, a base64 `.p12` | with `MACOS_SIGNING` on, the signing job fails |
