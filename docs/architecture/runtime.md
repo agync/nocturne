@@ -88,23 +88,32 @@ side of a disagreement, it is asked once more and the better answer is kept. Eve
 same guards: a reply that is only punctuation, the instructions read back, a refusal worded as an
 answer, or the not-sure word in any spelling is not shown and ends as not sure; a citation with
 no words before it is not a receipt. Talk of the facts holding nothing ("not mentioned") voids an
-answer only when it cites no fact. A mind on this computer is told the day's date; an online
-question is not.
+answer only when it cites no fact. A mind on this computer is told the day's date, by the
+engine's clock and time zone; an online question is not.
 
 Reading follows a GBNF grammar rather than a JSON schema: the engine parses a request into a map
 that sorts keys, so a schema would make the mind write each memory's confidence first and its
 quote last. The grammar has it write the quote first, then the sentence, who or what it is about,
 what is said, the dates, and its judgements; every text is at most 300 characters and a reply at
-most 16 memories. A reply cut off at its token ceiling is read again in halves, twice at most,
-and after that keeps the whole memories it holds. When the memories leave out a number or name
-the item gives, or lose who someone is to the person ("the plumber"), those lines go back to the
-mind once. A day the quote never names, by weekday, day of the month or a word such as tomorrow,
-is dropped from the memory. After the page, the tidy marks up to eight items kept in the past
-day whose memories still leave something out, none of them replaced by a later item and no
-question open on them; the reader reads them again on mains when nothing
-else waits, sentence by sentence where needed, without the re-reading notice. How each job picks
-its words is the same on every tier (a temperature only), and `NOCTURNE_TEST_SAMPLING` changes it
-for tests and evaluation runs.
+most 16 memories. An engine that refuses the grammar is asked again by a JSON schema with the
+same bounds, and from then on every reading goes that way. A reply cut off at its token ceiling,
+or holding 16 memories, is read again in halves, twice at most, and after that keeps the whole
+memories it holds. A day that neither the quote nor its line (with the heading above it) names,
+by day of the month, weekday or a phrase such as tomorrow or in three weeks, is dropped from the
+memory; a weekday or month that does not match rules a day out only when no day number does.
+
+On mains, when the memories of an item leave out a number or name it gives, or lose who someone
+is to the person ("the plumber"), the reader shows the mind the whole item again with those lines
+pointed out, once. A word that opens a sentence or follows a greeting ("Thanks, Sam") counts as a
+name only when it is a known one or another name follows it. On battery the first reading
+stands. After the page, the tidy marks up to eight items kept in the past day whose memories
+still leave something out, none of them already marked for a re-read, replaced by a later item or
+with a question open; the reader reads each again on mains when nothing else waits, with the
+whole item in view and one missing line at a time, without the re-reading notice. One that fails
+stays marked and is tried again like any re-read. How each job picks its words is the same on
+every tier (a temperature only); a debug build with the `test-sampling` feature lets
+`NOCTURNE_TEST_SAMPLING` change it for evaluation runs. The mind's raw replies are traced at trace
+level on their own target, `nocturne::reply`, so a log kept at info never holds them.
 
 The backend follows the hardware: Metal on a Mac (the engine offers nothing else there), Vulkan on
 an integrated GPU, ROCm on a discrete AMD GPU, otherwise the CPU. When the machine runs short of
