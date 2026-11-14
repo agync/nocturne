@@ -80,18 +80,18 @@ pub struct RouteSeen {
     pub with_key: bool,
 }
 
-/// A confirmation that always agrees, and notes the hosts it was asked about.
+/// A confirmation that always agrees, and notes the addresses it was asked about.
 pub fn agree(asked: Arc<Mutex<Vec<String>>>) -> super::controller::ConfirmFn {
     confirm_with(asked, true)
 }
 
-/// A confirmation that answers `yes`, and notes the hosts it was asked about.
+/// A confirmation that answers `yes`, and notes the addresses it was asked about.
 pub fn confirm_with(asked: Arc<Mutex<Vec<String>>>, yes: bool) -> super::controller::ConfirmFn {
-    Arc::new(move |host: &str| {
+    Arc::new(move |address: &str| {
         asked
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .push(host.to_string());
+            .push(address.to_string());
         Box::pin(async move { yes })
     })
 }

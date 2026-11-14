@@ -24,8 +24,6 @@ struct Lab {
     s: StandIn,
     port: Arc<StandInPort>,
     keychain: Arc<MemoryKeychain>,
-    /// The hosts the person was asked about in the app's own window.
-    asked: Arc<std::sync::Mutex<Vec<String>>>,
 }
 
 fn lab_with(keychain: MemoryKeychain) -> Lab {
@@ -33,16 +31,14 @@ fn lab_with(keychain: MemoryKeychain) -> Lab {
     let s = StandIn::start(&fake_provider());
     let port = Arc::new(StandInPort::new(Some(s.port)));
     let keychain = Arc::new(keychain);
-    let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
     nocturne_app_lib::online::manage_hub(h.app.handle(), port.clone(), keychain.clone())
         .unwrap()
-        .set_confirm(agree(asked.clone()));
+        .set_confirm(agree(Default::default()));
     Lab {
         h,
         s,
         port,
         keychain,
-        asked,
     }
 }
 
@@ -1014,39 +1010,85 @@ fn a_check_cancelled_mid_relaunch_hands_the_engine_back() {
     }
 }
 
-/// Turning on for a host it was not on for is asked about in the app's own window, naming the
-/// host: a no turns nothing on. The same host again is not asked about.
+/// Turning on with a route just checked is asked about in the app's own window, with its
+/// full address: a no turns nothing on, and that route is then refused without asking again
+/// until the person leaves setup. A changed key or path is asked about again.
 #[test]
-fn a_new_host_is_confirmed_outside_the_web_view() {
+fn turning_on_is_confirmed_outside_the_web_view() {
     let l = lab();
     let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
     let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
     hub.set_confirm(confirm_with(asked.clone(), false));
     assert_eq!(l.check(KEY)["type"], "works");
     assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
-    assert_eq!(*asked.lock().unwrap(), ["api.example.com"]);
+    assert_eq!(*asked.lock().unwrap(), [URL]);
     assert_eq!(l.view()["state"]["type"], "off");
     assert!(!l.keychain.holds_a_key(), "nothing kept after a no");
-    hub.set_confirm(agree(l.asked.clone()));
+
+    hub.set_confirm(agree(asked.clone()));
+    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(l.check(KEY)["type"], "works");
+    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(
+        asked.lock().unwrap().len(),
+        1,
+        "a refused route is not asked about again"
+    );
+
+    l.h.ok("abandon_online_setup", json!({}));
+    assert_eq!(l.check(KEY)["type"], "works");
     assert_eq!(l.h.ok("turn_on_online", settings())["state"]["type"], "on");
-    assert_eq!(*l.asked.lock().unwrap(), ["api.example.com"]);
+    assert_eq!(*asked.lock().unwrap(), [URL, URL]);
+
     l.h.ok("turn_off_online", json!({"forget": false}));
     assert_eq!(l.h.ok("turn_on_online", settings())["state"]["type"], "on");
     assert_eq!(
-        l.asked.lock().unwrap().len(),
-        1,
-        "the same host is not asked again"
+        asked.lock().unwrap().len(),
+        2,
+        "the route agreed to, from where it is kept"
     );
-    l.h.ok(
-        "check_online",
-        json!({"form": {"baseUrl": "https://new.example.com/v1", "key": "sk-new-key-0000111122",
-                        "model": "other-model"}}),
-    );
+
+    let other_key = json!({"form": {"baseUrl": URL, "key": "sk-other-key-000111222333",
+                                    "model": "stand-in-model"}});
+    assert_eq!(l.h.ok("check_online", other_key)["type"], "works");
     l.h.ok("turn_on_online", settings());
-    assert_eq!(
-        *l.asked.lock().unwrap(),
-        ["api.example.com", "new.example.com"]
-    );
+    assert_eq!(asked.lock().unwrap().len(), 3, "a new key is asked about");
+
+    let other_path = "https://api.example.com/other/v1";
+    let form = json!({"form": {"baseUrl": other_path, "key": KEY, "model": "stand-in-model"}});
+    assert_eq!(l.h.ok("check_online", form)["type"], "works");
+    l.h.ok("turn_on_online", settings());
+    assert_eq!(asked.lock().unwrap().last().unwrap(), other_path);
+}
+
+/// One question in the app's window at a time: turning on again while it is open is refused.
+#[test]
+fn only_one_confirmation_at_a_time() {
+    let l = lab();
+    let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
+    let reached = Arc::new(tokio::sync::Notify::new());
+    let go = Arc::new(tokio::sync::Notify::new());
+    let (r, g) = (reached.clone(), go.clone());
+    hub.set_confirm(Arc::new(move |_: &str| {
+        let (r, g) = (r.clone(), g.clone());
+        Box::pin(async move {
+            r.notify_one();
+            g.notified().await;
+            true
+        })
+    }));
+    assert_eq!(l.check(KEY)["type"], "works");
+    let first = {
+        let hub = hub.clone();
+        let settings: nocturne_contract::OnlineSettings =
+            serde_json::from_value(settings()["settings"].clone()).unwrap();
+        tauri::async_runtime::spawn(async move { hub.turn_on(settings).await })
+    };
+    block_on(reached.notified());
+    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    go.notify_one();
+    let view = block_on(first).unwrap().unwrap();
+    assert_eq!(view.state, nocturne_contract::OnlineState::On);
 }
 
 /// With no way to ask in the app's own window, nothing is turned on for a new host.

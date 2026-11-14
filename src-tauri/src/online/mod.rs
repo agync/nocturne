@@ -81,32 +81,36 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// Asks in a window of the system's own before Online answers is turned on for a host it was
-/// not on for, naming the host, so script in the web view cannot turn on its own address.
-pub fn install_confirm<R: Runtime>(app: &AppHandle<R>) {
+/// Asks in a window of the system's own, modal to the main window, before Online answers is
+/// turned on with a route just checked, naming its full address, so script in the web view
+/// cannot turn on an address of its own.
+pub fn install_confirm(app: &AppHandle) {
     use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
     let Some(hub) = hub(app) else {
         return;
     };
     let handle = app.clone();
-    hub.set_confirm(Arc::new(move |host: &str| {
+    hub.set_confirm(Arc::new(move |address: &str| {
         let (tx, rx) = tokio::sync::oneshot::channel();
-        handle
+        let mut ask = handle
             .dialog()
             .message(format!(
                 "While this is on, your questions and the few lines that answer them leave \
-                 this computer and go to {host}, which writes the answers.\n\n\
-                 Turn on online answers with {host}?"
+                 this computer and go to this address, which writes the answers:\n\n\
+                 {address}\n\nTurn on online answers with it?"
             ))
             .title("Turn on online answers?")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom(
                 "Turn on".into(),
                 "Cancel".into(),
-            ))
-            .show(move |yes| {
-                let _ = tx.send(yes);
-            });
+            ));
+        if let Some(main) = handle.get_webview_window("main") {
+            ask = ask.parent(&main);
+        }
+        ask.show(move |yes| {
+            let _ = tx.send(yes);
+        });
         Box::pin(async move { rx.await.unwrap_or(false) })
     }));
 }

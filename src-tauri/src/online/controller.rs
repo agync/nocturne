@@ -68,6 +68,9 @@ struct Routes {
     reserved: u32,
     /// The key could not be removed: it may still be in the keychain or the file.
     key_left: bool,
+    /// A route the person refused in the app's own window: turning on with it is refused
+    /// without asking again, until the person leaves setup.
+    refused: Option<Fingerprint>,
     /// The check under way, which `cancel_check` stops.
     checking: Option<CancellationToken>,
     /// The month the limit notice was last raised for.
@@ -75,7 +78,7 @@ struct Routes {
     loaded: bool,
 }
 
-/// Asks the person, outside the web view, whether Online answers may be turned on for a host.
+/// Asks the person, outside the web view, whether Online answers may be turned on with an host.
 pub type ConfirmFn = Arc<dyn Fn(&str) -> BoxFuture<'static, bool> + Send + Sync>;
 
 pub struct OnlineHub<R: Runtime> {
@@ -87,8 +90,10 @@ pub struct OnlineHub<R: Runtime> {
     /// Bumped when Online answers turns off: questions on their way online stop at once.
     gate: watch::Sender<u64>,
     send_hold: Mutex<Option<Arc<SendHold>>>,
-    /// Asks before turning on for a new host. Without it, nothing is turned on for one.
+    /// Asks before turning on with a route just checked. Without it, nothing is turned on.
     confirm: Mutex<Option<ConfirmFn>>,
+    /// Held while the person is asked: one question at a time.
+    confirming: tokio::sync::Mutex<()>,
 }
 
 /// Holds a question just before it is sent, for a test that turns Online answers off then.
@@ -123,15 +128,23 @@ fn route_from(base_url: &str, model: &str, key: OnlineKey) -> Result<CloudRoute,
     CloudRoute::new(base_url, model.to_string(), key)
 }
 
-/// Whether `route` goes to a host other than the one Online answers was last agreed for.
-fn new_host(row: &OnlineRow, route: &CloudRoute) -> bool {
-    let agreed = row
-        .base_url
-        .as_deref()
-        .filter(|_| row.set_up)
-        .and_then(|u| url::Url::parse(u).ok())
-        .map(|u| host_of(&u));
-    agreed.as_deref() != Some(host_of(route.base_url()).as_str())
+/// A route as the person refused it: its address, model and a hash of its key, never the key.
+#[derive(Clone, PartialEq, Eq)]
+struct Fingerprint {
+    base_url: String,
+    model: String,
+    key: [u8; 32],
+}
+
+impl Fingerprint {
+    fn of(route: &CloudRoute) -> Self {
+        use sha2_10::{Digest, Sha256};
+        Fingerprint {
+            base_url: route.base_url().to_string(),
+            model: route.model.clone(),
+            key: Sha256::digest(route.key.expose().as_bytes()).into(),
+        }
+    }
 }
 
 /// Why a question fell back to this computer, from why the online answer did not come.
@@ -160,6 +173,7 @@ impl<R: Runtime> OnlineHub<R> {
             gate: watch::channel(0).0,
             send_hold: Mutex::new(None),
             confirm: Mutex::new(None),
+            confirming: tokio::sync::Mutex::new(()),
         }
     }
 
@@ -201,21 +215,21 @@ impl<R: Runtime> OnlineHub<R> {
             && same_route(r.engine.as_ref(), r.active.as_ref())
     }
 
-    /// How the person is asked before Online answers is turned on for a host it was not on
-    /// for: the app's own window, which script in the web view cannot answer.
+    /// How the person is asked before Online answers is turned on with a route just checked:
+    /// the app's own window, which script in the web view cannot answer.
     pub fn set_confirm(&self, confirm: ConfirmFn) {
         *self.confirm.lock().unwrap_or_else(|e| e.into_inner()) = Some(confirm);
     }
 
-    /// Whether the person agrees to turn on for `host`; no way to ask is a no.
-    async fn confirmed(&self, host: &str) -> bool {
+    /// Whether the person agrees to turn on with `address`; no way to ask is a no.
+    async fn confirmed(&self, address: &str) -> bool {
         let confirm = self
             .confirm
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone();
         match confirm {
-            Some(ask) => ask(host).await,
+            Some(ask) => ask(address).await,
             None => false,
         }
     }
@@ -605,29 +619,42 @@ impl<R: Runtime> OnlineHub<R> {
     pub async fn turn_on(&self, settings: OnlineSettings) -> Result<OnlineView, CommandError> {
         self.load();
         let engine = self.engine()?;
-        // A host it was not last agreed for is asked about in the app's own window first,
-        // before the lock, so turning off is never kept waiting on the person.
+        // A route just checked is asked about in the app's own window first, the full address
+        // shown, before the lock, so turning off is never kept waiting on the person.
         let asked = {
-            let row = engine.online_state().map_err(internal)?;
             let r = self.routes();
-            r.provisional
-                .clone()
-                .filter(|p| r.passed && new_host(&row, p))
+            r.provisional.clone().filter(|_| r.passed)
         };
-        if let Some(route) = &asked
-            && !self.confirmed(&host_of(route.base_url())).await
-        {
-            return Err(CommandError::unavailable(
-                "Online answers was not turned on: the person did not agree in the app's window",
-            ));
-        }
+        let _asking = match &asked {
+            Some(route) => {
+                let Ok(asking) = self.confirming.try_lock() else {
+                    return Err(CommandError::unavailable(
+                        "the person is already being asked in the app's window",
+                    ));
+                };
+                let print = Fingerprint::of(route);
+                if self.routes().refused.as_ref() == Some(&print) {
+                    return Err(CommandError::unavailable(
+                        "the person said no to this connection; leave setup to start again",
+                    ));
+                }
+                if !self.confirmed(route.base_url().as_str()).await {
+                    self.routes().refused = Some(print);
+                    return Err(CommandError::unavailable(
+                        "Online answers was not turned on: the person did not agree in the \
+                         app's window",
+                    ));
+                }
+                Some(asking)
+            }
+            None => None,
+        };
         let _ops = self.ops.lock().await;
         let row = engine.online_state().map_err(internal)?;
         let (provisional, passed) = {
             let mut r = self.routes();
             // A route that passed its check while the person was asked is asked about too.
             if let Some(p) = r.provisional.as_ref().filter(|_| r.passed)
-                && new_host(&row, p)
                 && !same_route(asked.as_ref(), Some(p))
             {
                 return Err(CommandError::unavailable(
@@ -772,6 +799,7 @@ impl<R: Runtime> OnlineHub<R> {
             let mut r = self.routes();
             r.provisional = None;
             r.passed = false;
+            r.refused = None;
             r.active.clone()
         };
         self.give_engine(back)
