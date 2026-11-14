@@ -26,6 +26,7 @@ permissions:
 jobs:
   release-please:
     runs-on: ubuntu-24.04
+    environment: release-app
     steps:
       # The checkout is done with the app token so the job's git remote is authenticated for the
       # lock file push below.

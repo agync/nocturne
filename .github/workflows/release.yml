@@ -33,7 +33,7 @@ on:
         default: ""
 
 concurrency:
-  group: release-${{ inputs.tag || github.ref }}
+  group: release-${{ inputs.tag || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -44,19 +44,21 @@ jobs:
   # release tag. Every job checks out the commit resolved here, never a name.
   plan:
     runs-on: ubuntu-24.04
+    environment: release-app
     outputs:
       build: ${{ steps.plan.outputs.build }}
       ref: ${{ steps.plan.outputs.ref }}
       tag: ${{ steps.plan.outputs.tag }}
     steps:
-      # The release is a draft until the last job, which the workflow token cannot see.
+      # A draft release is visible only to a token with write access, so this one needs contents
+      # write. The job runs no code from the repository.
       - name: Get GitHub App installation token
         id: app-token
         uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
         with:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
-          permission-contents: read
+          permission-contents: write
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           sparse-checkout: .github
@@ -404,6 +406,7 @@ jobs:
       && (vars.MACOS_SIGNING != 'true' || needs.check-macos.result == 'success')
       && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success') }}
     runs-on: ubuntu-24.04
+    environment: release-app
     permissions:
       contents: read
     steps:
@@ -457,6 +460,7 @@ jobs:
       && needs.tailnet.result == 'success'
       && (needs.flatpak.result == 'success' || needs.flatpak.result == 'skipped') }}
     runs-on: ubuntu-24.04
+    environment: release-app
     permissions:
       contents: read
     steps:
