@@ -15,7 +15,8 @@ tags: [contribution, workflow, review]
 make check             # the gate every change must pass
 ```
 
-`make help` lists every target.
+`make help` lists every target. You need Rust, Node.js and pre-commit; the `okf` tool validates the
+docs bundle. [Building and packaging](building.md) has the versions.
 
 ## Working procedure
 
@@ -37,3 +38,16 @@ flowchart LR
 | Docs | Docs move with the change; a page added or restructured updates its index and adds a log entry |
 | Verify | Done only when `make check` passes with real output |
 | Review | A skeptical-maintainer review before push; the human decides the push |
+
+## Rules a first change trips on
+
+- Interface text follows the [experience principles](../design/experience-principles.md): no model,
+  token, GPU, NPU, embedding or graph outside an advanced details view.
+- Every answer and page line cites its original, and nothing leaves the computer except the
+  downloads and optional features that `AGENTS.md` at the repository root names.
+- A page added, renamed or restructured updates its parent `index.md`, adds an entry under
+  `docs/logs/`, and passes `okf validate docs` (part of `make check`).
+- Committed files hold no host-specific paths, private hostnames, tokens or internal task ids.
+- The git hooks run the checks; never bypass them.
+
+Vulnerabilities are reported privately, not as issues: see `SECURITY.md` at the repository root.
