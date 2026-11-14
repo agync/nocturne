@@ -233,3 +233,54 @@ CREATE TABLE reindex_state(
   id INTEGER PRIMARY KEY CHECK (id = 1), model TEXT, from_model TEXT, dim INTEGER,
   total INTEGER NOT NULL DEFAULT 0, started_at TEXT, finished_at TEXT, phase TEXT);
 INSERT INTO reindex_state(id) VALUES (1);
+
+-- migration 11
+-- Word endings no longer hide a match: "plumbers" finds "plumber". Both full-text indexes are
+-- rebuilt with the Porter stemmer from what the tables hold, with their triggers as before.
+DROP TRIGGER items_ai;
+DROP TRIGGER items_ad;
+DROP TRIGGER items_au;
+DROP TRIGGER memories_ai;
+DROP TRIGGER memories_ad;
+DROP TRIGGER memories_au;
+DROP TABLE items_fts;
+DROP TABLE memories_fts;
+CREATE VIRTUAL TABLE items_fts USING fts5(
+  title, text, summary, content='items', content_rowid='rowid', tokenize='porter unicode61');
+CREATE VIRTUAL TABLE memories_fts USING fts5(
+  sentence, subject, object, content='memories', content_rowid='rowid',
+  tokenize='porter unicode61');
+INSERT INTO items_fts(items_fts, rank) VALUES('secure-delete', 1);
+INSERT INTO memories_fts(memories_fts, rank) VALUES('secure-delete', 1);
+INSERT INTO items_fts(items_fts) VALUES('rebuild');
+INSERT INTO memories_fts(memories_fts) VALUES('rebuild');
+
+CREATE TRIGGER items_ai AFTER INSERT ON items BEGIN
+  INSERT INTO items_fts(rowid, title, text, summary)
+  VALUES (new.rowid, new.title, new.text, new.summary);
+END;
+CREATE TRIGGER items_ad AFTER DELETE ON items BEGIN
+  INSERT INTO items_fts(items_fts, rowid, title, text, summary)
+  VALUES ('delete', old.rowid, old.title, old.text, old.summary);
+END;
+CREATE TRIGGER items_au AFTER UPDATE OF title, text, summary ON items BEGIN
+  INSERT INTO items_fts(items_fts, rowid, title, text, summary)
+  VALUES ('delete', old.rowid, old.title, old.text, old.summary);
+  INSERT INTO items_fts(rowid, title, text, summary)
+  VALUES (new.rowid, new.title, new.text, new.summary);
+END;
+
+CREATE TRIGGER memories_ai AFTER INSERT ON memories BEGIN
+  INSERT INTO memories_fts(rowid, sentence, subject, object)
+  VALUES (new.rowid, new.sentence, new.subject, new.object);
+END;
+CREATE TRIGGER memories_ad AFTER DELETE ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, sentence, subject, object)
+  VALUES ('delete', old.rowid, old.sentence, old.subject, old.object);
+END;
+CREATE TRIGGER memories_au AFTER UPDATE OF sentence, subject, object ON memories BEGIN
+  INSERT INTO memories_fts(memories_fts, rowid, sentence, subject, object)
+  VALUES ('delete', old.rowid, old.sentence, old.subject, old.object);
+  INSERT INTO memories_fts(rowid, sentence, subject, object)
+  VALUES (new.rowid, new.sentence, new.subject, new.object);
+END;
