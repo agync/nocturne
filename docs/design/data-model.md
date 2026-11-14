@@ -121,9 +121,16 @@ one of these rows.
 
 ## Search
 
-SQLite FTS5 indexes `subject`, `predicate`, and `obj`. The query is tokenised and matched with BM25.
-A vector column is reserved for semantic recall, but the first version is lexical because it is
-easier to explain and to debug.
+SQLite FTS5 indexes each memory's sentence, subject and object, and each item's title, text and
+summary, with the Porter stemmer, so "plumbers" finds "plumber". A question is matched by its
+words (BM25) and by its meaning (the recall model's vectors), and the two rankings are fused by
+reciprocal rank. On Standard and Large, a reranking model, when it is on disk, orders the first
+twelve by how well each answers the question and keeps eight.
+
+When reading missed a line of an item, that line can still answer: a line of a matching item that
+no memory says is offered as a fact with the item as its receipt. It is never offered from an item
+that is private, untrusted or had something forgotten, or whose memories were let go, corrected or
+replaced by a later change, and it never leaves the computer.
 
 ## Provenance rules
 
