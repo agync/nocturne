@@ -3,4 +3,10 @@ import type { SendKind } from "./SendKind";
 import type { SendResult } from "./SendResult";
 import type { SentLine } from "./SentLine";
 
-export type OnlineSend = { id: number, at: string, kind: SendKind, host: string, model: string, question: string, lines: Array<SentLine>, instructions: string, bytesUp: number, bytesDown: number, costUsd: number | null, result: SendResult, };
+export type OnlineSend = { id: number, at: string, kind: SendKind, host: string, model: string, question: string, lines: Array<SentLine>, instructions: string, bytesUp: number, bytesDown: number, costUsd: number | null, result: SendResult, 
+/**
+ * The request reached the provider: it was handed over a connection the provider accepted
+ * and a status came back. False when there was no internet, the address could not be
+ * reached, or the question was cut off or never left.
+ */
+reached: boolean, };

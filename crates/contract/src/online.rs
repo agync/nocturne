@@ -33,6 +33,9 @@ pub enum LocalReason {
     Problem,
     /// A download the person agreed to is under way; the engine runs without the route meanwhile.
     Downloading,
+    /// Online answers was turned off, or a check of a provider began, while the question was on
+    /// its way.
+    TurnedOff,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -303,6 +306,10 @@ pub struct OnlineSend {
     pub bytes_down: f64,
     pub cost_usd: Option<f64>,
     pub result: SendResult,
+    /// The request reached the provider: it was handed over a connection the provider accepted
+    /// and a status came back. False when there was no internet, the address could not be
+    /// reached, or the question was cut off or never left.
+    pub reached: bool,
 }
 
 /// Online answers in the advanced details view. Never carries the key.
