@@ -677,18 +677,26 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
         json!({"form": {"baseUrl": second, "key": "", "model": "stand-in-model"}}),
     );
     assert_eq!(out["type"], "keyRefused");
-    let seen: Vec<Value> = l.port.own(block_on(async {
-        reqwest::Client::new()
-            .get(other.url("/fake/requests"))
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap()
-    }));
+    let log = |other: &StandIn| -> Vec<Value> {
+        block_on(async {
+            reqwest::Client::new()
+                .get(other.url("/fake/requests"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap()
+        })
+    };
+    // The whole log, whatever key a request carried: a leak of the first key must show here.
+    let all = log(&other);
+    assert!(
+        !serde_json::to_string(&all).unwrap().contains(&KEY[..20]),
+        "{all:?}"
+    );
+    let seen = l.port.own(all);
     assert!(seen.is_empty(), "{seen:?}");
-    assert!(!serde_json::to_string(&seen).unwrap().contains(&KEY[..20]));
     // With a key typed for it, the second address gets that key and only that one.
     let out = l.h.ok(
         "check_online",
@@ -696,18 +704,13 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
                         "model": "stand-in-model"}}),
     );
     assert_eq!(out["type"], "works");
-    let seen: Vec<Value> = l.port.own(block_on(async {
-        reqwest::Client::new()
-            .get(other.url("/fake/requests"))
-            .send()
-            .await
-            .unwrap()
-            .json()
-            .await
-            .unwrap()
-    }));
-    assert_eq!(seen.len(), 1);
-    assert!(!serde_json::to_string(&seen).unwrap().contains(&KEY[..20]));
+    let all = log(&other);
+    assert!(
+        !serde_json::to_string(&all).unwrap().contains(&KEY[..20]),
+        "{all:?}"
+    );
+    let seen = l.port.own_with(&["sk-second-key-000111222"], all);
+    assert_eq!(seen.len(), 1, "{seen:?}");
 }
 
 fn settings() -> Value {
