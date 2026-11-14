@@ -24,7 +24,7 @@ use nocturne_contract::{
     AnsweredBy, AskDelta, AskPhase, AskPlace, EVENT_ASK, LeftOut, LocalReason, NearMatch,
     SendResult,
 };
-use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, MindError, UseKind};
+use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, MindError, UseKind, is_source_line};
 use nocturne_lemonade::mind::online::OnlineMind;
 use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -429,6 +429,25 @@ async fn answer<R: Runtime>(
         .into_iter()
         .filter(|h| !h.let_go && !(public_only && h.memory.private))
         .collect();
+    // Lines of the originals that reading missed; a phone never gets them (`phone_safe`).
+    let (q, e) = (question.clone(), engine.clone());
+    let hits = match blocking(move || {
+        let fallback = hits.clone();
+        Ok(e.with_source_lines(&q, hits, RETRIEVE_K)
+            .unwrap_or_else(|_| {
+                tracing::warn!("could not look at the originals for lines");
+                fallback
+            }))
+    })
+    .await
+    {
+        Ok(h) => h,
+        Err(err) => {
+            tracing::error!("retrieval failed: {:?}", err.code);
+            sink.phase(AskPhase::Unavailable);
+            return;
+        }
+    };
     let hits = if public_only {
         let e = engine.clone();
         let safe = blocking(move || {
@@ -594,7 +613,13 @@ async fn ask_online<R: Runtime>(
     asked: &Asked<'_>,
     mut turned_off: tokio::sync::watch::Receiver<u64>,
 ) -> Online {
-    let ids: Vec<String> = asked.facts.iter().map(|f| f.memory.id.clone()).collect();
+    // Lines of originals stay here: they have not been through what decides what may leave.
+    let facts: Vec<&Fact> = asked
+        .facts
+        .iter()
+        .filter(|f| !is_source_line(&f.memory.id))
+        .collect();
+    let ids: Vec<String> = facts.iter().map(|f| f.memory.id.clone()).collect();
     let e = asked.engine.clone();
     let verdicts = match blocking(move || e.online_verdicts(&ids, send_sensitive)).await {
         Ok(v) => v,
@@ -607,9 +632,9 @@ async fn ask_online<R: Runtime>(
     };
     let (mut private, mut sensitive) = (false, false);
     let mut sendable: Vec<Fact> = Vec::new();
-    for (fact, verdict) in asked.facts.iter().zip(&verdicts) {
+    for (fact, verdict) in facts.iter().zip(&verdicts) {
         match verdict {
-            None => sendable.push(fact.clone()),
+            None => sendable.push((*fact).clone()),
             Some(LeftOut::Private) => private = true,
             Some(LeftOut::Sensitive) => sensitive = true,
             Some(LeftOut::Both) => (private, sensitive) = (true, true),
@@ -781,10 +806,17 @@ async fn conclude<R: Runtime>(
         sink.send(AskPhase::NotSure, |d| d.near = near);
         return;
     }
-    let ids: Vec<String> = cited.iter().map(|h| h.memory.id.clone()).collect();
+    let cited_ids: Vec<String> = cited.iter().map(|h| h.memory.id.clone()).collect();
     let receipts = cited
         .iter()
         .flat_map(|h| h.memory.receipts.iter().cloned())
+        .collect();
+    // A line of an original is no memory: its receipt is the original, and the answer is shown
+    // without bold, which would stand for memories one for one.
+    let ids: Vec<String> = cited_ids
+        .iter()
+        .filter(|id| !is_source_line(id))
+        .cloned()
         .collect();
     // Being cited in an answer counts as use; done before the answer is final so the next
     // look at the memory already shows it.
@@ -793,7 +825,7 @@ async fn conclude<R: Runtime>(
     if let Err(e) = blocking(move || engine.mark_used(&used, UseKind::Answer)).await {
         tracing::warn!("could not note the memories used: {e}");
     }
-    let plain = !bold_matches(said, &meta.spans, &ids);
+    let plain = ids.len() != cited_ids.len() || !bold_matches(said, &meta.spans, &ids);
     sink.send(AskPhase::Done, |d| {
         d.receipts = receipts;
         d.memory_ids = ids;
