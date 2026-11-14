@@ -6,7 +6,8 @@ import { onlineViewOn } from "../../engine/mock/onlineAsk";
 import { renderApp, setViewport } from "../../test/render";
 import { onlineEngine } from "../ask/testing";
 
-const now = Date.now();
+// Midday, so "an hour ago" is still today whenever the test runs.
+const now = new Date().setHours(12, 0, 0, 0);
 const today = (hours: number) => new Date(now - hours * 3_600_000).toISOString();
 const OLD = "2020-03-05T21:40:00";
 
