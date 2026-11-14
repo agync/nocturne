@@ -198,7 +198,7 @@ jobs:
       - name: sign and push the images
         env:
           GPG_KEY: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
-          AETHERPAK_GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
+          GPG_PASSPHRASE: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
           OCI_USERNAME: ${{ github.actor }}
           OCI_PASSWORD: ${{ github.token }}
           BRANCH: ${{ inputs.channel }}
@@ -210,11 +210,13 @@ jobs:
           chmod 600 "$keyfile"
           trap 'rm -f "$keyfile"' EXIT
           printf '%s' "$GPG_KEY" > "$keyfile"
+          passphrase=()
+          [ -z "$GPG_PASSPHRASE" ] || passphrase=(--gpg-key-passphrase "$GPG_PASSPHRASE")
           aetherpak push-oci \
             --registry ghcr.io --oci-repository agync/nocturne-flatpak \
             --repo-path _repo --records-dir _records \
             --app-id is.nocturne.Nocturne --branch "$BRANCH" --arch "$ARCH" \
-            --gpg-key "$keyfile"
+            --gpg-key "$keyfile" "${passphrase[@]}"
       # The index is assembled in a separate job, so each build's record travels as an artifact.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
