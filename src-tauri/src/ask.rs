@@ -9,17 +9,31 @@
 //!
 //! The windows ask through `start`. A paired phone asks through `start_with`: in its own lane,
 //! about public memories only, with the deltas going to its session instead of an event.
+//!
+//! With Online answers on, the last step may be written by the person's provider: the hub
+//! chooses per question, the memories that may not leave are filtered out here (and again just
+//! before the body is built), and the phases are `askingOnline`, `waitingOnline` after six
+//! seconds, and `switchingToComputer` when the provider fails, takes twenty seconds or Online
+//! answers is turned off. Falling back to this computer is automatic and marked on the
+//! terminal delta; nothing here ever goes online after something failed on this computer.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nocturne_contract::{AskDelta, AskPhase, AskPlace, EVENT_ASK, NearMatch};
-use nocturne_engine::{Engine, Fact, Hit, MindError, UseKind};
+use nocturne_contract::{
+    AnsweredBy, AskDelta, AskPhase, AskPlace, EVENT_ASK, LeftOut, LocalReason, NearMatch,
+    SendResult,
+};
+use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, MindError, UseKind};
+use nocturne_lemonade::mind::online::OnlineMind;
+use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 
 use crate::error::blocking;
+use crate::online::controller::{AskOutcome, OnlineHub, reason_for};
+use crate::online::route::RouteChoice;
 use crate::state::AppState;
 
 /// Memories handed to the mind.
@@ -212,6 +226,14 @@ impl<T> Drop for AbortOnDrop<T> {
     }
 }
 
+/// What every terminal delta of one ask says about where it was answered.
+#[derive(Default, Clone)]
+struct Mark {
+    answered_by: Option<AnsweredBy>,
+    left_out: Option<LeftOut>,
+    send_id: Option<f64>,
+}
+
 /// One ask's way of talking to the interface.
 struct Sink<R: Runtime> {
     app: AppHandle<R>,
@@ -220,6 +242,7 @@ struct Sink<R: Runtime> {
     out: AskSink,
     /// Set once a terminal phase has gone out (or the ask was cancelled).
     ended: std::sync::atomic::AtomicBool,
+    mark: Mutex<Mark>,
 }
 
 impl<R: Runtime> Sink<R> {
@@ -239,6 +262,16 @@ impl<R: Runtime> Sink<R> {
             send_id: None,
         };
         edit(&mut delta);
+        let terminal = matches!(
+            phase,
+            AskPhase::Done | AskPhase::NotSure | AskPhase::Nothing | AskPhase::Unavailable
+        );
+        if terminal {
+            let mark = self.mark.lock().unwrap_or_else(|e| e.into_inner()).clone();
+            delta.answered_by = delta.answered_by.take().or(mark.answered_by);
+            delta.left_out = delta.left_out.or(mark.left_out);
+            delta.send_id = delta.send_id.or(mark.send_id);
+        }
         let cancelled = self
             .gate
             .cancelled
@@ -269,6 +302,10 @@ impl<R: Runtime> Sink<R> {
     fn phase(&self, phase: AskPhase) {
         self.send(phase, |_| {});
     }
+
+    fn mark(&self, edit: impl FnOnce(&mut Mark)) {
+        edit(&mut self.mark.lock().unwrap_or_else(|e| e.into_inner()));
+    }
 }
 
 /// Start answering `question` for the windows; returns the ask id at once.
@@ -294,14 +331,16 @@ pub fn start_placed<R: Runtime>(app: &AppHandle<R>, question: String, place: Ask
 pub fn start_with<R: Runtime>(app: &AppHandle<R>, question: String, opts: AskOptions) -> String {
     let state = app.state::<AppState>();
     let id = format!("ask_{}", random_hex(8));
-    let gate = state.asks.register(&id, opts.lane);
+    let gate = state.asks.register(&id, opts.lane.clone());
     let public_only = opts.public_only;
+    let (lane, place) = (opts.lane.clone(), opts.place);
     let sink = Arc::new(Sink {
         app: app.clone(),
         id: id.clone(),
         gate,
         out: opts.sink,
         ended: std::sync::atomic::AtomicBool::new(false),
+        mark: Mutex::new(Mark::default()),
     });
     let finished = app.clone();
     let finished_id = id.clone();
@@ -311,7 +350,8 @@ pub fn start_with<R: Runtime>(app: &AppHandle<R>, question: String, opts: AskOpt
         // ends the ask with a terminal phase instead of leaving the page waiting.
         let worker = sink.clone();
         let outcome =
-            tokio::spawn(async move { answer(&worker, question, public_only).await }).await;
+            tokio::spawn(async move { answer(&worker, question, public_only, &lane, place).await })
+                .await;
         if outcome.is_err() {
             tracing::error!("an answer failed unexpectedly");
         }
@@ -330,7 +370,13 @@ fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool) {
+async fn answer<R: Runtime>(
+    sink: &Sink<R>,
+    question: String,
+    public_only: bool,
+    lane: &AskLane,
+    place: AskPlace,
+) {
     let state = sink.app.state::<AppState>();
     let (Some(mind), Ok(engine)) = (state.mind.get(), state.engine()) else {
         sink.phase(AskPhase::Unavailable);
@@ -421,6 +467,64 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool)
     };
     sink.send(AskPhase::Reading, |d| d.found = Some(facts.len() as u32));
 
+    // Where this question may be answered is decided once, before anything is asked: a
+    // failure here never sends it online.
+    let hub = crate::online::hub(&sink.app);
+    // Watched from before the choice: a turn-off from here on stops the question going out.
+    let turned_off = hub.as_ref().map(|h| h.gate());
+    let choice = match &hub {
+        Some(h) => h.route_for(lane, place).await,
+        None => RouteChoice::Off,
+    };
+    let here_because = match (choice, &hub) {
+        (RouteChoice::Off, _) => None,
+        (RouteChoice::Computer(reason), _) => Some(reason),
+        (
+            RouteChoice::Online {
+                mind: online,
+                host,
+                send_sensitive,
+                reservation,
+            },
+            Some(hub),
+        ) => {
+            // Held until the question is logged or has fallen back.
+            let _reservation = reservation;
+            let Some(turned_off) = turned_off else {
+                return;
+            };
+            let asked = Asked {
+                engine: &engine,
+                question: &question,
+                hits: &hits,
+                found,
+                facts: &facts,
+            };
+            match ask_online(
+                sink,
+                hub,
+                &online,
+                &host,
+                send_sensitive,
+                &asked,
+                turned_off,
+            )
+            .await
+            {
+                Online::Answered => return,
+                Online::Here(reason) => Some(reason),
+            }
+        }
+        (RouteChoice::Online { .. }, None) => None,
+    };
+    if let Some(reason) = here_because {
+        sink.mark(|m| {
+            m.answered_by = Some(AnsweredBy::Computer {
+                reason: Some(reason),
+            })
+        });
+    }
+
     let mut said = String::new();
     let meta = loop {
         let (tx, mut rx) = mpsc::channel::<String>(32);
@@ -459,7 +563,202 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool)
             }
         }
     };
+    conclude(sink, &engine, &hits, found, &meta, &said).await;
+}
 
+/// What one question found, for the online answer.
+struct Asked<'a> {
+    engine: &'a Engine,
+    question: &'a str,
+    hits: &'a [Hit],
+    found: usize,
+    facts: &'a [Fact],
+}
+
+/// How an online question ended.
+enum Online {
+    /// The terminal delta has gone out.
+    Answered,
+    /// This computer answers instead, for this reason.
+    Here(LocalReason),
+}
+
+/// The online part of one question: filter, send once, wait (six seconds, then twenty), and
+/// either finish with the provider's answer or hand back to this computer.
+async fn ask_online<R: Runtime>(
+    sink: &Sink<R>,
+    hub: &OnlineHub<R>,
+    mind: &OnlineMind,
+    host: &str,
+    send_sensitive: bool,
+    asked: &Asked<'_>,
+    mut turned_off: tokio::sync::watch::Receiver<u64>,
+) -> Online {
+    let ids: Vec<String> = asked.facts.iter().map(|f| f.memory.id.clone()).collect();
+    let e = asked.engine.clone();
+    let verdicts = match blocking(move || e.online_verdicts(&ids, send_sensitive)).await {
+        Ok(v) => v,
+        Err(err) => {
+            tracing::warn!("could not check what may go online: {:?}", err.code);
+            hub.record_not_sent(asked.question, host, LocalReason::Problem)
+                .await;
+            return Online::Here(LocalReason::Problem);
+        }
+    };
+    let (mut private, mut sensitive) = (false, false);
+    let mut sendable: Vec<Fact> = Vec::new();
+    for (fact, verdict) in asked.facts.iter().zip(&verdicts) {
+        match verdict {
+            None => sendable.push(fact.clone()),
+            Some(LeftOut::Private) => private = true,
+            Some(LeftOut::Sensitive) => sensitive = true,
+            Some(LeftOut::Both) => (private, sensitive) = (true, true),
+        }
+    }
+    sendable.truncate(MAX_FACTS);
+    let prepared = mind.prepare(asked.question, &sendable);
+    if prepared.as_ref().is_some_and(|p| p.dropped > 0) {
+        private = true;
+    }
+    let left_out = match (private, sensitive) {
+        (true, true) => Some(LeftOut::Both),
+        (true, false) => Some(LeftOut::Private),
+        (false, true) => Some(LeftOut::Sensitive),
+        (false, false) => None,
+    };
+    let Some(prepared) = prepared else {
+        hub.record_not_sent(asked.question, host, LocalReason::KeptHere)
+            .await;
+        return Online::Here(LocalReason::KeptHere);
+    };
+
+    hub.before_send().await;
+    // Turned off since the route was chosen: nothing goes out.
+    if turned_off.has_changed().unwrap_or(true) || !hub.still_on() {
+        hub.record_not_sent(asked.question, host, LocalReason::TurnedOff)
+            .await;
+        return Online::Here(LocalReason::TurnedOff);
+    }
+    sink.phase(AskPhase::AskingOnline);
+    let (tx, mut rx) = mpsc::channel::<String>(8);
+    let send = mind.send(&prepared, tx);
+    tokio::pin!(send);
+    let wait = tokio::time::sleep(Duration::from_secs(WAIT_SECONDS));
+    let switch = tokio::time::sleep(Duration::from_secs(SWITCH_SECONDS));
+    tokio::pin!(wait, switch);
+    let mut waited = false;
+    let ended = loop {
+        // A turn-off is looked at first, so a question it races never starts.
+        tokio::select! {
+            biased;
+            _ = turned_off.changed() => break Err(LocalReason::TurnedOff),
+            r = &mut send => break Ok(r),
+            () = &mut wait, if !waited => {
+                waited = true;
+                sink.phase(AskPhase::WaitingOnline);
+            }
+            () = &mut switch => break Err(LocalReason::Slow),
+        }
+    };
+    let outcome = |receipt, result, failure, counted| AskOutcome {
+        question: asked.question.to_string(),
+        host: host.to_string(),
+        model: hub.model(),
+        receipt,
+        result,
+        failure,
+        counted,
+    };
+    let (result, receipt) = match ended {
+        // The request was dropped: the engine drops its own, and nothing comes back.
+        Err(reason) => {
+            let failure =
+                (reason == LocalReason::Slow).then_some(nocturne_engine::OnlineFailure::Slow);
+            hub.record(outcome(
+                prepared.receipt.clone(),
+                SendResult::Failed { reason },
+                failure,
+                true,
+            ))
+            .await;
+            sink.phase(AskPhase::SwitchingToComputer);
+            return Online::Here(reason);
+        }
+        Ok(r) => r,
+    };
+    let meta = match result {
+        Ok(meta) => meta,
+        Err(err) => {
+            let mut failure = match err {
+                MindError::Online(f) => Some(f),
+                _ => None,
+            };
+            let mut reason = failure.map(reason_for).unwrap_or(LocalReason::Problem);
+            // A download window that opened after the route was chosen takes the route away
+            // for a while: the 404 that follows is not a missing model.
+            if failure == Some(nocturne_engine::OnlineFailure::ModelMissing)
+                && hub.downloading().await
+            {
+                failure = None;
+                reason = LocalReason::Downloading;
+            }
+            let counted = receipt.status.is_some();
+            hub.record(outcome(
+                receipt,
+                SendResult::Failed { reason },
+                failure,
+                counted,
+            ))
+            .await;
+            sink.phase(AskPhase::SwitchingToComputer);
+            return Online::Here(reason);
+        }
+    };
+    let mut said = String::new();
+    while let Ok(t) = rx.try_recv() {
+        said.push_str(&t);
+    }
+    let cited = meta
+        .cited
+        .iter()
+        .filter(|id| asked.hits.iter().any(|h| &h.memory.id == *id))
+        .count();
+    let stands = !meta.not_sure && cited > 0;
+    let result = if stands {
+        SendResult::Answered {
+            receipts: cited as u32,
+        }
+    } else {
+        SendResult::NotSure
+    };
+    let send_id = hub.record(outcome(receipt, result, None, true)).await;
+    // What was left out is said only of an answer written online.
+    sink.mark(|m| {
+        m.answered_by = Some(AnsweredBy::Online {
+            host: host.to_string(),
+        });
+        m.send_id = send_id.map(|id| id as f64);
+        m.left_out = left_out;
+    });
+    // Only an answer that stands is shown; a "not sure" offers this computer, never resends.
+    if stands && !said.is_empty() {
+        let text = said.clone();
+        sink.send(AskPhase::Streaming, |d| d.text_delta = Some(text));
+    }
+    conclude(sink, asked.engine, asked.hits, asked.found, &meta, &said).await;
+    Online::Answered
+}
+
+/// The terminal delta for an answer: `notSure` with the nearest matches, or `done` with the
+/// receipts of the memories it cites.
+async fn conclude<R: Runtime>(
+    sink: &Sink<R>,
+    engine: &Engine,
+    hits: &[Hit],
+    found: usize,
+    meta: &AnswerMeta,
+    said: &str,
+) {
     // In the order the answer cites them: the nth bold span stands for the nth memory.
     let cited: Vec<&Hit> = meta
         .cited
@@ -490,10 +789,11 @@ async fn answer<R: Runtime>(sink: &Sink<R>, question: String, public_only: bool)
     // Being cited in an answer counts as use; done before the answer is final so the next
     // look at the memory already shows it.
     let used = ids.clone();
+    let engine = engine.clone();
     if let Err(e) = blocking(move || engine.mark_used(&used, UseKind::Answer)).await {
         tracing::warn!("could not note the memories used: {e}");
     }
-    let plain = !bold_matches(&said, &meta.spans, &ids);
+    let plain = !bold_matches(said, &meta.spans, &ids);
     sink.send(AskPhase::Done, |d| {
         d.receipts = receipts;
         d.memory_ids = ids;
