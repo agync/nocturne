@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, configure, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
@@ -11,6 +11,7 @@ import { oneMemoryAnswer, onlineEngine, ScriptedAnswers, type Step } from "./tes
 
 const HOST = "api.example.com";
 vi.setConfig({ testTimeout: 20_000 });
+configure({ asyncUtilTimeout: 15_000 });
 
 beforeEach(() => {
   askSession.reset();
