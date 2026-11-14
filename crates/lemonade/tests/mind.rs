@@ -1626,10 +1626,7 @@ async fn every_call_has_a_token_ceiling_and_json_calls_a_long_limit() {
         .iter()
         .map(|c| c["body"]["max_tokens"].clone())
         .collect();
-    assert_eq!(
-        ceilings,
-        [json!(1024), json!(200), json!(1024), json!(1024)]
-    );
+    assert_eq!(ceilings, [json!(512), json!(200), json!(1024), json!(1024)]);
 }
 
 #[tokio::test]
@@ -1792,14 +1789,20 @@ async fn a_cut_sentence_keeps_the_whole_memories_it_has() {
     assert_eq!(got.len(), 1);
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
 
-    r.script(json!([{"content": "{\"memories\": [{\"span\""}]))
-        .await;
+    // With no whole memory and no way to split, it is read once more with the old room; cut
+    // again, the reading fails rather than being empty.
+    let nothing = json!({"content": "{\"memories\": [{\"span\""});
+    r.script(json!([nothing.clone(), nothing])).await;
     let err = r
         .mind
         .extract("Sam likes tea", &context())
         .await
         .unwrap_err();
     assert!(matches!(err, MindError::Failed(_)), "{err:?}");
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 3);
+    assert_eq!(calls[1]["body"]["max_tokens"], 512);
+    assert_eq!(calls[2]["body"]["max_tokens"], 1024);
 }
 
 /// A second look shows the mind the whole item again with the lines it left out pointed out,
@@ -2084,6 +2087,41 @@ async fn a_cut_reply_that_never_quoted_a_sentence_is_read_in_parts() {
     let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
     assert_eq!(objects, ["tea", "a packed lunch"]);
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 3);
+}
+
+/// A dense note on one line cut off at its lower ceiling cannot be split: it is read once more
+/// with the room every note had before.
+#[tokio::test]
+async fn a_cut_note_that_cannot_be_split_is_read_again_with_more_room() {
+    let r = rig().await;
+    let text = "Birthdays: Ana Lee 3 May, Ben Cole 9 June, Cat Dunn 1 July.";
+    let ana = memory_about(
+        "Ana Lee 3 May",
+        "Ana Lee",
+        "Ana Lee's birthday is 3 May.",
+        "3 May",
+    );
+    let ben = memory_about(
+        "Ben Cole 9 June",
+        "Ben Cole",
+        "Ben Cole's birthday is 9 June.",
+        "9 June",
+    );
+    let cat = memory_about(
+        "Cat Dunn 1 July",
+        "Cat Dunn",
+        "Cat Dunn's birthday is 1 July.",
+        "1 July",
+    );
+    let cut = format!("{{\"memories\": [{ana}, {{\"span\": {{\"quote\": \"Ben");
+    r.script(json!([{"content": cut}, reply(vec![ana, ben, cat])]))
+        .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(got.len(), 3);
+    let calls = r.seen("/v1/chat/completions").await;
+    assert_eq!(calls.len(), 2);
+    assert_eq!(calls[0]["body"]["max_tokens"], 738);
+    assert_eq!(calls[1]["body"]["max_tokens"], 1024);
 }
 
 /// An engine that refuses the grammar inside the stream, after it began, is treated as one

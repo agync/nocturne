@@ -38,11 +38,16 @@ const MAX_AUDIO_SECONDS: f64 = 2.0 * 3600.0;
 const EXTRACT_ATTEMPTS: usize = 2;
 /// How many times a reading cut off at its token ceiling is halved and read again in parts.
 const MAX_SPLITS: u32 = 2;
+/// The ceiling every reading had before a short note got a lower one.
+const ROOMY: u32 = 1024;
 
 /// The token ceiling for reading `text`: room for a memory or two per sentence, and no more,
-/// so a reply that loops stops early.
+/// so a reply that loops stops early. A short note gets about six tokens a character (a memory
+/// takes some 130, and a dense note holds one every 20 characters or so), never under 512.
 fn extract_tokens(text: &str) -> u32 {
-    (512 + text.chars().count() * 3 / 2).clamp(1024, 3072) as u32
+    let chars = text.chars().count();
+    let long = (512 + chars * 3 / 2).clamp(1024, 3072);
+    (384 + chars * 6).clamp(512, long) as u32
 }
 
 /// What has been checked or loaded since the engine last (re)started.
@@ -270,9 +275,18 @@ impl LemonadeMind {
     }
 
     /// A reading request: the item's grammar, and a ceiling that suits `text`.
-    fn extract_request(&self, model: &str, messages: Vec<Message>, text: &str) -> ChatRequest {
+    /// `roomy` gives a short note the ceiling every reading had before short notes got a lower
+    /// one.
+    fn extract_request(
+        &self,
+        model: &str,
+        messages: Vec<Message>,
+        text: &str,
+        roomy: bool,
+    ) -> ChatRequest {
         let mut req = ChatRequest::new(model, messages).sampled(&self.sampling.extract);
-        req.max_tokens = Some(extract_tokens(text));
+        let ceiling = extract_tokens(text);
+        req.max_tokens = Some(if roomy { ceiling.max(ROOMY) } else { ceiling });
         req.timeout = Some(self.client.timeouts().json);
         req.grammar = Some(prompts::extraction_grammar());
         req
@@ -288,7 +302,7 @@ impl LemonadeMind {
         }
         let model = self.warm_mind().await?;
         let before = self.reading_calls();
-        let found = self.extract_part(&model, text, cx, 0).await;
+        let found = self.extract_part(&model, text, cx, 0, false).await;
         tracing::info!("a reading took {} requests", self.reading_calls() - before);
         found
     }
@@ -296,13 +310,14 @@ impl LemonadeMind {
     /// One reading of `text`, asked again once for the memories that were not valid. A reply
     /// that loops, is cut off at its ceiling, or is as full as a reply may be, is kept when its
     /// whole memories keep every fact of `text`; otherwise `text` is read again in halves,
-    /// `depth` times at most.
+    /// `depth` times at most. `roomy` as for [`Self::extract_request`].
     fn extract_part<'a>(
         &'a self,
         model: &'a str,
         text: &'a str,
         cx: &'a ExtractContext,
         depth: u32,
+        roomy: bool,
     ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
         Box::pin(async move {
             let nonce = prompts::nonce();
@@ -314,7 +329,7 @@ impl LemonadeMind {
             // What a reply got right is kept; a retry asks again only for what was wrong.
             let mut kept: Vec<Candidate> = Vec::new();
             for attempt in 0..EXTRACT_ATTEMPTS {
-                let req = self.extract_request(model, messages.clone(), text);
+                let req = self.extract_request(model, messages.clone(), text, roomy);
                 let reply = self.reading_reply(req, text).await?;
                 raw_reply(
                     if depth == 0 {
@@ -340,7 +355,12 @@ impl LemonadeMind {
                         );
                         return Ok(whole);
                     }
-                    return self.read_in_parts(model, text, cx, depth, whole).await;
+                    // A short note cut off at its lower ceiling, and that cannot be split, is
+                    // read once more with the room every note had before.
+                    let roomier = cut && !roomy && extract_tokens(text) < ROOMY;
+                    return self
+                        .read_in_parts(model, text, cx, depth, roomier, whole)
+                        .await;
                 }
                 match parsed {
                     Ok(p) if p.invalid.is_empty() => return Ok(merged(kept, p.items)),
@@ -385,14 +405,16 @@ impl LemonadeMind {
     }
 
     /// A reply to `text` looped, was cut off, or held as many memories as a reply may, and
-    /// left a fact out: each half of `text` is read on its own, or, when it cannot be split
-    /// again, `whole` (the complete memories the reply held) is kept.
+    /// left a fact out: each half of `text` is read on its own. When it cannot be split again,
+    /// it is read once more with more room if `roomier`, or else `whole` (the complete memories
+    /// the reply held) is kept.
     async fn read_in_parts(
         &self,
         model: &str,
         text: &str,
         cx: &ExtractContext,
         depth: u32,
+        roomier: bool,
         whole: Vec<Candidate>,
     ) -> Result<Vec<Candidate>, MindError> {
         let halves = if depth < MAX_SPLITS {
@@ -401,6 +423,14 @@ impl LemonadeMind {
             None
         };
         let Some((first, second)) = halves else {
+            if roomier {
+                tracing::warn!("a reading was cut off; reading the item again with more room");
+                return match self.extract_part(model, text, cx, depth, true).await {
+                    Ok(found) => Ok(merged(whole, found)),
+                    Err(MindError::Failed(_)) if !whole.is_empty() => Ok(whole),
+                    Err(e) => Err(e),
+                };
+            }
             tracing::warn!(
                 "a reading was cut off or full; kept {} whole memories",
                 whole.len()
@@ -414,7 +444,7 @@ impl LemonadeMind {
         let mut out = whole;
         let mut failed = None;
         for part in [first, second] {
-            match self.extract_part(model, part, cx, depth + 1).await {
+            match self.extract_part(model, part, cx, depth + 1, false).await {
                 Ok(found) => out = merged(out, found),
                 Err(MindError::Failed(why)) => failed = Some(why),
                 Err(e) => return Err(e),
@@ -461,7 +491,7 @@ impl LemonadeMind {
                 Message::system(&prompts::extraction_system(&nonce)),
                 Message::user(&prompts::focus_user(text, cx, &nonce, lines)),
             ];
-            let req = self.extract_request(model, messages, &lines.join("\n"));
+            let req = self.extract_request(model, messages, &lines.join("\n"), false);
             let reply = self.reading_reply(req, text).await?;
             raw_reply("extract_second_look", &reply.full);
             if reply.looped {
@@ -1382,7 +1412,9 @@ mod tests {
 
     #[test]
     fn the_token_ceiling_grows_with_the_item_and_stays_bounded() {
-        assert_eq!(extract_tokens("Sam likes tea"), 1024);
+        assert_eq!(extract_tokens("Sam likes tea"), 512);
+        assert_eq!(extract_tokens(&"x".repeat(69)), 798);
+        assert_eq!(extract_tokens(&"x".repeat(112)), 1024);
         assert_eq!(extract_tokens(&"x".repeat(1000)), 2012);
         assert_eq!(extract_tokens(&"x".repeat(6000)), 3072);
     }

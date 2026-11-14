@@ -101,13 +101,15 @@ can fall into a loop until its token ceiling: writing again a memory it already 
 out the lines about the item ("Today is ..."). A memory that says again what an earlier valid one
 said, from the same words (its quote, sentence, subject, predicate and object), ends the request
 there. A memory whose quote is three or more whole words of the instructions, and not the item's,
-is left out; a second one ends the request. A reply that loops, is cut off at its token ceiling, or
-holds 16 memories is kept as it is when its whole memories keep every number, name and role in the
-item (the check below) and quote every sentence of it, or reach its last sentence; otherwise it is
-read again in halves, twice at most, and after that keeps the whole memories it holds. A day that
-neither the quote nor its line (with the heading above it) names, by day of the month, weekday or a
-phrase such as tomorrow or in three weeks, is dropped from the memory; a weekday or month that does
-not match rules a day out only when no day number does.
+is left out; a second one ends the request. The token ceiling is about six tokens a character for a
+short note, at least 512. A reply that loops, is cut off at its token ceiling, or holds 16 memories
+is kept as it is when its whole memories keep every number, name and role in the item (the check
+below) and quote every sentence of it, or reach its last sentence; otherwise it is read again in
+halves, twice at most. A short note cut off that cannot be split is read once more at the
+1024-token ceiling every note had before; after that the whole memories it holds are kept. A day
+that neither the quote nor its line (with the heading above it) names, by day of the month, weekday
+or a phrase such as tomorrow or in three weeks, is dropped from the memory; a weekday or month that
+does not match rules a day out only when no day number does.
 
 On mains, when the memories of an item leave out a number or name it gives, or lose who someone
 is to the person ("the plumber"), the reader shows the mind the whole item again with those lines
