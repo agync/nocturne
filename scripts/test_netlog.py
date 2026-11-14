@@ -334,8 +334,15 @@ class OnlineMode(unittest.TestCase):
         self.assertIn("second connection", twice[0])
         before = online([to_provider(300, T0 - 5)], marks)
         self.assertEqual(len(before), 1)
-        self.assertIn("before any check or ask", before[0])
+        self.assertIn("before any launch, check or ask", before[0])
         self.assertEqual(online([to_provider(300, T0 + 0.1), to_provider(300, T0 + 10.1)], marks), [])
+
+    def test_one_connection_per_launch_beside_the_asks(self):
+        marks = [(T0, "launch"), (T0 + 10, "ask")]
+        self.assertEqual(online([to_provider(300, T0 + 1), to_provider(300, T0 + 10.2)], marks), [])
+        twice = online([to_provider(300, T0 + 1), to_provider(300, T0 + 2)], marks)
+        self.assertEqual(len(twice), 1)
+        self.assertIn("second connection", twice[0])
 
     def test_lemond_connect_after_off_mark_fails(self):
         marks = [(T0, "ask"), (T0 + 30, "off")]

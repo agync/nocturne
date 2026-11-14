@@ -164,6 +164,7 @@ fn online_answers_in_the_network_check() {
     let host = FakeHost::new();
     let bundle = runtime::lemonade::find_bundle(h.app.handle())
         .expect("no engine bundle: run scripts/fetch-lemonade.sh");
+    mark(&marks, "launch");
     let services = start(&h, StartOptions::with_engine(host, bundle));
     let ready = wait_until(Duration::from_secs(180), || {
         block_on(async { services.client().await.is_some() })

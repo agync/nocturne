@@ -31,11 +31,11 @@ and lemond may not, ever. The tailnet helper never listens, in any mode: it serv
 tailnet, inside its own process. cloudflared answers its metrics on a loopback port.
 
 `online` mode (Online answers on, `--provider` names the one address the person entered): the
-`lemond` pid, and only it, may connect to that address, and only in answer to a scripted check or
-ask. That needs `-ttt` timestamps in the log and a marks file of `<epoch seconds> <kind>` lines
-(`check`, `ask`, `idle-start`, `idle-end`, `off`), written by the driver. A connection to the
-provider fails when it comes before any check or ask, when it is a second one for the same check
-or ask, between `idle-start` and `idle-end`, or at or after `off`. Any other non-loopback
+`lemond` pid, and only it, may connect to that address, and only in answer to a scripted launch with the route
+(the engine's one model listing), check or ask. That needs `-ttt` timestamps in the log and a marks file of `<epoch seconds> <kind>` lines
+(`launch`, `check`, `ask`, `idle-start`, `idle-end`, `off`), written by the driver. A connection to the
+provider fails when it comes before any launch, check or ask, when it is a second one for the same
+launch, check or ask, between `idle-start` and `idle-end`, or at or after `off`. Any other non-loopback
 destination, and anything the app pid does, fails as in `off` mode. In every other mode a
 connection to the provider is just another non-loopback destination.
 """
@@ -235,15 +235,15 @@ def provider_verdict(stamp, marks, taken):
             idle_since = when
         elif kind == "idle-end":
             idle_since = None
-        elif kind in ("check", "ask"):
+        elif kind in ("check", "ask", "launch"):
             last = when
     if idle_since is not None:
         return "came while the app was idle"
     if last is None:
-        return "came before any check or ask"
+        return "came before any launch, check or ask"
     taken[last] = taken.get(last, 0) + 1
     if taken[last] > 1:
-        return "was a second connection for one check or ask"
+        return "was a second connection for one launch, check or ask"
     return None
 
 
