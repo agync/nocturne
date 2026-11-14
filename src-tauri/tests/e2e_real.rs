@@ -2170,9 +2170,22 @@ fn the_whole_product_works_with_real_models() {
                     .is_some_and(|p| p.ends_with("/chat/completions"))
             })
             .collect();
+        // The person's own question is sent by design; only what else rides along is scanned.
+        let asked: Vec<String> = QUESTIONS
+            .iter()
+            .chain(HELD_OUT)
+            .chain(HELD_OUT_2)
+            .map(|q| q.text.to_lowercase())
+            .collect();
         let bodies: Vec<String> = chats
             .iter()
-            .map(|r| r["body"].to_string().to_lowercase())
+            .map(|r| {
+                let mut body = r["body"].to_string().to_lowercase();
+                for q in &asked {
+                    body = body.replace(q, "");
+                }
+                body
+            })
             .collect();
         let found: Vec<(&str, usize)> = PRIVATE_WORDS
             .iter()
