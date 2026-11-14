@@ -133,6 +133,7 @@ answer that came back not sure is never sent again automatically.
 | The model name is not found | A problem state ("The name to use wasn't accepted") until a passed check; a 404 while a model download holds the window is not counted as this |
 | The monthly limit is reached | Answered here, one notice a month; the pause lifts on the 1st |
 | The reply is "not sure" | The reply is not shown; the closest memories are listed, with "Ask on this computer" |
+| The reply is "not sure" and something stayed here (a private or sensitive memory, or a line of an original) | This computer answers at once with what stayed here, marked "your provider wasn't sure" (`notSureOnline`), still linked to what was sent |
 
 Local failure never goes online. There is no monthly limit unless the person sets one. A limit can be
 a number of questions (the setup suggests 200) or an amount in US dollars, which holds only while the provider reports a cost on its replies (it
