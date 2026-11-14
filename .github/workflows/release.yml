@@ -1,0 +1,499 @@
+# Cuts releases with release-please and builds the desktop packages for them.
+#
+# On every push to main, release-please opens or updates the release pull request from the
+# Conventional Commits since the last release. Merging that pull request tags the release and
+# creates the release page; this run then builds the packages for Linux, macOS and Windows,
+# checks each one with scripts/check-package.sh where it applies, and attaches them, with one
+# SHA256SUMS, to the release. The Most private helper (tailnet.yml) and the Flatpak
+# (flatpak.yml) are built by their own workflows, called from here.
+#
+# Run by hand (workflow_dispatch) with an existing release tag (vX.Y.Z) in `tag` to build that
+# tag and attach the files to its release. With `tag` empty it builds the chosen commit unsigned
+# and keeps the files as workflow artifacts only; any other value fails.
+#
+# The bot that opens the release pull request and tags releases is a GitHub App, so its events
+# start other workflows: the RELEASE_APP_ID and RELEASE_APP_PRIVATE_KEY secrets.
+#
+# The builds never see a signing secret. They upload unsigned files; separate jobs in the
+# protected release-signing environment download those files and only sign (and notarise) them,
+# when the MACOS_SIGNING or WINDOWS_SIGNING repository variable is `true`. Without them the
+# release carries the unsigned files (macOS signed ad hoc), as the local builds are. See
+# docs/contribution/release.md for every secret and variable.
+name: release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "An existing release tag, vX.Y.Z, to build and attach to (empty: build unsigned, attach nothing)"
+        required: false
+        type: string
+        default: ""
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  release-please:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      # The checkout is done with the app token so the job's git remote is authenticated for the
+      # lock file push below.
+      - name: Get GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      # Manifest mode is automatic when config-file and manifest-file are set.
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      # release-please moves the version in Cargo.toml and ui/package.json. The lock files must
+      # follow in the same pull request, or the tagged tree would build with a stale lock.
+      - name: Bring the lock files to the new version
+        if: steps.release.outputs.prs_created == 'true'
+        env:
+          PRS: ${{ steps.release.outputs.prs }}
+        run: |
+          set -euo pipefail
+          branch="$(echo "$PRS" | jq -r '.[0].headBranchName')"
+          git fetch origin "$branch"
+          git checkout "$branch"
+          version=$(python3 -I - << 'PY'
+          import tomllib
+          print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])
+          PY
+          )
+          cargo update --workspace
+          (cd ui && npm version "$version" --no-git-tag-version --allow-same-version --ignore-scripts)
+          git add Cargo.lock ui/package.json ui/package-lock.json
+          if git diff --cached --quiet; then
+            echo "lock files already at $version; nothing to push"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: lock files at $version"
+          git push origin "$branch"
+
+
+  # What to build and where the files go, for both triggers. A hand run accepts only an existing
+  # release tag. Every job checks out the commit resolved here, never a name.
+  plan:
+    needs: release-please
+    if: ${{ !cancelled() && (needs.release-please.result == 'success' || needs.release-please.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.plan.outputs.build }}
+      ref: ${{ steps.plan.outputs.ref }}
+      tag: ${{ steps.plan.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: .github
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          RELEASED: ${{ needs.release-please.outputs.release_created }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag=""
+          if [ "$EVENT" = workflow_dispatch ]; then
+            tag=$INPUT_TAG
+          elif [ "$RELEASED" = true ]; then
+            tag=$RELEASE_TAG
+          else
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ -z "$tag" ]; then
+            echo "no tag: building $GITHUB_SHA unsigned, attaching nothing"
+            { echo "build=true"; echo "ref=$GITHUB_SHA"; echo "tag="; } >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "not a release tag: $tag" >&2
+            exit 1
+          fi
+          # Resolve the tag to its commit once; every job builds that commit, and publish checks
+          # the tag still points at it. An annotated tag is peeled; a lightweight one is the commit.
+          refs=$(git ls-remote --tags origin "refs/tags/$tag" "refs/tags/$tag^{}")
+          sha=$(awk -v r="refs/tags/$tag^{}" '$2 == r { print $1 }' <<< "$refs")
+          [ -n "$sha" ] || sha=$(awk -v r="refs/tags/$tag" '$2 == r { print $1 }' <<< "$refs")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "no such tag: $tag" >&2; exit 1; }
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json tagName > /dev/null \
+            || { echo "no release for $tag" >&2; exit 1; }
+          echo "$tag is $sha"
+          { echo "build=true"; echo "ref=$sha"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+
+  linux:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - name: build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends build-essential curl file \
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev \
+            libdbus-1-dev rpm cpio
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: build the AppImage, deb and rpm
+        run: scripts/package.sh
+      - name: check each package
+        env:
+          NOCTURNE_RELEASE: ${{ vars.NOCTURNE_RELEASE_STRICT == 'true' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          for f in target/package/*.AppImage target/package/*.deb target/package/*.rpm; do
+            scripts/check-package.sh "$f"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-linux
+          if-no-files-found: error
+          path: |
+            target/package/*.AppImage
+            target/package/*.deb
+            target/package/*.rpm
+            target/package/SOURCES.txt
+            target/package/SHA256SUMS
+
+  macos:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: build the app and the disk image (signed ad hoc)
+        run: scripts/package.sh --config macos
+      # The engine is checked against its manifest here, before any Developer ID signature
+      # changes its bytes.
+      - name: check the disk image
+        env:
+          NOCTURNE_RELEASE: ${{ vars.NOCTURNE_RELEASE_STRICT == 'true' && '1' || '0' }}
+        run: scripts/check-package.sh target/package/*.dmg
+      # The app goes to the signing job as a tar, which keeps its modes and links, with the
+      # entitlements it is signed with.
+      - name: the app for signing
+        run: |
+          set -euo pipefail
+          mkdir -p target/sign
+          tar -C target/package/macos -cf target/sign/Nocturne.app.tar Nocturne.app
+          cp src-tauri/macos/Entitlements.plist target/sign/
+          basename target/package/*.dmg > target/sign/dmg-name
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-macos
+          if-no-files-found: error
+          path: |
+            target/package/*.dmg
+            target/package/SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: macos-unsigned-app
+          if-no-files-found: error
+          path: target/sign
+
+  # Only the downloaded app and the signing tools run here: no checkout, no build.
+  sign-macos:
+    needs: [plan, macos]
+    if: >-
+      ${{ !cancelled() && needs.macos.result == 'success' && needs.plan.outputs.tag != ''
+      && vars.MACOS_SIGNING == 'true' }}
+    runs-on: macos-15
+    timeout-minutes: 60
+    environment: release-signing
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos-unsigned-app
+          path: in
+      - name: sign with the Developer ID and notarise
+        env:
+          DEVELOPER_ID_CERTIFICATE: ${{ secrets.MACOS_DEVELOPER_ID_CERTIFICATE }}
+          DEVELOPER_ID_PASSWORD: ${{ secrets.MACOS_DEVELOPER_ID_PASSWORD }}
+          DEVELOPER_ID_IDENTITY: ${{ secrets.MACOS_DEVELOPER_ID_IDENTITY }}
+          NOTARY_APPLE_ID: ${{ secrets.MACOS_NOTARY_APPLE_ID }}
+          NOTARY_TEAM_ID: ${{ secrets.MACOS_NOTARY_TEAM_ID }}
+          NOTARY_APP_PASSWORD: ${{ secrets.MACOS_NOTARY_APP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/build.keychain"
+          security create-keychain -p "$DEVELOPER_ID_PASSWORD" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$DEVELOPER_ID_PASSWORD" "$keychain"
+          printf '%s' "$DEVELOPER_ID_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/id.p12"
+          security import "$RUNNER_TEMP/id.p12" -k "$keychain" -P "$DEVELOPER_ID_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/id.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$DEVELOPER_ID_PASSWORD" "$keychain"
+          xcrun notarytool store-credentials nocturne-notary --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$NOTARY_TEAM_ID" --password "$NOTARY_APP_PASSWORD" --keychain "$keychain"
+
+          mkdir -p work out
+          tar -C work -xf in/Nocturne.app.tar
+          app=work/Nocturne.app
+          dmg=$(cat in/dmg-name)
+          sign() { codesign --force --options runtime --timestamp --sign "$DEVELOPER_ID_IDENTITY" "$@"; }
+          # The engine's executables and libraries first, then the app around them.
+          find "$app/Contents/Resources/lemonade" -type f -print0 | while IFS= read -r -d '' f; do
+            if file -b "$f" | grep -q 'Mach-O'; then sign "$f"; fi
+          done
+          sign --entitlements in/Entitlements.plist "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+          stage=$(mktemp -d)
+          cp -R "$app" "$stage/"
+          ln -s /Applications "$stage/Applications"
+          hdiutil create -quiet -volname Nocturne -srcfolder "$stage" -ov -format UDZO "out/$dmg"
+          sign "out/$dmg"
+          xcrun notarytool submit "out/$dmg" --keychain-profile nocturne-notary --keychain "$keychain" --wait
+          xcrun stapler staple "out/$dmg"
+          xcrun stapler validate "out/$dmg"
+          security delete-keychain "$keychain"
+          (cd out && shasum -a 256 -- *.dmg > SHA256SUMS)
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-macos-signed
+          if-no-files-found: error
+          path: out
+
+  # The signed image is checked again outside the signing environment.
+  check-macos:
+    needs: [plan, sign-macos]
+    if: ${{ !cancelled() && needs.sign-macos.result == 'success' }}
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-macos-signed
+          path: signed
+      - name: check the signed disk image
+        env:
+          NOCTURNE_RELEASE: ${{ vars.NOCTURNE_RELEASE_STRICT == 'true' && '1' || '0' }}
+        run: |
+          set -euo pipefail
+          (cd signed && shasum -a 256 -c SHA256SUMS)
+          scripts/check-package.sh --no-manifest signed/*.dmg
+          spctl --assess --type open --context context:primary-signature -v signed/*.dmg
+
+  windows:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.plan.outputs.ref }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # The scripts call python3, which Python on Windows does not provide by that name.
+      - name: python3 on the path
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/usr/bin/env bash\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
+          chmod +x "$RUNNER_TEMP/bin/python3"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal && rustup default stable
+      - name: build the NSIS and MSI installers
+        run: scripts/package.sh --config windows
+      # scripts/check-package.sh reads Linux and macOS packages only; the installers are checked
+      # against their sums.
+      - name: check the installers
+        shell: pwsh
+        run: |
+          Set-Location target/package/windows
+          Get-Content SHA256SUMS | ForEach-Object {
+            $sum, $name = $_ -split '\s+\*?', 2
+            if ((Get-FileHash -Algorithm SHA256 $name).Hash.ToLower() -ne $sum) { throw "sha256 mismatch: $name" }
+            Write-Output "ok    $name"
+          }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows
+          if-no-files-found: error
+          path: |
+            target/package/windows/*.exe
+            target/package/windows/*.msi
+            target/package/windows/SHA256SUMS
+
+  # Only the downloaded installers and signtool run here: no checkout, no build. The installers
+  # are signed; the program inside them is not, because signing it would mean building here.
+  sign-windows:
+    needs: [plan, windows]
+    if: >-
+      ${{ !cancelled() && needs.windows.result == 'success' && needs.plan.outputs.tag != ''
+      && vars.WINDOWS_SIGNING == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    environment: release-signing
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-windows
+          path: out
+      - name: Authenticode
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd out
+          sha256sum -c SHA256SUMS
+          printf '%s' "$WINDOWS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/code-signing.pfx"
+          for f in *.exe *.msi; do
+            signtool sign //f "$RUNNER_TEMP/code-signing.pfx" //p "$WINDOWS_CERTIFICATE_PASSWORD" //fd SHA256 \
+              //tr http://timestamp.digicert.com //td SHA256 "$f"
+            signtool verify //pa "$f"
+          done
+          rm "$RUNNER_TEMP/code-signing.pfx"
+          sha256sum -- *.exe *.msi > SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: desktop-windows-signed
+          if-no-files-found: error
+          path: out
+
+  # The Most private helper ships beside the app, never inside a package. It signs, so it runs
+  # only for a release tag.
+  tailnet:
+    needs: plan
+    if: ${{ !cancelled() && needs.plan.outputs.tag != '' }}
+    permissions:
+      contents: write
+    uses: ./.github/workflows/tailnet.yml
+    with:
+      tag: ${{ needs.plan.outputs.tag }}
+      ref: ${{ needs.plan.outputs.ref }}
+    secrets: inherit
+
+  # The Flatpak is built and published to its own repository by flatpak.yml (AetherPak).
+  flatpak:
+    needs: [release-please, plan]
+    if: ${{ !cancelled() && needs.release-please.outputs.release_created == 'true' && needs.plan.outputs.tag != '' }}
+    permissions:
+      contents: read
+      packages: write
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/flatpak.yml
+    with:
+      ref: ${{ needs.plan.outputs.ref }}
+    secrets: inherit
+
+  # A signing job that was asked for must have succeeded; one that was not runs as skipped, and the
+  # unsigned files go up instead.
+  publish:
+    needs: [plan, linux, macos, sign-macos, check-macos, windows, sign-windows]
+    if: >-
+      ${{ !cancelled() && needs.plan.outputs.tag != ''
+      && needs.linux.result == 'success' && needs.macos.result == 'success' && needs.windows.result == 'success'
+      && (vars.MACOS_SIGNING != 'true' || needs.check-macos.result == 'success')
+      && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success') }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: desktop-*
+          path: desktop
+      - name: one SHA256SUMS for every package
+        run: |
+          set -euo pipefail
+          mkdir out
+          for platform in linux macos windows; do
+            dir="desktop/desktop-$platform"
+            [ -d "$dir-signed" ] && dir="$dir-signed"
+            echo "$platform: $dir"
+            (cd "$dir" && sha256sum -c SHA256SUMS)
+            find "$dir" -type f ! -name SHA256SUMS -exec cp {} out/ \;
+          done
+          (cd out && sha256sum -- * > SHA256SUMS)
+          cat out/SHA256SUMS
+      - name: Get GitHub App installation token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+      # Never replaces a file already on the release: a rebuild is not byte for byte the same.
+      - name: attach to the release
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          TAG: ${{ needs.plan.outputs.tag }}
+          SHA: ${{ needs.plan.outputs.ref }}
+        run: |
+          set -euo pipefail
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          if [ "${ref%% *}" = tag ]; then
+            now=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/${ref#* }" --jq .object.sha)
+          else
+            now=${ref#* }
+          fi
+          [ "$now" = "$SHA" ] || { echo "$TAG moved from $SHA to $now; not uploading" >&2; exit 1; }
+          gh release upload "$TAG" out/* --repo "$GITHUB_REPOSITORY"

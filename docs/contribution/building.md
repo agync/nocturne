@@ -189,8 +189,9 @@ owner-approved trials.
 
 ## Windows
 
-The Windows installers (NSIS and MSI) are built on a Windows machine only, and v1 does not publish
-them. `src-tauri/bundle/windows.json` is the configuration.
+The Windows installers (NSIS and MSI) are built on a Windows machine only: your own, or the
+release workflow's (see [Releasing](release.md)). `src-tauri/bundle/windows.json` is the
+configuration.
 
 Prerequisites: Windows 10 or 11 x86_64, Git for Windows (the scripts run under Git Bash), Rust with
 the MSVC toolchain and the Visual Studio Build Tools "Desktop development with C++" workload,
@@ -214,8 +215,8 @@ What the installers do:
 - WebView2 uses an embedded bootstrapper: it fetches the runtime only when it is missing, at
   install time, with the person present. When WebView2 is already there, nothing is downloaded.
 - The private engine is installed as the resource folder `lemonade/` next to the program.
-- The installers are unsigned in v1. Windows SmartScreen warns on first run ("More info", then
-  "Run anyway"). Signing is deferred.
+- A local build is unsigned, and so is a release build until the code signing secrets are set.
+  Windows SmartScreen warns on first run of an unsigned one ("More info", then "Run anyway").
 
 Behaviour to know on Windows:
 
@@ -227,8 +228,8 @@ Behaviour to know on Windows:
 
 ## macOS
 
-The Mac package (an app and a disk image, Apple Silicon only) is built on a Mac and v1 does not
-publish it. `src-tauri/bundle/macos.json` is the configuration. The Mac needs no Node: the app is
+The Mac package (an app and a disk image, Apple Silicon only) is built on a Mac: your own, or the
+release workflow's (see [Releasing](release.md)). `src-tauri/bundle/macos.json` is the configuration. The Mac needs no Node: the app is
 assembled by `scripts/macos-app.sh` with the tools macOS ships (PlistBuddy, plutil, codesign,
 hdiutil), not by the Tauri command line tool.
 
@@ -279,7 +280,8 @@ properly needs, as a decision for the owner:
 - an Apple Developer ID Application certificate (the paid Apple Developer Program);
 - signing the app and the engine's executables inside `Contents/Resources/lemonade/` with that
   identity, `--options runtime` and `--timestamp` (the microphone entitlement is in
-  `src-tauri/macos/Entitlements.plist`), which `scripts/macos-app.sh --sign` does not do yet;
+  `src-tauri/macos/Entitlements.plist`), which `scripts/macos-app.sh --sign` does not do yet and
+  the release workflow does when its signing secrets are set;
 - notarisation with `xcrun notarytool` and stapling the ticket to the disk image.
 
 Re-signing the engine changes its bytes, so it no longer matches the manifest. The order is

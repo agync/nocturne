@@ -1,24 +1,126 @@
 ---
 type: Guide
 title: Releasing
-description: The local release checklist, from a clean main to an approved annotated tag. Nothing is pushed or uploaded.
+description: How release-please cuts a release, what the release workflow builds for each platform, the secrets it needs, and the checklist a human runs before merging the release pull request.
 status: draft
-tags: [contribution, release, checklist]
+tags: [contribution, release, checklist, ci]
 ---
 
 # Releasing
 
-A release is built, checked and tagged on one machine. This checklist never pushes a branch, uploads
-a file or creates a release page; publishing is a separate decision made by a human after it.
+Releases are cut by release-please and built by the release workflow
+(`.github/workflows/release.yml`). A human still runs the checklist below against the release pull
+request and approves it; merging that pull request is the decision to publish.
+
+## How a release is cut
+
+1. Every push to `main` runs release-please. It reads the Conventional Commits since the last
+   release and opens or updates one release pull request. That pull request moves the version in
+   the workspace `Cargo.toml` and `ui/package.json`, brings `Cargo.lock` and `ui/package-lock.json`
+   to it, and adds the release notes to `CHANGELOG.md`. Before 1.0 a `feat` moves the minor version
+   and anything else the patch version.
+2. A human runs the checklist below on the release pull request's branch, then merges it.
+3. release-please tags the merge (`v<version>`) and creates the release page with the notes.
+4. The same run builds the packages, checks them and attaches them to the release with one
+   `SHA256SUMS`. It also calls `tailnet.yml` for the Most private helper and, for a release only,
+   `flatpak.yml` for the Flatpak, which publishes to its own repository.
+
+The configuration is `release-please-config.json` (release type `simple`, the version files it
+moves and the changelog path) and `.release-please-manifest.json` (the current version, which only
+release-please changes). The version keeps one source for the app: the workspace `Cargo.toml`.
+`tauri.conf.json` carries none, and the packaging script refuses to run if it ever does.
+
+The release pull request and the tags are made by a GitHub App, not by the workflow's own token,
+so that its events start the other workflows. The release workflow can also be run by hand. With
+`tag` set to an existing release tag (`vX.Y.Z`, with a release page) it builds that tag, signs when
+signing is on and attaches the files to its release; any other value fails. With `tag` empty it
+builds the chosen branch unsigned, runs no signing job and the helper workflow not at all, and
+keeps the files as workflow artifacts. A file already on a release is never replaced, so a failed
+upload is fixed by deleting the partial files by hand first.
+
+The tag is resolved to its commit once, at the start of the run. Every build, the helper workflow
+and the Flatpak workflow check out that commit, never the tag's name, and the upload stops if the
+tag has moved since. The owner should also add a repository ruleset that protects `v*` tags and
+`v*` branches: only the release App may create them, and nobody may move or delete them.
+
+## What the workflow builds
+
+| Platform | Runner | How | Files | Checked with |
+|---|---|---|---|---|
+| Linux x86_64 | Ubuntu 24.04 | `scripts/package.sh` | AppImage, deb, rpm, `SOURCES.txt` | `scripts/check-package.sh` on each |
+| macOS Apple Silicon | macOS 15 | `scripts/package.sh --config macos` | `.dmg` | `scripts/check-package.sh` on the ad hoc image (engine manifest); after a Developer ID signature, with `--no-manifest` and `spctl` in a job of its own |
+| Windows x86_64 | Windows Server 2022 | `scripts/package.sh --config windows` under Git Bash | NSIS `.exe`, `.msi` | the sums, and `signtool verify` when signed (`scripts/check-package.sh` does not read installers) |
+| Most private helper | `tailnet.yml` | `scripts/build-tailnet.sh`, built twice | four binaries and the licence report | the two builds agree byte for byte |
+| Flatpak | `flatpak.yml` | AetherPak | the Flatpak repository | AetherPak's own checks |
+
+Each build fetches the engine pinned for its platform in `lemonade.lock` and checks its sha256, as
+the local build does. There is no Intel Mac build, because `lemonade.lock` pins no Intel Mac engine.
+The helper is never inside a package; it is attached beside them.
+
+No build job sees a signing secret. The builds upload unsigned files (the Mac app signed ad hoc).
+For a release tag, `sign-macos` and `sign-windows` run in the `release-signing` environment: they
+download those files, check out nothing and run no build, sign them (and notarise and staple the
+Mac image), and upload the signed copies, which the release then carries instead. A separate job
+checks the signed Mac image again. The Windows installers are signed, the program inside them is
+not, because signing it would mean building in the signing job.
+
+Set the repository variable `NOCTURNE_RELEASE_STRICT` to `true` to run the package checks with
+`NOCTURNE_RELEASE=1`, which refuses a placeholder helper pin or one older than 183 days. Leave it
+unset until the Most private helper is pinned.
+
+## Secrets
+
+Add these in the repository settings. The signing secrets belong in the protected
+`release-signing` environment, which needs a maintainer's approval for each run. Signing is turned
+on by repository variables, not by the presence of a secret: `MACOS_SIGNING` and `WINDOWS_SIGNING`
+set to `true`. When one is on, its signing job must succeed or nothing is attached.
+
+| Secret | Where | Needed for | Without it |
+|---|---|---|---|
+| `RELEASE_APP_ID` | repository | the release bot: the GitHub App's id | release-please and the upload fail |
+| `RELEASE_APP_PRIVATE_KEY` | repository | the release bot: the App's private key | release-please and the upload fail |
+| `MACOS_DEVELOPER_ID_CERTIFICATE` | `release-signing` | the Developer ID Application certificate, a base64 `.p12` | with `MACOS_SIGNING` on, the signing job fails |
+| `MACOS_DEVELOPER_ID_PASSWORD` | `release-signing` | the `.p12` password | as above |
+| `MACOS_DEVELOPER_ID_IDENTITY` | `release-signing` | the identity name, `Developer ID Application: <name> (<team>)` | as above |
+| `MACOS_NOTARY_APPLE_ID` | `release-signing` | the Apple ID that notarises | as above |
+| `MACOS_NOTARY_TEAM_ID` | `release-signing` | the team id | as above |
+| `MACOS_NOTARY_APP_PASSWORD` | `release-signing` | an app-specific password for that Apple ID | as above |
+| `WINDOWS_CODE_SIGNING_CERTIFICATE` | `release-signing` | the code signing certificate, a base64 `.pfx` | with `WINDOWS_SIGNING` on, the signing job fails |
+| `WINDOWS_CODE_SIGNING_PASSWORD` | `release-signing` | the `.pfx` password | as above |
+
+The GitHub App needs read and write access to contents (branches, tags, releases and their files)
+and to pull requests (the release pull request and its labels) on this repository. The helper
+workflow uses the same signing secrets, and its macOS and Windows jobs fail without them; its
+licence job also fails until `go_licenses_version` in `helpers.lock` is pinned.
+
+## Checking a release
+
+From a machine with the GitHub command line tool:
+
+```bash
+gh release download v<version> --dir <scratch>
+cd <scratch> && sha256sum -c SHA256SUMS
+scripts/check-package.sh --no-manifest <scratch>/Nocturne_<version>_amd64.AppImage
+```
+
+Do the same for the deb and the rpm. To compare the engine byte for byte as well, drop
+`--no-manifest` after a `make package` of the same tag, which writes the manifest.
+
+On a Mac, `scripts/check-package.sh --no-manifest` on the `.dmg` verifies the signature, and
+`spctl --assess --type open --context context:primary-signature -v` on it shows whether Gatekeeper
+accepts it (only a notarised image passes). On Windows, the file properties show the signature on
+a signed installer. `make smoke` and the desktop checks below then run on the downloaded files.
 
 ## Checklist
 
-Keep the real output of each step with the release notes.
+Run it on the release pull request's branch, before merging it. Keep the real output of each step
+with the release notes.
 
-1. **Start clean.** `main` is rebased on the latest remote state, the working tree is clean, and
-   `make check` passes.
-2. **Bump the version** in the workspace `Cargo.toml` only, and let `Cargo.lock` follow. The
-   packaging script refuses to run if `tauri.conf.json` ever carries a different version.
+1. **Start clean.** The branch is the release pull request's latest state, the working tree is
+   clean, and `make check` passes.
+2. **Check the version.** The release pull request moved the workspace `Cargo.toml`, `Cargo.lock`
+   and the interface's package files to the same version, and `CHANGELOG.md` names it. Never edit
+   the version by hand.
 3. **Check the engine pin.** `lemonade.lock` is unchanged, or the engine's runtime tests were run
    again against the new pin.
 4. **Build.** `make package` produces the AppImage, the deb, the rpm, `SHA256SUMS` and
@@ -37,8 +139,8 @@ Keep the real output of each step with the release notes.
 10. **Skeptical review.** Review the whole range since the last release as a maintainer who wants
     to find a reason not to ship it.
 11. **Record `SHA256SUMS`** and `SOURCES.txt` next to the release notes.
-12. **Approval and tag.** A human approves. Only then, create a local annotated tag. Pushing the
-    tag and publishing files are separate decisions, outside this checklist.
+12. **Approval and merge.** A human approves and merges the release pull request. The workflow
+    tags it and builds and attaches the files; check them as in Checking a release above.
 
 > [!NOTE]
 > Owner decision needed: the wording of the written offer of corresponding source for the LGPL

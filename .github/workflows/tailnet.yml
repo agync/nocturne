@@ -1,13 +1,24 @@
 # Builds nocturne-tailnet (helpers/tailnet) for every platform, for Away from home (Most private).
-# Run by hand or on a release. Two independent builds must agree on every binary and the licence
-# report must be written before the macOS and Windows ones are signed (in the release-signing
-# environment); then all four are attached to the release, which never replaces a file.
+# Run by hand, or called by release.yml with a release tag. Two independent builds must agree on
+# every binary and the licence report must be written before the macOS and Windows ones are signed
+# (in the release-signing environment); then all four are attached to the release, which never
+# replaces a file.
 name: tailnet
 
 on:
   workflow_dispatch:
-  release:
-    types: [created]
+  workflow_call:
+    inputs:
+      tag:
+        description: "The release tag to build and attach to (empty: build the caller's commit, attach nothing)"
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "The commit to build, a full SHA (empty: the caller's commit)"
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -28,6 +39,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - id: pins
         name: pinned Go version (from helpers.lock)
@@ -74,6 +86,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - id: pins
         name: pinned versions (from helpers.lock)
@@ -184,6 +197,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ inputs.ref }}
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -218,7 +232,18 @@ jobs:
             out/tailnet-licenses.txt
             pins.txt
       - name: attach to the release
-        if: github.event_name == 'release'
+        if: inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" out/nocturne-tailnet-* out/tailnet-licenses.txt
+          TAG: ${{ inputs.tag }}
+          SHA: ${{ inputs.ref }}
+        run: |
+          set -euo pipefail
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type + " " + .object.sha')
+          if [ "${ref%% *}" = tag ]; then
+            now=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/${ref#* }" --jq .object.sha)
+          else
+            now=${ref#* }
+          fi
+          [ "$now" = "$SHA" ] || { echo "$TAG is $now, not the built $SHA; not uploading" >&2; exit 1; }
+          gh release upload "$TAG" out/nocturne-tailnet-* out/tailnet-licenses.txt --repo "$GITHUB_REPOSITORY"
