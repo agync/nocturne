@@ -49,6 +49,8 @@ const IDLE_POLL: Duration = Duration::from_secs(30);
 const KNOWN_ENTITIES: usize = 200;
 /// Items considered per tick.
 const PEEK: usize = 200;
+/// A careful re-read reads at most this many sentences of an item on their own.
+const CAREFUL_SENTENCES: usize = 12;
 
 /// What one `tick` did.
 #[derive(Debug, Clone, PartialEq)]
@@ -206,6 +208,9 @@ struct State {
     cooldown: HashMap<String, Timestamp>,
     reread_failures: HashMap<String, u32>,
     rereading: bool,
+    /// Items the tidy asked to be re-read carefully: sentence by sentence where the first
+    /// reading left a number or name out.
+    careful: HashSet<String>,
 }
 
 struct Inner {
@@ -376,6 +381,13 @@ impl Reader {
         for id in gone {
             st.remaining.remove(&id);
         }
+    }
+
+    /// Read these items again carefully, when nothing else is waiting and the computer is on
+    /// mains. They must be marked for a re-read too; the mark is what queues them.
+    pub fn read_carefully(&self, ids: &[String]) {
+        self.state().careful.extend(ids.iter().cloned());
+        self.wake();
     }
 
     /// Since when the mind has been unavailable (absent, or failing), if it is.
@@ -840,12 +852,19 @@ impl Reader {
         let left_queue = view
             .as_ref()
             .is_none_or(|v| !matches!(v.status, ItemStatus::Kept | ItemStatus::Reading));
+        let careful = self.state().careful.remove(id);
+        // A careful re-read is tried once: one that did not finish leaves the item as it was.
+        if careful && !ok {
+            let i = vec![id.to_string()];
+            let _ = self.eng(move |e| e.clear_reread(&i)).await;
+        }
         let (drain, announce_rereading) = {
             let mut st = self.state();
             if left_queue {
                 st.read_now.remove(id);
             }
-            let announce = class == CLASS_REREAD && !st.rereading;
+            // A careful re-read is the tidy's own housekeeping, not a new mind reading again.
+            let announce = class == CLASS_REREAD && !st.rereading && !careful;
             if announce {
                 st.rereading = true;
             }
@@ -977,6 +996,13 @@ impl Reader {
         for chunk in split_chunks(&text, CHUNK_CHARS) {
             let found = mind.extract(&chunk, &cx).await?;
             merge_candidates(&mut candidates, found);
+        }
+        if reread && self.state().careful.contains(&id) {
+            let said: Vec<String> = candidates.iter().map(said_by).collect();
+            for sentence in uncovered(&text, &said).into_iter().take(CAREFUL_SENTENCES) {
+                let found = mind.extract(&sentence, &cx).await?;
+                merge_candidates(&mut candidates, found);
+            }
         }
         let (i, l) = (id.clone(), lease.clone());
         let took = started.elapsed();
@@ -1114,6 +1140,110 @@ fn empty_pending() -> PendingItem {
     }
 }
 
+/// What a memory says, for telling whether the item's words were kept: its quote, subject,
+/// sentence and object.
+pub(crate) fn said_by(c: &Candidate) -> String {
+    let quote = match &c.span {
+        Some(nocturne_contract::Span::Quote { text }) => text.as_str(),
+        _ => "",
+    };
+    format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
+}
+
+/// Lower case, with every run of other characters than letters and digits made one space.
+fn normalise(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for word in text
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+    {
+        if !out.is_empty() {
+            out.push(' ');
+        }
+        out.extend(word.chars().flat_map(char::to_lowercase));
+    }
+    out
+}
+
+/// Titles that come before a name and are not one.
+const TITLES: [&str; 8] = ["mr", "mrs", "ms", "miss", "mister", "missus", "dr", "st"];
+const DAYS_AND_MONTHS: [&str; 19] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+];
+
+fn bare(token: &str) -> &str {
+    let t = token.trim_matches(|c: char| !c.is_alphanumeric());
+    t.strip_suffix("'s")
+        .or_else(|| t.strip_suffix("\u{2019}s"))
+        .unwrap_or(t)
+}
+
+/// The sentences of `text` with a number, code or name that nothing in `said` holds. The same
+/// check the mind makes after each reading (a word with a digit, or a capitalised word that
+/// does not open its sentence and is not a title, day, month or heading in capitals), made
+/// again over the whole item, whose parts may have been read apart.
+pub(crate) fn uncovered(text: &str, said: &[String]) -> Vec<String> {
+    let words = format!(" {} ", normalise(&said.join(" | ")));
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let mut current: Vec<&str> = Vec::new();
+        let mut sentences = Vec::new();
+        for token in line.split_whitespace() {
+            current.push(token);
+            let word = bare(token).to_lowercase();
+            let title = TITLES.contains(&word.as_str()) || word.chars().count() == 1;
+            if token.ends_with(['.', '!', '?']) && !title {
+                sentences.push(current.join(" "));
+                current.clear();
+            }
+        }
+        if !current.is_empty() {
+            sentences.push(current.join(" "));
+        }
+        for sentence in sentences {
+            let missing = sentence.split_whitespace().enumerate().any(|(i, token)| {
+                let word = bare(token);
+                let lower = word.to_lowercase();
+                let digit = word.chars().any(|c| c.is_ascii_digit());
+                let shouting = word
+                    .chars()
+                    .filter(|c| c.is_alphabetic())
+                    .all(char::is_uppercase);
+                let name = i > 0
+                    && word.chars().next().is_some_and(char::is_uppercase)
+                    && !shouting
+                    && lower != "i"
+                    && !TITLES.contains(&lower.as_str())
+                    && !DAYS_AND_MONTHS.contains(&lower.trim_end_matches('s'));
+                let key = normalise(word);
+                (digit || name) && !key.is_empty() && !words.contains(&format!(" {key} "))
+            });
+            if missing {
+                out.push(sentence);
+            }
+        }
+    }
+    out
+}
+
 /// Add `found` to `into`, dropping a candidate that says what an earlier one already said.
 fn merge_candidates(into: &mut Vec<Candidate>, found: Vec<Candidate>) {
     for c in found {
@@ -1146,6 +1276,22 @@ mod tests {
 
     fn c(subject: &str, object: &str, confidence: f32) -> Candidate {
         Candidate::new(subject, Predicate::Knows, object, "A sentence.", confidence)
+    }
+
+    #[test]
+    fn a_sentence_whose_name_or_number_nothing_keeps_is_uncovered() {
+        let text = "Boiler service on Monday 30 November, between 8 and 12. The engineer is Mr. Marek.\nPERMIT NUMBER 4471\nReminder to myself.";
+        let said = ["Boiler service on Monday 30 November, between 8 and 12".to_string()];
+        assert_eq!(
+            uncovered(text, &said),
+            ["The engineer is Mr. Marek.", "PERMIT NUMBER 4471"]
+        );
+        let all = [
+            said[0].clone(),
+            "Marek is the engineer.".to_string(),
+            "The permit number is 4471.".to_string(),
+        ];
+        assert!(uncovered(text, &all).is_empty());
     }
 
     #[test]

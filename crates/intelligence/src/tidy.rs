@@ -12,14 +12,17 @@ use std::time::Duration;
 
 use jiff::civil::Date;
 use jiff::{SignedDuration, Timestamp};
-use nocturne_contract::{Edition, NoticeCode, PageSummary, PageView, TidyProgress, TidyReport};
+use nocturne_contract::{
+    Edition, ItemFilter, ItemStatus, MemoryFilter, NoticeCode, PageSummary, PageView, Span,
+    TidyProgress, TidyReport,
+};
 use nocturne_engine::day::page_instant;
 use nocturne_engine::{Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
 use crate::events::{Events, notice};
 use crate::host::{Host, SleepGuard, probe};
-use crate::reader::{DrainHandle, Reader};
+use crate::reader::{DrainHandle, Reader, uncovered};
 use crate::schedule::parse_hm;
 use crate::{MindSlot, current_mind};
 
@@ -35,6 +38,11 @@ const BACKFILL_CHUNK: usize = 200;
 /// Filling in missing vectors gets this long in all, and each call this long.
 const BACKFILL_LIMIT: Duration = Duration::from_secs(3 * 60);
 const EMBED_LIMIT: Duration = Duration::from_secs(60);
+/// A night's tidy asks for at most this many careful re-reads.
+const CAREFUL_PER_NIGHT: usize = 8;
+/// Items kept this long before the page's end are looked at for a careful re-read: each is
+/// looked at on the night after it was kept.
+const CAREFUL_WINDOW: SignedDuration = SignedDuration::from_hours(24);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TidyKind {
@@ -388,6 +396,7 @@ impl Tidy {
             let_go: decayed.let_go,
         };
         let _ = self.eng(move |e| e.record_tidy(report)).await;
+        self.queue_careful(end).await;
         let watch = (pending > 0).then_some(Watch {
             date,
             end,
@@ -395,6 +404,83 @@ impl Tidy {
         });
         self.inner.events.page_ready(summary.clone());
         (TidyStep::Finished(summary), watch)
+    }
+
+    /// The items kept in the day before `end` whose memories leave out a number or name they
+    /// give are marked to be read again, carefully, sentence by sentence. The reader does it
+    /// after the page, only on mains and when nothing else is waiting.
+    async fn queue_careful(&self, end: Timestamp) {
+        let since = end - CAREFUL_WINDOW;
+        let picked = self
+            .eng(move |e| {
+                let items = e.items(ItemFilter {
+                    since: Some(since.to_string()),
+                    status: None,
+                    limit: None,
+                })?;
+                let mut picked = Vec::new();
+                for item in items {
+                    if picked.len() == CAREFUL_PER_NIGHT {
+                        break;
+                    }
+                    // An item with a question open is left for the person to settle.
+                    let read = matches!(
+                        item.status,
+                        ItemStatus::Understood | ItemStatus::Unconfirmed
+                    );
+                    let before = item.kept_at.parse::<Timestamp>().is_ok_and(|k| k < end);
+                    let Some(text) = item.text.as_deref().filter(|t| !t.trim().is_empty()) else {
+                        continue;
+                    };
+                    if !read || !before {
+                        continue;
+                    }
+                    let memories = e.memories(MemoryFilter {
+                        item_id: Some(item.id.clone()),
+                        ..MemoryFilter::default()
+                    })?;
+                    // A memory of it that a later item replaced is history the re-read must
+                    // not reopen: such an item is not read again.
+                    if memories.len() != item.memory_count as usize {
+                        continue;
+                    }
+                    let said: Vec<String> = memories
+                        .iter()
+                        .map(|m| {
+                            let quotes: Vec<&str> = m
+                                .receipts
+                                .iter()
+                                .filter(|r| r.item_id == item.id)
+                                .filter_map(|r| match &r.span {
+                                    Some(Span::Quote { text }) => Some(text.as_str()),
+                                    _ => None,
+                                })
+                                .collect();
+                            format!(
+                                "{} | {} | {} | {}",
+                                quotes.join(" | "),
+                                m.subject,
+                                m.sentence,
+                                m.object
+                            )
+                        })
+                        .collect();
+                    if !uncovered(text, &said).is_empty() {
+                        picked.push(item.id);
+                    }
+                }
+                let marked = e.queue_reread(&picked)?;
+                Ok((picked, marked))
+            })
+            .await;
+        match picked {
+            Ok((ids, marked)) if marked > 0 => {
+                tracing::info!("{marked} items will be read again carefully");
+                self.inner.reader.read_carefully(&ids);
+            }
+            Ok(_) => {}
+            Err(e) => tracing::warn!("could not look for items to read again: {e}"),
+        }
     }
 
     async fn compose(&self, date: Date, end: Timestamp) -> Option<PageView> {

@@ -780,3 +780,164 @@ async fn the_tidy_keeps_a_name_the_person_chose() {
         "{sentences:?}"
     );
 }
+
+fn said(subject: &str, object: &str, sentence: &str, quote: &str) -> nocturne_engine::Candidate {
+    nocturne_engine::Candidate {
+        span: Some(nocturne_contract::Span::Quote { text: quote.into() }),
+        ..nocturne_engine::Candidate::new(
+            subject,
+            nocturne_engine::Predicate::Scheduled,
+            object,
+            sentence,
+            0.9,
+        )
+    }
+}
+
+/// An item whose memories leave out a name it gives is read again after the page, sentence by
+/// sentence, and quietly: the name is kept, nothing the first reading kept is lost, and the
+/// next night has nothing left to read again.
+#[tokio::test]
+async fn the_tidy_reads_an_item_again_carefully_where_a_name_was_left_out() {
+    let text = "Boiler service on Monday 30 November. The engineer is called Marek.";
+    let lone = "The engineer is called Marek.";
+    let boiler = said(
+        "Boiler service",
+        "Monday 30 November",
+        "The boiler service is on Monday 30 November.",
+        "Boiler service on Monday 30 November",
+    );
+    let marek = said(
+        "Marek",
+        "the engineer",
+        "The boiler engineer is called Marek.",
+        lone,
+    );
+    let mind = FakeMind::new()
+        .with_extract(text, vec![boiler])
+        .with_extract(lone, vec![marek])
+        .with_headline("A quiet night", "One thing kept.");
+    let w = world_at("2026-11-12T20:00:00Z", mind);
+    let note = keep(&w, text);
+    at(&w, "2026-11-13T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    assert!(finished(&pump(&w, 4).await));
+    read_all(&w).await;
+
+    let sentences: Vec<String> = w
+        .engine
+        .memories(nocturne_contract::MemoryFilter {
+            item_id: Some(note.clone()),
+            ..Default::default()
+        })
+        .unwrap()
+        .into_iter()
+        .map(|m| m.sentence)
+        .collect();
+    assert_eq!(sentences.len(), 2, "{sentences:?}");
+    assert!(sentences.iter().any(|s| s.contains("Marek")));
+    assert!(w.engine.rereads(10).unwrap().is_empty());
+    assert!(
+        !w.events
+            .notices()
+            .iter()
+            .any(|n| n.code == NoticeCode::ReReading),
+        "a careful re-read is not announced"
+    );
+    let extracts = |w: &World| w.mind.calls().iter().filter(|c| *c == "extract").count();
+    assert_eq!(
+        extracts(&w),
+        3,
+        "the note, the note again, and the one sentence"
+    );
+
+    at(&w, "2026-11-14T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    pump(&w, 4).await;
+    read_all(&w).await;
+    assert_eq!(extracts(&w), 3, "nothing is left to read again");
+}
+
+/// An item whose memories keep every name and number it gives is never read again.
+#[tokio::test]
+async fn a_well_read_item_is_not_read_again() {
+    let (w, _) = world_with_note("2026-11-12T20:00:00Z", "2026-11-13T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    assert!(finished(&pump(&w, 4).await));
+    read_all(&w).await;
+    let extracts = w.mind.calls().iter().filter(|c| *c == "extract").count();
+    assert_eq!(extracts, 1);
+}
+
+/// An item whose memory a later item replaced is history: it is never read again carefully,
+/// however much the current memories leave out.
+#[tokio::test]
+async fn an_item_with_a_replaced_memory_is_not_read_again() {
+    let first = "Dentist with Dr Okafor on Wednesday 18 November at 10:00";
+    let second = "The dentist moved to Thursday 19 November at 14:30";
+    let appointment = |object: &str, on: &str, quote: &str| nocturne_engine::Candidate {
+        valid_from: Some(on.parse().unwrap()),
+        span: Some(nocturne_contract::Span::Quote { text: quote.into() }),
+        ..nocturne_engine::Candidate::new(
+            "Dentist appointment",
+            nocturne_engine::Predicate::Scheduled,
+            object,
+            &format!("The dentist appointment is on {object}."),
+            0.9,
+        )
+    };
+    let mind = FakeMind::new()
+        .with_extract(
+            first,
+            vec![appointment(
+                "Wednesday 18 November at 10:00",
+                "2026-11-18",
+                first,
+            )],
+        )
+        .with_extract(
+            second,
+            vec![appointment(
+                "Thursday 19 November at 14:30",
+                "2026-11-19",
+                second,
+            )],
+        )
+        .with_headline("A quiet night", "Two things kept.");
+    let w = world_at("2026-11-12T08:05:00Z", mind);
+    let note = keep(&w, first);
+    read_all(&w).await;
+    at(&w, "2026-11-12T12:00:00Z");
+    keep(&w, second);
+    read_all(&w).await;
+    let current = w
+        .engine
+        .memories(nocturne_contract::MemoryFilter {
+            item_id: Some(note.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert!(current.is_empty(), "the Wednesday is history: {current:?}");
+    assert_eq!(w.engine.get_item(&note).unwrap().memory_count, 1);
+    at(&w, "2026-11-13T03:00:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    assert!(finished(&pump(&w, 4).await));
+    read_all(&w).await;
+    let extracts = w.mind.calls().iter().filter(|c| *c == "extract").count();
+    assert_eq!(
+        extracts, 2,
+        "Dr Okafor is in no current memory, and still not read again"
+    );
+}
