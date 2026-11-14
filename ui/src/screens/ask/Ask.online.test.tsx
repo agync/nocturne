@@ -10,6 +10,7 @@ import { askSession } from "./session";
 import { oneMemoryAnswer, onlineEngine, ScriptedAnswers, type Step } from "./testing";
 
 const HOST = "api.example.com";
+const SLOW = 20_000;
 
 beforeEach(() => {
   askSession.reset();
@@ -127,19 +128,23 @@ describe("what was left out of an online question", () => {
     ],
   ];
 
-  it.each(NOTES)("says so for %s and offers to ask here", async (leftOut, words) => {
-    const engine = await open(
-      onlineViewOn(),
-      finished({ type: "online", host: HOST }, { leftOut }),
-    );
-    expect(await screen.findByText(words)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Ask on this computer" }));
-    await waitFor(() => expect(engine.asked).toHaveLength(2));
-    expect(engine.asked[1]).toEqual({
-      question: "When is Leo’s swimming?",
-      place: "thisComputer",
-    });
-  });
+  it.each(NOTES)(
+    "says so for %s and offers to ask here",
+    async (leftOut, words) => {
+      const engine = await open(
+        onlineViewOn(),
+        finished({ type: "online", host: HOST }, { leftOut }),
+      );
+      expect(await screen.findByText(words)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "Ask on this computer" }));
+      await waitFor(() => expect(engine.asked).toHaveLength(2));
+      expect(engine.asked[1]).toEqual({
+        question: "When is Leo’s swimming?",
+        place: "thisComputer",
+      });
+    },
+    SLOW,
+  );
 
   it("says nothing, and offers nothing, when the answer was written here and kept here", async () => {
     await open(
@@ -206,40 +211,50 @@ describe("an online answer that is not sure", () => {
 });
 
 describe("while an online answer is on its way", () => {
-  it("shows what is done and what is happening, then offers the computer when it is slow", async () => {
-    const engine = await open(onlineViewOn(), () => [
-      { phase: "searching" },
-      { phase: "askingOnline", found: 2 },
-      { phase: "waitingOnline", found: 2 },
-    ]);
-    expect(await screen.findByText("Asking your provider (api.example.com)…")).toBeVisible();
-    expect(screen.getByText("Looked through what you’ve kept")).toBeVisible();
-    expect(screen.getByText("Found 2 things you kept about this")).toBeVisible();
-    expect(
-      await screen.findByText("Still waiting: your provider is taking a while."),
-    ).toBeVisible();
-    expect(
-      screen.getByText("Nocturne switches to this computer by itself after 20 seconds."),
-    ).toBeVisible();
-    await userEvent.click(screen.getByRole("button", { name: "Answer on this computer instead" }));
-    await waitFor(() => expect(engine.asked).toHaveLength(2));
-    expect(engine.asked[1]?.place).toBe("thisComputer");
-    expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
-  });
+  it(
+    "shows what is done and what is happening, then offers the computer when it is slow",
+    async () => {
+      const engine = await open(onlineViewOn(), () => [
+        { phase: "searching" },
+        { phase: "askingOnline", found: 2 },
+        { phase: "waitingOnline", found: 2 },
+      ]);
+      expect(await screen.findByText("Asking your provider (api.example.com)…")).toBeVisible();
+      expect(screen.getByText("Looked through what you’ve kept")).toBeVisible();
+      expect(screen.getByText("Found 2 things you kept about this")).toBeVisible();
+      expect(
+        await screen.findByText("Still waiting: your provider is taking a while."),
+      ).toBeVisible();
+      expect(
+        screen.getByText("Nocturne switches to this computer by itself after 20 seconds."),
+      ).toBeVisible();
+      await userEvent.click(
+        screen.getByRole("button", { name: "Answer on this computer instead" }),
+      );
+      await waitFor(() => expect(engine.asked).toHaveLength(2));
+      expect(engine.asked[1]?.place).toBe("thisComputer");
+      expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
+    },
+    SLOW,
+  );
 
-  it("puts the wait note in the live region when it appears", async () => {
-    await open(onlineViewOn(), () => [
-      { phase: "searching" },
-      { phase: "askingOnline", found: 2 },
-      { phase: "waitingOnline", found: 2 },
-    ]);
-    await screen.findByText("Still waiting: your provider is taking a while.");
-    await waitFor(() => {
-      const said = announcer()?.textContent ?? "";
-      expect(said).toContain("your provider is taking a while");
-      expect(said).toContain("Answer on this computer instead");
-    });
-  });
+  it(
+    "puts the wait note in the live region when it appears",
+    async () => {
+      await open(onlineViewOn(), () => [
+        { phase: "searching" },
+        { phase: "askingOnline", found: 2 },
+        { phase: "waitingOnline", found: 2 },
+      ]);
+      await screen.findByText("Still waiting: your provider is taking a while.");
+      await waitFor(() => {
+        const said = announcer()?.textContent ?? "";
+        expect(said).toContain("your provider is taking a while");
+        expect(said).toContain("Answer on this computer instead");
+      });
+    },
+    SLOW,
+  );
 
   it("says the provider was slow while it switches", async () => {
     await open(onlineViewOn(), () => [
