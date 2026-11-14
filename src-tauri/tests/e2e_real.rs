@@ -30,8 +30,20 @@
 //! model it serves. The stand-in's recordings are scanned for the private note's words. Every
 //! run also asks three questions about notes that carry hostile instructions and checks that no
 //! memory changed and no link was written.
+//!
+//! Each stage is scored on its own as well (`stages` in the results): what reading kept (the gold
+//! words of every item, such as Marek, 4471, plot 17 and the plumber), the links the store formed
+//! (two moves and one which-is-right question), and whether the search put the source in its
+//! first 4 and 12. Replies the mind reports (trace events with target `nocturne::reply`) are kept
+//! with each question.
+//!
+//! Answer only: `NOCTURNE_E2E_ANSWER_ONLY=<runs>` skips keeping and reading. The store gets a
+//! perfect reading of the day (frozen, correct facts), and the twelve questions are asked that
+//! many times, so the answer step is measured without noise from the steps before it
+//! (`answer_only` in the results).
 
 mod common;
+mod eval;
 mod memwatch;
 
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -40,6 +52,7 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use common::*;
+use eval::*;
 use memwatch::MemWatch;
 use nocturne_app_lib::online::route::AppPort;
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, fake_provider};
@@ -54,7 +67,6 @@ use tauri::async_runtime::block_on;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Listener, WebviewWindowBuilder};
 
-const DAY: &str = "2026-11-12";
 const PAGE_DAY: &str = "2026-11-13";
 const PRIVATE_WORDS: [&str; 4] = ["cholesterol", "blood test", "5.9", "recheck"];
 const JARGON: [&str; 7] = [
@@ -65,240 +77,6 @@ const JARGON: [&str; 7] = [
     "gpu",
     "embedding",
     "graph",
-];
-
-// ---------------------------------------------------------------------------------------------
-// The seeded day. Everything is made up; nothing here is a real person's data.
-
-struct Note {
-    key: &'static str,
-    at: &'static str,
-    text: &'static str,
-}
-
-const NOTES: &[Note] = &[
-    Note {
-        key: "dentist",
-        at: "08:05",
-        text: "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00.",
-    },
-    Note {
-        key: "gran",
-        at: "08:40",
-        text: "Gran lives in Leeds. Her birthday is on 3 December.",
-    },
-    Note {
-        key: "trip",
-        at: "09:10",
-        text: "Leo's school trip to the science museum is on Monday 23 November. He needs a packed lunch.",
-    },
-    Note {
-        key: "priya",
-        at: "09:55",
-        text: "I promised Priya I would send her the budget spreadsheet by Friday 20 November.",
-    },
-    Note {
-        key: "bakery",
-        at: "10:30",
-        text: "Bakery order for Saturday: two sourdough loaves and one seeded rye, collect before noon from Fenn Street Bakery.",
-    },
-    Note {
-        key: "club1",
-        at: "11:15",
-        text: "Book club meets on the first Tuesday of the month at the library.",
-    },
-    Note {
-        key: "dentist_moved",
-        at: "12:00",
-        text: "The dentist appointment has moved. Dr Okafor's receptionist called: it is now Thursday 19 November at 14:30, not Wednesday 18 November.",
-    },
-    Note {
-        key: "blood",
-        at: "12:40",
-        text: "My blood test showed high cholesterol, 5.9. The doctor wants a recheck in March.",
-    },
-    Note {
-        key: "gran_moved",
-        at: "13:20",
-        text: "Gran has moved from Leeds to York as of 1 November. She now lives in York.",
-    },
-    Note {
-        key: "swim",
-        at: "14:00",
-        text: "Leo swims on Mondays with Coach Dee after school.",
-    },
-    Note {
-        key: "paint",
-        at: "14:45",
-        text: "Decision: we will repaint the hallway in sage green, not grey.",
-    },
-    Note {
-        key: "boiler",
-        at: "15:30",
-        text: "Boiler service is booked for Monday 30 November, between 8 and 12. The engineer is called Marek.",
-    },
-    Note {
-        key: "club2",
-        at: "16:10",
-        text: "Sam says book club is actually on the second Wednesday of the month at the community hall.",
-    },
-    Note {
-        key: "mot",
-        at: "17:20",
-        text: "The car MOT is due on 14 December. The garage is Hale Motors.",
-    },
-    Note {
-        key: "cinema",
-        at: "18:05",
-        text: "I told Sam I would book the cinema tickets this weekend.",
-    },
-    Note {
-        key: "wifi",
-        at: "19:30",
-        text: "The guest wifi network is called HillviewGuest.",
-    },
-];
-
-const PHOTO_AT: &str = "21:00";
-const PHOTO_LINES: [&str; 4] = [
-    "CITY PARKING PERMIT",
-    "PERMIT NUMBER 4471",
-    "BAY C7 LEVEL 2",
-    "VALID UNTIL 30 JUNE 2027",
-];
-const VOICE_AT: &str = "21:30";
-const VOICE_TEXT: &str = "Reminder to myself. The plumber, Mister Hughes, is coming on Friday the twentieth of November at nine in the morning to fix the kitchen tap.";
-const DOC_AT: &str = "21:45";
-const DOC_LINES: [&str; 4] = [
-    "Riverside Allotment Society, autumn newsletter",
-    "Our plot is number 17, next to the water tap.",
-    "The water is switched off for winter on 1 December.",
-    "The annual fee of 30 pounds is due by 15 January.",
-];
-
-struct Question {
-    id: &'static str,
-    kind: &'static str,
-    text: &'static str,
-    /// The kept things the answer must come from.
-    sources: &'static [&'static str],
-    /// Every group needs one of its words in the answer.
-    must: &'static [&'static [&'static str]],
-    /// The right answer is to say it does not know.
-    unknown: bool,
-    /// When not empty, the first sentence of the answer needs one of these words.
-    lead: &'static [&'static str],
-}
-
-const QUESTIONS: &[Question] = &[
-    Question {
-        id: "q01",
-        kind: "fact",
-        text: "Who is coming to service the boiler, and when?",
-        sources: &["boiler"],
-        must: &[&["marek"], &["30 november", "november 30", "30th"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q02",
-        kind: "changed fact",
-        text: "When is my dentist appointment?",
-        sources: &["dentist_moved", "dentist"],
-        must: &[&["19 november", "thursday"], &["14:30", "2:30", "14.30"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q03",
-        kind: "promise",
-        text: "What did I promise Priya?",
-        sources: &["priya"],
-        must: &[&["budget"], &["friday", "20 november"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q04",
-        kind: "photo only",
-        text: "What is my parking permit number?",
-        sources: &["photo"],
-        must: &[&["4471"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q05",
-        kind: "voice only",
-        text: "When is the plumber coming?",
-        sources: &["voice", "voice_raw"],
-        must: &[&["friday", "20", "twentieth"], &["9", "nine"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q06",
-        kind: "private, asked directly",
-        text: "What did my blood test show?",
-        sources: &["blood"],
-        must: &[&["cholesterol"], &["5.9"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q07",
-        kind: "never kept",
-        text: "What is Sam's mother's phone number?",
-        sources: &[],
-        must: &[],
-        unknown: true,
-        lead: &[],
-    },
-    Question {
-        id: "q08",
-        kind: "which is right",
-        text: "When does book club meet?",
-        sources: &["club1", "club2"],
-        must: &[&["tuesday"], &["wednesday"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q09",
-        kind: "changed fact",
-        text: "Where does Gran live?",
-        sources: &["gran_moved", "gran"],
-        must: &[&["york"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q10",
-        kind: "document only",
-        text: "What is our allotment plot number?",
-        sources: &["doc"],
-        must: &[&["17"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q11",
-        kind: "decision",
-        text: "What colour are we painting the hallway?",
-        sources: &["paint"],
-        must: &[&["sage"]],
-        unknown: false,
-        lead: &[],
-    },
-    Question {
-        id: "q12",
-        kind: "second promise",
-        text: "What did I tell Sam I would book this weekend?",
-        sources: &["cinema"],
-        must: &[&["cinema"]],
-        unknown: false,
-        lead: &[],
-    },
 ];
 
 // Held out: six questions and their notes, written before the extraction prompt was changed and
@@ -1105,6 +883,8 @@ struct Answer {
     plain: bool,
     /// Where the answer was written, as the last delta said.
     answered_by: Value,
+    /// What was kept back from an online question, as the last delta said.
+    left_out: Value,
 }
 
 impl Asker {
@@ -1169,6 +949,7 @@ impl Asker {
                     answer.memory_ids = d.memory_ids.clone();
                     answer.answered_by =
                         serde_json::to_value(&d.answered_by).unwrap_or(Value::Null);
+                    answer.left_out = serde_json::to_value(d.left_out).unwrap_or(Value::Null);
                     if d.plain {
                         answer.plain = true;
                         answer.text = plain(&answer.text);
@@ -1198,10 +979,6 @@ impl Asker {
     }
 }
 
-fn plain(text: &str) -> String {
-    text.replace("**", "")
-}
-
 fn bold_spans(text: &str) -> Vec<String> {
     text.split("**")
         .enumerate()
@@ -1218,16 +995,6 @@ fn words_of(text: &str) -> HashSet<String> {
         .collect()
 }
 
-/// Whether `word` is in `text` on its own, not inside a longer word or number: "son" is not in
-/// "person".
-fn has_word(text: &str, word: &str) -> bool {
-    text.match_indices(word).any(|(at, _)| {
-        let before = text[..at].chars().next_back();
-        let after = text[at + word.len()..].chars().next();
-        !before.is_some_and(char::is_alphanumeric) && !after.is_some_and(char::is_alphanumeric)
-    })
-}
-
 /// The tier this run sets up and checks, as the interface names it.
 fn tier_name() -> String {
     std::env::var("NOCTURNE_E2E_TIER").unwrap_or_else(|_| "small".to_string())
@@ -1240,9 +1007,24 @@ fn answer_json(q: &Question, a: &Answer, extra: Value) -> Value {
         "first_delta_ms": a.first_delta_ms, "first_sentence_ms": a.first_sentence_ms,
         "total_ms": a.total_ms, "saw_waking": a.saw_waking, "found": a.found,
         "memory_ids": a.memory_ids, "receipts": a.receipts, "near": a.near, "bold_dropped": a.plain,
-        "answered_by": a.answered_by,
+        "answered_by": a.answered_by, "left_out": a.left_out,
         "judged": extra,
     })
+}
+
+fn asked_of(a: &Answer) -> Asked {
+    Asked {
+        phase: a.phase.clone(),
+        text: a.text.clone(),
+        memory_ids: a.memory_ids.clone(),
+        cited_items: a
+            .receipts
+            .iter()
+            .filter_map(|r| r["itemId"].as_str().map(str::to_string))
+            .collect(),
+        answered_by: a.answered_by.clone(),
+        left_out: a.left_out.clone(),
+    }
 }
 
 const ONLINE_KEY: &str = "sk-e2e-stand-in-0123456789abcdefghijklmn";
@@ -1350,17 +1132,36 @@ fn the_whole_product_works_with_real_models() {
         out: Map::new(),
     };
     println!("scratch folder: {}", scratch.display());
+    let tap = ReplyTap::default();
     if let Ok(file) = std::fs::File::create(run.dir.join(format!("app{}.log", run.tag))) {
-        let _ = tracing_subscriber::fmt()
-            .with_writer(Mutex::new(file))
-            .with_ansi(false)
-            .with_env_filter(tracing_subscriber::EnvFilter::new("info"))
+        use tracing_subscriber::Layer;
+        use tracing_subscriber::layer::SubscriberExt;
+        use tracing_subscriber::util::SubscriberInitExt;
+        let _ = tracing_subscriber::registry()
+            .with(
+                tracing_subscriber::fmt::layer()
+                    .with_writer(Mutex::new(file))
+                    .with_ansi(false)
+                    .with_filter(tracing_subscriber::EnvFilter::new("info")),
+            )
+            .with(
+                tap.clone()
+                    .with_filter(tracing_subscriber::filter::filter_fn(|m| {
+                        m.target() == REPLY_TARGET
+                    })),
+            )
             .try_init();
     }
 
     let idle = env_secs("NOCTURNE_E2E_IDLE_SECS", 30);
     let mem = MemWatch::start("setup");
     let h = build_app(&data_dir);
+    let answer_only_runs = std::env::var("NOCTURNE_E2E_ANSWER_ONLY")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| *n > 0);
+    // Before anything reads: the store holds a perfect reading and nothing is waiting.
+    let fixture = answer_only_runs.map(|_| seed_fixture(&h.engine(), &h.clock));
     let online_model =
         std::env::var("NOCTURNE_E2E_ONLINE_MODEL").unwrap_or_else(|_| "stand-in-model".to_string());
     let stand_in = (std::env::var("NOCTURNE_E2E_ONLINE").as_deref() == Ok("stand-in"))
@@ -1643,6 +1444,50 @@ fn the_whole_product_works_with_real_models() {
         engine_pid = block_on(services.engine_pid());
     }
 
+    if let (Some(runs), Some(ids)) = (answer_only_runs, fixture.as_ref()) {
+        mem.phase("answer_only");
+        let mind = h.state().mind.get().expect("a mind");
+        let embedded = block_on(embed_all(&h.engine(), mind.as_ref()));
+        at(&h, DAY, "22:30");
+        let result = answer_only(runs, ids, Some(&tap), |q| asked_of(&asks.ask(&h, q)));
+        let rows = result["rows"].as_array().cloned().unwrap_or_default();
+        run.check(
+            "answer_only.terminal",
+            "every question on the frozen facts ends in one terminal phase",
+            rows.iter().all(|r| r["phase"] != "timeout"),
+            format!("{} answers", rows.len()),
+        );
+        run.put(
+            "answer_only",
+            json!({
+                "embedded": embedded, "links": links(&h.engine(), ids),
+                "extraction": extraction(&h.engine(), ids), "result": result,
+            }),
+        );
+        mem.phase("quit");
+        h.state().run_exit_hooks();
+        let gone = wait_until(Duration::from_secs(30), || {
+            processes_mentioning(&engine_root.to_string_lossy()).is_empty()
+        });
+        run.check(
+            "quit.clean",
+            "no engine process is left running after quit",
+            gone.is_some(),
+            "",
+        );
+        run.put("memory", mem.report());
+        let summary = answer_only_summary(&run);
+        let _ = std::fs::write(run.dir.join(format!("summary{}.md", run.tag)), &summary);
+        println!("\n{summary}");
+        let failed: Vec<&Check> = run.checks.iter().filter(|c| !c.pass).collect();
+        assert!(
+            failed.is_empty(),
+            "failed checks: {:?}",
+            failed.iter().map(|c| c.id).collect::<Vec<_>>()
+        );
+        return;
+    }
+
     // 2. Keep ------------------------------------------------------------------------------
     mem.phase("keep");
     let mut ids: HashMap<&'static str, String> = HashMap::new();
@@ -1850,6 +1695,16 @@ fn the_whole_product_works_with_real_models() {
                 .is_some_and(|m| !m.is_empty() && m.iter().all(|m| m["private"] == true)),
         "",
     );
+    let stages =
+        json!({"extraction": extraction(&h.engine(), &ids), "links": links(&h.engine(), &ids)});
+    println!(
+        "stages: reading kept {} of {} gold words; the store formed {} of {} links",
+        stages["extraction"]["found"],
+        stages["extraction"]["of"],
+        stages["links"]["formed"],
+        stages["links"]["of"]
+    );
+    run.put("stages", stages);
     let dentist = h.ok(
         "list_memories",
         json!({"filter": {"query": "dentist", "limit": 20}}),
@@ -1904,38 +1759,32 @@ fn the_whole_product_works_with_real_models() {
     for (q, set) in asked {
         let t = &mut tally[set];
         let wanted: HashSet<String> = q.sources.iter().map(|k| ids[k].clone()).collect();
-        // Retrieval on its own: is the source in the top five?
-        let query_vec = block_on(mind.embed(&[q.text.to_string()]))
+        // Retrieval on its own: where is the source among the first twelve?
+        let query_vec = block_on(nocturne_app_lib::ask::embed_question(mind.as_ref(), q.text))
             .ok()
             .and_then(|v| v.into_iter().next());
-        let top5 = h
+        let top12 = h
             .engine()
-            .retrieve(q.text, query_vec.as_deref(), 5)
+            .retrieve(q.text, query_vec.as_deref(), 12)
             .unwrap_or_default();
-        let rank = top5.iter().position(|hit| {
-            hit.memory
-                .receipts
-                .iter()
-                .any(|r| wanted.contains(&r.item_id))
-        });
+        let rank12 = source_rank(&top12, &wanted);
+        let rank = rank12.filter(|r| *r <= 5).map(|r| r - 1);
         if !q.unknown {
             t.recall_total += 1;
             t.recall_hits += usize::from(rank.is_some());
+            t.recall4_hits += usize::from(rank12.is_some_and(|r| r <= 4));
+            t.recall12_hits += usize::from(rank12.is_some());
         }
+        tap.drain();
         let a = asks.ask(&h, q.text);
+        let raw_replies = tap.drain();
+        let decided_by = policy(&asked_of(&a));
+        t.policy_not_sure += usize::from(decided_by == Some("keptBackNotSure"));
+        t.policy_here += usize::from(decided_by == Some("answeredHereAfterKeptBack"));
         mem.phase("answer");
         every_terminal &= a.phase != "timeout";
         let lower = plain(&a.text).to_lowercase();
-        let ok = if q.unknown {
-            matches!(a.phase.as_str(), "notSure" | "nothing")
-        } else {
-            let first = lower.split_terminator(". ").next().unwrap_or("");
-            a.phase == "done"
-                && q.must
-                    .iter()
-                    .all(|group| group.iter().any(|w| has_word(&lower, w)))
-                && (q.lead.is_empty() || q.lead.iter().any(|w| has_word(first, w)))
-        };
+        let ok = judge(q, &a.phase, &a.text);
         t.correct += usize::from(ok);
         let cited_items: Vec<String> = a
             .receipts
@@ -2027,7 +1876,10 @@ fn the_whole_product_works_with_real_models() {
             &a,
             json!({
                 "correct": ok, "retrieval_rank_in_top5": rank.map(|r| r + 1),
-                "top5": top5.iter().map(|hit| hit.memory.sentence.clone()).collect::<Vec<_>>(),
+                "retrieval_rank_in_top12": rank12,
+                "top5": top12.iter().take(5).map(|hit| hit.memory.sentence.clone()).collect::<Vec<_>>(),
+                "top12": top12.iter().map(|hit| hit.memory.sentence.clone()).collect::<Vec<_>>(),
+                "policy": decided_by, "raw_replies": raw_replies,
                 "expected_items": q.sources, "cited_items": cited_items.len(),
                 "cited_items_supporting": supporting, "bold_spans": spans,
                 "bold_spans_supported_by_cited_memory": mapped, "cited": cited_quotes,
@@ -2664,7 +2516,11 @@ fn the_whole_product_works_with_real_models() {
 #[derive(Default)]
 struct Tally {
     recall_hits: usize,
+    recall4_hits: usize,
+    recall12_hits: usize,
     recall_total: usize,
+    policy_not_sure: usize,
+    policy_here: usize,
     correct: usize,
     cited_ok: usize,
     cited_all: usize,
@@ -2683,7 +2539,11 @@ impl Tally {
         json!({
             "sample": sample,
             "recall_at_5": {"hits": self.recall_hits, "of": self.recall_total, "value": ratio(self.recall_hits, self.recall_total), "target": "> 0.8"},
+            "recall_at_4": {"hits": self.recall4_hits, "of": self.recall_total, "value": ratio(self.recall4_hits, self.recall_total)},
+            "recall_at_12": {"hits": self.recall12_hits, "of": self.recall_total, "value": ratio(self.recall12_hits, self.recall_total)},
             "answer_accuracy": {"correct": self.correct, "of": rows.len(), "value": ratio(self.correct, rows.len()), "target": "> 0.75"},
+            "policy": {"kept_back_not_sure": self.policy_not_sure, "answered_here_after_kept_back": self.policy_here,
+                       "accuracy_without_kept_back_not_sure": ratio(self.correct, rows.len() - self.policy_not_sure)},
             "citation_precision": {"supporting": self.cited_ok, "cited": self.cited_all, "value": ratio(self.cited_ok, self.cited_all), "target": "> 0.9"},
             "first_sentence_ms": {"p50": percentile(fs, 50.0), "p95": percentile(fs, 95.0), "max": fs.iter().max(), "target_p95": "< 3000"},
             "total_ms": {"p50": percentile(tt, 50.0), "p95": percentile(tt, 95.0), "max": tt.iter().max()},
@@ -2762,6 +2622,16 @@ fn summary(run: &Run) -> String {
             m[key]["target"]
         ));
     }
+    for (name, key) in [("Recall@4", "recall_at_4"), ("Recall@12", "recall_at_12")] {
+        s.push_str(&format!(
+            "| {name} | {} ({} of {}) | n/a |\n",
+            m[key]["value"], m[key]["hits"], m[key]["of"]
+        ));
+    }
+    s.push_str(&format!(
+        "| Kept back online, then not sure (policy, not quality) | {} ({} answered here instead) | n/a |\n",
+        m["policy"]["kept_back_not_sure"], m["policy"]["answered_here_after_kept_back"]
+    ));
     s.push_str(&format!(
         "| p95 time to first sentence | {} ms (p50 {} ms, max {} ms) | < 3000 ms |\n",
         m["first_sentence_ms"]["p95"], m["first_sentence_ms"]["p50"], m["first_sentence_ms"]["max"]
@@ -2789,6 +2659,7 @@ fn summary(run: &Run) -> String {
         m["bold_spans"]["answers_given"],
         m["bold_spans"]["answers_bold_dropped"]
     ));
+    s.push_str(&stages_table(&o["stages"]));
     for (key, title) in [
         (
             "held_out_metrics",
@@ -2868,5 +2739,60 @@ fn summary(run: &Run) -> String {
             largest
         ));
     }
+    s
+}
+
+/// What reading kept and the links the store formed, one row per item.
+fn stages_table(stages: &Value) -> String {
+    let mut s = String::new();
+    let e = &stages["extraction"];
+    s.push_str(&format!(
+        "\n## Stages\n\nReading kept {} of {} gold words ({}). The store formed {} of {} links.\n\n",
+        e["found"], e["of"], e["value"], stages["links"]["formed"], stages["links"]["of"]
+    ));
+    s.push_str("| Item | Gold words found | Missing |\n|---|---|---|\n");
+    for i in e["items"].as_array().into_iter().flatten() {
+        s.push_str(&format!(
+            "| {} | {} of {} | {} |\n",
+            i["key"].as_str().unwrap_or(""),
+            i["found"],
+            i["of"],
+            i["missing"]
+                .as_array()
+                .map(|m| m
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", "))
+                .unwrap_or_default()
+        ));
+    }
+    s
+}
+
+fn answer_only_summary(run: &Run) -> String {
+    let o = &run.out["answer_only"];
+    let r = &o["result"];
+    let mut s = String::new();
+    s.push_str("# Answer step on frozen facts\n\n");
+    s.push_str(&format!(
+        "The {} tier answered the twelve questions {} times over a perfect reading of the day. \
+         Correct per run: {} (median {} of {}).\n\n",
+        tier_name(),
+        r["runs"],
+        r["correct_per_run"],
+        r["median"],
+        r["of"]
+    ));
+    s.push_str("| # | Correct |\n|---|---|\n");
+    for q in r["correct_per_question"].as_array().into_iter().flatten() {
+        s.push_str(&format!(
+            "| {} | {} of {} |\n",
+            q["id"].as_str().unwrap_or(""),
+            q["correct"],
+            q["of"]
+        ));
+    }
+    s.push_str(&stages_table(o));
     s
 }
