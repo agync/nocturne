@@ -13,3 +13,4 @@ not deleted.
 - [0008 A small schema](0008-small-schema.md) - A short list of predicates; new ones are quarantined until confirmed.
 - [0009 Package locally and prove it stays local](0009-packaging.md) - Linux packages with the private engine inside, and a release-time proof that nothing leaves the computer.
 - [0010 Away from home, opt-in and sealed](0010-away-from-home.md) - Ask and keep from a paired phone through Cloudflare or Tailscale, sealed end to end, off by default.
+- [0011 Online answers, opt-in and through the engine](0011-online-answers.md) - A provider the person chose may write the last step of an answer, called by the embedded engine, bounded and logged.
