@@ -197,14 +197,15 @@ fn forget_leaves_no_trace() {
         0
     );
     // Search rows.
-    assert_eq!(
-        q("SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH 'zebrafish47'"),
-        0
-    );
-    assert_eq!(
-        q("SELECT COUNT(*) FROM items_fts WHERE items_fts MATCH 'zebrafish47'"),
-        0
-    );
+    for table in nocturne_engine::store::FTS_TABLES {
+        assert_eq!(
+            q(&format!(
+                "SELECT COUNT(*) FROM {table} WHERE {table} MATCH 'zebrafish47'"
+            )),
+            0,
+            "{table}"
+        );
+    }
     // Originals: the note and the photo go, the pdf stays.
     assert_eq!(q("SELECT COUNT(*) FROM items"), 1);
     assert!(f.engine.get_item(&w.pdf).is_ok());

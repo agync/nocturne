@@ -109,7 +109,7 @@ fn deleted_text_is_overwritten_in_the_store_and_in_both_search_indexes() {
     let dir = tempfile::tempdir().unwrap();
     drop(engine(dir.path()));
     let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
-    for table in ["items_fts", "memories_fts"] {
+    for table in store::FTS_TABLES {
         let v: String = conn
             .query_row(
                 &format!("SELECT v FROM {table}_config WHERE k = 'secure-delete'"),

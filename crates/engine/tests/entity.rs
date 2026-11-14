@@ -775,7 +775,9 @@ fn delete_everything_leaves_no_row_of_filing_behind() {
         // Online answers and a re-read are each put back as their one empty row.
         let one_row = ["remote_state", "online_state", "reindex_state"];
         if table.starts_with("sqlite_")
-            || table.contains("_fts")
+            || nocturne_engine::store::FTS_TABLES
+                .iter()
+                .any(|fts| table.starts_with(fts))
             || one_row.contains(&table.as_str())
         {
             continue;

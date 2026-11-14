@@ -488,11 +488,7 @@ impl Engine {
             tx.execute("INSERT INTO remote_state(id) VALUES (1)", [])?;
             tx.execute("INSERT INTO online_state(id) VALUES (1)", [])?;
             tx.execute("INSERT INTO reindex_state(id) VALUES (1)", [])?;
-            tx.execute(
-                "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
-                [],
-            )?;
-            tx.execute("INSERT INTO items_fts(items_fts) VALUES ('optimize')", [])?;
+            crate::store::optimize_fts(tx)?;
             Ok(())
         });
         self.bump_forget();

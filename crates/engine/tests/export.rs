@@ -243,6 +243,16 @@ fn delete_everything_needs_the_phrase_and_leaves_an_empty_working_store() {
     );
     assert_eq!(std::fs::read_dir(dir.join("originals")).unwrap().count(), 0);
     assert_eq!(std::fs::read_dir(dir.join("audio")).unwrap().count(), 0);
+    for table in nocturne_engine::store::FTS_TABLES {
+        assert_eq!(
+            sql_count(
+                dir,
+                &format!("SELECT COUNT(*) FROM {table} WHERE {table} MATCH 'zebrafish47'")
+            ),
+            0,
+            "{table}"
+        );
+    }
     for name in ["nocturne.db", "nocturne.db-wal"] {
         let p = dir.join(name);
         if p.exists() {

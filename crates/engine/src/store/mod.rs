@@ -9,6 +9,21 @@ use crate::error::{Error, Result};
 
 const SCHEMA: &str = include_str!("schema.sql");
 
+/// Every full-text index in the store. Forgetting and deleting everything compact each one, so no
+/// removed word is left in any of them.
+pub const FTS_TABLES: [&str; 4] = ["items_fts", "memories_fts", "items_stem", "memories_stem"];
+
+/// Merges every full-text index's segments, so what was deleted from them is gone for good.
+pub(crate) fn optimize_fts(conn: &Connection) -> Result<()> {
+    for table in FTS_TABLES {
+        conn.execute(
+            &format!("INSERT INTO {table}({table}) VALUES ('optimize')"),
+            [],
+        )?;
+    }
+    Ok(())
+}
+
 /// Ordered migrations parsed from `schema.sql`, split on `-- migration N` lines.
 pub fn migrations() -> Vec<(u32, &'static str)> {
     let mut out: Vec<(u32, &'static str)> = Vec::new();

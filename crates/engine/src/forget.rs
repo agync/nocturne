@@ -569,11 +569,7 @@ impl Engine {
                 [],
             )?;
             tx.execute("DELETE FROM forget_jobs WHERE id = ?1", [job])?;
-            tx.execute(
-                "INSERT INTO memories_fts(memories_fts) VALUES ('optimize')",
-                [],
-            )?;
-            tx.execute("INSERT INTO items_fts(items_fts) VALUES ('optimize')", [])?;
+            crate::store::optimize_fts(tx)?;
             Ok(())
         })?;
         self.invalidate_vectors();
