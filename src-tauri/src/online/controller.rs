@@ -655,9 +655,11 @@ impl<R: Runtime> OnlineHub<R> {
         let row = engine.online_state().map_err(internal)?;
         let (provisional, passed) = {
             let mut r = self.routes();
-            // A route that passed its check while the person was asked is asked about too.
-            if let Some(p) = r.provisional.as_ref().filter(|_| r.passed)
-                && !same_route(asked.as_ref(), Some(p))
+            // A route that passed its check while the person was asked is asked about too, and
+            // setup left while asking leaves nothing to turn on: the person agreed to the
+            // route shown, not to one kept before.
+            let now = r.provisional.as_ref().filter(|_| r.passed);
+            if asked.is_some() && now.is_none() || now.is_some() && !same_route(asked.as_ref(), now)
             {
                 return Err(CommandError::unavailable(
                     "the connection changed while waiting; turn on again",

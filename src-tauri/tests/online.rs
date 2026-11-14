@@ -1105,6 +1105,47 @@ fn only_one_confirmation_at_a_time() {
     assert_eq!(view.state, nocturne_contract::OnlineState::On);
 }
 
+/// Leaving setup while the confirmation is open, then agreeing: the route shown is gone, and
+/// the route kept before is not turned on in its place.
+#[test]
+fn agreeing_after_leaving_setup_turns_nothing_on() {
+    let l = lab();
+    let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
+    assert_eq!(l.check(KEY)["type"], "works");
+    assert_eq!(l.h.ok("turn_on_online", settings())["state"]["type"], "on");
+    l.h.ok("turn_off_online", json!({"forget": false}));
+    assert!(l.keychain.holds_a_key());
+
+    let reached = Arc::new(tokio::sync::Notify::new());
+    let go = Arc::new(tokio::sync::Notify::new());
+    let (r, g) = (reached.clone(), go.clone());
+    hub.set_confirm(Arc::new(move |_: &str| {
+        let (r, g) = (r.clone(), g.clone());
+        Box::pin(async move {
+            r.notify_one();
+            g.notified().await;
+            true
+        })
+    }));
+    let other_key = json!({"form": {"baseUrl": URL, "key": "sk-other-key-000111222333",
+                                    "model": "stand-in-model"}});
+    assert_eq!(l.h.ok("check_online", other_key)["type"], "works");
+    let turning = {
+        let hub = hub.clone();
+        let settings: nocturne_contract::OnlineSettings =
+            serde_json::from_value(settings()["settings"].clone()).unwrap();
+        tauri::async_runtime::spawn(async move { hub.turn_on(settings).await })
+    };
+    block_on(reached.notified());
+    l.h.ok("abandon_online_setup", json!({}));
+    go.notify_one();
+    let err = block_on(turning).unwrap().unwrap_err();
+    let code = format!("{:?}", err.code);
+    assert!(code == "Declined" || code == "Unavailable", "{code}");
+    assert_eq!(l.view()["state"]["type"], "off");
+    assert_eq!(l.port.current(), None, "no route given to the engine");
+}
+
 /// With no way to ask in the app's own window, nothing is turned on for a new host.
 #[test]
 fn without_a_way_to_ask_nothing_is_turned_on() {
