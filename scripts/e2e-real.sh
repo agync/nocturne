@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the real end-to-end test, then run it again with the network cut and traced.
 #
-# Usage: scripts/e2e-real.sh [run|offline|all|online|models]     (default: all)
+# Usage: scripts/e2e-real.sh [run|offline|all|online|models|relay]     (default: all)
 #   run      the test with real models. The first run downloads the small mind (about 4.8 GB)
 #            through the app's own setup into NOCTURNE_E2E_DIR; later runs reuse it.
 #   offline  the same test in a private network namespace (loopback only) under strace, on what
@@ -16,6 +16,7 @@
 #            pulled through its catalogue, the only network use of the mode. That engine is not a
 #            child of the test, so the memory the test reports excludes it. Stopped by its pid at
 #            the end. NOCTURNE_E2E_TIER, NOCTURNE_E2E_TAG and the other variables work as in `run`.
+#   relay    only gets the relay engine ready: pulls its model if it is missing, then stops it.
 #   models   the test with a model chosen for each job, NOCTURNE_E2E_MODELS="mind=<id>,speech=<id>,
 #            voice=<id>,recall=<id>" (any of the four), through the app's own change command with
 #            the download agreed (`make e2e-models`).
@@ -203,6 +204,7 @@ case "$mode" in
     run) run_online ;;
     online) run_stand_in ;;
     models) run_models ;;
+    relay) start_relay && stop_relay ;;
     offline) run_offline ;;
     all)
         # The second run is a measurement of its own: it happens whatever the first one found.
