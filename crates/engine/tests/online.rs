@@ -246,6 +246,30 @@ fn sensitive_in_any_version_needs_the_switch() {
     assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true; 7]);
 }
 
+/// A health line the local model tagged as something else is still found by its words, also in
+/// an earlier version, and a plain line with an ordinary tag is not.
+#[test]
+fn health_words_need_the_switch_whatever_the_tag() {
+    let f = fixture();
+    let tagged = memory(&f, "Sam was diagnosed with depression");
+    exec(
+        f.dir.path(),
+        "UPDATE memories SET tags = '[\"family\"]' WHERE id = ?1",
+        &tagged,
+    );
+    let earlier = memory(&f, "Ana started therapy in May");
+    let later = correct(&f, &earlier, "a hobby", "Ana started pottery in May");
+    let plain = memory(&f, "Sam visited the bakery");
+    exec(
+        f.dir.path(),
+        "UPDATE memories SET tags = '[\"family\"]' WHERE id = ?1",
+        &plain,
+    );
+    let ids = vec![tagged, later, plain];
+    let s = Some(LeftOut::Sensitive);
+    assert_eq!(f.engine.online_verdicts(&ids, false).unwrap(), [s, s, None]);
+}
+
 #[test]
 fn let_go_and_forgetting_not_sendable() {
     let f = fixture();

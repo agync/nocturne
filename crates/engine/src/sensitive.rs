@@ -1,7 +1,7 @@
 //! Health, money and ID details: what Online answers keeps on this computer unless the person
 //! allowed it. A memory counts when any version of it carries such a label, or when its words
 //! hold a card or bank number, a long number, an ID-like code, a password or PIN, or an amount
-//! of pay or debt. It fails closed: a shape that only looks like one of these counts too.
+//! of money, or words about health. It fails closed: a shape that only looks like one of these counts too.
 
 /// Labels that mark a health, money or ID detail.
 const TAGS: &[&str] = &[
@@ -82,6 +82,60 @@ const PAY_OR_DEBT: &[&str] = &[
     "savings",
 ];
 
+/// Words that come up when a line is about a person's health. A plain list: a false match
+/// only keeps a line here.
+const HEALTH_WORDS: &[&str] = &[
+    "diagnosis",
+    "diagnoses",
+    "diagnosed",
+    "diagnose",
+    "illness",
+    "illnesses",
+    "depression",
+    "depressed",
+    "anxiety",
+    "cancer",
+    "diabetes",
+    "diabetic",
+    "asthma",
+    "adhd",
+    "autism",
+    "autistic",
+    "hiv",
+    "pregnancy",
+    "pregnant",
+    "miscarriage",
+    "therapy",
+    "therapist",
+    "psychiatrist",
+    "psychologist",
+    "surgery",
+    "operation",
+    "hospital",
+    "prescription",
+    "prescribed",
+    "medication",
+    "medications",
+    "medicine",
+    "medicines",
+    "dose",
+    "doses",
+    "dosage",
+    "symptom",
+    "symptoms",
+    "gp",
+    "rehab",
+    "addiction",
+    "addicted",
+];
+
+const HEALTH_PHRASES: &[&str] = &[
+    "doctor appointment",
+    "doctor's appointment",
+    "doctors appointment",
+    "mental health",
+];
+
 const CURRENCY_SIGNS: &[char] = &['£', '$', '€', '¥', '₹'];
 
 const CURRENCY_WORDS: &[&str] = &[
@@ -102,6 +156,11 @@ pub(crate) fn text(s: &str) -> bool {
         .filter(|w| !w.is_empty())
         .collect();
     let has_digit = s.chars().any(|c| c.is_ascii_digit());
+    if words.iter().any(|w| HEALTH_WORDS.contains(w))
+        || HEALTH_PHRASES.iter().any(|p| lower.contains(p))
+    {
+        return true;
+    }
     if words.iter().any(|w| SECRET_WORDS.contains(w))
         || SECRET_PHRASES.iter().any(|p| lower.contains(p))
         || (has_digit && words.contains(&"pin"))
@@ -111,12 +170,12 @@ pub(crate) fn text(s: &str) -> bool {
     if !has_digit {
         return false;
     }
-    number_runs(s) || id_like(s) || iban(s) || pay_or_debt_amount(&lower, &words)
+    number_runs(s) || id_like(s) || iban(s) || amount(&lower, &words)
 }
 
-/// Runs of digits, alone or in groups split by single spaces or hyphens: a card number that
-/// passes the Luhn check, any run of 9 or more digits, a sort code (`12-34-56`) or an account
-/// number (8 digits on their own).
+/// Runs of digits, alone or in groups split by single spaces, hyphens or dots: a card number
+/// that passes the Luhn check, any run whose digits total 9 or more, a sort code (`12-34-56`)
+/// or an account number (8 digits alone or in two groups of 4).
 fn number_runs(s: &str) -> bool {
     let chars: Vec<char> = s.chars().collect();
     let mut i = 0;
@@ -134,7 +193,7 @@ fn number_runs(s: &str) -> bool {
             if c.is_ascii_digit() {
                 cur.push(c);
                 j += 1;
-            } else if (c == ' ' || c == '-')
+            } else if matches!(c, ' ' | '-' | '.')
                 && !cur.is_empty()
                 && chars.get(j + 1).is_some_and(char::is_ascii_digit)
             {
@@ -146,10 +205,10 @@ fn number_runs(s: &str) -> bool {
         }
         chunks.push(cur);
         let glued_after = chars.get(j).is_some_and(|c| c.is_alphabetic());
-        if chunks.iter().any(|c| c.len() >= 9) {
+        let digits: String = chunks.concat();
+        if digits.len() >= 9 {
             return true;
         }
-        let digits: String = chunks.concat();
         if (13..=19).contains(&digits.len()) && luhn(&digits) {
             return true;
         }
@@ -157,7 +216,7 @@ fn number_runs(s: &str) -> bool {
         if lens == [2, 2, 2] {
             return true;
         }
-        if lens == [8] && !glued_before && !glued_after {
+        if (lens == [8] || lens == [4, 4]) && !glued_before && !glued_after {
             return true;
         }
         i = j.max(i + 1);
@@ -213,10 +272,10 @@ fn iban(s: &str) -> bool {
             continue;
         }
         let mut whole = w.to_string();
-        if c.len() == 4 {
+        if c.len() <= 8 {
             for g in &words[i + 1..] {
                 let n = g.chars().count();
-                if n == 0 || n > 4 || !g.chars().all(|c| c.is_ascii_alphanumeric()) {
+                if n == 0 || n > 8 || !g.chars().all(|c| c.is_ascii_alphanumeric()) {
                     break;
                 }
                 whole.push_str(g);
@@ -232,11 +291,9 @@ fn iban(s: &str) -> bool {
     false
 }
 
-/// An amount of money in the same text as a word about pay or debt.
-fn pay_or_debt_amount(lower: &str, words: &[&str]) -> bool {
-    if !words.iter().any(|w| PAY_OR_DEBT.contains(w)) {
-        return false;
-    }
+/// Any amount of money: a currency sign before a number, or a number before a currency word.
+/// A bare `40k` counts only beside a word about pay or debt.
+fn amount(lower: &str, words: &[&str]) -> bool {
     let chars: Vec<char> = lower.chars().collect();
     let signed = chars.iter().enumerate().any(|(i, c)| {
         CURRENCY_SIGNS.contains(c)
@@ -247,11 +304,15 @@ fn pay_or_debt_amount(lower: &str, words: &[&str]) -> bool {
     });
     let worded = words.windows(2).any(|w| {
         w[0].chars().next().is_some_and(|c| c.is_ascii_digit()) && CURRENCY_WORDS.contains(&w[1])
-    }) || words.iter().any(|w| {
-        let digits = w.trim_end_matches('k');
-        digits.len() < w.len() && !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit())
     });
-    signed || worded
+    let thousands = words.iter().any(|w| PAY_OR_DEBT.contains(w))
+        && words.iter().any(|w| {
+            let digits = w.trim_end_matches('k');
+            digits.len() < w.len()
+                && !digits.is_empty()
+                && digits.chars().all(|c| c.is_ascii_digit())
+        });
+    signed || worded || thousands
 }
 
 #[cfg(test)]
@@ -302,12 +363,9 @@ mod tests {
                 "The card is 4111 1111 1111 1111.",
                 "Card 5500-0000-0000-0004 for bills",
                 "pay with 378282246310005",
-            ],
-            &[
                 "The code is 4111 1111 1111 1112 maybe",
-                "Dates 2026-11-14 and 2027-01-02",
-                "Rooms 12 and 34",
             ],
+            &["Dates 2026-11-14 and 2027-01-02", "Rooms 12 and 34"],
         );
     }
 
@@ -315,8 +373,22 @@ mod tests {
     fn long_runs() {
         all(
             text,
-            &["Reference 123456789", "Call 07700900123 later"],
-            &["Flat 12b", "Order 1234567 came", "Phone 07700 900 12"],
+            &[
+                "Reference 123456789",
+                "Call 07700900123 later",
+                "NHS number 943 476 5919",
+                "SSN 123-45-6789",
+                "Card 4111 1111 1111 1112",
+                "Card 4111.1111.1111.1111",
+                "Call 07700 900 123",
+                "Phone 07700 900 12",
+            ],
+            &[
+                "Flat 12b",
+                "Order 1234567 came",
+                "Version 1.2.3 is out",
+                "Dates 14.11.2026 and 3 4 5",
+            ],
         );
     }
 
@@ -324,7 +396,11 @@ mod tests {
     fn sort_codes_and_accounts() {
         all(
             text,
-            &["Bank 20-00-00 then", "Account 31926819 at the bank"],
+            &[
+                "Bank 20-00-00 then",
+                "Account 31926819 at the bank",
+                "Account 3192 6819",
+            ],
             &["Score 3-2 at half time", "The year 2026 and 20-00"],
         );
     }
@@ -353,6 +429,7 @@ mod tests {
             iban,
             &[
                 "Rent goes to GB82 WEST 1234 5698 7654 32 each month",
+                "Pay GB82WEST 12345698 765432 please",
                 "IBAN-free text DE89370400440532013000.",
             ],
             &[
@@ -374,12 +451,42 @@ mod tests {
                 "The loan is 3000 pounds",
                 "Earns 40k a year",
                 "Mortgage of € 1200 a month",
+                "Rent is £1,200",
+                "Overdrawn by £300",
+                "Bought the house for £450,000",
+                "Lunch was £12",
+                "It cost 20 euros",
             ],
             &[
-                "Lunch was £12",
+                "Ran 40k steps",
                 "The salary review is in May",
                 "Paid the 3 tickets",
                 "Debt free since 2020",
+            ],
+        );
+    }
+
+    #[test]
+    fn health_words() {
+        all(
+            text,
+            &[
+                "Sam was diagnosed with depression",
+                "Booked a GP appointment",
+                "Has a Doctor appointment on Friday",
+                "Her mental health is better",
+                "Asthma flares in spring",
+                "Starts therapy next week",
+                "Pregnant, due in May",
+                "Dose is twice a day",
+                "Sees the Psychiatrist",
+                "In rehab since June",
+            ],
+            &[
+                "The dentist is on Thursday.",
+                "Gpu drivers updated",
+                "Operational review on Monday",
+                "Anxiously awaiting the parcel at the post office",
             ],
         );
     }
