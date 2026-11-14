@@ -37,8 +37,7 @@ describe("pairing", () => {
     const running = pairing.connect("Pixel", (w) => {
       words = w;
     });
-    await expect.poll(() => offer.words).not.toBeNull();
-    expect(words).toHaveLength(3);
+    await expect.poll(() => words).toHaveLength(3);
     expect(words).toEqual(offer.words);
     for (const w of words) expect(P.WORDS).toContain(w);
     expect(store.current()).toBeNull();
@@ -172,8 +171,8 @@ describe("pairing", () => {
     });
     const shown: string[][] = [];
     const running = pairing.connect("Pixel", (w) => shown.push(w));
-    await expect.poll(() => offer.words).not.toBeNull();
-    expect(shown).toHaveLength(1);
+    await expect.poll(() => shown.length).toBe(1);
+    expect(offer.words).not.toBeNull();
     // A junk outcome and a second junk nonce do nothing either.
     const sink = offer.sink as { send(f: Uint8Array): void };
     sink.send(junk(P.KIND_PAIR_OUTCOME) as never);
