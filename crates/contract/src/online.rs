@@ -36,6 +36,10 @@ pub enum LocalReason {
     /// Online answers was turned off, or a check of a provider began, while the question was on
     /// its way.
     TurnedOff,
+    /// The question went online and the provider was not sure, while something that stays on
+    /// this computer was kept back from it; this computer, which has it, answered instead. The
+    /// sent log keeps what went out.
+    NotSureOnline,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

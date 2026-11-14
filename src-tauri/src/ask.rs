@@ -16,8 +16,9 @@
 //! seconds, and `switchingToComputer` when the provider fails, takes twenty seconds or Online
 //! answers is turned off. Falling back to this computer is automatic and marked on the
 //! terminal delta; nothing here ever goes online after something failed on this computer. A
-//! provider that is not sure, when something private or sensitive was kept back from it, also
-//! hands the question to this computer, which has what was kept back.
+//! provider that is not sure, when something private or sensitive or a line of an original was
+//! kept back from it, also hands the question to this computer, which has what was kept back
+//! (`notSureOnline`, still linked to what was sent).
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -669,6 +670,7 @@ async fn ask_online<R: Runtime>(
     mut turned_off: tokio::sync::watch::Receiver<u64>,
 ) -> Online {
     // Lines of originals stay here: they have not been through what decides what may leave.
+    let lines_held = asked.facts.iter().any(|f| is_source_line(&f.memory.id));
     let facts: Vec<&Fact> = asked
         .facts
         .iter()
@@ -812,11 +814,13 @@ async fn ask_online<R: Runtime>(
         SendResult::NotSure
     };
     let send_id = hub.record(outcome(receipt, result, None, true)).await;
-    // The provider was not sure without what was kept back: this computer, which has it,
-    // answers instead.
-    if !stands && left_out.is_some() {
+    // The provider was not sure without what was kept back (something private or sensitive, or
+    // lines of originals): this computer, which has it, answers instead, and the mark still
+    // leads to what was sent.
+    if !stands && (left_out.is_some() || lines_held) {
+        sink.mark(|m| m.send_id = send_id.map(|id| id as f64));
         sink.phase(AskPhase::SwitchingToComputer);
-        return Online::Here(LocalReason::KeptHere);
+        return Online::Here(LocalReason::NotSureOnline);
     }
     // What was left out is said only of an answer written online.
     sink.mark(|m| {

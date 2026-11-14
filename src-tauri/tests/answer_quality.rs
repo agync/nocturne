@@ -251,7 +251,7 @@ fn not_sure_online_without_what_stayed_here_is_answered_here() {
     let d = ask(&l.h, "What did the dentist give me?");
     let done = d.last().unwrap();
     assert_eq!(done.phase, AskPhase::Done);
-    assert_eq!(done.answered_by, here(LocalReason::KeptHere));
+    assert_eq!(done.answered_by, here(LocalReason::NotSureOnline));
     assert_eq!(done.left_out, None, "said only of an answer written online");
     assert!(done.memory_ids.contains(&pills));
     let phases: Vec<AskPhase> = d.iter().map(|x| x.phase).collect();
@@ -271,6 +271,31 @@ fn not_sure_online_without_what_stayed_here_is_answered_here() {
     let sends =
         l.h.ok("list_online_sends", json!({"limit": 10, "before": null}));
     assert_eq!(sends[0]["result"], json!({"type": "notSure"}));
+    assert_eq!(
+        done.send_id,
+        sends[0]["id"].as_f64(),
+        "the mark still leads to what was sent"
+    );
+}
+
+#[test]
+fn not_sure_online_without_lines_that_stayed_here_is_answered_here() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let l = lab(mind.clone());
+    boiler(&l.h);
+    l.turn_on();
+    l.script(json!({"reply": "NOT_SURE"}));
+    let d = ask(&l.h, "Who is coming to service the boiler, and when?");
+    let done = d.last().unwrap();
+    assert_eq!(done.phase, AskPhase::Done);
+    assert_eq!(done.answered_by, here(LocalReason::NotSureOnline));
+    assert!(done.send_id.is_some());
+    let sent = serde_json::to_string(&l.questions()).unwrap();
+    assert!(!sent.contains("Marek"), "{sent}");
+    let given = mind.answered_from.lock().unwrap()[0].clone();
+    assert!(given.iter().any(|f| f.memory.sentence == MAREK));
+    let text: String = d.iter().filter_map(|x| x.text_delta.clone()).collect();
+    assert!(text.contains("Marek"), "{text}");
 }
 
 #[test]

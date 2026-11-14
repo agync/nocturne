@@ -3,4 +3,4 @@
 /**
  * Why a question was answered on this computer.
  */
-export type LocalReason = "chosen" | "noInternet" | "couldntReach" | "slow" | "limit" | "noCredit" | "keyRefused" | "keptHere" | "problem" | "downloading" | "turnedOff";
+export type LocalReason = "chosen" | "noInternet" | "couldntReach" | "slow" | "limit" | "noCredit" | "keyRefused" | "keptHere" | "problem" | "downloading" | "turnedOff" | "notSureOnline";

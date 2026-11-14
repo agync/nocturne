@@ -492,7 +492,15 @@ fn limit_reached_answers_here() {
 fn not_sure_never_resends() {
     let mind = TestMind::new(AnswerMode::Normal);
     let l = lab_with(mind.clone());
-    dentist(&l);
+    // Nothing is kept back: the note says only what its memory says, so no line of it stays
+    // here (a provider not sure without something kept back hands the question to this
+    // computer instead; see `answer_quality.rs`).
+    l.h.learn(
+        "The dentist is on Thursday.",
+        "The dentist is on Thursday.",
+        "Dentist",
+        "Thursday",
+    );
     l.turn_on(true, false, 200);
     l.script(json!({"reply": "NOT_SURE"}));
     let d = l.ask("When is the dentist?", None);

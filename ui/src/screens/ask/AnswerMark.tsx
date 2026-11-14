@@ -29,6 +29,8 @@ export function reasonText(reason: LocalReason, host: string | null): string {
       return t("ask.reason.downloading");
     case "turnedOff":
       return t("ask.reason.turnedOff");
+    case "notSureOnline":
+      return t("ask.reason.notSureOnline");
   }
 }
 
@@ -59,6 +61,8 @@ interface Props {
 /** Where this answer was written. It sits above "You asked", so a screen reader meets it first. */
 export function AnswerMark({ by, phase, count, host, sendId }: Props) {
   const online = by.type === "online";
+  // A question that went online and came back not sure still links to what was sent.
+  const sent = online || (by.type === "computer" && by.reason === "notSureOnline");
   let text: string;
   if (by.type === "online") {
     text =
@@ -74,7 +78,7 @@ export function AnswerMark({ by, phase, count, host, sendId }: Props) {
     <p className={styles.mark} data-place={online ? "online" : "computer"}>
       <PlaceIcon place={online ? "online" : "computer"} />
       <span>{text}</span>
-      {online ? (
+      {sent ? (
         <>
           <span aria-hidden="true">·</span>
           <a

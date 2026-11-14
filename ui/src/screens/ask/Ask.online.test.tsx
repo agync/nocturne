@@ -81,6 +81,17 @@ describe("the mark on an answer", () => {
     expect(screen.queryByRole("link", { name: "See what was sent" })).toBeNull();
   });
 
+  it("says this computer answered when your provider was not sure, and links to what was sent", async () => {
+    await open(onlineViewOn(), finished({ type: "computer", reason: "notSureOnline" }));
+    const mark = await screen.findByText(
+      "Answered on this computer from 1 thing you kept · your provider wasn’t sure",
+    );
+    const link = within(mark.parentElement as HTMLElement).getByRole("link", {
+      name: "See what was sent",
+    });
+    expect(link).toHaveAttribute("href", "#/settings/online/sent?send=7");
+  });
+
   it("is read out first, before the answer", async () => {
     await open(onlineViewOn(), finished({ type: "online", host: HOST }));
     await waitFor(() =>
