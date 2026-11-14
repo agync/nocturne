@@ -1078,6 +1078,17 @@ impl Client {
         Ok(items.into_iter().map(|i| i.embedding).collect())
     }
 
+    /// The vector for a question, made the way `model` wants a search query made: see
+    /// [`query_text`]. What it is searched against is embedded as it is.
+    pub async fn embed_query(&self, model: &str, question: &str) -> Result<Vec<f32>, RuntimeError> {
+        let vecs = self
+            .embeddings(model, &[query_text(model, question)])
+            .await?;
+        vecs.into_iter()
+            .next()
+            .ok_or_else(|| RuntimeError::BadResponse("no embedding in the answer".into()))
+    }
+
     /// Speech as WAV bytes.
     pub async fn speech(
         &self,
@@ -1095,6 +1106,20 @@ impl Client {
         let response = Self::send(rb).await?;
         let bytes = response.bytes().await.map_err(map_transport)?;
         Ok(bytes.to_vec())
+    }
+}
+
+/// What a search for memories asks the recall model to look for.
+pub const QUERY_TASK: &str = "Given a question a person asks about their own life, retrieve the notes they kept that answer it";
+
+/// A question as `model` wants a search query written. Qwen3-Embedding is trained with a task
+/// line before each query, written as its model card does (`Instruct: {task}\nQuery:{query}`),
+/// and with none before the documents searched; other models get the question as it is.
+pub fn query_text(model: &str, question: &str) -> String {
+    if model.to_ascii_lowercase().starts_with("qwen3-embedding") {
+        format!("Instruct: {QUERY_TASK}\nQuery:{question}")
+    } else {
+        question.to_string()
     }
 }
 

@@ -1903,6 +1903,24 @@ async fn the_answer_is_told_today() {
     );
 }
 
+/// A question is embedded with the task line Qwen3-Embedding is trained with; memories are not.
+#[tokio::test]
+async fn a_question_is_embedded_as_a_search_query() {
+    let r = rig().await;
+    let v = r.mind.embed_query("Who is the plumber?").await.unwrap();
+    assert!(!v.is_empty());
+    let body = &r.seen("/v1/embeddings").await[0]["body"];
+    assert_eq!(body["model"], "Qwen3-Embedding-0.6B-GGUF");
+    let input = body["input"][0].as_str().unwrap();
+    assert!(input.starts_with("Instruct: "), "{input}");
+    assert!(input.ends_with("\nQuery:Who is the plumber?"), "{input}");
+    r.mind.embed(&["Who is the plumber?".into()]).await.unwrap();
+    assert_eq!(
+        r.seen("/v1/embeddings").await[1]["body"]["input"][0],
+        "Who is the plumber?"
+    );
+}
+
 fn preset(tier: Tier) -> nocturne_lemonade::selection::Picks {
     use nocturne_lemonade::selection;
     selection::picks(&selection::Selection::preset(tier))

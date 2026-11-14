@@ -115,6 +115,19 @@ impl LemonadeMind {
         Ok(model)
     }
 
+    /// The vector for a question asked of the memories, made the way the recall model wants a
+    /// search query made (see [`crate::client::query_text`]). Memories are embedded as they are,
+    /// with [`Mind::embed`].
+    pub fn embed_query<'a>(
+        &'a self,
+        question: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<f32>, MindError>> {
+        Box::pin(async move {
+            let model = self.installed(ComponentRole::Recall).await?;
+            Ok(self.client.embed_query(&model, question).await?)
+        })
+    }
+
     /// Loads the thinking model once per engine launch, with a context size to suit the tier.
     async fn warm_mind(&self) -> Result<String, MindError> {
         let model = self.installed(ComponentRole::Mind).await?;
