@@ -126,7 +126,8 @@ summary twice: as typed, for search as the person types, and with the Porter ste
 questions, so "plumbers" finds "plumber". Forgetting and Delete everything compact every one of
 these indexes. A question is matched by its
 words (BM25) and by its meaning (the recall model's vectors), and the two rankings are fused by
-reciprocal rank. On Standard and Large, a reranking model, when it is on disk, orders the first
+reciprocal rank. The recall model reads a question with the search instruction it was trained
+with (Qwen3-Embedding) or as it is (any other), and the memories always as they are. On Standard and Large, a reranking model, when it is on disk, orders the first
 twelve by how well each answers the question and keeps eight.
 
 When reading missed a line of an item, that line can still answer: a line of a matching item that

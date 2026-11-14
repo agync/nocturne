@@ -1775,9 +1775,7 @@ fn the_whole_product_works_with_real_models() {
         let t = &mut tally[set];
         let wanted: HashSet<String> = q.sources.iter().map(|k| ids[k].clone()).collect();
         // Retrieval on its own: where is the source among the first twelve?
-        let query_vec = block_on(nocturne_app_lib::ask::embed_question(mind.as_ref(), q.text))
-            .ok()
-            .and_then(|v| v.into_iter().next());
+        let query_vec = block_on(nocturne_app_lib::ask::embed_question(mind.as_ref(), q.text)).ok();
         let top12 = h
             .engine()
             .retrieve(q.text, query_vec.as_deref(), 12)

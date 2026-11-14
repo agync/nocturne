@@ -9,7 +9,7 @@ use std::sync::Arc;
 use common::*;
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
 use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, LocalReason, Span};
-use nocturne_engine::{Candidate, Hit, Mind, Predicate, is_source_line};
+use nocturne_engine::{BoxFuture, Candidate, Hit, Mind, MindError, Predicate, is_source_line};
 use nocturne_lemonade::Client;
 use nocturne_lemonade::rerank::Reranker;
 use serde_json::{Value, json};
@@ -171,16 +171,85 @@ fn the_search_order_stands_when_the_reranking_model_cannot_be_reached() {
     assert_eq!(ids(&kept), ids(&hits));
 }
 
+/// A mind with an instructed query embedding, which marks the vectors it makes for questions.
+struct Instructed(nocturne_engine::FakeMind);
+
+impl Mind for Instructed {
+    fn transcribe<'a>(
+        &'a self,
+        audio: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<nocturne_engine::Transcript, MindError>> {
+        self.0.transcribe(audio)
+    }
+
+    fn read_image<'a>(
+        &'a self,
+        image: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<nocturne_engine::Understanding, MindError>> {
+        self.0.read_image(image)
+    }
+
+    fn read_document<'a>(
+        &'a self,
+        doc: &'a std::path::Path,
+    ) -> BoxFuture<'a, Result<nocturne_engine::Understanding, MindError>> {
+        self.0.read_document(doc)
+    }
+
+    fn extract<'a>(
+        &'a self,
+        text: &'a str,
+        cx: &'a nocturne_engine::ExtractContext,
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        self.0.extract(text, cx)
+    }
+
+    fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>> {
+        self.0.embed(texts)
+    }
+
+    fn embed_query<'a>(&'a self, _: &'a str) -> BoxFuture<'a, Result<Vec<f32>, MindError>> {
+        Box::pin(async { Ok(vec![-1.0]) })
+    }
+
+    fn answer<'a>(
+        &'a self,
+        question: &'a str,
+        facts: &'a [nocturne_engine::Fact],
+        out: tokio::sync::mpsc::Sender<String>,
+    ) -> BoxFuture<'a, Result<nocturne_engine::AnswerMeta, MindError>> {
+        self.0.answer(question, facts, out)
+    }
+
+    fn write_headline<'a>(
+        &'a self,
+        page: &'a nocturne_contract::PageView,
+    ) -> BoxFuture<'a, Result<(String, String), MindError>> {
+        self.0.write_headline(page)
+    }
+
+    fn speak<'a>(
+        &'a self,
+        text: &'a str,
+        voice: &'a str,
+    ) -> BoxFuture<'a, Result<Vec<u8>, MindError>> {
+        self.0.speak(text, voice)
+    }
+}
+
 #[test]
-fn the_question_is_embedded_through_one_adapter() {
-    let mind = nocturne_engine::FakeMind::new();
-    let direct = block_on(mind.embed(&["When is the plumber coming?".to_string()])).unwrap();
-    let adapted = block_on(nocturne_app_lib::ask::embed_question(
-        &mind,
-        "When is the plumber coming?",
-    ))
-    .unwrap();
-    assert_eq!(adapted, direct);
+fn the_question_is_embedded_as_a_search_query() {
+    let q = "When is the plumber coming?";
+    let plain = nocturne_engine::FakeMind::new();
+    let direct = block_on(plain.embed(&[q.to_string()])).unwrap().remove(0);
+    let adapted = block_on(nocturne_app_lib::ask::embed_question(&plain, q)).unwrap();
+    assert_eq!(
+        adapted, direct,
+        "a mind without a query form embeds it as it is"
+    );
+    let instructed = Instructed(nocturne_engine::FakeMind::new());
+    let adapted = block_on(nocturne_app_lib::ask::embed_question(&instructed, q)).unwrap();
+    assert_eq!(adapted, vec![-1.0], "the mind's query form is used");
 }
 
 // Online answers and what was kept back ----------------------------------------------------

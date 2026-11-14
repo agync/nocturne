@@ -222,9 +222,8 @@ fn the_search_puts_every_source_in_the_first_twelve() {
             .iter()
             .filter_map(|k| ids.get(k).cloned())
             .collect();
-        let vector = block_on(nocturne_app_lib::ask::embed_question(mind.as_ref(), q.text))
-            .unwrap()
-            .remove(0);
+        let vector =
+            block_on(nocturne_app_lib::ask::embed_question(mind.as_ref(), q.text)).unwrap();
         let hits = h.engine().retrieve(q.text, Some(&vector), 12).unwrap();
         let rank = source_rank(&hits, &wanted);
         asked += 1;

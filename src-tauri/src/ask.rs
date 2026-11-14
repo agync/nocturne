@@ -378,12 +378,11 @@ fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-/// The question as the recall model reads it, for meaning-based search.
-///
-/// Integration point for the mind's query embedding (`embed_query`, which adds the recall
-/// model's search instruction): until the mind has it, the question is embedded as it is.
-pub async fn embed_question(mind: &dyn Mind, question: &str) -> Result<Vec<Vec<f32>>, MindError> {
-    mind.embed(&[question.to_string()]).await
+/// The question as the recall model reads it, for meaning-based search: through the mind's
+/// query embedding, which gives a recall model trained on search instructions its own and
+/// embeds the question as it is for any other.
+pub async fn embed_question(mind: &dyn Mind, question: &str) -> Result<Vec<f32>, MindError> {
+    mind.embed_query(question).await
 }
 
 /// On a tier with a reranking model that is on disk, the search's hits ordered by it and cut to
@@ -451,7 +450,7 @@ async fn answer<R: Runtime>(
     }
     let query_vec = loop {
         match embed_question(mind.as_ref(), &question).await {
-            Ok(v) => break v.into_iter().next(),
+            Ok(v) => break Some(v),
             Err(MindError::Busy) if tokio::time::Instant::now() < deadline => {
                 if !woke {
                     woke = true;
