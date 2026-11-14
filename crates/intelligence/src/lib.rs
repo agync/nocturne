@@ -9,7 +9,6 @@
 //! a manual clock and a mutable fake host.
 
 mod chunk;
-mod coverage;
 mod events;
 pub mod host;
 mod reader;

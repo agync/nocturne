@@ -32,6 +32,7 @@ mod settings;
 mod types;
 mod util;
 
+pub mod coverage;
 pub mod day;
 pub mod store;
 

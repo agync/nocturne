@@ -23,10 +23,10 @@ use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::chunk::{CHUNK_CHARS, split_chunks};
-use crate::coverage::{lost_roles, role_words, uncovered};
 use crate::events::{Events, notice};
 use crate::host::{Host, probe};
 use crate::{MindSlot, current_mind};
+use nocturne_engine::coverage::{left_out, role_words};
 
 /// How long a lease lasts, and how often it is renewed while the mind works.
 const LEASE: Duration = Duration::from_secs(10 * 60);
@@ -1177,33 +1177,6 @@ fn empty_pending() -> PendingItem {
         attempts: 0,
         lease: String::new(),
     }
-}
-
-/// What a memory says, for telling whether the item's words were kept: its quote, subject,
-/// sentence and object.
-fn said_by(c: &Candidate) -> String {
-    let quote = match &c.span {
-        Some(nocturne_contract::Span::Quote { text }) => text.as_str(),
-        _ => "",
-    };
-    format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
-}
-
-/// The sentences of `text` with a number or name that `found` does not keep, or that name
-/// someone by a role every memory about them lost.
-fn left_out(text: &str, found: &[Candidate], known: &[String]) -> Vec<String> {
-    let said: Vec<String> = found.iter().map(said_by).collect();
-    let told: Vec<String> = found
-        .iter()
-        .map(|c| format!("{} | {} | {}", c.subject, c.sentence, c.object))
-        .collect();
-    let mut lines = uncovered(text, &said, known);
-    for line in lost_roles(text, &told) {
-        if !lines.contains(&line) {
-            lines.push(line);
-        }
-    }
-    lines
 }
 
 /// Add `found` to `into`, dropping a candidate that says what an earlier one already said.

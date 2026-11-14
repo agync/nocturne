@@ -1,6 +1,12 @@
 //! Whether a reading kept what an item says: every number and name in it, and who someone is to
-//! the person. The reader uses it to decide when to give an item a second look, and the tidy to
-//! pick the items to read again carefully. English patterns only.
+//! the person. The reader uses it to decide when to give an item a second look, the tidy to pick
+//! the items to read again carefully, and the mind to keep a reply cut off at its ceiling
+//! instead of reading the item again in parts. Pure text work, so it lives with the engine that
+//! all three share. English patterns only.
+
+use nocturne_contract::Span;
+
+use crate::Candidate;
 
 /// Titles that come before a name and are not one.
 const TITLES: [&str; 8] = ["mr", "mrs", "ms", "miss", "mister", "missus", "dr", "st"];
@@ -273,6 +279,33 @@ pub fn lost_roles(text: &str, told: &[String]) -> Vec<String> {
             })
         })
         .collect()
+}
+
+/// What a memory says, for telling whether the item's words were kept: its quote, subject,
+/// sentence and object.
+fn said_by(c: &Candidate) -> String {
+    let quote = match &c.span {
+        Some(Span::Quote { text }) => text.as_str(),
+        _ => "",
+    };
+    format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
+}
+
+/// The sentences of `text` with a number or name that `found` does not keep, or that name
+/// someone by a role every memory about them lost.
+pub fn left_out(text: &str, found: &[Candidate], known: &[String]) -> Vec<String> {
+    let said: Vec<String> = found.iter().map(said_by).collect();
+    let told: Vec<String> = found
+        .iter()
+        .map(|c| format!("{} | {} | {}", c.subject, c.sentence, c.object))
+        .collect();
+    let mut lines = uncovered(text, &said, known);
+    for line in lost_roles(text, &told) {
+        if !lines.contains(&line) {
+            lines.push(line);
+        }
+    }
+    lines
 }
 
 #[cfg(test)]

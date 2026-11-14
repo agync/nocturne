@@ -20,12 +20,12 @@ use nocturne_engine::day::page_instant;
 use nocturne_engine::{Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
-use crate::coverage::uncovered;
 use crate::events::{Events, notice};
 use crate::host::{Host, SleepGuard, probe};
 use crate::reader::{DrainHandle, Reader};
 use crate::schedule::parse_hm;
 use crate::{MindSlot, current_mind};
+use nocturne_engine::coverage::uncovered;
 
 /// Below this charge, off mains, the tidy waits for power.
 pub const LOW_BATTERY: u8 = 40;
