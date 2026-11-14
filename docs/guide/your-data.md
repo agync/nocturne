@@ -31,7 +31,8 @@ kinds, never what you kept. Privacy in the app has an "Open folder" button that 
 ## Take a copy
 
 Privacy has "Export everything". It writes a folder of readable files: every memory as text, every
-page, and all your originals exactly as you kept them. Nothing is changed or removed by exporting.
+page, and all your originals exactly as you kept them. If you have used Online answers, it also holds
+the Sent online log as readable text, and your model choices; it never holds the key. Nothing is changed or removed by exporting.
 
 ## Let go, bring back, forget
 
@@ -51,7 +52,7 @@ Nocturne does not delete anything quietly.
 Privacy has "Delete everything". It removes everything Nocturne holds from this computer: what you
 kept, what it remembers and every page. You have to type the words it shows before it goes ahead,
 and it cannot be undone, so export first if you might want a copy. It keeps the reading setup it
-downloaded and the log files, turns off "Start with this computer" and resets the quick keep
+downloaded and the log files (the Sent online log and the key are removed), turns off "Start with this computer" and resets the quick keep
 shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac,
 the folders named `app.nocturne.desktop` in `~/Library/WebKit` and `~/Library/Caches`, and the saved
 window state; on Linux, the window's storage inside the data folder and `~/.cache/app.nocturne.desktop`.
@@ -62,7 +63,10 @@ Afterwards Nocturne starts again from setup.
 Nocturne has no account, no analytics and no crash reports. Its reading engine is a private one that
 listens only on your own computer's internal address, with a fresh key every time Nocturne starts.
 
-Away from home is the one exception, and it is off until you turn it on. While it is on, sealed
+Away from home and Online answers are the two exceptions, and each is off until you turn it on.
+While Online answers is on, your private engine sends a question and the few remembered sentences it
+needs to the one address you entered, and the Sent online log lists exactly what left
+([Online answers](online-answers.md)). While Away from home is on, sealed
 traffic goes to your own paired phones through the connection you chose, and that connection's helper
 talks to its company. Privacy then shows what was sent to your phones, and
 [Away from home](away-from-home.md) lists what each company can see.

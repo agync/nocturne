@@ -5,6 +5,8 @@ How to install Nocturne, live with it on your desktop, and stay in charge of wha
 - [Install and remove](install.md) - Choose a package, set Nocturne up, and take it off again.
 - [On your desktop](desktops.md) - The tray, the quick keep shortcut, notifications and starting with your computer.
 - [Away from home](away-from-home.md) - Ask, keep and read your page from a paired phone, and what that lets other companies see.
+- [Online answers](online-answers.md) - Let a service you already use write the answer, what is sent, and how to turn it off.
+- [Choosing models](choosing-models.md) - Pick a model for each job in the advanced view, with downloads only when you agree.
 - [Your data](your-data.md) - Where everything is kept, how to export it, let it go or delete it, and how Nocturne shows that nothing leaves your computer.
 
 ## What Nocturne does
