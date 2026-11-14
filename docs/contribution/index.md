@@ -6,4 +6,4 @@ How changes are scoped, built, verified and reviewed.
 - [Building and packaging](building.md) - The development loop, the real preview, the Linux packages, the checks that prove them and the Windows and macOS builds.
 - [The Flatpak](flatpak.md) - How the Flatpak is built, what it may reach and why, and how it is published to flatpak.nocturne.is.
 - [Releasing](release.md) - How release-please cuts a release, what the release workflow builds and the secrets it needs, the release checklist, the Away from home checks and the desktop checks.
-- [The website](website.md) - How the public landing page and these docs are built into one static site for Cloudflare, checked and refreshed.
+- [The website](website.md) - How the public landing page and these docs are built into one static site for Cloudflare, built, checked, refreshed and deployed with Cloudflare Workers Builds.

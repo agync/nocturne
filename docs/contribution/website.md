@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: The website
-description: How the public landing page and these docs are built into one static site for Cloudflare, checked locally and refreshed.
+description: How the public landing page and these docs are built into one static site, checked locally, refreshed and deployed with Cloudflare Workers Builds.
 status: draft
 tags: [contribution, website, docs, cloudflare]
 ---
@@ -18,7 +18,8 @@ repository by a command. Publishing is the owner's decision.
 | `site/assets/` | The stylesheet, the theme switch and tour scripts, the self-hosted fonts and the screenshots |
 | `site/docs-theme/` | The okf-wiki theme for `/docs/`: the app's colours and faces, and a link back to the landing page |
 | `site/_headers` | Response headers, including the content security policies; the build fills in the docs' script hashes |
-| `site/wrangler.jsonc` | A Cloudflare Worker with static assets only, serving `site/dist/` |
+| `site/wrangler.jsonc` | The Cloudflare Worker `nocturne`: static assets only, serving `site/dist/`, with the empty `previews` block pull request builds need |
+| `site/toolchain.sh` | Builds the docs renderer from source for a host with no container runtime |
 | `site/scripts/` | The build, a local server that applies `_headers`, the checks and the screenshot capture |
 
 ## Build
@@ -28,10 +29,25 @@ make site                                  # writes site/dist/
 make site SITE_URL=https://example.org     # the origin for the canonical and Open Graph links
 ```
 
-`make site` renders `docs/` with the pinned okf-wiki container image (podman, no network), then
+`SITE_URL` defaults to `https://nocturne.is`. `make site` renders `docs/` with okf-wiki, then
 copies the landing page and its assets into `site/dist/`, fills in the site origin and the pinned
-Lemonade version from `lemonade.lock`, and writes `site/dist/_headers`. Set `OKF_WIKI` to a local
-okf-wiki binary (and `OKF_WIKI_VENDOR` to its Mermaid bundle) to render without podman.
+Lemonade version from `lemonade.lock`, and writes `site/dist/_headers`.
+
+Two renderers give the same output:
+
+| Renderer | Used when |
+|---|---|
+| The pinned container image (`OKF_WIKI_IMAGE`, okf-wiki v1.2.0, run with podman and no network) | podman is installed |
+| The binary in `site/.toolchain/` | podman is missing, which is the case on a Cloudflare build image |
+
+`site/toolchain.sh` fills `site/.toolchain/` (git-ignored). It downloads the okf-wiki v1.2.0
+release archive for the host (the release the image carries), checks it against the sha256 values
+committed in `site/okf-wiki.sha256`, and unpacks the binary and the Mermaid bundle the docs'
+diagrams need. It needs only curl. `make site` runs the script by itself when podman is absent
+and the binary is not there yet, so the build command on Cloudflare is just `make site`.
+`OKF_WIKI` and `OKF_WIKI_VENDOR` name a different binary and Mermaid bundle. To move the pin,
+change `VERSION` in `toolchain.sh`, replace `okf-wiki.sha256` with that release's `checksums.txt`,
+and move `OKF_WIKI_IMAGE` to match.
 
 ## Check
 
@@ -72,11 +88,33 @@ own picture.
 
 ## Deploy
 
-Deployment needs, from the owner: a Cloudflare account, a Worker name (`name` in
-`site/wrangler.jsonc`), the domain to attach and to pass as `SITE_URL`, and an API token if a CI
-job deploys. With those, `make site` and then `npx wrangler deploy` from `site/` publish
-`site/dist/`. Cloudflare's own build runners have no podman, so build where podman or an okf-wiki
-binary is available.
+The site is the Worker `nocturne`, static assets only, built by Cloudflare Workers Builds from
+this repository. The Worker's name in the dashboard must match `name` in `site/wrangler.jsonc`.
+Under the Worker's Settings, Build:
+
+| Setting | Value |
+|---|---|
+| Production branch | `main` |
+| Root directory | `site` |
+| Build command | `make site` |
+| Deploy command | `npx wrangler deploy` |
+| Preview command | `npx wrangler preview` |
+
+The root directory is `site` because it is where the build command runs and where the deploy
+command finds `wrangler.jsonc`. The output path is not a dashboard field: the deploy command
+takes it from `assets.directory`, so the build only has to finish writing `dist/` first. The
+build image has curl and make but no container runtime, which is why it renders with the
+binary from `toolchain.sh`.
+
+Pull request builds run `npx wrangler preview`, which serves the branch at a preview address and
+never touches production. It reads its own `previews` block and refuses to run without one; every
+setting here is top level, so the block is empty.
+
+`nocturne.is` is attached under the Worker's Domains and Routes. `flatpak.nocturne.is` is not
+part of this Worker: it is a separate proxied CNAME record that points at GitHub Pages, which
+serves the Flatpak repository (see [The Flatpak](flatpak.md)).
+
+A local deploy is `make site` and then `npx wrangler deploy` from `site/`, after `wrangler login`.
 
 ## What the page may say
 
