@@ -146,19 +146,34 @@ impl StandInPort {
         &self.key
     }
 
-    /// `requests` as the stand-in logged them, without those another test's port sent. A
-    /// finished test's engine client can outlive it on the shared runtime and reach a stand-in
-    /// that was given its freed loopback port; its engine key is not this port's.
-    pub fn own(&self, requests: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
-        let mine = format!("Bearer {}", self.key);
+    /// `requests` as the stand-in logged them, keeping only those that prove they are this
+    /// lab's: the engine key is this port's own, or one of `extra_keys` the lab typed. A
+    /// finished test's client, or an unrelated process, can reach a stand-in that was given its
+    /// freed loopback port, and sends no key or another one.
+    pub fn own_with(
+        &self,
+        extra_keys: &[&str],
+        requests: Vec<serde_json::Value>,
+    ) -> Vec<serde_json::Value> {
+        let mut accepted = vec![format!("Bearer {}", self.key)];
+        accepted.extend(extra_keys.iter().map(|k| format!("Bearer {k}")));
         requests
             .into_iter()
             .filter(|r| {
                 r["headers"]["authorization"]
                     .as_str()
-                    .is_none_or(|a| a == mine || !a.starts_with("Bearer engine-key-"))
+                    .is_some_and(|a| accepted.iter().any(|m| m == a))
+                    && r["path"].as_str().is_some_and(|p| p.starts_with("/v1/"))
+                    && r["body"]["model"]
+                        .as_str()
+                        .is_none_or(|m| m == "stand-in-model" || m == "user.nocturne-online")
             })
             .collect()
+    }
+
+    /// `requests` that carry this port's own engine key.
+    pub fn own(&self, requests: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+        self.own_with(&[], requests)
     }
 
     /// Every route given to the engine, in order (`None` for none).

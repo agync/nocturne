@@ -702,7 +702,7 @@ fn a_check_of_another_provider_never_carries_questions() {
     );
     let b = StandIn::start(&fake_provider());
     let b_chats = || -> Vec<Value> {
-        let all: Vec<Value> = block_on(async {
+        let all: Vec<Value> = l.port.own(block_on(async {
             reqwest::Client::new()
                 .get(b.url("/fake/requests"))
                 .send()
@@ -711,7 +711,7 @@ fn a_check_of_another_provider_never_carries_questions() {
                 .json()
                 .await
                 .unwrap()
-        });
+        }));
         all.into_iter()
             .filter(|r| r["path"] == "/v1/chat/completions")
             .collect()

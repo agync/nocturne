@@ -205,20 +205,28 @@ impl Lab {
 
     fn requests(&self, path: &str) -> Vec<Value> {
         block_on(async {
-            let client = self.services.client().await.expect("an engine");
-            let endpoint = client.endpoint().expect("an address");
-            reqwest::Client::new()
-                .get(format!("http://127.0.0.1:{}/fake/requests", endpoint.port))
-                .bearer_auth(&endpoint.key)
-                .send()
-                .await
-                .unwrap()
-                .json::<Vec<Value>>()
-                .await
-                .unwrap()
+            let mut last = String::new();
+            for _ in 0..50 {
+                if let Some(client) = self.services.client().await
+                    && let Some(endpoint) = client.endpoint()
+                {
+                    let sent = reqwest::Client::new()
+                        .get(format!("http://127.0.0.1:{}/fake/requests", endpoint.port))
+                        .bearer_auth(&endpoint.key)
+                        .send()
+                        .await;
+                    match sent {
+                        Ok(r) => return r.json::<Vec<Value>>().await.unwrap(),
+                        Err(e) if e.is_connect() => last = e.to_string(),
+                        Err(e) => panic!("{e}"),
+                    }
+                }
+                tokio::time::sleep(Duration::from_millis(100)).await;
+            }
+            panic!("the request log could not be read: {last}")
         })
         .into_iter()
-        .filter(|r| r["path"] == path)
+        .filter(|r| r["authorised"] == true && r["path"] == path)
         .collect()
     }
 
@@ -589,10 +597,14 @@ fn a_new_finding_model_is_fetched_read_with_and_swapped_in() {
             &format!("thing {i}"),
         );
     }
-    let p = lab.h.ok(
-        "preview_model_change",
-        json!({"job": "finding", "model": "Qwen3-Embedding-4B-GGUF"}),
-    );
+    let preview = || {
+        lab.h.ok(
+            "preview_model_change",
+            json!({"job": "finding", "model": "Qwen3-Embedding-4B-GGUF"}),
+        )
+    };
+    wait_for("all five to be counted", || preview()["reindexItems"] == 5);
+    let p = preview();
     assert_eq!(p["reindexItems"], 5);
     assert!(p["reindexEtaSeconds"].as_u64().is_some());
     let view = lab
@@ -622,13 +634,11 @@ fn a_new_finding_model_is_fetched_read_with_and_swapped_in() {
     );
     assert_eq!(lab.downloads_in_ledger(), ["Qwen3-Embedding-4B-GGUF"]);
     // The worker read with the new model.
-    let embedded: Vec<Value> = lab.requests("/v1/embeddings");
-    assert!(
-        embedded
+    wait_for("the re-read to be logged with the new model", || {
+        lab.requests("/v1/embeddings")
             .iter()
-            .any(|r| r["body"]["model"] == "Qwen3-Embedding-4B-GGUF"),
-        "{embedded:?}"
-    );
+            .any(|r| r["body"]["model"] == "Qwen3-Embedding-4B-GGUF")
+    });
 }
 
 #[test]

@@ -59,16 +59,19 @@ impl Lab {
     }
 
     fn requests(&self) -> Vec<Value> {
-        self.port.own(block_on(async {
-            reqwest::Client::new()
-                .get(self.s.url("/fake/requests"))
-                .send()
-                .await
-                .unwrap()
-                .json()
-                .await
-                .unwrap()
-        }))
+        self.port.own_with(
+            &[KEY],
+            block_on(async {
+                reqwest::Client::new()
+                    .get(self.s.url("/fake/requests"))
+                    .send()
+                    .await
+                    .unwrap()
+                    .json()
+                    .await
+                    .unwrap()
+            }),
+        )
     }
 
     fn check(&self, key: &str) -> Value {
@@ -183,7 +186,15 @@ fn another_ports_engine_client_is_not_this_labs_request() {
         })
     };
     get(other.engine_key());
-    assert!(l.requests().is_empty(), "a stray engine client is ignored");
+    block_on(async {
+        reqwest::Client::new()
+            .get(l.s.url("/v1/models"))
+            .header("user-agent", "Go-http-client/1.1")
+            .send()
+            .await
+            .unwrap();
+    });
+    assert!(l.requests().is_empty(), "a stray client is ignored");
     get(l.port.engine_key());
     assert_eq!(l.requests().len(), 1, "this lab's own engine client counts");
 }
@@ -666,7 +677,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
         json!({"form": {"baseUrl": second, "key": "", "model": "stand-in-model"}}),
     );
     assert_eq!(out["type"], "keyRefused");
-    let seen: Vec<Value> = block_on(async {
+    let seen: Vec<Value> = l.port.own(block_on(async {
         reqwest::Client::new()
             .get(other.url("/fake/requests"))
             .send()
@@ -675,7 +686,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
             .json()
             .await
             .unwrap()
-    });
+    }));
     assert!(seen.is_empty(), "{seen:?}");
     assert!(!serde_json::to_string(&seen).unwrap().contains(&KEY[..20]));
     // With a key typed for it, the second address gets that key and only that one.
@@ -685,7 +696,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
                         "model": "stand-in-model"}}),
     );
     assert_eq!(out["type"], "works");
-    let seen: Vec<Value> = block_on(async {
+    let seen: Vec<Value> = l.port.own(block_on(async {
         reqwest::Client::new()
             .get(other.url("/fake/requests"))
             .send()
@@ -694,7 +705,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
             .json()
             .await
             .unwrap()
-    });
+    }));
     assert_eq!(seen.len(), 1);
     assert!(!serde_json::to_string(&seen).unwrap().contains(&KEY[..20]));
 }
@@ -1020,15 +1031,15 @@ fn turning_on_is_confirmed_outside_the_web_view() {
     let asked = Arc::new(std::sync::Mutex::new(Vec::new()));
     hub.set_confirm(confirm_with(asked.clone(), false));
     assert_eq!(l.check(KEY)["type"], "works");
-    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(l.h.code("turn_on_online", settings()), "declined");
     assert_eq!(*asked.lock().unwrap(), [URL]);
     assert_eq!(l.view()["state"]["type"], "off");
     assert!(!l.keychain.holds_a_key(), "nothing kept after a no");
 
     hub.set_confirm(agree(asked.clone()));
-    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(l.h.code("turn_on_online", settings()), "declined");
     assert_eq!(l.check(KEY)["type"], "works");
-    assert_eq!(l.h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(l.h.code("turn_on_online", settings()), "declined");
     assert_eq!(
         asked.lock().unwrap().len(),
         1,
@@ -1108,6 +1119,6 @@ fn without_a_way_to_ask_nothing_is_turned_on() {
         json!({"form": {"baseUrl": URL, "key": KEY, "model": "stand-in-model"}}),
     );
     assert_eq!(out["type"], "works");
-    assert_eq!(h.code("turn_on_online", settings()), "unavailable");
+    assert_eq!(h.code("turn_on_online", settings()), "declined");
     assert_eq!(h.ok("get_online", json!({}))["state"]["type"], "off");
 }
