@@ -69,6 +69,10 @@ jobs:
         run: |
           set -euo pipefail
           ref=${REF:-$GITHUB_SHA}
+          case "$ref" in
+            -* | refs/* | */refs/* | *..* | *[[:space:]]* )
+              echo "refusing the ref: $ref" >&2; exit 1 ;;
+          esac
           peel() {
             local refs
             refs=$(git ls-remote origin "refs/tags/$1" "refs/tags/$1^{}")
@@ -80,7 +84,8 @@ jobs:
           else
             sha=$(peel "$ref" || true)
             if [ -z "$sha" ]; then
-              sha=$(git ls-remote origin "refs/heads/$ref" | awk '{ print $1 }' | head -n1)
+              sha=$(git ls-remote origin "refs/heads/$ref" \
+                | awk -v r="refs/heads/$ref" '$2 == r { print $1 }' | head -n1)
             fi
           fi
           [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "cannot resolve $ref" >&2; exit 1; }
