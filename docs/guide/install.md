@@ -130,11 +130,11 @@ sudo apt install ./Nocturne-linux-amd64.deb
 
 ### Flatpak
 
-Add Nocturne's repository from [nocturne.is/flatpak](https://nocturne.is/flatpak), then install
+Add Nocturne's repository from [flatpak.nocturne.is](https://flatpak.nocturne.is), then install
 the app. The page has a button that does both, or run:
 
 ```bash
-flatpak remote-add --user --if-not-exists nocturne https://nocturne.is/flatpak/nocturne.flatpakrepo
+flatpak remote-add --user --if-not-exists nocturne https://flatpak.nocturne.is/nocturne.flatpakrepo
 flatpak install --user nocturne is.nocturne.Nocturne
 ```
 
