@@ -97,7 +97,8 @@ jobs:
             [ "$(peel "$tag" || true)" = "$sha" ] \
               || { echo "$tag does not point at $sha" >&2; exit 1; }
             # The commit must already be on main: a tag on a side branch is never built or signed.
-            onmain=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...$sha" --jq .status)
+            mainsha=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+            onmain=$(gh api "repos/$GITHUB_REPOSITORY/compare/$mainsha...$sha" --jq .status)
             case "$onmain" in
               identical | behind) ;;
               *) echo "$sha is not on main (compare says $onmain)" >&2; exit 1 ;;
