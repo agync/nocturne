@@ -190,6 +190,62 @@ fn sensitive_needs_the_switch() {
     assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true]);
 }
 
+fn correct(f: &Fixture, id: &str, object: &str, sentence: &str) -> String {
+    f.engine
+        .correct(
+            id,
+            CorrectPatch {
+                object: object.into(),
+                sentence: Some(sentence.into()),
+                due: None,
+                valid_from: None,
+                valid_to: None,
+            },
+        )
+        .unwrap()
+}
+
+/// Health, money and ID details are found in any version's words or labels, not only in what
+/// was suggested private when the current version was kept.
+#[test]
+fn sensitive_in_any_version_needs_the_switch() {
+    let f = fixture();
+    let plain = memory(&f, "Ana visited the bakery on Sunday");
+    let bank = memory(&f, "Rent goes to GB82 WEST 1234 5698 7654 32");
+    let passport = memory(&f, "Ana renewed passport AB1234567");
+    let pay = memory(&f, "Ana earns £52,000 as salary");
+    let was_card = memory(&f, "Ana uses card 4111 1111 1111 1111");
+    let now_plain = correct(&f, &was_card, "a new card", "Ana uses a new card");
+    let was_flagged = memory(&f, "Ana sees the nurse weekly");
+    exec(
+        f.dir.path(),
+        "UPDATE memories SET suggest_private = 1 WHERE id = ?1",
+        &was_flagged,
+    );
+    let flagged_now_plain = correct(&f, &was_flagged, "monthly", "Ana sees the nurse monthly");
+    let labelled = memory(&f, "Ana sorted the paperwork");
+    exec(
+        f.dir.path(),
+        "UPDATE memories SET tags = '[\"Bank\"]' WHERE id = ?1",
+        &labelled,
+    );
+    let ids = vec![
+        plain,
+        bank,
+        passport,
+        pay,
+        now_plain,
+        flagged_now_plain,
+        labelled,
+    ];
+    let s = Some(LeftOut::Sensitive);
+    assert_eq!(
+        f.engine.online_verdicts(&ids, false).unwrap(),
+        [None, s, s, s, s, s, s]
+    );
+    assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true; 7]);
+}
+
 #[test]
 fn let_go_and_forgetting_not_sendable() {
     let f = fixture();

@@ -295,6 +295,44 @@ fn private_and_sensitive_never_in_payload() {
     assert_eq!(last(&d).left_out, Some(LeftOut::Both));
 }
 
+/// A bank detail and a passport number found in what was kept stay here with the switch off,
+/// though neither was suggested private when it was kept.
+#[test]
+fn bank_and_passport_details_stay_here() {
+    let l = lab();
+    dentist(&l);
+    let (_, bank) = l.h.learn(
+        "BANKNOTE the dentist bill",
+        "The dentist is paid from GB82 WEST 1234 5698 7654 32 BANKMARK.",
+        "Dentist",
+        "GB82 WEST 1234 5698 7654 32",
+    );
+    let (_, passport) = l.h.learn(
+        "PASSNOTE the dentist form",
+        "The dentist form needs passport AB1234567 PASSMARK.",
+        "Dentist",
+        "AB1234567",
+    );
+    assert!(!l.h.memory(&bank).suggest_private);
+    assert!(!l.h.memory(&passport).suggest_private);
+    l.turn_on(true, false, 200);
+    let d = l.ask("What about the dentist?", None);
+    let recorded = serde_json::to_string(&l.chats()).unwrap();
+    for marker in [
+        "BANKMARK",
+        "PASSMARK",
+        "GB82",
+        "AB1234567",
+        "BANKNOTE",
+        "PASSNOTE",
+    ] {
+        assert!(!recorded.contains(marker), "{marker} left the computer");
+    }
+    assert!(recorded.contains("The dentist is on Thursday."));
+    assert_eq!(last(&d).left_out, Some(LeftOut::Sensitive));
+    assert_eq!(last(&d).answered_by, online());
+}
+
 #[test]
 fn left_out_flag_private_sensitive_both() {
     for (private, sensitive, want) in [

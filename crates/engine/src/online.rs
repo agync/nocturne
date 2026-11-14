@@ -192,23 +192,55 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
 /// Why a memory may not be sent, or `None` when it may. Fails closed: a memory the store does
 /// not know, or one being forgotten or let go, counts as private.
 fn verdict(conn: &Connection, id: &str, allow_sensitive: bool) -> Result<Option<LeftOut>> {
-    let row: Option<(bool, bool, Option<String>)> = conn
+    let row: Option<(bool, Option<String>)> = conn
         .query_row(
-            "SELECT forgetting, suggest_private, let_go_at FROM memories WHERE id = ?1",
+            "SELECT forgetting, let_go_at FROM memories WHERE id = ?1",
             [id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .optional()?;
-    let Some((forgetting, sensitive, let_go)) = row else {
+    let Some((forgetting, let_go)) = row else {
         return Ok(Some(LeftOut::Private));
     };
     if forgetting || let_go.is_some() || crate::memory::is_private_chain(conn, id)? {
         return Ok(Some(LeftOut::Private));
     }
-    if sensitive && !allow_sensitive {
+    if !allow_sensitive && sensitive_chain(conn, id)? {
         return Ok(Some(LeftOut::Sensitive));
     }
     Ok(None)
+}
+
+/// Whether any version of a memory is a health, money or ID detail: suggested private when it
+/// was kept, labelled so, or with words that hold one. Every version counts, because a line
+/// sent says what the memory was before. An unknown memory counts.
+fn sensitive_chain(conn: &Connection, id: &str) -> Result<bool> {
+    let versions = crate::memory::chain(conn, id)?;
+    if versions.is_empty() {
+        return Ok(true);
+    }
+    let mut read = conn.prepare_cached(
+        "SELECT suggest_private, subject, object, sentence, tags FROM memories WHERE id = ?1",
+    )?;
+    for v in &versions {
+        let (suggested, subject, object, sentence, tags): (bool, String, String, String, String) =
+            read.query_row([v], |r| {
+                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+            })?;
+        let labelled = match serde_json::from_str::<Vec<String>>(&tags) {
+            Ok(tags) => tags.iter().any(|t| crate::sensitive::tag(t)),
+            Err(_) => true,
+        };
+        if suggested
+            || labelled
+            || [&subject, &object, &sentence]
+                .iter()
+                .any(|t| crate::sensitive::text(t))
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// The first instant of `now`'s calendar month in `tz`, and of the next one.
