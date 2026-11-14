@@ -235,6 +235,7 @@ Rules:\n\
 - span, written first: {{\"quote\": the words of the item that support it, copied character for character}}. A memory without one is thrown away.\n\
 - tags: a few lower-case words.\n\
 - moved: true only when the text says this value replaces an earlier one (moved, changed, rescheduled, now instead of); otherwise false.\n\
+- When the text says something has moved and then that it is now on a day (the eye test has moved; the optician rang: it is now Friday 6 March), that day is the new value of what moved: one memory about it (the eye test), predicate scheduled, due that day, moved true. The day is not when anyone rang or wrote.\n\
 Skip small talk and anything that will not matter later. Never invent facts. An empty list is fine.\n\
 Example. A note kept on {EXAMPLE_KEPT}: {EXAMPLE_NOTE}\n\
 Reply: {EXAMPLE_REPLY}\n{}",
@@ -633,6 +634,19 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn a_day_after_a_move_is_the_new_value_of_what_moved() {
+        // Tiny read "The dentist appointment has moved. Dr Okafor's receptionist called: it is
+        // now Thursday 19 November at 14:30" as "The call was made on Thursday 19 November at
+        // 14:30" and an undated "The dentist appointment has been moved" in two runs of three.
+        let system = extraction_system("n");
+        assert!(system.contains(
+            "that day is the new value of what moved: one memory about it (the eye test), \
+             predicate scheduled, due that day, moved true. The day is not when anyone rang or \
+             wrote."
+        ));
     }
 
     #[test]
