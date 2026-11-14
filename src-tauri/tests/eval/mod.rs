@@ -761,10 +761,10 @@ pub async fn embed_all(engine: &Engine, mind: &dyn Mind) -> usize {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Raw replies: the mind reports each reply it got, before any check, as a trace event with this
-// target (fields `step` and `reply`). Only a run that asks for them records them.
+// Raw replies: the mind reports each reply it got, before any check, as a trace event with its
+// reply target (fields `step` and `reply`). Only a run that asks for them records them.
 
-pub const REPLY_TARGET: &str = "nocturne::reply";
+pub use nocturne_lemonade::mind::REPLY_TARGET;
 
 #[derive(Clone, Default)]
 pub struct ReplyTap(Arc<Mutex<Vec<Value>>>);

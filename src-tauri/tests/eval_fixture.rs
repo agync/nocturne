@@ -66,7 +66,7 @@ impl Mind for Reporting {
                 .map(|(n, f)| format!("{} [m{}]", f.memory.sentence, n + 1))
                 .collect::<Vec<_>>()
                 .join(" ");
-            tracing::trace!(target: "nocturne::reply", step = "answer", reply = %reply);
+            tracing::trace!(target: REPLY_TARGET, step = "answer", reply = %reply);
             self.0.answer(question, facts, out).await
         })
     }

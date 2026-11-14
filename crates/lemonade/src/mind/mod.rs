@@ -741,7 +741,7 @@ fn merged(mut kept: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
 pub const REPLY_TARGET: &str = "nocturne::reply";
 
 fn raw_reply(step: &str, reply: &str) {
-    tracing::trace!(target: "nocturne::reply", step, reply = %reply);
+    tracing::trace!(target: REPLY_TARGET, step, reply = %reply);
 }
 
 /// `req` asking for a reply by the JSON schema instead of the grammar.
