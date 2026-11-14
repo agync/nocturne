@@ -2,14 +2,17 @@
 
 .PHONY: help site docs serve check shots clean
 
-# The public origin, used for the canonical and Open Graph links. Set it when the domain is known.
-SITE_URL ?= https://nocturne.example
+# The public origin, used for the canonical and Open Graph links.
+SITE_URL ?= https://nocturne.is
 
-# The docs renderer. The pinned image is the default; OKF_WIKI names a local okf-wiki binary
-# instead, with OKF_WIKI_VENDOR pointing at its built Mermaid bundle.
+# The docs renderer. With podman, the pinned image (okf-wiki v1.2.0) renders. Without it, the
+# binary from toolchain.sh renders, and the Makefile builds that toolchain if it is missing, which
+# is the case on a Cloudflare build image. OKF_WIKI names another okf-wiki binary instead, with
+# OKF_WIKI_VENDOR pointing at its built Mermaid bundle.
 OKF_WIKI_IMAGE ?= ghcr.io/abn/okf-wiki@sha256:c6a3844ad2f6f1c453146d145ea1893c8d038b2d8dc6647ef328866bcb123264
 OKF_WIKI ?=
 OKF_WIKI_VENDOR ?=
+TOOLCHAIN := .toolchain
 PODMAN ?= podman
 
 PORT ?= 4180
@@ -20,6 +23,14 @@ DIST := dist
 
 RENDER_FLAGS = --base /docs/ --brand Nocturne --brand-sub docs --title "Nocturne docs" \
 	--sections "guide:Using Nocturne,design:Design,architecture:Architecture,adr:Decisions,contribution:Contribution"
+
+ifeq ($(strip $(OKF_WIKI)),)
+ifeq ($(shell command -v $(PODMAN) 2>/dev/null),)
+OKF_WIKI := $(TOOLCHAIN)/bin/okf-wiki
+OKF_WIKI_VENDOR := $(TOOLCHAIN)/mermaid
+NEED_TOOLCHAIN := 1
+endif
+endif
 
 ifeq ($(strip $(OKF_WIKI)),)
 RENDER = $(PODMAN) run --rm --network=none --user 0:0 --security-opt label=disable \
@@ -39,6 +50,7 @@ site: docs ## Build the landing page and the docs into dist/ (the deploy directo
 		--lock ../lemonade.lock . $(DIST)
 
 docs: ## Render ../docs with the Nocturne theme into build/render
+	$(if $(NEED_TOOLCHAIN),@test -x $(OKF_WIKI) || ./toolchain.sh)
 	rm -rf $(BUILD)
 	mkdir -p $(BUILD)/render
 	python3 -I scripts/build.py theme docs-theme assets/fonts $(BUILD)/theme
