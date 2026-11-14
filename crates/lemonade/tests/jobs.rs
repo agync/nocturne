@@ -137,7 +137,10 @@ async fn a_download_finishes_once_into_the_ledger_and_closes_the_window() {
     assert!(done.total > 0);
     assert_eq!(done.received, done.total);
     assert!(r.present("Whisper-Tiny").await);
-    r.wait_offline(true).await;
+    assert!(
+        r.offline().await,
+        "the window is closed before the end is announced"
+    );
     let ledger = r.ledger.lock().unwrap().clone();
     assert_eq!(ledger, [("Whisper-Tiny".to_string(), done.total)]);
     assert_eq!(r.jobs.model(), None);

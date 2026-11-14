@@ -297,7 +297,8 @@ async fn fetch(
     gate: Arc<Gate>,
     on_download: OnDownload,
 ) {
-    match follow(&engine, opts, &model, &tx, &gate).await {
+    let finished = follow(&engine, opts, &model, &tx, &gate).await;
+    let bytes = match &finished {
         Some(last) => {
             let total = tx.borrow().total;
             let bytes = last
@@ -310,16 +311,23 @@ async fn fetch(
                 .control(&job_id(&model), Action::Remove)
                 .await;
             on_download(&model, bytes);
-            tx.send_modify(|p| {
-                p.done = true;
-                p.paused = false;
-                p.total = p.total.max(bytes);
-                p.received = p.total;
-            });
+            bytes
         }
+        None => 0,
+    };
+    // The window closes before the end is announced: what follows (the re-read of a new
+    // finding model) starts on the engine that will keep running, not on one the closing
+    // relaunch is about to replace.
+    gate.release().await;
+    match finished {
+        Some(_) => tx.send_modify(|p| {
+            p.done = true;
+            p.paused = false;
+            p.total = p.total.max(bytes);
+            p.received = p.total;
+        }),
         None => tx.send_modify(|p| p.failed = true),
     }
-    gate.release().await;
 }
 
 async fn present(client: &Client, model: &str) -> bool {
