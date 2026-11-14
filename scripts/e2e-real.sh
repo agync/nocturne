@@ -16,6 +16,9 @@
 #            pulled through its catalogue, the only network use of the mode. That engine is not a
 #            child of the test, so the memory the test reports excludes it. Stopped by its pid at
 #            the end. NOCTURNE_E2E_TIER, NOCTURNE_E2E_TAG and the other variables work as in `run`.
+#            The relay answers without a thinking phase (--reasoning-budget 0, NOCTURNE_E2E_RELAY_ARGS
+#            replaces the engine flags), as a plain hosted answerer would for a request that does
+#            not ask for thinking.
 #   relay    only gets the relay engine ready: pulls its model if it is missing, then stops it.
 #   models   the test with a model chosen for each job, NOCTURNE_E2E_MODELS="mind=<id>,speech=<id>,
 #            voice=<id>,recall=<id>" (any of the four), through the app's own change command with
@@ -95,7 +98,7 @@ relay_launch() {
 
 start_relay() {
     local model=${NOCTURNE_E2E_RELAY_MODEL:-Qwen3.5-9B-GGUF}
-    local root=$dir/relay port ws key args="--cache-ram 256 --ctx-checkpoints 4"
+    local root=$dir/relay port ws key args=${NOCTURNE_E2E_RELAY_ARGS:---cache-ram 256 --ctx-checkpoints 4 --reasoning-budget 0}
     bundle=${NOCTURNE_LEMOND:-$repo/vendor/lemonade/linux-x86_64}
     [[ -x "$bundle/lemond" ]] || { printf 'no pinned lemond at %s\n' "$bundle" >&2; return 2; }
     mkdir -p "$root/cache/bin" "$root/config" "$root/models"
