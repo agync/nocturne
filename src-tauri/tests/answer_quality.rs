@@ -131,6 +131,18 @@ fn the_search_order_stands_when_the_reranking_model_cannot_be_reached() {
     assert_eq!(ids(&kept), ids(&hits));
 }
 
+#[test]
+fn the_question_is_embedded_through_one_adapter() {
+    let mind = nocturne_engine::FakeMind::new();
+    let direct = block_on(mind.embed(&["When is the plumber coming?".to_string()])).unwrap();
+    let adapted = block_on(nocturne_app_lib::ask::embed_question(
+        &mind,
+        "When is the plumber coming?",
+    ))
+    .unwrap();
+    assert_eq!(adapted, direct);
+}
+
 // Online answers and what was kept back ----------------------------------------------------
 
 struct Lab {

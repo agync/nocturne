@@ -26,7 +26,7 @@ use nocturne_contract::{
     AnsweredBy, AskDelta, AskPhase, AskPlace, EVENT_ASK, LeftOut, LocalReason, NearMatch,
     SendResult,
 };
-use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, MindError, UseKind, is_source_line};
+use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, Mind, MindError, UseKind, is_source_line};
 use nocturne_lemonade::mind::online::OnlineMind;
 use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
 use nocturne_lemonade::rerank::Reranker;
@@ -377,6 +377,14 @@ fn random_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// The question as the recall model reads it, for meaning-based search.
+///
+/// Integration point for the mind's query embedding (`embed_query`, which adds the recall
+/// model's search instruction): until the mind has it, the question is embedded as it is.
+pub async fn embed_question(mind: &dyn Mind, question: &str) -> Result<Vec<Vec<f32>>, MindError> {
+    mind.embed(&[question.to_string()]).await
+}
+
 /// On a tier with a reranking model that is on disk, the search's hits ordered by it and cut to
 /// [`RERANKED_K`]. Anything that goes wrong leaves the search's own order.
 async fn rerank(state: &AppState, question: &str, hits: Vec<Hit>) -> Vec<Hit> {
@@ -441,7 +449,7 @@ async fn answer<R: Runtime>(
         sink.phase(AskPhase::Waking);
     }
     let query_vec = loop {
-        match mind.embed(std::slice::from_ref(&question)).await {
+        match embed_question(mind.as_ref(), &question).await {
             Ok(v) => break v.into_iter().next(),
             Err(MindError::Busy) if tokio::time::Instant::now() < deadline => {
                 if !woke {
