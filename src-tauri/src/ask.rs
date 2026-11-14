@@ -533,14 +533,15 @@ async fn answer<R: Runtime>(
         return;
     }
     let e = engine.clone();
-    let (hits, found, facts) = match blocking(move || with_disputes(&e, hits, public_only)).await {
-        Ok(v) => v,
-        Err(err) => {
-            tracing::error!("could not read the open questions: {:?}", err.code);
-            sink.phase(AskPhase::Unavailable);
-            return;
-        }
-    };
+    let (hits, found, facts, pairs) =
+        match blocking(move || with_disputes(&e, hits, public_only)).await {
+            Ok(v) => v,
+            Err(err) => {
+                tracing::error!("could not read the open questions: {:?}", err.code);
+                sink.phase(AskPhase::Unavailable);
+                return;
+            }
+        };
     sink.send(AskPhase::Reading, |d| d.found = Some(facts.len() as u32));
 
     // Where this question may be answered is decided once, before anything is asked: a
@@ -575,6 +576,7 @@ async fn answer<R: Runtime>(
                 hits: &hits,
                 found,
                 facts: &facts,
+                pairs: &pairs,
             };
             match ask_online(
                 sink,
@@ -639,6 +641,14 @@ async fn answer<R: Runtime>(
             }
         }
     };
+    let mut meta = meta;
+    let known: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
+    if let Some((extra, ids)) = settle(&pairs, &meta, &said, &known) {
+        tracing::info!("an answer gave one side of two; the other is added");
+        said.push_str(&extra);
+        meta.cited.extend(ids);
+        sink.send(AskPhase::Streaming, |d| d.text_delta = Some(extra));
+    }
     conclude(sink, &engine, &hits, found, &meta, &said).await;
 }
 
@@ -649,6 +659,7 @@ struct Asked<'a> {
     hits: &'a [Hit],
     found: usize,
     facts: &'a [Fact],
+    pairs: &'a [Sides],
 }
 
 /// How an online question ended.
@@ -692,7 +703,20 @@ async fn ask_online<R: Runtime>(
     let mut sendable: Vec<Fact> = Vec::new();
     for (fact, verdict) in facts.iter().zip(&verdicts) {
         match verdict {
-            None => sendable.push((*fact).clone()),
+            None => {
+                // A move goes out as the memory is kept: the old value it carries here is
+                // another memory's, judged for this computer only, and the Sent log shows
+                // exactly the memory's own words.
+                let mut fact = (*fact).clone();
+                if let Some(p) = asked
+                    .pairs
+                    .iter()
+                    .find(|p| p.moved && p.newer.id == fact.memory.id)
+                {
+                    fact.memory.was = p.newer_was.clone();
+                }
+                sendable.push(fact);
+            }
             Some(LeftOut::Private) => private = true,
             Some(LeftOut::Sensitive) => sensitive = true,
             Some(LeftOut::Both) => (private, sensitive) = (true, true),
@@ -824,6 +848,20 @@ async fn ask_online<R: Runtime>(
         return Online::Here(LocalReason::NotSureOnline);
     }
     // What was left out is said only of an answer written online.
+    // A side kept back from the provider (a line of an original, something private) that the
+    // answer needed is added here, from this computer; it never goes out, the Sent log keeps
+    // only what came back, and the mark says something stayed here.
+    let mut meta = meta;
+    let mut left_out = left_out;
+    let known: Vec<String> = asked.hits.iter().map(|h| h.memory.id.clone()).collect();
+    if stands && let Some((extra, ids)) = settle(asked.pairs, &meta, &said, &known) {
+        said.push_str(&extra);
+        meta.cited.extend(ids);
+        left_out = Some(match left_out {
+            Some(LeftOut::Sensitive | LeftOut::Both) => LeftOut::Both,
+            _ => LeftOut::Private,
+        });
+    }
     sink.mark(|m| {
         m.answered_by = Some(AnsweredBy::Online {
             host: host.to_string(),
@@ -899,17 +937,121 @@ async fn conclude<R: Runtime>(
     });
 }
 
-/// The facts for the mind: each hit with the memories it disagrees with in an open
-/// which-is-right question. A memory on the other side that the search did not find is brought
-/// in, so the answer can give both and cite both: at most `MAX_SIDES` of them, with the facts
-/// kept to `RETRIEVE_K` by leaving out the lowest hits. A side that can no longer be read (it is
-/// being forgotten), or a private one when `public_only`, is left out. Returns the facts' hits, how many of them the search found
-/// (they come first), and the facts.
+/// One side of two, as the answer would give it.
+#[derive(Debug, Clone, PartialEq)]
+struct Side {
+    id: String,
+    sentence: String,
+}
+
+/// Two facts an answer must not give one of alone: the sides of an open which-is-right
+/// question, or an appointment and where a later note says it moved (`moved`, with the memory
+/// that says it moved as `notice`). A move reaches the mind as the newer side alone, carrying
+/// the old value as `was`; `older` is then not among the facts.
+#[derive(Debug, Clone, PartialEq)]
+struct Sides {
+    older: Side,
+    newer: Side,
+    /// Whether `newer` was clearly kept later.
+    ordered: bool,
+    moved: bool,
+    notice: Option<String>,
+    /// For a move, the newer side's own `was`, before the old value was put there.
+    newer_was: Option<String>,
+}
+
+/// The facts' hits, how many of them the search found, the facts, and the pairs of sides.
+type Gathered = (Vec<Hit>, usize, Vec<Fact>, Vec<Sides>);
+
+/// The facts for the mind.
+///
+/// A dated appointment a later note says moved (`Engine::later_moves`) is given as a move: in
+/// its place, what that note says it moved to, with the old value as `was`. That is the line of
+/// the note, or on a phone, which never gets a line of an original, the memory that says it
+/// moved, when it may go out; otherwise the appointment stays as it is. A line the search
+/// already offered is used as it is, not offered twice.
+///
+/// Each hit then comes with the memories it disagrees with in an open which-is-right question.
+/// A side the search did not find is brought in, so the answer can give both and cite both: at
+/// most `MAX_SIDES` of them, with the facts kept to `RETRIEVE_K` by leaving out the lowest hits.
+/// A side that can no longer be read (it is being forgotten), or a private one when
+/// `public_only`, is left out. Returns the facts' hits, how many of them the search found (they
+/// come first), the facts, and the pairs of sides.
 fn with_disputes(
     engine: &Engine,
     mut hits: Vec<Hit>,
     public_only: bool,
-) -> nocturne_engine::Result<(Vec<Hit>, usize, Vec<Fact>)> {
+) -> nocturne_engine::Result<Gathered> {
+    let mut pairs: Vec<Sides> = Vec::new();
+    for (old, notice, mut side) in engine.later_moves(&hits)? {
+        let Some(at) = hits.iter().position(|h| h.memory.id == old) else {
+            continue;
+        };
+        if public_only && is_source_line(&side.memory.id) {
+            side = match engine.get_memory(&notice) {
+                Ok(memory) => Hit {
+                    memory,
+                    score: 0.0,
+                    let_go: false,
+                },
+                Err(nocturne_engine::Error::NotFound(_)) => continue,
+                Err(e) => return Err(e),
+            };
+        }
+        if public_only && !phone_safe(engine, &side.memory)? {
+            continue;
+        }
+        let item = |h: &Hit| h.memory.receipts.first().map(|r| r.item_id.clone());
+        let offered = hits.iter().position(|h| {
+            h.memory.id == side.memory.id
+                || (is_source_line(&h.memory.id)
+                    && is_source_line(&side.memory.id)
+                    && h.memory.sentence == side.memory.sentence
+                    && item(h) == item(&side))
+        });
+        let older = Side {
+            id: old,
+            sentence: hits[at].memory.sentence.clone(),
+        };
+        // The old value travels with the move as `was`: on a phone only when it may go there.
+        let was = (!public_only || phone_safe(engine, &hits[at].memory)?)
+            .then(|| hits[at].memory.object.clone());
+        let newer_was = match offered {
+            Some(i) => hits[i].memory.was.clone(),
+            None => side.memory.was.clone(),
+        };
+        let newer = match offered {
+            Some(i) => {
+                hits[i].memory.was = was;
+                let id = hits[i].memory.id.clone();
+                hits.remove(at);
+                id
+            }
+            None => {
+                side.memory.was = was;
+                let id = side.memory.id.clone();
+                hits[at] = side;
+                id
+            }
+        };
+        let sentence = hits
+            .iter()
+            .find(|h| h.memory.id == newer)
+            .map(|h| h.memory.sentence.clone())
+            .unwrap_or_default();
+        pairs.push(Sides {
+            older,
+            newer: Side {
+                id: newer,
+                sentence,
+            },
+            ordered: true,
+            moved: true,
+            notice: Some(notice),
+            newer_was,
+        });
+    }
+
     let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
     let disputes = engine.open_disputes(&ids)?;
     let mut sides: Vec<Hit> = Vec::new();
@@ -962,7 +1104,343 @@ fn with_disputes(
             }
         })
         .collect();
-    Ok((hits, found, facts))
+    let side = |id: &str| {
+        hits.iter().find(|h| h.memory.id == id).map(|h| {
+            let kept = h.memory.receipts.iter().map(|r| r.kept_at.clone()).max();
+            (
+                Side {
+                    id: id.to_string(),
+                    sentence: h.memory.sentence.clone(),
+                },
+                kept,
+            )
+        })
+    };
+    for (a, b) in &disputes {
+        let (Some((a, ka)), Some((b, kb))) = (side(a), side(b)) else {
+            continue;
+        };
+        let ordered = ka.is_some() && kb.is_some() && ka != kb;
+        let (older, newer) = if ka > kb { (b, a) } else { (a, b) };
+        pairs.push(Sides {
+            older,
+            newer,
+            ordered,
+            moved: false,
+            notice: None,
+            newer_was: None,
+        });
+    }
+    Ok((hits, found, facts, pairs))
+}
+
+const WEEKDAYS: [&str; 7] = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+];
+
+const MONTHS: [&str; 12] = [
+    "january",
+    "february",
+    "march",
+    "april",
+    "may",
+    "june",
+    "july",
+    "august",
+    "september",
+    "october",
+    "november",
+    "december",
+];
+
+const ORDINALS: [(&str, &str); 5] = [
+    ("first", "1st"),
+    ("second", "2nd"),
+    ("third", "3rd"),
+    ("fourth", "4th"),
+    ("fifth", "5th"),
+];
+
+/// Words that tell nothing apart.
+const PLAIN: [&str; 16] = [
+    "the", "a", "an", "is", "are", "was", "on", "at", "of", "in", "to", "and", "it", "my", "with",
+    "for",
+];
+
+/// The words of `text`, lower case, with a time kept whole ("14:30", "2.30" as "2:30").
+fn tokens(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.to_lowercase().chars().collect();
+    let mut out = Vec::new();
+    let mut word = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        let joins = matches!(c, ':' | '.')
+            && i > 0
+            && chars[i - 1].is_ascii_digit()
+            && chars.get(i + 1).is_some_and(char::is_ascii_digit);
+        if c.is_alphanumeric() || joins {
+            word.push(if c == '.' { ':' } else { c });
+        } else if !word.is_empty() {
+            out.push(std::mem::take(&mut word));
+        }
+    }
+    if !word.is_empty() {
+        out.push(word);
+    }
+    out
+}
+
+/// A time of day in its 24-hour forms: "14:30", "2:30 pm" and "2:30pm" are 14:30; "2:30" with no
+/// am or pm may be 02:30 or 14:30; "2pm" is 14:00. A bare number is no time.
+fn clock(word: &str, next: Option<&String>) -> Option<Vec<String>> {
+    let (body, half) = match (word.strip_suffix("am"), word.strip_suffix("pm")) {
+        (Some(b), _) => (b, Some(false)),
+        (_, Some(b)) => (b, Some(true)),
+        _ => (
+            word,
+            match next.map(String::as_str) {
+                Some("am") => Some(false),
+                Some("pm") => Some(true),
+                _ => None,
+            },
+        ),
+    };
+    let (h, m) = match body.split_once(':') {
+        Some((h, m)) => (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?),
+        None if half.is_some() => (body.parse::<u32>().ok()?, 0),
+        None => return None,
+    };
+    if h > 23 || m > 59 {
+        return None;
+    }
+    let hours = match half {
+        Some(pm) if (1..=12).contains(&h) => vec![h % 12 + if pm { 12 } else { 0 }],
+        Some(_) => return None,
+        None if (1..=12).contains(&h) => vec![h, (h + 12) % 24],
+        None => vec![h],
+    };
+    Some(
+        hours
+            .into_iter()
+            .map(|h| format!("t:{h:02}:{m:02}"))
+            .collect(),
+    )
+}
+
+/// The days and the times of day `text` names, each in the forms it may take: a weekday, a day
+/// of a month ("19 November", "November 19th"), an ordinal of a weekday ("first Tuesday"), a
+/// month on its own. Other numbers (a phone number, a room) are none of these.
+fn days_and_times(text: &str) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
+    // "Tuesdays" is Tuesday.
+    let t: Vec<String> = tokens(text)
+        .into_iter()
+        .map(|w| match w.strip_suffix('s') {
+            Some(day) if WEEKDAYS.contains(&day) => day.to_string(),
+            _ => w,
+        })
+        .collect();
+    let month = |i: usize| t.get(i).filter(|w| MONTHS.contains(&w.as_str()));
+    let (mut days, mut times) = (Vec::new(), Vec::new());
+    let mut dated_months = Vec::new();
+    for (i, w) in t.iter().enumerate() {
+        if WEEKDAYS.contains(&w.as_str()) {
+            days.push(vec![format!("wd:{w}")]);
+        } else if let Some((word, _)) = ORDINALS.iter().find(|(a, b)| w == a || w == b)
+            && t.get(i + 1).is_some_and(|n| WEEKDAYS.contains(&n.as_str()))
+        {
+            days.push(vec![format!("ord:{word}")]);
+        } else if let Some(forms) = clock(w, t.get(i + 1)) {
+            times.push(forms);
+        } else {
+            let n = w.trim_end_matches(|c: char| c.is_ascii_alphabetic());
+            let day = (w.len() - n.len() <= 2 && !n.is_empty())
+                .then(|| n.parse::<u32>().ok())
+                .flatten()
+                .filter(|d| (1..=31).contains(d));
+            let near = if t.get(i + 1).is_some_and(|x| x == "of") {
+                month(i + 2).map(|m| (i + 2, m))
+            } else {
+                month(i + 1)
+                    .map(|m| (i + 1, m))
+                    .or_else(|| i.checked_sub(1).and_then(|j| month(j).map(|m| (j, m))))
+            };
+            if let (Some(d), Some((at, m))) = (day, near) {
+                days.push(vec![format!("dm:{d}:{m}")]);
+                dated_months.push(at);
+            }
+        }
+    }
+    for (i, w) in t.iter().enumerate() {
+        if MONTHS.contains(&w.as_str()) && !dated_months.contains(&i) {
+            days.push(vec![format!("m:{w}")]);
+        }
+    }
+    (days, times)
+}
+
+/// The sentences of an answer. A full stop between digits ("14.30") ends none.
+fn sentences(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out = Vec::new();
+    let mut now = String::new();
+    for (i, &c) in chars.iter().enumerate() {
+        now.push(c);
+        let ends = matches!(c, '!' | '?' | ';' | '\n')
+            || (c == '.' && chars.get(i + 1).is_none_or(|n| n.is_whitespace()));
+        if ends {
+            out.push(std::mem::take(&mut now));
+        }
+    }
+    out.push(now);
+    out.retain(|s| s.chars().any(char::is_alphanumeric));
+    out
+}
+
+/// Words that point back at what was just named.
+const POINTERS: [&str; 4] = ["it", "they", "that", "this"];
+
+/// Whether an answer sentence speaks of what two sides are about: it shares a word with either
+/// (not a day, a number or a small word), or points back at it ("It is now ...").
+fn about(sentence: &str, side: &str, other: &str) -> bool {
+    let side = format!("{side} {other}");
+    let side = side.as_str();
+    let (days, times) = days_and_times(side);
+    let values: std::collections::HashSet<String> =
+        days.into_iter().chain(times).flatten().collect();
+    let theirs: Vec<String> = tokens(side)
+        .into_iter()
+        .filter(|w| {
+            w.chars().count() > 2
+                && !PLAIN.contains(&w.as_str())
+                && !w.chars().any(|c| c.is_ascii_digit())
+                && !WEEKDAYS.contains(&w.as_str())
+                && !MONTHS.contains(&w.as_str())
+                && !values.iter().any(|v| v.ends_with(w.as_str()))
+        })
+        .collect();
+    tokens(sentence)
+        .iter()
+        .any(|w| theirs.contains(w) || POINTERS.contains(&w.as_str()))
+}
+
+/// Whether `answer` says what `side` says and `other` does not: in one sentence that speaks of
+/// it, its day or date (any one of them) and every time of day of its own, in any usual form.
+/// A side with no day or time of its own is said when any word of its own is.
+fn carries(answer: &str, side: &str, other: &str) -> bool {
+    let all = |text: &str| {
+        let (d, t) = days_and_times(text);
+        d.into_iter()
+            .chain(t)
+            .flatten()
+            .collect::<std::collections::HashSet<String>>()
+    };
+    let theirs = all(other);
+    let (days, times) = days_and_times(side);
+    let own = |v: Vec<Vec<String>>| -> Vec<Vec<String>> {
+        v.into_iter()
+            .filter(|forms| !forms.iter().any(|f| theirs.contains(f)))
+            .collect()
+    };
+    let (days, times) = (own(days), own(times));
+    if days.is_empty() && times.is_empty() {
+        let (words, theirs) = (tokens(side), tokens(other));
+        let said = tokens(answer);
+        let named: Vec<&String> = words
+            .iter()
+            .filter(|w| !theirs.contains(w) && !PLAIN.contains(&w.as_str()))
+            .collect();
+        return named.is_empty() || named.iter().any(|w| said.contains(w));
+    }
+    sentences(answer).iter().any(|s| {
+        let said = all(s);
+        let has = |forms: &Vec<String>| forms.iter().any(|f| said.contains(f));
+        about(s, side, other) && (days.is_empty() || days.iter().any(has)) && times.iter().all(has)
+    })
+}
+
+fn full_stop(sentence: &str) -> String {
+    let s = sentence.trim();
+    if s.ends_with(['.', '!', '?']) {
+        s.to_string()
+    } else {
+        format!("{s}.")
+    }
+}
+
+/// Whether an answer already says two notes disagree.
+fn says_unsettled(text: &str) -> bool {
+    let lower = text.to_lowercase();
+    lower.contains("not settled") || lower.contains("disagree")
+}
+
+/// What to add to an answer that cites one of two sides without saying what the other says: an
+/// open question answered as settled, or a move answered without where it moved to.
+///
+/// The missing side follows in its own words and is cited: for an open question marked as the
+/// earlier or the later note, then that it is not settled (also when the answer gives both but
+/// picks one); for a move as the later note, said to be where it moved when the answer gave the
+/// old day. A move needs only its newer side said. A side with no receipt among `known` is never
+/// added. The answer's own words stay as they are. Returns the words to add and the memories
+/// they cite, or `None`.
+fn settle(
+    pairs: &[Sides],
+    meta: &AnswerMeta,
+    said: &str,
+    known: &[String],
+) -> Option<(String, Vec<String>)> {
+    if meta.not_sure {
+        return None;
+    }
+    let mut extra = String::new();
+    let mut ids: Vec<String> = Vec::new();
+    for p in pairs {
+        let touched = meta
+            .cited
+            .iter()
+            .any(|id| id == &p.older.id || id == &p.newer.id || p.notice.as_ref() == Some(id));
+        if !touched {
+            continue;
+        }
+        let so_far = format!("{said}{extra}");
+        let mut add: Vec<(&Side, &str)> = Vec::new();
+        if !carries(&so_far, &p.newer.sentence, &p.older.sentence) {
+            let label = match (p.moved, p.ordered) {
+                (true, _) if carries(&so_far, &p.older.sentence, &p.newer.sentence) => {
+                    "It has since moved. The later note says:"
+                }
+                (true, _) => "The later note says:",
+                (false, true) => "A later note says:",
+                (false, false) => "Another note says:",
+            };
+            add.push((&p.newer, label));
+        }
+        if !p.moved && !carries(&so_far, &p.older.sentence, &p.newer.sentence) {
+            let label = if p.ordered {
+                "An earlier note says:"
+            } else {
+                "Another note says:"
+            };
+            add.push((&p.older, label));
+        }
+        if add.iter().any(|(side, _)| !known.contains(&side.id)) {
+            continue;
+        }
+        for (side, label) in &add {
+            extra.push_str(&format!(" {label} {}", full_stop(&side.sentence)));
+            if !meta.cited.contains(&side.id) && !ids.contains(&side.id) {
+                ids.push(side.id.clone());
+            }
+        }
+        if !p.moved && !says_unsettled(&format!("{said}{extra}")) {
+            extra.push_str(" It is not settled which is right.");
+        }
+    }
+    (!extra.is_empty()).then_some((extra, ids))
 }
 
 /// For a phone: the memory is public in every version and every item it cites may go out, so
@@ -986,7 +1464,254 @@ fn bold_matches(text: &str, spans: &[String], cited: &[String]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::bold_matches;
+    use super::{AnswerMeta, Side, Sides, bold_matches, carries, settle};
+
+    const CLUB1: &str = "The book club meets on the first Tuesday of the month at the library.";
+    const CLUB2: &str =
+        "The book club meeting is on the second Wednesday of the month at the community hall.";
+    const WED: &str =
+        "The dentist appointment with Dr Okafor is on Wednesday 18 November at 10:00.";
+    const NOW_THU: &str = "Dr Okafor's receptionist called: it is now Thursday 19 November at 14:30, not Wednesday 18 November.";
+
+    fn side(id: &str, sentence: &str) -> Side {
+        Side {
+            id: id.into(),
+            sentence: sentence.into(),
+        }
+    }
+
+    fn cites(ids: &[&str]) -> AnswerMeta {
+        AnswerMeta {
+            cited: ids.iter().map(|s| s.to_string()).collect(),
+            ..Default::default()
+        }
+    }
+
+    fn known(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn club() -> Vec<Sides> {
+        vec![Sides {
+            older: side("club1", CLUB1),
+            newer: side("club2", CLUB2),
+            ordered: true,
+            moved: false,
+            notice: None,
+            newer_was: None,
+        }]
+    }
+
+    fn moved() -> Vec<Sides> {
+        vec![Sides {
+            older: side("wed", WED),
+            newer: side("line:itm:moved", NOW_THU),
+            ordered: true,
+            moved: true,
+            notice: Some("notice".into()),
+            newer_was: None,
+        }]
+    }
+
+    const ALL: [&str; 5] = ["club1", "club2", "wed", "line:itm:moved", "notice"];
+
+    /// Tiny's second tries on the book club question, citing both notes but saying one: the
+    /// other is added after the answer's own words.
+    #[test]
+    fn an_open_question_answered_with_one_side_gets_the_other() {
+        let pairs = club();
+        let all = known(&ALL);
+        let said = "The book club meeting is on the second Wednesday of the month, but it is not settled which fact is correct.";
+        let (extra, ids) = settle(&pairs, &cites(&["club2", "club1"]), said, &all).unwrap();
+        assert_eq!(extra, format!(" An earlier note says: {CLUB1}"));
+        assert!(ids.is_empty(), "both were cited already");
+        let said = "The book club meets on the first Tuesday of the month at the library.";
+        let (extra, ids) = settle(&pairs, &cites(&["club1"]), said, &all).unwrap();
+        assert_eq!(
+            extra,
+            format!(" A later note says: {CLUB2} It is not settled which is right.")
+        );
+        assert_eq!(ids, ["club2"]);
+        let both =
+            "Book club meets on the first Tuesday or the second Wednesday; it is not settled.";
+        assert!(settle(&pairs, &cites(&["club1", "club2"]), both, &all).is_none());
+        // Not about the question, or not sure: left as it is.
+        assert!(settle(&pairs, &cites(&["other"]), "Bins go out on Tuesday.", &all).is_none());
+        let unsure = AnswerMeta {
+            not_sure: true,
+            ..cites(&["club1"])
+        };
+        assert!(settle(&pairs, &unsure, "", &all).is_none());
+    }
+
+    /// Both sides named, one picked: that it is not settled is added.
+    #[test]
+    fn an_answer_that_picks_one_of_two_named_sides_is_told_not_settled() {
+        let said = "The book club meets on the first Tuesday, not the second Wednesday.";
+        let (extra, ids) =
+            settle(&club(), &cites(&["club1", "club2"]), said, &known(&ALL)).unwrap();
+        assert_eq!(extra, " It is not settled which is right.");
+        assert!(ids.is_empty());
+    }
+
+    /// A side whose receipt is not among the facts is never added.
+    #[test]
+    fn a_side_with_no_receipt_is_never_added() {
+        let said = "The book club meets on the first Tuesday of the month at the library.";
+        assert!(settle(&club(), &cites(&["club1"]), said, &known(&["club1"])).is_none());
+    }
+
+    /// An answer about two things keeps all it said; only the missing side is added.
+    #[test]
+    fn a_multi_fact_answer_keeps_its_other_content() {
+        let said =
+            "The boiler service is on Monday 30 November. Book club is on the first Tuesday.";
+        let (extra, ids) =
+            settle(&club(), &cites(&["boiler", "club1"]), said, &known(&ALL)).unwrap();
+        let whole = format!("{said}{extra}");
+        assert!(whole.starts_with(said));
+        assert!(whole.contains(CLUB2) && whole.ends_with("It is not settled which is right."));
+        assert_eq!(ids, ["club2"]);
+    }
+
+    /// A move answered without where it went gets the note's line; one that gave the old day is
+    /// told it has since moved. Saying the new day and time in any usual form is enough.
+    #[test]
+    fn a_move_without_where_it_went_gets_the_note() {
+        let pairs = moved();
+        let all = known(&ALL);
+        let (extra, ids) = settle(
+            &pairs,
+            &cites(&["notice"]),
+            "The dentist appointment has been moved.",
+            &all,
+        )
+        .unwrap();
+        assert_eq!(extra, format!(" The later note says: {NOW_THU}"));
+        assert_eq!(ids, ["line:itm:moved"]);
+        let (extra, _) = settle(&pairs, &cites(&["line:itm:moved"]), WED, &all).unwrap();
+        assert_eq!(
+            extra,
+            format!(" It has since moved. The later note says: {NOW_THU}")
+        );
+        for said in [
+            "Your dentist appointment is now on Thursday 19 November at 14:30.",
+            "The dentist appointment moved to Thursday at 2:30 pm.",
+            "It is on 19th of November, 2.30pm.",
+        ] {
+            assert!(
+                settle(&pairs, &cites(&["line:itm:moved"]), said, &all).is_none(),
+                "{said}"
+            );
+        }
+        let no_time = "The dentist appointment is on Thursday 19 November.";
+        assert!(settle(&pairs, &cites(&["line:itm:moved"]), no_time, &all).is_some());
+    }
+
+    #[test]
+    fn a_side_is_said_with_its_day_and_its_time_where_it_is_spoken_of() {
+        assert!(carries(
+            "Book club: first Tuesday, at the library.",
+            CLUB1,
+            CLUB2
+        ));
+        assert!(
+            carries("Book club is on Tuesdays.", CLUB1, CLUB2),
+            "the day is enough"
+        );
+        assert!(!carries("Book club is at the library.", CLUB1, CLUB2));
+        assert!(carries(
+            "The dentist appointment is Thursday 19 November at 2:30 pm.",
+            NOW_THU,
+            WED
+        ));
+        assert!(!carries(
+            "It is at 2:30 am on Thursday 19 November.",
+            NOW_THU,
+            WED
+        ));
+        assert!(carries("It is at 2:30 on 19 November.", NOW_THU, WED));
+        assert!(
+            !carries(
+                "The dentist appointment is soon. Bins go out Thursday 19 November at 14:30.",
+                NOW_THU,
+                WED
+            ),
+            "a day said of something else"
+        );
+        let room = "The meeting is in room 214 on Friday; call 0161 496 0000.";
+        let other = "The meeting is on Monday.";
+        assert!(
+            carries("The meeting is on Friday.", room, other),
+            "numbers are no day"
+        );
+        assert!(carries(
+            "At the hall.",
+            "Meets at the hall.",
+            "Meets at the library."
+        ));
+        assert!(!carries(
+            "At the hall.",
+            "Meets at the library.",
+            "Meets at the hall."
+        ));
+    }
+
+    /// On a phone, the old value goes with a move only when the old memory may go there: an
+    /// appointment from a note that also holds something private does not, though the note
+    /// that says it moved does. The search's own filter is left out to reach this check.
+    #[test]
+    fn on_a_phone_an_old_value_that_may_not_go_there_stays_out_of_the_move() {
+        use nocturne_contract::{Kept, Source, Span};
+        use nocturne_engine::{Candidate, Engine, ManualClock, Predicate};
+        let dir = tempfile::tempdir().unwrap();
+        let clock = std::sync::Arc::new(ManualClock::at("2026-11-12T08:05:00Z", "Europe/London"));
+        let engine = Engine::open(dir.path(), clock.clone()).unwrap();
+        let apply = |text: &str, read: Vec<Candidate>| {
+            let item = match engine.keep_text(text, Source::QuickCapture).unwrap() {
+                Kept::New { item } | Kept::Duplicate { item } => item.id,
+            };
+            let lease = engine
+                .lease_item(&item, std::time::Duration::from_secs(60))
+                .unwrap();
+            engine.apply_candidates(&item, &lease.lease, read).unwrap()
+        };
+        let mut wed = Candidate::new(
+            "Dentist appointment",
+            Predicate::Scheduled,
+            "Wednesday 18 November at 10:00",
+            WED,
+            0.9,
+        );
+        wed.due = Some("2026-11-18".parse().unwrap());
+        wed.span = Some(Span::Quote { text: WED.into() });
+        let pills = Candidate::new("Gran", Predicate::Takes, "pills", "Gran takes pills.", 0.9);
+        let first = apply(&format!("{WED} Gran takes pills."), vec![wed, pills]);
+        engine.set_private(&first.created[1], true).unwrap();
+        clock.set_str("2026-11-12T12:00:00Z");
+        apply(
+            "The dentist appointment has been moved.",
+            vec![Candidate::new(
+                "Dentist appointment",
+                Predicate::Other("moved".into()),
+                "moved",
+                "The dentist appointment has been moved.",
+                0.9,
+            )],
+        );
+        let hits = engine
+            .retrieve("When is my dentist appointment?", None, 12)
+            .unwrap();
+        assert_eq!(engine.later_moves(&hits).unwrap().len(), 1);
+        let (_, _, facts, pairs) = super::with_disputes(&engine, hits.clone(), true).unwrap();
+        assert_eq!(pairs.len(), 1, "the move stands");
+        assert!(facts.iter().all(|f| f.memory.was.is_none()), "{facts:?}");
+        let (_, _, facts, _) = super::with_disputes(&engine, hits, false).unwrap();
+        assert!(
+            facts.iter().any(|f| f.memory.was.is_some()),
+            "here it goes with it"
+        );
+    }
 
     fn ids(v: &[&str]) -> Vec<String> {
         v.iter().map(|s| s.to_string()).collect()
