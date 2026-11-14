@@ -6,6 +6,7 @@ mod documents;
 mod guard;
 pub mod online;
 mod prompts;
+mod sampling;
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -44,6 +45,7 @@ pub struct LemonadeMind {
     client: Client,
     picks: Picks,
     tier: Tier,
+    sampling: sampling::Presets,
     overrides: Vec<(ComponentRole, String)>,
     seen: Mutex<Seen>,
 }
@@ -55,6 +57,7 @@ impl LemonadeMind {
             client,
             picks,
             tier,
+            sampling: sampling::Presets::from_env(tier),
             overrides: Vec::new(),
             seen: Mutex::new(Seen::default()),
         }
@@ -279,8 +282,7 @@ impl LemonadeMind {
     /// not-sure marker is an answer the mind did not stand behind, and none of it may reach the
     /// person. Answers are a sentence or two, so this costs little time.
     async fn reply_to(&self, model: &str, messages: &[Message]) -> Result<String, MindError> {
-        let mut req = ChatRequest::new(model, messages.to_vec());
-        req.temperature = Some(0.2);
+        let mut req = ChatRequest::new(model, messages.to_vec()).sampled(&self.sampling.answer);
         req.max_tokens = Some(1024);
         let mut stream = match self.client.chat(&req).await {
             Ok(s) => s,
@@ -314,8 +316,8 @@ impl LemonadeMind {
                 Message::system(&prompts::image_system()),
                 Message::user_with_image("Describe and read this image.", &uri),
             ],
-        );
-        req.temperature = Some(0.0);
+        )
+        .sampled(&self.sampling.image);
         req.max_tokens = Some(1024);
         #[derive(Deserialize)]
         struct Reading {
@@ -365,8 +367,8 @@ impl LemonadeMind {
                 Message::system(&prompts::headline_system(&nonce)),
                 Message::user(&prompts::headline_user(page, &nonce)),
             ],
-        );
-        req.temperature = Some(0.4);
+        )
+        .sampled(&self.sampling.headline);
         req.max_tokens = Some(200);
         #[derive(Deserialize)]
         struct Headline {

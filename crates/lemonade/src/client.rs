@@ -594,6 +594,22 @@ pub struct ChatRequest {
     pub enable_thinking: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ctx_size: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_k: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seed: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub presence_penalty: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repeat_penalty: Option<f32>,
+    /// A GBNF grammar the reply must follow, for llama.cpp. Sent instead of a JSON schema
+    /// when the order of an object's keys matters: the engine parses the body into a map that
+    /// sorts keys, so a schema reaches llama.cpp with its properties in alphabetical order,
+    /// while a grammar is a string and arrives as written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub grammar: Option<String>,
     pub stream: bool,
     /// Overall limit for this call, instead of the client's default.
     #[serde(skip)]
@@ -610,10 +626,89 @@ impl ChatRequest {
             response_format: None,
             enable_thinking: Some(false),
             ctx_size: None,
+            top_k: None,
+            top_p: None,
+            seed: None,
+            presence_penalty: None,
+            repeat_penalty: None,
+            grammar: None,
             stream: false,
             timeout: None,
         }
     }
+
+    /// The request with `sampling` applied: each value it sets replaces the request's own.
+    pub fn sampled(mut self, sampling: &Sampling) -> ChatRequest {
+        sampling.apply(&mut self);
+        self
+    }
+}
+
+/// How the next word is picked. A value left `None` is not sent, so the engine's own default
+/// holds.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Sampling {
+    pub temperature: Option<f32>,
+    pub top_k: Option<u32>,
+    pub top_p: Option<f32>,
+    pub seed: Option<i64>,
+    pub presence_penalty: Option<f32>,
+    pub repeat_penalty: Option<f32>,
+}
+
+impl Sampling {
+    /// Only a temperature, as every request was sent before sampling could be set.
+    pub const fn temperature(t: f32) -> Sampling {
+        Sampling {
+            temperature: Some(t),
+            top_k: None,
+            top_p: None,
+            seed: None,
+            presence_penalty: None,
+            repeat_penalty: None,
+        }
+    }
+
+    /// `self`, with every value `other` sets taking the place of its own.
+    pub fn overlaid(self, other: &Sampling) -> Sampling {
+        Sampling {
+            temperature: other.temperature.or(self.temperature),
+            top_k: other.top_k.or(self.top_k),
+            top_p: other.top_p.or(self.top_p),
+            seed: other.seed.or(self.seed),
+            presence_penalty: other.presence_penalty.or(self.presence_penalty),
+            repeat_penalty: other.repeat_penalty.or(self.repeat_penalty),
+        }
+    }
+
+    pub fn apply(&self, req: &mut ChatRequest) {
+        let s = req_sampling(req).overlaid(self);
+        req.temperature = s.temperature;
+        req.top_k = s.top_k;
+        req.top_p = s.top_p;
+        req.seed = s.seed;
+        req.presence_penalty = s.presence_penalty;
+        req.repeat_penalty = s.repeat_penalty;
+    }
+}
+
+fn req_sampling(req: &ChatRequest) -> Sampling {
+    Sampling {
+        temperature: req.temperature,
+        top_k: req.top_k,
+        top_p: req.top_p,
+        seed: req.seed,
+        presence_penalty: req.presence_penalty,
+        repeat_penalty: req.repeat_penalty,
+    }
+}
+
+/// A whole reply, and whether the engine stopped it at the token ceiling.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ChatReply {
+    pub text: String,
+    pub cut: bool,
 }
 
 /// The body of an online question, and nothing more.
