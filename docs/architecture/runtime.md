@@ -61,10 +61,15 @@ download plus 2 GiB). The source of truth is `crates/lemonade/src/tier.rs`.
 
 | Tier | Needs memory | Mind | Speech | Voice | Recall | Download |
 |---|---|---|---|---|---|---|
-| Large | 60 GiB | `Qwen3.6-35B-A3B-MTP-GGUF` | `Whisper-Large-v3-Turbo` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 26.4 GB |
-| Standard | 28 GiB | `Qwen3.5-9B-GGUF` | `Whisper-Small` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 8.4 GB |
+| Large | 60 GiB | `Qwen3.6-35B-A3B-MTP-GGUF` | `Whisper-Large-v3-Turbo` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 27.0 GB |
+| Standard | 28 GiB | `Qwen3.5-9B-GGUF` | `Whisper-Small` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 9.0 GB |
 | Small | 14 GiB | `Qwen3.5-4B-MTP-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 4.8 GB |
 | Tiny | 6 GiB | `Qwen3.5-2B-GGUF` | `Whisper-Base` | `kokoro-v1` | `Qwen3-Embedding-0.6B-GGUF` | about 3.2 GB |
+
+Large and Standard also fetch the reranking model `bge-reranker-v2-m3-GGUF` (0.64 GB, counted in
+the download above), which orders what a search found before the mind answers. It is an extra:
+the tier is installed without it, so an install from before it existed keeps working and uses
+it once a later setup has fetched it.
 
 The detected tier is the one offered first; the person may choose any smaller one that fits, and
 Tiny fits every computer that can run Nocturne at all. Tiny is for 8 GB computers, which report a

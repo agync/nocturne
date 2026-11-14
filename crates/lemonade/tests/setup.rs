@@ -664,3 +664,73 @@ async fn a_download_that_stops_on_its_own_is_cleared_and_started_again_through_a
     assert_eq!(removals, 2, "refused, then done: {calls:?}");
     rig.sup.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn a_new_standard_setup_fetches_the_reranker_and_counts_its_size() {
+    let rig = rig("download-ms=100", 32).await;
+    let mut rx = rig.setup.view();
+    let offered = rig.setup.check().await.unwrap();
+    let standard = offered
+        .options
+        .iter()
+        .find(|o| o.tier == Tier::Standard)
+        .unwrap();
+    assert_eq!(
+        standard.download_bytes,
+        tier::download_bytes(Tier::Standard) as f64
+    );
+    let reranker = tier::reranker(Tier::Standard).unwrap();
+    let size = tier::extras(Tier::Standard)[0].bytes;
+    let components: u64 = tier::components(Tier::Standard)
+        .iter()
+        .map(|c| c.bytes)
+        .sum();
+    assert_eq!(tier::download_bytes(Tier::Standard), components + size);
+
+    rig.setup.start(Tier::Standard).await.unwrap();
+    let mid = wait_view(
+        &mut rx,
+        |v| v.phase == SetupPhase::Downloading && v.total_bytes > 0.0,
+        30,
+    )
+    .await;
+    assert_eq!(mid.total_bytes, (components + size) as f64);
+    let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    assert_eq!(done.total_bytes, (components + size) as f64);
+
+    let ledger = rig.ledger.lock().unwrap().clone();
+    assert!(
+        ledger.iter().any(|(kind, label, bytes)| label == reranker
+            && *kind == LedgerKind::Setup
+            && *bytes > 0),
+        "{ledger:?}"
+    );
+    let models = rig.sup.client().models().await.unwrap();
+    assert!(models.iter().any(|m| m.id == reranker && m.present()));
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn a_standard_install_from_before_the_reranker_is_still_installed() {
+    let rig = rig("download-ms=100", 32).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Standard).await.unwrap();
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    // As an install made before the reranker existed: everything but it on disk.
+    let reranker = tier::reranker(Tier::Standard).unwrap();
+    rig.sup.client().delete(reranker).await.unwrap();
+    let models = rig.sup.client().models().await.unwrap();
+    assert!(!models.iter().any(|m| m.id == reranker && m.present()));
+    let pulls_before = requests_to(&rig.sup, "/v1/pull").await.len();
+
+    let later = new_setup(&rig.sup, &rig.dirs, 32, &rig.ledger);
+    let view = later.check().await.unwrap();
+    assert_eq!(view.phase, SetupPhase::Done);
+    assert_eq!(view.chosen, Some(Tier::Standard));
+    assert_eq!(later.installed(), Some(Tier::Standard));
+    assert_eq!(later.installed_ready().await, Some(Tier::Standard));
+    let pulls_after = requests_to(&rig.sup, "/v1/pull").await.len();
+    assert_eq!(pulls_after, pulls_before, "checking fetches nothing");
+    assert_eq!(rig.sup.admin().config().await.unwrap()["offline"], true);
+    rig.sup.shutdown().await.unwrap();
+}

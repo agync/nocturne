@@ -104,16 +104,22 @@ pub fn model_for(tier: Tier, role: ComponentRole) -> Option<&'static str> {
         .map(|c| c.model)
 }
 
+/// What setting up `tier` fetches: its components and its extras.
 pub fn download_bytes(tier: Tier) -> u64 {
-    components(tier).iter().map(|c| c.bytes).sum()
-}
-
-/// What `tier` still needs fetched when everything `held` needs is already on disk: models the
-/// two share (the voice and the recall model) are not counted again.
-pub fn missing_bytes(tier: Tier, held: Tier) -> u64 {
-    let have = components(held);
     components(tier)
         .iter()
+        .chain(&extras(tier))
+        .map(|c| c.bytes)
+        .sum()
+}
+
+/// What `tier` still needs fetched when everything `held` fetched is already on disk: models the
+/// two share (the voice, the recall model and the reranking model) are not counted again.
+pub fn missing_bytes(tier: Tier, held: Tier) -> u64 {
+    let have: Vec<Component> = components(held).into_iter().chain(extras(held)).collect();
+    components(tier)
+        .iter()
+        .chain(&extras(tier))
         .filter(|c| !have.iter().any(|h| h.model == c.model))
         .map(|c| c.bytes)
         .sum()
@@ -221,7 +227,11 @@ mod tests {
         assert_eq!(missing_bytes(Tier::Small, Tier::Small), 0);
         assert_eq!(
             missing_bytes(Tier::Standard, Tier::Small),
-            6_880_000_000 + 488_000_000
+            6_880_000_000 + 488_000_000 + 636_000_000
+        );
+        assert_eq!(
+            missing_bytes(Tier::Large, Tier::Standard),
+            23_800_000_000 + 1_620_000_000
         );
         assert_eq!(
             missing_bytes(Tier::Small, Tier::Unsupported),
@@ -333,8 +343,8 @@ mod tests {
         );
         assert!(components(Tier::Unsupported).is_empty());
         let gb = |t| download_bytes(t) as f64 / 1e9;
-        assert!((gb(Tier::Large) - 26.4).abs() < 0.1);
-        assert!((gb(Tier::Standard) - 8.4).abs() < 0.1);
+        assert!((gb(Tier::Large) - 27.0).abs() < 0.1);
+        assert!((gb(Tier::Standard) - 9.0).abs() < 0.1);
         assert!((gb(Tier::Small) - 4.8).abs() < 0.1);
         assert!((gb(Tier::Tiny) - 3.2).abs() < 0.1);
         assert_eq!(

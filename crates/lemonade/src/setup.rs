@@ -423,10 +423,21 @@ impl Inner {
             .unwrap_or_else(|| tier::components(tier))
     }
 
+    /// What setup also fetches for `tier` when it is missing, without making the tier depend on
+    /// it: an install from before an extra existed stays installed. None when the components are
+    /// given (tests that must stay small).
+    fn extras(&self, tier: Tier) -> Vec<Component> {
+        if self.opts.components.is_some() {
+            Vec::new()
+        } else {
+            tier::extras(tier)
+        }
+    }
+
     /// The backends those models need.
     fn recipes(&self, tier: Tier) -> Vec<&'static str> {
         let mut out = Vec::new();
-        for c in self.comps(tier) {
+        for c in self.comps(tier).into_iter().chain(self.extras(tier)) {
             let recipe = match c.role {
                 ComponentRole::Mind | ComponentRole::Recall => "llamacpp",
                 ComponentRole::Speech => "whispercpp",
@@ -449,9 +460,17 @@ impl Inner {
     }
 
     async fn missing(&self, tier: Tier) -> Result<Vec<Component>, RuntimeError> {
+        self.absent(self.comps(tier)).await
+    }
+
+    /// The extras of `tier` that are not on disk.
+    async fn missing_extras(&self, tier: Tier) -> Result<Vec<Component>, RuntimeError> {
+        self.absent(self.extras(tier)).await
+    }
+
+    async fn absent(&self, of: Vec<Component>) -> Result<Vec<Component>, RuntimeError> {
         let models = self.client.models().await?;
-        Ok(self
-            .comps(tier)
+        Ok(of
             .into_iter()
             .filter(|c| !models.iter().any(|m| m.id == c.model && m.present()))
             .collect())
@@ -551,7 +570,13 @@ impl Inner {
             });
             return Ok(());
         }
-        let models: u64 = self.missing(tier).await?.iter().map(|c| c.bytes).sum();
+        let models: u64 = self
+            .missing(tier)
+            .await?
+            .iter()
+            .chain(&self.missing_extras(tier).await?)
+            .map(|c| c.bytes)
+            .sum();
         let backends: u64 = self
             .recipes(tier)
             .into_iter()
@@ -709,8 +734,16 @@ impl Inner {
         record::write(&self.config_dir, &rec).map_err(engine)?;
 
         let steps = self.plan(tier, &info, &rec).await.map_err(Fail::Error)?;
+        let extras = self.extras(tier);
         for step in &steps {
-            self.run_step(step).await?;
+            match self.run_step(step).await {
+                // The tier works without an extra: one that cannot be fetched is left out.
+                Err(Fail::Error(_)) if matches!(step, Step::Model(c) if extras.iter().any(|e| e.model == c.model)) =>
+                {
+                    tracing::warn!("an optional model could not be fetched; setup goes on");
+                }
+                other => other?,
+            }
         }
 
         self.update(|v| {
@@ -737,7 +770,12 @@ impl Inner {
         // The new tier's own models, keeping only the finding model the person chose.
         selection::update(&self.config_dir, |_| {}).map_err(engine)?;
         self.close_window().await;
-        let total = self.comps(tier).iter().map(|c| c.bytes).sum::<u64>() as f64;
+        let total = self
+            .comps(tier)
+            .iter()
+            .chain(&self.extras(tier))
+            .map(|c| c.bytes)
+            .sum::<u64>() as f64;
         self.update(|v| {
             v.phase = SetupPhase::Done;
             v.downloaded_bytes = total.max(v.downloaded_bytes);
@@ -766,12 +804,17 @@ impl Inner {
                 _ => steps.push(Step::Backend { recipe, backend }),
             }
         }
-        let missing = self
+        let mut missing = self
             .missing(tier)
             .await
             .map_err(|_| SetupError::EngineFailed)?;
+        missing.extend(
+            self.missing_extras(tier)
+                .await
+                .map_err(|_| SetupError::EngineFailed)?,
+        );
         let mut book = Progress::default();
-        for c in self.comps(tier) {
+        for c in self.comps(tier).into_iter().chain(self.extras(tier)) {
             let absent = missing.iter().any(|m| m.model == c.model);
             book.steps.push(StepProgress {
                 id: format!("model:{}", c.model),

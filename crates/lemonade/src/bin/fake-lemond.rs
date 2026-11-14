@@ -58,6 +58,7 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
     ("Whisper-Large-v3", 3.1, "whispercpp", "transcription"),
     ("Qwen3-Embedding-4B-GGUF", 4.28, "llamacpp", "embeddings"),
     ("nomic-embed-text-v1-GGUF", 0.0781, "llamacpp", "embeddings"),
+    ("bge-reranker-v2-m3-GGUF", 0.636, "llamacpp", "reranking"),
     (
         "MiniCPM-V-4.6-Thinking-GGUF",
         1.64,
