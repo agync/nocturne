@@ -16,7 +16,7 @@ use nocturne_intelligence::FakeHost;
 use nocturne_intelligence::reindex::ReindexOptions;
 use nocturne_lemonade::jobs::JobOptions;
 use nocturne_lemonade::record::{self, SetupRecord};
-use nocturne_lemonade::selection::{self, Pending, Selection};
+use nocturne_lemonade::selection::{self, OldModel, Pending, Selection};
 use nocturne_lemonade::{Dirs, SetupOptions, SupervisorOptions, tier};
 use serde_json::{Value, json};
 use tauri::Manager;
@@ -87,6 +87,11 @@ impl Drop for Lab {
 /// Standard installed, its models on disk plus `extra`; `mode` for the fake engine; `before`
 /// may write a selection before the launch.
 fn lab(mode: &str, extra: &[&str], before: impl FnOnce(&Path)) -> Lab {
+    lab_with(mode, extra, before, Duration::from_millis(5))
+}
+
+/// A lab whose re-read waits `pause` between chunks, to catch it under way.
+fn lab_with(mode: &str, extra: &[&str], before: impl FnOnce(&Path), pause: Duration) -> Lab {
     let h = harness();
     let bundle = tempfile::tempdir().unwrap();
     let link = bundle.path().join(if cfg!(windows) {
@@ -141,7 +146,7 @@ fn lab(mode: &str, extra: &[&str], before: impl FnOnce(&Path)) -> Lab {
         },
         reindex: ReindexOptions {
             chunk: 2,
-            pause: Duration::from_millis(5),
+            pause,
             retry: Duration::from_millis(50),
             embed_limit: Duration::from_secs(10),
         },
@@ -721,4 +726,146 @@ fn a_failed_change_waits_after_restart() {
     wait_for("the change", || {
         lab.job_model("recordings") == "Whisper-Base"
     });
+}
+
+fn learn_many(lab: &Lab, n: usize) {
+    for i in 0..n {
+        lab.h.learn(
+            &format!("note {i}"),
+            &format!("Sam likes thing {i}."),
+            "Sam",
+            &format!("thing {i}"),
+        );
+    }
+}
+
+#[test]
+fn two_finding_changes_at_once_leave_one_re_read_and_no_stray_vectors() {
+    let lab = lab_with(
+        "download-ms=400",
+        &["Qwen3-Embedding-4B-GGUF", "nomic-embed-text-v1-GGUF"],
+        |_| {},
+        Duration::from_millis(100),
+    );
+    learn_many(&lab, 10);
+    let hub = models::hub(lab.h.app.handle()).unwrap();
+    let app = lab.h.app.handle().clone();
+    let (a, b) = block_on(async {
+        tokio::join!(
+            hub.change(
+                &app,
+                nocturne_contract::Job::Finding,
+                "Qwen3-Embedding-4B-GGUF",
+                false
+            ),
+            hub.change(
+                &app,
+                nocturne_contract::Job::Finding,
+                "nomic-embed-text-v1-GGUF",
+                false
+            ),
+        )
+    });
+    assert!(a.is_ok() != b.is_ok(), "exactly one change: {a:?} {b:?}");
+    let winner = if a.is_ok() {
+        "Qwen3-Embedding-4B-GGUF"
+    } else {
+        "nomic-embed-text-v1-GGUF"
+    };
+    let engine = lab.h.engine();
+    assert_eq!(engine.reindex_state().unwrap().unwrap().model, winner);
+    wait_for("the re-read", || lab.view()["reindex"]["phase"] == "done");
+    assert_eq!(engine.indexed_model().unwrap().as_deref(), Some(winner));
+    assert_eq!(engine.recall_model(), winner);
+}
+
+#[test]
+fn an_old_model_is_never_removed_while_a_re_read_uses_it() {
+    let lab = lab_with(
+        "download-ms=400",
+        &["Qwen3-Embedding-4B-GGUF"],
+        |config| {
+            let mut s = Selection::preset(Tier::Standard);
+            s.old = Some(OldModel {
+                role: ComponentRole::Recall,
+                model: "Qwen3-Embedding-4B-GGUF".into(),
+            });
+            selection::write(config, &s).unwrap();
+        },
+        Duration::from_millis(300),
+    );
+    learn_many(&lab, 20);
+    lab.change("finding", "Qwen3-Embedding-4B-GGUF", false)
+        .unwrap();
+    assert_eq!(lab.view()["reindex"]["phase"], "running");
+    assert_eq!(lab.h.code("remove_old_model", json!({})), "invalid");
+    assert!(lab.requests("/v1/delete").is_empty());
+    lab.h.ok("cancel_reindex", json!({}));
+}
+
+#[test]
+fn a_change_and_removing_its_model_never_both_go_ahead() {
+    let lab = lab("download-ms=400", &["Whisper-Tiny"], |_| {});
+    lab.change("recordings", "Whisper-Tiny", false).unwrap();
+    // The old model is Whisper-Small: remove it and switch back to it at the same moment.
+    let hub = models::hub(lab.h.app.handle()).unwrap();
+    let app = lab.h.app.handle().clone();
+    let (removed, changed) = block_on(async {
+        tokio::join!(
+            hub.remove_old(&app),
+            hub.change(
+                &app,
+                nocturne_contract::Job::Recordings,
+                "Whisper-Small",
+                false
+            ),
+        )
+    });
+    let present = block_on(async { lab.services.client().await.unwrap().models().await.unwrap() })
+        .into_iter()
+        .any(|m| m.id == "Whisper-Small" && m.present());
+    if changed.is_ok() {
+        assert_eq!(lab.job_model("recordings"), "Whisper-Small");
+        assert!(present, "the model in use was never deleted");
+    } else {
+        assert!(removed.is_ok());
+        assert!(!present);
+        assert_eq!(lab.job_model("recordings"), "Whisper-Tiny");
+    }
+}
+
+#[test]
+fn a_download_that_never_starts_leaves_nothing_pending() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    // The next launch, the one that opens the download window, cannot start.
+    let path = lab.config.join("config.json");
+    let mut cfg: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    cfg["fake_mode"] = json!("fail-bind");
+    std::fs::write(&path, cfg.to_string()).unwrap();
+    let refused = lab.change("recordings", "Whisper-Base", true).unwrap_err();
+    assert_ne!(refused["code"], "busy", "{refused}");
+    assert!(lab.selection().pending.is_none(), "rolled back");
+    assert!(lab.view()["change"].is_null());
+}
+
+#[test]
+fn setup_waits_while_a_model_downloads() {
+    let lab = lab("download-ms=6000", &[], |_| {});
+    lab.change("recordings", "Whisper-Base", true).unwrap();
+    assert_eq!(lab.h.code("start_setup", json!({"tier": "small"})), "busy");
+    lab.h.ok("pause_model_download", json!({}));
+    lab.h.ok("cancel_model_change", json!({}));
+}
+
+#[test]
+fn the_store_names_its_finding_model_from_the_start() {
+    let lab = lab("download-ms=400", &[], |_| {});
+    let engine = lab.h.engine();
+    learn_many(&lab, 1);
+    let id = engine.memories(Default::default()).unwrap()[0].id.clone();
+    engine.set_recall_model("nomic-embed-text-v1-GGUF");
+    engine.store_embeddings(vec![(id, vec![1.0, 0.0])]).unwrap();
+    engine.set_recall_model(nocturne_engine::DEFAULT_RECALL_MODEL);
+    models::install(lab.h.app.handle()).unwrap();
+    assert_eq!(engine.recall_model(), "nomic-embed-text-v1-GGUF");
 }

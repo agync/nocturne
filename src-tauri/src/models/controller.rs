@@ -64,6 +64,9 @@ pub(super) struct HubState {
 
 pub struct ModelsHub {
     pub(super) opts: HubOptions,
+    /// Held by whatever decides about the models on disk (a change, a reset, removing the old
+    /// model), so two of them never act on the same state.
+    pub(super) deciding: tokio::sync::Mutex<()>,
     pub(super) jobs: tokio::sync::Mutex<Option<Arc<ModelJobs>>>,
     pub(super) state: Mutex<HubState>,
 }
@@ -83,6 +86,7 @@ impl ModelsHub {
     pub fn new(opts: HubOptions) -> Self {
         ModelsHub {
             opts,
+            deciding: tokio::sync::Mutex::new(()),
             jobs: tokio::sync::Mutex::new(None),
             state: Mutex::new(HubState::default()),
         }
@@ -346,6 +350,7 @@ impl ModelsHub {
         &self,
         app: &AppHandle<R>,
     ) -> Result<ModelsView, CommandError> {
+        let _deciding = self.deciding.lock().await;
         let dir = Self::config_dir(app);
         let s = selection::read(&dir);
         let Some(old) = s.old.clone() else {
@@ -389,6 +394,7 @@ impl ModelsHub {
         self: &Arc<Self>,
         app: &AppHandle<R>,
     ) -> Result<ModelsView, CommandError> {
+        let _deciding = self.deciding.lock().await;
         let dir = Self::config_dir(app);
         let s = selection::read(&dir);
         if s.pending.is_some() || self.state().change.is_some() || self.state().reindex.is_some() {
@@ -417,7 +423,7 @@ impl ModelsHub {
         .map_err(CommandError::internal)?;
         crate::runtime::lemonade::refill_mind(app).await;
         if recall.is_some() {
-            self.change(app, Job::Finding, own(ComponentRole::Recall), false)
+            self.decide(app, Job::Finding, own(ComponentRole::Recall), false)
                 .await?;
         }
         Ok(self.emit(app).await)
@@ -437,6 +443,14 @@ impl ModelsHub {
             let _ = engine.cancel_reindex();
         }
         self.forget();
+    }
+
+    /// A model download is under way (not paused, not stopped).
+    pub fn downloading(&self) -> bool {
+        self.state()
+            .change
+            .as_ref()
+            .is_some_and(|c| !c.progress.done && !c.progress.failed && !c.progress.paused)
     }
 
     /// Forgets what this session showed.

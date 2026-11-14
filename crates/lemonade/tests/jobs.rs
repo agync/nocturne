@@ -328,3 +328,22 @@ async fn downloads_follow_an_engine_started_in_place_of_one_that_gave_up() {
     }
     panic!("the new engine's window was left open");
 }
+
+#[tokio::test]
+async fn a_paused_download_does_not_open_a_new_engines_window() {
+    let r = rig("download-ms=3000").await;
+    let other = rig("download-ms=300").await;
+    let mut rx = r.get("Whisper-Small").await;
+    until(&mut rx, |p| p.received > 0).await;
+    r.jobs.pause().await.unwrap();
+    r.jobs.follow(other.sup.control()).await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(
+        other.offline().await,
+        "paused: nothing may reach the internet"
+    );
+    r.jobs.resume().await.unwrap();
+    other.wait_offline(false).await;
+    until(&mut rx, |p| p.done).await;
+    other.wait_offline(true).await;
+}

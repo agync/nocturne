@@ -548,6 +548,12 @@ impl Services {
 
 /// Begin setup for `tier` (the person chose it, or agreed to the smaller one).
 pub async fn start_setup<R: Runtime>(app: &AppHandle<R>, tier: Tier) -> Result<(), CommandError> {
+    if crate::models::hub(app).is_some_and(|h| h.downloading()) {
+        return Err(CommandError::new(
+            crate::error::ErrorCode::Busy,
+            "a model is downloading",
+        ));
+    }
     let setup = setup_of(app).await?;
     setup.start(tier).await.map_err(runtime_error)?;
     let state = app.state::<AppState>();

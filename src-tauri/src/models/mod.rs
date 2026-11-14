@@ -22,6 +22,12 @@ use crate::state::AppState;
 
 /// Called once the app is ready.
 pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
+    // The store's vectors name the finding model until the mind arrives and says which it uses.
+    if let Ok(engine) = app.state::<AppState>().engine()
+        && let Ok(Some(indexed)) = engine.indexed_model()
+    {
+        engine.set_recall_model(&indexed);
+    }
     if app.try_state::<Arc<ModelsHub>>().is_none() {
         let opts = app
             .try_state::<HubOptions>()

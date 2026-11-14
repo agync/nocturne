@@ -31,6 +31,19 @@ impl ModelsHub {
         model: &str,
         allow_download: bool,
     ) -> Result<ModelsView, CommandError> {
+        let _deciding = self.deciding.lock().await;
+        self.decide(app, job, model, allow_download).await
+    }
+
+    /// [`ModelsHub::change`], with `deciding` held by the caller: the checks below and the
+    /// change they allow happen with nothing else deciding in between.
+    pub(super) async fn decide<R: Runtime>(
+        self: &Arc<Self>,
+        app: &AppHandle<R>,
+        job: Job,
+        model: &str,
+        allow_download: bool,
+    ) -> Result<ModelsView, CommandError> {
         if model.starts_with("user.") {
             return Err(CommandError::invalid("only models from the catalogue"));
         }
@@ -191,6 +204,7 @@ impl ModelsHub {
                     return;
                 }
                 if p.done {
+                    let _deciding = hub.deciding.lock().await;
                     if let Err(e) = hub.switch(&app, role, &model, &from).await {
                         tracing::warn!("the downloaded model could not be switched in: {e:?}");
                     }
@@ -353,6 +367,7 @@ impl ModelsHub {
             .await
             .is_ok_and(|ms| ms.iter().any(|m| m.id == p.model && m.present()));
         if present {
+            let _deciding = self.deciding.lock().await;
             if let Err(e) = self.switch(app, p.role, &p.model, &p.from).await {
                 tracing::warn!("a change that finished before the restart did not switch: {e:?}");
             }

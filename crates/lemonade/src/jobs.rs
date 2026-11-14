@@ -125,7 +125,16 @@ impl ModelJobs {
             && !gate.paused()
         {
             let hold = control.hold_online().await?;
-            let stale = lock(&gate.hold).replace(hold);
+            // Checked again with the hold's lock taken: a pause meanwhile gave the window back,
+            // and this hold goes back with it.
+            let mut held = lock(&gate.hold);
+            if gate.paused() {
+                drop(held);
+                hold.release().await;
+                return Ok(());
+            }
+            let stale = held.replace(hold);
+            drop(held);
             drop(stale);
             gate.wake.notify_one();
         }
