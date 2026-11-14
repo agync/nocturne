@@ -517,8 +517,9 @@ figcaption,
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   grid-template-areas:
     "eyebrow body"
-    "title body";
-  grid-template-rows: auto 1fr;
+    "title body"
+    "box body";
+  grid-template-rows: auto auto 1fr;
   gap: 10px 48px;
 }
 
@@ -545,17 +546,19 @@ figcaption,
   margin: 0;
 }
 
-.feature-shot.stack {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+.feature-box {
+  grid-area: box;
+  align-self: start;
+  margin-top: 18px;
 }
 
-.feature-shot .box {
+.feature-box .box {
   max-width: 518px;
 }
 
-.feature-shot .box img {
+.feature-box .box img {
+  width: 100%;
+  height: auto;
   border-radius: 10px;
   box-shadow: var(--shadow);
 }
@@ -780,7 +783,8 @@ figcaption,
     grid-template-areas:
       "eyebrow"
       "title"
-      "body";
+      "body"
+      "box";
     grid-template-rows: auto;
   }
 }
