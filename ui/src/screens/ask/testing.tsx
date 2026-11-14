@@ -22,28 +22,22 @@ export class ScriptedAnswers extends MockEngine {
   override async ask(question: string, place?: AskPlace): Promise<string> {
     this.asked.push({ question, place });
     const askId = `scripted-${this.asked.length}`;
-    this.steps.forEach((step, i) => {
-      setTimeout(
-        () => {
-          const delta: AskDelta = {
-            askId,
-            textDelta: null,
-            receipts: [],
-            memoryIds: [],
-            near: [],
-            found: null,
-            etaSeconds: null,
-            plain: false,
-            ...step,
-          };
-          (this as unknown as { emit(name: string, delta: AskDelta): void }).emit(
-            "ask-delta",
-            delta,
-          );
-        },
-        5 * (i + 1),
-      );
-    });
+    // Every step is delivered before the id is returned, so nothing depends on the clock. The
+    // screen keeps what arrives early and replays it once it knows the id.
+    for (const step of this.steps) {
+      const delta: AskDelta = {
+        askId,
+        textDelta: null,
+        receipts: [],
+        memoryIds: [],
+        near: [],
+        found: null,
+        etaSeconds: null,
+        plain: false,
+        ...step,
+      };
+      (this as unknown as { emit(name: string, delta: AskDelta): void }).emit("ask-delta", delta);
+    }
     return askId;
   }
 }

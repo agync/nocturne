@@ -1,6 +1,6 @@
-import { act, configure, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { askRequests } from "../../app/ask-request";
 import { askPlace } from "../../components/KeepAskBar/askPlace";
 import type { AnsweredBy, LeftOut, LocalReason, OnlineView } from "../../engine/bindings";
@@ -10,8 +10,6 @@ import { askSession } from "./session";
 import { oneMemoryAnswer, onlineEngine, ScriptedAnswers, type Step } from "./testing";
 
 const HOST = "api.example.com";
-vi.setConfig({ testTimeout: 20_000 });
-configure({ asyncUtilTimeout: 15_000 });
 
 beforeEach(() => {
   askSession.reset();
@@ -177,7 +175,7 @@ describe("what was left out of an online question", () => {
 
   it("says nothing when nothing was left out", async () => {
     await open(onlineViewOn(), finished({ type: "online", host: HOST }));
-    await screen.findByText(/Answered online/);
+    await screen.findByText(/^Answered online by your provider/);
     expect(screen.queryByText(/were left out/)).toBeNull();
   });
 });
@@ -274,7 +272,7 @@ describe("the choice for one question", () => {
     await userEvent.click(top.getByRole("button", { name: /^Ask/ }));
     await waitFor(() => expect(engine.asked).toHaveLength(1));
     expect(engine.asked[0]?.place).toBe("thisComputer");
-    await screen.findByText(/Answered online/);
+    await screen.findByText(/^Answered online by your provider/);
 
     await userEvent.type(bar, "And the coach?");
     expect(await top.findByRole("radio", { name: "Online · api.example.com" })).toBeChecked();
@@ -285,7 +283,7 @@ describe("the choice for one question", () => {
 
   it("is offered on the follow-up form before it is sent, and resets after one question", async () => {
     const engine = await open(onlineViewOn(), finished({ type: "online", host: HOST }));
-    await screen.findByText(/Answered online/);
+    await screen.findByText(/^Answered online by your provider/);
     const follow = screen.getByRole("textbox", { name: "Ask a follow-up" });
     const group = await screen.findAllByRole("radiogroup", { name: "Answer this" });
     const where = group.at(-1) as HTMLElement;
