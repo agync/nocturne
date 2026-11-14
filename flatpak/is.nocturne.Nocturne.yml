@@ -85,6 +85,9 @@ modules:
         skip:
           - .agents
           - .git
+          - .flatpak-builder
+          - _repo
+          - repo.tar
           - target
           - vendor
           - ui/node_modules
