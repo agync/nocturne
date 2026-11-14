@@ -15,7 +15,9 @@
 //! before the body is built), and the phases are `askingOnline`, `waitingOnline` after six
 //! seconds, and `switchingToComputer` when the provider fails, takes twenty seconds or Online
 //! answers is turned off. Falling back to this computer is automatic and marked on the
-//! terminal delta; nothing here ever goes online after something failed on this computer.
+//! terminal delta; nothing here ever goes online after something failed on this computer. A
+//! provider that is not sure, when something private or sensitive was kept back from it, also
+//! hands the question to this computer, which has what was kept back.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -757,6 +759,12 @@ async fn ask_online<R: Runtime>(
         SendResult::NotSure
     };
     let send_id = hub.record(outcome(receipt, result, None, true)).await;
+    // The provider was not sure without what was kept back: this computer, which has it,
+    // answers instead.
+    if !stands && left_out.is_some() {
+        sink.phase(AskPhase::SwitchingToComputer);
+        return Online::Here(LocalReason::KeptHere);
+    }
     // What was left out is said only of an answer written online.
     sink.mark(|m| {
         m.answered_by = Some(AnsweredBy::Online {

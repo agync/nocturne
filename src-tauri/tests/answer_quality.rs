@@ -1,4 +1,6 @@
-//! What helps an answer when reading was imperfect: lines of an original that no memory says.
+//! What helps an answer when reading was imperfect or something had to stay here: lines of an
+//! original that no memory says, and this computer answering when an online "not sure" lacked
+//! what was kept back.
 
 mod common;
 
@@ -6,7 +8,7 @@ use std::sync::Arc;
 
 use common::*;
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
-use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, Span};
+use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, LocalReason, Span};
 use nocturne_engine::{Candidate, Mind, Predicate, is_source_line};
 use serde_json::{Value, json};
 use tauri::async_runtime::block_on;
@@ -99,7 +101,7 @@ fn an_original_with_no_memory_can_still_answer() {
     assert!(text.contains("number 17"), "{text}");
 }
 
-// Online answers ----------------------------------------------------
+// Online answers and what was kept back ----------------------------------------------------
 
 struct Lab {
     h: Harness,
@@ -169,6 +171,81 @@ impl Lab {
         );
         assert_eq!(view["state"]["type"], "on", "{view}");
     }
+}
+
+fn here(reason: LocalReason) -> Option<AnsweredBy> {
+    Some(AnsweredBy::Computer {
+        reason: Some(reason),
+    })
+}
+
+/// The dentist note, and a medicine the store suggests keeping private.
+fn dentist_and_pills(l: &Lab) -> String {
+    l.h.learn(
+        "the dentist note",
+        "The dentist is on Thursday.",
+        "Dentist",
+        "Thursday",
+    );
+    let c = Candidate::new(
+        "Dentist",
+        Predicate::Takes,
+        "pills",
+        "The dentist gave PILLMARK pills.",
+        0.9,
+    );
+    let id = l.h.learn_candidate("pills", c).1.remove(0);
+    assert!(l.h.memory(&id).suggest_private);
+    id
+}
+
+#[test]
+fn not_sure_online_without_what_stayed_here_is_answered_here() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let l = lab(mind.clone());
+    let pills = dentist_and_pills(&l);
+    l.turn_on();
+    l.script(json!({"reply": "NOT_SURE"}));
+    let d = ask(&l.h, "What did the dentist give me?");
+    let done = d.last().unwrap();
+    assert_eq!(done.phase, AskPhase::Done);
+    assert_eq!(done.answered_by, here(LocalReason::KeptHere));
+    assert_eq!(done.left_out, None, "said only of an answer written online");
+    assert!(done.memory_ids.contains(&pills));
+    let phases: Vec<AskPhase> = d.iter().map(|x| x.phase).collect();
+    let online = phases.iter().position(|p| *p == AskPhase::AskingOnline);
+    let switched = phases
+        .iter()
+        .position(|p| *p == AskPhase::SwitchingToComputer);
+    assert!(online.is_some() && switched > online, "{phases:?}");
+    let questions = l.questions();
+    assert_eq!(questions.len(), 1, "asked online once, never again");
+    assert!(
+        !serde_json::to_string(&questions)
+            .unwrap()
+            .contains("PILLMARK")
+    );
+    assert_eq!(mind.answered_from.lock().unwrap().len(), 1);
+    let sends =
+        l.h.ok("list_online_sends", json!({"limit": 10, "before": null}));
+    assert_eq!(sends[0]["result"], json!({"type": "notSure"}));
+}
+
+#[test]
+fn not_sure_online_with_nothing_kept_back_stays_not_sure() {
+    let mind = TestMind::new(AnswerMode::Normal);
+    let l = lab(mind.clone());
+    l.h.learn(
+        "the dentist note",
+        "The dentist is on Thursday.",
+        "Dentist",
+        "Thursday",
+    );
+    l.turn_on();
+    l.script(json!({"reply": "NOT_SURE"}));
+    let d = ask(&l.h, "When is the dentist?");
+    assert_eq!(d.last().unwrap().phase, AskPhase::NotSure);
+    assert!(mind.answered_from.lock().unwrap().is_empty());
 }
 
 #[test]
