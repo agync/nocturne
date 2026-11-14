@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: The Flatpak
-description: How the Flatpak is built, what it may reach on the computer and why, and how AetherPak publishes it to nocturne.is/flatpak.
+description: How the Flatpak is built, what it may reach on the computer and why, and how AetherPak publishes it to flatpak.nocturne.is.
 status: draft
 tags: [contribution, build, packaging, flatpak]
 ---
@@ -114,7 +114,7 @@ portal too.
 [AetherPak](https://github.com/aetherpak/actions) and, when asked, publishes it. AetherPak stores
 the app as OCI images in GHCR (`ghcr.io/agync/nocturne-flatpak`) and writes a small static index,
 a `nocturne.flatpakrepo`, a `.flatpakref` per channel and a landing page under
-`https://nocturne.is/flatpak`. The remote is named `nocturne` and titled "Nocturne", so software
+`https://flatpak.nocturne.is`. The remote is named `nocturne` and titled "Nocturne", so software
 centres show it under its own name.
 
 The workflow runs by hand (`workflow_dispatch`) or from another workflow (`workflow_call`). It is
@@ -160,12 +160,15 @@ Before the first publish, a maintainer:
   and the index against the real registry before a release depends on them;
 - allows public packages for the organisation, then makes `nocturne-flatpak` public after the
   first push, so people can install without signing in to GitHub;
-- points `nocturne.is` at this repository's GitHub Pages, or replaces the `deploy` job with a copy
-  of `_site/flatpak` to wherever `nocturne.is` is served. A Pages deployment replaces the whole
-  site, so it must not be pointed at a domain whose other pages live elsewhere;
+- sets up the domain once: in Cloudflare DNS adds a `flatpak` CNAME record to `agync.github.io`,
+  set the zone's SSL/TLS mode to Full (strict) or add a configuration rule for that host, and in
+  the repository's Pages settings sets the custom domain `flatpak.nocturne.is` and turns on
+  Enforce HTTPS. Leave the record DNS only until GitHub has issued its certificate for the
+  domain, then switch it to proxied. The `site` job writes a `CNAME` file into the site so each
+  deployment keeps the domain. The landing site at `nocturne.is` stays on Cloudflare Pages;
 - publishes the three screenshots the metainfo names under `https://nocturne.is/screenshots/`.
 
 > [!NOTE]
-> Owner decisions needed: the signing key, where `nocturne.is` is hosted, the GHCR package name,
+> Owner decisions needed: the signing key, the GHCR package name,
 > and whether to build aarch64 too (the engine is pinned for it, the workflow builds x86_64 only).
 > TODO(owner).

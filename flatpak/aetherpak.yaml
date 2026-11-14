@@ -1,7 +1,6 @@
 registry: ghcr.io
 oci_repository: agync/nocturne-flatpak
-pages_url: https://nocturne.is
-site_subpath: flatpak
+pages_url: https://flatpak.nocturne.is
 remote_name: nocturne
 repo_title: Nocturne
 repo_homepage: https://nocturne.is/
