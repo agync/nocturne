@@ -646,6 +646,7 @@ fn purge_memory(tx: &Transaction<'_>, id: &str) -> Result<()> {
     tx.execute("DELETE FROM conflicts WHERE a = ?1 OR b = ?1", [id])?;
     tx.execute("DELETE FROM questions WHERE memory_id = ?1", [id])?;
     tx.execute("DELETE FROM page_line_memories WHERE memory_id = ?1", [id])?;
+    crate::online::scrub_memory(tx, id)?;
     tx.execute("DELETE FROM memories WHERE id = ?1", [id])?;
     Ok(())
 }
