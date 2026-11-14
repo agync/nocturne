@@ -57,7 +57,7 @@ impl Lab {
     }
 
     fn requests(&self) -> Vec<Value> {
-        block_on(async {
+        self.port.own(block_on(async {
             reqwest::Client::new()
                 .get(self.s.url("/fake/requests"))
                 .send()
@@ -66,7 +66,7 @@ impl Lab {
                 .json()
                 .await
                 .unwrap()
-        })
+        }))
     }
 
     fn check(&self, key: &str) -> Value {
@@ -160,7 +160,30 @@ fn fresh_store_sets_no_route() {
     nocturne_app_lib::online::install(l.h.app.handle()).unwrap();
     std::thread::sleep(std::time::Duration::from_millis(200));
     assert!(l.port.routes().iter().all(Option::is_none));
-    assert!(l.requests().is_empty());
+    {
+        let r = l.requests();
+        assert!(r.is_empty(), "stray requests: {r:#?}");
+    }
+}
+
+#[test]
+fn another_ports_engine_client_is_not_this_labs_request() {
+    let l = lab();
+    let other = StandInPort::new(Some(l.s.port));
+    let get = |key: &str| {
+        block_on(async {
+            reqwest::Client::new()
+                .get(l.s.url("/v1/models"))
+                .bearer_auth(key)
+                .send()
+                .await
+                .unwrap();
+        })
+    };
+    get(other.engine_key());
+    assert!(l.requests().is_empty(), "a stray engine client is ignored");
+    get(l.port.engine_key());
+    assert_eq!(l.requests().len(), 1, "this lab's own engine client counts");
 }
 
 #[test]
@@ -226,7 +249,10 @@ fn check_refuses_addresses_before_anything_is_sent() {
         assert_eq!(out["type"], want, "{url}");
     }
     assert!(l.port.routes().is_empty());
-    assert!(l.requests().is_empty());
+    {
+        let r = l.requests();
+        assert!(r.is_empty(), "stray requests: {r:#?}");
+    }
 }
 
 #[test]
@@ -306,7 +332,10 @@ fn forged_event_changes_nothing() {
     assert!(!l.route_at_launch());
     assert!(l.port.routes().is_empty());
     dentist_ask(&l);
-    assert!(l.requests().is_empty());
+    {
+        let r = l.requests();
+        assert!(r.is_empty(), "stray requests: {r:#?}");
+    }
 }
 
 fn dentist_ask(l: &Lab) -> nocturne_contract::AskDelta {
@@ -336,7 +365,10 @@ fn key_unreadable_at_launch_is_a_problem() {
         serde_json::to_value(&d.answered_by).unwrap(),
         json!({"type": "computer", "reason": "problem"})
     );
-    assert!(l.requests().is_empty());
+    {
+        let r = l.requests();
+        assert!(r.is_empty(), "stray requests: {r:#?}");
+    }
 }
 
 #[test]
@@ -603,7 +635,10 @@ fn a_blank_key_before_setup_is_refused() {
     );
     assert_eq!(out["type"], "keyRefused");
     assert!(l.port.routes().is_empty());
-    assert!(l.requests().is_empty());
+    {
+        let r = l.requests();
+        assert!(r.is_empty(), "stray requests: {r:#?}");
+    }
 }
 
 /// Two stand-ins on loopback: the key kept for the first never reaches the second.

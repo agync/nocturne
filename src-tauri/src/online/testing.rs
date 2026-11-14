@@ -119,6 +119,21 @@ impl StandInPort {
         &self.key
     }
 
+    /// `requests` as the stand-in logged them, without those another test's port sent. A
+    /// finished test's engine client can outlive it on the shared runtime and reach a stand-in
+    /// that was given its freed loopback port; its engine key is not this port's.
+    pub fn own(&self, requests: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+        let mine = format!("Bearer {}", self.key);
+        requests
+            .into_iter()
+            .filter(|r| {
+                r["headers"]["authorization"]
+                    .as_str()
+                    .is_none_or(|a| a == mine || !a.starts_with("Bearer engine-key-"))
+            })
+            .collect()
+    }
+
     /// Every route given to the engine, in order (`None` for none).
     pub fn routes(&self) -> Vec<Option<RouteSeen>> {
         self.seen.lock().unwrap_or_else(|e| e.into_inner()).clone()

@@ -53,7 +53,7 @@ impl Lab {
     }
 
     fn chats(&self) -> Vec<Value> {
-        let all: Vec<Value> = block_on(async {
+        let all: Vec<Value> = self.port.own(block_on(async {
             reqwest::Client::new()
                 .get(self.s.url("/fake/requests"))
                 .send()
@@ -62,7 +62,7 @@ impl Lab {
                 .json()
                 .await
                 .unwrap()
-        });
+        }));
         all.into_iter()
             .filter(|r| r["path"] == "/v1/chat/completions")
             .collect()
