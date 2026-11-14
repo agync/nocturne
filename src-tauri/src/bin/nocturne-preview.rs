@@ -12,8 +12,9 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use nocturne_app_lib::preview::{self, DATA_MARKER, MARKER, Options, Preview};
-use nocturne_app_lib::{AppState, configure, logging};
+use nocturne_app_lib::{AppState, configure, logging, models, online};
 use nocturne_engine::SystemClock;
+use nocturne_lemonade::online::OwnPort;
 use tauri::test::{mock_builder, mock_context, noop_assets};
 use tauri::{Manager, WebviewWindowBuilder};
 
@@ -84,9 +85,30 @@ fn main() {
         .build()
         .expect("a window");
     let handle = app.handle().clone();
+    // Before the engine starts, which asks for the route: the key is kept in the preview's own
+    // folder, never in the system keychain the app uses, and turning on is noted here instead
+    // of asked in a window of the system's own, which a browser does not have.
+    if let Some(hub) = online::manage_hub(
+        &handle,
+        Arc::new(online::route::AppPort {
+            app: handle.clone(),
+        }),
+        Arc::new(online::keys::NoKeychain),
+    ) {
+        hub.set_confirm(Arc::new(|address: &str| {
+            println!("Online answers is turning on from the preview, with {address}");
+            Box::pin(async { true })
+        }));
+    }
     if !nocturne_app_lib::start_services(&handle) {
         eprintln!("the store could not be opened");
         std::process::exit(1);
+    }
+    if let Err(e) = online::install(&handle) {
+        eprintln!("Online answers did not start: {e}");
+    }
+    if let Err(e) = models::install(&handle) {
+        eprintln!("the model choices did not start: {e}");
     }
 
     let token = preview::new_token();
@@ -98,6 +120,7 @@ fn main() {
     };
     let server = Preview::new(handle.clone(), window, &data_dir, opts);
 
+    let _own = OwnPort::hold(args.port);
     let listener =
         tauri::async_runtime::block_on(tokio::net::TcpListener::bind(("127.0.0.1", args.port)))
             .unwrap_or_else(|e| {

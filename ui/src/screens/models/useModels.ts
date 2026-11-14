@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Job, ModelChoice, ModelsView } from "../../engine/bindings";
+import { type EngineError, toEngineError } from "../../engine/client";
 import { useEngine, useEngineEvent } from "../../engine/context";
 
 export const MODELS_KEY = ["models"] as const;
@@ -20,6 +21,8 @@ const busy = (view: ModelsView | undefined) =>
 export function useModels(options: { screen?: boolean } = {}): {
   data?: ModelsView;
   error: boolean;
+  /** Why the computer could not be read, when it could not. */
+  failure: EngineError | null;
   refetch(): void;
 } {
   const engine = useEngine();
@@ -33,7 +36,12 @@ export function useModels(options: { screen?: boolean } = {}): {
   useEngineEvent("models-changed", (view) => {
     client.setQueryData(MODELS_KEY, view);
   });
-  return { data: query.data, error: query.isError, refetch: () => void query.refetch() };
+  return {
+    data: query.data,
+    error: query.isError,
+    failure: query.error ? toEngineError(query.error) : null,
+    refetch: () => void query.refetch(),
+  };
 }
 
 /** Every choice for a job, with its fit. Asked again whenever the view changes. */

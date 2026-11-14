@@ -1,7 +1,9 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openOnline } from "./testing";
+import { EngineError } from "../../engine/client";
+import { renderApp, setViewport } from "../../test/render";
+import { onlineEngine, openOnline } from "./testing";
 
 afterEach(() => {
   window.location.hash = "";
@@ -201,5 +203,31 @@ describe("online", () => {
       "200 questions",
     );
     await waitFor(() => expect(engine.online.view().limit.kind).toBe("questions"));
+  });
+});
+
+describe("online, when the computer cannot be read", () => {
+  it("online.unavailable: says Online answers is unavailable, and Advanced says why", async () => {
+    setViewport(1280);
+    const engine = onlineEngine();
+    engine.getOnline = async () => {
+      throw new EngineError("unavailable", "this is not available in a browser");
+    };
+    renderApp({ hash: "#/settings/online", engine });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Online answers aren’t available here.");
+    expect(alert).not.toHaveTextContent("What went wrong");
+  });
+
+  it("online.unavailable: the Advanced page shows the real error", async () => {
+    setViewport(1280);
+    const engine = onlineEngine();
+    engine.getOnline = async () => {
+      throw new EngineError("internal", "the store is locked");
+    };
+    renderApp({ hash: "#/settings/advanced/online", engine });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nocturne couldn’t open this.");
+    expect(alert).toHaveTextContent("What went wrong: the store is locked");
   });
 });

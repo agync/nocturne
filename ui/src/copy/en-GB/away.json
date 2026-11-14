@@ -7,6 +7,7 @@
   "away.title": "Away from home",
   "away.loading": "Opening Away from home…",
   "away.error": "Nocturne couldn’t open this. What you kept is safe.",
+  "away.unavailable": "Away from home isn’t available here. What you kept is safe.",
   "away.failed": "That didn’t work. Nothing was changed.",
   "away.saved": "Saved.",
   "away.cancel": "Cancel",

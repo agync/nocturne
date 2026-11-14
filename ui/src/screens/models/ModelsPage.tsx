@@ -85,7 +85,7 @@ function Row({
 
 /** #/settings/models (M1, M2): what runs each job, memory at its busiest, and any change under way. */
 export function ModelsPage() {
-  const { data: view, error, refetch } = useModels({ screen: true });
+  const { data: view, failure, refetch } = useModels({ screen: true });
   const { act } = useModelsCommands();
   const heading = useRef<HTMLHeadingElement>(null);
   const [failed, setFailed] = useState(false);
@@ -126,9 +126,12 @@ export function ModelsPage() {
             })}
           </ul>
         </>
-      ) : error ? (
+      ) : failure ? (
         <div className={styles.card} role="alert">
-          <p className={styles.body}>{t("advanced.error")}</p>
+          <p className={styles.body}>
+            {t(failure.code === "unavailable" ? "advanced.models.unavailable" : "advanced.error")}
+          </p>
+          <p className={styles.body}>{t("advanced.errorDetail", { detail: failure.detail })}</p>
           <div className={styles.actions}>
             <Button onClick={refetch}>{t("models.read.retry")}</Button>
           </div>

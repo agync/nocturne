@@ -11,6 +11,10 @@ use axum::body::Body;
 use axum::http::{Method, Request, Response, StatusCode};
 use common::*;
 use http_body_util::BodyExt;
+use nocturne_app_lib::online::{
+    self,
+    testing::{MemoryKeychain, StandInPort},
+};
 use nocturne_app_lib::preview::{self, Options, Preview};
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -223,10 +227,40 @@ async fn preview_refuses_remote_commands() {
     }
 }
 
-/// The preview never drives Online answers or choosing models.
+/// Online answers and choosing models go through the preview as through the window: each
+/// reaches the app, and what it answers is what the window would be told.
 #[tokio::test(flavor = "multi_thread")]
-async fn preview_refuses_online_and_model_commands() {
+async fn preview_takes_online_and_model_commands() {
     let r = rig();
+    online::manage_hub(
+        r.h.app.handle(),
+        Arc::new(StandInPort::new(None)),
+        Arc::new(MemoryKeychain::default()),
+    )
+    .unwrap();
+    nocturne_app_lib::models::install(r.h.app.handle()).unwrap();
+    for (command, args) in [
+        ("get_online", json!({})),
+        ("list_online_sends", json!({ "limit": 10, "before": null })),
+    ] {
+        let (status, body) = invoke(&r, command, args.clone()).await;
+        assert_eq!(status, StatusCode::OK, "{command}: {body}");
+        assert_eq!(body, r.h.ok(command, args), "{command}");
+    }
+    let (status, body) = invoke(&r, "get_models", json!({})).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body["jobs"].is_array(), "{body}");
+    // The key travels in the request body only; an address that is never a provider is
+    // refused before anything is sent.
+    let (status, body) = invoke(
+        &r,
+        "check_online",
+        json!({ "form": { "baseUrl": "http://169.254.169.254/v1", "key": "sk-preview", "model": "m" } }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["type"], "addressNotAllowed");
+    let refused = json!({ "code": "unavailable", "detail": "this is not available in a browser" });
     for command in [
         "get_online",
         "check_online",
@@ -248,9 +282,8 @@ async fn preview_refuses_online_and_model_commands() {
         "remove_old_model",
         "reset_models_to_tier",
     ] {
-        let (status, body) = invoke(&r, command, json!({})).await;
-        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");
-        assert_eq!(body["code"], "unavailable", "{command}");
+        let (_, body) = invoke(&r, command, json!({})).await;
+        assert_ne!(body, refused, "{command}");
     }
 }
 

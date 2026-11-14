@@ -3,6 +3,8 @@
   "advanced.dek": "For the curious. Nothing here needs changing.",
   "advanced.loading": "Reading the details…",
   "advanced.error": "Nocturne couldn’t read these details. What you kept is safe.",
+  "advanced.errorDetail": "What went wrong: {detail}",
+  "advanced.models.unavailable": "Choosing models isn’t available here. What you kept is safe.",
   "advanced.row.tier": "tier",
   "advanced.row.mind": "chat model",
   "advanced.row.vision": "vision",

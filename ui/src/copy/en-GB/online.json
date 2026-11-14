@@ -10,6 +10,7 @@
 
   "online.loading": "Opening Online answers…",
   "online.error": "Nocturne couldn’t open this. What you kept is safe.",
+  "online.unavailable": "Online answers aren’t available here. What you kept is safe.",
   "online.failed": "That didn’t work. Nothing was changed.",
   "online.tag.off": "Off",
   "online.tag.on": "On",

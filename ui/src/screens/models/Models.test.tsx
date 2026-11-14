@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { EngineError } from "../../engine/client";
 import type { ModelsScenario } from "../../engine/mock/models";
 import { renderApp, setViewport } from "../../test/render";
 import { modelsEngine } from "./testing";
@@ -388,6 +389,17 @@ describe("models, page errors and the row", () => {
     fail = false;
     await user.click(within(alert).getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Standard · for this computer")).toBeInTheDocument();
+  });
+
+  it("models.unavailable: says what is unavailable and what went wrong", async () => {
+    const { engine } = modelsEngine();
+    engine.getModels = async () => {
+      throw new EngineError("unavailable", "this is not available in a browser");
+    };
+    renderApp({ hash: "#/settings/models", engine });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Choosing models isn’t available here.");
+    expect(alert).toHaveTextContent("What went wrong: this is not available in a browser");
   });
 
   it("models.attention_row_in_settings: the Settings row says Needs you and why", async () => {

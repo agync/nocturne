@@ -63,6 +63,24 @@ impl Keychain for SystemKeychain {
     }
 }
 
+/// No keychain: the key is kept in the file only. The development preview uses it, so it never
+/// reads or replaces the app's own key.
+pub struct NoKeychain;
+
+impl Keychain for NoKeychain {
+    fn get(&self) -> Result<Option<Zeroizing<String>>, KeyError> {
+        Ok(None)
+    }
+
+    fn set(&self, _key: &str) -> Result<(), KeyError> {
+        Err(KeyError::Unavailable)
+    }
+
+    fn delete(&self) -> Result<(), KeyError> {
+        Ok(())
+    }
+}
+
 /// The key's two homes, keychain first.
 pub struct KeyStore {
     keychain: Arc<dyn Keychain>,

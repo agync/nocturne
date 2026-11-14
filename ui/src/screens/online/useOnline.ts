@@ -3,13 +3,19 @@ import { useCallback, useRef, useState } from "react";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { OnlineView } from "../../engine/bindings";
-import { toEngineError } from "../../engine/client";
+import { type EngineError, toEngineError } from "../../engine/client";
 import { useEngine, useEngineEvent } from "../../engine/context";
 
 export const ONLINE_KEY = ["online"] as const;
 
 /** Online answers as the computer last said it, following `online-changed`. */
-export function useOnline(): { data?: OnlineView; isError: boolean; refetch(): void } {
+export function useOnline(): {
+  data?: OnlineView;
+  isError: boolean;
+  /** Why the computer could not be read, when it could not. */
+  failure: EngineError | null;
+  refetch(): void;
+} {
   const engine = useEngine();
   const client = useQueryClient();
   const query = useQuery({
@@ -22,7 +28,12 @@ export function useOnline(): { data?: OnlineView; isError: boolean; refetch(): v
     void client.invalidateQueries({ queryKey: ["privacy"] });
     void client.invalidateQueries({ queryKey: ["advanced"] });
   });
-  return { data: query.data, isError: query.isError, refetch: () => void query.refetch() };
+  return {
+    data: query.data,
+    isError: query.isError,
+    failure: query.error ? toEngineError(query.error) : null,
+    refetch: () => void query.refetch(),
+  };
 }
 
 /**

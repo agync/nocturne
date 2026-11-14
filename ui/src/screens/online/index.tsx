@@ -15,13 +15,14 @@ export default function Online() {
   const [sent] = useRoute("/settings/online/sent");
   const [connect] = useRoute("/settings/advanced/online");
   const step = useQueryParam("step");
-  const { data, isError, refetch } = useOnline();
+  const { data, failure, refetch } = useOnline();
 
   if (sent) return <Sent />;
   if (!data) {
-    return isError ? (
+    return failure ? (
       <div className={styles.message} role="alert">
-        <p>{t("online.error")}</p>
+        <p>{t(failure.code === "unavailable" ? "online.unavailable" : "online.error")}</p>
+        {connect ? <p>{t("advanced.errorDetail", { detail: failure.detail })}</p> : null}
         <Button variant="secondary" onClick={refetch}>
           {t("button.tryAgain")}
         </Button>

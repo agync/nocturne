@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
+import { toEngineError } from "../../engine/client";
 import { Activity } from "./Activity";
 import { AddPhone } from "./AddPhone";
 import styles from "./Away.module.css";
@@ -39,7 +40,9 @@ export default function Away() {
   if (query.isError && !query.data) {
     return (
       <div className={styles.message} role="alert">
-        <p>{t("away.error")}</p>
+        <p>
+          {t(toEngineError(query.error).code === "unavailable" ? "away.unavailable" : "away.error")}
+        </p>
         <Button variant="secondary" onClick={() => void query.refetch()}>
           {t("button.tryAgain")}
         </Button>
