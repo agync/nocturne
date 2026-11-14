@@ -223,3 +223,31 @@ listener for phones is local (an owner-only Unix socket, or loopback on Windows)
 is not: the Tailscale helper binds UDP on every network interface while on, and both helpers talk to
 their company. The release check allows that only for helper processes and fails it for the app and
 the engine ([remote access](remote.md), [decision 0010](/adr/0010-away-from-home.md)).
+
+The second exception is Online answers, which is also off until the person turns it on, and only
+after a passed check and consent. While it is on, the engine, not the app, reaches the one address
+the person entered, only when a question is asked, with that question and the few remembered
+sentences needed to answer it, never anything marked private. The app has no connection to the
+provider, the engine's `offline` setting stays on, and while it is off the engine has no provider
+and no key. The release check allows a non-loopback connection only from the engine, only to that
+address and only during questions ([online answers](online.md),
+[decision 0011](/adr/0011-online-answers.md)).
+
+## Choosing models
+
+The tier is the preset. An advanced view lets the person pick a model for each job: answering,
+reading recordings, reading aloud and finding memories. Choices come only from the engine's own
+catalogue, never from a pasted address, and a job lists only models that suit it (answering needs a
+model that reads pictures and does not think aloud). A pick that is not on the computer downloads
+only after the person says yes, inside the same download window setup uses.
+
+| Part | Behaviour |
+|---|---|
+| Selection | `selection.json` beside the engine record holds the per-job choice. The supervisor reads it at launch for saved options and the runtime builds its picks from it. "Reset to" the tier clears it. It is part of the export and removed by Delete everything |
+| Fit | Each row is marked Fits, Tight, Won't fit or Can't use, with one reason. The budget is the smaller of 0.55 x RAM + 1.7 GiB and RAM - 1.0 GiB. The need is the busiest moment: reading (mind, recall and speech together) or, where the voice runs alone, the voice. Fits is at most 0.85 of the budget and Tight at most the budget. Every tier preset fits at its own minimum, and a test keeps it so. Models not in the shipped table are estimated from their size and shown as not tested with Nocturne |
+| Switching | The current model keeps working until the new one is present, then one step changes it. The old model is kept unless the person removes it; the offer to free its space never defaults to removal |
+| Finding memories | Changing the finding model re-reads memories in the background into a second table while the old index keeps answering, then swaps in one transaction. Asking and reading go first, memories added meanwhile are caught up, a restart carries on, and cancel drops the second table. Each row records which model made it |
+| Ledger | Every finished model download writes a ledger entry with the model name and size |
+
+The memory figures behind the budget are the measured peaks in Running on 8 GB, and the larger tiers
+are estimates until measured.
