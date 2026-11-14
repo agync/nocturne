@@ -328,7 +328,8 @@ async fn put_mind<R: Runtime>(app: &AppHandle<R>, client: Client, tier: Tier) {
         .map(|m| model_bytes(tier, m) as f64)
         .sum();
     let recall = picks.recall.clone();
-    let mind: Arc<dyn Mind> = Arc::new(LemonadeMind::new(client, picks, tier));
+    let mind: Arc<dyn Mind> =
+        Arc::new(LemonadeMind::new(client, picks, tier).with_clock(state.clock.clone()));
     state.status.set_mind_bytes(bytes);
     set_mind(app, Some(mind)).await;
     // Named after the mind is in: a vector the old mind was still making is then marked with
