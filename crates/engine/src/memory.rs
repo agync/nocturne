@@ -457,82 +457,116 @@ fn reports_on(sentence: &str, teller: &str, about: &str) -> bool {
     })
 }
 
-/// Whether `word` is the name of something else the store knows on its own.
-fn names_something(tx: &Transaction<'_>, word: &str) -> Result<bool> {
-    let subject: bool = tx.query_row(
-        "SELECT EXISTS(SELECT 1 FROM memories WHERE subject_key = ?1 AND superseded_at IS NULL)",
-        [word],
-        |r| r.get(0),
+/// The words a memory or claim is said in: its subject, its sentence and what its items say in
+/// the words quoted from them.
+fn said_words(subject: &str, sentence: &str, quotes: &[String]) -> HashSet<String> {
+    words_of(subject)
+        .into_iter()
+        .chain(words_of(sentence))
+        .chain(quotes.iter().flat_map(|q| words_of(q)))
+        .collect()
+}
+
+/// The words trusted items behind a memory are quoted saying.
+fn trusted_quotes(tx: &Transaction<'_>, memory: &str) -> Result<Vec<String>> {
+    let mut stmt = tx.prepare(
+        "SELECT s.span FROM memory_sources s JOIN items i ON i.id = s.item_id \
+         WHERE s.memory_id = ?1 AND i.trust = 'trusted' AND s.span IS NOT NULL",
     )?;
-    Ok(subject || find_by_key(tx, word, None)?.is_some())
+    let spans: Vec<String> = stmt
+        .query_map([memory], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(spans
+        .iter()
+        .filter_map(|json| match serde_json::from_str::<Span>(json) {
+            Ok(Span::Quote { text }) => Some(text),
+            _ => None,
+        })
+        .collect())
 }
 
 /// Whether the claim (`b_subject`, `b_sentence`) is about the memory `a` filed under another
 /// name. Its sentence names all of `a`'s subject, and either it passes on what its own subject
-/// says about `a` ("Ravi thinks choir practice is ..."), or the last word of its subject is in
-/// `a`'s words and no other word of it names something else the store knows ("Dentist
-/// appointment" and "Dr Okafor's appointment", never "Leo's appointment").
+/// says about `a` ("Ravi thinks choir practice is ..."), or every naming word of its subject is
+/// among `a`'s words ("Dentist appointment" and a note saying "Dentist appointment with Dr
+/// Okafor"). A word `a` never says ("Leo Smith's", "Mum's") may name someone else: no link.
 fn about_other_subject(
-    tx: &Transaction<'_>,
     a_subject: &str,
-    a_sentence: &str,
+    a_words: &HashSet<String>,
     b_subject: &str,
     b_sentence: &str,
-) -> Result<bool> {
+) -> bool {
     if !names_all(b_sentence, a_subject) {
-        return Ok(false);
+        return false;
     }
     if reports_on(b_sentence, b_subject, a_subject) {
-        return Ok(true);
+        return true;
     }
-    let a_words: HashSet<String> = words_of(a_subject)
-        .into_iter()
-        .chain(words_of(a_sentence))
-        .collect();
     let naming = naming_words(b_subject);
-    if !naming.last().is_some_and(|w| a_words.contains(w)) {
-        return Ok(false);
-    }
-    for w in naming.iter().filter(|w| !a_words.contains(*w)) {
-        if names_something(tx, w)? {
-            return Ok(false);
-        }
-    }
-    Ok(true)
+    !naming.is_empty() && naming.iter().all(|w| a_words.contains(w))
 }
 
-/// Appointments filed under another subject that this candidate changes or disputes: the same
-/// one said with a different name ("Dr Okafor" and "Dentist appointment"), or someone's view of
-/// it filed under them ("Ravi thinks choir practice is ..."). Only a value that differs links
-/// them, and only when the candidate points at one other subject: a missed link costs a
-/// question, a wrong one rewrites the wrong thing. A memory the person moved away from this
-/// subject is never linked back to it.
-fn drifted_appointments(
+/// Appointments filed under another subject that this candidate disputes: the same one said
+/// with a different name ("Dr Okafor" and "Dentist appointment"), or someone's view of it filed
+/// under them ("Ravi thinks choir practice is ..."). Only a value that differs links them, only
+/// between memories of the same privacy, and only when the candidate points at one other
+/// subject. A memory the person re-filed is where they want it and is never linked. A missed
+/// link costs a question; a wrong one asks about the wrong thing.
+fn appointments_elsewhere(
     tx: &Transaction<'_>,
     c: &Candidate,
+    values: &Values,
     subject_key: &str,
+    private: bool,
     current: &[MemRow],
 ) -> Result<Vec<MemRow>> {
+    let is_value = |w: &str| {
+        WEEKDAYS.iter().any(|(_, forms)| forms.contains(&w))
+            || MONTH_FORMS.iter().any(|forms| forms.contains(&w))
+    };
+    let mut words: Vec<String> = naming_words(&c.subject)
+        .into_iter()
+        .chain(naming_words(&c.sentence))
+        .filter(|w| !is_value(w))
+        .collect();
+    words.sort();
+    words.dedup();
+    if words.is_empty() {
+        return Ok(Vec::new());
+    }
+    let shared = words
+        .iter()
+        .map(|w| format!("\"{w}\""))
+        .collect::<Vec<_>>()
+        .join(" OR ");
     let others: Vec<(String, String, String, String, String)> = {
         let mut stmt = tx.prepare(
-            "SELECT id, subject, subject_key, object, sentence FROM memories \
-             WHERE predicate = 'scheduled' AND subject_key != ?1 AND superseded_at IS NULL \
-             AND status IN ('active', 'fading') AND moved_from_key IS NOT ?1 \
-             ORDER BY recorded_at, id",
+            "SELECT m.id, m.subject, m.subject_key, m.object, m.sentence FROM memories m \
+             WHERE m.predicate = 'scheduled' AND m.subject_key != ?1 \
+             AND m.superseded_at IS NULL AND m.status IN ('active', 'fading') \
+             AND m.moved_from_key IS NULL AND m.private = ?2 \
+             AND m.rowid IN (SELECT rowid FROM memories_fts WHERE memories_fts MATCH ?3) \
+             ORDER BY m.recorded_at, m.id",
         )?;
-        stmt.query_map([subject_key], |r| {
+        stmt.query_map(params![subject_key, private, shared], |r| {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })?
         .collect::<rusqlite::Result<_>>()?
     };
+    let quoted: Vec<String> = match &c.span {
+        Some(Span::Quote { text }) => vec![text.clone()],
+        _ => Vec::new(),
+    };
+    let c_words = said_words(&c.subject, &c.sentence, &quoted);
     let mut linked = Vec::new();
     let mut subjects = HashSet::new();
     for (id, subject, key, object, sentence) in others {
-        if current.iter().any(|m| m.id == id) || !says_otherwise(&values_of(&c.object), &object) {
+        if current.iter().any(|m| m.id == id) || !says_otherwise(values, &object) {
             continue;
         }
-        if about_other_subject(tx, &subject, &sentence, &c.subject, &c.sentence)?
-            || about_other_subject(tx, &c.subject, &c.sentence, &subject, &sentence)?
+        let e_words = said_words(&subject, &sentence, &trusted_quotes(tx, &id)?);
+        if about_other_subject(&subject, &e_words, &c.subject, &c.sentence)
+            || about_other_subject(&c.subject, &c_words, &subject, &sentence)
         {
             linked.push(id);
             subjects.insert(key);
@@ -1287,16 +1321,23 @@ fn apply_one(
     let mut to_replace: Vec<String> = Vec::new();
     let mut in_conflict: Vec<String> = Vec::new();
     if status == MemoryStatus::Active {
-        let drifted = if predicate == "scheduled" {
-            drifted_appointments(tx, c, &subject_key, &current)?
+        let elsewhere = if predicate == "scheduled" {
+            appointments_elsewhere(tx, c, &values, &subject_key, item.private, &current)?
         } else {
             Vec::new()
         };
-        for e in current.iter().chain(&drifted) {
+        let slot = current.iter().map(|e| (e, false));
+        for (e, filed_elsewhere) in slot.chain(elsewhere.iter().map(|e| (e, true))) {
             if !matches!(e.status, MemoryStatus::Active | MemoryStatus::Fading)
                 || e.object_key == object_key
                 || !same_slot(&predicate, &c.object, &c.tags, e)
             {
+                continue;
+            }
+            if filed_elsewhere {
+                // Under another name it may be this appointment or another one: never replaced,
+                // only asked about.
+                in_conflict.push(e.id.clone());
                 continue;
             }
             let later_start = match (&e.valid_from, &vf) {
