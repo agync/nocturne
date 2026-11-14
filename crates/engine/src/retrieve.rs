@@ -22,11 +22,14 @@ use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use nocturne_contract::{Certainty, MemoryStatus, MemoryView, Receipt, Span};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
 use crate::Engine;
 use crate::error::Result;
-use crate::rows::{de, load_mem, mem_view, query_mems};
+use crate::memory::{
+    is_private_chain, kept_order, names_a_value, names_all, values_disagree, words_of,
+};
+use crate::rows::{MemRow, de, load_mem, mem_view, query_mems};
 use crate::types::{Hit, MemoryId};
 use crate::util::{fts_or, key_of};
 
@@ -310,6 +313,309 @@ impl Engine {
             Ok(out)
         })
     }
+
+    /// Dated appointments and deadlines among `hits` that a note kept clearly later says have
+    /// moved, where reading kept the move but not where it went ("The dentist appointment has
+    /// been moved."). Each comes as the old memory, the memory that says it moved, and the newer
+    /// side for the answer: the line of that note naming another value than the old one ("it is
+    /// now Thursday 19 November at 14:30"), with the note as its receipt, or else the memory
+    /// itself. The line is the move sentence or the one just after it, and names the appointment
+    /// or speaks of it as "it".
+    ///
+    /// The memory that says it moved is filed under the appointment's own subject, or its sentence
+    /// names that subject, and it names no other owner (no other person's name, no "Mum's" or
+    /// "her"). It says nothing else of its own: "Sam moved to Leeds" or "The dentist changed my
+    /// filling" is no move. One that could be about more than one appointment is left out, as is
+    /// one whose new value reading already kept in the appointment's place.
+    pub fn later_moves(&self, hits: &[Hit]) -> Result<Vec<(MemoryId, MemoryId, Hit)>> {
+        self.read(|conn| {
+            let mut found: Vec<(MemRow, MemRow, String)> = Vec::new();
+            for hit in hits.iter().filter(|h| !is_source_line(&h.memory.id)) {
+                let Some(old) = load_mem(conn, &hit.memory.id)? else {
+                    continue;
+                };
+                let dated = old.due.is_some() || old.valid_from.is_some();
+                if !matches!(old.predicate.as_str(), "scheduled" | "due")
+                    || !dated
+                    || old.superseded_at.is_some()
+                    || !matches!(old.status, MemoryStatus::Active | MemoryStatus::Fading)
+                {
+                    continue;
+                }
+                let Some((_, old_kept)) = newest_trusted(conn, &old.id)? else {
+                    continue;
+                };
+                let mut notices = query_mems(
+                    conn,
+                    "m.subject_key = ?1 AND m.id != ?2 AND m.superseded_at IS NULL \
+                     AND m.forgetting = 0 AND m.status != 'letGo' AND m.private = ?3",
+                    rusqlite::params![old.subject_key, old.id, old.private],
+                )?;
+                for other in hits.iter().filter(|h| {
+                    !is_source_line(&h.memory.id)
+                        && key_of(&h.memory.subject) != old.subject_key
+                        && names_all(&h.memory.sentence, &old.subject)
+                }) {
+                    notices.extend(
+                        load_mem(conn, &other.memory.id)?
+                            .filter(|n| n.superseded_at.is_none() && n.private == old.private),
+                    );
+                }
+                for n in notices {
+                    if !is_move_notice(&n)
+                        || names_other_owner(&n.sentence, &old)
+                        || !same_care(conn, &n, &old)?
+                    {
+                        continue;
+                    }
+                    let Some((item, kept)) = newest_trusted(conn, &n.id)? else {
+                        continue;
+                    };
+                    if kept_order(&kept, &old_kept) != Some(std::cmp::Ordering::Greater)
+                        || kept_in_place(conn, &old, &item)?
+                        || dated_under(conn, &[&old.subject_key, &n.subject_key])? > 1
+                    {
+                        continue;
+                    }
+                    if !found.iter().any(|(o, m, _)| o.id == old.id && m.id == n.id) {
+                        found.push((old.clone(), n, item));
+                    }
+                }
+            }
+            let mut out = Vec::new();
+            for (old, notice, item) in &found {
+                let olds: HashSet<&str> = found
+                    .iter()
+                    .filter(|(_, n, _)| n.id == notice.id)
+                    .map(|(o, _, _)| o.id.as_str())
+                    .collect();
+                if olds.len() > 1 {
+                    continue;
+                }
+                let side = match moved_line(conn, item, old, notice)? {
+                    Some(line) => line,
+                    None => Hit {
+                        memory: mem_view(conn, notice)?,
+                        score: 0.0,
+                        let_go: false,
+                    },
+                };
+                out.push((old.id.clone(), notice.id.clone(), side));
+            }
+            Ok(out)
+        })
+    }
+}
+
+/// Whether `words` say an appointment moved: moved, rescheduled, postponed, brought forward or
+/// "now on" or "now at"; "changed" or "instead" only of an appointment.
+fn says_rescheduled(words: &[String]) -> bool {
+    let has = |w: &str| words.iter().any(|x| x == w);
+    has("moved")
+        || has("rescheduled")
+        || has("postponed")
+        || words.windows(2).any(|p| {
+            matches!(
+                (p[0].as_str(), p[1].as_str()),
+                ("brought", "forward") | ("now", "on") | ("now", "at")
+            )
+        })
+        || ((has("changed") || has("instead")) && has("appointment"))
+}
+
+/// Words a move notice may say besides what it is about.
+const NOTICE_WORDS: [&str; 12] = [
+    "moved",
+    "rescheduled",
+    "postponed",
+    "changed",
+    "brought",
+    "forward",
+    "been",
+    "has",
+    "was",
+    "is",
+    "now",
+    "appointment",
+];
+
+/// A memory that says an appointment moved and says nothing else of its own: no value, and no
+/// object beyond the move ("moved", "rescheduled"). Where someone lives or works is no move.
+fn is_move_notice(m: &MemRow) -> bool {
+    let words = words_of(&format!("{} {} {}", m.predicate, m.object, m.sentence));
+    let object_says_more = words_of(&m.object)
+        .iter()
+        .any(|w| w.chars().count() > 1 && !NOTICE_WORDS.contains(&w.as_str()) && w != "the");
+    m.due.is_none()
+        && m.valid_from.is_none()
+        && !matches!(
+            m.predicate.as_str(),
+            "lives_in" | "works_on" | "knows" | "prefers" | "takes" | "decided" | "promised"
+        )
+        && says_rescheduled(&words)
+        && !object_says_more
+        && !names_a_value(&m.object)
+        && !names_a_value(&m.sentence)
+}
+
+/// Words that name whose something is.
+const OWNER_WORDS: [&str; 30] = [
+    "mum",
+    "mom",
+    "mother",
+    "dad",
+    "father",
+    "son",
+    "daughter",
+    "wife",
+    "husband",
+    "partner",
+    "brother",
+    "sister",
+    "gran",
+    "granny",
+    "grandma",
+    "grandad",
+    "grandpa",
+    "grandmother",
+    "grandfather",
+    "aunt",
+    "uncle",
+    "cousin",
+    "friend",
+    "boss",
+    "colleague",
+    "neighbour",
+    "neighbor",
+    "his",
+    "her",
+    "their",
+];
+
+/// Words a sentence may start with that name nobody.
+const FIRST_WORDS: [&str; 16] = [
+    "the", "a", "an", "my", "our", "this", "that", "it", "its", "we", "you", "your", "there",
+    "today", "tomorrow", "next",
+];
+
+/// Whether `sentence` names an owner `old` does not: a possessive ("Mum's", "Sam's"), a relation
+/// word or a name that `old` never says.
+fn names_other_owner(sentence: &str, old: &MemRow) -> bool {
+    let known: HashSet<String> =
+        words_of(&format!("{} {} {}", old.subject, old.sentence, old.object))
+            .into_iter()
+            .collect();
+    let new = |w: &str| !known.contains(w);
+    let raw: Vec<&str> = sentence.split_whitespace().collect();
+    raw.iter().enumerate().any(|(at, token)| {
+        let t = token.trim_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '\u{2019}');
+        let lower = t.to_lowercase().replace('\u{2019}', "'");
+        if let Some(owner) = lower
+            .strip_suffix("'s")
+            .or_else(|| lower.strip_suffix("s'"))
+            && new(owner)
+        {
+            return true;
+        }
+        let word = lower.trim_end_matches("'s");
+        if OWNER_WORDS.contains(&word) && new(word) {
+            return true;
+        }
+        // A sentence's first word is a name too ("Sam has had ..."), unless it is a word any
+        // sentence may start with.
+        let named = (at > 0 || !FIRST_WORDS.contains(&word))
+            && t.chars().next().is_some_and(char::is_uppercase)
+            && !TITLES.contains(&word)
+            && !names_a_value(t)
+            && word != "i";
+        named && new(word)
+    })
+}
+
+/// Whether two memories are kept with the same care: both private (in any version) or neither,
+/// and both a health, money or ID detail or neither. The answer gives one with the other's
+/// value, so one may never carry what the other keeps back.
+fn same_care(conn: &Connection, a: &MemRow, b: &MemRow) -> Result<bool> {
+    let sensitive = |m: &MemRow| {
+        m.suggest_private
+            || m.tags.iter().any(|t| crate::sensitive::tag(t))
+            || [&m.subject, &m.object, &m.sentence]
+                .iter()
+                .any(|t| crate::sensitive::text(t))
+    };
+    Ok(
+        is_private_chain(conn, &a.id)? == is_private_chain(conn, &b.id)?
+            && sensitive(a) == sensitive(b),
+    )
+}
+
+/// How many current dated appointments and deadlines are filed under any of `subjects`: a note
+/// that says one of them moved, with more than one, could be about any of them, found by the
+/// search or not.
+fn dated_under(conn: &Connection, subjects: &[&str]) -> Result<usize> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT COUNT(*) FROM memories m WHERE m.subject_key IN (?1, ?2) \
+         AND m.predicate IN ('scheduled', 'due') AND m.superseded_at IS NULL \
+         AND m.forgetting = 0 AND m.status IN ('active', 'fading') \
+         AND (m.due IS NOT NULL OR m.valid_from IS NOT NULL)",
+    )?;
+    let n: i64 = stmt.query_row(
+        rusqlite::params![subjects[0], subjects.get(1).unwrap_or(&subjects[0])],
+        |r| r.get(0),
+    )?;
+    Ok(usize::try_from(n).unwrap_or(usize::MAX))
+}
+
+/// The newest trusted item behind a memory, and when it was kept.
+fn newest_trusted(conn: &Connection, memory: &str) -> Result<Option<(String, String)>> {
+    Ok(conn
+        .query_row(
+            "SELECT i.id, i.kept_at FROM memory_sources s JOIN items i ON i.id = s.item_id \
+             WHERE s.memory_id = ?1 AND i.trust = 'trusted' ORDER BY i.kept_at DESC, i.id LIMIT 1",
+            [memory],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?)
+}
+
+/// Whether reading already kept a current value in `old`'s place from `item`.
+fn kept_in_place(conn: &Connection, old: &MemRow, item: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM memories m JOIN memory_sources s ON s.memory_id = m.id \
+         WHERE s.item_id = ?1 AND m.subject_key = ?2 AND m.predicate = ?3 \
+         AND m.superseded_at IS NULL AND (m.due IS NOT NULL OR m.valid_from IS NOT NULL))",
+        rusqlite::params![item, old.subject_key, old.predicate],
+        |r| r.get(0),
+    )?)
+}
+
+/// The line of `item` that gives where `old` moved to, as a fact with the item as its receipt:
+/// the sentence that says the appointment moved, naming it, or the one just after it, when it
+/// names another value than the old one and names the appointment or says "it". Only from an
+/// item a line may come from (see `line_sources`).
+fn moved_line(conn: &Connection, item: &str, old: &MemRow, notice: &MemRow) -> Result<Option<Hit>> {
+    let Some(source) = line_source(conn, item)? else {
+        return Ok(None);
+    };
+    let lines = lines_of(&source.text);
+    let names = |l: &str| names_all(l, &old.subject) || names_all(l, &notice.subject);
+    let Some(at) = lines
+        .iter()
+        .position(|l| says_rescheduled(&words_of(l)) && names(l) && !names_other_owner(l, old))
+    else {
+        return Ok(None);
+    };
+    let line = lines.iter().skip(at).take(2).find(|l| {
+        line_is_safe(l)
+            && names_a_value(l)
+            && values_disagree(l, &old.object)
+            && (names(l) || words_of(l).iter().any(|w| w == "it"))
+    });
+    Ok(line.map(|l| {
+        let mut hit = line_hit(&source, 0, l.clone());
+        hit.memory.id = format!("{SOURCE_LINE}{item}:moved");
+        hit
+    }))
 }
 
 /// `hits` ordered by `scores` (one for each hit, higher is more relevant), the best `k` kept.
@@ -467,44 +773,61 @@ struct LineSource {
     receipt: Receipt,
 }
 
+/// What an original must be to give lines: trusted, not private, read, with text, nothing of it
+/// forgotten or being forgotten, and none of its memories let go, corrected, replaced or private.
+const LINE_ITEM_RULES: &str = "i.private = 0 AND i.trust = 'trusted' \
+     AND i.status IN ('understood', 'partlyUnderstood') AND i.text IS NOT NULL \
+     AND i.forget_epoch = 0 \
+     AND NOT EXISTS (SELECT 1 FROM forgotten_claims c WHERE c.item_id = i.id) \
+     AND NOT EXISTS (SELECT 1 FROM forget_jobs j WHERE instr(j.items, '\"' || i.id || '\"') > 0) \
+     AND NOT EXISTS (SELECT 1 FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+         WHERE s.item_id = i.id AND (m.superseded_at IS NOT NULL OR m.status = 'letGo' \
+         OR m.let_go_at IS NOT NULL OR m.forgetting = 1 OR m.private = 1))";
+
+const LINE_ITEM_COLS: &str = "i.id, i.kind, i.source, NULL, i.title, i.kept_at, i.duration_ms, \
+     i.text, (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+     ON rd.id = rk.device_id WHERE rk.item_id = i.id)";
+
+fn line_source_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LineSource> {
+    Ok(LineSource {
+        id: r.get(0)?,
+        text: r.get(7)?,
+        receipt: Receipt {
+            item_id: r.get(0)?,
+            kind: de(r.get(1)?)?,
+            source: de(r.get(2)?)?,
+            label: r.get(4)?,
+            kept_at: r.get(5)?,
+            duration_ms: r.get(6)?,
+            span: None,
+            unconfirmed: false,
+            from_device: r.get(8)?,
+        },
+    })
+}
+
 /// The originals that match `query` and may give lines, best match first.
 fn line_sources(conn: &Connection, query: &str) -> Result<Vec<LineSource>> {
     let Some(q) = fts_or(query) else {
         return Ok(Vec::new());
     };
-    let mut stmt = conn.prepare_cached(
-        "SELECT i.id, i.kind, i.source, NULL, i.title, i.kept_at, i.duration_ms, i.text, \
-                (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
-                 WHERE rk.item_id = i.id) \
-         FROM items_stem f JOIN items i ON i.rowid = f.rowid \
-         WHERE items_stem MATCH ?1 AND i.private = 0 AND i.trust = 'trusted' \
-         AND i.status IN ('understood', 'partlyUnderstood') AND i.text IS NOT NULL \
-         AND i.forget_epoch = 0 \
-         AND NOT EXISTS (SELECT 1 FROM forgotten_claims c WHERE c.item_id = i.id) \
-         AND NOT EXISTS (SELECT 1 FROM forget_jobs j WHERE instr(j.items, '\"' || i.id || '\"') > 0) \
-         AND NOT EXISTS (SELECT 1 FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-             WHERE s.item_id = i.id AND (m.superseded_at IS NOT NULL OR m.status = 'letGo' \
-             OR m.let_go_at IS NOT NULL OR m.forgetting = 1 OR m.private = 1)) \
-         ORDER BY f.rank LIMIT ?2",
-    )?;
-    let rows = stmt.query_map(rusqlite::params![q, LINE_ITEMS as i64], |r| {
-        Ok(LineSource {
-            id: r.get(0)?,
-            text: r.get(7)?,
-            receipt: Receipt {
-                item_id: r.get(0)?,
-                kind: de(r.get(1)?)?,
-                source: de(r.get(2)?)?,
-                label: r.get(4)?,
-                kept_at: r.get(5)?,
-                duration_ms: r.get(6)?,
-                span: None,
-                unconfirmed: false,
-                from_device: r.get(8)?,
-            },
-        })
-    })?;
+    let mut stmt = conn.prepare_cached(&format!(
+        "SELECT {LINE_ITEM_COLS} FROM items_stem f JOIN items i ON i.rowid = f.rowid \
+         WHERE items_stem MATCH ?1 AND {LINE_ITEM_RULES} ORDER BY f.rank LIMIT ?2"
+    ))?;
+    let rows = stmt.query_map(rusqlite::params![q, LINE_ITEMS as i64], line_source_row)?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// One original by id, when it may give lines.
+fn line_source(conn: &Connection, item: &str) -> Result<Option<LineSource>> {
+    Ok(conn
+        .query_row(
+            &format!("SELECT {LINE_ITEM_COLS} FROM items i WHERE i.id = ?1 AND {LINE_ITEM_RULES}"),
+            [item],
+            line_source_row,
+        )
+        .optional()?)
 }
 
 /// The lines of `source` no memory of it says, each with how many words it shares with

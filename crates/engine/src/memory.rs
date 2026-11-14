@@ -30,7 +30,7 @@ fn closes_old_value(predicate: &str) -> bool {
 const ORDER_GAP: jiff::SignedDuration = jiff::SignedDuration::from_mins(5);
 
 /// Which of two items was kept first, when that is clear.
-fn kept_order(new: &str, old: &str) -> Option<std::cmp::Ordering> {
+pub(crate) fn kept_order(new: &str, old: &str) -> Option<std::cmp::Ordering> {
     let (Ok(new), Ok(old)) = (
         new.parse::<jiff::Timestamp>(),
         old.parse::<jiff::Timestamp>(),
@@ -77,7 +77,7 @@ const MONTHS: [&str; 12] = [
     "december",
 ];
 
-fn words_of(text: &str) -> Vec<String> {
+pub(crate) fn words_of(text: &str) -> Vec<String> {
     text.to_lowercase()
         .split(|ch: char| !ch.is_alphanumeric())
         .filter(|w| !w.is_empty())
@@ -86,22 +86,48 @@ fn words_of(text: &str) -> Vec<String> {
 }
 
 /// Whether the item says this candidate replaces an earlier value: the mind marked it so, or the
-/// words it quotes say so.
+/// words it quotes say so. The reader's own sentence saying it moved counts only when the quote
+/// itself has a move word, or "now" with the subject or a day or time: a paraphrase alone is not
+/// the item's word.
 fn says_moved(c: &Candidate) -> bool {
     let date = date_str(c.due.or(c.valid_from));
+    let quote = match &c.span {
+        Some(Span::Quote { text }) => Some(text.as_str()),
+        _ => None,
+    };
+    let cue = quote.is_some_and(|q| {
+        let words = words_of(q);
+        has_move_word(&words)
+            || (words.iter().any(|w| w == "now") && (names_all(q, &c.subject) || names_a_value(q)))
+    });
+    let sentence = Span::Quote {
+        text: c.sentence.clone(),
+    };
     c.moved
         || c.span
             .as_ref()
-            .is_some_and(|s| quote_says_moved(s, &c.object, date.as_deref()))
+            .is_some_and(|s| quote_says_moved(s, &c.object, date.as_deref(), &c.subject))
+        || (cue && quote_says_moved(&sentence, &c.object, date.as_deref(), &c.subject))
 }
 
-/// A move word counts only in the sentence of the quote that gives the new value (its words, or
-/// the day and month of its date): "The dentist moved to the High Street. Hygienist 3 December"
-/// does not move the dentist.
-fn quote_says_moved(span: &Span, object: &str, date: Option<&str>) -> bool {
-    let Span::Quote { text } = span else {
-        return false;
-    };
+/// Whether `words` holds a word that says something moved.
+fn has_move_word(words: &[String]) -> bool {
+    words.iter().any(|w| MOVE_WORDS.contains(&w.as_str()))
+        || words
+            .windows(2)
+            .any(|p| p[0] == "brought" && p[1] == "forward")
+}
+
+/// The sentences of a quote, as words.
+fn quote_sentences(text: &str) -> Vec<Vec<String>> {
+    text.split(['.', '!', '?', ';', '\n'])
+        .map(words_of)
+        .filter(|w| !w.is_empty())
+        .collect()
+}
+
+/// Whether `words` gives the value `object` (its words in a row) or the day and month of `date`.
+fn gives_value(words: &[String], object: &str, date: Option<&str>) -> bool {
     let value = words_of(object);
     let day_month: Option<(String, &str)> = date.and_then(|d| {
         let d: jiff::civil::Date = d.parse().ok()?;
@@ -110,18 +136,77 @@ fn quote_says_moved(span: &Span, object: &str, date: Option<&str>) -> bool {
             MONTHS[usize::try_from(d.month()).ok()? - 1],
         ))
     });
-    text.split(['.', '!', '?', ';', '\n']).any(|sentence| {
-        let words = words_of(sentence);
-        let has_value = (!value.is_empty() && words.windows(value.len()).any(|w| w == value))
-            || day_month.as_ref().is_some_and(|(day, month)| {
-                words.contains(day) && words.iter().any(|w| w == month)
-            });
-        let moved = words.iter().any(|w| MOVE_WORDS.contains(&w.as_str()))
-            || words
-                .windows(2)
-                .any(|p| p[0] == "brought" && p[1] == "forward");
-        has_value && moved
+    (!value.is_empty() && words.windows(value.len()).any(|w| w == value))
+        || day_month
+            .as_ref()
+            .is_some_and(|(day, month)| words.contains(day) && words.iter().any(|w| w == month))
+}
+
+/// A move word counts only in the sentence of the quote that gives the new value (its words, or
+/// the day and month of its date), or in the sentence just before it when that one names the
+/// whole subject and the value's own sentence speaks of it as "it": "The dentist appointment has
+/// moved. It is now Thursday 19 November." But "The dentist moved to the High Street. Hygienist
+/// 3 December" does not move the dentist.
+fn quote_says_moved(span: &Span, object: &str, date: Option<&str>, subject: &str) -> bool {
+    let Span::Quote { text } = span else {
+        return false;
+    };
+    let sentences = quote_sentences(text);
+    let naming = naming_words(subject);
+    sentences.iter().enumerate().any(|(at, words)| {
+        if !gives_value(words, object, date) {
+            return false;
+        }
+        has_move_word(words)
+            || (at > 0 && words.iter().any(|w| w == "it") && {
+                let before = &sentences[at - 1];
+                has_move_word(before)
+                    && !naming.is_empty()
+                    && naming.iter().all(|w| before.contains(w))
+            })
     })
+}
+
+/// Whether `text`, in the sentence that gives the new value (`object`, or the day and month of
+/// `date`), says the old day no longer holds: "it is now Thursday 19 November at 14:30, not
+/// Wednesday 18 November". The old day is the day and month of `old_date`, after "not", "no
+/// longer" or "instead of" in that same sentence.
+fn cancels_in(text: &str, object: &str, date: Option<&str>, old_date: &str) -> bool {
+    let Ok(old) = old_date.parse::<jiff::civil::Date>() else {
+        return false;
+    };
+    let Some(month) = usize::try_from(old.month())
+        .ok()
+        .and_then(|m| MONTHS.get(m - 1))
+    else {
+        return false;
+    };
+    let day = old.day().to_string();
+    quote_sentences(text).iter().any(|words| {
+        if !gives_value(words, object, date) {
+            return false;
+        }
+        (0..words.len()).any(|i| {
+            let after = match (words[i].as_str(), words.get(i + 1).map(String::as_str)) {
+                ("not", _) => i + 1,
+                ("no", Some("longer")) | ("instead", Some("of")) => i + 2,
+                _ => return false,
+            };
+            let rest = &words[after.min(words.len())..];
+            rest.contains(&day) && rest.iter().any(|w| w == month)
+        })
+    })
+}
+
+/// Whether the candidate's quote says `e`'s day, filed under the same subject, no longer holds.
+fn quote_cancels(c: &Candidate, e: &MemRow) -> bool {
+    let (Some(Span::Quote { text }), Some(old)) =
+        (&c.span, e.due.as_deref().or(e.valid_from.as_deref()))
+    else {
+        return false;
+    };
+    let date = date_str(c.due.or(c.valid_from));
+    key_of(&c.subject) == e.subject_key && cancels_in(text, &c.object, date.as_deref(), old)
 }
 
 /// The concrete values a phrase pins down, by kind. Each value lists the forms it may take:
@@ -367,9 +452,19 @@ fn values_apart(a: &Values, b: &Values) -> bool {
         || apart(&a.numbers, &b.numbers)
 }
 
-#[cfg(test)]
-fn values_disagree(a: &str, b: &str) -> bool {
+/// Whether two phrases name different values of one kind (see `values_apart`).
+pub(crate) fn values_disagree(a: &str, b: &str) -> bool {
     values_apart(&values_of(a), &values_of(b))
+}
+
+/// Whether a phrase pins down any value: a day, month, ordinal, time or number.
+pub(crate) fn names_a_value(text: &str) -> bool {
+    let v = values_of(text);
+    !(v.weekdays.is_empty()
+        && v.months.is_empty()
+        && v.ordinals.is_empty()
+        && v.times.is_empty()
+        && v.numbers.is_empty())
 }
 
 /// Whether a candidate names other values than a memory: another day, month, ordinal, time or
@@ -423,7 +518,7 @@ fn naming_words(subject: &str) -> Vec<String> {
 }
 
 /// Whether `sentence` names every naming word of `subject`.
-fn names_all(sentence: &str, subject: &str) -> bool {
+pub(crate) fn names_all(sentence: &str, subject: &str) -> bool {
     let words = words_of(sentence);
     let naming = naming_words(subject);
     !naming.is_empty() && naming.iter().all(|w| words.contains(w))
@@ -582,8 +677,9 @@ fn appointments_elsewhere(
     Ok(rows)
 }
 
-/// Whether a trusted item behind a memory quotes words that say it moved to its value.
-fn quotes_a_move(tx: &Transaction<'_>, m: &MemRow) -> Result<bool> {
+/// Whether a trusted item behind a memory quotes words that say it moved to its value, or, given
+/// `other`'s day, that this day no longer holds ("..., not Wednesday 18 November").
+fn quotes_a_move(tx: &Transaction<'_>, m: &MemRow, other: Option<&str>) -> Result<bool> {
     let mut stmt = tx.prepare(
         "SELECT s.span FROM memory_sources s JOIN items i ON i.id = s.item_id \
          WHERE s.memory_id = ?1 AND i.trust = 'trusted' AND s.span IS NOT NULL",
@@ -593,7 +689,13 @@ fn quotes_a_move(tx: &Transaction<'_>, m: &MemRow) -> Result<bool> {
         .collect::<rusqlite::Result<_>>()?;
     let date = m.due.as_deref().or(m.valid_from.as_deref());
     Ok(spans.iter().any(|json| {
-        serde_json::from_str::<Span>(json).is_ok_and(|s| quote_says_moved(&s, &m.object, date))
+        serde_json::from_str::<Span>(json).is_ok_and(|s| {
+            quote_says_moved(&s, &m.object, date, &m.subject)
+                || match (&s, other) {
+                    (Span::Quote { text }, Some(old)) => cancels_in(text, &m.object, date, old),
+                    _ => false,
+                }
+        })
     }))
 }
 
@@ -622,10 +724,10 @@ fn appointment_meets(
     else {
         return Ok(None);
     };
-    if !says_moved(c) {
+    if !says_moved(c) && !quote_cancels(c, e) {
         // Read out of order, the newer note may be the one that said it moved: then this may be
         // the same appointment, and only the person can say.
-        let same = new_date == old_date || quotes_a_move(tx, e)?;
+        let same = new_date == old_date || quotes_a_move(tx, e, Some(new_date))?;
         return Ok(Some(if same { Meets::Asks } else { Meets::Separate }));
     }
     let newer = last_kept(tx, &e.id)?.and_then(|old| kept_order(&item.kept_at, &old))
@@ -674,7 +776,8 @@ fn successor_in_slot(
                 .or(o.valid_from.as_ref())
                 .is_some_and(|old| old.as_str() >= item.kept_on.as_str())
         });
-        if moves_them && new_date.as_str() >= item.kept_on.as_str() && quotes_a_move(tx, &m)? {
+        if moves_them && new_date.as_str() >= item.kept_on.as_str() && quotes_a_move(tx, &m, None)?
+        {
             return Ok(Some(m.id));
         }
     }

@@ -136,6 +136,28 @@ free. It is never offered from an item
 that is private, untrusted or had something forgotten, or whose memories were let go, corrected or
 replaced by a later change, and it never leaves the computer or reaches a phone.
 
+A dated appointment that a note kept clearly later says has moved, when reading kept the move
+but not the new day, reaches the answer as a move: in its place, the line of that note that says
+where it went, with the old value as what it was and the note as its receipt. The line is the
+move sentence or the one right after it and names the appointment or says "it". The note must be
+about this appointment: filed under it or naming it, naming no other owner ("Mum's", "her",
+another person's name, also as its first word), and saying nothing else ("Sam moved to Leeds" is
+no move), and it is kept with the same care as the appointment (private, or a health, money or
+ID detail). When more than one dated appointment is filed under the same name, found by the
+search or not, the note could be about any of them and is no move. A phone gets the memory that
+says it moved instead of the line, with the old value only when the old memory may go to a
+phone. The old value never goes online: an online question gets the memory as it is kept, so the
+Sent log shows exactly what left.
+
+An answer never gives one side of an open which-is-right question as settled, or a move without
+where it went. When it cites one side without the other's day or date and time, said in one
+sentence about it (in any usual form), the other side is added after its own words and cited:
+for an open question marked as the earlier or the later note, followed by "It is not settled
+which is right" (also when the answer names both but picks one); for a move as the later note,
+said to have since moved when the answer gave the old day. A side is added only with its
+receipt. This runs on this computer for an online answer too: a side kept back from the provider
+is added here and never sent or logged, and the answer is marked as having kept something here.
+
 ## Provenance rules
 
 1. A fact without at least one event id is invalid.
