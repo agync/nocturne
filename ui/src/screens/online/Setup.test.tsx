@@ -207,9 +207,32 @@ describe("setup", () => {
     expect(screen.queryByRole("switch", { name: /Private things/ })).toBeNull();
   });
 
-  it("limit_200_default: the limit starts at 200 questions", async () => {
+  it("limit_none_default: the limit starts as no limit", async () => {
     await toLimit();
-    expect(screen.getByLabelText(/Stop online answers after/)).toHaveValue("200");
+    expect(screen.getByText(/There is no limit\./)).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Stop online answers after/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Set a limit" })).toBeInTheDocument();
+  });
+
+  it("limit_none_default: continuing without choosing sends no limit and asks nothing", async () => {
+    const { engine } = await toLimit();
+    await click("Continue");
+    await heading(STEP5);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(
+      screen.getByText(/There is no limit on how many questions go online/),
+    ).toBeInTheDocument();
+    const on = vi.spyOn(engine, "turnOnOnline");
+    await click("Turn on online answers");
+    await waitFor(() => expect(on).toHaveBeenCalledTimes(1));
+    expect(on.mock.calls[0]?.[0].limit.kind).toBe("none");
+  });
+
+  it("limit_set: a limit can be set, starts at 200 and says when it changed", async () => {
+    await toLimit();
+    await click("Set a limit");
+    const input = screen.getByLabelText(/Stop online answers after/);
+    expect(input).toHaveValue("200");
     expect(
       screen.getByText(/Then questions are answered on this computer until the 1st/),
     ).toBeInTheDocument();
@@ -217,11 +240,6 @@ describe("setup", () => {
     expect(
       screen.getByText(/doesn’t tell Nocturne what each one costs, so the limit counts questions/),
     ).toBeInTheDocument();
-  });
-
-  it("limit_200_default: editing it says it changed", async () => {
-    await toLimit();
-    const input = screen.getByLabelText(/Stop online answers after/);
     await userEvent.clear(input);
     await userEvent.type(input, "50");
     expect(screen.getByText(/Changed from 200\./)).toBeInTheDocument();
@@ -229,6 +247,7 @@ describe("setup", () => {
 
   it("invalid_limit: asks for a whole number and will not go on", async () => {
     await toLimit();
+    await click("Set a limit");
     const input = screen.getByLabelText(/Stop online answers after/);
     for (const bad of ["0", "-3", "2.5", "", "lots"]) {
       await userEvent.clear(input);
@@ -245,16 +264,12 @@ describe("setup", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
-  it("no_limit_confirms: asks first and keeps the limit when told to", async () => {
+  it("no_limit_direct: going back to no limit needs no confirmation", async () => {
     await toLimit();
-    await userEvent.click(screen.getByRole("button", { name: "Use no limit…" }));
-    const dialog = await screen.findByRole("dialog", { name: "Use no limit?" });
-    expect(within(dialog).getByText(/your provider charges for each one/)).toBeInTheDocument();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Keep a limit" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
+    await click("Set a limit");
     expect(screen.getByLabelText(/Stop online answers after/)).toHaveValue("200");
-    await userEvent.click(screen.getByRole("button", { name: "Use no limit…" }));
-    await userEvent.click(await screen.findByRole("button", { name: "Use no limit" }));
+    await userEvent.click(screen.getByRole("button", { name: "Use no limit" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByText(/There is no limit\./)).toBeInTheDocument();
     await click("Continue");
     await heading(STEP5);
@@ -298,7 +313,7 @@ describe("setup", () => {
     expect(on).toHaveBeenCalledWith({
       phones: false,
       sendSensitive: false,
-      limit: { kind: "questions", questions: 200, usd: null },
+      limit: { kind: "none", questions: 200, usd: null },
     });
     expect(await screen.findByRole("switch", { name: "Online answers are on" })).toBeChecked();
     expect(window.location.hash).toBe("#/settings/online");

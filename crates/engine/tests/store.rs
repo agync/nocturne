@@ -220,7 +220,7 @@ fn migration_10_applies_on_a_v9_store() {
         assert_eq!(n, 0, "{table} starts empty");
     }
     // Off is the fresh state: nothing wanted on, nothing set up, phones on, sensitive off,
-    // 200 questions a month, nothing sent, no key storage named.
+    // no monthly limit, nothing sent, no key storage named.
     let row: (
         i64,
         i64,
@@ -251,7 +251,7 @@ fn migration_10_applies_on_a_v9_store() {
             },
         )
         .unwrap();
-    assert_eq!(row, (0, 0, 1, 0, "questions".into(), 200, 0.0, None, None));
+    assert_eq!(row, (0, 0, 1, 0, "none".into(), 200, 0.0, None, None));
     let phase: Option<String> = conn
         .query_row("SELECT phase FROM reindex_state", [], |r| r.get(0))
         .unwrap();

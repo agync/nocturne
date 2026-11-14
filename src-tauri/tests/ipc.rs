@@ -1778,7 +1778,7 @@ fn get_online_is_off_on_a_fresh_store() {
     assert_eq!(view["sendSensitive"], false);
     assert_eq!(
         view["limit"],
-        json!({"kind": "questions", "questions": 200, "usd": null})
+        json!({"kind": "none", "questions": 200, "usd": null})
     );
     assert_eq!(view["questionsThisMonth"], 0);
     assert_eq!(view["sentBytes"], 0.0);

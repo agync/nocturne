@@ -76,7 +76,20 @@ mod tests {
             "no cost reported: the question count limits instead"
         );
         assert!(!reached(&usd, 199, None, false));
-        assert!(reached(&OnlineLimit::default(), 200, None, false));
-        assert!(!reached(&OnlineLimit::default(), 199, None, false));
+    }
+
+    #[test]
+    fn there_is_no_limit_unless_one_is_set() {
+        let none = OnlineLimit::default();
+        assert_eq!(none.kind, LimitKind::None);
+        assert!(!reached(&none, 0, None, false));
+        assert!(!reached(&none, 1_000_000, Some(500.0), true));
+        let count = OnlineLimit {
+            kind: LimitKind::Questions,
+            questions: 200,
+            usd: None,
+        };
+        assert!(reached(&count, 200, None, false));
+        assert!(!reached(&count, 199, None, false));
     }
 }

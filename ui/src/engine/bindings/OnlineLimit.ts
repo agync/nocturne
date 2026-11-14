@@ -2,6 +2,7 @@
 import type { LimitKind } from "./LimitKind";
 
 /**
- * A monthly limit. `usd` is offered only when the provider reports cost.
+ * A monthly limit. There is none unless the person sets one; `questions` is the number offered
+ * when they choose to count questions. `usd` is offered only when the provider reports cost.
  */
 export type OnlineLimit = { kind: LimitKind, questions: number, usd: number | null, };

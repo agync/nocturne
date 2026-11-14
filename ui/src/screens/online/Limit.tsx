@@ -1,6 +1,5 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
-import { Dialog } from "../../components/Dialog/Dialog";
 import { t } from "../../copy/t";
 import type { OnlineLimit } from "../../engine/bindings";
 import { type StepProps, withLimit } from "./draft";
@@ -8,31 +7,6 @@ import { DEFAULT_LIMIT, parseQuestions, parseUsd } from "./limits";
 import styles from "./Online.module.css";
 import { Frame } from "./parts";
 import { StepAside, StepLabel } from "./SetupBits";
-
-/** Asks before sending every question online with nothing to stop it. */
-export function NoLimitDialog({
-  onKeep,
-  onConfirm,
-}: {
-  onKeep: () => void;
-  onConfirm: () => void;
-}) {
-  return (
-    <Dialog title={t("online.limit.none.title")} onClose={onKeep}>
-      <div className={styles.confirm}>
-        <p className={styles.strong}>{t("online.limit.none.body")}</p>
-        <div className={styles.buttons}>
-          <Button variant="secondary" onClick={onKeep}>
-            {t("online.limit.none.keep")}
-          </Button>
-          <Button variant="primary" onClick={onConfirm}>
-            {t("online.limit.none.confirm")}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
 
 type Mode = OnlineLimit["kind"];
 
@@ -44,7 +18,6 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
   const [mode, setMode] = useState<Mode>(startMode);
   const [questions, setQuestions] = useState(String(draft.limit.questions || 200));
   const [dollars, setDollars] = useState(draft.limit.usd ? draft.limit.usd.toFixed(2) : "5.00");
-  const [asking, setAsking] = useState(false);
 
   const parsedQuestions = parseQuestions(questions);
   const parsedUsd = parseUsd(dollars);
@@ -187,7 +160,7 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
           <button
             type="button"
             className={`${styles.linkButton} hit`}
-            onClick={() => setAsking(true)}
+            onClick={() => setMode("none")}
             style={{ alignSelf: "flex-start" }}
           >
             {t("online.limit.useNone")}
@@ -202,15 +175,6 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
           {t("online.back")}
         </Button>
       </div>
-      {asking ? (
-        <NoLimitDialog
-          onKeep={() => setAsking(false)}
-          onConfirm={() => {
-            setMode("none");
-            setAsking(false);
-          }}
-        />
-      ) : null}
     </Frame>
   );
 }

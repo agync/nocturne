@@ -111,7 +111,8 @@ pub enum LimitKind {
     None,
 }
 
-/// A monthly limit. `usd` is offered only when the provider reports cost.
+/// A monthly limit. There is none unless the person sets one; `questions` is the number offered
+/// when they choose to count questions. `usd` is offered only when the provider reports cost.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -124,7 +125,7 @@ pub struct OnlineLimit {
 impl Default for OnlineLimit {
     fn default() -> Self {
         Self {
-            kind: LimitKind::Questions,
+            kind: LimitKind::None,
             questions: 200,
             usd: None,
         }

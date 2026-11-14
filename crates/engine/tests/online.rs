@@ -93,6 +93,7 @@ fn fresh_store_is_off() {
     assert!(!row.wanted_on && !row.set_up);
     assert!(row.phones && !row.send_sensitive);
     assert_eq!(row.limit, OnlineLimit::default());
+    assert_eq!(row.limit.kind, LimitKind::None);
     assert_eq!(row.limit.questions, 200);
     assert!(row.base_url.is_none() && row.key_storage.is_none());
     assert!(row.pause.is_none() && row.problem.is_none());

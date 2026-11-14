@@ -18,10 +18,8 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use nocturne_contract::{
-    LimitKind, OnlineAdvanced, OnlineLimit, OnlineState, OnlineView, PrivacyView,
-};
-use nocturne_lemonade::online::{CloudRoute, DEFAULT_LIMIT};
+use nocturne_contract::{OnlineAdvanced, OnlineLimit, OnlineState, OnlineView, PrivacyView};
+use nocturne_lemonade::online::CloudRoute;
 use tauri::{AppHandle, Manager, Runtime};
 
 use crate::state::AppState;
@@ -150,11 +148,7 @@ pub fn off_view() -> OnlineView {
         phones: true,
         phones_available: false,
         send_sensitive: false,
-        limit: OnlineLimit {
-            kind: LimitKind::Questions,
-            questions: DEFAULT_LIMIT,
-            usd: None,
-        },
+        limit: OnlineLimit::default(),
         questions_this_month: 0,
         spent_this_month_usd: None,
         cost_reported: false,

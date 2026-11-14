@@ -7,7 +7,8 @@ export const usdText = (usd: number): string => `$${usd.toFixed(2)}`;
 export const QUESTION_STEPS = [50, 200, 500] as const;
 export const USD_STEPS = [5, 10, 20] as const;
 
-export const DEFAULT_LIMIT: OnlineLimit = { kind: "questions", questions: 200, usd: null };
+/** What a new setup starts with: no limit, and 200 as the number offered if one is set. */
+export const DEFAULT_LIMIT: OnlineLimit = { kind: "none", questions: 200, usd: null };
 
 /** "200 questions", "$5.00 a month" or "No limit". */
 export function limitText(limit: OnlineLimit): string {

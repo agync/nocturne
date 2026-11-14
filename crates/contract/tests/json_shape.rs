@@ -96,6 +96,7 @@ fn online_types_are_tagged_and_keyless() {
         r#"{"type":"memory","n":2,"text":null,"state":"changed"}"#
     );
     assert_eq!(AskPlace::default(), AskPlace::Auto);
+    assert_eq!(OnlineLimit::default().kind, LimitKind::None);
     assert_eq!(OnlineLimit::default().questions, 200);
     let form: OnlineForm = serde_json::from_str(
         r#"{"baseUrl":"https://api.example.com/v1","key":"sk-secret-value","model":"m"}"#,

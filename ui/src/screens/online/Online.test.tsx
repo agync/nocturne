@@ -183,23 +183,21 @@ describe("online", () => {
     expect(engine.online.view().phonesAvailable).toBe(true);
   });
 
-  it("limit: no limit asks first", async () => {
+  it("limit: no limit is chosen at once, and a limit can be set again", async () => {
     const { engine } = await openOnline(PAGE, "on");
     const update = vi.spyOn(engine, "updateOnlineSettings");
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: "Monthly limit" }),
       "No limit",
     );
-    const dialog = await screen.findByRole("dialog", { name: "Use no limit?" });
-    expect(update).not.toHaveBeenCalled();
-    await userEvent.click(within(dialog).getByRole("button", { name: "Keep a limit" }));
-    expect(update).not.toHaveBeenCalled();
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(engine.online.view().limit.kind).toBe("none");
+    expect(await screen.findByText(/No limit is set\. Resets on/)).toBeInTheDocument();
     await userEvent.selectOptions(
       screen.getByRole("combobox", { name: "Monthly limit" }),
-      "No limit",
+      "200 questions",
     );
-    await userEvent.click(await screen.findByRole("button", { name: "Use no limit" }));
-    await waitFor(() => expect(update).toHaveBeenCalled());
-    expect(engine.online.view().limit.kind).toBe("none");
+    await waitFor(() => expect(engine.online.view().limit.kind).toBe("questions"));
   });
 });

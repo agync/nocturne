@@ -214,7 +214,7 @@ CREATE TABLE entity_changes(
 CREATE TABLE online_state(
   id INTEGER PRIMARY KEY CHECK (id = 1), wanted_on INTEGER NOT NULL DEFAULT 0,
   set_up INTEGER NOT NULL DEFAULT 0, base_url TEXT, model TEXT, phones INTEGER NOT NULL DEFAULT 1,
-  send_sensitive INTEGER NOT NULL DEFAULT 0, limit_kind TEXT NOT NULL DEFAULT 'questions',
+  send_sensitive INTEGER NOT NULL DEFAULT 0, limit_kind TEXT NOT NULL DEFAULT 'none',
   limit_questions INTEGER NOT NULL DEFAULT 200, limit_usd REAL, pause TEXT, problem TEXT,
   problem_since TEXT, sent_bytes REAL NOT NULL DEFAULT 0, first_on_at TEXT, on_since TEXT,
   last_on_at TEXT, last_off_at TEXT, key_storage TEXT);

@@ -6,7 +6,6 @@ import { formatBytes, formatLongDay, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { OnlineLimit, OnlineView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
-import { NoLimitDialog } from "./Limit";
 import { limitText, QUESTION_STEPS, USD_STEPS } from "./limits";
 import styles from "./Online.module.css";
 import { Frame, LockNote, providerName } from "./parts";
@@ -244,7 +243,6 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
   const limitId = useId();
   const limitRef = useRef<HTMLSelectElement>(null);
   const [forgetting, setForgetting] = useState(false);
-  const [noLimit, setNoLimit] = useState(false);
   const state = view.state;
   const trouble = state.type !== "on";
   const options = limitOptions(view);
@@ -261,8 +259,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
   const changeLimit = (value: string) => {
     const picked = options.find((o) => o.value === value);
     if (!picked) return;
-    if (picked.limit.kind === "none") setNoLimit(true);
-    else void patch({ limit: picked.limit });
+    void patch({ limit: picked.limit });
   };
 
   const focusLimit = () => {
@@ -447,15 +444,6 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
         </button>
       </div>
       {forgetting ? <ForgetKeyDialog view={view} onClose={() => setForgetting(false)} /> : null}
-      {noLimit ? (
-        <NoLimitDialog
-          onKeep={() => setNoLimit(false)}
-          onConfirm={() => {
-            setNoLimit(false);
-            void patch({ limit: { kind: "none", questions: view.limit.questions, usd: null } });
-          }}
-        />
-      ) : null}
     </Frame>
   );
 }

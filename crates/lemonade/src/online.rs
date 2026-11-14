@@ -36,8 +36,6 @@ pub const WAIT_SECONDS: u64 = 6;
 /// After this long without an answer this computer answers instead.
 pub const SWITCH_SECONDS: u64 = 20;
 pub const SENT_KEPT_DAYS: u32 = 90;
-/// Questions a month, unless the person chose otherwise.
-pub const DEFAULT_LIMIT: u32 = 200;
 /// The most remembered sentences one question sends.
 pub const MAX_FACTS: usize = 12;
 
