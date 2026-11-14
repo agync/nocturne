@@ -241,6 +241,8 @@
   "online.consent.mind.none": "There is no limit on how many questions go online.",
   "online.consent.mind.rest": "Turn it off at any time in Settings or on the Privacy page. Every answer says where it was written, and “See what was sent” shows the exact words.",
   "online.consent.failed": "Nocturne couldn’t save this, so nothing was turned on. Try again.",
+  "online.consent.declined": "Not turned on. To use this service, check it again from Advanced details.",
+  "online.consent.toAdvanced": "Go to Advanced details",
   "online.consent.turnOn": "Turn on online answers",
   "online.consent.turningOn": "Turning on…",
   "online.consent.tryAgain": "Try again",

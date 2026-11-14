@@ -13,6 +13,8 @@ pub enum ErrorCode {
     Invalid,
     Busy,
     Unavailable,
+    /// The person said no in the app's own window.
+    Declined,
     TokenExpired,
     /// Too late to undo: the moment for it has passed.
     TooLate,

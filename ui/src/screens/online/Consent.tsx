@@ -33,14 +33,20 @@ export function Consent({
 }) {
   const engine = useEngine();
   const { run, busy } = useOnlineAct();
-  const [failed, setFailed] = useState(false);
+  const [failed, setFailed] = useState<false | "error" | "declined">(false);
   const { limit } = draft;
 
   const turnOn = async () => {
     setFailed(false);
-    const done = await run(() => engine.turnOnOnline(draft), { quiet: true });
+    let why: "error" | "declined" = "error";
+    const done = await run(() => engine.turnOnOnline(draft), {
+      quiet: true,
+      onError: (code) => {
+        if (code === "declined") why = "declined";
+      },
+    });
     if (!done) {
-      setFailed(true);
+      setFailed(why);
       return;
     }
     onHandOver();
@@ -189,15 +195,24 @@ export function Consent({
 
       {failed ? (
         <p role="alert" className={styles.alert}>
-          {t("online.consent.failed")}
+          {t(failed === "declined" ? "online.consent.declined" : "online.consent.failed")}
         </p>
       ) : null}
       <div className={styles.footer}>
-        <Button variant="primary" disabled={busy} aria-busy={busy} onClick={() => void turnOn()}>
-          {busy
-            ? t("online.consent.turningOn")
-            : t(failed ? "online.consent.tryAgain" : "online.consent.turnOn")}
-        </Button>
+        {failed === "declined" ? (
+          <Button
+            variant="primary"
+            onClick={() => goTo("/settings/advanced/online", { from: "online" })}
+          >
+            {t("online.consent.toAdvanced")}
+          </Button>
+        ) : (
+          <Button variant="primary" disabled={busy} aria-busy={busy} onClick={() => void turnOn()}>
+            {busy
+              ? t("online.consent.turningOn")
+              : t(failed ? "online.consent.tryAgain" : "online.consent.turnOn")}
+          </Button>
+        )}
         <Button variant="quiet" onClick={onLeave}>
           {t("online.notNow")}
         </Button>

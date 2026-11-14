@@ -23,7 +23,7 @@ use super::limit;
 use super::notices;
 use super::route::{EnginePort, RouteChoice};
 use crate::ask::AskLane;
-use crate::error::CommandError;
+use crate::error::{CommandError, ErrorCode};
 use crate::state::AppState;
 
 /// One question counted against the month's limit while it is on its way. Given back when
@@ -634,13 +634,15 @@ impl<R: Runtime> OnlineHub<R> {
                 };
                 let print = Fingerprint::of(route);
                 if self.routes().refused.as_ref() == Some(&print) {
-                    return Err(CommandError::unavailable(
+                    return Err(CommandError::new(
+                        ErrorCode::Declined,
                         "the person said no to this connection; leave setup to start again",
                     ));
                 }
                 if !self.confirmed(route.base_url().as_str()).await {
                     self.routes().refused = Some(print);
-                    return Err(CommandError::unavailable(
+                    return Err(CommandError::new(
+                        ErrorCode::Declined,
                         "Online answers was not turned on: the person did not agree in the \
                          app's window",
                     ));

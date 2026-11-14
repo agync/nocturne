@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from "react";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { OnlineView } from "../../engine/bindings";
+import { toEngineError } from "../../engine/client";
 import { useEngine, useEngineEvent } from "../../engine/context";
 
 export const ONLINE_KEY = ["online"] as const;
@@ -37,7 +38,7 @@ export function useOnlineAct() {
   const run = useCallback(
     async <T>(
       call: () => Promise<T>,
-      options: { quiet?: boolean } = {},
+      options: { quiet?: boolean; onError?: (code: string) => void } = {},
     ): Promise<{ value: T } | null> => {
       if (flying.current) return null;
       flying.current = true;
@@ -48,7 +49,8 @@ export function useOnlineAct() {
         void client.invalidateQueries({ queryKey: ["privacy"] });
         void client.invalidateQueries({ queryKey: ["advanced"] });
         return { value };
-      } catch {
+      } catch (error) {
+        options.onError?.(toEngineError(error).code);
         if (!options.quiet) toast.show({ message: t("online.failed") });
         return null;
       } finally {

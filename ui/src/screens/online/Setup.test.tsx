@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckOutcome } from "../../engine/bindings";
+import { EngineError } from "../../engine/client";
 import type { OnlineScenario } from "../../engine/mock/online";
 import { openOnline } from "./testing";
 
@@ -385,6 +386,24 @@ describe("setup", () => {
     await click("Try again");
     await waitFor(() => expect(on).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole("switch", { name: "Online answers are on" })).toBeChecked();
+  });
+
+  it("says plainly when the confirmation was cancelled, and offers the way back", async () => {
+    const { engine } = await toLimit();
+    await click("Continue");
+    await heading(STEP5);
+    const on = vi
+      .spyOn(engine, "turnOnOnline")
+      .mockRejectedValue(new EngineError("declined", "the person said no"));
+    await click("Turn on online answers");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(
+      "Not turned on. To use this service, check it again from Advanced details.",
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(on).toHaveBeenCalledTimes(1);
+    await click("Go to Advanced details");
+    expect(window.location.hash).toContain("#/settings/advanced/online");
   });
 
   const KEY = "sk-example-not-a-real-key";
