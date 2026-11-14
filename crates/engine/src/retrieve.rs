@@ -351,6 +351,8 @@ const MAX_LINES: usize = 3;
 /// A line is said by a memory when this share of its words is in that memory.
 const COVERED: f32 = 0.6;
 const MAX_LINE_CHARS: usize = 300;
+/// A line with fewer words of its own than this (a title, "Sam's note") says too little.
+const MIN_LINE_WORDS: usize = 3;
 /// Words that carry no meaning of their own when lines and memories are compared.
 const FILLER: [&str; 34] = [
     "the", "is", "are", "was", "were", "my", "of", "to", "in", "on", "at", "and", "or", "a", "an",
@@ -380,7 +382,11 @@ pub fn is_source_line(id: &str) -> bool {
 fn content_words(text: &str) -> HashSet<String> {
     text.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty() && !FILLER.contains(w))
+        .filter(|w| {
+            (w.len() > 1 || w.chars().all(|c| c.is_ascii_digit()))
+                && !w.is_empty()
+                && !FILLER.contains(w)
+        })
         .map(str::to_string)
         .collect()
 }
@@ -511,7 +517,8 @@ fn uncovered_lines(
         .filter(|(_, l)| line_is_safe(l))
         .filter_map(|(at, l)| {
             let words = content_words(&l);
-            (!covered(&words, &said)).then(|| (words.intersection(&asked).count(), at, l))
+            (words.len() >= MIN_LINE_WORDS && !covered(&words, &said))
+                .then(|| (words.intersection(&asked).count(), at, l))
         })
         .collect();
     lines.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));

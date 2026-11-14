@@ -253,11 +253,11 @@ fn no_line_comes_from_an_original_a_move_replaced() {
     wed.valid_from = Some(date("2026-11-18"));
     let (first, _) = learn(
         &f.engine,
-        "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00. Bring the forms.",
+        "Dentist appointment with Dr Okafor on Wednesday 18 November at 10:00. Bring the dental forms.",
         wed,
     );
     let asked = "When is the dentist appointment? Do I bring forms?";
-    assert_eq!(lines(&with_lines(&f, asked)), ["Bring the forms."]);
+    assert_eq!(lines(&with_lines(&f, asked)), ["Bring the dental forms."]);
     f.clock.set_str("2026-11-12T12:00:00Z");
     let moved_note = keep(
         &f.engine,
