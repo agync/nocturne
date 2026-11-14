@@ -112,6 +112,140 @@ pub fn left_out(answer: &str, sentences: &[&str]) -> Vec<String> {
     out
 }
 
+/// The days, months, ordinals, times and numbers in `text`, each in one form: an ordinal as
+/// its number ("first" and "1st" as "1"), a time as 24-hour "14:30" ("2:30pm", "2.30 pm"), a
+/// weekday in the singular, a month by its full name ("May" only beside a number).
+fn details(text: &str) -> Vec<String> {
+    let pieces: Vec<String> = text
+        .split_whitespace()
+        .map(|t| {
+            t.trim_matches(|c: char| !c.is_alphanumeric())
+                .to_lowercase()
+                .replace('\u{2019}', "'")
+        })
+        .filter(|t| !t.is_empty())
+        .collect();
+    let number = |t: &str| !t.is_empty() && t.chars().all(|c| c.is_ascii_digit());
+    let mut out: Vec<String> = Vec::new();
+    let mut i = 0;
+    while i < pieces.len() {
+        let piece = pieces[i].as_str();
+        let next = pieces.get(i + 1).map(String::as_str).unwrap_or("");
+        let before = if i > 0 { pieces[i - 1].as_str() } else { "" };
+        let (found, used) = if let Some(t) = time(piece, next) {
+            (Some(t), if ["am", "pm"].contains(&next) { 2 } else { 1 })
+        } else if let Some(n) = ordinal(piece) {
+            (Some(n.to_string()), 1)
+        } else if let Some((names, _)) = WEEKDAYS
+            .iter()
+            .find(|(names, _)| names[0] == piece || piece.strip_suffix('s') == Some(names[0]))
+        {
+            (Some(names[0].to_string()), 1)
+        } else if let Some(names) = MONTHS.iter().find(|names| names[0] == piece) {
+            let modal =
+                piece == "may" && !number(before) && !number(next) && ordinal(next).is_none();
+            (
+                if modal {
+                    None
+                } else {
+                    Some(names[0].to_string())
+                },
+                1,
+            )
+        } else if piece.chars().any(|c| c.is_ascii_digit()) {
+            (Some(piece.to_string()), 1)
+        } else {
+            (None, 1)
+        };
+        if let Some(d) = found
+            && !out.contains(&d)
+        {
+            out.push(d);
+        }
+        i += used;
+    }
+    out
+}
+
+/// `piece` (with `next`, for a separate "am" or "pm") as a 24-hour time, when it is one: "14:30",
+/// "14.30", "2:30pm", "2pm", "2.30 pm".
+fn time(piece: &str, next: &str) -> Option<String> {
+    let (clock, meridiem) = match piece.strip_suffix("am").or(piece.strip_suffix("pm")) {
+        Some(c) => (c, Some(piece.ends_with("pm"))),
+        None if ["am", "pm"].contains(&next) => (piece, Some(next == "pm")),
+        None => (piece, None),
+    };
+    let (hour, minute) = match clock.split_once([':', '.']) {
+        Some((h, m)) if m.len() == 2 => (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?),
+        Some(_) => return None,
+        None if meridiem.is_some() => (clock.parse::<u32>().ok()?, 0),
+        None => return None,
+    };
+    let hour = match meridiem {
+        Some(_) if !(1..=12).contains(&hour) => return None,
+        Some(true) if hour < 12 => hour + 12,
+        Some(false) if hour == 12 => 0,
+        _ => hour,
+    };
+    (hour < 24 && minute < 60).then(|| format!("{hour:02}:{minute:02}"))
+}
+
+/// The number an ordinal stands for, written as a word or as "1st", "22nd".
+fn ordinal(piece: &str) -> Option<usize> {
+    if let Some(i) = ORDINALS.iter().position(|o| *o == piece) {
+        return Some(i + 1);
+    }
+    let digits = piece
+        .strip_suffix("st")
+        .or(piece.strip_suffix("nd"))
+        .or(piece.strip_suffix("rd"))
+        .or(piece.strip_suffix("th"))?;
+    digits
+        .parse::<usize>()
+        .ok()
+        .filter(|n| (1..=31).contains(n))
+}
+
+/// The capitalised words of `text` after its first word, lower-cased: the names and places it
+/// gives.
+fn named(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .skip(1)
+        .map(|t| t.trim_matches(|c: char| !c.is_alphanumeric()))
+        .filter(|t| t.chars().next().is_some_and(char::is_uppercase))
+        .map(|t| {
+            let t = t.to_lowercase();
+            t.strip_suffix("'s").map(str::to_string).unwrap_or(t)
+        })
+        .collect()
+}
+
+/// Whether `answer` gives the fact `sentence`, set against the facts it disagrees with,
+/// `others`: it says each day, month, ordinal, time and number that `sentence` has and the
+/// others do not, or, when there are none (a dispute over a place), each name or place it has
+/// and they do not. A detail both sides share tells nothing about which side was given. A
+/// fact cited by its marker alone is not given.
+pub fn carries(answer: &str, sentence: &str, others: &[&str]) -> bool {
+    let theirs: Vec<String> = others.iter().flat_map(|o| details(o)).collect();
+    let own: Vec<String> = details(sentence)
+        .into_iter()
+        .filter(|d| !theirs.contains(d))
+        .collect();
+    if !own.is_empty() {
+        let said = details(answer);
+        return own.iter().all(|d| said.contains(d));
+    }
+    let theirs: Vec<String> = others
+        .iter()
+        .flat_map(|o| words(o).into_iter().chain(named(o)))
+        .collect();
+    let said = format!(" {} ", words(answer).join(" "));
+    named(sentence)
+        .iter()
+        .filter(|n| !theirs.contains(n))
+        .all(|n| said.contains(&format!(" {} ", words(n).join(" "))))
+}
+
 /// The fact (from 1) an answer that cites none is made of: the one whose sentence holds every
 /// word of the answer, when only one does and the answer has at least two words. An answer
 /// that is the fact's own words is that fact's answer; anything else is left uncited.
@@ -421,6 +555,66 @@ mod tests {
         assert!(left_out("High cholesterol, **5.9**.", &fact[..1]).is_empty());
         assert!(left_out("On Thursday 19 November at **14:30**.", &fact[1..]).is_empty());
         assert!(left_out("anything", &["No digits here."]).is_empty());
+    }
+
+    #[test]
+    fn an_answer_carries_a_fact_only_with_its_own_days_and_numbers() {
+        let tuesday = "The book club meets on the first Tuesday of the month at the library.";
+        let wednesday =
+            "The book club meeting is on the second Wednesday of the month at the community hall.";
+        // Tiny's retry on the evaluation day: both cited, one given.
+        let retry = "The book club meeting is on the second Wednesday of the month, but it is not \
+                     settled which fact is correct.";
+        assert!(carries(retry, wednesday, &[tuesday]));
+        assert!(!carries(retry, tuesday, &[wednesday]));
+        assert!(carries(
+            "It meets on the 1st Tuesday.",
+            tuesday,
+            &[wednesday]
+        ));
+        assert!(carries(
+            "It meets on Tuesdays, the first of each month.",
+            tuesday,
+            &[wednesday]
+        ));
+    }
+
+    #[test]
+    fn times_ordinals_and_shared_numbers_are_read_alike() {
+        let new = "The dentist is on Thursday 19 November at 14:30.";
+        let old = "The dentist is on Wednesday 18 November at 10:00.";
+        assert!(carries("Thursday the 19th at 2:30pm.", new, &[old]));
+        assert!(carries("Thursday 19th, 2.30 pm.", new, &[old]));
+        assert!(
+            !carries("Thursday at 2:30pm.", new, &[old]),
+            "the 19th is not said"
+        );
+        assert!(carries("Wednesday 18th at 10am.", old, &[new]));
+        // November is on both sides: it tells nothing.
+        assert!(carries("Thursday 19, 14:30.", new, &[old]));
+        let fee = "The fee of 30 pounds is due by 15 January.";
+        let other = "The fee of 30 pounds is due by 1 February.";
+        assert!(
+            carries("By 15 January.", fee, &[other]),
+            "30 pounds is on both sides"
+        );
+        assert!(!carries("By the end of January.", fee, &[other]));
+        assert_eq!(
+            details("You may come in May. May 3 at 9am."),
+            ["may", "3", "09:00"]
+        );
+    }
+
+    #[test]
+    fn a_dispute_over_a_place_is_given_by_its_place() {
+        let leeds = "Gran lives in Leeds.";
+        let york = "Gran lives in York.";
+        assert!(carries("She lives in Leeds.", leeds, &[york]));
+        assert!(!carries("She lives in Leeds.", york, &[leeds]));
+        let anne = "The choir practice is on Thursday evenings at St Anne's church.";
+        let ravi = "Ravi thinks the choir practice is on Friday evenings at the school hall.";
+        assert!(carries("Thursday evenings at St Anne's.", anne, &[ravi]));
+        assert!(carries("Friday evenings.", ravi, &[anne]));
     }
 
     #[test]

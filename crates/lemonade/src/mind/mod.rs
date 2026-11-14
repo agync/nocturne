@@ -1121,18 +1121,33 @@ impl Judged {
     }
 }
 
-/// The cited facts that disagree with a fact the answer does not cite: (cited, other side),
-/// both from 1.
+/// The cited facts that disagree with a fact the answer does not give: (cited, other side),
+/// both from 1. A side is given when it is cited and the answer says what sets it apart from
+/// the other side ([`guard::carries`]); a marker alone does not give it.
 fn one_sided(judged: &Judged, facts: &[Fact]) -> Vec<(usize, usize)> {
-    let mut out = Vec::new();
-    for n in &judged.cited {
+    let given = |n: usize, m: usize| {
+        let sentence = |i: usize| facts.get(i - 1).map(|f| f.memory.sentence.as_str());
+        judged.cited.contains(&n)
+            && sentence(n).is_some_and(|s| {
+                guard::carries(
+                    &judged.text,
+                    s,
+                    &sentence(m).into_iter().collect::<Vec<_>>(),
+                )
+            })
+    };
+    let mut out: Vec<(usize, usize)> = Vec::new();
+    for &n in &judged.cited {
         let Some(fact) = facts.get(n - 1) else {
             continue;
         };
         for id in &fact.disputed_by {
-            let other = facts.iter().position(|f| &f.memory.id == id).map(|i| i + 1);
-            if let Some(m) = other.filter(|m| !judged.cited.contains(m)) {
-                out.push((*n, m));
+            let Some(m) = facts.iter().position(|f| &f.memory.id == id).map(|i| i + 1) else {
+                continue;
+            };
+            let seen = out.iter().any(|&(a, b)| (a, b) == (m, n));
+            if !seen && !(given(n, m) && given(m, n)) {
+                out.push((n, m));
             }
         }
     }

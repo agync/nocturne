@@ -807,6 +807,38 @@ async fn tiny_is_asked_again_for_one_sided_answers_and_keeps_only_a_cited_better
 }
 
 /// An answer that is one fact's own words, given without a citation twice, is that fact's.
+/// A side of a disagreement is given only when the answer says its own days: Tiny's retry on
+/// an evaluation day cited both notes but stated one, and was kept over its first answer. Now
+/// it is not better than the first, and the person gets both sides in the facts' own words.
+#[tokio::test]
+async fn a_side_cited_by_its_marker_alone_is_not_given() {
+    let tuesday = "The book club meets on the first Tuesday of the month at the library.";
+    let wednesday =
+        "The book club meeting is on the second Wednesday of the month at the community hall.";
+    let facts = [
+        Fact {
+            memory: memory("tue", tuesday),
+            disputed_by: vec!["wed".into()],
+        },
+        Fact {
+            memory: memory("wed", wednesday),
+            disputed_by: vec!["tue".into()],
+        },
+    ];
+    let r = rig_with("downloaded=all", Tier::Tiny).await;
+    r.script(json!([
+        {"deltas": ["**The book club meets on the second Wednesday of the month** [m2]."]},
+        {"deltas": ["The book club meeting is on the second Wednesday of the month [m2], but it is not settled which fact is correct [m1]."]},
+    ]))
+    .await;
+    let (meta, text) = answer_facts(&r, &facts).await;
+    assert_eq!(
+        text,
+        format!("{wednesday} {tuesday} It is not settled which is right.")
+    );
+    assert_eq!(meta.unwrap().cited, ["wed", "tue"]);
+}
+
 #[tokio::test]
 async fn tiny_answer_in_a_facts_own_words_with_no_marker_cites_that_fact() {
     let facts = [

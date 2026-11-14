@@ -80,16 +80,20 @@ before downloading anything and says why.
 
 Tiny's mind is told less than the others. Small, Standard and Large share one set of answer
 instructions, kept byte for byte (a test pins them). Tiny gets a shorter set with no worked
-example, because a two-billion-parameter mind copies an example or an instruction into its
-answer. It is shown at most four facts (and any fact on the other side of a disagreement with
-one of them) instead of twelve, not a home that a later fact replaces, and dates only on facts
-in dispute. When its answer leaves out a number, date or time of a fact it cites, or gives one
-side of a disagreement, it is asked once more and the better answer is kept. Every tier has the
-same guards: a reply that is only punctuation, the instructions read back, a refusal worded as an
-answer, or the not-sure word in any spelling is not shown and ends as not sure; a citation with
-no words before it is not a receipt. Talk of the facts holding nothing ("not mentioned") voids an
-answer only when it cites no fact. A mind on this computer is told the day's date, by the
-engine's clock and time zone; an online question is not.
+example, because a two-billion-parameter mind copies an example or an instruction into its answer.
+It is shown at most four facts (and any fact on the other side of a disagreement with one of them)
+instead of twelve, not a home that a later fact replaces, and dates only on facts in dispute. When
+its answer leaves out a number, date or time of a fact it cites, or gives one side of a
+disagreement, it is asked once more and the better answer is kept; an answer still one-sided gives
+both facts in their own words. A side counts as given only when it is cited and the answer says
+what sets it apart from the other side: the days, months, ordinals, times and numbers the other
+side does not share, read alike however they are written ("1st" and "first", "2:30pm" and "14:30"),
+or, in a dispute over a place, its place. Every tier has the same guards: a reply that is only
+punctuation, the instructions read back, a refusal worded as an answer, or the not-sure word in any
+spelling is not shown and ends as not sure; a citation with no words before it is not a receipt.
+Talk of the facts holding nothing ("not mentioned") voids an answer only when it cites no fact. A
+mind on this computer is told the day's date, by the engine's clock and time zone; an online
+question is not.
 
 Reading follows a GBNF grammar rather than a JSON schema: the engine parses a request into a map
 that sorts keys, so a schema would make the mind write each memory's confidence first and its quote
