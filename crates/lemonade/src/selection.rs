@@ -138,10 +138,25 @@ pub fn write(config_dir: &Path, s: &Selection) -> Result<(), RuntimeError> {
     Ok(())
 }
 
+/// Whether `id` names a model from the engine's own catalogue. The engine gives every other
+/// model a prefix (`user.` for one registered, Online answers' row among them, `extra.` for one
+/// imported, `builtin.` for an alias); none of those ever does a job here.
+pub fn from_catalogue(id: &str) -> bool {
+    let id = id.trim().to_ascii_lowercase();
+    !id.is_empty()
+        && !["user.", "extra.", "builtin."]
+            .iter()
+            .any(|p| id.starts_with(p))
+        && !id.contains(crate::online::ROW)
+}
+
+/// The model for each job: the person's choice where it names a catalogue model, else the
+/// tier's own.
 pub fn picks(s: &Selection) -> Picks {
     let pick = |role| {
         s.custom
             .get(&role)
+            .filter(|m| from_catalogue(m))
             .cloned()
             .or_else(|| tier::model_for(s.tier, role).map(str::to_string))
             .unwrap_or_default()
@@ -177,6 +192,34 @@ mod tests {
         assert_eq!(picks(&s).mind, "Other-GGUF");
         assert_eq!(picks(&s).recall, preset.recall);
         assert_eq!(picks(&Selection::preset(Tier::Unsupported)).mind, "");
+    }
+
+    #[test]
+    fn picks_refuse_models_from_outside_the_catalogue() {
+        let preset = picks(&Selection::preset(Tier::Standard));
+        for id in [
+            "user.nocturne-online",
+            "User.Nocturne-Online",
+            " user.Something-GGUF",
+            "extra.Imported-GGUF",
+            "builtin.Qwen3.5-2B-GGUF",
+            "nocturne-online",
+            "",
+        ] {
+            let mut s = Selection::preset(Tier::Standard);
+            for role in [
+                ComponentRole::Mind,
+                ComponentRole::Speech,
+                ComponentRole::Voice,
+                ComponentRole::Recall,
+            ] {
+                s.custom.insert(role, id.to_string());
+            }
+            assert_eq!(picks(&s), preset, "{id:?}");
+        }
+        assert!(from_catalogue("Qwen3.5-2B-GGUF"));
+        assert!(from_catalogue("Whisper-Base"));
+        assert!(!from_catalogue("user.nocturne-online"));
     }
 
     #[test]
