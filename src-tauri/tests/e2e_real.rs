@@ -1254,7 +1254,7 @@ fn model_overrides() -> Vec<(&'static str, String)> {
     };
     text.split(',')
         .filter_map(|pair| pair.split_once('='))
-        .filter_map(|(role, model)| {
+        .map(|(role, model)| {
             let job = match role.trim() {
                 "mind" => "answering",
                 "speech" => "recordings",
@@ -1262,7 +1262,7 @@ fn model_overrides() -> Vec<(&'static str, String)> {
                 "recall" => "finding",
                 other => panic!("NOCTURNE_E2E_MODELS: unknown role {other}"),
             };
-            Some((job, model.trim().to_string()))
+            (job, model.trim().to_string())
         })
         .collect()
 }
