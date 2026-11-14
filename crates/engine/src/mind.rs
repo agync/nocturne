@@ -143,6 +143,24 @@ pub trait Mind: Send + Sync {
         text: &'a str,
         cx: &'a ExtractContext,
     ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>>;
+    /// Another look at `text`, for the facts in `lines` (some of its own lines) that an earlier
+    /// reading of it left out. A mind that can read the whole item with those lines pointed out
+    /// does; by default each line is read on its own.
+    fn extract_lines<'a>(
+        &'a self,
+        text: &'a str,
+        cx: &'a ExtractContext,
+        lines: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<Candidate>, MindError>> {
+        let _ = text;
+        Box::pin(async move {
+            let mut out = Vec::new();
+            for line in lines {
+                out.extend(self.extract(line, cx).await?);
+            }
+            Ok(out)
+        })
+    }
     fn embed<'a>(&'a self, texts: &'a [String]) -> BoxFuture<'a, Result<Vec<Vec<f32>>, MindError>>;
     /// Embed with a named recall model rather than the current one, for a re-read.
     fn embed_with<'a>(
