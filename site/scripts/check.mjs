@@ -1,6 +1,7 @@
-// Checks the served site: axe on the landing page and a few docs pages in both themes, no
-// policy violations or console errors, no sideways scrolling at 360 px, the theme buttons work
-// from the keyboard, and full-page screenshots at 1440 and 390 px.
+// Checks the served site: axe on the landing page, the install page and a few docs pages in both
+// themes, no policy violations or console errors, no sideways scrolling at 360 px (320 px for the
+// install page), the theme buttons work from the keyboard, and full-page screenshots at 1440 and
+// 390 px.
 //
 //   make serve                                  # in another terminal
 //   node site/scripts/check.mjs http://127.0.0.1:4180
@@ -26,6 +27,7 @@ mkdirSync(shots, { recursive: true });
 
 const pages = [
   { name: "landing", path: "/", shoot: true },
+  { name: "install", path: "/install", shoot: true },
   { name: "docs-home", path: "/docs/", shoot: true },
   { name: "docs-concept", path: "/docs/design/concept.html", shoot: false },
   { name: "docs-install", path: "/docs/guide/install.html", shoot: false },
@@ -117,6 +119,15 @@ try {
   );
   if (wide > 0) fail(`landing 360: scrolls sideways by ${wide}px`);
   else console.log("ok landing 360: no sideways scroll");
+  await page.setViewportSize({ width: 320, height: 740 });
+  await page.goto(`${origin}/install`, { waitUntil: "networkidle" });
+  const installWide = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  if (installWide > 0) fail(`install 320: scrolls sideways by ${installWide}px`);
+  else console.log("ok install 320: no sideways scroll");
+  await page.setViewportSize({ width: 360, height: 740 });
+  await page.goto(`${origin}/`, { waitUntil: "networkidle" });
   await page.keyboard.press("Tab");
   const skip = await page.evaluate(() => document.activeElement?.textContent?.trim());
   if (skip !== "Skip to content") fail(`first Tab lands on ${JSON.stringify(skip)}`);

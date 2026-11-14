@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Get Nocturne · Download for Mac, Windows and Linux</title>
+<meta name="description" content="Download Nocturne for a Mac with an Apple chip, a Windows 10 or 11 computer, or a Linux desktop. Free and open source, with no account. The first time it opens, it sets itself up for the computer it is on.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="{{SITE_URL}}/install">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="en_GB">
+<meta property="og:title" content="Get Nocturne · Download for Mac, Windows and Linux">
+<meta property="og:description" content="Free and open source, with no account. The first time it opens, Nocturne sets itself up for the computer it is on.">
+<meta property="og:url" content="{{SITE_URL}}/install">
+<meta property="og:image" content="{{SITE_URL}}/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nocturne's morning page beside the words: It sleeps on it. You wake to one page.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="preload" href="/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/assets/css/site.css">
+<script src="/assets/js/theme.js"></script>
+<script src="/assets/js/install.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Nocturne, home">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a class="nav-section" href="/#how">How it works</a>
+    <a class="nav-section" href="/#privacy">Privacy</a>
+    <a class="nav-section" href="#needs">Requirements</a>
+    <a href="/install" aria-current="page">Download</a>
+    <a href="/docs/">Docs</a>
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+<section class="get" aria-labelledby="get-title">
+  <h1 id="get-title">Get Nocturne.</h1>
+  <p class="lede">Free and open source, for Mac, Windows and Linux. No account, nothing to sign in to.</p>
+  <p class="here" data-here>Choose your computer below. Each link gives the latest version.</p>
+</section>
+
+<!-- Each platform's download and its first-open steps. install.js moves the visitor's platform
+     to the top; without it they stay in this order. The first-open steps follow
+     docs/guide/install.md ("The first time you open it"); change both together. -->
+<div class="platforms" data-platforms>
+
+  <section class="platform" id="mac" data-platform="mac" aria-labelledby="mac-title">
+    <div class="platform-head">
+      <h2 id="mac-title">Mac</h2>
+      <p class="spec-line">Apple chip, M1 or later · macOS 26 or later</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-macos-arm64.dmg">Download for Mac</a>
+        <p class="file">Nocturne-macos-arm64.dmg</p>
+      </div>
+      <p class="note">Macs with an Intel chip are not supported. To see which chip yours has, open the Apple menu and choose About This Mac.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Open the downloaded file, then drag Nocturne into Applications.</li>
+          <li>Open Nocturne from Applications. Your Mac says <q>Nocturne</q> Not Opened, because it could not check the app. Click <b>Done</b>.</li>
+          <li>Open System Settings, then <b>Privacy &amp; Security</b>. Scroll down to the line saying Nocturne was blocked and click <b>Open Anyway</b>.</li>
+          <li>Enter your password, then click <b>Open Anyway</b> again.</li>
+        </ol>
+        <p class="why">You only do this once. Apple charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="platform" id="windows" data-platform="windows" aria-labelledby="windows-title">
+    <div class="platform-head">
+      <h2 id="windows-title">Windows</h2>
+      <p class="spec-line">Windows 10 or 11, 64-bit</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <div class="download">
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64-setup.exe">Download for Windows</a>
+        <p class="file">Nocturne-windows-x64-setup.exe</p>
+      </div>
+      <p class="note">Installs for you alone and needs no administrator password. Computers managed by an organisation can use the <a href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64.msi">.msi installer</a> instead.</p>
+      <div class="first-open">
+        <h3>The first time you open it</h3>
+        <ol>
+          <li>Your browser may warn that the file is not commonly downloaded. In Edge, open the <b>…</b> menu beside the file, choose <b>Keep</b>, then <b>Show more</b>, then <b>Keep anyway</b>.</li>
+          <li>Open the installer. Windows shows <q>Windows protected your PC</q>. Click <b>More info</b>, then <b>Run anyway</b>.</li>
+        </ol>
+        <p class="why">You only do this once. Microsoft charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="platform" id="linux" data-platform="linux" aria-labelledby="linux-title">
+    <div class="platform-head">
+      <h2 id="linux-title">Linux</h2>
+      <p class="spec-line">64-bit Intel or AMD computer</p>
+      <p class="here-tag" data-here-tag hidden>For this computer</p>
+    </div>
+    <div class="platform-body">
+      <ul class="choices" aria-label="Ways to install on Linux">
+        <li>
+          <div class="choice-text">
+            <h3>From your software centre</h3>
+            <p>The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet.</p>
+          </div>
+          <a class="button primary" href="https://nocturne.is/flatpak">Get the Flatpak</a>
+          <details class="terminal">
+            <summary>Or install it from a terminal</summary>
+            <pre><code>flatpak remote-add --user --if-not-exists nocturne https://nocturne.is/flatpak/nocturne.flatpakrepo
+flatpak install --user nocturne is.nocturne.Nocturne</code></pre>
+          </details>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Ubuntu, Linux Mint or Debian</h3>
+            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+          </div>
+          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">Download .deb</a>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Fedora, Red Hat or openSUSE</h3>
+            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+          </div>
+          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">Download .rpm</a>
+        </li>
+        <li>
+          <div class="choice-text">
+            <h3>Try it without installing</h3>
+            <p>One file that runs on most desktops. In its properties, allow it to run as a program, then open it.</p>
+          </div>
+          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">Download AppImage</a>
+        </li>
+      </ul>
+      <p class="why">Linux shows no warning the first time you open Nocturne.</p>
+    </div>
+  </section>
+
+  <p class="others" data-others hidden>Other computers</p>
+
+</div>
+
+<p class="checks small">To make sure a download is the one we published, compare it with the fingerprints in <a href="https://github.com/agync/nocturne/releases/latest/download/SHA256SUMS">SHA256SUMS</a>. The <a href="/docs/guide/install.html">install guide</a> shows how, explains each package and how to take Nocturne off again. Earlier versions are on the <a href="https://github.com/agync/nocturne/releases">releases page</a>.</p>
+
+<section id="needs" class="band" aria-labelledby="needs-title">
+  <div class="intro">
+    <h2 id="needs-title">What your computer needs.</h2>
+    <p>At least 8&nbsp;GB of memory. The first time it opens, Nocturne looks at the computer and picks the largest setup it carries comfortably; there is nothing for you to choose. Every setup does everything; smaller ones answer more simply and tidy more slowly.</p>
+  </div>
+  <div class="tiers" role="list">
+    <div role="listitem"><h3>Large</h3><p class="spec-line">64 GB memory · 28 GB space</p><p>Clearer answers to harder questions.</p></div>
+    <div role="listitem"><h3>Standard</h3><p class="spec-line">32 GB memory · 11 GB space</p><p>Many recent laptops.</p></div>
+    <div role="listitem"><h3>Small</h3><p class="spec-line">16 GB memory · 7 GB space</p><p>Same page. The overnight tidy takes longer.</p></div>
+    <div role="listitem"><h3>Tiny</h3><p class="spec-line">8 GB memory · 5.2 GB space</p><p>Simpler answers that may miss details.</p></div>
+  </div>
+</section>
+
+<section id="after" class="band" aria-labelledby="after-title">
+  <div class="intro">
+    <h2 id="after-title">After you install.</h2>
+    <p>Nocturne opens a short setup. You can keep things straight away.</p>
+  </div>
+  <ol class="steps">
+    <li>
+      <span class="when">When it opens</span>
+      <h3>It looks at the computer</h3>
+      <p>It tells you which setup it will use. You can always pick a smaller one, which uses less memory, space and battery.</p>
+    </li>
+    <li>
+      <span class="when">Once, when you agree</span>
+      <h3>It downloads what it needs</h3>
+      <p>It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops.</p>
+    </li>
+    <li>
+      <span class="when">The next morning</span>
+      <h3>Your first page</h3>
+      <p>From then on, Nocturne works with no internet at all.</p>
+    </li>
+  </ol>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    Nocturne · engine by Lemonade · Apache 2.0
+  </p>
+  <nav aria-label="Footer">
+    <a href="/docs/">Docs</a>
+    <a href="/docs/guide/your-data.html">Your data</a>
+    <a href="/docs/guide/install.html">Install guide</a>
+    <a href="/assets/fonts/OFL.txt">Font licence</a>
+  </nav>
+</footer>
+
+</div>
+</body>
+</html>

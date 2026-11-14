@@ -18,7 +18,7 @@ import shutil
 import sys
 import tomllib
 
-LANDING = ("index.html", "404.html", "favicon.svg", "robots.txt")
+LANDING = ("index.html", "install.html", "404.html", "favicon.svg", "robots.txt")
 INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)
 
 
