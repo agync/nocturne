@@ -445,12 +445,25 @@ figcaption,
   color: var(--ink2);
 }
 
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 520px;
+}
+
+/* The problem leads; the answer follows, quieter. */
 .lede {
   font-family: var(--serif);
-  font-size: 1.3125rem;
-  line-height: 1.5;
+  font-size: clamp(1.3125rem, 2.2vw, 1.5rem);
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.answer {
+  font-size: 1rem;
+  line-height: 1.6;
   color: var(--ink2);
-  max-width: 520px;
 }
 
 .facts {
