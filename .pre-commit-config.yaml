@@ -7,6 +7,8 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
+        # A patch's blank context lines are a single space.
+        exclude: \.patch$
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json

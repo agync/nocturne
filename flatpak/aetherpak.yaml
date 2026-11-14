@@ -1,0 +1,28 @@
+registry: ghcr.io
+oci_repository: agync/nocturne-flatpak
+pages_url: https://nocturne.is
+site_subpath: flatpak
+remote_name: nocturne
+repo_title: Nocturne
+repo_homepage: https://nocturne.is/
+app_id: is.nocturne.Nocturne
+manifest: flatpak/is.nocturne.Nocturne.yml
+branches:
+  - stable
+  - beta
+default_branch: stable
+arches:
+  - x86_64
+
+defaults:
+  run_linter: true
+  builder_args:
+    - --install-deps-from=flathub
+
+apps:
+  - id: is.nocturne.Nocturne
+    manifest: flatpak/is.nocturne.Nocturne.yml
+    linter:
+      exceptions:
+        # The screenshots are on nocturne.is, which the offline build sandbox cannot fetch.
+        - appstream-missing-screenshots

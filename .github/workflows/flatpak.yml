@@ -1,0 +1,159 @@
+# Builds the Nocturne Flatpak with AetherPak and, when asked, publishes it: the app goes to GHCR as
+# OCI images and the repository index to https://nocturne.is/flatpak. Run by hand, or called by
+# the release workflow with channel stable and publish true. See docs/contribution/flatpak.md.
+name: flatpak
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Tag, branch or commit to build (empty for the selected branch)
+        type: string
+        default: ''
+      channel:
+        description: Flatpak branch to build for
+        type: choice
+        options: [beta, stable]
+        default: beta
+      publish:
+        description: Push the images and deploy the repository index
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      ref:
+        description: Tag, branch or commit to build (empty for the calling ref)
+        type: string
+        default: ''
+      channel:
+        description: Flatpak branch to build for (stable or beta)
+        type: string
+        default: stable
+      publish:
+        description: Push the images and deploy the repository index
+        type: boolean
+        default: false
+    secrets:
+      FLATPAK_GPG_PRIVATE_KEY:
+        required: false
+      FLATPAK_GPG_PASSPHRASE:
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flatpak-${{ inputs.channel }}
+  cancel-in-progress: false
+
+jobs:
+  sources:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      - name: offline cargo and npm sources
+        run: scripts/flatpak-sources.sh
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flatpak-generated
+          path: flatpak/generated
+          if-no-files-found: error
+
+  build:
+    needs: sources
+    name: build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runs-on }}
+    permissions:
+      contents: read
+      packages: write
+    container:
+      image: ghcr.io/aetherpak/cli:latest-builder
+      options: --privileged
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: flatpak-generated
+          path: flatpak/generated
+      - name: build
+        uses: aetherpak/actions/build@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        with:
+          config: flatpak/aetherpak.yaml
+          app-id: is.nocturne.Nocturne
+          branch: ${{ inputs.channel }}
+          arch: ${{ matrix.arch }}
+          repo-path: _repo
+          upload-bundle: ${{ !inputs.publish }}
+      - name: push the images
+        if: inputs.publish
+        uses: aetherpak/actions/publish-oci@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        with:
+          repo-path: _repo
+          branch: ${{ inputs.channel }}
+          arch: ${{ matrix.arch }}
+          registry: ghcr.io
+          oci-repository: agync/nocturne-flatpak
+          signing: auto
+          gpg-private-key: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+          gpg-private-key-passphrase: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
+      # The index is assembled in a separate job, so each build's record travels as an artifact.
+      - if: inputs.publish
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: flatpak-records-${{ matrix.arch }}
+          path: _records
+          if-no-files-found: error
+
+  site:
+    needs: build
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: flatpak-records-*
+          path: _records
+          merge-multiple: true
+      - name: repository index
+        uses: aetherpak/actions/publish-site@d3803c8feb52143ebb13c8909d2d2a7364eeddef # v3.14.0
+        with:
+          config: flatpak/aetherpak.yaml
+          records-dir: _records
+          pages-url: https://nocturne.is
+          site-subpath: flatpak
+          site-dir: _site
+          oci-repository: agync/nocturne-flatpak
+          signing: auto
+          gpg-private-key: ${{ secrets.FLATPAK_GPG_PRIVATE_KEY }}
+          gpg-private-key-passphrase: ${{ secrets.FLATPAK_GPG_PASSPHRASE }}
+          upload-pages-artifact: 'true'
+
+  deploy:
+    needs: site
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: https://nocturne.is/flatpak/
+    steps:
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

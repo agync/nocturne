@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Nocturne
+GenericName=Daily memory
+Comment=Remembers your day and hands you one page each morning
+Exec=nocturne
+Icon=is.nocturne.Nocturne
+Terminal=false
+Categories=Office;
+Keywords=memory;notes;journal;diary;day;morning;page;
+StartupNotify=true
+StartupWMClass=nocturne

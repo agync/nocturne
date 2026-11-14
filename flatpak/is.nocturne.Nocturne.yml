@@ -1,0 +1,113 @@
+app-id: is.nocturne.Nocturne
+runtime: org.gnome.Platform
+# The pinned engine is built against glibc 2.43; GNOME 50 has 2.42, GNOME 51 has 2.44.
+runtime-version: '51'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node24
+command: nocturne
+
+# Each line is explained in docs/contribution/flatpak.md. Keep the two in step.
+finish-args:
+  - --share=ipc
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --device=all
+  - --socket=pulseaudio
+  - --share=network
+  - --talk-name=org.freedesktop.Notifications
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=app.nocturne.desktop.SingleInstance
+  - --env=WEBKIT_DISABLE_DMABUF_RENDERER=1
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - '*.a'
+  - '*.la'
+
+modules:
+  # The private engine links libdrm_amdgpu, which the GNOME runtime does not carry. The version
+  # matches the runtime's own libdrm.
+  - name: libdrm
+    buildsystem: meson
+    builddir: true
+    config-opts:
+      - -Dtests=false
+      - -Dman-pages=disabled
+      - -Dvalgrind=disabled
+    sources:
+      - type: git
+        url: https://gitlab.freedesktop.org/mesa/libdrm.git
+        tag: libdrm-2.4.134
+        commit: e984d448b8b17aab853369e6c203e53719f46de1
+
+  # The tray library Tauri loads at run time. Copied from flathub/shared-modules.
+  - shared-modules/libayatana-appindicator/libayatana-appindicator-gtk3.json
+
+  - name: nocturne
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin
+      env:
+        CARGO_HOME: /run/build/nocturne/cargo
+        CARGO_NET_OFFLINE: 'true'
+        npm_config_cache: /run/build/nocturne/flatpak-node/npm-cache
+        npm_config_offline: 'true'
+        XDG_CACHE_HOME: /run/build/nocturne/flatpak-node/cache
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+      # The engine is installed byte for byte as it was verified: no stripping, no debug split.
+      strip: false
+      no-debuginfo: true
+    build-commands:
+      - cd ui && npm ci --offline
+      - cd ui && npm run build
+      - python3 -I scripts/check_ui_dist.py ui/dist
+      - cargo build --release --locked --offline --jobs "$FLATPAK_BUILDER_N_JOBS" -p nocturne-app --features custom-protocol
+      - python3 -I scripts/notices.py --target "$(uname -m)-unknown-linux-gnu" --lemonade lemonade-bundle --out notices
+      - install -Dm755 target/release/nocturne-app /app/bin/nocturne
+      - install -d /app/lib/Nocturne/lemonade
+      - cp -a lemonade-bundle/. /app/lib/Nocturne/lemonade/
+      - chmod 755 /app/lib/Nocturne/lemonade/lemond
+      - cp -a notices /app/lib/Nocturne/notices
+      - install -Dm644 LICENSE /app/lib/Nocturne/LICENSE
+      - install -Dm644 flatpak/is.nocturne.Nocturne.desktop /app/share/applications/is.nocturne.Nocturne.desktop
+      - install -Dm644 flatpak/is.nocturne.Nocturne.metainfo.xml /app/share/metainfo/is.nocturne.Nocturne.metainfo.xml
+      - install -Dm644 src-tauri/icons/32x32.png /app/share/icons/hicolor/32x32/apps/is.nocturne.Nocturne.png
+      - install -Dm644 src-tauri/icons/128x128.png /app/share/icons/hicolor/128x128/apps/is.nocturne.Nocturne.png
+      - install -Dm644 src-tauri/icons/128x128@2x.png /app/share/icons/hicolor/256x256/apps/is.nocturne.Nocturne.png
+      - install -Dm644 src-tauri/icons/icon.png /app/share/icons/hicolor/512x512/apps/is.nocturne.Nocturne.png
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - .agents
+          - .git
+          - target
+          - vendor
+          - ui/node_modules
+          - ui/dist
+          - ui/dist-preview
+          - flatpak/.flatpak-builder
+          - flatpak/build
+          - flatpak/repo
+          - flatpak/generated
+      # The pinned engine from lemonade.lock. scripts/check_flatpak.py fails make check when the
+      # two disagree.
+      - type: archive
+        only-arches:
+          - x86_64
+        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.46.2/lemonade-embeddable-2026.46.2-ubuntu-x64.tar.gz
+        sha256: 67869b1a4fb128dfeb636d50417fee54bf25a7f61a7c97e8be234f1fe2444eaf
+        dest: lemonade-bundle
+      - type: archive
+        only-arches:
+          - aarch64
+        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.46.2/lemonade-embeddable-2026.46.2-ubuntu-arm64.tar.gz
+        sha256: 894b88864c29e63c9104ed40ac75548d4b5babf7298b234324d69481d3140f0a
+        dest: lemonade-bundle
+      # Written by scripts/flatpak-sources.sh from Cargo.lock and ui/package-lock.json.
+      - generated/cargo-sources.json
+      - generated/node-sources.json

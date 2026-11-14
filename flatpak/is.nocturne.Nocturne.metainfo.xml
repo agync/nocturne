@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>is.nocturne.Nocturne</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Nocturne</name>
+  <summary>Remembers your day and hands you one page each morning</summary>
+  <developer id="is.nocturne">
+    <name>Nocturne</name>
+  </developer>
+  <description>
+    <p>
+      Nocturne is a private app that remembers your day. Keep a photo of a letter, a voice note,
+      a file or a line of text as you go. Overnight it reads them, joins them up and lets go of
+      what you no longer need. In the morning you get one page: what changed, what needs you and
+      one question.
+    </p>
+    <p>
+      Ask it anything and it answers only from what you kept, with the original as proof.
+      Everything stays on this computer. It goes online only to download what you agree to.
+    </p>
+  </description>
+  <launchable type="desktop-id">is.nocturne.Nocturne.desktop</launchable>
+  <url type="homepage">https://nocturne.is</url>
+  <url type="bugtracker">https://github.com/agync/nocturne/issues</url>
+  <url type="vcs-browser">https://github.com/agync/nocturne</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>This morning's page</caption>
+      <image>https://nocturne.is/screenshots/morning-page.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>An answer with the original it came from</caption>
+      <image>https://nocturne.is/screenshots/answer.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Keeping a voice note, a photo or a line of text</caption>
+      <image>https://nocturne.is/screenshots/keep.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Office</category>
+  </categories>
+  <keywords>
+    <keyword>memory</keyword>
+    <keyword>notes</keyword>
+    <keyword>journal</keyword>
+    <keyword>diary</keyword>
+  </keywords>
+  <provides>
+    <binary>nocturne</binary>
+  </provides>
+  <recommends>
+    <memory>6144</memory>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </recommends>
+  <supports>
+    <internet>first-run</internet>
+  </supports>
+  <branding>
+    <color type="primary" scheme_preference="light">#EEEBE4</color>
+    <color type="primary" scheme_preference="dark">#17181C</color>
+  </branding>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="0.1.0" date="2026-11-14"/>
+  </releases>
+</component>

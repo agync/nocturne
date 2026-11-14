@@ -134,6 +134,8 @@ time; that is a developer-time download and never happens when Nocturne runs.
 The deb and rpm depend on the web view, the toolkit, the tray library and the libraries the engine
 links; the AppImage carries its own copies of the system libraries it needs.
 
+The Flatpak is built separately, with `flatpak-builder` and AetherPak: see [The Flatpak](flatpak.md).
+
 ## Proving a package
 
 | Check | Command | What it proves |

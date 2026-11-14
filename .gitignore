@@ -50,3 +50,9 @@ __pycache__/
 
 # The development preview build (make preview-real)
 ui/dist-preview/
+
+# Flatpak build state and generated offline sources
+flatpak/.flatpak-builder/
+flatpak/build/
+flatpak/repo/
+flatpak/generated/
