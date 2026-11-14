@@ -1853,26 +1853,44 @@ async fn a_second_look_shows_the_whole_item_and_the_lines() {
 async fn a_full_reply_is_read_again_in_halves() {
     let r = rig().await;
     let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
-    let coffee = memory_about("Sam likes coffee", "Sam", "Sam likes coffee.", "coffee");
-    let full = reply(vec![tea.clone(); 16]);
+    let coffee = memory_about(
+        "Ana Lee likes coffee",
+        "Ana Lee",
+        "Ana Lee likes coffee.",
+        "coffee",
+    );
+    // Sixteen ways of saying one thing, none of them a repeat of another.
+    let teas = || {
+        (0..16)
+            .map(|i| {
+                memory_about(
+                    "Sam likes tea",
+                    "Sam",
+                    &format!("Sam likes tea {i}."),
+                    "tea",
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let full = reply(teas());
     r.script(json!([
         full,
         reply(vec![tea.clone()]),
         reply(vec![coffee.clone()])
     ]))
     .await;
-    let text = "Sam likes tea.\nSam likes coffee.";
+    let text = "Sam likes tea.\nAna Lee likes coffee.";
     let got = r.mind.extract(text, &context()).await.unwrap();
     let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
     assert_eq!(objects, ["tea", "coffee"]);
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 3);
 
-    let full = reply(vec![tea.clone(); 16]);
+    let full = reply(teas());
     r.script(json!([full, reply(vec![tea]), reply(vec![coffee])]))
         .await;
     let lines = vec![
         "Sam likes tea.".to_string(),
-        "Sam likes coffee.".to_string(),
+        "Ana Lee likes coffee.".to_string(),
     ];
     let got = r
         .mind
@@ -1890,7 +1908,65 @@ async fn a_full_reply_is_read_again_in_halves() {
             .to_string()
     };
     assert!(last_fence(4).contains("Sam likes tea.") && !last_fence(4).contains("coffee"));
-    assert!(last_fence(5).contains("Sam likes coffee.") && !last_fence(5).contains("tea"));
+    assert!(last_fence(5).contains("Ana Lee likes coffee.") && !last_fence(5).contains("tea"));
+}
+
+/// A reply cut off at its ceiling whose whole memories already keep every number, name and
+/// role in the item is kept as it is: reading the item again in parts would add nothing.
+#[tokio::test]
+async fn a_cut_reply_that_kept_every_fact_is_not_read_again() {
+    let r = rig().await;
+    let text = "Sam likes tea.\nAna Lee likes coffee.";
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let coffee = memory_about(
+        "Ana Lee likes coffee",
+        "Ana Lee",
+        "Ana Lee likes coffee.",
+        "coffee",
+    );
+    let cut = format!("{{\"memories\": [{tea}, {coffee}, {{\"span\": {{\"quote\": \"Sam");
+    r.script(json!([{"content": cut}])).await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(got.len(), 2);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+
+    // Ana Lee is in no whole memory: the item is read again in parts.
+    let cut = format!("{{\"memories\": [{tea}, {{\"span\": {{\"quote\": \"Sam");
+    r.script(json!([
+        {"content": cut},
+        reply(vec![tea.clone()]),
+        reply(vec![coffee.clone()]),
+    ]))
+    .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    assert_eq!(got.len(), 2);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 4);
+}
+
+/// A cut reply whose memories hold every name and number is still read in parts when a
+/// sentence with neither was never quoted: the names alone do not show it was read.
+#[tokio::test]
+async fn a_cut_reply_that_never_quoted_a_sentence_is_read_in_parts() {
+    let r = rig().await;
+    let text = "Sam likes tea.\nHe needs a packed lunch.";
+    let tea = memory_about("Sam likes tea", "Sam", "Sam likes tea.", "tea");
+    let lunch = memory_about(
+        "He needs a packed lunch",
+        "Sam",
+        "Sam needs a packed lunch.",
+        "a packed lunch",
+    );
+    let cut = format!("{{\"memories\": [{tea}, {{\"span\": {{\"quote\": \"He");
+    r.script(json!([
+        {"content": cut},
+        reply(vec![tea.clone()]),
+        reply(vec![lunch]),
+    ]))
+    .await;
+    let got = r.mind.extract(text, &context()).await.unwrap();
+    let objects: Vec<&str> = got.iter().map(|c| c.object.as_str()).collect();
+    assert_eq!(objects, ["tea", "a packed lunch"]);
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 3);
 }
 
 /// An engine that refuses the grammar is asked again by a JSON schema, and every later reading

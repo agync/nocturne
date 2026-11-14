@@ -92,15 +92,17 @@ answer only when it cites no fact. A mind on this computer is told the day's dat
 engine's clock and time zone; an online question is not.
 
 Reading follows a GBNF grammar rather than a JSON schema: the engine parses a request into a map
-that sorts keys, so a schema would make the mind write each memory's confidence first and its
-quote last. The grammar has it write the quote first, then the sentence, who or what it is about,
-what is said, the dates, and its judgements; every text is at most 300 characters and a reply at
-most 16 memories. An engine that refuses the grammar is asked again by a JSON schema with the
-same bounds, and from then on every reading goes that way. A reply cut off at its token ceiling,
-or holding 16 memories, is read again in halves, twice at most, and after that keeps the whole
-memories it holds. A day that neither the quote nor its line (with the heading above it) names,
-by day of the month, weekday or a phrase such as tomorrow or in three weeks, is dropped from the
-memory; a weekday or month that does not match rules a day out only when no day number does.
+that sorts keys, so a schema would make the mind write each memory's confidence first and its quote
+last. The grammar has it write the quote first, then the sentence, who or what it is about, what is
+said, the dates, and its judgements; every text is at most 300 characters and a reply at most 16
+memories. An engine that refuses the grammar is asked again by a JSON schema with the same bounds,
+and from then on every reading goes that way. A reply cut off at its token ceiling, or holding 16
+memories, is kept as it is when its whole memories keep every number, name and role in the item
+(the check below) and quote every sentence of it, or reach its last sentence; otherwise it is read
+again in halves, twice at most, and after that keeps the whole memories it holds. A day that
+neither the quote nor its line (with the heading above it) names, by day of the month, weekday or a
+phrase such as tomorrow or in three weeks, is dropped from the memory; a weekday or month that does
+not match rules a day out only when no day number does.
 
 On mains, when the memories of an item leave out a number or name it gives, or lose who someone
 is to the person ("the plumber"), the reader shows the mind the whole item again with those lines

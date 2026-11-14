@@ -17,6 +17,7 @@ use base64::Engine as _;
 use futures_util::StreamExt;
 use jiff::civil::Date;
 use nocturne_contract::{ComponentRole, EntityKind, PageView, Span, Tier};
+use nocturne_engine::coverage::{self, normalise};
 use nocturne_engine::{
     AnswerMeta, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError, Predicate,
     Transcript, Understanding,
@@ -248,8 +249,9 @@ impl LemonadeMind {
     }
 
     /// One reading of `text`, asked again once for the memories that were not valid. A reply
-    /// cut off at its ceiling, or as full as a reply may be, is read again in halves, `depth`
-    /// times at most; after that it keeps the whole memories it holds.
+    /// cut off at its ceiling, or as full as a reply may be, is kept when its whole memories
+    /// keep every fact of `text`; otherwise `text` is read again in halves, `depth` times at
+    /// most.
     fn extract_part<'a>(
         &'a self,
         model: &'a str,
@@ -279,18 +281,22 @@ impl LemonadeMind {
                 );
                 let parsed = parse_candidates(&reply.text, text);
                 let cut = reply.cut || parsed.as_ref().is_err_and(|e| e.contains("EOF while"));
-                if cut {
-                    let whole = salvage(&reply.text, text);
-                    return self
-                        .read_in_parts(model, text, cx, depth, kept, whole)
-                        .await;
+                let full = match &parsed {
+                    Ok(p) if p.total >= prompts::MAX_MEMORIES => Some(p.items.clone()),
+                    _ => None,
+                };
+                if cut || full.is_some() {
+                    let whole = merged(kept, full.unwrap_or_else(|| salvage(&reply.text, text)));
+                    if covered(text, &whole, cx) {
+                        tracing::info!(
+                            "a reading that was cut off or full kept every fact; \
+                             not reading it in parts"
+                        );
+                        return Ok(whole);
+                    }
+                    return self.read_in_parts(model, text, cx, depth, whole).await;
                 }
                 match parsed {
-                    Ok(p) if p.total >= prompts::MAX_MEMORIES => {
-                        return self
-                            .read_in_parts(model, text, cx, depth, kept, p.items)
-                            .await;
-                    }
                     Ok(p) if p.invalid.is_empty() => return Ok(merged(kept, p.items)),
                     Ok(p) if attempt + 1 == EXTRACT_ATTEMPTS => {
                         tracing::warn!(
@@ -332,16 +338,15 @@ impl LemonadeMind {
         })
     }
 
-    /// A reply to `text` was cut off, or held as many memories as a reply may: each half of
-    /// `text` is read on its own, or, when it cannot be split again, `whole` (the complete
-    /// memories the reply held) is kept.
+    /// A reply to `text` was cut off, or held as many memories as a reply may, and
+    /// left a fact out: each half of `text` is read on its own, or, when it cannot be split
+    /// again, `whole` (the complete memories the reply held) is kept.
     async fn read_in_parts(
         &self,
         model: &str,
         text: &str,
         cx: &ExtractContext,
         depth: u32,
-        kept: Vec<Candidate>,
         whole: Vec<Candidate>,
     ) -> Result<Vec<Candidate>, MindError> {
         let halves = if depth < MAX_SPLITS {
@@ -350,7 +355,6 @@ impl LemonadeMind {
             None
         };
         let Some((first, second)) = halves else {
-            let whole = merged(kept, whole);
             tracing::warn!(
                 "a reading was cut off or full; kept {} whole memories",
                 whole.len()
@@ -361,7 +365,7 @@ impl LemonadeMind {
             return Ok(whole);
         };
         tracing::warn!("a reading was cut off or full; reading the item in two parts");
-        let mut out = kept;
+        let mut out = whole;
         let mut failed = None;
         for part in [first, second] {
             match self.extract_part(model, part, cx, depth + 1).await {
@@ -752,6 +756,34 @@ fn by_schema(req: &mut ChatRequest) {
     ));
 }
 
+/// Whether `found` keeps all of `text`: every number, name and role in it, by the check the
+/// reader gives a reading before a second look, and every sentence of it quoted, or the reading
+/// carried on to its last sentence. The first check alone misses a sentence with no number or
+/// name in it, and counts a name another memory happens to hold.
+fn covered(text: &str, found: &[Candidate], cx: &ExtractContext) -> bool {
+    let known: Vec<String> = cx.known_entities.iter().map(|(n, _)| n.clone()).collect();
+    if found.is_empty() || !coverage::left_out(text, found, &known).is_empty() {
+        return false;
+    }
+    let quote = |c: &Candidate| match &c.span {
+        Some(Span::Quote { text }) => normalise(text),
+        _ => String::new(),
+    };
+    let quotes: Vec<String> = found.iter().map(quote).filter(|q| !q.is_empty()).collect();
+    let sentences: Vec<String> = coverage::sentences(text)
+        .iter()
+        .map(|s| normalise(s))
+        .filter(|s| !s.is_empty())
+        .collect();
+    let holds = |s: &str, q: &str| s.contains(q) || q.contains(s);
+    let every = sentences.iter().all(|s| quotes.iter().any(|q| holds(s, q)));
+    let to_the_end = match (sentences.last(), found.last().map(quote)) {
+        (Some(last), Some(q)) => !q.is_empty() && holds(last, &q),
+        _ => false,
+    };
+    every || to_the_end
+}
+
 /// `text` in two parts of about the same length, split between lines or else between
 /// sentences. `None` for a single sentence.
 fn halves(text: &str) -> Option<(&str, &str)> {
@@ -813,23 +845,6 @@ fn salvage(reply: &str, text: &str) -> Vec<Candidate> {
             _ => {}
         }
     }
-    out
-}
-
-/// Lower case, with every run of non-alphanumeric characters made one space.
-fn normalise(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut gap = true;
-    for c in text.chars() {
-        if c.is_alphanumeric() {
-            out.extend(c.to_lowercase());
-            gap = false;
-        } else if !gap {
-            out.push(' ');
-            gap = true;
-        }
-    }
-    out.truncate(out.trim_end().len());
     out
 }
 
