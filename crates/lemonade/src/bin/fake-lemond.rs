@@ -21,7 +21,8 @@
 //! key. As in the real engine, handing over a key drops the static row (the model can no longer
 //! be loaded until the next launch), a failed load (`load-oom`) or an unload naming no model
 //! unloads it, and a key in the environment (`LEMONADE_NOCTURNE_ONLINE_API_KEY`) refuses a
-//! handed-over one with 409. Mode `cloud-auth-fail` makes the key request fail.
+//! handed-over one with 409. A key for an `http://` provider without `allow_insecure_http` is
+//! refused with 400. Mode `cloud-auth-fail` makes the key request fail.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -971,6 +972,19 @@ async fn cloud_auth(State(app): State<Shared>, Json(body): Json<Value>) -> Respo
     let Some(key) = body["api_key"].as_str().filter(|k| !k.is_empty()) else {
         return err(400, "invalid_request_error", "api_key is required");
     };
+    // As the real engine: a key for an `http://` provider needs `allow_insecure_http`.
+    if entry["base_url"]
+        .as_str()
+        .is_some_and(|b| b.starts_with("http://"))
+        && entry["allow_insecure_http"] != true
+        && body["allow_insecure_http"] != true
+    {
+        return err(
+            400,
+            "insecure_http_requires_opt_in",
+            "Cloud provider uses http://; set allow_insecure_http=true",
+        );
+    }
     if std::env::var_os(ONLINE_KEY_ENV).is_some() {
         return (
             StatusCode::CONFLICT,

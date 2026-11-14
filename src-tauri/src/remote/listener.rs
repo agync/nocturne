@@ -76,6 +76,8 @@ pub struct ListenerHandle {
     pub origin: Origin,
     stop: CancellationToken,
     task: tokio::task::JoinHandle<()>,
+    /// A port on loopback, which no address for Online answers may name.
+    _port: Option<nocturne_lemonade::online::OwnPort>,
 }
 
 impl ListenerHandle {
@@ -152,6 +154,7 @@ pub async fn serve(cfg: ListenerConfig, core: Arc<Core>) -> std::io::Result<List
                 origin: Origin::Unix(path),
                 stop,
                 task,
+                _port: None,
             })
         }
         #[cfg(not(unix))]
@@ -169,6 +172,7 @@ pub async fn serve(cfg: ListenerConfig, core: Arc<Core>) -> std::io::Result<List
                 origin: Origin::Tcp { port, key },
                 stop,
                 task,
+                _port: Some(nocturne_lemonade::online::OwnPort::hold(port)),
             })
         }
     }

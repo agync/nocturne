@@ -31,13 +31,13 @@ pub fn llamacpp_args(tier: Tier) -> &'static str {
 /// stops those. Never `null` (it admits sandboxed frames) and never `*`.
 pub const ALLOWED_ORIGINS: &str = "https://none.invalid";
 
-/// The one provider entry for Online answers. The key is never part of it: the engine reads the
-/// key from its environment.
+/// The one provider entry for Online answers. The key is never part of it: it is handed to the
+/// running engine (see [`crate::online`]).
 #[derive(Debug, Clone, Copy)]
 pub struct CloudEntry<'a> {
     pub base_url: &'a str,
-    /// Plain HTTP; only ever for the stand-in provider on loopback, and written only in builds
-    /// with the stand-in feature.
+    /// Plain HTTP; written only for an `http://` address on this computer or the person's own
+    /// network.
     pub allow_insecure_http: bool,
 }
 
@@ -96,7 +96,8 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
         Some(c) => json!([{
             "name": crate::online::PROVIDER,
             "base_url": c.base_url,
-            "allow_insecure_http": c.allow_insecure_http && cfg!(feature = "online-stand-in"),
+            "allow_insecure_http": c.allow_insecure_http
+                && crate::online::plain_http_allowed(c.base_url),
             "wire_format": "openai",
         }]),
         None => json!([]),
@@ -315,21 +316,30 @@ mod tests {
         assert!(!text.contains("api_key") && !text.contains("auth_header"));
     }
 
-    #[cfg(not(feature = "online-stand-in"))]
     #[test]
-    fn a_build_without_the_stand_in_never_allows_plain_http() {
+    fn plain_http_only_for_this_computer_and_the_own_network() {
         let tmp = tempfile::tempdir().unwrap();
         let models = tmp.path().join("m");
-        let mut s = settings(&models);
-        s.cloud = Some(CloudEntry {
-            base_url: "http://127.0.0.1:8080/v1",
-            allow_insecure_http: true,
-        });
-        write(tmp.path(), &s).unwrap();
-        assert_eq!(
-            read(tmp.path())["cloud_providers"][0]["allow_insecure_http"],
-            false
-        );
+        for (base_url, want) in [
+            ("http://127.0.0.1:8080/v1", true),
+            ("http://192.168.1.10:8000/v1", true),
+            ("http://box.tail1234.ts.net/v1", true),
+            ("http://api.example.com/v1", false),
+            ("http://169.254.169.254/v1", false),
+            ("https://192.168.1.10/v1", false),
+        ] {
+            let mut s = settings(&models);
+            s.cloud = Some(CloudEntry {
+                base_url,
+                allow_insecure_http: true,
+            });
+            write(tmp.path(), &s).unwrap();
+            assert_eq!(
+                read(tmp.path())["cloud_providers"][0]["allow_insecure_http"],
+                want,
+                "{base_url}"
+            );
+        }
     }
 
     #[test]

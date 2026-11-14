@@ -401,6 +401,8 @@ struct Running {
     pgid: u32,
     /// Reads the engine's output into its log; ends with the process.
     _log: Option<tokio::task::JoinHandle<()>>,
+    /// The engine's ports, which no address for Online answers may name.
+    _ports: Vec<online::OwnPort>,
 }
 
 struct Actor {
@@ -561,6 +563,9 @@ fn new_key() -> Result<String, RuntimeError> {
         .collect())
 }
 
+/// How long the name of a provider on the person's own network may take to look up at launch.
+const LOOKUP_WAIT: Duration = Duration::from_secs(5);
+
 /// Whether a loopback port can be taken. The probe only binds: it never listens, so the app is
 /// never, even for an instant, a listener of its own (the network check reads any listen by the
 /// app as a break of "off means off").
@@ -571,11 +576,11 @@ fn port_is_free(port: u16) -> bool {
 }
 
 /// A random loopback port nothing is listening on right now.
-fn free_port(avoid: Option<u16>) -> Result<u16, RuntimeError> {
+fn free_port(avoid: &[Option<u16>]) -> Result<u16, RuntimeError> {
     for _ in 0..50 {
         let [a, b] = random_bytes::<2>()?;
         let port = 20000 + u16::from_le_bytes([a, b]) % 40000;
-        if Some(port) == avoid {
+        if avoid.contains(&Some(port)) {
             continue;
         }
         if port_is_free(port) {
@@ -787,9 +792,6 @@ impl Actor {
         }
         let mut last = String::new();
         for _ in 0..PORT_TRIES {
-            let port = free_port(None)?;
-            let ws_port = free_port(Some(port))?;
-            let keys = Keys::new(new_key()?, new_key()?)?;
             // Noted before the window and the route are read, so any change after this point
             // stops the key from being handed over.
             let read_at = self.shared.route_gen.load(Ordering::SeqCst);
@@ -804,6 +806,11 @@ impl Actor {
                     .unwrap_or_else(|e| e.into_inner())
                     .clone()
             };
+            // The engine never takes the port of a provider on this computer.
+            let provider = route.as_ref().and_then(CloudRoute::loopback_port);
+            let port = free_port(&[provider])?;
+            let ws_port = free_port(&[provider, Some(port)])?;
+            let keys = Keys::new(new_key()?, new_key()?)?;
             let (llama, whisper) = read_backends(&self.dirs.config());
             let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
             config::write(
@@ -829,6 +836,7 @@ impl Actor {
             }
             self.client.set_saved_options(saved);
             let mut running = self.spawn(port, &keys, route.as_ref().map(|r| &r.key))?;
+            running._ports = vec![online::OwnPort::hold(port), online::OwnPort::hold(ws_port)];
             match self
                 .await_ready(&mut running, port, ws_port, &keys.api)
                 .await
@@ -879,6 +887,26 @@ impl Actor {
         let Ok(admin) = Admin::new(port, keys.admin.clone()) else {
             return false;
         };
+        // A name on the person's own network is judged again by what it resolves to now.
+        let lookup = online::system_lookup();
+        match tokio::time::timeout(
+            LOOKUP_WAIT,
+            online::resolved_reach(route.base_url(), &lookup),
+        )
+        .await
+        {
+            Ok(Ok(_)) => {}
+            Ok(Err(_)) => {
+                tracing::warn!(
+                    "the address for Online answers no longer points at the person's own network; the route is not taken"
+                );
+                return false;
+            }
+            Err(_) => {
+                tracing::warn!("the address for Online answers could not be looked up in time");
+                return false;
+            }
+        }
         let shared = self.shared.clone();
         let still = move || shared.route_gen.load(Ordering::SeqCst) == read_at;
         match online::give(&admin, route, &still).await {
@@ -956,6 +984,7 @@ impl Actor {
             stdin,
             pgid,
             _log: log,
+            _ports: Vec::new(),
         })
     }
 
@@ -1249,9 +1278,9 @@ mod tests {
 
     #[test]
     fn free_port_gives_a_port_that_can_be_listened_on() {
-        let port = free_port(None).unwrap();
+        let port = free_port(&[]).unwrap();
         assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
-        assert_ne!(free_port(Some(port)).unwrap(), port);
+        assert_ne!(free_port(&[Some(port)]).unwrap(), port);
     }
 
     #[test]

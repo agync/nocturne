@@ -57,7 +57,14 @@ describe("mock.online", () => {
       (await online.check(form(patch))).type;
     expect(await outcome({})).toBe("works");
     expect(await outcome({ baseUrl: "http://api.example.com/v1" })).toBe("notHttps");
-    expect(await outcome({ baseUrl: "https://localhost/v1" })).toBe("addressNotAllowed");
+    expect(await outcome({ baseUrl: "https://169.254.169.254/latest" })).toBe("addressNotAllowed");
+    expect(await outcome({ baseUrl: "http://0.0.0.0:11434/v1" })).toBe("addressNotAllowed");
+    expect(await outcome({ baseUrl: "https://api.example.com/v1?key=1" })).toBe(
+      "addressNotAllowed",
+    );
+    expect(await outcome({ baseUrl: "http://localhost:11434/v1" })).toBe("works");
+    expect(await outcome({ baseUrl: "http://192.168.1.10:8000/v1" })).toBe("works");
+    expect(await outcome({ baseUrl: "http://box.tail1234.ts.net/v1" })).toBe("works");
     expect(await outcome({ baseUrl: "https://offline.example.com" })).toBe("noInternet");
     expect(await outcome({ baseUrl: "https://unreachable.example.com" })).toBe("unreachable");
     expect(await outcome({ baseUrl: "not an address" })).toBe("unreachable");

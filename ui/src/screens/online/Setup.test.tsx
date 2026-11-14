@@ -190,7 +190,7 @@ describe("setup", () => {
     [
       { type: "addressNotAllowed" },
       /That address can’t be used\./,
-      /plain https address your provider gives, with nothing after it/,
+      /Use the address your provider gives, with nothing after it/,
     ],
     [{ type: "busy" }, /api\.example\.com is busy right now\./, /Wait a moment/],
     [
@@ -222,8 +222,10 @@ describe("setup", () => {
     engine.online.forceOutcome({ type: "addressNotAllowed" });
     await fill({ url: "https://user@api.example.com/v1?x=1" });
     await click("Check");
-    await screen.findByText(/That address can’t be used\./);
-    expect(document.body.textContent).not.toMatch(/this computer or your own network/);
+    const title = await screen.findByText(/That address can’t be used\./);
+    const message = title.parentElement?.textContent ?? "";
+    expect(message).toMatch(/Nothing was sent/);
+    expect(message).not.toMatch(/this computer|your own network/);
     expect(screen.getByLabelText(/^Address/)).toHaveAttribute("aria-invalid", "true");
   });
 

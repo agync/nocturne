@@ -251,9 +251,14 @@ fn check_refuses_addresses_before_anything_is_sent() {
     let l = lab();
     for (url, want) in [
         ("http://api.example.com/v1", "notHttps"),
-        ("https://192.168.1.10/v1", "addressNotAllowed"),
+        ("http://8.8.8.8/v1", "notHttps"),
         ("https://169.254.169.254/latest", "addressNotAllowed"),
+        ("http://169.254.169.254/latest", "addressNotAllowed"),
+        ("http://0.0.0.0:11434/v1", "addressNotAllowed"),
+        ("http://[fe80::1]:11434/v1", "addressNotAllowed"),
+        ("http://metadata.google.internal/v1", "addressNotAllowed"),
         ("https://api.example.com/v1?key=1", "addressNotAllowed"),
+        ("http://192.168.1.10:8000/v1?key=1", "addressNotAllowed"),
     ] {
         let out = l.h.ok(
             "check_online",
@@ -654,8 +659,61 @@ fn a_blank_key_before_setup_is_refused() {
     }
 }
 
+/// A server on this computer is a provider over plain HTTP in every build, with no warning:
+/// the check works and the route the engine is given allows plain HTTP.
+#[test]
+fn a_server_on_this_computer_works_over_plain_http() {
+    let l = lab();
+    let url = format!("http://localhost:{}/v1", l.s.port);
+    let out = l.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": url, "key": KEY, "model": "stand-in-model"}}),
+    );
+    assert_eq!(out["type"], "works", "{out}");
+    assert_eq!(out["host"], format!("localhost:{}", l.s.port));
+    l.h.ok(
+        "turn_on_online",
+        json!({"settings": {"phones": true, "sendSensitive": false,
+                            "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
+    );
+    let route = nocturne_app_lib::online::route_at_launch(l.h.app.handle()).unwrap();
+    assert_eq!(route.base_url().as_str(), url);
+    assert!(route.allow_insecure_http());
+}
+
+/// A name on the person's own network is judged by what it resolves to at the check: private
+/// addresses take plain HTTP, a public one does not, and one that is never a provider is
+/// refused. Nothing is sent for a refused name.
+#[test]
+fn an_own_name_is_judged_by_what_it_resolves_to() {
+    let l = lab();
+    let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
+    let to = |addr: &'static str| -> nocturne_lemonade::online::Lookup {
+        Arc::new(move |_: String, _: u16| Box::pin(async move { Ok(vec![addr.parse().unwrap()]) }))
+    };
+    let check = |url: &str| -> String {
+        l.h.ok(
+            "check_online",
+            json!({"form": {"baseUrl": url, "key": KEY, "model": "stand-in-model"}}),
+        )["type"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    hub.set_lookup(to("8.8.8.8"));
+    assert_eq!(check("http://gpubox:8000/v1"), "addressNotAllowed");
+    hub.set_lookup(to("169.254.169.254"));
+    assert_eq!(check("http://gpubox:8000/v1"), "addressNotAllowed");
+    assert_eq!(check("https://gpubox.local/v1"), "addressNotAllowed");
+    assert!(
+        l.port.routes().is_empty(),
+        "nothing was sent for a refused name"
+    );
+    hub.set_lookup(to("192.168.1.10"));
+    assert_eq!(check("http://gpubox:8000/v1"), "works");
+}
+
 /// Two stand-ins on loopback: the key kept for the first never reaches the second.
-#[cfg(feature = "online-stand-in")]
 #[test]
 fn a_blank_key_never_reaches_a_second_stand_in() {
     let l = lab();

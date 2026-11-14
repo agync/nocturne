@@ -290,14 +290,19 @@ export class OnlineSim {
     const url = form.baseUrl.trim();
     const key = form.key.toLowerCase();
     const model = form.model.trim();
-    let host = "";
+    let parsed: URL;
     try {
-      host = new URL(url).host;
+      parsed = new URL(url);
     } catch {
       return { type: "unreachable" };
     }
-    if (!url.startsWith("https://")) return { type: "notHttps" };
-    if (/localhost|^127\.|^192\.168\.|\.local$/.test(host)) return { type: "addressNotAllowed" };
+    const host = parsed.host;
+    const where = reach(parsed.hostname);
+    if (where === "never" || parsed.username || parsed.password || parsed.search || parsed.hash) {
+      return { type: "addressNotAllowed" };
+    }
+    const plain = parsed.protocol === "http:" && where === "own";
+    if (parsed.protocol !== "https:" && !plain) return { type: "notHttps" };
     if (/offline/.test(host)) return { type: "noInternet" };
     if (/unreachable/.test(host)) return { type: "unreachable" };
     if (key.includes("refused")) return { type: "keyRefused" };
@@ -407,4 +412,25 @@ export class OnlineSim {
   async sends(limit: number, before: number | null): Promise<OnlineSend[]> {
     return this.log.filter((s) => before === null || s.id < before).slice(0, limit);
   }
+}
+
+/**
+ * Where an address points, as the computer judges it: never a provider, this computer or the
+ * person's own network (plain http too), or anywhere else (https only).
+ */
+function reach(hostname: string): "never" | "own" | "public" {
+  const host = hostname.toLowerCase().replace(/\.$/, "");
+  const never =
+    /^(0\.|169\.254\.|2(2[4-9]|[3-5]\d)\.)/.test(host) ||
+    /^\[(::|fe80:.*|ff.*)\]$/.test(host) ||
+    /^(metadata|metadata\.google\.internal|instance-data)$/.test(host);
+  if (never) return "never";
+  const own =
+    /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(
+      host,
+    ) ||
+    /^\[(::1|f[cd][0-9a-f]*:.*)\]$/.test(host) ||
+    /(^|\.)(localhost|local|home\.arpa|internal|ts\.net)$/.test(host) ||
+    !host.includes(".");
+  return own ? "own" : "public";
 }

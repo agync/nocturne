@@ -794,7 +794,6 @@ fn turn_off_between_choice_and_send_sends_nothing() {
 
 /// While on with host A, a check of host B begins: a question already on its way, and one
 /// asked during the check, never reach B; they are answered here or by A.
-#[cfg(feature = "online-stand-in")]
 #[test]
 fn a_check_of_another_provider_never_carries_questions() {
     let l = lab();

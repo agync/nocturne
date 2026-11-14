@@ -13,7 +13,7 @@ use nocturne_contract::{
 };
 use nocturne_engine::{BoxFuture, Engine, NewSend, OnlineFailure, OnlineReceipt, OnlineRow};
 use nocturne_lemonade::mind::online::{OnlineMind, check};
-use nocturne_lemonade::online::{CloudRoute, OnlineKey, UrlProblem, host_of};
+use nocturne_lemonade::online::{self, CloudRoute, OnlineKey, UrlProblem, host_of};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -94,6 +94,8 @@ pub struct OnlineHub<R: Runtime> {
     confirm: Mutex<Option<ConfirmFn>>,
     /// Held while the person is asked: one question at a time.
     confirming: tokio::sync::Mutex<()>,
+    /// How a provider's name on the person's own network is looked up.
+    lookup: Mutex<online::Lookup>,
 }
 
 /// Holds a question just before it is sent, for a test that turns Online answers off then.
@@ -118,8 +120,8 @@ fn internal(e: impl std::fmt::Display) -> CommandError {
     CommandError::internal(e)
 }
 
-/// A route from what the person entered. Builds with the stand-in feature take a loopback
-/// address over plain HTTP.
+/// A route from what the person entered. Builds with the stand-in feature mark a plain HTTP
+/// route as the stand-in's in the log.
 fn route_from(base_url: &str, model: &str, key: OnlineKey) -> Result<CloudRoute, UrlProblem> {
     #[cfg(feature = "online-stand-in")]
     if base_url.starts_with("http://") {
@@ -174,7 +176,14 @@ impl<R: Runtime> OnlineHub<R> {
             send_hold: Mutex::new(None),
             confirm: Mutex::new(None),
             confirming: tokio::sync::Mutex::new(()),
+            lookup: Mutex::new(online::system_lookup()),
         }
+    }
+
+    /// Looks names up with `lookup` instead of the system's resolver.
+    #[doc(hidden)]
+    pub fn set_lookup(&self, lookup: online::Lookup) {
+        *self.lookup.lock().unwrap_or_else(|e| e.into_inner()) = lookup;
     }
 
     fn routes(&self) -> std::sync::MutexGuard<'_, Routes> {
@@ -522,10 +531,22 @@ impl<R: Runtime> OnlineHub<R> {
         let model = model.trim().to_string();
         // The address is judged first, with no key in it.
         let entered = match route_from(base_url.trim(), &model, OnlineKey::new(String::new())) {
-            Ok(r) => r.base_url().to_string(),
+            Ok(r) => r.base_url().clone(),
             Err(UrlProblem::NotHttps) => return Ok(CheckOutcome::NotHttps),
             Err(_) => return Ok(CheckOutcome::AddressNotAllowed),
         };
+        // A name on the person's own network is judged by what it resolves to now.
+        let lookup = self
+            .lookup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        match tokio::time::timeout(LOOKUP_WAIT, online::resolved_reach(&entered, &lookup)).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(_)) => return Ok(CheckOutcome::AddressNotAllowed),
+            Err(_) => return Ok(CheckOutcome::Unreachable),
+        }
+        let entered = entered.to_string();
         let key = if key.expose().trim().is_empty() {
             // A blank key means the one kept, and only for the address it was kept for: a
             // changed address never gets it.
@@ -1254,4 +1275,6 @@ impl<R: Runtime> OnlineHub<R> {
 }
 
 /// What a check is logged as asking.
+/// How long a provider's name on the person's own network may take to look up at a check.
+const LOOKUP_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
 const CHECK_LOG_QUESTION: &str = nocturne_lemonade::online::CHECK_QUESTION;

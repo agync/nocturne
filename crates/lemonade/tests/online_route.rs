@@ -11,7 +11,7 @@ use nocturne_engine::OnlineFailure;
 use nocturne_lemonade::client::{ChatRequest, Message};
 use nocturne_lemonade::logpipe::{self, Redactor};
 use nocturne_lemonade::online::{
-    self, CloudRoute, KEY_ENV, MODEL_ID, OnlineKey, PROVIDER, ROW, UrlProblem, classify,
+    self, CloudRoute, KEY_ENV, MODEL_ID, OnlineKey, PROVIDER, ROW, Reach, UrlProblem, classify,
     validate_url,
 };
 use nocturne_lemonade::{Dirs, Supervisor, SupervisorOptions};
@@ -452,40 +452,78 @@ fn one_writer_for_entry_and_row() {
     );
 }
 
+/// The threat model's address rules: what is never a provider is refused over either scheme,
+/// this computer and the person's own network take plain HTTP, anywhere else takes HTTPS only.
 #[test]
 fn url_refusals() {
     for raw in [
         "https://api.example.com/v1?key=1",
-        "https://127.0.0.1/v1",
-        "https://localhost/v1",
+        "http://192.168.0.10/v1?key=1",
         "https://169.254.169.254/latest/meta-data",
+        "http://169.254.169.254/latest/meta-data",
         "https://[fe80::1]/v1",
+        "http://[fe80::1]/v1",
         "https://0.0.0.0/v1",
+        "http://0.0.0.0:11434/v1",
         "https://[::]/v1",
-        "https://10.0.0.1/v1",
-        "https://172.16.0.1/v1",
-        "https://172.31.255.255/v1",
-        "https://192.168.0.10/v1",
-        "https://[fc00::1]/v1",
-        "https://[fd12:3456::1]/v1",
-        "https://[::ffff:10.0.0.1]/v1",
-        "https://printer.local/v1",
+        "https://224.0.0.1/v1",
+        "https://255.255.255.255/v1",
+        "https://240.0.0.1/v1",
+        "https://192.0.2.1/v1",
+        "https://[2001:db8::1]/v1",
+        "http://[::ffff:169.254.169.254]/v1",
+        "http://metadata.google.internal/computeMetadata/v1",
     ] {
-        assert!(validate_url(raw, false).is_err(), "{raw}");
+        assert!(validate_url(raw).is_err(), "{raw}");
     }
     assert_eq!(
-        validate_url("https://api.example.com/v1?key=1", false),
+        validate_url("https://api.example.com/v1?key=1"),
         Err(UrlProblem::Extra)
     );
     assert_eq!(
-        validate_url("https://[::ffff:10.0.0.1]/v1", false),
+        validate_url("http://[::ffff:169.254.169.254]/v1"),
         Err(UrlProblem::NotAllowed)
     );
-    assert!(validate_url("https://172.32.0.1/v1", false).is_ok());
+    assert!(validate_url("https://172.32.0.1/v1").is_ok());
+}
+
+/// A server on this computer or the person's own network is a provider, over HTTPS or plain
+/// HTTP, with no warning.
+#[test]
+fn own_network_addresses_are_providers() {
+    for raw in [
+        "http://127.0.0.1:11434/v1",
+        "http://localhost:11434/v1",
+        "http://[::1]:8000/v1",
+        "http://10.0.0.1/v1",
+        "http://172.16.0.1/v1",
+        "http://172.31.255.255/v1",
+        "http://192.168.0.10/v1",
+        "http://100.64.0.1/v1",
+        "http://[fc00::1]/v1",
+        "http://[fd12:3456::1]/v1",
+        "http://[::ffff:10.0.0.1]/v1",
+        "http://printer.local/v1",
+        "http://gpu.tail1234.ts.net/v1",
+        "http://nas.home.arpa/v1",
+        "http://gpu.internal/v1",
+        "http://gpubox/v1",
+        "https://192.168.0.10/v1",
+    ] {
+        let address = validate_url(raw).unwrap_or_else(|e| panic!("{raw}: {e:?}"));
+        assert_eq!(address.reach, Reach::Own, "{raw}");
+        assert_eq!(address.insecure_http(), raw.starts_with("http://"), "{raw}");
+        let route = CloudRoute::new(raw, "m".into(), OnlineKey::new("k".into())).unwrap();
+        assert_eq!(route.allow_insecure_http(), raw.starts_with("http://"));
+        assert_eq!(
+            online::entry(&route).allow_insecure_http,
+            raw.starts_with("http://")
+        );
+    }
 }
 
 /// A public name is never resolved here: one that points at this computer or the home network
-/// is accepted. The residual risk is written down in ADR 0011.
+/// is judged as public, so it must be HTTPS. The residual is written down in ADR 0011.
 #[test]
 fn private_resolving_name_is_a_residual() {
     for raw in [
@@ -493,20 +531,27 @@ fn private_resolving_name_is_a_residual() {
         "https://127.0.0.1.nip.io/v1",
         "https://10.0.0.1.sslip.io/v1",
     ] {
-        assert!(validate_url(raw, false).is_ok(), "{raw}");
+        assert_eq!(
+            validate_url(raw).map(|a| a.reach),
+            Ok(Reach::Public),
+            "{raw}"
+        );
+        let http = raw.replacen("https://", "http://", 1);
+        assert_eq!(validate_url(&http), Err(UrlProblem::NotHttps), "{http}");
     }
 }
 
 #[test]
-fn release_refuses_http_and_userinfo() {
+fn public_addresses_refuse_http_and_userinfo() {
     for raw in [
         "http://api.example.com/v1",
-        "http://127.0.0.1:8080/v1",
+        "http://8.8.8.8/v1",
         "https://user:secret@api.example.com/v1",
         "https://user@api.example.com/v1",
+        "http://user:secret@127.0.0.1:8080/v1",
         "https://api.example.com/v1#x",
     ] {
-        assert!(validate_url(raw, false).is_err(), "{raw}");
+        assert!(validate_url(raw).is_err(), "{raw}");
         assert!(CloudRoute::new(raw, "m".into(), OnlineKey::new("k".into())).is_err());
     }
     let route = route();
@@ -514,19 +559,15 @@ fn release_refuses_http_and_userinfo() {
     assert!(!online::entry(&route).allow_insecure_http);
 }
 
+/// The stand-in constructor of test builds judges the address exactly as a release build does.
 #[cfg(feature = "online-stand-in")]
 #[test]
-fn stand_in_http_only_for_loopback_with_feature() {
+fn the_stand_in_takes_what_a_release_build_takes() {
     let key = || OnlineKey::new("k".into());
     let r = CloudRoute::stand_in("http://127.0.0.1:9/v1", "m".into(), key()).unwrap();
     assert!(r.allow_insecure_http());
     assert!(online::entry(&r).allow_insecure_http);
-    for raw in [
-        "http://10.0.0.1:9/v1",
-        "http://localhost:9/v1",
-        "http://127.0.0.1/v1",
-        "http://[::1]:9/v1",
-    ] {
+    for raw in ["http://api.example.com/v1", "http://169.254.169.254/v1"] {
         assert!(
             CloudRoute::stand_in(raw, "m".into(), key()).is_err(),
             "{raw}"
@@ -534,16 +575,6 @@ fn stand_in_http_only_for_loopback_with_feature() {
     }
     let https = CloudRoute::stand_in("https://api.example.com/v1", "m".into(), key()).unwrap();
     assert!(!https.allow_insecure_http());
-}
-
-#[cfg(not(feature = "online-stand-in"))]
-#[test]
-fn stand_in_http_only_for_loopback_with_feature() {
-    assert_eq!(
-        validate_url("http://127.0.0.1:9/v1", true),
-        Err(UrlProblem::NotHttps),
-        "without the feature even the stand-in address is refused"
-    );
 }
 
 #[test]
@@ -785,9 +816,9 @@ async fn log_file_owner_only_and_rotated() {
 
 /// The route B probe, kept: the real pinned engine runs without the key in its environment,
 /// takes it at run time, reads the provider's list exactly once, and serves the static row with
-/// `offline` true; the stand-in sees exactly the body Nocturne sent. Run with
+/// `offline` true; the stand-in sees exactly the body Nocturne sent. The stand-in is reached
+/// over plain HTTP on loopback, as a server on this computer would be. Run with
 /// `NOCTURNE_LEMOND` naming a bundle folder.
-#[cfg(feature = "online-stand-in")]
 #[tokio::test]
 #[ignore = "needs the real engine (NOCTURNE_LEMOND)"]
 async fn real_engine_takes_the_key_at_run_time() {
@@ -855,13 +886,11 @@ async fn real_engine_takes_the_key_at_run_time() {
 }
 
 /// A stand-in provider on loopback for these tests, stopped when dropped.
-#[cfg(feature = "online-stand-in")]
 struct Provider {
     child: std::process::Child,
     port: u16,
 }
 
-#[cfg(feature = "online-stand-in")]
 impl Drop for Provider {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -869,7 +898,6 @@ impl Drop for Provider {
     }
 }
 
-#[cfg(feature = "online-stand-in")]
 impl Provider {
     fn start() -> Provider {
         use std::io::BufRead;
@@ -907,9 +935,9 @@ impl Provider {
     }
 }
 
-#[cfg(feature = "online-stand-in")]
+/// A route to the stand-in on loopback over plain HTTP, judged as a release build judges it.
 fn stand_in_route(port: u16) -> CloudRoute {
-    CloudRoute::stand_in(
+    CloudRoute::new(
         &format!("http://127.0.0.1:{port}/v1"),
         "stand-in-model".into(),
         OnlineKey::new(KEY.into()),
@@ -919,7 +947,6 @@ fn stand_in_route(port: u16) -> CloudRoute {
 
 /// The engine reads the provider's list once per launch with the route, with the key it holds
 /// in memory, and never in a launch without the route: off, or the download window.
-#[cfg(feature = "online-stand-in")]
 #[tokio::test]
 async fn one_listing_per_launch_with_a_route_and_none_otherwise() {
     let provider = Provider::start();
@@ -933,6 +960,11 @@ async fn one_listing_per_launch_with_a_route_and_none_otherwise() {
         .await
         .unwrap();
     assert!(control.route_taken());
+    assert_eq!(
+        config(&dirs)["cloud_providers"][0]["allow_insecure_http"],
+        true,
+        "plain HTTP to this computer is allowed in every build"
+    );
     assert_eq!(provider.listings().await, 1);
     let ask = ChatRequest::new(MODEL_ID, vec![Message::user("When?")]);
     assert!(!sup.client().chat_complete(&ask).await.unwrap().is_empty());
@@ -1183,7 +1215,6 @@ async fn a_very_long_line_is_cut_and_the_rest_withheld() {
 /// Turned off while the engine starts with the route: the launch read the route before the
 /// change, yet it hands nothing over, so the provider never sees the list request the key
 /// would cause. The same holds for Delete everything, which turns off the same way.
-#[cfg(feature = "online-stand-in")]
 #[tokio::test]
 async fn turning_off_while_the_engine_starts_hands_nothing_over() {
     let provider = Provider::start();
