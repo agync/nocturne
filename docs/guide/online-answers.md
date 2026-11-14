@@ -21,7 +21,9 @@ tidy and your morning page never use it.
 1. Open Settings, then Advanced details, choose Online answers and "Set up…". The setup has five
    steps and says what each one changes.
 2. Enter three things from your provider's site: the API URL, your API key and the model name. There
-   is nothing to sign in to and no account with Nocturne. The address must start with `https://`.
+   is nothing to sign in to and no account with Nocturne. An online service's address starts with
+   `https://`. A server on this computer (one on `localhost`, for example) or on your own network,
+   at home or on a tailnet, works too, and there plain `http://` is fine.
 3. Press Check. Nocturne sends one small test question ("Reply with the word ready.") that holds none
    of your memories. If the check fails, it says why in plain words, and nothing was sent for an
    address it refuses.

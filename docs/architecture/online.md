@@ -22,9 +22,10 @@ flowchart LR
 ```
 
 - The provider entry is one record in the engine's `config.json` (provider `nocturne_online`, the
-  entered address, no plain HTTP) and one fixed model row in its user models, `nocturne-online`,
-  whose model name is the one the person entered. Both are written at every launch by one function in
-  the supervisor, from the same optional route. Nothing else writes either.
+  entered address, plain HTTP allowed only for an `http://` address on the person's own network)
+  and one fixed model row in its user models, `nocturne-online`, whose model name is the one the
+  person entered. Both are written at every launch by one function in the supervisor, from the same
+  optional route. Nothing else writes either.
 - Off is the default and the state at every launch while off: `cloud_providers` is an empty list, the
   row is removed and no key is given to the engine. The spawn environment never holds the provider
   key: it holds only the two per-launch keys beside a few basics (home folder, path, locale, runtime
@@ -59,18 +60,31 @@ flowchart LR
 
 ## Addresses
 
-Release builds accept only `https://` addresses with a host. They refuse user names, query strings,
-fragments and whitespace. They also refuse these networks, written as IP literals in any form the
-URL parser reads (decimal, octal, hex, shortened) and as the IPv4 address an IPv6 form carries:
-loopback, link-local (including the metadata address 169.254.169.254), unspecified, private network
-(10/8, 172.16/12, 192.168/16), shared (100.64/10), multicast, broadcast and reserved, unique-local
-and site-local IPv6, NAT64 and 6to4. They refuse the names `localhost`, `*.localhost`, `*.local`,
-`*.home.arpa`, `*.internal` and `*.ts.net`, and any name of one label. A trailing dot is ignored.
-The lists are `REFUSED_NETS` and `REFUSED_NAMES`. Nocturne does not resolve names, so a public name
-that resolves to a private address passes; that is a stated residual risk. Test builds with the
-`online-stand-in` feature also accept one `http://127.0.0.1:<port>` stand-in. Planned: the feature
-will carry a marker string and `scripts/check-package.sh` will fail a package that holds it; the
-script checks only the helper stand-in marker today.
+An address has a host, and nothing but a scheme, host, port and path: user names, query strings,
+fragments and whitespace are refused. IP literals are read the way the URL parser reads them
+(decimal, octal, hex, shortened, a trailing dot) and an IPv6 form that carries an IPv4 address is
+judged as that IPv4 address. Every address then falls in one of three classes, in every build:
+
+| Class | Networks and names | Schemes |
+|---|---|---|
+| Never | Unspecified (0.0.0.0/8, `::`), link-local (169.254/16, fe80::/10, where cloud metadata lives), multicast, broadcast and reserved (240/4), the documentation ranges (192.0.2/24, 198.51.100/24, 203.0.113/24, 2001:db8::/32, 3fff::/20), site-local IPv6, NAT64 and 6to4, and the metadata names `metadata`, `metadata.google.internal`, `instance-data` and `instance-data.ec2.internal` | Refused |
+| This computer or the person's own network | Loopback (127/8, `::1`), private (10/8, 172.16/12, 192.168/16), shared (100.64/10, where tailnets live), unique-local IPv6 (fc00::/7), and the names `localhost`, `*.localhost`, `*.local`, `*.home.arpa`, `*.internal`, `*.ts.net` and any name of one label | `https://` or `http://`, with no warning |
+| Anywhere else | Everything not above | `https://` only |
+
+The lists are `NEVER_NETS`, `NEVER_NAMES`, `OWN_NETS` and `OWN_NAMES` in the engine crate. An
+address on this computer is also refused at a port Nocturne itself listens on: the engine's two
+ports, the preview's and a listener of Away from home. Each holds its port while it runs, and the
+engine never picks the port of a provider on this computer. A name of the second class is also
+looked up, at the check and before each engine start hands over the key: if any address it resolves
+to is public, the address counts as public and plain `http://` is refused as not allowed; if any is
+never a provider, it is refused. For an `http://` address of the second
+class, and only then, the provider entry sets the engine's `allow_insecure_http`; the engine then
+takes the key for it and reaches it over plain HTTP for both the list of models and the chats
+(`cloud_auth.cpp`, `cloud_server.cpp` in lemonade v2026.46.2). Without that flag the engine refuses
+the key with `insecure_http_requires_opt_in`, so the route fails closed. Nocturne does not resolve
+names, so a public name that resolves to a private address is judged as public and needs
+`https://`. Builds with the `online-stand-in` feature only mark a route as the stand-in's in the
+log, and `scripts/check-package.sh` fails a package that holds that marker.
 
 ## The choice per question
 
@@ -133,7 +147,8 @@ limit together.
 
 The check relaunches the engine with a provisional route and sends one fixed question ("Reply with
 the word ready.", no memories, at most 8 tokens back, 20 seconds). Outcomes: works, unreachable, key
-refused, no credit, model not found, no internet, not secure (not `https://`), address not allowed,
+refused, no credit, model not found, no internet, not secure (`http://` to an address outside the
+person's own network), address not allowed,
 busy, server error, empty reply, cancelled. An address that is malformed or carries a user name,
 query or fragment is reported as address not allowed. The address is judged before anything is
 sent. The provisional route and the key stay in memory only until the person consents: the key is
@@ -184,7 +199,14 @@ made undumpable; the engine and its children inherit the limit.
   could already change the address, so it is covered by the first point.
 - The provider sees one model-listing request (and the key) each time the engine starts while Online
   answers is on, with no question or memory in it.
-- A public name that resolves to a private address passes the address check.
+- A public name that resolves to a private address passes the address check, as a public one that
+  must use `https://`.
+- A provider on the person's own network over `http://` sees the key and the questions in plain
+  text on that network, as any device there could; that is the person's choice of address.
+- 100.64.0.0/10 is also carrier-grade NAT space: without a tailnet, a plain `http://` provider
+  there could be outside the person's own network.
+- The engine looks a name up again when it connects, so a DNS change after Nocturne's look-up is
+  not seen.
 - The engine's trace streams on loopback need no key; telemetry is off, so they carry nothing.
 - System proxy settings are not used, and TLS trust is the engine's bundled default.
 - Nocturne cannot check what the provider keeps.

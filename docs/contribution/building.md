@@ -83,7 +83,10 @@ service behind the same host name and port, and set `PREVIEW_PUBLIC_ORIGIN` to e
 
 What a browser cannot do is reported as unavailable: folder and file dialogs, opening a folder or a
 file in the system's app, the logs folder, printing, sound settings and exporting to a folder.
-Files are chosen in the page and travel as bytes.
+Away from home is unavailable too. Files are chosen in the page and travel as bytes. Online answers
+and choosing models work as in the window: the key travels only in the request body to the preview,
+is kept in the preview folder's owner-only key file and never in the system keychain, and turning
+on is printed on the preview's terminal instead of asked in a window of the system's own.
 
 The feature is `preview` on `nocturne-app` and sits in no default feature set. `make check` tests it
 (`cargo test -p nocturne-app --features preview`), and the package check fails if a package holds

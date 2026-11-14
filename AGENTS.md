@@ -13,9 +13,9 @@ The design lives in `docs/` (start at `docs/overview.md` and `docs/design/`).
    downloads; while the person has turned on Away from home, sealed traffic to their own paired
    phones through the connection they chose, plus that connection's own traffic to its company's
    servers and relays to stay connected; and, while the person has turned on Online answers, the
-   embedded engine's requests to the one provider they chose for answers (a question with the few
-   remembered sentences it needs, never anything marked private), plus one look at that provider's
-   list of models each time the engine starts. The embedded `lemond` binds loopback with a per-launch key.
+   embedded engine's requests to the one provider they chose for answers, online or on their own
+   network (a question with the few remembered sentences it needs, never anything marked private),
+   plus one look at that provider's list of models each time the engine starts. The embedded `lemond` binds loopback with a per-launch key.
 3. **No jargon in the interface.** Model, inference, token, NPU, GPU, embedding and graph appear only
    in advanced details views. See `docs/design/experience-principles.md`.
 4. **Receipts or it did not happen.** Every answer and page line cites the original it came from.

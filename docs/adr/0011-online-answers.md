@@ -45,7 +45,7 @@ not make Nocturne depend on any one company.
 | The key | After each engine start while Online answers is on, Nocturne loads the online entry, then hands the key to the engine in memory through its own cloud authentication endpoint on loopback, and confirms the engine holds it. Never argv, never the spawn environment, never a file the engine reads. Turning off, forgetting the key, Delete everything and an abandoned check clear it from the running engine at once, before the relaunch. If the engine refuses it or loses the route, nothing is sent, questions are answered on this computer, and "Try again" recovers. The key is kept in the system keychain, or in an owner-only file when there is none |
 | Reach to the provider | While Online answers is on, the engine makes one model-listing request to the provider each time it starts, a cost the owner accepted for keeping the key out of the environment. Otherwise it reaches the provider only when Nocturne sends a question or the one check question. With Online answers off it never does |
 | Requests | One non-streaming chat request per question with a short reply limit, no tools and nothing else. The check sends one fixed word-reply question and no memories |
-| Addresses | Release builds accept only `https://` addresses with a host, and refuse user names, query strings, fragments, loopback, link-local (including metadata addresses), unspecified, private network, shared, multicast, reserved, unique-local, site-local, NAT64 and 6to4 addresses, and the names `localhost`, `.local`, `.home.arpa`, `.internal`, `.ts.net` and any one-label name. Redirects are not followed, by the engine or by the app's own client |
+| Addresses | A provider may be on this computer or the person's own network (loopback, private, shared 100.64/10 where tailnets live, unique-local IPv6, and the names `localhost`, `.local`, `.home.arpa`, `.internal`, `.ts.net` and any one-label name), over `https://` or plain `http://`, with no confirmation or warning; for plain HTTP there, and only there, the engine is allowed insecure HTTP. Anywhere else takes `https://` only. Never: user names, query strings, fragments, unspecified, link-local (including metadata addresses and names), multicast, broadcast, reserved, documentation ranges, site-local, NAT64 and 6to4, and Nocturne's own ports on this computer. Redirects are not followed, by the engine or by the app's own client |
 | Logs | The engine's output goes through Nocturne's own pipe, which withholds provider error bodies (a multi-line body whole) and replaces any occurrence of the key, or of its first or last eight characters, with `[key]`. Replies are never logged |
 | Core dumps | The whole app sets `RLIMIT_CORE` to 0 at start, and on Linux is also made undumpable, so no core file of the app, the engine or its children holds the key. The limit is set on the whole app, not on the engine alone, because the workspace forbids the `unsafe` code a per-spawn hook needs |
 
@@ -63,8 +63,20 @@ bump re-checks them.
   read the engine's memory on Linux, where the engine is dumpable again after it starts.
 - Anything holding the engine's per-launch key can also replace the key the engine holds. That holder
   could already change the address, so this adds nothing beyond the first point.
-- A public name that resolves to a private address passes the address check, because Nocturne does
-  not resolve names.
+- A public name that resolves to a private address passes the address check as a public one, which
+  must use `https://`, because Nocturne does not resolve names.
+- A provider on the person's own network reached over `http://` gets the key and the questions in
+  plain text on that network. The owner chose this on 2026-11-14 so a server at home, on a tailnet or
+  on this computer works without certificates; such an address is the person's own.
+- 100.64.0.0/10 is where tailnets live, and it is also carrier-grade NAT space: on a network without
+  a tailnet, a plain `http://` provider there could be outside the person's own network, at their
+  internet provider. The owner chose to allow it without a warning.
+- A name on the person's own network (one label, `.local`, `.home.arpa`, `.internal`, `.ts.net`) is
+  looked up at the check and again before each engine start hands over the key: every address it
+  resolves to must be on this computer or the person's own network, or it counts as public and plain
+  `http://` is refused; a name that resolves into a range that is never a provider is refused. The
+  engine looks the name up again when it connects, so a change in DNS between that look-up and a
+  request is not seen. A name that does not resolve at the check keeps its class.
 - The engine's trace streams on loopback need no key. Telemetry is off, so they carry nothing.
 - The engine does not use system proxy settings (the environment is scrubbed) and trusts the TLS
   roots bundled with its HTTP library. Nocturne cannot check what the provider keeps or for how long,
