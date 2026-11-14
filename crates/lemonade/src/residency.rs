@@ -41,10 +41,12 @@ pub fn mind_context(tier: Tier) -> u32 {
 pub fn saved_options() -> Vec<(&'static str, Map<String, Value>)> {
     let mut out: Vec<(&'static str, Map<String, Value>)> = Vec::new();
     let tiers = [Tier::Large, Tier::Standard, Tier::Small, Tier::Tiny];
-    for (t, c) in tiers
-        .into_iter()
-        .flat_map(|t| tier::components(t).into_iter().map(move |c| (t, c)))
-    {
+    for (t, c) in tiers.into_iter().flat_map(|t| {
+        tier::components(t)
+            .into_iter()
+            .chain(tier::extras(t))
+            .map(move |c| (t, c))
+    }) {
         if out.iter().any(|(m, _)| *m == c.model) {
             continue;
         }
@@ -53,6 +55,9 @@ pub fn saved_options() -> Vec<(&'static str, Map<String, Value>)> {
             options.insert("evict_idle_timeout".into(), json!(secs));
         }
         match c.role {
+            ComponentRole::Recall if c.model == tier::RERANK.model => {
+                options.insert("ctx_size".into(), json!(tier::RERANK_CONTEXT));
+            }
             ComponentRole::Recall => {
                 options.insert("ctx_size".into(), json!(tier::RECALL_CONTEXT));
             }
@@ -178,6 +183,17 @@ mod tests {
         assert_eq!(recall.len(), 1);
         assert_eq!(recall[0].1["ctx_size"], tier::RECALL_CONTEXT);
         assert!(!recall[0].1.contains_key("evict_idle_timeout"));
+    }
+
+    #[test]
+    fn the_reranking_model_is_saved_once_with_its_context() {
+        let rerank: Vec<_> = saved_options()
+            .into_iter()
+            .filter(|(m, _)| *m == tier::RERANK.model)
+            .collect();
+        assert_eq!(rerank.len(), 1);
+        assert_eq!(rerank[0].1["ctx_size"], tier::RERANK_CONTEXT);
+        assert!(!rerank[0].1.contains_key("evict_idle_timeout"));
     }
 
     #[test]

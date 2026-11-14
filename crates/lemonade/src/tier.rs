@@ -41,6 +41,11 @@ pub const RERANK: Component = c(
     636_000_000,
 );
 
+/// The context the reranking model is loaded with: a question and one memory sentence at a time,
+/// far below what the engine would give it by itself. The engine raises anything smaller than
+/// 8192 to 8192.
+pub const RERANK_CONTEXT: u32 = 8192;
+
 /// Models a tier uses when they are on disk and does without otherwise. They are not part of
 /// what makes a tier installed, so a tier installed before one was added keeps working.
 pub fn extras(tier: Tier) -> Vec<Component> {
