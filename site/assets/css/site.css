@@ -465,8 +465,7 @@ figcaption,
   gap: 12px;
 }
 
-.hero-shot img,
-.feature-shot .window img {
+.hero-shot img {
   border-radius: 10px;
   box-shadow: var(--shadow);
   background: var(--sheet);
@@ -504,31 +503,52 @@ figcaption,
 
 /* In the app */
 
-.feature {
+/* The whole window, shown once. The outline marks the column the later pictures crop to; the
+   rest of the window is dimmed so the eye goes to it. */
+.frame-map {
+  margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 12px;
+}
+
+.frame-map-shot {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  background: var(--sheet);
+}
+
+.frame-map-column {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 18.125%;
+  width: 60%;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  box-shadow: 0 0 0 100vmax color-mix(in srgb, var(--bg) 52%, transparent);
+  pointer-events: none;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: 28px 56px;
+  align-items: start;
   padding-top: 36px;
   border-top: 1px solid var(--rule);
 }
 
 .feature-text {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  grid-template-areas:
-    "eyebrow body"
-    "title body"
-    "box body";
-  grid-template-rows: auto auto 1fr;
-  gap: 10px 48px;
-}
-
-.feature-text .eyebrow {
-  grid-area: eyebrow;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 440px;
 }
 
 .feature-text h3 {
-  grid-area: title;
   font-family: var(--serif);
   font-size: clamp(1.625rem, 3vw, 2rem);
   line-height: 1.15;
@@ -536,7 +556,7 @@ figcaption,
 }
 
 .feature-text p:not(.eyebrow) {
-  grid-area: body;
+  margin-top: 6px;
   font-size: 1rem;
   line-height: 1.6;
   color: var(--ink2);
@@ -546,14 +566,28 @@ figcaption,
   margin: 0;
 }
 
+.feature-shot .window img,
+.handset img {
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+  background: var(--sheet);
+}
+
+.phone-shot {
+  justify-self: center;
+  width: min(100%, 300px);
+}
+
+.handset img {
+  border-radius: 22px;
+}
+
 .feature-box {
-  grid-area: box;
-  align-self: start;
   margin-top: 18px;
 }
 
 .feature-box .box {
-  max-width: 518px;
+  max-width: 420px;
 }
 
 .feature-box .box img {
@@ -561,6 +595,12 @@ figcaption,
   height: auto;
   border-radius: 10px;
   box-shadow: var(--shadow);
+}
+
+.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
 }
 
 /* Privacy */
@@ -778,14 +818,20 @@ figcaption,
     display: none;
   }
 
-  .feature-text {
+}
+
+@media (max-width: 959px) {
+  .feature {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas:
-      "eyebrow"
-      "title"
-      "body"
-      "box";
-    grid-template-rows: auto;
+  }
+
+  .feature-text,
+  .feature-shot .window {
+    max-width: 640px;
+  }
+
+  .phone-shot {
+    justify-self: start;
   }
 }
 
@@ -803,8 +849,7 @@ figcaption,
     padding: 56px 0;
   }
 
-  /* The narrow screenshots are a phone-width window: show its top, not all of it. */
-  .feature-shot .window img,
+  /* The narrow screenshot is a phone-width window: show its top, not all of it. */
   .hero-shot img {
     max-height: 560px;
     object-fit: cover;

@@ -2,7 +2,19 @@
 // and writes them as WebP at the widths the page asks for.
 //
 //   cd ui && npx vite --mode mock --port 4173     # in another terminal
-//   node site/scripts/shots.mjs http://127.0.0.1:4173
+//   node site/scripts/shots.mjs http://127.0.0.1:4173 [phone origin]
+//
+// The phone shot needs the phone app's scripted build, served on its own. Without it the phone
+// shot is skipped:
+//
+//   cd ui && VITE_ENGINE=phone-mock PHONE_OUT_DIR=/tmp/phone npx vite build --config vite.phone.config.ts
+//   python3 -m http.server -d /tmp/phone --bind 127.0.0.1 4174
+//
+// The window is shown once, whole. The other desktop shots are its column right of the rail,
+// captured at a width where the kept-today column has moved under the page, so every one has the
+// same frame and only the page in it changes. A shot with `mark` prints where that element sits,
+// in percent of the picture; the page's tour uses those numbers to show where to look. A shot with
+// `fit` ends below its content.
 //
 // Needs the UI dependencies (Playwright) and ImageMagick (`magick`) with WebP. UI_DIR names another
 // checkout's ui/ when this one has no node_modules. CHROME_PATH points at a Chromium build when
@@ -20,25 +32,30 @@ const ui = process.env.UI_DIR ?? path.join(root, "ui");
 const { chromium } = await import(path.join(ui, "node_modules/playwright/index.mjs"));
 
 const origin = process.argv[2] ?? "http://127.0.0.1:4173";
+const phoneOrigin = process.argv[3] ?? "";
 const out = path.join(root, "site/assets/img");
 const work = mkdtempSync(path.join(tmpdir(), "nocturne-shots-"));
 
 const desktop = { width: 1280, height: 800 };
+const column = { width: 1000, height: 900 };
 const phone = { width: 390, height: 760 };
+const ASK = "What does Leo need for his trip?";
 
 // Each shot is captured in both themes. `widths` are the WebP widths written, in pixels.
 const shots = [
   { name: "page", route: "/#/today", viewport: desktop, clip: "main article", height: 625, widths: [560, 1120] },
   { name: "page-narrow", route: "/#/today", viewport: phone, widths: [390, 780] },
+  { name: "window", route: "/#/today", viewport: desktop, widths: [800, 1600] },
   { name: "keep", route: "/#/quick-capture", viewport: { width: 640, height: 220 }, box: true, widths: [560, 1120] },
-  { name: "recent", route: "/#/recent", viewport: desktop, widths: [800, 1600] },
-  { name: "recent-narrow", route: "/#/recent", viewport: phone, widths: [390, 780] },
-  { name: "ask", route: "/#/ask", viewport: desktop, ask: "What does Leo need for his trip?", widths: [800, 1600] },
-  { name: "ask-narrow", route: "/#/ask", viewport: phone, ask: "What does Leo need for his trip?", widths: [390, 780] },
-  { name: "fading", route: "/#/fading", viewport: desktop, widths: [800, 1600] },
-  { name: "fading-narrow", route: "/#/fading", viewport: phone, widths: [390, 780] },
-  { name: "away", route: "/?mockAway=on#/settings/away", viewport: desktop, widths: [800, 1600] },
-  { name: "away-narrow", route: "/?mockAway=on#/settings/away", viewport: phone, widths: [390, 780] },
+  { name: "recent", route: "/#/recent", viewport: column, clip: "column", mark: "li[class*=_row_]", widths: [768, 1536] },
+  { name: "recent-narrow", route: "/#/recent", viewport: phone, clip: "main", widths: [390, 780] },
+  { name: "ask", route: "/#/ask", viewport: column, clip: "column", ask: ASK, mark: "[class*=_receipts_]", widths: [768, 1536] },
+  { name: "ask-narrow", route: "/#/ask", viewport: phone, clip: "main", ask: ASK, widths: [390, 780] },
+  { name: "today", route: "/#/today", viewport: column, clip: "column", mark: "[class*=_line_]:has(fieldset)", widths: [768, 1536] },
+  { name: "today-narrow", route: "/#/today", viewport: phone, clip: "main", widths: [390, 780] },
+  { name: "fading", route: "/#/fading", viewport: column, clip: "column", fit: true, widths: [768, 1536] },
+  { name: "fading-narrow", route: "/#/fading", viewport: phone, clip: "main", widths: [390, 780] },
+  { name: "phone", phone: true, route: "/", viewport: { width: 390, height: 620 }, widths: [390, 780] },
 ];
 
 async function settle(page) {
@@ -56,6 +73,10 @@ const browser = await chromium.launch(
 try {
   for (const theme of ["light", "dark"]) {
     for (const shot of shots) {
+      if (shot.phone && !phoneOrigin) {
+        console.log(`skipped ${shot.name}: no phone origin`);
+        continue;
+      }
       const context = await browser.newContext({
         viewport: shot.viewport,
         deviceScaleFactor: 2,
@@ -63,7 +84,7 @@ try {
         reducedMotion: "reduce",
       });
       const page = await context.newPage();
-      await page.goto(origin + shot.route);
+      await page.goto((shot.phone ? phoneOrigin : origin) + shot.route);
       await settle(page);
       if (shot.ask) {
         const box = page.getByRole("textbox").first();
@@ -80,8 +101,31 @@ try {
         await box.click();
         await box.pressSequentially("Gran’s new number ends 4471", { delay: 15 });
       }
+      let area = null;
+      if (shot.clip === "column" || shot.clip === "main") {
+        const r = await page.locator("main").first().boundingBox();
+        area =
+          shot.clip === "column"
+            ? { x: r.x, y: 0, width: shot.viewport.width - r.x, height: shot.viewport.height }
+            : r;
+        if (shot.fit) {
+          // A short screen ends below its last sheet instead of on empty background.
+          const sheet = await page.locator("main > *").first().boundingBox();
+          area.height = Math.min(area.height, Math.ceil(sheet.y + sheet.height + 28));
+        }
+      }
+      if (shot.mark && area && theme === "light") {
+        const m = await page.locator(shot.mark).first().boundingBox();
+        const pct = (v, of) => ((v / of) * 100).toFixed(1);
+        console.log(
+          `${shot.name} mark: ${pct(m.x - area.x, area.width)} ${pct(m.y - area.y, area.height)} ` +
+            `${pct(m.width, area.width)} ${pct(m.height, area.height)}`,
+        );
+      }
       const png = path.join(work, `${shot.name}-${theme}.png`);
-      if (shot.clip) {
+      if (area) {
+        await page.screenshot({ path: png, clip: area });
+      } else if (shot.clip) {
         const r = await page.locator(shot.clip).first().boundingBox();
         await page.screenshot({
           path: png,

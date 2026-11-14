@@ -14,6 +14,7 @@ PODMAN ?= podman
 
 PORT ?= 4180
 MOCK ?= http://127.0.0.1:4173
+PHONE ?=
 BUILD := build
 DIST := dist
 
@@ -49,8 +50,8 @@ serve: ## Serve dist/ on 127.0.0.1:$(PORT) with the _headers applied
 check: ## Run axe and take screenshots of the served site (needs make serve and ../ui/node_modules)
 	node scripts/check.mjs http://127.0.0.1:$(PORT)
 
-shots: ## Recapture the app screenshots from a mock interface at $(MOCK)
-	node scripts/shots.mjs $(MOCK)
+shots: ## Recapture the app screenshots from a mock interface at $(MOCK), and the phone at $(PHONE)
+	node scripts/shots.mjs $(MOCK) $(PHONE)
 
 clean: ## Remove build output
 	rm -rf $(BUILD) $(DIST)
