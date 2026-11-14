@@ -1920,3 +1920,33 @@ fn a_move_that_could_be_either_of_two_moves_neither() {
     assert!(r.conflicts.is_empty() && r.replaced.is_empty(), "{r:?}");
     assert_eq!(all(&f).len(), 3);
 }
+
+/// Numbers that are no part of the value (an address, a room) never keep two sayings of one
+/// appointment apart.
+#[test]
+fn a_date_only_match_ignores_numbers_outside_the_value() {
+    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
+    let mut wed = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wednesday 18 November at 10:00",
+        "The dentist appointment is on Wednesday 18 November at 10:00 at 12 High Street.",
+    );
+    wed.due = Some(date("2026-11-18"));
+    let (_, id) = learn(&f.engine, "Dentist Wednesday 18 November at 10:00", wed);
+    f.clock.set_str("2026-11-12T12:00:00Z");
+    let item = keep(
+        &f.engine,
+        "Dentist Wed 18 Nov 10am, room 3, call 0161 496 0000",
+    );
+    let mut again = cand(
+        "Dentist appointment",
+        Predicate::Scheduled,
+        "Wed 18 Nov, 10am",
+        "The dentist appointment is on Wed 18 Nov at 10am in room 3, phone 0161 496 0000.",
+    );
+    again.due = Some(date("2026-11-18"));
+    let r = f.engine.apply(&item, vec![again]).unwrap();
+    assert_eq!(r.reinforced, vec![id], "{r:?}");
+    assert!(r.created.is_empty() && r.conflicts.is_empty());
+}

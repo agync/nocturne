@@ -1,7 +1,7 @@
 //! Candidates become memories: reinforcement, trust and corroboration, contradictions, history,
 //! corrections, and the entries that wait on the person.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::HashSet;
 
 use nocturne_contract::{
     EntityKind, EntityView, MemoryFilter, MemoryStatus, MemoryView, NeedsYouEntry, Span,
@@ -124,14 +124,32 @@ fn quote_says_moved(span: &Span, object: &str, date: Option<&str>) -> bool {
     })
 }
 
-/// The concrete values a phrase pins down: the days of the week, the ordinals ("first",
-/// "second"), the times of day in minutes and the other numbers it names.
+/// The concrete values a phrase pins down, by kind. Each value lists the forms it may take:
+/// "2:30" with no am or pm may be 02:30 or 14:30.
 #[derive(Default)]
 struct Values {
-    weekdays: BTreeSet<&'static str>,
-    ordinals: BTreeSet<usize>,
-    times: BTreeSet<u16>,
-    numbers: BTreeSet<String>,
+    weekdays: Vec<Vec<String>>,
+    months: Vec<Vec<String>>,
+    ordinals: Vec<Vec<String>>,
+    times: Vec<Vec<String>>,
+    numbers: Vec<Vec<String>>,
+}
+
+#[derive(Clone, Copy)]
+enum ValueKind {
+    Weekday,
+    Month,
+    Ordinal,
+    Time,
+    Number,
+}
+
+/// One word read as a value. A weak one ("sat", "first", "may") counts only next to a date or
+/// time word: "Sat 14 November", "first Tuesday", but not "the sat nav" or "first prize".
+struct Read {
+    kind: ValueKind,
+    forms: Vec<String>,
+    weak: bool,
 }
 
 const WEEKDAYS: [(&str, &[&str]); 7] = [
@@ -147,32 +165,68 @@ const WEEKDAYS: [(&str, &[&str]); 7] = [
     ("sunday", &["sun", "sunday", "sundays"]),
 ];
 
+const MONTH_FORMS: [&[&str]; 12] = [
+    &["jan", "january"],
+    &["feb", "february"],
+    &["mar", "march"],
+    &["apr", "april"],
+    &["may"],
+    &["jun", "june"],
+    &["jul", "july"],
+    &["aug", "august"],
+    &["sep", "sept", "september"],
+    &["oct", "october"],
+    &["nov", "november"],
+    &["dec", "december"],
+];
+
 const ORDINALS: [&str; 5] = ["first", "second", "third", "fourth", "fifth"];
 
-/// Lowercase words, keeping a time such as "14:30" or "14.30" whole.
-fn value_tokens(text: &str) -> Vec<String> {
+/// Words that are also everyday words, so they are values only in a date or time phrase.
+const WEAK_WORDS: [&str; 7] = ["sat", "sun", "wed", "first", "second", "may", "march"];
+
+/// Words that say a number is money: "30 pounds".
+const MONEY_WORDS: [&str; 9] = [
+    "pound", "pounds", "pence", "p", "quid", "euro", "euros", "dollar", "dollars",
+];
+
+/// A word of the phrase. `money` when a currency sign comes right before it: "£12.50".
+struct Token {
+    text: String,
+    money: bool,
+}
+
+/// Lowercase words, keeping "14:30", "5.9" and "18/11/2026" whole.
+fn value_tokens(text: &str) -> Vec<Token> {
     let chars: Vec<char> = text.to_lowercase().chars().collect();
     let mut out = Vec::new();
     let mut cur = String::new();
+    let mut money = false;
     for (i, &ch) in chars.iter().enumerate() {
-        let joins = matches!(ch, ':' | '.')
+        let joins = matches!(ch, ':' | '.' | '/' | '-')
             && cur.ends_with(|c: char| c.is_ascii_digit())
             && chars.get(i + 1).is_some_and(char::is_ascii_digit);
         if ch.is_alphanumeric() || joins {
+            if cur.is_empty() {
+                money = i > 0 && matches!(chars[i - 1], '£' | '$' | '€');
+            }
             cur.push(ch);
         } else if !cur.is_empty() {
-            out.push(std::mem::take(&mut cur));
+            out.push(Token {
+                text: std::mem::take(&mut cur),
+                money,
+            });
         }
     }
     if !cur.is_empty() {
-        out.push(cur);
+        out.push(Token { text: cur, money });
     }
     out
 }
 
-/// Minutes into the day for "14:30", "2.30" with pm, or "9" with am. A bare number without
-/// am or pm is not a time.
-fn clock_minutes(num: &str, pm: Option<bool>) -> Option<u16> {
+/// The forms of a clock time, in minutes into the day: "14:30" is one, "2:30" with no am or pm
+/// is 02:30 or 14:30 (an hour from 1 to 7 is ambiguous), "9" is a time only with am or pm.
+fn clock_forms(num: &str, pm: Option<bool>) -> Option<Vec<String>> {
     let (h, m) = match num.split_once([':', '.']) {
         Some((h, m)) if m.len() == 2 => (h.parse::<u16>().ok()?, m.parse::<u16>().ok()?),
         Some(_) => return None,
@@ -182,54 +236,115 @@ fn clock_minutes(num: &str, pm: Option<bool>) -> Option<u16> {
     if h >= 24 || m >= 60 || (pm.is_some() && !(1..=12).contains(&h)) {
         return None;
     }
-    let h = match pm {
-        Some(true) if h < 12 => h + 12,
-        Some(false) if h == 12 => 0,
-        _ => h,
+    let hours = match pm {
+        Some(true) if h < 12 => vec![h + 12],
+        Some(false) if h == 12 => vec![0],
+        None if (1..=7).contains(&h) => vec![h, h + 12],
+        _ => vec![h],
     };
-    Some(h * 60 + m)
+    Some(hours.iter().map(|h| (h * 60 + m).to_string()).collect())
 }
 
-fn values_of(text: &str) -> Values {
+fn read_token(tokens: &[Token], i: usize) -> Option<Read> {
+    let t = tokens[i].text.as_str();
+    let next = tokens.get(i + 1).map(|n| n.text.as_str());
+    let read = |kind, form: String| {
+        Some(Read {
+            kind,
+            forms: vec![form],
+            weak: WEAK_WORDS.contains(&t),
+        })
+    };
+    let split = t
+        .find(|c: char| !(c.is_ascii_digit() || matches!(c, ':' | '.' | '/' | '-')))
+        .unwrap_or(t.len());
+    let (num, suffix) = t.split_at(split);
+    if num.is_empty() {
+        if let Some((day, _)) = WEEKDAYS.iter().find(|(_, forms)| forms.contains(&t)) {
+            return read(ValueKind::Weekday, (*day).to_string());
+        }
+        if let Some(m) = MONTH_FORMS.iter().position(|forms| forms.contains(&t)) {
+            return read(ValueKind::Month, (m + 1).to_string());
+        }
+        if let Some(n) = ORDINALS.iter().position(|o| *o == t) {
+            return read(ValueKind::Ordinal, (n + 1).to_string());
+        }
+        return match t {
+            "noon" | "midday" => read(ValueKind::Time, (12 * 60).to_string()),
+            "midnight" => read(ValueKind::Time, "0".to_string()),
+            _ => None,
+        };
+    }
+    let separators = num.matches([':', '.', '/', '-']).count();
+    let money = tokens[i].money || next.is_some_and(|n| MONEY_WORDS.contains(&n));
+    if money || separators > 1 || num.contains(['/', '-']) {
+        return None;
+    }
     let meridiem = |s: &str| match s {
         "am" => Some(false),
         "pm" => Some(true),
         _ => None,
     };
+    let pm = if suffix.is_empty() {
+        next.and_then(meridiem)
+    } else {
+        meridiem(suffix)
+    };
+    if let Some(forms) = clock_forms(num, pm) {
+        return Some(Read {
+            kind: ValueKind::Time,
+            forms,
+            weak: false,
+        });
+    }
+    if num.contains(':') {
+        return None;
+    }
+    let n = num.trim_start_matches('0');
+    let n = if n.is_empty() || n.starts_with('.') {
+        format!("0{n}")
+    } else {
+        n.to_string()
+    };
+    match suffix {
+        "st" | "nd" | "rd" | "th" if matches!(n.as_str(), "1" | "2" | "3" | "4" | "5") => {
+            read(ValueKind::Ordinal, n)
+        }
+        "" | "st" | "nd" | "rd" | "th" => read(ValueKind::Number, n),
+        _ => None,
+    }
+}
+
+fn values_of(text: &str) -> Values {
     let tokens = value_tokens(text);
+    let reads: Vec<Option<Read>> = (0..tokens.len()).map(|i| read_token(&tokens, i)).collect();
+    let dated = |j: usize| {
+        reads[j].as_ref().is_some_and(|r| !r.weak)
+            || matches!(tokens[j].text.as_str(), "month" | "week")
+    };
+    // The nearest word on each side, past "of" and "the": "the first of the month".
+    let near = |i: usize| {
+        let filler = |j: usize| matches!(tokens[j].text.as_str(), "of" | "the");
+        let before = (0..i).rev().find(|&j| !filler(j));
+        let after = (i + 1..tokens.len()).find(|&j| !filler(j));
+        before.is_some_and(dated) || after.is_some_and(dated)
+    };
     let mut v = Values::default();
-    for (i, t) in tokens.iter().enumerate() {
-        let split = t
-            .find(|c: char| !(c.is_ascii_digit() || c == ':' || c == '.'))
-            .unwrap_or(t.len());
-        let (num, suffix) = t.split_at(split);
-        if num.is_empty() {
-            if let Some((day, _)) = WEEKDAYS
-                .iter()
-                .find(|(_, forms)| forms.contains(&t.as_str()))
-            {
-                v.weekdays.insert(day);
-            } else if let Some(n) = ORDINALS.iter().position(|o| o == t) {
-                v.ordinals.insert(n + 1);
-            } else if matches!(t.as_str(), "noon" | "midday") {
-                v.times.insert(12 * 60);
-            } else if t == "midnight" {
-                v.times.insert(0);
-            }
+    for (i, read) in reads.iter().enumerate() {
+        let Some(read) = read else {
+            continue;
+        };
+        if read.weak && !near(i) {
             continue;
         }
-        let pm = if suffix.is_empty() {
-            tokens.get(i + 1).and_then(|n| meridiem(n))
-        } else {
-            meridiem(suffix)
+        let into = match read.kind {
+            ValueKind::Weekday => &mut v.weekdays,
+            ValueKind::Month => &mut v.months,
+            ValueKind::Ordinal => &mut v.ordinals,
+            ValueKind::Time => &mut v.times,
+            ValueKind::Number => &mut v.numbers,
         };
-        if let Some(minutes) = clock_minutes(num, pm) {
-            v.times.insert(minutes);
-        } else if matches!(suffix, "" | "st" | "nd" | "rd" | "th") {
-            let n = num.trim_start_matches('0');
-            v.numbers
-                .insert(if n.is_empty() { "0" } else { n }.to_string());
-        }
+        into.push(read.forms.clone());
     }
     v
 }
@@ -237,20 +352,31 @@ fn values_of(text: &str) -> Values {
 /// Whether two phrases name different values of one kind, each one the other lacks: "first
 /// Tuesday" and "second Wednesday", "10:00" and "14:30". Saying less is not disagreeing:
 /// "18 November" and "Wednesday 18 November at 10:00" agree.
-fn values_disagree(a: &str, b: &str) -> bool {
-    fn apart<T: Ord>(a: &BTreeSet<T>, b: &BTreeSet<T>) -> bool {
-        !a.is_subset(b) && !b.is_subset(a)
+fn values_apart(a: &Values, b: &Values) -> bool {
+    fn lacks(a: &[Vec<String>], b: &[Vec<String>]) -> bool {
+        a.iter()
+            .any(|x| !b.iter().any(|y| x.iter().any(|f| y.contains(f))))
     }
-    let (a, b) = (values_of(a), values_of(b));
+    fn apart(a: &[Vec<String>], b: &[Vec<String>]) -> bool {
+        lacks(a, b) && lacks(b, a)
+    }
     apart(&a.weekdays, &b.weekdays)
+        || apart(&a.months, &b.months)
         || apart(&a.ordinals, &b.ordinals)
         || apart(&a.times, &b.times)
         || apart(&a.numbers, &b.numbers)
 }
 
-/// Whether a candidate and a memory say different things, in their values or their sentences.
-fn says_otherwise(c: &Candidate, object: &str, sentence: &str) -> bool {
-    values_disagree(&c.object, object) || values_disagree(&c.sentence, sentence)
+#[cfg(test)]
+fn values_disagree(a: &str, b: &str) -> bool {
+    values_apart(&values_of(a), &values_of(b))
+}
+
+/// Whether a candidate names other values than a memory: another day, month, ordinal, time or
+/// number in its object. Sentences are not compared: they carry addresses, rooms and phone
+/// numbers that are no part of the value.
+fn says_otherwise(c: &Values, object: &str) -> bool {
+    values_apart(c, &values_of(object))
 }
 
 /// Words that name nothing on their own: articles, pronouns, titles, small joining words.
@@ -402,7 +528,7 @@ fn drifted_appointments(
     let mut linked = Vec::new();
     let mut subjects = HashSet::new();
     for (id, subject, key, object, sentence) in others {
-        if current.iter().any(|m| m.id == id) || !says_otherwise(c, &object, &sentence) {
+        if current.iter().any(|m| m.id == id) || !says_otherwise(&values_of(&c.object), &object) {
             continue;
         }
         if about_other_subject(tx, &subject, &sentence, &c.subject, &c.sentence)?
@@ -1043,11 +1169,12 @@ fn apply_one(
         params![subject_key, predicate],
     )?;
     current.retain(|m| m.subject_key == subject_key || relinked.contains(m.id.as_str()));
+    let values = values_of(&c.object);
     let same_date = |e: &MemRow| {
         matches!(predicate.as_str(), "due" | "scheduled")
             && due.is_some()
             && e.due == due
-            && !says_otherwise(c, &e.object, &e.sentence)
+            && !says_otherwise(&values, &e.object)
     };
     // A date-only match (same due date, different words) is a convenience for trusted items
     // agreeing with settled memories. It never matches an unconfirmed memory, so it can never
@@ -1954,6 +2081,27 @@ mod tests {
         assert!(values_disagree("Wednesday at 10:00", "Wednesday at 14:30"));
         assert!(values_disagree("bay 7", "bay 9"));
         assert!(values_disagree("Fridays", "Thursday evenings"));
+        assert!(values_disagree("1st Tuesday", "2nd Tuesday"));
+        assert!(values_disagree("Sat 14 November", "Sun 15 November"));
+        assert!(values_disagree("18 November", "18 December"));
+        assert!(values_disagree("May 3", "June 3"));
+        assert!(values_disagree("2:30am", "14:30"));
+        assert!(values_disagree(
+            "the first of the month",
+            "the second of the month"
+        ));
+    }
+
+    #[test]
+    fn everyday_words_dates_and_money_are_no_values() {
+        assert!(!values_disagree("the sat nav", "the sun room"));
+        assert!(!values_disagree("first prize", "second opinion"));
+        assert!(!values_disagree("you may go", "in June"));
+        assert!(!values_disagree("£12.50", "12:50"));
+        assert!(!values_disagree("30 pounds", "45"));
+        assert!(!values_disagree("18/11/2026", "19/11/2026"));
+        assert!(!values_disagree("18.11.2026", "19.11.2026"));
+        assert!(!values_disagree("18-11-2026", "4"));
     }
 
     #[test]
@@ -1963,6 +2111,9 @@ mod tests {
             "Wed 18 Nov, 10am"
         ));
         assert!(!values_disagree("2:30pm", "14:30"));
+        assert!(!values_disagree("2:30", "14:30"));
+        assert!(!values_disagree("2:30", "2:30am"));
+        assert!(!values_disagree("1st Tuesday", "first Tuesday"));
         assert!(!values_disagree("14.30", "14:30"));
         assert!(!values_disagree("12 noon", "midday"));
         assert!(!values_disagree(
