@@ -13,6 +13,12 @@
 //! `load-oom`, `load-error`, `ignore-term` (SIGTERM does nothing; only SIGKILL ends it).
 //! `POST /fake/crash` kills it on demand. `POST /v1/delete` removes a model's files, as the real
 //! engine does.
+//!
+//! Online answers: `POST /v1/cloud/auth` keeps a provider's key in memory and, like the real
+//! engine, reads the provider's list of models once with it, but only from a stand-in on
+//! `http://127.0.0.1`, so no test reaches the network; `DELETE /v1/cloud/auth/{provider}` forgets
+//! it. `user.nocturne-online` loads from the static row and its chats go to the provider with that
+//! key. Mode `cloud-auth-fail` makes the key request fail.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -57,6 +63,7 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
 ];
 
 const SCALE: f64 = 5000.0;
+const ONLINE_MODEL: &str = "user.nocturne-online";
 const BACKEND_BYTES: u64 = 100_000;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -94,6 +101,10 @@ struct Inner {
     conflicts: u64,
     /// Downloads that have already stopped on their own.
     self_paused: Vec<String>,
+    /// The provider key handed over with `POST /v1/cloud/auth`, in memory only.
+    cloud_key: Option<String>,
+    /// `user.nocturne-online` is loaded.
+    cloud_loaded: bool,
 }
 
 struct App {
@@ -103,6 +114,7 @@ struct App {
     ws_port: u16,
     modes: RwLock<HashMap<String, String>>,
     cache: PathBuf,
+    config_dir: PathBuf,
     models_dir: String,
     sleeper: Mutex<Option<std::process::Child>>,
     leak: bool,
@@ -457,6 +469,7 @@ async fn main() {
         crash_ms: Mutex::new(None),
         flaked: AtomicBool::new(false),
         cache,
+        config_dir,
         models_dir,
         inner: Mutex::new(inner),
     });
@@ -498,6 +511,11 @@ async fn main() {
         .route("/downloads/control", post(control))
         .route("/delete", post(delete))
         .route("/load", post(load))
+        .route("/cloud/auth", post(cloud_auth))
+        .route(
+            "/cloud/auth/{provider}",
+            axum::routing::delete(cloud_forget),
+        )
         .route("/unload", post(unload))
         .route("/chat/completions", post(chat))
         .route("/embeddings", post(embeddings))
@@ -554,11 +572,15 @@ async fn guard(State(app): State<Shared>, req: Request, next: Next) -> Response 
         .await
         .unwrap_or_default();
     if !is_fake {
-        let body_json = if is_json {
+        let mut body_json = if is_json {
             serde_json::from_slice::<Value>(&bytes).ok()
         } else {
             None
         };
+        // The provider key is never kept, not even in this fake's own record.
+        if let Some(b) = body_json.as_mut().filter(|b| b.get("api_key").is_some()) {
+            b["api_key"] = json!("[key]");
+        }
         app.inner().log.push(json!({
             "method": method,
             "path": path,
@@ -609,12 +631,22 @@ async fn health(State(app): State<Shared>) -> Json<Value> {
             std::process::exit(1);
         });
     }
-    let loaded = app.inner().loaded.clone();
+    let (loaded, cloud_loaded) = {
+        let inner = app.inner();
+        (inner.loaded.clone(), inner.cloud_loaded)
+    };
+    let mut all: Vec<Value> = loaded
+        .iter()
+        .map(|m| json!({"model_name": m, "type": "llm"}))
+        .collect();
+    if cloud_loaded {
+        all.push(json!({"model_name": ONLINE_MODEL, "type": "llm", "recipe": "cloud"}));
+    }
     Json(json!({
         "status": "ok",
         "version": "fake-1.0",
         "model_loaded": loaded,
-        "all_models_loaded": loaded.iter().map(|m| json!({"model_name": m, "type": "llm"})).collect::<Vec<_>>(),
+        "all_models_loaded": all,
         "websocket_port": if app.flag("bad-ws-port") { app.ws_port.wrapping_add(1) } else { app.ws_port },
         "max_models": {"llm": 1, "embedding": 1},
     }))
@@ -653,8 +685,24 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
             .collect();
         json!({"backends": map})
     };
+    let providers: Vec<Value> = inner
+        .config
+        .get("cloud_providers")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .map(|p| {
+            json!({
+                "name": p["name"],
+                "base_url": p["base_url"],
+                "env_var_set": false,
+                "runtime_key_set": inner.cloud_key.is_some(),
+            })
+        })
+        .collect();
     Json(json!({
         "OS Version": "Fake",
+        "cloud": {"providers": providers},
         "devices": {"amd_gpu": amd_gpu, "amd_npu": {"available": false}, "cpu": {"available": true}},
         "model_storage": {
             "free_bytes": app.mode_u64("free-bytes").unwrap_or(5_000_000_000_000),
@@ -843,6 +891,9 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     if app.flag("load-error") {
         return err(500, "model_load_error", "backend did not start");
     }
+    if name == ONLINE_MODEL {
+        return load_online(&app);
+    }
     let mut inner = app.inner();
     app.tick(&mut inner);
     if !CATALOG.iter().any(|m| m.0 == name) {
@@ -858,9 +909,154 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
 
 async fn unload(State(app): State<Shared>, body: Option<Json<Value>>) -> Json<Value> {
     let mut inner = app.inner();
-    let _ = body;
-    inner.loaded = None;
+    match body.as_ref().and_then(|b| b["model_name"].as_str()) {
+        Some(ONLINE_MODEL) => inner.cloud_loaded = false,
+        _ => inner.loaded = None,
+    }
     Json(json!({"status": "success"}))
+}
+
+/// The provider entry `config.json` gave this launch for `name`.
+fn provider_entry(app: &App, name: &str) -> Option<Value> {
+    app.inner()
+        .config
+        .get("cloud_providers")
+        .and_then(Value::as_array)
+        .and_then(|a| a.iter().find(|p| p["name"] == name).cloned())
+}
+
+/// Loads the online model from the static row in `user_models.json`, as the real engine does.
+fn load_online(app: &App) -> Response {
+    let row = std::fs::read(app.config_dir.join("user_models.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .map(|v| v["nocturne-online"].clone())
+        .unwrap_or(Value::Null);
+    let provider = row["cloud_provider"].as_str().unwrap_or("");
+    if row["recipe"] != "cloud" || provider_entry(app, provider).is_none() {
+        return err(404, "model_not_found", "model is not registered");
+    }
+    app.inner().cloud_loaded = true;
+    Json(json!({"status": "success", "model_name": ONLINE_MODEL, "recipe": "cloud"}))
+        .into_response()
+}
+
+async fn cloud_auth(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    if app.flag("cloud-auth-fail") {
+        return err(500, "server_error", "the key could not be stored");
+    }
+    let provider = body["provider"].as_str().unwrap_or("").to_string();
+    let Some(entry) = provider_entry(&app, &provider) else {
+        return err(404, "", "Cloud provider is not installed");
+    };
+    let Some(key) = body["api_key"].as_str().filter(|k| !k.is_empty()) else {
+        return err(400, "invalid_request_error", "api_key is required");
+    };
+    let key = key.to_string();
+    app.inner().cloud_key = Some(key.clone());
+    let base = entry["base_url"]
+        .as_str()
+        .unwrap_or("")
+        .trim_end_matches('/');
+    let mut listed = 0;
+    if base.starts_with("http://127.0.0.1:")
+        && let Ok(http) = reqwest::Client::builder().no_proxy().build()
+        && let Ok(r) = http
+            .get(format!("{base}/models"))
+            .bearer_auth(&key)
+            .timeout(Duration::from_secs(15))
+            .send()
+            .await
+        && r.status().is_success()
+        && let Ok(v) = r.json::<Value>().await
+    {
+        listed = v["data"].as_array().map_or(0, Vec::len);
+    }
+    Json(json!({
+        "provider": provider,
+        "allow_insecure_http": entry["allow_insecure_http"],
+        "auth_state": {"env_var_set": false, "runtime_key_set": true},
+        "models_discovered": listed,
+    }))
+    .into_response()
+}
+
+async fn cloud_forget(
+    State(app): State<Shared>,
+    axum::extract::Path(provider): axum::extract::Path<String>,
+) -> Json<Value> {
+    let cleared = app.inner().cloud_key.take().is_some();
+    Json(json!({
+        "provider": provider,
+        "cleared_runtime_key": cleared,
+        "auth_state": {"env_var_set": false, "runtime_key_set": false},
+    }))
+}
+
+/// A chat to the online model goes to the provider with the key held in memory, non-streaming.
+async fn chat_online(app: &App, body: &Value) -> Response {
+    let (loaded, key) = {
+        let inner = app.inner();
+        (inner.cloud_loaded, inner.cloud_key.clone())
+    };
+    if !loaded {
+        return err(404, "model_not_found", "model is not registered");
+    }
+    let Some(key) = key else {
+        return err(
+            500,
+            "backend_error",
+            "No API key for cloud provider 'nocturne_online'",
+        );
+    };
+    let entry = provider_entry(app, "nocturne_online").unwrap_or(Value::Null);
+    let base = entry["base_url"]
+        .as_str()
+        .unwrap_or("")
+        .trim_end_matches('/');
+    if !base.starts_with("http://127.0.0.1:") {
+        return err(
+            502,
+            "backend_error",
+            "this fake reaches stand-ins on loopback only",
+        );
+    }
+    let model = std::fs::read(app.config_dir.join("user_models.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+        .and_then(|v| {
+            v["nocturne-online"]["checkpoint"]
+                .as_str()
+                .map(String::from)
+        })
+        .unwrap_or_default();
+    let mut upstream = body.clone();
+    upstream["model"] = json!(model);
+    let Ok(http) = reqwest::Client::builder().no_proxy().build() else {
+        return err(500, "backend_error", "no http client");
+    };
+    match http
+        .post(format!("{base}/chat/completions"))
+        .bearer_auth(&key)
+        .json(&upstream)
+        .send()
+        .await
+    {
+        Ok(r) => {
+            let status = r.status().as_u16();
+            let v = r.json::<Value>().await.unwrap_or(Value::Null);
+            (
+                StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_GATEWAY),
+                Json(v),
+            )
+                .into_response()
+        }
+        Err(_) => err(
+            502,
+            "backend_error",
+            "cloud request failed: CURL error: Couldn't connect",
+        ),
+    }
 }
 
 fn default_chat_content(body: &Value) -> String {
@@ -880,6 +1076,9 @@ fn default_chat_content(body: &Value) -> String {
 }
 
 async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    if body["model"] == ONLINE_MODEL {
+        return chat_online(&app, &body).await;
+    }
     app.touch_model(body["model"].as_str().unwrap_or(""));
     let scripted = app.inner().script.pop_front();
     let spec = scripted.unwrap_or_else(|| json!({"content": default_chat_content(&body)}));

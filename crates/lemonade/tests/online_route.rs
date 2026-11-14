@@ -11,7 +11,8 @@ use nocturne_engine::OnlineFailure;
 use nocturne_lemonade::client::{ChatRequest, Message};
 use nocturne_lemonade::logpipe::{self, Redactor};
 use nocturne_lemonade::online::{
-    self, CloudRoute, KEY_ENV, OnlineKey, PROVIDER, ROW, UrlProblem, classify, validate_url,
+    self, CloudRoute, KEY_ENV, MODEL_ID, OnlineKey, PROVIDER, ROW, UrlProblem, classify,
+    validate_url,
 };
 use nocturne_lemonade::{Dirs, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
@@ -67,13 +68,52 @@ async fn engine_env(sup: &Supervisor) -> Value {
         .unwrap()
 }
 
+/// Whether the running engine holds a provider key in memory, and whether the online model is
+/// loaded.
+async fn engine_holds(sup: &Supervisor) -> (bool, bool) {
+    let admin = sup.admin();
+    let health = admin.health().await.unwrap();
+    let loaded = health
+        .all_models_loaded
+        .iter()
+        .any(|m| m.model_name == MODEL_ID);
+    let endpoint = sup.client().endpoint().unwrap();
+    let info: Value = reqwest::Client::new()
+        .get(format!("http://127.0.0.1:{}/v1/system-info", endpoint.port))
+        .bearer_auth(&endpoint.key)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let key = info["cloud"]["providers"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .any(|p| p["runtime_key_set"] == true);
+    (key, loaded)
+}
+
+/// The key is in neither the engine's environment nor its process record.
+async fn assert_key_not_in_environment(sup: &Supervisor) {
+    let env = engine_env(sup).await;
+    assert!(env.get(KEY_ENV).is_none());
+    assert!(!env.to_string().contains(KEY));
+    #[cfg(target_os = "linux")]
+    {
+        let environ = std::fs::read(format!("/proc/{}/environ", sup.pid().unwrap())).unwrap();
+        assert!(!String::from_utf8_lossy(&environ).contains(KEY));
+    }
+}
+
 /// Off: no provider, no row, no key, and nothing in the environment that names a proxy.
 async fn assert_off(sup: &Supervisor, dirs: &Dirs) {
     assert_eq!(config(dirs)["cloud_providers"], json!([]));
     assert!(rows(dirs).get(ROW).is_none());
-    let env = engine_env(sup).await;
-    assert!(env.get(KEY_ENV).is_none());
-    assert!(!env.to_string().contains(KEY));
+    assert_key_not_in_environment(sup).await;
+    assert_eq!(engine_holds(sup).await, (false, false));
+    assert!(!sup.control().route_taken());
 }
 
 #[tokio::test]
@@ -87,7 +127,7 @@ async fn off_launch_has_no_provider_row_or_key() {
 }
 
 #[tokio::test]
-async fn on_launch_writes_one_entry_row_and_env_key() {
+async fn on_launch_writes_one_entry_and_row_and_hands_the_key_over() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
     std::fs::create_dir_all(dirs.config()).unwrap();
@@ -114,8 +154,9 @@ async fn on_launch_writes_one_entry_row_and_env_key() {
                "labels": ["chat"], "suggested": false})
     );
     assert_eq!(rows["mine"]["recipe"], "llamacpp", "other rows are kept");
-    let env = engine_env(&sup).await;
-    assert_eq!(env[KEY_ENV], KEY);
+    assert_key_not_in_environment(&sup).await;
+    assert_eq!(engine_holds(&sup).await, (true, true));
+    assert!(sup.control().route_taken());
     sup.shutdown().await.unwrap();
 }
 
@@ -140,8 +181,9 @@ async fn key_never_in_argv_or_config_or_row() {
     sup.shutdown().await.unwrap();
 }
 
+/// With a route, the engine's environment names no proxy and holds only the launch's two keys.
 #[tokio::test]
-async fn env_has_no_proxy_variables() {
+async fn env_has_no_proxy_variables_or_provider_key() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
     let sup = start(&dirs, Some(route())).await;
@@ -159,14 +201,8 @@ async fn env_has_no_proxy_variables() {
         .filter(|n| n.starts_with("LEMONADE_"))
         .collect();
     lemonade.sort_unstable();
-    assert_eq!(
-        lemonade,
-        [
-            "LEMONADE_ADMIN_API_KEY",
-            "LEMONADE_API_KEY",
-            "LEMONADE_NOCTURNE_ONLINE_API_KEY"
-        ]
-    );
+    assert_eq!(lemonade, ["LEMONADE_ADMIN_API_KEY", "LEMONADE_API_KEY"]);
+    assert!(sup.control().route_taken());
     sup.shutdown().await.unwrap();
 }
 
@@ -211,7 +247,7 @@ async fn turn_off_relaunches_without_route() {
     let control = sup.control();
     control.set_cloud(Some(route())).await.unwrap();
     assert!(control.has_cloud());
-    assert_eq!(engine_env(&sup).await[KEY_ENV], KEY);
+    assert_eq!(engine_holds(&sup).await, (true, true));
     control.set_cloud(None).await.unwrap();
     assert!(!control.has_cloud());
     assert_off(&sup, &dirs).await;
@@ -336,7 +372,7 @@ async fn relaunches_during_a_launch_wait_and_the_last_wins() {
         assert!(ready(&sup.state().borrow()), "the engine runs");
         assert_eq!(control.has_cloud(), with_route);
         if with_route {
-            assert_eq!(engine_env(&sup).await[KEY_ENV], KEY);
+            assert_eq!(engine_holds(&sup).await, (true, true));
             assert_eq!(config(&dirs)["cloud_providers"][0]["name"], PROVIDER);
         } else {
             assert_off(&sup, &dirs).await;
@@ -747,29 +783,31 @@ async fn log_file_owner_only_and_rotated() {
     }
 }
 
-/// The S1a probe, kept: the real pinned engine calls the static row with `offline` true, and
-/// the stand-in sees exactly the body Nocturne sent. Run with `NOCTURNE_LEMOND` naming a bundle
-/// folder and `NOCTURNE_FAKE_PROVIDER_PORT` a stand-in already listening on loopback.
+/// The route B probe, kept: the real pinned engine runs without the key in its environment,
+/// takes it at run time, reads the provider's list exactly once, and serves the static row with
+/// `offline` true; the stand-in sees exactly the body Nocturne sent. Run with
+/// `NOCTURNE_LEMOND` naming a bundle folder.
 #[cfg(feature = "online-stand-in")]
 #[tokio::test]
-#[ignore = "needs the real engine (NOCTURNE_LEMOND) and a stand-in"]
-async fn real_engine_calls_the_static_row_offline() {
+#[ignore = "needs the real engine (NOCTURNE_LEMOND)"]
+async fn real_engine_takes_the_key_at_run_time() {
     let bundle = std::path::PathBuf::from(std::env::var("NOCTURNE_LEMOND").unwrap());
-    let port: u16 = std::env::var("NOCTURNE_FAKE_PROVIDER_PORT")
-        .unwrap()
-        .parse()
-        .unwrap();
+    let provider = Provider::start();
+    let port = provider.port;
     let tmp = tempfile::tempdir().unwrap();
     let dirs = Dirs::new(bundle, tmp.path().join("root"));
-    let route = CloudRoute::stand_in(
-        &format!("http://127.0.0.1:{port}/v1"),
-        "stand-in-model".into(),
-        OnlineKey::new(KEY.into()),
+    let sup = Supervisor::start_with(
+        dirs.clone(),
+        SupervisorOptions::default(),
+        Some(stand_in_route(port)),
     )
+    .await
     .unwrap();
-    let sup = Supervisor::start_with(dirs.clone(), SupervisorOptions::default(), Some(route))
-        .await
-        .unwrap();
+    assert!(sup.control().route_taken());
+    assert_eq!(provider.listings().await, 1, "one list at launch");
+    let environ = std::fs::read(format!("/proc/{}/environ", sup.pid().unwrap())).unwrap();
+    assert!(!String::from_utf8_lossy(&environ).contains(KEY));
+    assert!(!String::from_utf8_lossy(&environ).contains(KEY_ENV));
     let mind = nocturne_lemonade::mind::online::OnlineMind::new(
         sup.client(),
         Arc::new(|ids: &[String]| vec![true; ids.len()]),
@@ -801,21 +839,196 @@ async fn real_engine_calls_the_static_row_offline() {
         .unwrap();
     let (tx, _rx) = tokio::sync::mpsc::channel(4);
     assert!(mind.answer("again?", &[fact], tx).await.is_err());
-    let seen: Vec<Value> = reqwest::Client::new()
-        .get(format!("http://127.0.0.1:{port}/fake/requests"))
-        .send()
-        .await
-        .unwrap()
-        .json()
-        .await
-        .unwrap();
+    let seen = provider.requests().await;
     assert!(seen.iter().all(|r| r["path"] != "/v1/elsewhere"));
     assert!(
-        seen.iter().all(|r| r["path"] != "/v1/models"),
-        "no discovery"
+        seen.iter()
+            .all(|r| r["headers"]["authorization"] == format!("Bearer {KEY}"))
     );
+    // Turning off: the engine forgets the key, and the engine after it has none.
+    sup.control().set_cloud(None).await.unwrap();
+    assert!(!sup.control().route_taken());
+    assert_eq!(provider.listings().await, 1, "no list without the route");
     let log = std::fs::read_to_string(dirs.logs().join("lemond.log")).unwrap_or_default();
     assert!(!log.contains(KEY));
+    sup.shutdown().await.unwrap();
+}
+
+/// A stand-in provider on loopback for these tests, stopped when dropped.
+#[cfg(feature = "online-stand-in")]
+struct Provider {
+    child: std::process::Child,
+    port: u16,
+}
+
+#[cfg(feature = "online-stand-in")]
+impl Drop for Provider {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+#[cfg(feature = "online-stand-in")]
+impl Provider {
+    fn start() -> Provider {
+        use std::io::BufRead;
+        let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_fake-provider"))
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        let mut line = String::new();
+        std::io::BufReader::new(child.stdout.take().unwrap())
+            .read_line(&mut line)
+            .unwrap();
+        let port = line.trim().strip_prefix("ready ").unwrap().parse().unwrap();
+        Provider { child, port }
+    }
+
+    async fn requests(&self) -> Vec<Value> {
+        reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{}/fake/requests", self.port))
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap()
+    }
+
+    /// Requests for the provider's list of models.
+    async fn listings(&self) -> usize {
+        self.requests()
+            .await
+            .iter()
+            .filter(|r| r["path"] == "/v1/models")
+            .count()
+    }
+}
+
+#[cfg(feature = "online-stand-in")]
+fn stand_in_route(port: u16) -> CloudRoute {
+    CloudRoute::stand_in(
+        &format!("http://127.0.0.1:{port}/v1"),
+        "stand-in-model".into(),
+        OnlineKey::new(KEY.into()),
+    )
+    .unwrap()
+}
+
+/// The engine reads the provider's list once per launch with the route, with the key it holds
+/// in memory, and never in a launch without the route: off, or the download window.
+#[cfg(feature = "online-stand-in")]
+#[tokio::test]
+async fn one_listing_per_launch_with_a_route_and_none_otherwise() {
+    let provider = Provider::start();
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let control = sup.control();
+    assert_eq!(provider.listings().await, 0, "none while off");
+    control
+        .set_cloud(Some(stand_in_route(provider.port)))
+        .await
+        .unwrap();
+    assert!(control.route_taken());
+    assert_eq!(provider.listings().await, 1);
+    let ask = ChatRequest::new(MODEL_ID, vec![Message::user("When?")]);
+    assert!(!sup.client().chat_complete(&ask).await.unwrap().is_empty());
+    let hold = control.hold_online().await.unwrap();
+    assert!(!control.route_taken());
+    assert_eq!(provider.listings().await, 1, "none in the download window");
+    hold.release().await;
+    assert!(control.route_taken());
+    assert_eq!(
+        provider.listings().await,
+        2,
+        "the closing relaunch gives it back"
+    );
+    control.set_cloud(None).await.unwrap();
+    assert_eq!(provider.listings().await, 2, "none after turning off");
+    let seen = provider.requests().await;
+    assert_eq!(seen.len(), 3, "two lists and the one question");
+    assert!(
+        seen.iter()
+            .all(|r| r["headers"]["authorization"] == format!("Bearer {KEY}"))
+    );
+    assert_eq!(sup.restarts(), 0);
+    sup.shutdown().await.unwrap();
+}
+
+/// A key request the engine refuses leaves the route closed: no online model, no key held,
+/// nothing can be sent, and the change says so. The engine itself keeps running.
+#[tokio::test]
+async fn a_refused_key_request_leaves_the_route_closed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, "cloud-auth-fail");
+    let sup = start(&dirs, Some(route())).await;
+    let control = sup.control();
+    assert!(ready(&sup.state().borrow()));
+    assert!(control.has_cloud());
+    assert!(!control.route_taken());
+    assert_eq!(engine_holds(&sup).await, (false, false));
+    let ask = ChatRequest::new(MODEL_ID, vec![Message::user("When?")]);
+    assert!(sup.client().chat_complete(&ask).await.is_err());
+    assert!(matches!(
+        control.set_cloud(Some(route())).await,
+        Err(nocturne_lemonade::RuntimeError::RouteRefused)
+    ));
+    assert!(!control.route_taken());
+    assert_key_not_in_environment(&sup).await;
+    assert_eq!(sup.restarts(), 0);
+    sup.shutdown().await.unwrap();
+}
+
+/// Turning off makes the running engine forget the key and drop the online model at once,
+/// while the relaunch still waits for work in flight.
+#[tokio::test]
+async fn turning_off_clears_the_key_in_the_engine_at_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some(route())).await;
+    let control = sup.control();
+    assert_eq!(engine_holds(&sup).await, (true, true));
+    let client = sup.client();
+    let old = client.endpoint().unwrap();
+    let busy = client
+        .chat(&ChatRequest::new("some-model", vec![Message::user("q")]))
+        .await
+        .unwrap();
+    control.set_idle_waits(Duration::from_secs(5), Duration::from_secs(5));
+    let off = {
+        let c = control.clone();
+        tokio::spawn(async move { c.set_cloud(None).await })
+    };
+    let held = |port: u16, key: String| async move {
+        let info: Value = reqwest::Client::new()
+            .get(format!("http://127.0.0.1:{port}/v1/system-info"))
+            .bearer_auth(key)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        info["cloud"]["providers"][0]["runtime_key_set"] == true
+    };
+    let deadline = Instant::now() + Duration::from_secs(3);
+    while held(old.port, old.key.clone()).await {
+        assert!(Instant::now() < deadline, "the key was not cleared");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(
+        common::launch_count(&dirs),
+        1,
+        "cleared before the relaunch"
+    );
+    assert!(!control.route_taken());
+    drop(busy);
+    off.await.unwrap().unwrap();
+    assert_off(&sup, &dirs).await;
     sup.shutdown().await.unwrap();
 }
 

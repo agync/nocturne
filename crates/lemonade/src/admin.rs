@@ -8,8 +8,26 @@ use std::time::Duration;
 use reqwest::Method;
 use serde_json::{Value, json};
 
-use crate::client::{Client, Timeouts};
+use crate::client::{Client, Health, Timeouts};
 use crate::error::RuntimeError;
+use crate::online::OnlineKey;
+
+/// Longest wait for `POST /v1/cloud/auth`, which waits for the provider's list (15 s at most in
+/// the engine).
+const CLOUD_AUTH_TIMEOUT: Duration = Duration::from_secs(40);
+/// Longest wait for the other calls that give or take back the route.
+const ROUTE_CALL_TIMEOUT: Duration = Duration::from_secs(20);
+
+/// What the engine says after it was given a provider's key.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct CloudAuth {
+    /// The key came from the engine's environment.
+    pub env_var_set: bool,
+    /// The key is held in the engine's memory.
+    pub runtime_key_set: bool,
+    /// Chat models in the provider's list, 0 when the list could not be read.
+    pub models_discovered: u64,
+}
 
 /// The pair of keys one launch of the engine is given. They are never equal and never empty.
 #[derive(Clone)]
@@ -122,6 +140,65 @@ impl Admin {
     /// `GET /internal/config`: the settings in force.
     pub async fn config(&self) -> Result<Value, RuntimeError> {
         Client::json(self.request(Method::GET, "/internal/config")?).await
+    }
+
+    /// `POST /v1/cloud/auth`: hands the engine `key` for `provider`, held in its memory only. The
+    /// engine then reads the provider's list of models once, with the key.
+    pub async fn cloud_auth(
+        &self,
+        provider: &str,
+        key: &OnlineKey,
+    ) -> Result<CloudAuth, RuntimeError> {
+        let body = json!({"provider": provider, "api_key": key.expose()});
+        let rb = self
+            .request(Method::POST, "/v1/cloud/auth")?
+            .timeout(CLOUD_AUTH_TIMEOUT)
+            .json(&body);
+        let v: Value = Client::json(rb).await?;
+        let state = &v["auth_state"];
+        Ok(CloudAuth {
+            env_var_set: state["env_var_set"].as_bool().unwrap_or(true),
+            runtime_key_set: state["runtime_key_set"].as_bool().unwrap_or(false),
+            models_discovered: v["models_discovered"].as_u64().unwrap_or(0),
+        })
+    }
+
+    /// `DELETE /v1/cloud/auth/{provider}`: the engine forgets the key it holds for `provider`.
+    pub async fn cloud_forget(&self, provider: &str) -> Result<(), RuntimeError> {
+        let rb = self
+            .request(Method::DELETE, &format!("/v1/cloud/auth/{provider}"))?
+            .timeout(ROUTE_CALL_TIMEOUT);
+        let _: Value = Client::json(rb).await?;
+        Ok(())
+    }
+
+    /// `POST /v1/load` of a model that needs no options, such as one a provider serves.
+    pub async fn load(&self, model: &str) -> Result<(), RuntimeError> {
+        let rb = self
+            .request(Method::POST, "/v1/load")?
+            .timeout(ROUTE_CALL_TIMEOUT)
+            .json(&json!({"model_name": model}));
+        let _: Value = Client::json(rb).await?;
+        Ok(())
+    }
+
+    /// `POST /v1/unload` of one model.
+    pub async fn unload(&self, model: &str) -> Result<(), RuntimeError> {
+        let rb = self
+            .request(Method::POST, "/v1/unload")?
+            .timeout(ROUTE_CALL_TIMEOUT)
+            .json(&json!({"model_name": model}));
+        let _: Value = Client::json(rb).await?;
+        Ok(())
+    }
+
+    /// `GET /v1/health`, with the admin key.
+    pub async fn health(&self) -> Result<Health, RuntimeError> {
+        Client::json(
+            self.request(Method::GET, "/v1/health")?
+                .timeout(ROUTE_CALL_TIMEOUT),
+        )
+        .await
     }
 
     /// `POST /internal/shutdown`: unloads every model and stops the engine.

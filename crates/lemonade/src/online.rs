@@ -1,6 +1,13 @@
 //! The engine route for Online answers: one provider entry in the engine's `config.json`, one
-//! static model row in its `user_models.json`, and the key in `lemond`'s spawn environment only.
-//! While Online answers is off none of the three exists.
+//! static model row in its `user_models.json`, and the key handed to the running engine over
+//! loopback (`POST /v1/cloud/auth`, admin key), held in its memory only. The key is never in
+//! `lemond`'s environment, so a crash record of the process environment and the model servers
+//! it starts never hold it. While Online answers is off none of the three exists.
+//!
+//! Handing over the key makes the engine read the provider's list of models once, and drops the
+//! static row from its model list (`CloudRows::refresh`). So the row's model is loaded first: a
+//! loaded model is served without the list, and reads the key on every request
+//! (`model_loader.cpp:33-48`, `cloud_server.cpp:382-386, 407-431` in lemonade v2026.46.2).
 //!
 //! The engine posts to the provider without following redirects (`utils/http_client.cpp:798`
 //! passes `follow_redirects = false` to `apply_http_security_policy`, `:645`), so a redirect
@@ -22,7 +29,8 @@ pub use nocturne_engine::OnlineFailure;
 /// The provider's name in `cloud_providers`. Underscore only, so the key's environment name is
 /// settable everywhere.
 pub const PROVIDER: &str = "nocturne_online";
-/// The environment variable the engine reads the key from on every request.
+/// The environment variable the engine would read the key from. Nocturne never sets it: the
+/// key goes to the running engine instead (see [`give`]).
 pub const KEY_ENV: &str = "LEMONADE_NOCTURNE_ONLINE_API_KEY";
 /// The static row's key in `user_models.json`.
 pub const ROW: &str = "nocturne-online";
@@ -99,7 +107,7 @@ impl OnlineKey {
         OnlineKey(Zeroizing::new(key))
     }
 
-    /// The key itself, for the spawn environment and nowhere else.
+    /// The key itself, for the engine's key request and nowhere else.
     pub fn expose(&self) -> &str {
         &self.0
     }
@@ -349,6 +357,37 @@ pub fn write_row(engine_dir: &Path, route: Option<&CloudRoute>) -> Result<(), Ru
     std::fs::write(&tmp, text)?;
     std::fs::rename(&tmp, &path)?;
     Ok(())
+}
+
+/// Gives the engine that `admin` reaches the route's key, before anything else may use it:
+/// loads the static row's model (no request to the provider), hands over the key (the engine
+/// reads the provider's list once), then confirms the key is held in memory and the model still
+/// loaded. Returns how many chat models the provider listed. On an error the caller takes the
+/// route back with [`take_back`].
+pub(crate) async fn give(admin: &crate::Admin, route: &CloudRoute) -> Result<u64, RuntimeError> {
+    admin.load(MODEL_ID).await?;
+    let auth = admin.cloud_auth(PROVIDER, &route.key).await?;
+    if !auth.runtime_key_set || auth.env_var_set {
+        return Err(RuntimeError::RouteRefused);
+    }
+    let health = admin.health().await?;
+    if !health
+        .all_models_loaded
+        .iter()
+        .any(|m| m.model_name == MODEL_ID)
+    {
+        return Err(RuntimeError::RouteRefused);
+    }
+    Ok(auth.models_discovered)
+}
+
+/// Makes the engine forget the key and unload the online model, so nothing can be sent with
+/// it. Best effort: an engine that does not answer is about to be stopped anyway.
+pub(crate) async fn take_back(admin: &crate::Admin) {
+    if let Err(e) = admin.cloud_forget(PROVIDER).await {
+        tracing::warn!("the engine did not confirm it forgot the Online answers key: {e}");
+    }
+    let _ = admin.unload(MODEL_ID).await;
 }
 
 /// The provider as the person knows it: the address's host, with its port when one was given.

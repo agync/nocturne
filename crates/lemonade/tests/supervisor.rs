@@ -703,9 +703,13 @@ async fn download_window_launch_has_no_provider() {
     sup.shutdown().await.unwrap();
 }
 
+/// The engine inherits a core file limit of 0, so no core file of its memory is written. That
+/// is all the limit does: a crash handler such as systemd-coredump still records the process
+/// and its environment, which is why the Online answers key is never in the engine's
+/// environment (`online_route.rs` checks `/proc/<pid>/environ`).
 #[cfg(target_os = "linux")]
 #[tokio::test]
-async fn core_limit_is_zero_for_lemond() {
+async fn engine_inherits_no_core_files() {
     nocturne_lemonade::supervisor::harden_process().unwrap();
     assert!(
         !nix::sys::prctl::get_dumpable().unwrap(),

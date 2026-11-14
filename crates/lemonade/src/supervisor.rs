@@ -18,7 +18,7 @@ use crate::client::{Client, Endpoint, Timeouts};
 use crate::config;
 use crate::error::RuntimeError;
 use crate::logpipe::{self, Redactor};
-use crate::online::{self, CloudRoute, RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON};
+use crate::online::{self, CloudRoute, OnlineKey, RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON};
 use crate::{residency, selection};
 
 const PORT_TRIES: u32 = 5;
@@ -32,6 +32,9 @@ const SHUTDOWN_REQUEST: Duration = Duration::from_secs(2);
 const AFTER_REQUEST: Duration = Duration::from_secs(4);
 const AFTER_TERM: Duration = Duration::from_secs(4);
 const AFTER_KILL: Duration = Duration::from_secs(2);
+/// How long a route change waits for the running engine to forget the key before it goes on
+/// to the relaunch, which ends that engine anyway.
+const TAKE_BACK_WAIT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub struct SupervisorOptions {
@@ -169,6 +172,8 @@ struct Shared {
     ready_since: Mutex<Option<Instant>>,
     /// The route for Online answers every launch outside the download window uses.
     cloud: Mutex<Option<CloudRoute>>,
+    /// The running engine holds the route: it took the key and has the online model loaded.
+    route_taken: AtomicBool,
     /// How long a relaunch for Online answers waits for model requests in flight to end: when
     /// turning off, and when turning on or checking.
     idle_waits: Mutex<(Duration, Duration)>,
@@ -228,7 +233,14 @@ impl Control {
     /// the model requests in flight (reading, the tidy, the voice) to end. A relaunch asked for
     /// while another one starts the engine waits for it, then the engine starts once more with
     /// the latest window and route: the last change wins, and none stops the engine.
+    ///
+    /// The running engine forgets the key it holds at once, before any wait. With a route, the
+    /// new engine is given it before it answers anyone; one that does not take it runs without
+    /// it, and this returns [`RuntimeError::RouteRefused`].
     pub async fn set_cloud(&self, route: Option<CloudRoute>) -> Result<(), RuntimeError> {
+        if self.shared.route_taken.swap(false, Ordering::SeqCst) {
+            let _ = tokio::time::timeout(TAKE_BACK_WAIT, online::take_back(&self.admin)).await;
+        }
         let (off, on) = *self
             .shared
             .idle_waits
@@ -251,7 +263,19 @@ impl Control {
             *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = None;
             return Err(RuntimeError::Unavailable);
         }
-        rx.await.map_err(|_| RuntimeError::Unavailable)?
+        rx.await.map_err(|_| RuntimeError::Unavailable)??;
+        // A later change that won (off, or the download window) is not a refusal.
+        if with_route && self.has_cloud() && !self.download_window_open() && !self.route_taken() {
+            return Err(RuntimeError::RouteRefused);
+        }
+        Ok(())
+    }
+
+    /// Whether the running engine holds the route for Online answers: it took the key and has
+    /// the online model loaded. False while no engine runs, and after a launch that could not
+    /// give it the route.
+    pub fn route_taken(&self) -> bool {
+        self.shared.route_taken.load(Ordering::SeqCst)
     }
 
     /// Shorter waits for [`Control::set_cloud`], for tests.
@@ -381,6 +405,7 @@ impl Supervisor {
             online: AtomicBool::new(false),
             ready_since: Mutex::new(None),
             cloud: Mutex::new(cloud),
+            route_taken: AtomicBool::new(false),
             idle_waits: Mutex::new((RELAUNCH_IDLE_WAIT_OFF, RELAUNCH_IDLE_WAIT_ON)),
             holds: tokio::sync::Mutex::new(0),
         });
@@ -529,9 +554,11 @@ fn free_port(avoid: Option<u16>) -> Result<u16, RuntimeError> {
 }
 
 /// Turns core dumps off for this process, and so for the engine and its children, which inherit
-/// the limit: a dump could hold the Online answers key. On Linux the app is also made
-/// undumpable, so other processes of the same user cannot read its memory or environment through
-/// `/proc`. Called once at app start, before anything reads the key. It is set on the whole app
+/// the limit: a dump of the app's or the engine's memory could hold the Online answers key. A
+/// crash handler the system pipes crashes to (systemd-coredump) still records the process and
+/// its environment whatever the limit, which is why the key is never in the engine's
+/// environment. On Linux the app is also made undumpable, so other processes of the same user
+/// cannot read its memory or environment through `/proc`. Called once at app start, before anything reads the key. It is set on the whole app
 /// because the workspace forbids the `unsafe` a per-spawn `pre_exec` hook needs.
 #[cfg(unix)]
 pub fn harden_process() -> Result<(), RuntimeError> {
@@ -711,6 +738,7 @@ impl Actor {
 
     fn clear_ready(&self) {
         self.shared.pid.store(0, Ordering::SeqCst);
+        self.shared.route_taken.store(false, Ordering::SeqCst);
         *self
             .shared
             .ready_since
@@ -765,12 +793,18 @@ impl Actor {
                 tracing::warn!("could not save the models' load options: {e}");
             }
             self.client.set_saved_options(saved);
-            let mut running = self.spawn(port, &keys, route.as_ref())?;
+            let mut running = self.spawn(port, &keys, route.as_ref().map(|r| &r.key))?;
             match self
                 .await_ready(&mut running, port, ws_port, &keys.api)
                 .await
             {
                 Ok(version) => {
+                    // Before the endpoints are known to anyone, so nothing is sent with a route
+                    // that is half given.
+                    if let Some(r) = &route {
+                        let taken = self.give_route(port, &keys, r).await;
+                        self.shared.route_taken.store(taken, Ordering::SeqCst);
+                    }
                     self.client.set_endpoint(Some(Endpoint {
                         port,
                         key: keys.api,
@@ -803,6 +837,35 @@ impl Actor {
         )))
     }
 
+    /// Hands the new engine the route's key; on any failure it is taken back, and the engine
+    /// runs without the route. True when the engine holds it.
+    async fn give_route(&self, port: u16, keys: &Keys, route: &CloudRoute) -> bool {
+        let Ok(admin) = Admin::new(port, keys.admin.clone()) else {
+            return false;
+        };
+        match online::give(&admin, route).await {
+            Ok(listed) => {
+                tracing::info!(
+                    "the engine took the route for Online answers; the provider listed {listed} models"
+                );
+                true
+            }
+            Err(e) => {
+                // The status only: the engine's own words stay out of the app's log.
+                let why = match &e {
+                    RuntimeError::Rejected { status, .. } | RuntimeError::Server { status, .. } => {
+                        format!("status {status}")
+                    }
+                    RuntimeError::NotFound(_) => "status 404".to_string(),
+                    other => other.to_string(),
+                };
+                tracing::warn!("the engine did not take the route for Online answers: {why}");
+                online::take_back(&admin).await;
+                false
+            }
+        }
+    }
+
     /// Neither key works against a stopped engine.
     fn forget_endpoints(&self) {
         self.client.set_endpoint(None);
@@ -810,12 +873,13 @@ impl Actor {
     }
 
     /// Starts the engine. Its log goes to standard output, which the log pipe redacts into
-    /// `lemond.log`; the key, when there is a route, is in its environment and nowhere else.
+    /// `lemond.log`, hiding `key` (the route's, when there is one). The key is never in the
+    /// engine's environment: it is handed over after the engine answers (see `give_route`).
     fn spawn(
         &self,
         port: u16,
         keys: &Keys,
-        route: Option<&CloudRoute>,
+        key: Option<&OnlineKey>,
     ) -> Result<Running, RuntimeError> {
         let mut cmd = Command::new(&self.exe);
         cmd.arg(self.dirs.cache())
@@ -824,23 +888,13 @@ impl Actor {
             .args(["--host", "127.0.0.1", "--no-broadcast"]);
         #[cfg(unix)]
         cmd.args(["--watchdog-fd", "0"]);
-        cmd.env_clear()
-            .env("HOME", &self.dirs.root)
-            .env("PATH", default_path())
-            .env("XDG_RUNTIME_DIR", self.dirs.run())
-            .env("LANG", "C.UTF-8")
-            .env("LEMONADE_API_KEY", &keys.api)
-            .env("LEMONADE_ADMIN_API_KEY", &keys.admin);
-        if let Some(r) = route {
-            cmd.env(online::KEY_ENV, r.key.expose());
+        cmd.env_clear();
+        for (name, value) in spawn_env(&self.dirs, keys) {
+            cmd.env(name, value);
         }
         // A redactor of its own for each launch: the key it hides is this launch's.
         let redact = Arc::new(Redactor::new());
-        redact.set_key(route.map(|r| &r.key));
-        #[cfg(windows)]
-        if let Some(root) = std::env::var_os("SystemRoot") {
-            cmd.env("SystemRoot", root);
-        }
+        redact.set_key(key);
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null());
@@ -1010,6 +1064,28 @@ enum Launch {
     Fatal(RuntimeError),
 }
 
+/// The whole environment the engine starts with: a home, a path, its runtime folder, a locale
+/// and the launch's two keys. Nothing else, no provider key and no proxy.
+fn spawn_env(dirs: &Dirs, keys: &Keys) -> Vec<(&'static str, std::ffi::OsString)> {
+    let env: Vec<(&'static str, std::ffi::OsString)> = vec![
+        ("HOME", dirs.root.clone().into_os_string()),
+        ("PATH", default_path().into()),
+        ("XDG_RUNTIME_DIR", dirs.run().into_os_string()),
+        ("LANG", "C.UTF-8".into()),
+        ("LEMONADE_API_KEY", keys.api.clone().into()),
+        ("LEMONADE_ADMIN_API_KEY", keys.admin.clone().into()),
+    ];
+    #[cfg(windows)]
+    let env = {
+        let mut env = env;
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            env.push(("SystemRoot", root));
+        }
+        env
+    };
+    env
+}
+
 fn default_path() -> &'static str {
     if cfg!(windows) {
         "C:\\Windows\\System32"
@@ -1138,6 +1214,39 @@ mod tests {
         let port = free_port(None).unwrap();
         assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
         assert_ne!(free_port(Some(port)).unwrap(), port);
+    }
+
+    #[test]
+    fn the_spawn_environment_holds_no_provider_key() {
+        let dirs = Dirs::new("/bundle", "/root");
+        let keys = Keys::new("api-key".into(), "admin-key".into()).unwrap();
+        let env = spawn_env(&dirs, &keys);
+        let names: Vec<&str> = env.iter().map(|(n, _)| *n).collect();
+        let keys_given: Vec<&str> = names
+            .iter()
+            .copied()
+            .filter(|n| n.ends_with("_API_KEY"))
+            .collect();
+        assert_eq!(keys_given, ["LEMONADE_API_KEY", "LEMONADE_ADMIN_API_KEY"]);
+        assert!(!names.contains(&online::KEY_ENV));
+        assert!(
+            names
+                .iter()
+                .all(|n| !n.to_ascii_lowercase().contains("proxy")),
+            "{names:?}"
+        );
+        #[cfg(not(windows))]
+        assert_eq!(
+            names,
+            [
+                "HOME",
+                "PATH",
+                "XDG_RUNTIME_DIR",
+                "LANG",
+                "LEMONADE_API_KEY",
+                "LEMONADE_ADMIN_API_KEY"
+            ]
+        );
     }
 
     #[test]

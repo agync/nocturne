@@ -42,6 +42,8 @@ pub enum RuntimeError {
     },
     #[error("setup is already running for another tier")]
     Busy,
+    #[error("the engine did not take the route for Online answers")]
+    RouteRefused,
 }
 
 impl From<std::io::Error> for RuntimeError {

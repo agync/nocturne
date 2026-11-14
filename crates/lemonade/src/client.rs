@@ -234,7 +234,8 @@ impl Client {
     }
 
     /// Unloads every other model that is not busy, when `model` must run alone. True when
-    /// anything was unloaded.
+    /// anything was unloaded. The online model is kept: it holds no memory here, and once
+    /// unloaded the engine cannot load it again until it restarts (see [`crate::online`]).
     pub async fn make_room(&self, model: &str) -> bool {
         let alone = self
             .shared
@@ -252,7 +253,7 @@ impl Client {
         let mut unloaded = false;
         for other in health.all_models_loaded {
             let busy = self.activity(&other.model_name).is_some_and(|a| a.busy > 0);
-            if other.model_name != model && !busy {
+            if other.model_name != model && other.model_name != crate::online::MODEL_ID && !busy {
                 unloaded |= self.unload(&other.model_name).await.is_ok();
             }
         }
