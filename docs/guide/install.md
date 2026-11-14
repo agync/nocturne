@@ -36,6 +36,7 @@ You are given up to three packages and a list of fingerprints to check them (`SH
 | AppImage | You want to try Nocturne without installing it, or your desktop is not Fedora or Debian based |
 | rpm | Your computer runs Fedora, Red Hat, openSUSE or something similar |
 | deb | Your computer runs Debian, Ubuntu, Linux Mint or something similar |
+| Flatpak | You want your software centre to keep Nocturne up to date, on any Linux desktop |
 
 Nocturne is not signed. Before you open a package, check it against the list that came with it. Put the package and `SHA256SUMS` in the same folder and run:
 
@@ -81,6 +82,20 @@ Your software centre can open the file too. Nocturne then appears in your applic
 sudo apt install ./Nocturne_<version>_amd64.deb
 ```
 
+### Flatpak
+
+Add Nocturne's repository from [nocturne.is/flatpak](https://nocturne.is/flatpak), then install
+the app. The page has a button that does both, or run:
+
+```bash
+flatpak remote-add --user --if-not-exists nocturne https://nocturne.is/flatpak/nocturne.flatpakrepo
+flatpak install --user nocturne is.nocturne.Nocturne
+```
+
+Your software centre then shows Nocturne and its updates. The Flatpak keeps everything it holds in
+its own folder and sees only the files you choose or drop on it. Starting with your computer is not
+available in the Flatpak yet.
+
 ## The first run
 
 Nocturne opens a short setup:
@@ -101,6 +116,8 @@ delete them yourself (see [Your data](your-data.md)).
 - AppImage: delete the file.
 - rpm: `sudo dnf remove nocturne`
 - deb: `sudo apt remove nocturne`
+- Flatpak: `flatpak uninstall --user is.nocturne.Nocturne`. Your things stay in
+  `~/.var/app/is.nocturne.Nocturne/` until you delete that folder.
 
 If you turned on "Start with this computer", turn it off in Settings first. Otherwise your desktop
 keeps a start-up entry for a program that is no longer there.
