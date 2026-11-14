@@ -178,7 +178,8 @@ describe("the settings sheet", () => {
 describe("pairing screens", () => {
   it("pair.name_then_words_then_allowed", async () => {
     await open("s=pair");
-    expect(await screen.findByRole("heading", { name: "Name this phone" })).toHaveFocus();
+    const heading = await screen.findByRole("heading", { name: "Name this phone" });
+    await waitFor(() => expect(heading).toHaveFocus());
     const name = screen.getByLabelText("Name");
     await userEvent.clear(name);
     await userEvent.type(name, "Pixel");
