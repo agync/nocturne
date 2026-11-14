@@ -20,9 +20,10 @@ use nocturne_engine::day::page_instant;
 use nocturne_engine::{Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
+use crate::coverage::uncovered;
 use crate::events::{Events, notice};
 use crate::host::{Host, SleepGuard, probe};
-use crate::reader::{DrainHandle, Reader, uncovered};
+use crate::reader::{DrainHandle, Reader};
 use crate::schedule::parse_hm;
 use crate::{MindSlot, current_mind};
 
@@ -418,6 +419,10 @@ impl Tidy {
                     status: None,
                     limit: None,
                 })?;
+                // Items already marked (a new mind reads everything again) are that re-read's.
+                let marked: std::collections::HashSet<String> =
+                    e.rereads(usize::MAX)?.into_iter().collect();
+                let names: Vec<String> = e.entities(None)?.into_iter().map(|en| en.name).collect();
                 let mut picked = Vec::new();
                 for item in items {
                     if picked.len() == CAREFUL_PER_NIGHT {
@@ -432,7 +437,7 @@ impl Tidy {
                     let Some(text) = item.text.as_deref().filter(|t| !t.trim().is_empty()) else {
                         continue;
                     };
-                    if !read || !before {
+                    if !read || !before || marked.contains(&item.id) {
                         continue;
                     }
                     let memories = e.memories(MemoryFilter {
@@ -465,17 +470,18 @@ impl Tidy {
                             )
                         })
                         .collect();
-                    if !uncovered(text, &said).is_empty() {
+                    if !uncovered(text, &said, &names).is_empty()
+                        && e.queue_reread(std::slice::from_ref(&item.id))? == 1
+                    {
                         picked.push(item.id);
                     }
                 }
-                let marked = e.queue_reread(&picked)?;
-                Ok((picked, marked))
+                Ok(picked)
             })
             .await;
         match picked {
-            Ok((ids, marked)) if marked > 0 => {
-                tracing::info!("{marked} items will be read again carefully");
+            Ok(ids) if !ids.is_empty() => {
+                tracing::info!("{} items will be read again carefully", ids.len());
                 self.inner.reader.read_carefully(&ids);
             }
             Ok(_) => {}

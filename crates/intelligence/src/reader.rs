@@ -23,6 +23,7 @@ use tokio::sync::{Notify, watch};
 use tokio_util::sync::CancellationToken;
 
 use crate::chunk::{CHUNK_CHARS, split_chunks};
+use crate::coverage::{lost_roles, role_words, uncovered};
 use crate::events::{Events, notice};
 use crate::host::{Host, probe};
 use crate::{MindSlot, current_mind};
@@ -92,6 +93,10 @@ pub enum Outcome {
 pub struct ReaderStats {
     pub items_read: u64,
     pub renewals: u64,
+    /// Readings asked of the mind: one per part of an item.
+    pub readings: u64,
+    /// Second looks asked of the mind, for what a reading left out.
+    pub second_looks: u64,
 }
 
 /// An ask is being answered: the reader gives way until the guard is dropped.
@@ -225,6 +230,8 @@ struct Inner {
     busy: AtomicBool,
     items_read: AtomicU64,
     renewals: AtomicU64,
+    readings: AtomicU64,
+    second_looks: AtomicU64,
 }
 
 /// The reader. Cheap to clone; clones share one queue.
@@ -290,6 +297,8 @@ impl Reader {
                 busy: AtomicBool::new(false),
                 items_read: AtomicU64::new(0),
                 renewals: AtomicU64::new(0),
+                readings: AtomicU64::new(0),
+                second_looks: AtomicU64::new(0),
             }),
         }
     }
@@ -302,6 +311,8 @@ impl Reader {
         ReaderStats {
             items_read: self.inner.items_read.load(Ordering::SeqCst),
             renewals: self.inner.renewals.load(Ordering::SeqCst),
+            readings: self.inner.readings.load(Ordering::SeqCst),
+            second_looks: self.inner.second_looks.load(Ordering::SeqCst),
         }
     }
 
@@ -384,7 +395,8 @@ impl Reader {
     }
 
     /// Read these items again carefully, when nothing else is waiting and the computer is on
-    /// mains. They must be marked for a re-read too; the mark is what queues them.
+    /// mains. Only items the tidy itself marked for a re-read belong here; the mark is what
+    /// queues them.
     pub fn read_carefully(&self, ids: &[String]) {
         self.state().careful.extend(ids.iter().cloned());
         self.wake();
@@ -545,7 +557,9 @@ impl Reader {
         let id = pending.id.clone();
         self.announce(&id).await;
         let started = tokio::time::Instant::now();
-        let outcome = self.run_item(&mind, pending, reread, &mut preempt).await;
+        let outcome = self
+            .run_item(&mind, pending, reread, on_ac, &mut preempt)
+            .await;
         let took = started.elapsed();
         self.settle(&id, outcome, took, class).await;
         Step::Read { item: id, outcome }
@@ -674,11 +688,12 @@ impl Reader {
         mind: &Arc<dyn Mind>,
         p: PendingItem,
         reread: bool,
+        on_ac: bool,
         preempt: &mut watch::Receiver<u64>,
     ) -> Outcome {
         let id = p.id.clone();
         let lease = p.lease.clone();
-        let work = self.process(mind, p, reread);
+        let work = self.process(mind, p, reread, on_ac);
         tokio::pin!(work);
         let mut renew =
             tokio::time::interval_at(tokio::time::Instant::now() + RENEW_EVERY, RENEW_EVERY);
@@ -759,6 +774,7 @@ impl Reader {
             let mut st = self.state();
             st.reread_failures.remove(id);
             st.cooldown.remove(id);
+            st.careful.remove(id);
         }
         Outcome::Returned
     }
@@ -852,12 +868,13 @@ impl Reader {
         let left_queue = view
             .as_ref()
             .is_none_or(|v| !matches!(v.status, ItemStatus::Kept | ItemStatus::Reading));
-        let careful = self.state().careful.remove(id);
-        // A careful re-read is tried once: one that did not finish leaves the item as it was.
-        if careful && !ok {
-            let i = vec![id.to_string()];
-            let _ = self.eng(move |e| e.clear_reread(&i)).await;
-        }
+        // A careful re-read that did not finish stays marked and is tried again like any
+        // re-read; the mark is never taken off here.
+        let careful = if ok {
+            self.state().careful.remove(id)
+        } else {
+            self.state().careful.contains(id)
+        };
         let (drain, announce_rereading) = {
             let mut st = self.state();
             if left_queue {
@@ -903,6 +920,7 @@ impl Reader {
         mind: &Arc<dyn Mind>,
         p: PendingItem,
         reread: bool,
+        on_ac: bool,
     ) -> Result<Outcome, Abort> {
         let started = tokio::time::Instant::now();
         let id = p.id.clone();
@@ -986,22 +1004,43 @@ impl Reader {
                     .collect::<Vec<_>>())
             })
             .await?;
+        let names: Vec<String> = known.iter().map(|(name, _)| name.clone()).collect();
         let cx = ExtractContext {
             item_kind: p.kind,
             kept_at: p.kept_at.parse().unwrap_or(now),
             today: now.to_zoned(self.inner.clock.tz()).date(),
             known_entities: known,
         };
+        let careful = reread && self.state().careful.contains(&id);
         let mut candidates: Vec<Candidate> = Vec::new();
         for chunk in split_chunks(&text, CHUNK_CHARS) {
             let found = mind.extract(&chunk, &cx).await?;
+            self.inner.readings.fetch_add(1, Ordering::SeqCst);
             merge_candidates(&mut candidates, found);
-        }
-        if reread && self.state().careful.contains(&id) {
-            let said: Vec<String> = candidates.iter().map(said_by).collect();
-            for sentence in uncovered(&text, &said).into_iter().take(CAREFUL_SENTENCES) {
-                let found = mind.extract(&sentence, &cx).await?;
-                merge_candidates(&mut candidates, found);
+            // A second look costs another reading: on battery the first one stands.
+            if !on_ac {
+                continue;
+            }
+            let lines = left_out(&chunk, &candidates, &names);
+            // A careful re-read looks at each line it missed on its own; a first reading
+            // looks at them all at once.
+            let looks: Vec<Vec<String>> = if careful {
+                lines
+                    .into_iter()
+                    .take(CAREFUL_SENTENCES)
+                    .map(|l| vec![l])
+                    .collect()
+            } else if lines.is_empty() {
+                Vec::new()
+            } else {
+                vec![lines]
+            };
+            for look in looks {
+                self.inner.second_looks.fetch_add(1, Ordering::SeqCst);
+                match mind.extract_lines(&chunk, &cx, &look).await {
+                    Ok(more) => merge_candidates(&mut candidates, more),
+                    Err(e) => tracing::warn!("a second look found nothing to add: {e}"),
+                }
             }
         }
         let (i, l) = (id.clone(), lease.clone());
@@ -1142,7 +1181,7 @@ fn empty_pending() -> PendingItem {
 
 /// What a memory says, for telling whether the item's words were kept: its quote, subject,
 /// sentence and object.
-pub(crate) fn said_by(c: &Candidate) -> String {
+fn said_by(c: &Candidate) -> String {
     let quote = match &c.span {
         Some(nocturne_contract::Span::Quote { text }) => text.as_str(),
         _ => "",
@@ -1150,98 +1189,21 @@ pub(crate) fn said_by(c: &Candidate) -> String {
     format!("{quote} | {} | {} | {}", c.subject, c.sentence, c.object)
 }
 
-/// Lower case, with every run of other characters than letters and digits made one space.
-fn normalise(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    for word in text
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| !w.is_empty())
-    {
-        if !out.is_empty() {
-            out.push(' ');
-        }
-        out.extend(word.chars().flat_map(char::to_lowercase));
-    }
-    out
-}
-
-/// Titles that come before a name and are not one.
-const TITLES: [&str; 8] = ["mr", "mrs", "ms", "miss", "mister", "missus", "dr", "st"];
-const DAYS_AND_MONTHS: [&str; 19] = [
-    "monday",
-    "tuesday",
-    "wednesday",
-    "thursday",
-    "friday",
-    "saturday",
-    "sunday",
-    "january",
-    "february",
-    "march",
-    "april",
-    "may",
-    "june",
-    "july",
-    "august",
-    "september",
-    "october",
-    "november",
-    "december",
-];
-
-fn bare(token: &str) -> &str {
-    let t = token.trim_matches(|c: char| !c.is_alphanumeric());
-    t.strip_suffix("'s")
-        .or_else(|| t.strip_suffix("\u{2019}s"))
-        .unwrap_or(t)
-}
-
-/// The sentences of `text` with a number, code or name that nothing in `said` holds. The same
-/// check the mind makes after each reading (a word with a digit, or a capitalised word that
-/// does not open its sentence and is not a title, day, month or heading in capitals), made
-/// again over the whole item, whose parts may have been read apart.
-pub(crate) fn uncovered(text: &str, said: &[String]) -> Vec<String> {
-    let words = format!(" {} ", normalise(&said.join(" | ")));
-    let mut out = Vec::new();
-    for line in text.lines() {
-        let mut current: Vec<&str> = Vec::new();
-        let mut sentences = Vec::new();
-        for token in line.split_whitespace() {
-            current.push(token);
-            let word = bare(token).to_lowercase();
-            let title = TITLES.contains(&word.as_str()) || word.chars().count() == 1;
-            if token.ends_with(['.', '!', '?']) && !title {
-                sentences.push(current.join(" "));
-                current.clear();
-            }
-        }
-        if !current.is_empty() {
-            sentences.push(current.join(" "));
-        }
-        for sentence in sentences {
-            let missing = sentence.split_whitespace().enumerate().any(|(i, token)| {
-                let word = bare(token);
-                let lower = word.to_lowercase();
-                let digit = word.chars().any(|c| c.is_ascii_digit());
-                let shouting = word
-                    .chars()
-                    .filter(|c| c.is_alphabetic())
-                    .all(char::is_uppercase);
-                let name = i > 0
-                    && word.chars().next().is_some_and(char::is_uppercase)
-                    && !shouting
-                    && lower != "i"
-                    && !TITLES.contains(&lower.as_str())
-                    && !DAYS_AND_MONTHS.contains(&lower.trim_end_matches('s'));
-                let key = normalise(word);
-                (digit || name) && !key.is_empty() && !words.contains(&format!(" {key} "))
-            });
-            if missing {
-                out.push(sentence);
-            }
+/// The sentences of `text` with a number or name that `found` does not keep, or that name
+/// someone by a role every memory about them lost.
+fn left_out(text: &str, found: &[Candidate], known: &[String]) -> Vec<String> {
+    let said: Vec<String> = found.iter().map(said_by).collect();
+    let told: Vec<String> = found
+        .iter()
+        .map(|c| format!("{} | {} | {}", c.subject, c.sentence, c.object))
+        .collect();
+    let mut lines = uncovered(text, &said, known);
+    for line in lost_roles(text, &told) {
+        if !lines.contains(&line) {
+            lines.push(line);
         }
     }
-    out
+    lines
 }
 
 /// Add `found` to `into`, dropping a candidate that says what an earlier one already said.
@@ -1259,8 +1221,11 @@ fn merge_candidates(into: &mut Vec<Candidate>, found: Vec<Candidate>) {
             )
         };
         let k = key(&c);
+        let roles = |c: &Candidate| role_words(&format!("{} {}", c.sentence, c.object));
         if let Some(existing) = into.iter_mut().find(|e| key(e) == k) {
-            if c.confidence > existing.confidence {
+            // Who someone is to the person outweighs how sure the mind was.
+            let (new, old) = (roles(&c), roles(existing));
+            if new > old || (new == old && c.confidence > existing.confidence) {
                 *existing = c;
             }
         } else {
@@ -1279,19 +1244,25 @@ mod tests {
     }
 
     #[test]
-    fn a_sentence_whose_name_or_number_nothing_keeps_is_uncovered() {
-        let text = "Boiler service on Monday 30 November, between 8 and 12. The engineer is Mr. Marek.\nPERMIT NUMBER 4471\nReminder to myself.";
-        let said = ["Boiler service on Monday 30 November, between 8 and 12".to_string()];
-        assert_eq!(
-            uncovered(text, &said),
-            ["The engineer is Mr. Marek.", "PERMIT NUMBER 4471"]
+    fn a_memory_that_keeps_who_someone_is_wins_over_a_surer_one() {
+        let mut all = vec![Candidate::new(
+            "Hughes",
+            Predicate::Knows,
+            "Friday",
+            "Mr Hughes comes on Friday.",
+            0.9,
+        )];
+        merge_candidates(
+            &mut all,
+            vec![Candidate::new(
+                "Hughes",
+                Predicate::Knows,
+                "Friday",
+                "The plumber, Mr Hughes, comes on Friday.",
+                0.6,
+            )],
         );
-        let all = [
-            said[0].clone(),
-            "Marek is the engineer.".to_string(),
-            "The permit number is 4471.".to_string(),
-        ];
-        assert!(uncovered(text, &all).is_empty());
+        assert!(all[0].sentence.starts_with("The plumber"));
     }
 
     #[test]

@@ -794,13 +794,10 @@ fn said(subject: &str, object: &str, sentence: &str, quote: &str) -> nocturne_en
     }
 }
 
-/// An item whose memories leave out a name it gives is read again after the page, sentence by
-/// sentence, and quietly: the name is kept, nothing the first reading kept is lost, and the
-/// next night has nothing left to read again.
-#[tokio::test]
-async fn the_tidy_reads_an_item_again_carefully_where_a_name_was_left_out() {
-    let text = "Boiler service on Monday 30 November. The engineer is called Marek.";
-    let lone = "The engineer is called Marek.";
+const BOILER: &str = "Boiler service on Monday 30 November. The engineer is called Marek.";
+const MAREK: &str = "The engineer is called Marek.";
+
+fn boiler_mind() -> FakeMind {
     let boiler = said(
         "Boiler service",
         "Monday 30 November",
@@ -811,32 +808,64 @@ async fn the_tidy_reads_an_item_again_carefully_where_a_name_was_left_out() {
         "Marek",
         "the engineer",
         "The boiler engineer is called Marek.",
-        lone,
+        MAREK,
     );
-    let mind = FakeMind::new()
-        .with_extract(text, vec![boiler])
-        .with_extract(lone, vec![marek])
-        .with_headline("A quiet night", "One thing kept.");
-    let w = world_at("2026-11-12T20:00:00Z", mind);
-    let note = keep(&w, text);
-    at(&w, "2026-11-13T03:00:00Z");
-    assert_eq!(
-        w.scheduler.tick().await,
-        SchedStep::Started(TidyKind::Night)
-    );
-    assert!(finished(&pump(&w, 4).await));
-    read_all(&w).await;
+    FakeMind::new()
+        .with_extract(BOILER, vec![boiler])
+        .with_extract(MAREK, vec![marek])
+        .with_headline("A quiet night", "One thing kept.")
+}
 
-    let sentences: Vec<String> = w
-        .engine
+fn extracts(w: &World) -> usize {
+    w.mind.calls().iter().filter(|c| *c == "extract").count()
+}
+
+fn sentences_of(w: &World, item: &str) -> Vec<String> {
+    w.engine
         .memories(nocturne_contract::MemoryFilter {
-            item_id: Some(note.clone()),
+            item_id: Some(item.to_string()),
             ..Default::default()
         })
         .unwrap()
         .into_iter()
         .map(|m| m.sentence)
-        .collect();
+        .collect()
+}
+
+/// A note read on battery, at the person's request, gets no second look: the first reading
+/// stands, and Marek is left out.
+async fn read_on_battery(w: &World, text: &str) -> String {
+    w.host.set_ac(Some(false));
+    let note = keep(w, text);
+    w.reader.read_now(Some(&note)).await;
+    read_all(w).await;
+    w.host.set_ac(Some(true));
+    note
+}
+
+async fn night(w: &World, when: &str) {
+    at(w, when);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    assert!(finished(&pump(w, 4).await));
+    read_all(w).await;
+}
+
+/// An item whose memories leave out a name it gives is read again after the page, a missing
+/// line at a time with the whole item in view, and quietly: the name is kept, nothing the
+/// first reading kept is lost, and the next night has nothing left to read again.
+#[tokio::test]
+async fn the_tidy_reads_an_item_again_carefully_where_a_name_was_left_out() {
+    let w = world_at("2026-11-12T20:00:00Z", boiler_mind());
+    let note = read_on_battery(&w, BOILER).await;
+    assert_eq!(extracts(&w), 1, "no second look on battery");
+    assert_eq!(w.reader.stats().second_looks, 0);
+    assert_eq!(sentences_of(&w, &note).len(), 1);
+
+    night(&w, "2026-11-13T03:00:00Z").await;
+    let sentences = sentences_of(&w, &note);
     assert_eq!(sentences.len(), 2, "{sentences:?}");
     assert!(sentences.iter().any(|s| s.contains("Marek")));
     assert!(w.engine.rereads(10).unwrap().is_empty());
@@ -847,23 +876,104 @@ async fn the_tidy_reads_an_item_again_carefully_where_a_name_was_left_out() {
             .any(|n| n.code == NoticeCode::ReReading),
         "a careful re-read is not announced"
     );
-    let extracts = |w: &World| w.mind.calls().iter().filter(|c| *c == "extract").count();
     assert_eq!(
         extracts(&w),
         3,
-        "the note, the note again, and the one sentence"
+        "the note, the note again, and the one line"
     );
+    let stats = w.reader.stats();
+    assert_eq!((stats.readings, stats.second_looks), (2, 1));
 
-    at(&w, "2026-11-14T03:00:00Z");
-    assert_eq!(
-        w.scheduler.tick().await,
-        SchedStep::Started(TidyKind::Night)
-    );
-    pump(&w, 4).await;
-    read_all(&w).await;
+    night(&w, "2026-11-14T03:00:00Z").await;
     assert_eq!(extracts(&w), 3, "nothing is left to read again");
 }
 
+/// On mains, the first reading already takes a second look at what it left out.
+#[tokio::test]
+async fn on_mains_the_first_reading_takes_a_second_look() {
+    let w = world_at("2026-11-12T20:00:00Z", boiler_mind());
+    let note = keep(&w, BOILER);
+    read_all(&w).await;
+    assert_eq!(sentences_of(&w, &note).len(), 2);
+    assert_eq!(extracts(&w), 2);
+    assert_eq!(w.reader.stats().second_looks, 1);
+}
+
+/// A careful re-read that fails leaves the item as it was, still marked, and is tried again
+/// like any re-read.
+#[tokio::test]
+async fn a_failed_careful_re_read_keeps_the_item_and_its_mark() {
+    let w = world_at("2026-11-12T20:00:00Z", boiler_mind());
+    let note = read_on_battery(&w, BOILER).await;
+    w.mind
+        .fail_always("extract", MindError::Failed("no".into()));
+    night(&w, "2026-11-13T03:00:00Z").await;
+    assert_eq!(sentences_of(&w, &note).len(), 1, "nothing was taken away");
+    assert_eq!(
+        w.engine.rereads(10).unwrap(),
+        std::slice::from_ref(&note),
+        "still marked"
+    );
+    w.mind.clear_failures("extract");
+    at(&w, "2026-11-13T03:30:00Z");
+    w.reader.retry_now();
+    read_all(&w).await;
+    assert_eq!(sentences_of(&w, &note).len(), 2);
+    assert!(w.engine.rereads(10).unwrap().is_empty());
+}
+
+/// An item already marked for a re-read by a new mind is that re-read's: the tidy never marks it
+/// for a careful one.
+#[tokio::test]
+async fn an_item_marked_by_a_new_mind_is_left_to_that_re_read() {
+    let w = world_at("2026-11-12T20:00:00Z", boiler_mind());
+    let note = read_on_battery(&w, BOILER).await;
+    w.engine.queue_reread(std::slice::from_ref(&note)).unwrap();
+    night(&w, "2026-11-13T03:00:00Z").await;
+    assert!(
+        w.events
+            .notices()
+            .iter()
+            .any(|n| n.code == NoticeCode::ReReading),
+        "a new mind's re-read is announced as before"
+    );
+}
+
+/// The tidy asks for at most eight careful re-reads a night.
+#[tokio::test]
+async fn careful_re_reads_are_capped_at_eight_a_night() {
+    let mut mind = boiler_mind();
+    let texts: Vec<String> = (1..=10)
+        .map(|n| format!("Locker {n} is next to the door. The key is with Marek."))
+        .collect();
+    for (n, t) in texts.iter().enumerate() {
+        let quote = format!("Locker {} is next to the door", n + 1);
+        mind = mind.with_extract(
+            t,
+            vec![said(
+                &format!("Locker {}", n + 1),
+                "next to the door",
+                &format!("Locker {} is next to the door.", n + 1),
+                &quote,
+            )],
+        );
+    }
+    let w = world_at("2026-11-12T20:00:00Z", mind);
+    w.host.set_ac(Some(false));
+    let mut notes = Vec::new();
+    for t in &texts {
+        let note = keep(&w, t);
+        w.reader.read_now(Some(&note)).await;
+        notes.push(note);
+    }
+    read_all(&w).await;
+    w.host.set_ac(Some(true));
+    let before = extracts(&w);
+    assert_eq!(before, 10);
+    night(&w, "2026-11-13T03:00:00Z").await;
+    // Each re-read is the note and one second look at its missing line.
+    assert_eq!(extracts(&w) - before, 8 * 2, "eight a night");
+}
 /// An item whose memories keep every name and number it gives is never read again.
 #[tokio::test]
 async fn a_well_read_item_is_not_read_again() {
@@ -940,4 +1050,66 @@ async fn an_item_with_a_replaced_memory_is_not_read_again() {
         extracts, 2,
         "Dr Okafor is in no current memory, and still not read again"
     );
+}
+
+/// An item with a question open is left for the person to settle: it is not read again.
+#[tokio::test]
+async fn an_item_with_a_question_open_is_not_read_again() {
+    let first = "Dentist on Wednesday 18 November at 10:00";
+    let second = "Dentist moved to Thursday 19 November at 14:30 with Dr Okafor";
+    let appointment = |object: &str, on: &str, quote: &str| nocturne_engine::Candidate {
+        valid_from: Some(on.parse().unwrap()),
+        span: Some(nocturne_contract::Span::Quote { text: quote.into() }),
+        ..nocturne_engine::Candidate::new(
+            "Dentist appointment",
+            nocturne_engine::Predicate::Scheduled,
+            object,
+            &format!("The dentist appointment is on {object}."),
+            0.9,
+        )
+    };
+    let mind = FakeMind::new()
+        .with_extract(
+            first,
+            vec![appointment(
+                "Wednesday 18 November at 10:00",
+                "2026-11-18",
+                first,
+            )],
+        )
+        .with_extract(
+            second,
+            vec![appointment(
+                "Thursday 19 November at 14:30",
+                "2026-11-19",
+                "Dentist moved to Thursday 19 November at 14:30",
+            )],
+        )
+        .with_headline("A quiet night", "Two things kept.");
+    let w = world_at("2026-11-12T08:05:00Z", mind);
+    read_on_battery(&w, first).await;
+    at(&w, "2026-11-12T08:07:00Z");
+    let note = read_on_battery(&w, second).await;
+    assert_eq!(status(&w, &note), ItemStatus::NeedsYou);
+    let before = extracts(&w);
+    night(&w, "2026-11-13T03:00:00Z").await;
+    assert_eq!(extracts(&w), before, "Dr Okafor waits for the person");
+}
+
+/// A private item read again carefully keeps what it says private.
+#[tokio::test]
+async fn a_private_item_read_again_stays_private() {
+    let w = world_at("2026-11-12T20:00:00Z", boiler_mind());
+    let note = read_on_battery(&w, BOILER).await;
+    w.engine.set_item_private(&note, true).unwrap();
+    night(&w, "2026-11-13T03:00:00Z").await;
+    let memories = w
+        .engine
+        .memories(nocturne_contract::MemoryFilter {
+            item_id: Some(note.clone()),
+            ..Default::default()
+        })
+        .unwrap();
+    assert_eq!(memories.len(), 2, "read again");
+    assert!(memories.iter().all(|m| m.private), "{memories:?}");
 }
