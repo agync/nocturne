@@ -78,13 +78,52 @@ fn a_plural_finds_the_singular_and_search_as_you_type_still_works() {
             .map(|m| m.id)
             .collect()
     };
-    for q in [
-        "plu", "plum", "plumber", "plumbers", "Mr Hug", "Leo sw", "Mond",
-    ] {
+    for q in ["plu", "plum", "plumber", "Mr Hug", "Leo sw", "Mond"] {
         assert!(!typed(q).is_empty(), "{q:?} finds something");
     }
     assert_eq!(typed("swims"), [swim]);
     assert!(typed("zebra").is_empty());
+}
+
+#[test]
+fn a_word_part_way_typed_still_finds_what_it_starts() {
+    let f = fixture();
+    let (_, running) = learn(
+        &f.engine,
+        "Leo is running the relay on Sunday.",
+        cand(
+            "Leo",
+            Predicate::Scheduled,
+            "relay on Sunday",
+            "Leo is running the relay on Sunday.",
+        ),
+    );
+    for q in ["r", "run", "runn", "runnin", "running", "Leo runnin"] {
+        let found: Vec<String> = f
+            .engine
+            .memories(MemoryFilter {
+                query: Some(q.into()),
+                limit: Some(10),
+                ..MemoryFilter::default()
+            })
+            .unwrap()
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
+        assert_eq!(found, std::slice::from_ref(&running), "{q:?}");
+    }
+    let asked: Vec<String> = f
+        .engine
+        .retrieve("Who runs on Sunday?", None, 5)
+        .unwrap()
+        .into_iter()
+        .map(|h| h.memory.id)
+        .collect();
+    assert_eq!(
+        asked,
+        std::slice::from_ref(&running),
+        "answering is stemmed"
+    );
 }
 
 #[test]
@@ -119,7 +158,7 @@ fn a_store_from_before_stemming_is_reindexed_when_it_opens() {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].memory.id, "mem_old");
     let conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
-    for table in ["items_fts", "memories_fts"] {
+    for table in ["items_stem", "memories_stem"] {
         let sql: String = conn
             .query_row(
                 "SELECT sql FROM sqlite_master WHERE name = ?1",
@@ -143,7 +182,7 @@ fn a_store_from_before_stemming_is_reindexed_when_it_opens() {
     assert_eq!(
         sql_count(
             dir.path(),
-            "SELECT COUNT(*) FROM items_fts WHERE items_fts MATCH 'zebrafish47'"
+            "SELECT COUNT(*) FROM items_stem WHERE items_stem MATCH 'zebrafish47'"
         ),
         1
     );
@@ -151,10 +190,17 @@ fn a_store_from_before_stemming_is_reindexed_when_it_opens() {
     assert_eq!(
         sql_count(
             dir.path(),
-            "SELECT COUNT(*) FROM items_fts WHERE items_fts MATCH 'zebrafish47'"
+            "SELECT COUNT(*) FROM items_stem WHERE items_stem MATCH 'zebrafish47'"
         ),
         0
     );
+    for table in ["items_stem", "memories_stem"] {
+        let v: i64 = sql_count(
+            dir.path(),
+            &format!("SELECT v FROM {table}_config WHERE k = 'secure-delete'"),
+        );
+        assert_eq!(v, 1, "{table} deletes securely");
+    }
 }
 
 #[test]
@@ -230,6 +276,14 @@ fn no_line_comes_from_an_original_something_was_forgotten_from() {
     f.engine.forget(&preview.token).unwrap();
     assert!(f.engine.get_item(&item).is_ok(), "the original is kept");
     assert!(lines(&with_lines(&f, BOILER_ASKED)).is_empty());
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM memories_stem WHERE memories_stem MATCH 'booked'"
+        ),
+        0,
+        "the stemmed index forgets too"
+    );
 }
 
 #[test]
@@ -317,4 +371,54 @@ fn a_line_sharing_no_word_with_the_question_comes_only_from_the_first_hit() {
         "{said:?}"
     );
     assert!(!said.contains(&"Ask Sam about it."), "{said:?}");
+}
+
+/// How long migration 11 takes on a large store. Run by hand, in release:
+/// `cargo test --release -p nocturne-engine --test quality -- --ignored --nocapture`.
+#[test]
+#[ignore = "a timing, run by hand"]
+fn migration_11_on_fifty_thousand_items() {
+    let dir = tempfile::tempdir().unwrap();
+    {
+        let mut conn = rusqlite::Connection::open(dir.path().join("nocturne.db")).unwrap();
+        for (version, sql) in store::migrations() {
+            if version <= 10 {
+                conn.execute_batch(sql).unwrap();
+                conn.pragma_update(None, "user_version", version).unwrap();
+            }
+        }
+        let tx = conn.transaction().unwrap();
+        for n in 0..50_000 {
+            let text = format!(
+                "Note {n}: the plumber is coming on Friday {n} to fix the kitchen tap, and the \
+                 boiler service is booked for Monday between 8 and 12 with engineer number {n}."
+            );
+            tx.execute(
+                "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status, text) \
+                 VALUES (?1, 'text', 'quickCapture', 'trusted', ?1, 'Note', \
+                 '2026-11-01T00:00:00.000Z', 'understood', ?2)",
+                rusqlite::params![format!("itm_{n}"), text],
+            )
+            .unwrap();
+            tx.execute(
+                "INSERT INTO memories(id, subject, subject_key, predicate, object, object_key, \
+                 sentence, recorded_at, confidence, status) VALUES (?1, 'Plumber', 'plumber', \
+                 'scheduled', 'Friday', 'friday', ?2, '2026-11-01T00:00:00.000Z', 0.9, 'active')",
+                rusqlite::params![format!("mem_{n}"), text],
+            )
+            .unwrap();
+        }
+        tx.commit().unwrap();
+    }
+    let started = std::time::Instant::now();
+    let clock = std::sync::Arc::new(nocturne_engine::ManualClock::at(
+        "2026-11-13T07:00:00Z",
+        "Europe/London",
+    ));
+    let engine = nocturne_engine::Engine::open(dir.path(), clock).unwrap();
+    println!(
+        "migration 11 on 50000 items and 50000 memories: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(engine.retrieve("plumbers", None, 5).unwrap().len(), 5);
 }

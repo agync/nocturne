@@ -12,7 +12,11 @@
 //! original. Only lines no memory covers are offered, and never from an original that is private,
 //! not trusted, being forgotten or had something forgotten, or whose memories were let go,
 //! corrected or replaced by a later change, so a line can never bring back what was forgotten
-//! or what a move replaced.
+//! or what a move replaced. Lines only take places the memories left free.
+//!
+//! Words are matched through stemmed copies of the full-text indexes (`memories_stem`,
+//! `items_stem`), so "plumbers" finds "plumber"; the indexes searched as the person types stay
+//! unstemmed.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
@@ -142,8 +146,8 @@ impl Engine {
         if let Some(q) = fts_or(query) {
             let ids: Vec<String> = self.read(|conn| {
                 let mut stmt = conn.prepare_cached(
-                    "SELECT m.id FROM memories_fts f JOIN memories m ON m.rowid = f.rowid \
-                     WHERE memories_fts MATCH ?1 AND m.superseded_at IS NULL \
+                    "SELECT m.id FROM memories_stem f JOIN memories m ON m.rowid = f.rowid \
+                     WHERE memories_stem MATCH ?1 AND m.superseded_at IS NULL \
                      ORDER BY f.rank LIMIT ?2",
                 )?;
                 let rows = stmt.query_map(rusqlite::params![q, POOL as i64], |r| r.get(0))?;
@@ -460,8 +464,8 @@ fn line_sources(conn: &Connection, query: &str) -> Result<Vec<LineSource>> {
         "SELECT i.id, i.kind, i.source, NULL, i.title, i.kept_at, i.duration_ms, i.text, \
                 (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd ON rd.id = rk.device_id \
                  WHERE rk.item_id = i.id) \
-         FROM items_fts f JOIN items i ON i.rowid = f.rowid \
-         WHERE items_fts MATCH ?1 AND i.private = 0 AND i.trust = 'trusted' \
+         FROM items_stem f JOIN items i ON i.rowid = f.rowid \
+         WHERE items_stem MATCH ?1 AND i.private = 0 AND i.trust = 'trusted' \
          AND i.status IN ('understood', 'partlyUnderstood') AND i.text IS NOT NULL \
          AND i.forget_epoch = 0 \
          AND NOT EXISTS (SELECT 1 FROM forgotten_claims c WHERE c.item_id = i.id) \
