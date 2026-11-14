@@ -291,6 +291,96 @@ async fn relaunch_waits_for_idle_with_a_cap() {
     sup.shutdown().await.unwrap();
 }
 
+/// Waits until the engine's state passes `ok`.
+async fn until(sup: &Supervisor, ok: impl Fn(&nocturne_lemonade::RuntimeState) -> bool) {
+    let mut state = sup.state();
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            if ok(&state.borrow_and_update()) {
+                break;
+            }
+            state.changed().await.unwrap();
+        }
+    })
+    .await
+    .expect("the engine reached the state");
+}
+
+fn starting(s: &nocturne_lemonade::RuntimeState) -> bool {
+    matches!(s, nocturne_lemonade::RuntimeState::Starting)
+}
+
+fn ready(s: &nocturne_lemonade::RuntimeState) -> bool {
+    matches!(s, nocturne_lemonade::RuntimeState::Ready { .. })
+}
+
+/// A relaunch asked for while another one starts the engine waits its turn: the engine ends
+/// up running with the last route asked for, and nothing stops it.
+#[tokio::test]
+async fn relaunches_during_a_launch_wait_and_the_last_wins() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let control = sup.control();
+    common::set_mode(&dirs, "slow-start-ms=600");
+    for last in [None, Some(route())] {
+        let first = {
+            let c = control.clone();
+            let route = if last.is_some() { None } else { Some(route()) };
+            tokio::spawn(async move { c.set_cloud(route).await })
+        };
+        until(&sup, starting).await;
+        let with_route = last.is_some();
+        control.set_cloud(last).await.unwrap();
+        first.await.unwrap().unwrap();
+        assert!(ready(&sup.state().borrow()), "the engine runs");
+        assert_eq!(control.has_cloud(), with_route);
+        if with_route {
+            assert_eq!(engine_env(&sup).await[KEY_ENV], KEY);
+            assert_eq!(config(&dirs)["cloud_providers"][0]["name"], PROVIDER);
+        } else {
+            assert_off(&sup, &dirs).await;
+        }
+    }
+    assert_eq!(sup.restarts(), 0);
+    sup.shutdown().await.unwrap();
+}
+
+/// The download window and the route changing at once are both kept: the engine runs in the
+/// window without the route, and gets the route back when the window closes.
+#[tokio::test]
+async fn the_window_and_the_route_changing_at_once_both_hold() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, None).await;
+    let control = sup.control();
+    common::set_mode(&dirs, "slow-start-ms=600");
+    let routed = {
+        let c = control.clone();
+        tokio::spawn(async move { c.set_cloud(Some(route())).await })
+    };
+    until(&sup, starting).await;
+    let hold = control.hold_online().await.unwrap();
+    routed.await.unwrap().unwrap();
+    assert!(ready(&sup.state().borrow()));
+    assert!(control.download_window_open());
+    assert!(control.has_cloud());
+    assert_eq!(config(&dirs)["offline"], false);
+    assert_off(&sup, &dirs).await;
+
+    // The other way round: the window closes while the route is taken away.
+    let released = tokio::spawn(hold.release());
+    until(&sup, starting).await;
+    control.set_cloud(None).await.unwrap();
+    released.await.unwrap();
+    until(&sup, ready).await;
+    assert!(!control.download_window_open());
+    assert!(!control.has_cloud());
+    assert_eq!(config(&dirs)["offline"], true);
+    assert_off(&sup, &dirs).await;
+    sup.shutdown().await.unwrap();
+}
+
 /// The `config.json` entry and the static row are written in one place, the launch, from the
 /// same route: no other code outside the unit tests calls either writer.
 #[test]

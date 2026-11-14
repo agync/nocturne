@@ -96,9 +96,19 @@ enum Cmd {
     Relaunch(Relaunch),
 }
 
+/// Which launch-time setting a relaunch changes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Changes {
+    /// The download window ([`Control::set_online`]).
+    Window,
+    /// The route for Online answers ([`Control::set_cloud`]).
+    Route,
+}
+
 /// The answer to a relaunch, and what to put back if it fails.
 struct Relaunch {
     reply: oneshot::Sender<Result<(), RuntimeError>>,
+    changes: Changes,
     /// Set when this relaunch opens the download window: a relaunch that fails closes it
     /// again, so a window that did not open never opens at a later restart. A failed close is
     /// never undone: the window stays closed.
@@ -112,16 +122,18 @@ impl Relaunch {
     fn new(reply: oneshot::Sender<Result<(), RuntimeError>>, closes_on_failure: bool) -> Self {
         Relaunch {
             reply,
+            changes: Changes::Window,
             closes_on_failure,
             drops_cloud_on_failure: false,
         }
     }
 
-    fn with_route(reply: oneshot::Sender<Result<(), RuntimeError>>) -> Self {
+    fn route(reply: oneshot::Sender<Result<(), RuntimeError>>, with_route: bool) -> Self {
         Relaunch {
             reply,
+            changes: Changes::Route,
             closes_on_failure: false,
-            drops_cloud_on_failure: true,
+            drops_cloud_on_failure: with_route,
         }
     }
 
@@ -137,6 +149,16 @@ impl Relaunch {
             *shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = None;
         }
         let _ = self.reply.send(Err(e));
+    }
+
+    /// A failure whose setting a later relaunch already changed again: that later one owns it
+    /// now, so nothing is put back.
+    fn failed_after(self, shared: &Shared, e: RuntimeError, later: &[Relaunch]) {
+        if later.iter().any(|l| l.changes == self.changes) {
+            let _ = self.reply.send(Err(e));
+        } else {
+            self.failed(shared, e);
+        }
     }
 }
 
@@ -203,7 +225,9 @@ impl Control {
     /// Sets the route for Online answers (`None` for off) and relaunches the engine, which reads
     /// providers only when it starts. Returns once the new one answers. A relaunch is not a
     /// restart: it never counts toward the restart limit. It first waits, up to a limit, for
-    /// the model requests in flight (reading, the tidy, the voice) to end.
+    /// the model requests in flight (reading, the tidy, the voice) to end. A relaunch asked for
+    /// while another one starts the engine waits for it, then the engine starts once more with
+    /// the latest window and route: the last change wins, and none stops the engine.
     pub async fn set_cloud(&self, route: Option<CloudRoute>) -> Result<(), RuntimeError> {
         let (off, on) = *self
             .shared
@@ -218,12 +242,12 @@ impl Control {
         let with_route = route.is_some();
         *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = route;
         let (tx, rx) = oneshot::channel();
-        let relaunch = if with_route {
-            Relaunch::with_route(tx)
-        } else {
-            Relaunch::new(tx, false)
-        };
-        if self.cmd.send(Cmd::Relaunch(relaunch)).await.is_err() {
+        if self
+            .cmd
+            .send(Cmd::Relaunch(Relaunch::route(tx, with_route)))
+            .await
+            .is_err()
+        {
             *self.shared.cloud.lock().unwrap_or_else(|e| e.into_inner()) = None;
             return Err(RuntimeError::Unavailable);
         }
@@ -546,34 +570,56 @@ impl Actor {
         let mut first = Some(first);
         let mut crashes: VecDeque<Instant> = VecDeque::new();
         let mut attempt = 0u32;
-        let mut relaunch: Option<Relaunch> = None;
+        // The relaunches the launch under way answers.
+        let mut waiting: Vec<Relaunch> = Vec::new();
         loop {
-            let launched = tokio::select! {
-                r = self.launch() => r,
-                c = cmd.recv() => {
-                    match c {
-                        Some(Cmd::Relaunch(r)) => r.failed(&self.shared, RuntimeError::Unavailable),
-                        Some(Cmd::Shutdown(reply, _)) => {
-                            let _ = reply.send(Ok(()));
-                        }
-                        None => {}
+            // Relaunches asked for while the engine starts. The launch may have read the
+            // settings before they changed, so it starts again with the latest ones, and every
+            // relaunch is answered once that one is up: the last setting wins, nothing stops.
+            let mut later: Vec<Relaunch> = Vec::new();
+            let launched = {
+                let launch = self.launch();
+                tokio::pin!(launch);
+                loop {
+                    tokio::select! {
+                        r = &mut launch => break r,
+                        c = cmd.recv() => match c {
+                            Some(Cmd::Relaunch(r)) => later.push(r),
+                            Some(Cmd::Shutdown(reply, _)) => {
+                                self.give_up(waiting, later);
+                                let _ = reply.send(Ok(()));
+                                self.set_state(RuntimeState::Stopped);
+                                return;
+                            }
+                            None => {
+                                self.give_up(waiting, later);
+                                self.set_state(RuntimeState::Stopped);
+                                return;
+                            }
+                        },
                     }
-                    self.set_state(RuntimeState::Stopped);
-                    return;
                 }
             };
             match launched {
-                Ok(running) => {
+                Ok(mut running) => {
                     if let Some(f) = first.take() {
                         let _ = f.send(Ok(()));
                     }
-                    if let Some(r) = relaunch.take() {
+                    if !later.is_empty() {
+                        let _ = self.stop_gracefully(&mut running, Stop::patient()).await;
+                        self.forget_endpoints();
+                        self.clear_ready();
+                        self.set_state(RuntimeState::Starting);
+                        waiting.append(&mut later);
+                        continue;
+                    }
+                    for r in waiting.drain(..) {
                         r.succeeded();
                     }
                     match self.supervise(running, &mut cmd).await {
                         Exit::Shutdown => return,
                         Exit::Relaunch(reply) => {
-                            relaunch = Some(reply);
+                            waiting.push(reply);
                             continue;
                         }
                         Exit::Crashed(why) => {
@@ -582,10 +628,12 @@ impl Actor {
                     }
                 }
                 Err(e) => {
-                    if let Some(r) = relaunch.take() {
-                        r.failed(&self.shared, e.clone());
+                    for r in waiting.drain(..) {
+                        r.failed_after(&self.shared, e.clone(), &later);
                     }
+                    waiting = later;
                     if let Some(f) = first.take() {
+                        self.give_up(std::mem::take(&mut waiting), Vec::new());
                         self.set_state(RuntimeState::Stopped);
                         let _ = f.send(Err(e));
                         return;
@@ -596,6 +644,7 @@ impl Actor {
             let now = Instant::now();
             crashes.retain(|t| now.duration_since(*t) < RESTART_WINDOW);
             if crashes.len() as u32 >= self.opts.restart_limit {
+                self.give_up(std::mem::take(&mut waiting), Vec::new());
                 self.fail(
                     format!(
                         "the engine stopped {} times within an hour",
@@ -615,19 +664,28 @@ impl Actor {
                 _ = tokio::time::sleep(delay) => {}
                 c = cmd.recv() => {
                     match c {
-                        Some(Cmd::Relaunch(reply)) => relaunch = Some(reply),
+                        Some(Cmd::Relaunch(reply)) => waiting.push(reply),
                         Some(Cmd::Shutdown(reply, _)) => {
+                            self.give_up(std::mem::take(&mut waiting), Vec::new());
                             let _ = reply.send(Ok(()));
                             self.set_state(RuntimeState::Stopped);
                             return;
                         }
                         None => {
+                            self.give_up(std::mem::take(&mut waiting), Vec::new());
                             self.set_state(RuntimeState::Stopped);
                             return;
                         }
                     }
                 }
             }
+        }
+    }
+
+    /// Answers relaunches that will not happen, putting back what each would have changed.
+    fn give_up(&self, waiting: Vec<Relaunch>, later: Vec<Relaunch>) {
+        for r in waiting.into_iter().chain(later) {
+            r.failed(&self.shared, RuntimeError::Unavailable);
         }
     }
 
@@ -905,7 +963,7 @@ impl Actor {
                         }
                     };
                     self.forget_endpoints();
-                                self.clear_ready();
+                    self.clear_ready();
                     return exit;
                 }
             }
