@@ -204,7 +204,9 @@ with the release notes.
    behind the claim that Nocturne goes online only to download what the person agrees to.
    For Away from home also run `make netcheck-remote` (see Away from home checks below).
 8. **Check the licences.** `scripts/notices.py --check` passes. The copyleft policy for the
-   AppImage's bundled libraries is enforced by step 5.
+   AppImage's bundled libraries is enforced by step 5. The release runners are Ubuntu, so the
+   policy reads Debian package names there: a new GPL entry in a bundled package needs a reviewed
+   `ALLOW_GPL` entry for that package's Debian name as well as its Fedora name.
 9. **Check the desktop** (below) on a GNOME Wayland session and on one X11 session.
 10. **Skeptical review.** Review the whole range since the last release as a maintainer who wants
     to find a reason not to ship it.
