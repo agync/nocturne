@@ -48,8 +48,9 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# The development preview build (make preview-real)
+# The development preview build (make preview-real) and the server's (make server/build)
 ui/dist-preview/
+ui/dist-server/
 
 # Flatpak build state and generated offline sources
 flatpak/.flatpak-builder/

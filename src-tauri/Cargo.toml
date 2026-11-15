@@ -21,6 +21,11 @@ name = "nocturne-preview"
 path = "src/bin/nocturne-preview.rs"
 required-features = ["preview"]
 
+[[bin]]
+name = "nocturne-server"
+path = "src/bin/nocturne-server.rs"
+required-features = ["server"]
+
 [[test]]
 name = "preview"
 required-features = ["preview"]
@@ -39,6 +44,10 @@ fake-helpers = ["nocturne-helpers/fake"]
 # loopback, for use from a browser. Never in `default`, never built by packaging; the package
 # checks fail if it shows up. See docs/contribution/building.md.
 preview = ["tauri/test", "axum/json", "axum/query", "dep:tower", "dep:tower-http", "dep:futures-util"]
+# The experimental server: the same HTTP front as the preview, with a sign-in token kept in the
+# data folder, for the container image. Never in `default`, never in a desktop package. See
+# docs/adr/0012-server-mode.md.
+server = ["preview"]
 # Lets Online answers use the stand-in provider on loopback (tests, the network check and S1).
 # Never in `default`, never packaged.
 online-stand-in = ["nocturne-lemonade/online-stand-in"]

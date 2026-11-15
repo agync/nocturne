@@ -1,8 +1,11 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { authHeaders, captureToken, currentToken } from "./httpAuth";
 
 afterEach(() => {
   sessionStorage.clear();
+  localStorage.clear();
+  vi.unstubAllEnvs();
+  vi.resetModules();
   window.history.replaceState(null, "", "/");
 });
 
@@ -26,5 +29,19 @@ describe("the preview token", () => {
     window.history.replaceState(null, "", "/#/today");
     expect(captureToken()).toBeNull();
     expect(window.location.hash).toBe("#/today");
+  });
+});
+
+describe("the server token", () => {
+  it("is kept in this browser, not only this tab, under its own name", async () => {
+    vi.stubEnv("MODE", "server");
+    vi.resetModules();
+    const server = await import("./httpAuth");
+    window.history.replaceState(null, "", "/#token=def456");
+    expect(server.captureToken()).toBe("def456");
+    expect(window.location.hash).toBe("#/");
+    expect(localStorage.getItem("nocturne.server.token")).toBe("def456");
+    expect(sessionStorage.getItem("nocturne.preview.token")).toBeNull();
+    expect(server.currentToken()).toBe("def456");
   });
 });

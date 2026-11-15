@@ -150,6 +150,12 @@ class FixtureTrees(unittest.TestCase):
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("development-only real preview", proc.stdout)
         os.remove(os.path.join(self.tmp, "usr/bin/nocturne-preview"))
+        # The experimental server belongs in its container image only.
+        write(os.path.join(self.tmp, "usr/bin/nocturne-server"), b"\x7fELF\0", 0o755)
+        proc = run_check(self.tmp)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("nocturne-server", proc.stdout)
+        os.remove(os.path.join(self.tmp, "usr/bin/nocturne-server"))
         # The program itself, carrying the text the preview prints.
         write(os.path.join(self.tmp, "usr/bin/nocturne"), b"\x7fELF\0nocturne-preview-dev-only\0", 0o755)
         proc = run_check(self.tmp)
@@ -158,6 +164,10 @@ class FixtureTrees(unittest.TestCase):
         write(os.path.join(self.tmp, "usr/bin/nocturne"), b"\x7fELF\0", 0o755)
         # The interface built for the preview, which keeps its token under a name of its own.
         write(os.path.join(lib, "ui/app.js"), 'sessionStorage.getItem("nocturne.preview.token")')
+        proc = run_check(self.tmp)
+        self.assertEqual(proc.returncode, 1, proc.stdout)
+        self.assertIn("app.js", proc.stdout)
+        write(os.path.join(lib, "ui/app.js"), 'localStorage.getItem("nocturne.server.token")')
         proc = run_check(self.tmp)
         self.assertEqual(proc.returncode, 1, proc.stdout)
         self.assertIn("app.js", proc.stdout)

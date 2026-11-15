@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fail when the built interface holds the development-only preview.
+"""Fail when the built interface holds the development-only preview or the server.
 
 Usage: scripts/check_ui_dist.py DIR
 
@@ -28,9 +28,9 @@ def main(argv=None):
         if any(marker in data for marker in PREVIEW_MARKERS):
             found.append(os.path.relpath(path, args[0]))
     if found:
-        print(f"the development-only real preview is in the built interface: {found[:5]}")
+        print(f"the development-only real preview or the server is in the built interface: {found[:5]}")
         return 1
-    print("no development-only real preview in the built interface")
+    print("no development-only real preview or server in the built interface")
     return 0
 
 
