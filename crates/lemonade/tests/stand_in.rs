@@ -170,3 +170,32 @@ async fn scripted_errors_echo_the_key_and_the_marker() {
         .unwrap();
     assert_eq!(refused.status().as_u16(), 400, "relays to loopback only");
 }
+
+#[tokio::test]
+async fn a_stray_probe_from_another_program_is_not_recorded() {
+    let s = start();
+    let http = reqwest::Client::new();
+    for agent in ["Go-http-client/1.1", "nocturne-test"] {
+        let _ = http
+            .get(format!("{}/", s.base))
+            .header("user-agent", agent)
+            .send()
+            .await
+            .unwrap();
+    }
+    let log: Value = http
+        .get(format!("{}/fake/requests", s.base))
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let agents: Vec<&str> = log
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["headers"]["user-agent"].as_str().unwrap())
+        .collect();
+    assert_eq!(agents, ["nocturne-test"]);
+}

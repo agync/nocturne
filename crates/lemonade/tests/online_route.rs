@@ -914,27 +914,16 @@ impl Provider {
         Provider { child, port }
     }
 
-    /// What reached the stand-in, less probes from other programs on a shared machine. The port
-    /// is taken from the system's free ports, and a Go program polling a port it expects to
-    /// find a server on (a `GET /` from `Go-http-client`, to `127.0.0.1` and then `localhost`)
-    /// sometimes lands on it. Neither the engine nor the app is a Go client, and each of their
-    /// requests is still counted and held to carry the key.
+    /// What reached the stand-in. It leaves out stray probes from other programs itself.
     async fn requests(&self) -> Vec<Value> {
-        let all: Vec<Value> = reqwest::Client::new()
+        reqwest::Client::new()
             .get(format!("http://127.0.0.1:{}/fake/requests", self.port))
             .send()
             .await
             .unwrap()
             .json()
             .await
-            .unwrap();
-        all.into_iter()
-            .filter(|r| {
-                !r["headers"]["user-agent"]
-                    .as_str()
-                    .is_some_and(|ua| ua.starts_with("Go-http-client/"))
-            })
-            .collect()
+            .unwrap()
     }
 
     /// Requests for the provider's list of models.
