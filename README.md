@@ -9,6 +9,10 @@
   page each morning.
 </p>
 
+<p align="center">
+  <a href="https://github.com/agync/nocturne/actions/workflows/ci.yml"><img src="https://github.com/agync/nocturne/actions/workflows/ci.yml/badge.svg?branch=main" alt="ci"></a>
+</p>
+
 ![The morning page in Nocturne, shown with sample data](docs/assets/nocturne-today.webp)
 
 Drop in a photo of a letter, a voice note, a screenshot or a line of text. While your computer is
