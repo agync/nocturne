@@ -31,9 +31,12 @@ weakening what the preview guarantees.
   built-in TLS. The `Host` and `Origin` checks are the preview's: only `127.0.0.1` on the port and
   the public origin are accepted, so a page on another site or a name pointed here cannot use it.
 - **Signing in.** A 256-bit token is kept in `server-token` in the data folder, owner-only. It is
-  made at the first start and printed once. `nocturne-server token` prints the sign-in link again,
+  made at the first start and never written to the log. `nocturne-server token` prints the sign-in
+  link,
   and `nocturne-server token --rotate` replaces the token; the running server reads the file at
-  every check, so the old link stops working at the next request without a restart. A missing
+  every check, so the old link stops working at the next request without a restart. Event and media
+  tickets are tied to the token they were made under and end with it, an open event stream closes
+  within a second or so, and a media ticket lives twelve hours at most however often it is used. A missing
   or malformed file admits nobody. The link carries the token in the fragment, which never reaches
   the server in a URL; the page sends it as a bearer header and keeps it in this browser's local
   storage (the preview keeps its own per tab). There are no accounts: one server is one person.
@@ -70,9 +73,7 @@ weakening what the preview guarantees.
   that is not loopback is refused.
 - The token sits in the browser's local storage, readable by any script on that origin; the content
   policy allows scripts from the server only.
-- The first start prints the token to the container's log.
-- A rotated token does not close an event stream already open or end a media ticket already issued
-  (an hour at most). Restart the server after rotating if the old link may have leaked.
+- A media file already being sent when the token is replaced finishes sending.
 - Anyone who can run commands in the container (`podman exec`) can read the token, as on any host.
 - GPU access inside a container depends on the host's drivers and device permissions; only what the
   guide names was tried.

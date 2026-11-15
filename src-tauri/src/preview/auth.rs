@@ -62,11 +62,16 @@ impl Token {
         }))
     }
 
-    fn matches(&self, presented: &str) -> bool {
+    /// The token now; `None` when the file is missing or malformed.
+    pub(crate) fn current(&self) -> Option<String> {
         match self {
-            Token::Fixed(token) => same(presented, token),
-            Token::File(file) => file.current().is_some_and(|t| same(presented, &t)),
+            Token::Fixed(token) => Some(token.clone()),
+            Token::File(file) => file.current(),
         }
+    }
+
+    fn matches(&self, presented: &str) -> bool {
+        self.current().is_some_and(|t| same(presented, &t))
     }
 }
 
@@ -108,7 +113,7 @@ pub fn rotate_token_file(path: &Path) -> std::io::Result<String> {
 }
 
 /// Equal strings, in time that does not depend on where they differ.
-fn same(a: &str, b: &str) -> bool {
+pub(crate) fn same(a: &str, b: &str) -> bool {
     let (a, b) = (a.as_bytes(), b.as_bytes());
     if a.len() != b.len() {
         return false;
@@ -133,7 +138,7 @@ fn protected(path: &str) -> bool {
     path.starts_with("/api/") || path.starts_with("/originals/") || path.starts_with("/audio/")
 }
 
-fn refuse(status: StatusCode, code: &str) -> Response {
+pub(crate) fn refuse(status: StatusCode, code: &str) -> Response {
     let mut response = (
         status,
         [(header::CACHE_CONTROL, "no-store")],

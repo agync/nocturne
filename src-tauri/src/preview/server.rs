@@ -180,12 +180,19 @@ async fn ticket(State(preview): State<Arc<Preview>>, body: Bytes) -> Response {
         Some("media") => TicketKind::Media,
         Some(_) => return failure(json!({ "code": "invalid", "detail": "events or media" })),
     };
-    json_response(StatusCode::OK, json!({ "ticket": preview.issue(kind) }))
+    match preview.issue(kind) {
+        Some(ticket) => json_response(StatusCode::OK, json!({ "ticket": ticket })),
+        None => auth::refuse(StatusCode::UNAUTHORIZED, "unauthorized"),
+    }
 }
 
 /// Every event the app emits, as server-sent events named as the app names them. A new stream
-/// starts with the current status, so a browser that reconnects is up to date.
-async fn events(State(preview): State<Arc<Preview>>) -> impl IntoResponse {
+/// starts with the current status, so a browser that reconnects is up to date. A stream ends
+/// within a second or so of the token it was opened under being replaced.
+async fn events(State(preview): State<Arc<Preview>>) -> Response {
+    let Some(opened_under) = preview.opts.token.current() else {
+        return auth::refuse(StatusCode::UNAUTHORIZED, "unauthorized");
+    };
     let rx = preview.events.subscribe();
     let first = {
         let preview = preview.clone();
@@ -194,21 +201,42 @@ async fn events(State(preview): State<Arc<Preview>>) -> impl IntoResponse {
             .ok()
             .flatten()
     };
+    let token = preview.opts.token.clone();
+    let still_current = move || {
+        token
+            .current()
+            .is_some_and(|t| auth::same(&t, &opened_under))
+    };
     let stream: std::pin::Pin<Box<dyn Stream<Item = Result<Sse, Infallible>> + Send>> = Box::pin(
-        futures_util::stream::unfold((rx, first), |(mut rx, first)| async move {
-            if let Some(status) = first {
-                let event = Sse::default()
-                    .event("status-changed")
-                    .data(status.to_string());
-                return Some((Ok(event), (rx, None)));
-            }
-            loop {
-                match rx.recv().await {
-                    Ok((name, data)) => {
-                        return Some((Ok(Sse::default().event(name).data(data)), (rx, None)));
+        futures_util::stream::unfold((rx, first), move |(mut rx, first)| {
+            let still_current = still_current.clone();
+            async move {
+                if let Some(status) = first {
+                    let event = Sse::default()
+                        .event("status-changed")
+                        .data(status.to_string());
+                    return Some((Ok(event), (rx, None)));
+                }
+                let mut check = tokio::time::interval(super::STREAM_TOKEN_CHECK);
+                loop {
+                    tokio::select! {
+                        _ = check.tick() => {
+                            if !still_current() {
+                                return None;
+                            }
+                        }
+                        received = rx.recv() => match received {
+                            Ok((name, data)) => {
+                                if !still_current() {
+                                    return None;
+                                }
+                                let event = Sse::default().event(name).data(data);
+                                return Some((Ok(event), (rx, None)));
+                            }
+                            Err(RecvError::Lagged(_)) => continue,
+                            Err(RecvError::Closed) => return None,
+                        },
                     }
-                    Err(RecvError::Lagged(_)) => continue,
-                    Err(RecvError::Closed) => return None,
                 }
             }
         }),
@@ -217,6 +245,7 @@ async fn events(State(preview): State<Arc<Preview>>) -> impl IntoResponse {
         [(header::CACHE_CONTROL, "no-store")],
         axum::response::Sse::new(stream).keep_alive(KeepAlive::default()),
     )
+        .into_response()
 }
 
 /// Serve a file the server itself chose, with the type its extension says and nothing a page

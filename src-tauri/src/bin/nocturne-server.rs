@@ -115,7 +115,8 @@ fn token(config: &Config, rotate: bool) {
 fn serve(config: &Config) {
     let data_dir = preview::claim(&config.data_dir, DATA_MARKER, "nocturne-server")
         .unwrap_or_else(|e| fail(e));
-    let (token, fresh) = preview::ensure_token_file(&token_path(config))
+    // Made here when there is none; never printed, so it stays out of the container's log.
+    preview::ensure_token_file(&token_path(config))
         .unwrap_or_else(|e| fail(format!("the sign-in token cannot be kept: {e}")));
     let _log = logging::init(&data_dir.join("logs"));
     let (app, window) = preview::start_app(&data_dir).unwrap_or_else(|e| {
@@ -140,14 +141,8 @@ fn serve(config: &Config) {
         "Nocturne server (experimental), listening on {}",
         config.bind
     );
-    if fresh {
-        println!(
-            "Sign in once with this link: {}",
-            sign_in_link(config, &token)
-        );
-    } else {
-        println!("For the sign-in link, run: nocturne-server token");
-    }
+    println!("For the sign-in link, run: nocturne-server token");
+    println!("In a container: podman exec <name> nocturne-server token");
     preview::serve(app, listener, server);
 }
 
