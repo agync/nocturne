@@ -39,6 +39,12 @@ pub fn read(config_dir: &Path) -> Option<SetupRecord> {
     serde_json::from_slice(&bytes).ok()
 }
 
+/// The tier setup was last asked for, read before the engine answers: none means setup has never
+/// begun on this computer.
+pub fn chosen(config_dir: &Path) -> Option<Tier> {
+    read(config_dir).and_then(|r| r.tier)
+}
+
 pub fn write(config_dir: &Path, record: &SetupRecord) -> Result<(), RuntimeError> {
     std::fs::create_dir_all(config_dir)?;
     let tmp = config_dir.join(format!("{FILE}.tmp"));
@@ -56,6 +62,7 @@ mod tests {
     fn round_trips_and_tolerates_absence() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(read(tmp.path()).is_none());
+        assert_eq!(chosen(tmp.path()), None);
         let mut record = SetupRecord {
             version: 1,
             tier: Some(Tier::Standard),
@@ -66,6 +73,7 @@ mod tests {
         record.backends.insert("llamacpp".into(), "vulkan".into());
         write(tmp.path(), &record).unwrap();
         assert_eq!(read(tmp.path()), Some(record));
+        assert_eq!(chosen(tmp.path()), Some(Tier::Standard));
     }
 
     #[test]
