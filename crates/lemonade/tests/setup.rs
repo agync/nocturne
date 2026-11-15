@@ -402,7 +402,9 @@ async fn an_8_gb_computer_is_offered_the_tiny_tier() {
 async fn a_restarted_engine_resumes_the_partial_download() {
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
-    common::set_mode(&dirs, "download-ms=3000");
+    // Each download takes half a minute, so the stop below always lands in the middle of one: a
+    // download that finished between the look and the stop would leave nothing cut short.
+    common::set_mode(&dirs, "download-ms=30000");
     let ledger: Ledger = Arc::default();
 
     let sup = Supervisor::start(dirs.clone(), sup_opts()).await.unwrap();
