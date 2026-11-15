@@ -329,19 +329,25 @@ def check_app_bundle(root, rel, version, report):
 
 
 def parse_bundled(text):
-    """Entries of BUNDLED-LIBRARIES.txt: name, licence, source package and files."""
-    entries, current = [], None
-    for line in text.splitlines():
+    """Entries of BUNDLED-LIBRARIES.txt: name, licence, source package and files.
+
+    An entry is `name version  (licence)`, its source package line, then its files up to the first
+    line that is not one; the licence texts follow. Text that happens to look like an entry or a
+    file is not read as one.
+    """
+    entries = []
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
         head = re.match(r"^(\S+) (\S+)  \((.*)\)$", line)
-        if head and not line.startswith(" "):
-            current = {"name": head.group(1), "license": head.group(3), "srpm": None, "files": []}
-            entries.append(current)
-        elif current and line.startswith("  source package: "):
-            current["srpm"] = line.split(": ", 1)[1].strip()
-        elif current and re.match(r"^  \S+\.so\S*$", line):
-            current["files"].append(line.strip())
-        elif line.startswith("="):
-            current = None
+        if not head or i + 1 >= len(lines) or not lines[i + 1].startswith("  source package: "):
+            continue
+        entry = {"name": head.group(1), "license": head.group(3), "srpm": lines[i + 1].split(": ", 1)[1].strip()}
+        entry["files"] = []
+        for later in lines[i + 2 :]:
+            if not re.match(r"^  \S+\.so\S*$", later):
+                break
+            entry["files"].append(later.strip())
+        entries.append(entry)
     return entries
 
 
