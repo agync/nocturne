@@ -6,7 +6,7 @@ members = ["crates/*", "src-tauri"]
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-rust-version = "1.90"
+rust-version = "1.100"
 
 [workspace.dependencies]
 nocturne-contract = { path = "crates/contract" }

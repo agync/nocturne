@@ -124,7 +124,7 @@ jobs:
         with:
           node-version: 22
       - name: Rust
-        run: rustup toolchain install stable --profile minimal && rustup default stable
+        run: rustup toolchain install
       - name: build the AppImage, deb and rpm
         run: scripts/package.sh
       - name: check each package
@@ -160,7 +160,7 @@ jobs:
         with:
           node-version: 22
       - name: Rust
-        run: rustup toolchain install stable --profile minimal && rustup default stable
+        run: rustup toolchain install
       - name: build the app and the disk image (signed ad hoc)
         run: scripts/package.sh --config macos
       # The engine is checked against its manifest here, before any Developer ID signature
@@ -306,7 +306,7 @@ jobs:
           chmod +x "$RUNNER_TEMP/bin/python3"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Rust
-        run: rustup toolchain install stable --profile minimal && rustup default stable
+        run: rustup toolchain install
       - name: build the NSIS and MSI installers
         run: scripts/package.sh --config windows
       # scripts/check-package.sh reads Linux and macOS packages only; the installers are checked
