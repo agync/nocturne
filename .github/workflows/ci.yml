@@ -64,7 +64,7 @@ jobs:
           read -ra packages <<< "$APT_PACKAGES"
           sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
       - name: Rust
-        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+        run: rustup toolchain install
       # The registry is small and cached on every run. The build output is big, so it is saved
       # from main only and a pull request restores it.
       - name: Restore the Cargo caches
@@ -149,7 +149,7 @@ jobs:
           python-version: "3.13"
       # The cargo-fmt hook runs rustfmt from the toolchain.
       - name: Rust
-        run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
+        run: rustup toolchain install
       - name: Install okf and pre-commit
         env:
           OKF_VERSION: "0.5.2"
