@@ -6,6 +6,7 @@ How to install Nocturne, live with it on your desktop, and stay in charge of wha
 - [On your desktop](desktops.md) - The tray, the quick keep shortcut, notifications and starting with your computer.
 - [Away from home](away-from-home.md) - Ask, keep and read your page from a paired phone, and what that lets other companies see.
 - [Online answers](online-answers.md) - Let a service you already use write the answer, what is sent, and how to turn it off.
+- [Faster with the NPU](npu.md) - What the NPU in some AMD computers does for Nocturne, why it may not be in use, and the steps to set it up on Linux.
 - [Choosing models](choosing-models.md) - Pick a model for each job in the advanced view, with downloads only when you agree.
 - [Your data](your-data.md) - Where everything is kept, how to export it, let it go or delete it, and how Nocturne shows that nothing leaves your computer.
 

@@ -47,7 +47,7 @@ people never install or see a separate server.
 | Find the bundle | `NOCTURNE_LEMOND` (a folder, or the `lemond` file in it), then `lemonade/` among the app's own resources, then, in a debug build only, `vendor/lemonade/<platform>` in the checkout |
 | Launch | `lemond` with a scrubbed environment, a random loopback port and a random key per launch; the log says `the private engine <version> is ready on 127.0.0.1:<port>` |
 | Isolation | Every working folder (`cache`, `config`, `models`, `logs`, an owner-only `run`) is under `engine/` in the data folder, never beside the program, so a read-only install works; no discovery beacon |
-| First run | `GET /v1/system-info` picks the hardware tier and backends; `POST /v1/install` and `POST /v1/pull` download with progress |
+| First run | `GET /v1/system-info` picks the hardware tier and backends; `POST /v1/install` and `POST /v1/pull` download with progress, the NPU runtime and its speech model only when they will be used |
 | Steady state | `POST /v1/load` and `/v1/unload` on demand; models unload when idle so games and other apps get the memory back (see [Running on 8 GB](#running-on-8-gb)) |
 | Understanding | `/v1/audio/transcriptions`, vision chat for images, `/v1/chat/completions` for extraction and answers, `/v1/embeddings` for recall |
 | Voice | `/v1/audio/speech` reads the page aloud |
@@ -231,13 +231,21 @@ setup:
 
 | Work | Device | Why |
 |---|---|---|
-| Answers and extraction | GPU | The large model needs the bandwidth and the KV cache |
-| Salience | NPU when idle, otherwise GPU | Low power; optional because the NPU stack is not stable enough to depend on |
-| Embeddings | GPU or CPU | NPU embeddings on Linux are not usable in current FastFlowLM releases |
+| Answers and reading items | GPU | The mind needs the bandwidth and the KV cache; FastFlowLM ignores the reading grammar |
+| Reading recordings | NPU (`whisper-v3-turbo-FLM`) when usable and it fits, otherwise the tier's speech model on the GPU or CPU | Leaves the GPU to answers and reading ([decision 0006](/adr/0006-npu-optional.md)) |
+| Finding memories, reranking | GPU or CPU | The NPU embedding model has no GPU twin, so a fallback would mix vectors; no NPU reranker |
+| Reading aloud | CPU (Metal on a Mac) | No NPU voice in the catalogue |
 | Store and scheduling | CPU | SQLite and the scheduler are cheap |
 
-The NPU and GPU run sequentially by default; concurrent use is an experiment
-([decision 0006](/adr/0006-npu-optional.md)).
+`crates/lemonade/src/npu.rs` decides. At each mind start it reads `system-info` (`amd_npu` and the
+`flm:npu` backend; on Linux an XDNA 2 device on the PCI bus with no driver counts as an NPU whose
+driver is missing), whether the person chose a speech model, and whether the tier's busiest moment
+with the NPU model (1.0 GB measured, in `fit_table`) still Fits. A failed NPU load or request is read
+again by the tier's speech model; when that works the NPU is left alone until the engine restarts,
+and the engine's reason (`flm validate`: driver, kernel, firmware, memory lock) is kept for the
+advanced details. Setup fetches the runtime and the model as optional steps, only when they will be
+used. The engine has one slot per kind of model, shared by every device, so an NPU chat model would
+evict the GPU mind; nothing is placed by how busy the GPU is.
 
 ## Failure modes
 
