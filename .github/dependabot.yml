@@ -51,10 +51,6 @@ updates:
       prefix: "chore(deps)"
     cooldown:
       default-days: 7
-    ignore:
-      # The types must match the Node major that ci.yml and release.yml run (see pin-bumps.md).
-      - dependency-name: "@types/node"
-        update-types: ["version-update:semver-major"]
     groups:
       ui-packages:
         patterns: ["*"]
