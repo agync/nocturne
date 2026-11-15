@@ -129,11 +129,15 @@ impl Conv {
 
     /// The transport took a frame of `len` bytes.
     pub fn took(&self, len: usize) {
-        let _ = self
-            .queued
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |q| {
-                Some(q.saturating_sub(len))
-            });
+        let mut q = self.queued.load(Ordering::SeqCst);
+        while let Err(now) = self.queued.compare_exchange_weak(
+            q,
+            q.saturating_sub(len),
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            q = now;
+        }
         self.drained.notify_waiters();
     }
 
