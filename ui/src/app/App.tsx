@@ -39,9 +39,11 @@ function Routed() {
   useEffect(() => {
     if (location !== "/" && location !== "") return;
     let live = true;
-    engine
-      .getSetup()
-      .then(firstScreen, () => "/setup")
+    Promise.all([engine.getSetup(), engine.getStatus().catch(() => null)])
+      .then(
+        ([view, status]) => firstScreen(view, status?.state ?? null),
+        () => "/setup",
+      )
       .then((to) => {
         if (live) navigate(to, { replace: true });
       });
