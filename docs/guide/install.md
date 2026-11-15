@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: Install and remove
-description: Choose a package for your Mac, Windows or Linux computer, open it past the first-time warning, set Nocturne up and take it off again.
+description: Choose a package for your Mac, Windows or Linux computer, open it past the first-time warning, set Nocturne up and take it off again, or run it as a server in a container.
 status: draft
 tags: [guide, install, packages, setup]
 ---
@@ -141,6 +141,125 @@ flatpak install --user nocturne is.nocturne.Nocturne
 Your software centre then shows Nocturne and its updates. The Flatpak keeps everything it holds in
 its own folder and sees only the files you choose or drop on it. Starting with your computer is not
 available in the Flatpak yet.
+
+## Run it as a server
+
+This part is for technical people, and the server is experimental. Instead of a desktop app,
+Nocturne runs in a container on a machine that is always on, and you use it from a browser. It is
+the same app with the same private engine, and it keeps everything in one volume. What needs a
+desktop (the tray, starting with the computer, notifications, printing, choosing folders, Away from
+home) is not there. [Decision 0012](/adr/0012-server-mode.md) has the details.
+
+Releases publish the image as `ghcr.io/agync/nocturne`. Until one has, build it yourself with
+`make server/image` ([building](/contribution/building.md#the-server-image)) and use
+`localhost/nocturne:dev` in place of the name below.
+
+```bash
+podman run -d --name nocturne \
+  -p 127.0.0.1:55066:55066 \
+  -v nocturne-data:/data \
+  ghcr.io/agync/nocturne:latest
+podman exec nocturne nocturne-server token     # the sign-in link
+```
+
+Docker takes the same flags (`docker run ...`, `docker exec ...`). Open the link it prints,
+`http://127.0.0.1:55066/#token=...`, in a new tab, once in each browser you use; the browser keeps
+you signed in. The link is never written to the container's log. To publish another port on this
+machine, say so with `-e NOCTURNE_PUBLIC_ORIGIN=http://127.0.0.1:<port>`.
+
+| Command | What it does |
+|---|---|
+| `podman exec nocturne nocturne-server token` | Prints the sign-in link |
+| `podman exec nocturne nocturne-server token --rotate` | Makes a new link; the old one stops working at once |
+| `podman exec nocturne nocturne-server health` | Exits 0 while the server is up; the image's health check runs it |
+
+The link is the only key, so keep it like a password. If you think it leaked, rotate it: within a few
+seconds the old link stops working in every browser that used it.
+
+### Reach it from other devices
+
+The port is published on this machine's loopback only, and the server accepts plain HTTP only from
+this machine. To use it from a phone or another computer, put a TLS proxy in front and tell the
+server its address with `NOCTURNE_PUBLIC_ORIGIN`. It must be `https://`, with no path. The server
+does not start with a plain `http://` address other than this machine's.
+
+With [Caddy](https://caddyserver.com), which gets a certificate for the name by itself:
+
+```text
+nocturne.example.com {
+    reverse_proxy 127.0.0.1:55066
+}
+```
+
+With Tailscale, inside your own tailnet:
+
+```bash
+tailscale serve --bg --https=443 http://127.0.0.1:55066
+```
+
+Then start the container with the address the proxy serves, for example
+`-e NOCTURNE_PUBLIC_ORIGIN=https://nocturne.example.com` or
+`-e NOCTURNE_PUBLIC_ORIGIN=https://<machine>.<tailnet>.ts.net`, and print the link again: it now
+starts with that address. If the proxy already serves something else on that name and port, give
+Nocturne a port of its own (`--https=8443`) and include the port in the address.
+
+### Compose
+
+```yaml
+services:
+  nocturne:
+    image: ghcr.io/agync/nocturne:latest
+    ports:
+      - "127.0.0.1:55066:55066"
+    volumes:
+      - nocturne-data:/data
+    environment:
+      NOCTURNE_PUBLIC_ORIGIN: https://nocturne.example.com
+    restart: unless-stopped
+volumes:
+  nocturne-data: {}
+```
+
+`podman compose up -d` or `docker compose up -d` starts it.
+
+### Your data, updates and removal
+
+Everything lives in the `nocturne-data` volume: what you kept, the memory, the downloaded setup,
+the logs (`logs/`) and the sign-in token. The first visit offers the usual setup, which downloads
+once, with your consent, into the volume. To keep a folder of your own instead of a named volume,
+make it owned by the container's user first (`podman unshare chown 10001:10001 <folder>` with
+rootless podman) and mount it with `-v <folder>:/data:Z`.
+
+To update, pull the new image and start a new container on the same volume:
+
+```bash
+podman pull ghcr.io/agync/nocturne:latest
+podman rm -f nocturne
+podman run -d --name nocturne -p 127.0.0.1:55066:55066 -v nocturne-data:/data ghcr.io/agync/nocturne:latest
+```
+
+To take it off, remove the container. The volume stays until you remove it yourself with
+`podman volume rm nocturne-data`, which deletes everything you kept.
+
+### Graphics cards
+
+The image runs on the processor and needs nothing more. A graphics card is optional, and the
+published image does not carry the drivers for one. Do not pass a graphics device to it.
+
+For an AMD Radeon that Nocturne uses through Vulkan (the usual case for one built into the
+processor), build the image with the Vulkan drivers and pass the device in:
+
+```bash
+podman build --format docker --build-arg EXTRA_PACKAGES=mesa-vulkan-drivers \
+  -f Containerfile -t localhost/nocturne:vulkan .
+podman run -d --name nocturne --device /dev/dri \
+  -p 127.0.0.1:55066:55066 -v nocturne-data:/data localhost/nocturne:vulkan
+```
+
+With rootless podman, your own user must be able to open `/dev/dri/renderD128`; if it can only
+through the `render` group, add `--group-add keep-groups`. This was tried with rootless podman on a
+Radeon 890M, where the model servers opened the card. A discrete AMD card would use ROCm, which
+needs `--device /dev/kfd --device /dev/dri`; that, Docker and NVIDIA cards have not been tried.
 
 ## The first run
 

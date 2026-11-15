@@ -126,6 +126,36 @@ The feature is `preview` on `nocturne-app` and sits in no default feature set. `
 (`cargo test -p nocturne-app --features preview`), and the package check fails if a package holds
 `nocturne-preview`, the text the server prints or the preview interface.
 
+## The server image
+
+The experimental server ([0012](/adr/0012-server-mode.md)) is the preview's HTTP front with a sign-in
+token kept in the data folder, built `--release` and shipped only as a container image. The
+`Containerfile` at the root has four stages: the interface (`vite build --mode server`, into
+`ui/dist-server`), the server (`cargo build --release --features server --bin nocturne-server`),
+the engine (`scripts/fetch-lemonade.sh`, checked against `lemonade.lock`), and an Ubuntu 26.04
+runtime with only the libraries the server and the engine load, `ffmpeg`, a `nocturne` user (uid
+10001) and the `/data` volume. The runtime is Ubuntu because the engine's Linux build needs its C
+library (glibc 2.43); Debian 13 has an older one. Every base image is pinned by digest; bump the digest and its tag comment together.
+
+```bash
+make server/build                      # the server and ui/dist-server, without a container
+make server/image                      # podman build, tagged localhost/nocturne:dev
+make server/image IMAGE=localhost/nocturne:try
+```
+
+`make server/image` builds with `--format docker`, since the OCI format drops the `HEALTHCHECK`, and
+with `--jobs 1`. Two build arguments change it: `CARGO_BUILD_JOBS` limits the Rust build on a shared
+machine, and `EXTRA_PACKAGES` adds runtime packages, such as `mesa-vulkan-drivers` for the
+graphics card variant the install guide describes. Only what `.containerignore` lets through reaches the build. Cargo and npm caches
+are build cache mounts, so they stay out of the layers. Run it as the
+[install guide](/guide/install.md#run-it-as-a-server) says.
+
+`.github/workflows/container.yml` builds the image natively for amd64 and arm64 on every pull request
+that touches what goes into it, without logging in or pushing. A release tag (`vX.Y.Z`) builds both,
+pushes each as `<tag>-<arch>` to `ghcr.io/agync/nocturne` (the `IMAGE_NAME` repository variable
+overrides it) with the built-in token, and pushes a manifest list as `<tag>` and `latest`. The
+actions are Red Hat's buildah, podman login and push actions, pinned by commit.
+
 ## Linux packages
 
 ```bash
