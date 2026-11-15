@@ -49,19 +49,29 @@ the engine lives under the data folder, never beside the program, so a read-only
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`, on Ubuntu 24.04
 (x86_64), with the tests also on Linux arm64, macOS and Windows, a read-only token and no secret.
 `make check` is lint plus test, so the workflow runs its targets as parallel jobs and together
-they cover all of it:
+they cover all of it. On a pull request, each job runs only when a path it reads changed:
 
-| Job | Runs | Covers |
-|---|---|---|
-| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the bindings drift check |
-| `ui and scripts` | `make ui/lint ui/test scripts/test` | Biome, the type check, the interface tests, the packaging scripts' tests |
-| `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` |
-| `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them |
-| `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium |
-| `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks |
-| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo test --workspace --no-fail-fast` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64 |
-| `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows |
-| `gate` | | fails when any job above did not pass; the one job to require |
+| Job | Runs | Covers | Runs when these change |
+|---|---|---|---|
+| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the bindings drift check | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh` |
+| `ui` | `make ui/lint ui/test` | Biome, the type check, the interface tests | `ui/`, `src-tauri/` |
+| `packaging scripts` | `make scripts/test` | the packaging scripts' tests | `scripts/`, the Rust side, `flatpak/`, `docs/contribution/flatpak.md`, `LICENSE`, `ui/package*.json` |
+| `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` | `helpers/`, `scripts/test-tailnet.sh`, `scripts/tailnet-tags.sh` |
+| `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them | always |
+| `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium | `ui/`, `src-tauri/` |
+| `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks | `site/`, `docs/`, `lemonade.lock`, `ui/package*.json` |
+| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo test --workspace --no-fail-fast` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64 | the Rust side |
+| `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
+| `gate` | | fails when any job above failed or was cancelled; the one job to require | always |
+
+The `changed paths` job compares a pull request with its merge base, and its run summary says
+which jobs it chose. A change to a workflow, the `Makefile` or `rust-toolchain.toml`, a push to
+`main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
+the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in
+`ui/` and write the bindings there, and the interface's tests read files in `src-tauri/`, so on
+x86_64 Linux both sides run when either changes, while the other platforms run only their own
+side. A job skipped this way counts as passed in `gate`. Every run on `main` finishes, and none is
+dropped while queued.
 
 The `browser tests` and `site` jobs go beyond `make check`, and so do the platform jobs. Lint, the
 bindings drift check, the browser tests and the Go tests run on x86_64 Linux only. A test that
@@ -82,11 +92,12 @@ says so each time:
 - The Linux arm64 package is built by the release workflow, on its own runner.
 
 The Linux x86_64, macOS and Windows packages are built by CI too, unsigned and uploaded nowhere,
-so that a packaging bug fails a pull request and not a release. The `package-*` jobs run on a push
-to main, on a hand run, and on a pull request that changes `scripts/`, `src-tauri/bundle/`, a
-`src-tauri/tauri*.json` file, `src-tauri/Cargo.toml`, `Cargo.lock`, `ui/package*.json`,
-`lemonade.lock`, `helpers.lock`, `release.yml` or `ci.yml` (the Linux job also runs for
-`flatpak/`). On any other pull request they are skipped and `gate` counts that as a pass.
+so that a packaging bug fails a pull request and not a release. The `package-*` jobs run on every
+push to `main`, and on a pull request that touches `scripts/`, `src-tauri/bundle/`,
+`src-tauri/macos/`, `src-tauri/icons/`, a `src-tauri/tauri*.json` file, `src-tauri/Info.plist`,
+`src-tauri/Cargo.toml`, `src-tauri/build.rs`, `LICENSE`, `Cargo.lock`, `ui/package*.json`,
+`lemonade.lock`, `helpers.lock` or `release.yml` (the Linux job also runs for `flatpak/`). A release builds every package from its
+tag in `release.yml`, whatever CI ran.
 
 The workflow installs `okf` at a version and checksum written in `ci.yml`, and pins every action
 by commit. Dependabot keeps the actions, the Cargo crates, the interface packages and the helper's
