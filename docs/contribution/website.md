@@ -67,9 +67,8 @@ they are reported as warnings because the theme cannot change them.
 
 The screenshots are the app's own screens on its demo data. The desktop pictures crop to the
 column where the page changes, so the reader does not have to spot the difference between two
-full windows. The capture also writes the whole window, the fading list and the phone, which the
-landing page does not show at the moment. To refresh them, run the mock interface, and for
-the phone picture the phone app's scripted build, and capture again:
+full windows. The capture writes only the pictures the pages use. To refresh them, run the mock
+interface, and for the phone picture the phone app's scripted build, and capture again:
 
 ```bash
 cd ui && npx vite --mode mock --port 4173  # in another terminal
