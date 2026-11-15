@@ -7,10 +7,11 @@ import { AppError } from "../components/ErrorBoundary/ScreenError";
 import { ToastProvider } from "../components/Toast/Toast";
 import { t } from "../copy/t";
 import type { EngineClient } from "../engine/client";
-import { EngineProvider } from "../engine/context";
+import { EngineProvider, useEngine } from "../engine/context";
 import { PlatformProvider } from "../platform/context";
 import type { Platform } from "../platform/types";
 import { NotFound } from "../screens/NotFound";
+import { firstScreen } from "./firstScreen";
 import { pathOf } from "./query";
 import { findRoute } from "./routes";
 import { Shell } from "./Shell";
@@ -33,9 +34,21 @@ function Routed() {
   const [location, navigate] = useLocation();
   useThemeSync();
 
+  const engine = useEngine();
+
   useEffect(() => {
-    if (location === "/" || location === "") navigate("/today", { replace: true });
-  }, [location, navigate]);
+    if (location !== "/" && location !== "") return;
+    let live = true;
+    engine
+      .getSetup()
+      .then(firstScreen, () => "/setup")
+      .then((to) => {
+        if (live) navigate(to, { replace: true });
+      });
+    return () => {
+      live = false;
+    };
+  }, [engine, location, navigate]);
 
   const route = findRoute(location);
   if (location === "/" || location === "") return null;
