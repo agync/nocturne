@@ -1,0 +1,155 @@
+# Builds the experimental server's container image (Containerfile, docs/adr/0012-server-mode.md)
+# and, for a release tag, publishes it to the GitHub container registry as a manifest list.
+#
+# A pull request that touches what goes into the image only builds it: no login, no push, and the
+# token can only read. A release tag (vX.Y.Z) builds each architecture natively on its own runner,
+# pushes it as <tag>-<arch>, and then puts both under <tag> and latest. release.yml may call this
+# with `tag` and `ref` instead, as it calls tailnet.yml; the tag trigger should then be removed so
+# a release publishes once.
+#
+# The image goes to the repository owner's namespace, where the built-in GITHUB_TOKEN can push, so
+# no secret is needed. Set the IMAGE_NAME repository variable to publish elsewhere.
+name: container
+
+on:
+  pull_request:
+    paths:
+      - Containerfile
+      - .containerignore
+      - Cargo.toml
+      - Cargo.lock
+      - helpers.lock
+      - lemonade.lock
+      - crates/**
+      - src-tauri/**
+      - ui/**
+      - scripts/fetch-lemonade.sh
+      - scripts/sha256.sh
+      - .github/workflows/container.yml
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_call:
+    inputs:
+      tag:
+        description: "The release tag to publish as (empty: build only)"
+        required: false
+        type: string
+        default: ""
+      ref:
+        description: "The commit to build, a full SHA (empty: the caller's commit)"
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# One publish of a tag at a time: both architectures and the manifest list write the same names.
+concurrency:
+  group: container-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  IMAGE: ${{ vars.IMAGE_NAME || 'ghcr.io/agync/nocturne' }}
+  TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
+
+jobs:
+  # Pull requests, and a call without a tag: build each architecture and keep nothing.
+  build:
+    name: build ${{ matrix.arch }}
+    if: ${{ !(inputs.tag || github.ref_type == 'tag') }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - uses: redhat-actions/buildah-build@9dc2ade9b5db229966b5025ae266311e12f349c4 # v2
+        with:
+          image: ${{ env.IMAGE }}
+          tags: check-${{ matrix.arch }}
+          containerfiles: Containerfile
+          context: .
+          # The docker format keeps the HEALTHCHECK, which OCI has no field for.
+          oci: false
+
+  # A release tag: build each architecture and push it under <tag>-<arch>.
+  publish:
+    name: publish ${{ matrix.arch }}
+    if: ${{ inputs.tag || github.ref_type == 'tag' }}
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          persist-credentials: false
+      - id: build
+        uses: redhat-actions/buildah-build@9dc2ade9b5db229966b5025ae266311e12f349c4 # v2
+        with:
+          image: ${{ env.IMAGE }}
+          tags: ${{ env.TAG }}-${{ matrix.arch }}
+          containerfiles: Containerfile
+          context: .
+          oci: false
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.version=${{ env.TAG }}
+            org.opencontainers.image.revision=${{ inputs.ref || github.sha }}
+      - uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: redhat-actions/push-to-registry@5860fc963bf8f2b3221773a023141612f010c469 # v2
+        with:
+          image: ${{ steps.build.outputs.image }}
+          tags: ${{ steps.build.outputs.tags }}
+
+  # Both architectures under <tag> and latest.
+  manifest:
+    name: manifest list
+    needs: publish
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: assemble and push
+        run: |
+          set -euo pipefail
+          for name in "$TAG" latest; do
+            podman manifest create "$IMAGE:$name"
+            for arch in amd64 arm64; do
+              podman manifest add --arch "$arch" --os linux "$IMAGE:$name" "docker://$IMAGE:$TAG-$arch"
+            done
+            podman manifest push --all "$IMAGE:$name" "docker://$IMAGE:$name"
+          done
+          podman manifest inspect "$IMAGE:$TAG" \
+            | python3 -I -c 'import json, sys; print(sorted(m["platform"]["os"] + "/" + m["platform"]["architecture"] for m in json.load(sys.stdin)["manifests"]))'
