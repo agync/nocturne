@@ -104,13 +104,12 @@ when they will be used.
 ### The Flatpak
 
 Nocturne's Flatpak asks for access to all devices, so it can see the NPU, and it has the same
-memory lock limit as your login. The steps above apply unchanged. The NPU has not yet been tried
-with Nocturne inside the Flatpak.
+memory lock limit as your login. The steps above apply unchanged.
 
 ## Windows
 
-Lemonade supports the XDNA 2 NPU on Windows too. Nocturne has not been tried with it there; the
-advanced details show what the engine reports.
+Lemonade supports the XDNA 2 NPU on Windows too. The advanced details show what the engine
+reports.
 
 ## Sources
 
