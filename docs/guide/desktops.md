@@ -30,7 +30,8 @@ Most other desktops, such as KDE Plasma, show the tray without any extra step.
 
 ## Quick keep shortcut
 
-The default shortcut is Ctrl+Shift+Space. It opens a small box above whatever you are doing, where
+The default shortcut is Ctrl+Shift+Space on Windows and Linux, and Cmd+Shift+Space on a Mac. It
+opens a small box above whatever you are doing, where
 you can type, paste, drop a file or hold Space in the empty box to talk. Press Esc and it goes away. You can change
 the keys in Settings.
 

@@ -3,6 +3,7 @@ import { t } from "../../copy/t";
 import type { AskPlace } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { usePlatform } from "../../platform/context";
+import { shortcutLabel } from "../../platform/shortcutKeys";
 import { Icon } from "../Icon/Icon";
 import { useToast } from "../Toast/Toast";
 import { AnswerWhere } from "./AnswerWhere";
@@ -18,11 +19,6 @@ export function defaultVerb(text: string): Verb {
   const clean = text.trim();
   if (clean.endsWith("?") || QUESTION_WORDS.test(clean)) return "ask";
   return "keep";
-}
-
-/** "Ctrl+Shift+Space" -> "Ctrl Shift Space" */
-export function shortcutLabel(shortcut: string): string {
-  return shortcut.split("+").join(" ");
 }
 
 interface KeepAskBarProps {
