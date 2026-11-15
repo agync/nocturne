@@ -656,15 +656,9 @@ async fn piped(lines: &[String], key: Option<&str>) -> String {
     }
     drop(engine);
     task.await.unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
-    loop {
-        let text = std::fs::read_to_string(&file).unwrap_or_default();
-        if text.contains("end-of-feed") {
-            return text;
-        }
-        assert!(Instant::now() < deadline, "the log was written: {text}");
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
+    let text = std::fs::read_to_string(&file).unwrap_or_default();
+    assert!(text.contains("end-of-feed"), "the log was written: {text}");
+    text
 }
 
 /// The error bodies the stand-in sends, as the engine logs them: the non-streaming dump cut at
@@ -798,16 +792,10 @@ async fn log_file_owner_only_and_rotated() {
     drop(engine);
     task.await.unwrap();
     let rotated = |n: usize| tmp.path().join(format!("lemond.log.{n}"));
-    // The writer thread outlives the task, and a rotation briefly has no `.1` or no live file, so
-    // wait for the moment all three exist rather than for one of them.
-    let all = || file.exists() && rotated(1).exists() && rotated(2).exists();
-    let deadline = Instant::now() + Duration::from_secs(5);
-    let mut seen = all();
-    while !seen && Instant::now() < deadline {
-        tokio::time::sleep(Duration::from_millis(20)).await;
-        seen = all();
-    }
-    assert!(seen, "the live file and two rotated files");
+    assert!(
+        file.exists() && rotated(1).exists() && rotated(2).exists(),
+        "the live file and two rotated files"
+    );
     assert!(!rotated(3).exists(), "three files in all");
     #[cfg(unix)]
     {
