@@ -546,11 +546,13 @@ mod tests {
 
     #[test]
     fn the_data_dir_override_wins_unless_empty() {
-        let default = PathBuf::from("/data/default");
-        assert_eq!(
-            resolve_data_dir(Some("/data/other".into()), default.clone()),
-            PathBuf::from("/data/other")
-        );
+        // The folder is created and resolved, so it lives in a scratch folder.
+        let tmp = tempfile::tempdir().unwrap();
+        let default = tmp.path().join("default");
+        let other = tmp.path().join("other");
+        let chosen = resolve_data_dir(Some(other.to_string_lossy().into_owned()), default.clone());
+        assert_eq!(chosen, std::fs::canonicalize(&other).unwrap());
+        let default = std::fs::canonicalize(resolve_data_dir(None, default)).unwrap();
         assert_eq!(
             resolve_data_dir(Some("  ".into()), default.clone()),
             default

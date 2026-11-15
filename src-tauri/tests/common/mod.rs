@@ -102,12 +102,20 @@ fn finish(
     }
 }
 
+/// The address the app's own pages have, which the command permissions are checked against: Tauri
+/// serves them from `http://tauri.localhost` on Windows and from `tauri://localhost` elsewhere.
+pub const APP_URL: &str = if cfg!(windows) {
+    "http://tauri.localhost"
+} else {
+    "tauri://localhost"
+};
+
 fn request(cmd: &str, body: InvokeBody, headers: tauri::http::HeaderMap) -> InvokeRequest {
     InvokeRequest {
         cmd: cmd.into(),
         callback: CallbackFn(0),
         error: CallbackFn(1),
-        url: "tauri://localhost".parse().unwrap(),
+        url: APP_URL.parse().unwrap(),
         body,
         headers,
         invoke_key: INVOKE_KEY.to_string(),

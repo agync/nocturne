@@ -67,7 +67,7 @@ impl Phone {
     fn addr(&self) -> Addr {
         match self.hub.listener_origin().unwrap() {
             Origin::Unix(p) => Addr::Unix(p),
-            Origin::Tcp { port, .. } => Addr::Tcp(port),
+            Origin::Tcp { port, key } => Addr::Keyed { port, host: key },
         }
     }
 
@@ -1009,12 +1009,14 @@ fn upload_streams_to_disk() {
         caption: None,
     }))
     .unwrap();
+    // The file's own metadata, not the folder listing's: Windows updates the size in the listing
+    // only when the file is closed.
     let part = || {
         std::fs::read_dir(p.hub.core.incoming.dir())
             .ok()
             .and_then(|mut d| d.next())
             .and_then(|e| e.ok())
-            .and_then(|e| e.metadata().ok())
+            .and_then(|e| std::fs::metadata(e.path()).ok())
             .map(|m| m.len())
     };
     for (i, piece) in bytes.chunks(chunk).enumerate() {

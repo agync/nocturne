@@ -362,6 +362,8 @@ fn page_ready_with_a_saved_page_sends_one_private_free_notification() {
     );
 }
 
+// Windows starts at login through the autostart plugin, not an entry file.
+#[cfg(not(windows))]
 #[test]
 fn start_at_login_writes_the_entry_in_the_given_folder_and_reports_the_truth() {
     use nocturne_app_lib::os::autostart::{ENTRY, Target};
@@ -840,8 +842,12 @@ mod inbox {
             dir: dir.clone(),
             exec: "/usr/bin/nocturne".into(),
         });
-        h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
-        assert!(dir.join(ENTRY).exists());
+        // Windows starts at login through the autostart plugin, not an entry file.
+        let entry = !cfg!(windows);
+        if entry {
+            h.ok("update_settings", json!({"patch": {"startAtLogin": true}}));
+            assert!(dir.join(ENTRY).exists());
+        }
         h.ok(
             "update_settings",
             json!({"patch": {"inboxFolder": folder.path().to_string_lossy()}}),

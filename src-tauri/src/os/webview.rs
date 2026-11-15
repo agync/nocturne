@@ -104,17 +104,11 @@ mod tests {
     #[test]
     fn the_linux_folders_leave_the_engines_own_folders_alone() {
         let dirs = linux_dirs(Path::new("/d"), Path::new("/c"), "app.nocturne.desktop");
-        let names: Vec<_> = dirs
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect();
-        assert!(names.contains(&"/c/app.nocturne.desktop".to_string()));
-        assert!(names.contains(&"/d/app.nocturne.desktop/WebKitCache".to_string()));
+        let id = Path::new("app.nocturne.desktop");
+        assert!(dirs.contains(&Path::new("/c").join(id)));
+        assert!(dirs.contains(&Path::new("/d").join(id).join("WebKitCache")));
         for own in ["store", "engine", "logs"] {
-            assert!(
-                !names.iter().any(|n| n.ends_with(&format!("/{own}"))),
-                "{own}"
-            );
+            assert!(!dirs.iter().any(|p| p.ends_with(own)), "{own}");
         }
     }
 

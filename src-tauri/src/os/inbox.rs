@@ -1005,7 +1005,8 @@ mod tests {
             check(&outside).unwrap(),
             std::fs::canonicalize(&outside).unwrap()
         );
-        assert_eq!(check(Path::new("/")), Err(InboxError::TooBroad));
+        let top = if cfg!(windows) { "C:\\" } else { "/" };
+        assert_eq!(check(Path::new(top)), Err(InboxError::TooBroad));
         assert_eq!(check(&home), Err(InboxError::TooBroad));
         assert_eq!(
             check(&data),
@@ -1132,7 +1133,8 @@ mod tests {
             .map(|e| e.rel)
             .collect();
         names.sort();
-        assert_eq!(names, ["1/2/3/4/ok.txt", "top.txt"]);
+        let deep_rel: PathBuf = ["1", "2", "3", "4", "ok.txt"].iter().collect();
+        assert_eq!(names, [deep_rel.to_string_lossy().as_ref(), "top.txt"]);
     }
 
     #[test]

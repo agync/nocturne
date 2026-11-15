@@ -100,7 +100,7 @@ async fn local() -> Running {
 fn keyed(r: &Running) -> Vec<(&'static str, &'static str)> {
     match r.addr {
         Addr::Tcp(_) => vec![("host", KEY)],
-        Addr::Unix(_) => vec![],
+        Addr::Unix(_) | Addr::Keyed { .. } => vec![],
     }
 }
 
@@ -675,7 +675,7 @@ async fn stalled_post(r: &Running) -> tokio::io::BufReader<Box<dyn StallIo>> {
     let mut io: Box<dyn StallIo> = match &r.addr {
         #[cfg(unix)]
         Addr::Unix(p) => Box::new(tokio::net::UnixStream::connect(p).await.unwrap()),
-        Addr::Tcp(port) => Box::new(
+        Addr::Tcp(port) | Addr::Keyed { port, .. } => Box::new(
             tokio::net::TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, *port))
                 .await
                 .unwrap(),
