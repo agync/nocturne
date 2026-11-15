@@ -2,20 +2,20 @@
 
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    EVENT_NEEDS_YOU, EVENT_SETUP, EVENT_STATUS, EngineStatus, ItemFilter, ItemStatus, SetupPhase,
-    SetupView,
+    BackupProgress, BackupSummary, EVENT_NEEDS_YOU, EVENT_SETUP, EVENT_STATUS, EngineStatus,
+    ItemFilter, ItemStatus, SetupPhase, SetupView,
 };
 use nocturne_engine::{Clock, Engine, Mind};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio::sync::Notify;
 
 use crate::ask::AskRegistry;
-use crate::error::{CommandError, blocking};
+use crate::error::{CommandError, ErrorCode, blocking};
 use crate::runtime::Services;
 use crate::status::{Counts, MindState, StatusHub};
 
@@ -115,6 +115,10 @@ pub struct AppState {
     pub work: Notify,
     /// Files the person dropped or picked in this session: the only paths `keep_files` takes.
     chosen_paths: Mutex<HashSet<PathBuf>>,
+    /// Files a save dialog chose as a backup destination, each good for one finished save.
+    save_targets: Mutex<HashSet<PathBuf>>,
+    /// Files an open dialog chose as a backup to restore: only the backup commands read them.
+    restore_sources: Mutex<HashSet<PathBuf>>,
     /// Items the quick capture window kept in this session: the only ones it may read or take
     /// back.
     quick_items: Mutex<HashSet<String>>,
@@ -123,7 +127,13 @@ pub struct AppState {
     quick_drop: Mutex<Vec<PathBuf>>,
     /// Folders made by an export in this session: the only ones `open_export` opens.
     exports: Mutex<HashSet<PathBuf>>,
+    /// The one backup job: a backup is being written, or a backup file is being checked.
+    backup: Mutex<BackupJob>,
+    /// Passphrase work for new backups, as a test sets it. 0 is what Nocturne writes.
+    backup_work: AtomicU8,
     opener: Mutex<Option<OpenFn>>,
+    /// Restarts the app after a restore has been scheduled (installed by `run`).
+    restarter: Mutex<Option<RestartFn>>,
     /// Whether something has shown the main window yet.
     window_shown: AtomicBool,
     /// Start in the tray, without showing the window (set by the OS integration lane).
@@ -138,6 +148,19 @@ pub struct AppState {
 
 /// Opens a path with the system's own app (installed by `run`).
 pub type OpenFn = Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
+/// Restarts the app so a scheduled restore runs (installed by `run`).
+pub type RestartFn = Arc<dyn Fn() + Send + Sync>;
+
+/// The one backup or restore job, and the check it left for a restore.
+#[derive(Default)]
+struct BackupJob {
+    running: bool,
+    /// Set once a restore has been unpacked and only the switch at the next start is left.
+    committed: bool,
+    cancel: Arc<AtomicBool>,
+    progress: Option<BackupProgress>,
+    checked: Option<(PathBuf, BackupSummary)>,
+}
 /// Runs when the app is exiting (stop the private engine, flush, remove the tray).
 pub type ExitHook = Box<dyn Fn() + Send + Sync>;
 
@@ -210,10 +233,15 @@ impl AppState {
             tray_available: AtomicBool::new(false),
             work: Notify::new(),
             chosen_paths: Mutex::new(HashSet::new()),
+            save_targets: Mutex::new(HashSet::new()),
+            restore_sources: Mutex::new(HashSet::new()),
+            backup_work: AtomicU8::new(0),
             quick_items: Mutex::new(HashSet::new()),
             quick_drop: Mutex::new(Vec::new()),
             exports: Mutex::new(HashSet::new()),
+            backup: Mutex::new(BackupJob::default()),
             opener: Mutex::new(None),
+            restarter: Mutex::new(None),
             window_shown: AtomicBool::new(false),
             start_hidden: AtomicBool::new(false),
             refresh: tokio::sync::Mutex::new(()),
@@ -278,6 +306,60 @@ impl AppState {
             .contains(&canonical(path))
     }
 
+    /// Remember a file a save dialog chose as a backup destination.
+    pub fn allow_save_target(&self, path: &Path) {
+        let mut set = self.save_targets.lock().unwrap_or_else(|e| e.into_inner());
+        if set.len() >= MAX_CHOSEN {
+            set.clear();
+        }
+        set.insert(canonical(path));
+    }
+
+    pub fn save_target_allowed(&self, path: &Path) -> bool {
+        self.save_targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&canonical(path))
+    }
+
+    /// Check and consume a save target: a finished save cannot be replayed without the dialog.
+    pub fn take_save_target(&self, path: &Path) -> bool {
+        self.save_targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&canonical(path))
+    }
+
+    /// Ask less passphrase work of new backups, so a test's backups open quickly.
+    #[doc(hidden)]
+    pub fn set_backup_work_factor(&self, factor: u8) {
+        self.backup_work.store(factor, Ordering::Relaxed);
+    }
+
+    /// The passphrase work a new backup asks for: `None` is the real one.
+    pub fn backup_work_factor(&self) -> Option<u8> {
+        Some(self.backup_work.load(Ordering::Relaxed)).filter(|f| *f != 0)
+    }
+
+    /// Remember a file an open dialog chose as a backup to restore.
+    pub fn allow_restore_source(&self, path: &Path) {
+        let mut set = self
+            .restore_sources
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        if set.len() >= MAX_CHOSEN {
+            set.clear();
+        }
+        set.insert(canonical(path));
+    }
+
+    pub fn restore_source_allowed(&self, path: &Path) -> bool {
+        self.restore_sources
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(&canonical(path))
+    }
+
     pub fn allow_export(&self, folder: &Path) {
         self.exports
             .lock()
@@ -309,6 +391,106 @@ impl AppState {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clear();
+        self.save_targets
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.restore_sources
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.set_checked_backup(None);
+    }
+
+    /// Take the one backup job, or say another is running. A new job starts uncancelled and
+    /// uncommitted, and the last progress it reported is forgotten.
+    pub fn begin_backup(&self) -> Result<Arc<AtomicBool>, CommandError> {
+        let mut job = self.backup.lock().unwrap_or_else(|e| e.into_inner());
+        if job.running {
+            return Err(CommandError::new(
+                ErrorCode::Busy,
+                "a backup is already running",
+            ));
+        }
+        job.running = true;
+        job.committed = false;
+        job.progress = None;
+        job.cancel.store(false, Ordering::SeqCst);
+        Ok(Arc::clone(&job.cancel))
+    }
+
+    /// Release the job, whether it finished, failed or was cancelled.
+    pub fn end_backup(&self) {
+        let mut job = self.backup.lock().unwrap_or_else(|e| e.into_inner());
+        job.running = false;
+        job.committed = false;
+        job.progress = None;
+    }
+
+    /// Stop the running work. Harmless when nothing runs, and nothing once a restore is
+    /// committed: the switch at the next start cannot be stopped any more.
+    pub fn cancel_backup(&self) {
+        let job = self.backup.lock().unwrap_or_else(|e| e.into_inner());
+        if !job.committed {
+            job.cancel.store(true, Ordering::SeqCst);
+        }
+    }
+
+    /// Say the unpacked restore is fixed: `cancel_backup` no longer stops it.
+    pub fn commit_backup(&self) {
+        self.backup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .committed = true;
+    }
+
+    /// Whether no backup task is running.
+    pub fn backup_idle(&self) -> bool {
+        !self
+            .backup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .running
+    }
+
+    /// What the running task last reported, for the backup screen.
+    pub fn set_backup_progress(&self, progress: Option<BackupProgress>) {
+        self.backup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .progress = progress;
+    }
+
+    pub fn backup_progress(&self) -> Option<BackupProgress> {
+        let job = self.backup.lock().unwrap_or_else(|e| e.into_inner());
+        if job.running { job.progress } else { None }
+    }
+
+    /// Remember what was checked, with the file it came from, or forget it with `None`.
+    pub fn set_checked_backup(&self, checked: Option<(PathBuf, BackupSummary)>) {
+        self.backup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .checked = checked;
+    }
+
+    pub fn checked_backup(&self) -> Option<(PathBuf, BackupSummary)> {
+        self.backup
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .checked
+            .clone()
+    }
+
+    pub fn set_restarter(&self, restart: RestartFn) {
+        *self.restarter.lock().unwrap_or_else(|e| e.into_inner()) = Some(restart);
+    }
+
+    pub fn restarter(&self) -> Option<RestartFn> {
+        self.restarter
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn set_opener(&self, open: OpenFn) {
@@ -631,8 +813,33 @@ mod tests {
         assert!(!state.path_allowed(&dir.path().join("b.txt")));
         state.allow_export(dir.path());
         assert!(state.export_allowed(dir.path()));
+
+        // A save target is good for one finished save; a restore source is only read.
+        let dest = dir.path().join("b.nocturne");
+        assert!(!state.save_target_allowed(&dest));
+        state.allow_save_target(&dest);
+        assert!(state.save_target_allowed(&dest));
+        assert!(state.take_save_target(&dest));
+        assert!(!state.save_target_allowed(&dest));
+        assert!(!state.take_save_target(&dest));
+        let source = dir.path().join("c.nocturne");
+        state.allow_restore_source(&source);
+        assert!(state.restore_source_allowed(&source));
+        assert!(!state.restore_source_allowed(&f));
+
         state.forget_session();
         assert!(!state.export_allowed(dir.path()) && !state.path_allowed(&f));
+        assert!(!state.restore_source_allowed(&source));
+        assert!(!state.save_target_allowed(&dest));
+    }
+
+    #[test]
+    fn a_new_state_asks_for_the_real_passphrase_work() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(dir.path(), Arc::new(SystemClock));
+        assert_eq!(state.backup_work_factor(), None);
+        state.set_backup_work_factor(10);
+        assert_eq!(state.backup_work_factor(), Some(10));
     }
 
     #[test]
@@ -661,6 +868,61 @@ mod tests {
         std::fs::write(store.join("nocturne.db"), b"this is not a database at all").unwrap();
         let state = AppState::open(dir.path(), Arc::new(SystemClock));
         assert!(!state.has_engine());
+    }
+
+    #[test]
+    fn one_backup_job_at_a_time_and_forgetting_drops_the_checked_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = AppState::open(dir.path(), Arc::new(SystemClock));
+        let cancel = state.begin_backup().unwrap();
+        let busy = state.begin_backup().unwrap_err();
+        assert_eq!(busy.code, ErrorCode::Busy);
+        assert!(
+            !cancel.load(Ordering::SeqCst),
+            "the second take changed nothing"
+        );
+
+        let progress = nocturne_contract::BackupProgress {
+            phase: nocturne_contract::BackupPhase::Saving,
+            done: 5.0,
+            total: 10.0,
+        };
+        state.set_backup_progress(Some(progress));
+        assert_eq!(state.backup_progress(), Some(progress));
+
+        state.cancel_backup();
+        assert!(cancel.load(Ordering::SeqCst));
+        state.end_backup();
+        assert!(state.backup_idle());
+        assert!(state.backup_progress().is_none());
+
+        let next = state.begin_backup().unwrap();
+        assert!(!next.load(Ordering::SeqCst), "a new job starts uncancelled");
+        state.commit_backup();
+        state.cancel_backup();
+        assert!(
+            !next.load(Ordering::SeqCst),
+            "cancel does nothing once a restore is committed"
+        );
+        state.end_backup();
+
+        let summary = nocturne_contract::BackupSummary {
+            made_at: "2026-11-13T07:00:00.000Z".into(),
+            app_version: "0.2.2".into(),
+            store_version: 10,
+            memories: 1,
+            items: 1,
+            pages: 0,
+            originals: 0,
+            online_used: false,
+            away_used: false,
+            bytes: 10.0,
+        };
+        let file = dir.path().join("chosen.nocturne");
+        state.set_checked_backup(Some((file.clone(), summary.clone())));
+        assert_eq!(state.checked_backup(), Some((file, summary)));
+        state.forget_session();
+        assert!(state.checked_backup().is_none());
     }
 
     #[test]

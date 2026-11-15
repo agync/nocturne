@@ -15,6 +15,8 @@ pub const RAW: &[&str] = &["keep_recording", "keep_bytes"];
 pub const UNAVAILABLE: &[&str] = &[
     "pick_folder",
     "pick_files",
+    "pick_backup",
+    "pick_backup_save",
     "open_original",
     "open_export",
     "open_logs",
@@ -39,6 +41,19 @@ pub const UNAVAILABLE: &[&str] = &[
     "update_remote_settings",
     "open_remote_sign_in",
     "new_computer_key",
+    "make_backup",
+    "probe_backup",
+    "estimate_backup",
+    "check_backup",
+    "restore_backup",
+    "restore_put_aside",
+    "delete_put_aside",
+    "get_backups",
+    "dismiss_backup_notices",
+    "get_restored",
+    "finish_restore",
+    "cancel_backup",
+    "discard_restore",
 ];
 
 pub fn unavailable() -> Value {

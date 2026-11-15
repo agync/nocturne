@@ -124,6 +124,9 @@ pub async fn delete_everything<R: Runtime>(
         let state = handle.state::<AppState>();
         state.status.forget_persisted();
         let _ = std::fs::remove_dir_all(state.data_dir.join("tmp"));
+        // A backup waiting to be restored, and the copies kept aside for one, are the person's
+        // data too.
+        crate::restore::remove_all(&state.data_dir);
         Ok(())
     })
     .await?;

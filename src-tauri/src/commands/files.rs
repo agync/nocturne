@@ -11,6 +11,9 @@ use super::{read, run};
 use crate::error::{CommandError, blocking_cmd};
 use crate::state::AppState;
 
+/// The name the system dialogs offer for backups.
+const BACKUP_FILTER: &str = "Nocturne backup";
+
 fn text(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
@@ -40,6 +43,57 @@ pub async fn pick_files<R: Runtime>(app: AppHandle<R>) -> Result<Vec<String>, Co
             .collect();
         app.state::<AppState>().allow_paths(paths.iter().cloned());
         Ok(paths.iter().map(|p| text(p)).collect())
+    })
+    .await
+}
+
+/// Ask the person for one backup file. What they pick may then be checked by path.
+#[tauri::command]
+pub async fn pick_backup<R: Runtime>(app: AppHandle<R>) -> Result<Option<String>, CommandError> {
+    run(app, |app| async move {
+        let dialog = app.clone();
+        let picked = blocking_cmd(move || {
+            Ok(dialog
+                .dialog()
+                .file()
+                .add_filter(BACKUP_FILTER, &[nocturne_engine::BACKUP_EXT])
+                .blocking_pick_file())
+        })
+        .await?;
+        let path = picked.and_then(|p| p.into_path().ok());
+        if let Some(p) = &path {
+            app.state::<AppState>().allow_restore_source(p);
+        }
+        Ok(path.map(|p| text(&p)))
+    })
+    .await
+}
+
+/// Ask the person where to save a backup, with today's name already in the dialog.
+#[tauri::command]
+pub async fn pick_backup_save<R: Runtime>(
+    app: AppHandle<R>,
+) -> Result<Option<String>, CommandError> {
+    run(app, |app| async move {
+        let wanted = match app.state::<AppState>().engine() {
+            Ok(e) => e.suggested_backup_name(),
+            Err(_) => format!("Nocturne backup.{}", nocturne_engine::BACKUP_EXT),
+        };
+        let dialog = app.clone();
+        let picked = blocking_cmd(move || {
+            Ok(dialog
+                .dialog()
+                .file()
+                .set_file_name(wanted)
+                .add_filter(BACKUP_FILTER, &[nocturne_engine::BACKUP_EXT])
+                .blocking_save_file())
+        })
+        .await?;
+        let path = picked.and_then(|p| p.into_path().ok());
+        if let Some(p) = &path {
+            app.state::<AppState>().allow_save_target(p);
+        }
+        Ok(path.map(|p| text(&p)))
     })
     .await
 }

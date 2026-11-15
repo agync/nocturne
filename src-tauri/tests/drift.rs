@@ -7,7 +7,23 @@ use std::collections::{BTreeMap, BTreeSet};
 use nocturne_app_lib::COMMAND_NAMES;
 
 /// Commands the interface does not call, by design.
-const SHELL_ONLY: &[&str] = &[];
+const SHELL_ONLY: &[&str] = &[
+    "pick_backup",
+    "pick_backup_save",
+    "make_backup",
+    "probe_backup",
+    "estimate_backup",
+    "check_backup",
+    "restore_backup",
+    "restore_put_aside",
+    "delete_put_aside",
+    "get_backups",
+    "dismiss_backup_notices",
+    "get_restored",
+    "finish_restore",
+    "cancel_backup",
+    "discard_restore",
+];
 
 fn read(rel: &str) -> String {
     let path = format!("{}/{rel}", env!("CARGO_MANIFEST_DIR"));

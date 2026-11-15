@@ -23,6 +23,7 @@ pub mod os;
 #[cfg(feature = "preview")]
 pub mod preview;
 pub mod remote;
+pub mod restore;
 pub mod runtime;
 pub mod state;
 pub mod status;
@@ -66,6 +67,16 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
         let dir = state::resolve_data_dir(std::env::var(DATA_DIR_ENV).ok(), platform);
         let guard = logging::init(&dir.join("logs"));
         app.manage(LogGuard(guard));
+        // Before the store is opened: a scheduled restore swaps it, and nothing may hold it.
+        match restore::apply_pending(&dir) {
+            restore::ApplyOutcome::Restored { .. } => {
+                tracing::info!("restored from a backup");
+            }
+            restore::ApplyOutcome::Failed(reason) => {
+                tracing::warn!("the backup was not restored: {reason}");
+            }
+            restore::ApplyOutcome::NothingPending => {}
+        }
         let state = AppState::open(&dir, Arc::new(SystemClock));
         state.mind.install_from_env();
         let args: Vec<String> = std::env::args().collect();
@@ -254,6 +265,7 @@ pub fn run() {
         // The setup hook, which manages `AppState`, runs inside `run` before `Ready`.
         if matches!(event, RunEvent::Ready) {
             install_opener(app);
+            install_restarter(app);
             if let Err(e) = os::install(app) {
                 tracing::warn!("the desktop integrations did not start: {e}");
             }
@@ -324,6 +336,17 @@ async fn serve_signals(
     if signals.recv().await.is_some() {
         force();
     }
+}
+
+fn install_restarter(app: &AppHandle) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let handle = app.clone();
+    state.set_restarter(Arc::new(move || {
+        handle.state::<AppState>().run_exit_hooks();
+        handle.restart();
+    }));
 }
 
 fn install_opener(app: &AppHandle) {

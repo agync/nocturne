@@ -112,6 +112,8 @@ tauri-plugin-autostart.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+age = "0.12.1"
+tar = "0.4"
 nocturne-engine = { workspace = true, features = ["fake"] }
 nocturne-intelligence = { path = "../crates/intelligence", features = ["fake"] }
 nocturne-lemonade = { workspace = true, features = ["fake-server"] }
