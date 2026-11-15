@@ -286,7 +286,7 @@ files. Tick them off in the release notes.
 | The window opens and the setup welcome shows | yes | yes |
 | A tray icon shows (with the AppIndicator extension on GNOME) and its menu keeps, asks, opens today's page, pauses and quits | with the extension | yes |
 | Without a tray, closing the window quits the app and starting at login opens the window | yes | yes |
-| The quick keep shortcut opens the small box; on Wayland Settings shows the command for a desktop shortcut instead, and running that command opens the box | the command route | the shortcut itself |
+| The quick keep shortcut opens the small box; on Wayland the desktop asks to add it first, and where it has no shortcut portal Settings shows the command for a desktop shortcut instead, and running that command opens the box | the portal, or the command route | the shortcut itself |
 | A file dropped on the window, and a file passed to a second launch, are kept once | yes | yes |
 | Choosing an inbox folder keeps a file saved there, and leaves it where it was | yes | yes |
 | One notification arrives when the page is ready, says nothing about what was kept, and stops when "Don't interrupt me" is chosen | yes | yes |
