@@ -313,6 +313,65 @@ pub struct TidyReport {
     pub let_go: u32,
 }
 
+/// Why the NPU does not read recordings, grounded in what the engine reported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum NpuCause {
+    /// The NPU is there but its kernel driver is not.
+    DriverMissing,
+    /// The NPU driver is too old.
+    DriverOld,
+    /// The kernel is too old for the NPU.
+    KernelOld,
+    /// The NPU firmware is too old.
+    FirmwareOld,
+    /// The memory lock limit is too low.
+    MemoryLock,
+    /// The engine does not support this NPU.
+    NotSupported,
+    /// The NPU model does not fit the memory budget beside the other jobs.
+    TooLittleMemory,
+    /// The NPU runtime or model is not downloaded yet.
+    NotFetched,
+    /// The person chose a model for reading recordings.
+    Chosen,
+    /// The NPU failed for another reason; `detail` holds the engine's words.
+    Failed,
+}
+
+impl NpuCause {
+    /// A cause the person can put right on this computer.
+    pub fn fixable(self) -> bool {
+        matches!(
+            self,
+            NpuCause::DriverMissing
+                | NpuCause::DriverOld
+                | NpuCause::KernelOld
+                | NpuCause::FirmwareOld
+                | NpuCause::MemoryLock
+        )
+    }
+}
+
+/// The NPU as Nocturne uses it. Shown only in the advanced view, except that a fixable cause may
+/// raise a quiet note.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NpuView {
+    /// This computer has an NPU the engine can name, or one whose driver is missing.
+    pub present: bool,
+    /// Recordings are read on it.
+    pub used: bool,
+    /// The model that reads recordings there, when used.
+    pub model: Option<String>,
+    /// Why it is not used, empty when it is or when there is none.
+    pub causes: Vec<NpuCause>,
+    /// The engine's own words for the last failure, for the advanced view.
+    pub detail: Option<String>,
+}
+
 /// The only view that may show technical words.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]

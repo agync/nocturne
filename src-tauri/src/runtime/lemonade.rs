@@ -10,9 +10,12 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
-use nocturne_contract::{LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier};
+use nocturne_contract::{
+    ComponentRole, LedgerKind, Notice, NoticeCode, SetupError, SetupPhase, Tier,
+};
 use nocturne_engine::Mind;
 use nocturne_lemonade::client::SystemInfo;
+use nocturne_lemonade::npu;
 use nocturne_lemonade::{
     Admin, Client, Control, Dirs, LemonadeMind, RuntimeError, RuntimeState, Setup, Supervisor,
     bundle, fit, residency, selection, tier,
@@ -298,7 +301,7 @@ async fn fill<R: Runtime>(
     if changed {
         super::memory_settled(&state, services);
     }
-    put_mind(app, client, tier).await;
+    put_mind(app, services, client, tier).await;
     services.reader.retry_now();
     match previous {
         Some(from) if from != tier => super::tier_changed(app, from, tier).await,
@@ -309,9 +312,14 @@ async fn fill<R: Runtime>(
     crate::models::on_mind_ready(app);
 }
 
-/// A mind for the models chosen for each job on `tier`, in the slot, with the finding model
-/// and the models that must run alone set to match.
-async fn put_mind<R: Runtime>(app: &AppHandle<R>, client: Client, tier: Tier) {
+/// A mind for the models chosen for each job on `tier`, in the slot, with the finding model,
+/// the models that must run alone and the NPU's share set to match.
+async fn put_mind<R: Runtime>(
+    app: &AppHandle<R>,
+    services: &Arc<Services>,
+    client: Client,
+    tier: Tier,
+) {
     let state = app.state::<AppState>();
     let config_dir = crate::models::config_dir(&state.data_dir);
     crate::models::repair_after_swap(app, &config_dir);
@@ -328,8 +336,17 @@ async fn put_mind<R: Runtime>(app: &AppHandle<R>, client: Client, tier: Tier) {
         .map(|m| model_bytes(tier, m) as f64)
         .sum();
     let recall = picks.recall.clone();
-    let mind: Arc<dyn Mind> =
-        Arc::new(LemonadeMind::new(client, picks, tier).with_clock(state.clock.clone()));
+    let info = client.system_info().await.unwrap_or_default();
+    services.npu.set(
+        npu::readiness(&info, npu::pci_xdna2()),
+        npu::fits(&chosen, ram),
+        chosen.custom.contains_key(&ComponentRole::Speech),
+    );
+    let mind: Arc<dyn Mind> = Arc::new(
+        LemonadeMind::new(client, picks, tier)
+            .with_clock(state.clock.clone())
+            .with_npu(services.npu.clone()),
+    );
     state.status.set_mind_bytes(bytes);
     set_mind(app, Some(mind)).await;
     // Named after the mind is in: a vector the old mind was still making is then marked with
@@ -368,7 +385,7 @@ pub async fn refill_mind<R: Runtime>(app: &AppHandle<R>) {
     if state.mind.get().is_none() {
         return;
     }
-    put_mind(app, client, tier).await;
+    put_mind(app, &services, client, tier).await;
     services.reader.retry_now();
 }
 

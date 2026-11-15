@@ -11,6 +11,7 @@ pub mod fit_table;
 pub mod jobs;
 pub mod logpipe;
 pub mod mind;
+pub mod npu;
 pub mod online;
 pub mod record;
 pub mod rerank;
