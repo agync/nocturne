@@ -78,7 +78,8 @@ jobs:
   # because its area did not change counts as passed in the gate.
   changes:
     name: changed paths
-    runs-on: ubuntu-24.04
+    # Only git and the shell: the 1 vCPU runner is enough.
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     outputs:
       rust: ${{ steps.paths.outputs.rust }}
@@ -641,16 +642,22 @@ jobs:
       - package-linux
       - package-macos
       - package-windows
-    runs-on: ubuntu-24.04
+    # The gate only reads its needs, so the 1 vCPU runner is enough.
+    runs-on: ubuntu-slim
     timeout-minutes: 5
     steps:
       - name: Every job passed
         env:
           RESULTS: ${{ toJSON(needs) }}
+          # Decided by expressions, so the step needs no tools beyond the shell.
+          PASSED: >-
+            ${{ needs.changes.result == 'success'
+            && !contains(needs.*.result, 'failure')
+            && !contains(needs.*.result, 'cancelled') }}
         run: |
           set -euo pipefail
-          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTS" | jq -e '.changes.result == "success" and all(.[]; .result == "success" or .result == "skipped")' > /dev/null
+          echo "$RESULTS"
+          test "$PASSED" = true
       - name: What this run did not cover
         if: always()
         run: |
