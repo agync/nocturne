@@ -8,7 +8,7 @@
 #   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check
 #   ui         ui/lint, ui/test, scripts/test
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
-#   hygiene    docs/check and `pre-commit run --all-files`
+#   hygiene    `pre-commit run --all-files`, which validates the docs bundle too
 #
 # Beyond `make check`, four jobs run what a pull request can break and the gate does not reach:
 # `e2e` (ui/e2e, the browser tests against the mock engine), `site` (the landing page and the
@@ -78,19 +78,12 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
       - name: Rust
         run: rustup toolchain install
-      # The registry is small and cached on every run. The build output is big, so it is saved
-      # from main only and a pull request restores it.
-      - name: Restore the Cargo caches
-        id: cargo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # The registry and the dependencies' build output, one cache per job and platform, keyed
+      # on the toolchain and the lock file. The workspace's own crates are left out, so the cache
+      # stays small. Only main saves it; a pull request restores it.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Lint
         run: make rust/lint
       - name: Test
@@ -98,16 +91,6 @@ jobs:
       # Regenerates the TypeScript bindings and fails when the committed ones are stale.
       - name: Contract drift
         run: make contract/check
-      - name: Save the Cargo caches
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
   # The Rust tests on the other machines Nocturne ships for. Linux on Arm runs both test runs of
   # rust/test; macOS and Windows run the workspace tests, since the server is built for Linux only.
@@ -149,18 +132,10 @@ jobs:
           sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
       - name: Rust
         run: rustup toolchain install
-      # As in the rust job, but one cache per platform: the key names the architecture too.
-      - name: Restore the Cargo caches
-        id: cargo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # As in the rust job; the toolchain's host in the key keeps one cache per platform.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-test-${{ runner.os }}-${{ runner.arch }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       # Every test target is built first, so a compile error in one does not hide another's, and
       # every test runs, so one failure does not hide the next.
       - name: Build the tests
@@ -200,16 +175,6 @@ jobs:
         with:
           path: vendor/lemonade/windows-x86_64
           key: lemonade-windows-x86_64-${{ hashFiles('lemonade.lock', 'scripts/fetch-lemonade.sh') }}
-      - name: Save the Cargo caches
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
 
   ui:
     name: ui and scripts
@@ -296,9 +261,6 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.13"
-      # The cargo-fmt hook runs rustfmt from the toolchain.
-      - name: Rust
-        run: rustup toolchain install
       - name: Install okf and pre-commit
         env:
           OKF_VERSION: "0.5.2"
@@ -317,9 +279,11 @@ jobs:
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
-      - name: Docs bundle
-        run: make docs/check
+      # The okf-validate hook is make docs/check. The rust job checks the formatting, so the
+      # cargo-fmt hook is skipped here and this job needs no Rust toolchain.
       - name: Hooks on every file
+        env:
+          SKIP: cargo-fmt
         run: pre-commit run --all-files --show-diff-on-failure
 
   e2e:
@@ -454,18 +418,10 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Rust
         run: rustup toolchain install
-      - name: Restore the Cargo caches
-        id: cargo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Release builds, so a cache of their own; target/package is not kept.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: build the AppImage, deb and rpm
         run: scripts/package.sh
       - name: check each package
@@ -474,17 +430,6 @@ jobs:
           for f in target/package/*.AppImage target/package/*.deb target/package/*.rpm; do
             scripts/check-package.sh "$f"
           done
-      - name: Save the Cargo caches
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
 
   package-macos:
     name: package (macos arm64)
@@ -501,33 +446,14 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
       - name: Rust
         run: rustup toolchain install
-      - name: Restore the Cargo caches
-        id: cargo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Release builds, so a cache of their own; target/package is not kept.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: build the app and the disk image (signed ad hoc)
         run: scripts/package.sh --config macos
       - name: check the disk image
         run: scripts/check-package.sh target/package/*.dmg
-      - name: Save the Cargo caches
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
 
   package-windows:
     name: package (windows x64)
@@ -560,18 +486,10 @@ jobs:
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Rust
         run: rustup toolchain install
-      - name: Restore the Cargo caches
-        id: cargo-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Release builds, so a cache of their own; target/package is not kept.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: build the NSIS and MSI installers
         run: scripts/package.sh --config windows
       # scripts/check-package.sh reads Linux and macOS packages only; the installers are checked
@@ -585,17 +503,6 @@ jobs:
             if ((Get-FileHash -Algorithm SHA256 $name).Hash.ToLower() -ne $sum) { throw "sha256 mismatch: $name" }
             Write-Output "ok    $name"
           }
-      - name: Save the Cargo caches
-        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-            !target/package
-          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
 
   # The one job to require in branch protection: it fails when any job above failed or was
   # cancelled, and it says what this workflow does not cover. A package job that was skipped
