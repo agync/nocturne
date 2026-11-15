@@ -14,7 +14,7 @@ Nocturne works on:
 
 - a Mac with an Apple chip (M1 or later), running macOS 26 or later. Older Intel Macs are not supported;
 - a Windows 10 or 11 computer, 64-bit;
-- a Linux desktop, on a 64-bit Intel or AMD computer.
+- a Linux desktop, on a 64-bit computer with an Intel, AMD or Arm chip.
 
 The first time it runs, it checks the memory and free
 space and offers the largest setup the computer can carry comfortably. A smaller setup means
