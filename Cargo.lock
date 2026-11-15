@@ -3087,7 +3087,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-app"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "aes-gcm",
  "axum",
@@ -3137,7 +3137,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-contract"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-engine"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "getrandom 0.3.4",
  "jiff",
@@ -3165,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-helpers"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "flate2",
  "nocturne-lemonade",
@@ -3185,7 +3185,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-intelligence"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "jiff",
  "nocturne-contract",
@@ -3201,7 +3201,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-lemonade"
-version = "0.2.0"
+version = "0.2.1"
 dependencies = [
  "axum",
  "base64 0.23.1",
