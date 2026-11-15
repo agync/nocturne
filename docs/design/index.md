@@ -8,3 +8,4 @@ screen follows, the data model, and how quality is measured.
 - [Data model](data-model.md) - The event tape, the fact graph, the status lifecycle and the provenance rules.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
+- [Advanced details](advanced-details.md) - The words the advanced details view uses where they have been designed and approved.
