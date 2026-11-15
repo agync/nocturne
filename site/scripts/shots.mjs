@@ -10,11 +10,12 @@
 //   cd ui && VITE_ENGINE=phone-mock PHONE_OUT_DIR=/tmp/phone npx vite build --config vite.phone.config.ts
 //   python3 -m http.server -d /tmp/phone --bind 127.0.0.1 4174
 //
-// The window is shown once, whole. The other desktop shots are its column right of the rail,
-// captured at a width where the kept-today column has moved under the page, so every one has the
-// same frame and only the page in it changes. A shot with `mark` prints where that element sits,
-// in percent of the picture; the page's tour uses those numbers to show where to look. A shot with
-// `fit` ends below its content.
+// The desktop shots are the window's column right of the rail, captured at a width where the
+// kept-today column has moved under the page, so every one has the same frame and only the page
+// in it changes. The morning page step has no narrow shot: on narrow screens it would repeat the
+// picture at the top of the page, so the page hides it. A shot with `mark` prints where that
+// element sits, in percent of the picture; the page's tour uses those numbers to show where to
+// look.
 //
 // Needs the UI dependencies (Playwright) and ImageMagick (`magick`) with WebP. UI_DIR names another
 // checkout's ui/ when this one has no node_modules. CHROME_PATH points at a Chromium build when
@@ -45,16 +46,12 @@ const ASK = "What does Leo need for his trip?";
 const shots = [
   { name: "page", route: "/#/today", viewport: desktop, clip: "main article", height: 625, widths: [560, 1120] },
   { name: "page-narrow", route: "/#/today", viewport: phone, widths: [390, 780] },
-  { name: "window", route: "/#/today", viewport: desktop, widths: [800, 1600] },
   { name: "keep", route: "/#/quick-capture", viewport: { width: 640, height: 220 }, box: true, widths: [560, 1120] },
   { name: "recent", route: "/#/recent", viewport: column, clip: "column", mark: "li[class*=_row_]", widths: [768, 1536] },
   { name: "recent-narrow", route: "/#/recent", viewport: phone, clip: "main", widths: [390, 780] },
   { name: "ask", route: "/#/ask", viewport: column, clip: "column", ask: ASK, mark: "[class*=_receipts_]", widths: [768, 1536] },
   { name: "ask-narrow", route: "/#/ask", viewport: phone, clip: "main", ask: ASK, widths: [390, 780] },
   { name: "today", route: "/#/today", viewport: column, clip: "column", mark: "[class*=_line_]:has(fieldset)", widths: [768, 1536] },
-  { name: "today-narrow", route: "/#/today", viewport: phone, clip: "main", widths: [390, 780] },
-  { name: "fading", route: "/#/fading", viewport: column, clip: "column", fit: true, widths: [768, 1536] },
-  { name: "fading-narrow", route: "/#/fading", viewport: phone, clip: "main", widths: [390, 780] },
   { name: "phone", phone: true, route: "/", viewport: { width: 390, height: 620 }, widths: [390, 780] },
 ];
 
@@ -108,11 +105,6 @@ try {
           shot.clip === "column"
             ? { x: r.x, y: 0, width: shot.viewport.width - r.x, height: shot.viewport.height }
             : r;
-        if (shot.fit) {
-          // A short screen ends below its last sheet instead of on empty background.
-          const sheet = await page.locator("main > *").first().boundingBox();
-          area.height = Math.min(area.height, Math.ceil(sheet.y + sheet.height + 28));
-        }
       }
       if (shot.mark && area && theme === "light") {
         const m = await page.locator(shot.mark).first().boundingBox();
