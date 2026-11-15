@@ -32,6 +32,32 @@ const open = async (
   return { engine, platform };
 };
 
+describe("first open", () => {
+  it("opens setup when it cannot tell", async () => {
+    const engine = at("done");
+    vi.spyOn(engine, "getSetup").mockRejectedValueOnce(new Error("no answer"));
+    renderApp({ hash: "", engine, platform: fakePlatform() });
+    await waitFor(() => expect(window.location.hash).toBe("#/setup"));
+  });
+
+  it.each(["notStarted", "checking", "choosing"])(
+    "opens setup when no size was ever chosen (%s)",
+    async (name) => {
+      renderApp({ hash: "", engine: at(name), platform: fakePlatform() });
+      await screen.findByRole("main", { name: "Setting up Nocturne" });
+      expect(window.location.hash).toBe("#/setup");
+    },
+  );
+
+  it.each(["downloading", "done"])(
+    "opens today's page once a size was chosen (%s)",
+    async (name) => {
+      renderApp({ hash: "", engine: at(name), platform: fakePlatform() });
+      await waitFor(() => expect(window.location.hash).toBe("#/today"));
+    },
+  );
+});
+
 describe("night", () => {
   it.each([
     ["checking", "#/setup?step=choosing"],
