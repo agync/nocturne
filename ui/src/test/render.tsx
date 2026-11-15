@@ -42,6 +42,7 @@ export function fakePlatform(
     openPath: async () => undefined,
     openOriginal: async () => undefined,
     openLogs: async () => undefined,
+    openDataFolder: async () => undefined,
     originalSrc: (path) => `file:${path}`,
     inQuickCapture: () => options.quickCapture ?? false,
     closeQuickCapture: async () => undefined,

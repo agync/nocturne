@@ -109,3 +109,18 @@ pub async fn open_logs<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError
     })
     .await
 }
+
+/// Open the data folder.
+#[tauri::command]
+pub async fn open_data_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    run(app, move |app| async move {
+        let state = app.state::<AppState>();
+        let dir = state.data_dir.clone();
+        let exists = blocking_cmd(move || Ok(dir.is_dir())).await?;
+        if !exists {
+            return Err(CommandError::not_found("there is no data folder yet"));
+        }
+        open(&state, &state.data_dir)
+    })
+    .await
+}

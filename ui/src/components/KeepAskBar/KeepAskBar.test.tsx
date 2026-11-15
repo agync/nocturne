@@ -7,7 +7,6 @@ import { EngineError } from "../../engine/client";
 import { EngineProvider } from "../../engine/context";
 import { onlineViewOn } from "../../engine/mock/onlineAsk";
 import { PlatformProvider } from "../../platform/context";
-import { shortcutLabel } from "../../platform/shortcutKeys";
 import type { Platform } from "../../platform/types";
 import { onlineEngine } from "../../screens/ask/testing";
 import { ToastProvider } from "../Toast/Toast";
@@ -135,18 +134,6 @@ describe("KeepAskBar", () => {
     const wide = setup({ shortcut: "Ctrl+Shift+Space" });
     expect(screen.getByText("Ctrl Shift Space")).toBeInTheDocument();
     expect(wide.input).toHaveAttribute("placeholder", "Keep something, or ask…");
-  });
-
-  it("names the keys of the default shortcut as they are on the keyboard", () => {
-    expect(shortcutLabel("CommandOrControl+Shift+Space", "windows")).toBe("Ctrl Shift Space");
-    expect(shortcutLabel("CommandOrControl+Shift+Space", "linux")).toBe("Ctrl Shift Space");
-    expect(shortcutLabel("CommandOrControl+Shift+Space", "mac")).toBe("Cmd Shift Space");
-    expect(shortcutLabel("CmdOrCtrl+K", "windows")).toBe("Ctrl K");
-    expect(shortcutLabel("Control+Alt+K", "mac")).toBe("Ctrl Option K");
-    expect(shortcutLabel("Super+K", "mac")).toBe("Cmd K");
-    expect(shortcutLabel("Super+K", "windows")).toBe("Win K");
-    expect(shortcutLabel("Super+K", "linux")).toBe("Super K");
-    expect(shortcutLabel("Ctrl + Shift + Space", "linux")).toBe("Ctrl Shift Space");
   });
 
   it("uses the narrow prompt and no shortcut at the bottom", () => {

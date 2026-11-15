@@ -56,6 +56,10 @@ export class HttpPlatform extends WebPlatform {
     console.info("Opening logs is not available in a browser");
   }
 
+  override async openDataFolder(): Promise<void> {
+    console.info("Opening the data folder is not available in a browser");
+  }
+
   override pickFiles(): Promise<string[]> {
     return new Promise((resolve) => {
       const input = document.createElement("input");

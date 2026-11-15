@@ -1642,10 +1642,22 @@ fn open_logs_still_opens_after_the_log_folder_is_deleted() {
 }
 
 #[test]
+fn open_data_folder_opens_the_data_folder() {
+    let h = harness();
+    let opened = h.recording_opener();
+    h.ok("open_data_folder", json!({}));
+    assert_eq!(
+        opened.lock().unwrap().as_slice(),
+        &[h.dir.path().to_path_buf()]
+    );
+}
+
+#[test]
 fn nothing_can_be_opened_before_the_app_installs_its_opener() {
     let h = harness();
     std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
     assert_eq!(h.code("open_logs", json!({})), "unavailable");
+    assert_eq!(h.code("open_data_folder", json!({})), "unavailable");
 }
 
 // ---- the window ----

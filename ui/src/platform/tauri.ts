@@ -86,6 +86,10 @@ export class TauriPlatform implements Platform {
     await invoke("open_logs");
   }
 
+  async openDataFolder(): Promise<void> {
+    await invoke("open_data_folder");
+  }
+
   originalSrc(path: string): string {
     return convertFileSrc(path);
   }

@@ -93,6 +93,10 @@ export class WebPlatform implements Platform {
     console.info("Would open the logs");
   }
 
+  async openDataFolder(): Promise<void> {
+    console.info("Would open the data folder");
+  }
+
   originalSrc(path: string): string {
     // The preview holds what was just kept in memory and points at it with a blob address.
     return path.startsWith("blob:") ? path : PLACEHOLDER;

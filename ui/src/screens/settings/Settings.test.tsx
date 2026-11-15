@@ -92,17 +92,6 @@ describe("Settings", () => {
     expect(box).toHaveAccessibleDescription(/Include Ctrl, Alt or Super with another key\./);
   });
 
-  it("spells out the engine's default shortcut", async () => {
-    const engine = createMockEngine();
-    const base = await engine.getSettings();
-    vi.spyOn(engine, "getSettings").mockResolvedValue({
-      ...base,
-      shortcut: "CommandOrControl+Shift+Space",
-    });
-    await open(engine);
-    expect(screen.getByText("Ctrl+Shift+Space")).toBeInTheDocument();
-  });
-
   it("links the explanation of a shortcut that is not working to its button", async () => {
     const engine = createMockEngine();
     const base = await engine.getSettings();

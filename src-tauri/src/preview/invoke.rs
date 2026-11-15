@@ -18,6 +18,7 @@ pub const UNAVAILABLE: &[&str] = &[
     "open_original",
     "open_export",
     "open_logs",
+    "open_data_folder",
     "open_sound_settings",
     "print_page",
     "quick_keep_command",
