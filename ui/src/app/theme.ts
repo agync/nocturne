@@ -13,10 +13,18 @@ export function resolveTheme(setting: Theme, platform: SystemTheme | null): Syst
   return platform;
 }
 
+/** The theme the sync last asked for, which a screen that holds its own theme gives back. */
+let synced: SystemTheme | null = null;
+
+export function syncedTheme(): SystemTheme | null {
+  return synced;
+}
+
 export function applyTheme(
   theme: SystemTheme | null,
   root: HTMLElement = document.documentElement,
 ) {
+  synced = theme;
   if (theme) root.setAttribute("data-theme", theme);
   else root.removeAttribute("data-theme");
 }
