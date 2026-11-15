@@ -1,9 +1,9 @@
 ---
 type: Guide
 title: Your data
-description: Where everything is kept, how to export, let go or delete it, and how Nocturne shows that nothing leaves your computer.
+description: Where everything is kept, how to export, back up and restore it, let it go or delete it, and how Nocturne shows that nothing leaves your computer.
 status: draft
-tags: [guide, privacy, data, export, delete]
+tags: [guide, privacy, data, export, backup, restore, delete]
 ---
 
 # Your data
@@ -35,6 +35,51 @@ page, and all your originals exactly as you kept them. If you have used Online a
 the Sent online log as readable text and your model choices (as `online/sent.md` and
 `models.json`); it never holds the key. Nothing is changed or removed by exporting.
 
+## Back up and restore
+
+A backup is one file that holds everything Nocturne needs to start again on this or another
+computer. It is locked with a passphrase you choose, and nobody can open it without that
+passphrase. Export everything is for reading your things; a backup is for getting them back.
+
+**Make a backup.** Privacy has "Make a backup…". Type a passphrase twice (at least 8 characters;
+Nocturne shows how strong it is), tick the box that says you have kept it safe, then choose where
+to save the file. Use a long one, such as three or four words that do not go together. **If you
+forget the passphrase, nobody can open the backup, not even the people who make Nocturne.** Keep
+it somewhere safe, apart from the file, or in a password manager. The file is named `Nocturne
+backup` with the day, and ends in `.nocturne`. You can watch it being saved and stop it. When it
+has saved the file, Nocturne reads it back to check it, and only then says it is saved. Stopping,
+or any failure, leaves no half-written file. Making a backup changes nothing in Nocturne.
+
+**What is in it.** Everything you kept, exactly as you kept it, everything Nocturne remembers from
+it, every page and your settings. Things you marked private are in it too, locked like the rest.
+
+**What is not in it.**
+
+- What Nocturne downloads at setup to read and speak. A new computer downloads it again.
+- The key for your provider (Online answers). Online answers is off after a restore and you paste
+  the key again.
+- The phones you added for Away from home. You add them again.
+- Spoken pages and log files. They are made again.
+- Anything you had asked Nocturne to forget completely and it had not finished.
+
+**Restore.** On the first screen of setup choose "Restore from a backup", or choose "Restore from
+a backup…" in Privacy. Pick the file and type its passphrase. Nocturne checks the whole file first,
+tells you what is in it and when it was made, and changes nothing until you agree. A wrong
+passphrase, a file that is not a backup, a damaged or cut-off file, and a backup made by a newer
+Nocturne each get their own plain sentence, and nothing changes. A backup made by an older
+Nocturne is brought up to date. When you agree, Nocturne unpacks the backup, closes and opens
+again on the restored things. If the reading and speaking files are missing, setup downloads them.
+
+**If this computer already holds memories.** Restoring never deletes them quietly. Nocturne shows
+what is in the backup beside what is here, and you press "Replace with the backup" or "Keep
+what's here". If you replace, everything here is first moved aside, not deleted, into a folder
+called `put-aside` inside Nocturne's own folder. Privacy then lists it, with "Bring it back…",
+which swaps the two again, and "Delete it…", which asks first. Put-aside copies never expire.
+Delete everything removes them too. Nocturne cannot merge two sets of memories.
+
+**Open it without Nocturne.** A backup is a standard age file that holds a tar archive. Any age
+tool with your passphrase opens it, and the originals inside are your files under content names.
+
 ## Let go, bring back, forget
 
 Nocturne does not delete anything quietly.
@@ -52,7 +97,8 @@ Nocturne does not delete anything quietly.
 
 Privacy has "Delete everything". It removes everything Nocturne holds from this computer: what you
 kept, what it remembers and every page. You have to type the words it shows before it goes ahead,
-and it cannot be undone, so export first if you might want a copy. It keeps the reading setup it
+and it cannot be undone, so export or back up first if you might want a copy. It also removes
+backups waiting to be restored and the `put-aside` copies a restore made. It keeps the reading setup it
 downloaded and the log files (the Sent online log, the key and your model choices are removed),
 turns off "Start with this computer" and resets the quick keep shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac,
 the folders named `app.nocturne.desktop` in `~/Library/WebKit` and `~/Library/Caches`, and the saved
