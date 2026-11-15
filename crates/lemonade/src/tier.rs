@@ -174,10 +174,14 @@ pub fn tier_options(ram_bytes: u64, free_disk_bytes: u64) -> Vec<TierOption> {
         .collect()
 }
 
-/// The backend to run `recipe` on: Metal on a Mac, Vulkan on an integrated GPU (the dependable
-/// path there), ROCm on a discrete AMD GPU, otherwise the CPU. Falls back to the CPU when the
-/// preferred backend is not available on this machine, and to Metal where the CPU is not
+/// The backend to run `recipe` on: Metal on a Mac, ROCm on a discrete AMD GPU, Vulkan on any
+/// other graphics (AMD integrated, NVIDIA, Intel), otherwise the CPU. Falls back to the CPU when
+/// the preferred backend is not available on this machine, and to Metal where the CPU is not
 /// offered either (the engine runs everything through Metal on a Mac).
+///
+/// The engine's CUDA backend is left out on purpose: it serves llama.cpp only, so speech and
+/// voice would still need another backend, and it fetches a runtime of its own. Vulkan runs on
+/// every NVIDIA card the engine finds, on the same download as the other graphics.
 pub fn choose_backend(info: &SystemInfo, recipe: &str) -> &'static str {
     let usable = |backend: &str| {
         matches!(
@@ -185,18 +189,17 @@ pub fn choose_backend(info: &SystemInfo, recipe: &str) -> &'static str {
             BackendState::Installable | BackendState::Installed
         )
     };
-    let gpus: Vec<_> = info
-        .devices
-        .amd_gpu
-        .iter()
-        .filter(|g| g.available)
-        .collect();
     let metal = info.devices.metal.as_ref().is_some_and(|m| m.available);
     let preferred = if metal {
         "metal"
-    } else if gpus.iter().any(|g| !g.integrated) {
+    } else if info
+        .devices
+        .amd_gpu
+        .iter()
+        .any(|g| g.available && !g.integrated)
+    {
         "rocm"
-    } else if !gpus.is_empty() {
+    } else if info.devices.has_graphics() {
         "vulkan"
     } else {
         "cpu"
@@ -431,6 +434,128 @@ mod tests {
         assert_eq!(choose_backend(&mac, "whispercpp"), "metal");
         let unsupported = json.replace(r#""update_required""#, r#""unsupported""#);
         assert_eq!(choose_backend(&info(&unsupported), "llamacpp"), "cpu");
+    }
+
+    /// What the engine says on a computer whose graphics are not AMD's: Vulkan runs on the CPU
+    /// entry, so it is installable whatever the graphics, and CUDA only where NVIDIA is found.
+    fn recipes(cuda: &str) -> String {
+        format!(
+            r#""recipes": {{
+              "llamacpp": {{"backends": {{"cuda": {{"state": "{cuda}"}}, "vulkan": {{"state": "installable"}}, "rocm": {{"state": "unsupported"}}, "cpu": {{"state": "installable"}}}}}},
+              "whispercpp": {{"backends": {{"vulkan": {{"state": "installable"}}, "rocm": {{"state": "unsupported"}}, "cpu": {{"state": "installable"}}}}}},
+              "kokoro": {{"backends": {{"cpu": {{"state": "installable"}}}}}}}}"#
+        )
+    }
+
+    fn nvidia(gpu: &str) -> SystemInfo {
+        info(&format!(
+            r#"{{"devices": {{"amd_gpu": [], "nvidia_gpu": [{gpu}]}}, {}}}"#,
+            recipes("installable")
+        ))
+    }
+
+    #[test]
+    fn an_nvidia_card_runs_on_vulkan() {
+        let info = nvidia(
+            r#"{"available": true, "name": "NVIDIA GeForce RTX 4060", "family": "sm_89", "compute_capability": "8.9", "vram_gb": 8.0}"#,
+        );
+        assert_eq!(
+            info.backend_state("llamacpp", "cuda"),
+            BackendState::Installable
+        );
+        assert_eq!(choose_backend(&info, "llamacpp"), "vulkan");
+        assert_eq!(choose_backend(&info, "whispercpp"), "vulkan");
+        assert_eq!(choose_backend(&info, "kokoro"), "cpu");
+    }
+
+    #[test]
+    fn an_nvidia_card_the_engine_could_not_find_means_the_cpu() {
+        let none =
+            nvidia(r#"{"available": false, "error": "No NVIDIA discrete GPU found", "name": ""}"#);
+        assert_eq!(choose_backend(&none, "llamacpp"), "cpu");
+        assert_eq!(choose_backend(&none, "whispercpp"), "cpu");
+    }
+
+    #[test]
+    fn nvidia_beside_an_amd_integrated_gpu_runs_on_vulkan() {
+        let json = format!(
+            r#"{{"devices": {{"amd_gpu": [{{"available": true, "integrated": true}}],
+                "nvidia_gpu": [{{"available": true, "vram_gb": 6.0}}]}}, {}}}"#,
+            recipes("installable")
+        );
+        assert_eq!(choose_backend(&info(&json), "llamacpp"), "vulkan");
+    }
+
+    #[test]
+    fn a_discrete_amd_gpu_keeps_rocm_beside_other_graphics() {
+        let json = format!(
+            r#"{{"devices": {{"amd_gpu": [{{"available": true, "integrated": false}}],
+                "intel_gpu": [{{"available": true}}]}}, {}}}"#,
+            recipes("unsupported").replace(
+                r#""rocm": {"state": "unsupported"}"#,
+                r#""rocm": {"state": "installable"}"#
+            )
+        );
+        assert_eq!(choose_backend(&info(&json), "llamacpp"), "rocm");
+    }
+
+    #[test]
+    fn intel_graphics_run_on_vulkan() {
+        let json = format!(
+            r#"{{"devices": {{"amd_gpu": [], "nvidia_gpu": [{{"available": false, "name": ""}}],
+                "intel_gpu": [{{"available": true, "name": "Intel graphics"}}]}}, {}}}"#,
+            recipes("unsupported")
+        );
+        let info = info(&json);
+        assert_eq!(choose_backend(&info, "llamacpp"), "vulkan");
+        assert_eq!(choose_backend(&info, "whispercpp"), "vulkan");
+        assert_eq!(choose_backend(&info, "kokoro"), "cpu");
+    }
+
+    #[test]
+    fn vulkan_the_engine_cannot_run_means_the_cpu_on_any_graphics() {
+        for gpu in [
+            r#""nvidia_gpu": [{"available": true}]"#,
+            r#""intel_gpu": [{"available": true}]"#,
+            r#""amd_gpu": [{"available": true, "integrated": true}]"#,
+        ] {
+            let json = format!(
+                r#"{{"devices": {{{gpu}}}, {}}}"#,
+                recipes("installable").replace(
+                    r#""vulkan": {"state": "installable"}"#,
+                    r#""vulkan": {"state": "unsupported"}"#
+                )
+            );
+            assert_eq!(choose_backend(&info(&json), "llamacpp"), "cpu", "{gpu}");
+        }
+    }
+
+    #[test]
+    fn vulkan_already_installed_is_chosen() {
+        let json = format!(
+            r#"{{"devices": {{"intel_gpu": [{{"available": true}}]}}, {}}}"#,
+            recipes("unsupported").replace(
+                r#""vulkan": {"state": "installable"}"#,
+                r#""vulkan": {"state": "installed"}"#
+            )
+        );
+        assert_eq!(choose_backend(&info(&json), "llamacpp"), "vulkan");
+    }
+
+    #[test]
+    fn an_unavailable_intel_entry_is_not_graphics() {
+        let json = format!(
+            r#"{{"devices": {{"intel_gpu": [{{"available": false}}]}}, {}}}"#,
+            recipes("unsupported")
+        );
+        assert_eq!(choose_backend(&info(&json), "llamacpp"), "cpu");
+    }
+
+    #[test]
+    fn the_engine_with_no_nvidia_entry_at_all_still_reads() {
+        let old = info(r#"{"devices": {"amd_gpu": []}}"#);
+        assert!(old.devices.nvidia_gpu.is_empty() && old.devices.intel_gpu.is_empty());
+        assert!(!old.devices.has_graphics());
     }
 
     #[test]
