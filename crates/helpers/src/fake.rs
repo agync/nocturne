@@ -144,7 +144,7 @@ pub fn behave(control: &Value, index: usize) {
             .env("FAKE_ROLE", "sleeper")
             .spawn()
     {
-        let _ = std::fs::write(exe_dir().join(CHILD_PID_FILE), child.id().to_string());
+        write_whole(&exe_dir().join(CHILD_PID_FILE), &child.id().to_string());
     }
     let runs = control
         .get("crash_runs")
@@ -193,6 +193,16 @@ pub fn serve_metrics(addr: &str, hostname: String) -> Option<u16> {
     Some(port)
 }
 
+/// Writes `text` to `path` whole: to a name beside it first, then renamed, so a test that sees the
+/// file never reads it empty or half written.
+pub fn write_whole(path: &std::path::Path, text: &str) {
+    let mut part = path.as_os_str().to_owned();
+    part.push(".part");
+    if std::fs::write(&part, text).is_ok() {
+        let _ = std::fs::rename(&part, path);
+    }
+}
+
 /// Another local program answering on `addr` as if it were the helper's metrics port, naming
 /// `hostname`. Returns the port it answers on, once it does.
 pub fn spawn_spoofer(addr: &str, hostname: &str) -> Option<u16> {
@@ -224,7 +234,7 @@ pub fn spoofer_if_asked() {
     let addr = std::env::var("FAKE_SPOOF_ADDR").unwrap_or_default();
     let host = std::env::var("FAKE_SPOOF_HOST").unwrap_or_default();
     if let Some(port) = serve_metrics(&addr, host) {
-        let _ = std::fs::write(exe_dir().join(SPOOF_PORT_FILE), port.to_string());
+        write_whole(&exe_dir().join(SPOOF_PORT_FILE), &port.to_string());
     }
     sleep_forever();
 }

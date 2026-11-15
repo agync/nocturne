@@ -72,9 +72,9 @@ fn serve(target: &str, key: Option<String>, control: &Value) {
         return;
     };
     if let Ok(addr) = listener.local_addr() {
-        let _ = std::fs::write(
-            fake::exe_dir().join(fake::PUBLIC_PORT_FILE),
-            addr.port().to_string(),
+        fake::write_whole(
+            &fake::exe_dir().join(fake::PUBLIC_PORT_FILE),
+            &addr.port().to_string(),
         );
     }
     let header = key.map(|k| (HELPER_KEY_HEADER.to_string(), k));
