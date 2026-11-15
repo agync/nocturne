@@ -65,7 +65,12 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     os.set_webview_dirs(webview::default_dirs(&app.config().identifier));
     os.set_registrar(Arc::new(shortcut::PluginRegistrar(app.clone())));
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
-        shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
+        let grab = shortcut::session_allows_grab_now();
+        shortcut::install(&os, &settings.shortcut, grab);
+        #[cfg(target_os = "linux")]
+        if !grab {
+            install_portal_shortcut(app);
+        }
     }
     #[cfg(target_os = "linux")]
     if sandbox::flatpak_app_id_now().is_some() {
@@ -106,6 +111,33 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
         }
     }));
     Ok(())
+}
+
+/// Where the app cannot take keys itself (Wayland), the desktop's shortcut portal holds the
+/// shortcut. It runs on a thread of its own, since the desktop may ask the person before it
+/// binds the keys; the saved shortcut is read once the portal is there.
+#[cfg(target_os = "linux")]
+fn install_portal_shortcut<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let press = app.clone();
+        let Some(registrar) = shortcut::PortalRegistrar::connect(
+            &portal::Bus::session(),
+            Arc::new(move || quick_capture::open(&press)),
+        ) else {
+            tracing::info!("global shortcut not registered: the desktop has no shortcut portal");
+            return;
+        };
+        let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>())
+        else {
+            return;
+        };
+        let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) else {
+            return;
+        };
+        os.set_registrar(Arc::new(registrar));
+        shortcut::install(&os, &settings.shortcut, true);
+    });
 }
 
 /// Handle a second launch that is for the OS lane (`--quick-capture`). `true` means it was
@@ -275,7 +307,16 @@ pub async fn apply_settings<R: Runtime>(
     if let Some(new) = &patch.shortcut
         && *new != before.shortcut
     {
-        shortcut::change(&os, new)?;
+        // Off the async workers: the desktop's portal may wait for the person.
+        let handle = app.clone();
+        let new = new.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            handle
+                .try_state::<OsState>()
+                .map_or(Ok(()), |os| shortcut::change(&os, &new))
+        })
+        .await
+        .map_err(|_| CommandError::unavailable("the shortcut could not be changed"))??;
     }
     if let Some(folder) = &patch.inbox_folder
         && Some(folder) != before.inbox_folder.as_ref()
@@ -344,7 +385,7 @@ pub async fn after_failed_delete<R: Runtime>(app: &AppHandle<R>) {
 
 /// Everything was deleted: drop what the desktop side remembers, and undo what it set up. The
 /// settings are back to their defaults, so the start-at-login entry goes and the shortcut is the
-/// default one again. The web view's own storage and cache go too.
+/// default one again, unless the desktop holds it and keeps its own keys. The web view's own storage and cache go too.
 pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     let Some(os) = app.try_state::<OsState>() else {
         return;
@@ -353,7 +394,10 @@ pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     os.forget_all();
     webview::remove(&os.webview_dirs());
     switch_off_start_at_login(app, &os, told_portal);
-    if let Err(e) = shortcut::change(&os, shortcut::DEFAULT) {
+    // Nothing held, nothing to move: through the portal a change would ask the person again.
+    if os.shortcut_registered()
+        && let Err(e) = shortcut::change(&os, shortcut::DEFAULT)
+    {
         tracing::warn!(
             "the shortcut could not be put back to its default: {:?}",
             e.code

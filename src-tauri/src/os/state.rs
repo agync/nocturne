@@ -53,6 +53,9 @@ pub struct OsState {
     dir: PathBuf,
     file: Mutex<OsFile>,
     shortcut: Mutex<ShortcutSlot>,
+    /// Held by whoever is moving the shortcut, for as long as that takes; the slot itself is only
+    /// held for a moment, so reading it never waits for the desktop.
+    shortcut_writer: Mutex<()>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
     autostart: Mutex<Option<Target>>,
     #[cfg(target_os = "linux")]
@@ -70,6 +73,7 @@ impl OsState {
             dir: dir.to_path_buf(),
             file: Mutex::new(load(dir)),
             shortcut: Mutex::new(ShortcutSlot::default()),
+            shortcut_writer: Mutex::new(()),
             notifier: Mutex::new(None),
             autostart: Mutex::new(None),
             #[cfg(target_os = "linux")]
@@ -103,6 +107,12 @@ impl OsState {
 
     pub fn forget_all(&self) {
         self.update(|f| *f = OsFile::default());
+    }
+
+    pub(super) fn shortcut_writer(&self) -> MutexGuard<'_, ()> {
+        self.shortcut_writer
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
     }
 
     pub(super) fn shortcut(&self) -> MutexGuard<'_, ShortcutSlot> {
