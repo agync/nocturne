@@ -193,18 +193,16 @@ impl Preview {
     }
 
     /// A ticket for the event stream (once, soon) or for media (for an hour after its last use,
-    /// twelve at most), tied to the token in force. `None` when there is no token.
-    pub(crate) fn issue(&self, kind: TicketKind) -> Option<String> {
-        let token = self.opts.token.current()?;
+    /// twelve at most), tied to the token the request was admitted under.
+    pub(crate) fn issue(&self, kind: TicketKind, admitted: &auth::Admitted) -> String {
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        Some(all.issue(kind, Instant::now(), token))
+        all.issue(kind, Instant::now(), admitted.0.clone())
     }
 
-    /// Whether `ticket` is a live one of this kind, made under the token in force.
-    pub(crate) fn redeem(&self, ticket: &str, kind: TicketKind) -> bool {
-        let current = self.opts.token.current();
+    /// Whether `ticket` is a live one of this kind, made under `current`, the token in force.
+    pub(crate) fn redeem(&self, ticket: &str, kind: TicketKind, current: &str) -> bool {
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        all.redeem(ticket, kind, Instant::now(), current.as_deref())
+        all.redeem(ticket, kind, Instant::now(), Some(current))
     }
 
     pub(crate) fn engine(&self) -> Option<nocturne_engine::Engine> {

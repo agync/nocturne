@@ -70,6 +70,7 @@ impl Token {
         }
     }
 
+    #[cfg(test)]
     fn matches(&self, presented: &str) -> bool {
         self.current().is_some_and(|t| same(presented, &t))
     }
@@ -154,15 +155,21 @@ pub(crate) fn refuse(status: StatusCode, code: &str) -> Response {
     response
 }
 
-/// Whether the request may go on. `Host` and `Origin` first (a page on another site, a name
-/// that points here by trickery), then the token.
+/// The token a request was admitted under, read once by the gate. What the request makes (a
+/// ticket, an event stream) is bound to it, never to a token read again later, so a request let
+/// in just before a new token cannot leave with access under the new one.
+#[derive(Clone)]
+pub(crate) struct Admitted(pub(crate) String);
+
+/// Whether the request may go on, and under which token when it carries data. `Host` and
+/// `Origin` first (a page on another site, a name that points here by trickery), then the token.
 fn admit(
     preview: &Preview,
     method: &Method,
     headers: &HeaderMap,
     path: &str,
     query: Option<&str>,
-) -> Result<(), (StatusCode, &'static str)> {
+) -> Result<Option<Admitted>, (StatusCode, &'static str)> {
     let host = headers.get(header::HOST).and_then(|v| v.to_str().ok());
     if !host.is_some_and(|h| preview.hosts.iter().any(|ok| ok == h)) {
         return Err((StatusCode::FORBIDDEN, "forbidden"));
@@ -176,23 +183,26 @@ fn admit(
         }
     }
     if !protected(path) {
-        return Ok(());
+        return Ok(None);
     }
-    if bearer(headers).is_some_and(|t| preview.opts.token.matches(t)) {
-        return Ok(());
+    let Some(current) = preview.opts.token.current() else {
+        return Err((StatusCode::UNAUTHORIZED, "unauthorized"));
+    };
+    if bearer(headers).is_some_and(|t| same(t, &current)) {
+        return Ok(Some(Admitted(current)));
     }
     if method == Method::GET {
         if path == "/api/events"
             && let Some(ticket) = query_value(query, "ticket")
-            && preview.redeem(ticket, TicketKind::Events)
+            && preview.redeem(ticket, TicketKind::Events, &current)
         {
-            return Ok(());
+            return Ok(Some(Admitted(current)));
         }
         if (path.starts_with("/originals/") || path.starts_with("/audio/"))
             && let Some(ticket) = query_value(query, "t")
-            && preview.redeem(ticket, TicketKind::Media)
+            && preview.redeem(ticket, TicketKind::Media, &current)
         {
-            return Ok(());
+            return Ok(Some(Admitted(current)));
         }
     }
     Err((StatusCode::UNAUTHORIZED, "unauthorized"))
@@ -200,7 +210,7 @@ fn admit(
 
 pub async fn gate(
     State(preview): State<Arc<Preview>>,
-    request: Request<Body>,
+    mut request: Request<Body>,
     next: Next,
 ) -> Response {
     let verdict = admit(
@@ -211,7 +221,12 @@ pub async fn gate(
         request.uri().query(),
     );
     match verdict {
-        Ok(()) => next.run(request).await,
+        Ok(admitted) => {
+            if let Some(admitted) = admitted {
+                request.extensions_mut().insert(admitted);
+            }
+            next.run(request).await
+        }
         Err((status, code)) => refuse(status, code),
     }
 }
