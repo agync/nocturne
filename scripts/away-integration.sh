@@ -24,9 +24,12 @@ case "$what" in interop | e2e | real | netcheck | all) ;; *) printf 'usage: %s [
 
 status=0
 
+# shellcheck source=scripts/away-test-programs.sh
+source "$(dirname "${BASH_SOURCE[0]}")/away-test-programs.sh"
+
 if [[ "$what" == interop || "$what" == e2e || "$what" == all ]]; then
     cargo build -p nocturne-helpers --features fake
-    cargo test -p nocturne-app --features fake-helpers --test away_driver --test away_phone --no-run
+    build_tests away_driver away_phone
     npm --prefix ui run build:phone
     if [[ "$what" == interop || "$what" == all ]]; then
         (cd ui && npx vitest run --config vitest.interop.config.ts) || status=1
@@ -51,7 +54,7 @@ if [[ "$what" == netcheck ]]; then
     NET_CHECK_BINARY="$repo/target/release/nocturne-app" make netcheck || status=1
 
     cargo build -p nocturne-helpers --features fake
-    cargo test -p nocturne-app --features fake-helpers --test away_driver --no-run
+    build_tests away_driver
     cargo build --release -p nocturne-app --features custom-protocol,fake-helpers
     prepared=$(mktemp -d)
     (cd ui && AWAY_NETCHECK_STORE="$prepared" npx vitest run --config vitest.interop.config.ts store.test.ts)

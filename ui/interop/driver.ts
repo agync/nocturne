@@ -3,14 +3,7 @@
 
 import { type ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import {
-  createWriteStream,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { createWriteStream, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,18 +11,16 @@ import { fileURLToPath } from "node:url";
 export const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const HOST = "amber-otter-lamp-quiet.trycloudflare.com";
 
-/** The newest built test program named `name`, or `AWAY_<NAME>` when set. */
+/** The built test program named `name`, from `AWAY_<NAME>`, which scripts/away-integration.sh sets. */
 export function builtTest(name: string): string {
-  const fromEnv = process.env[`AWAY_${name.toUpperCase()}`];
-  if (fromEnv) return fromEnv;
-  const deps = join(repo, "target", "debug", "deps");
-  const found = readdirSync(deps)
-    .filter((f) => f.startsWith(`${name}-`) && !f.includes("."))
-    .map((f) => join(deps, f))
-    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
-  if (!found[0])
-    throw new Error(`${name} is not built: cargo test --features fake-helpers --no-run`);
-  return found[0];
+  const variable = `AWAY_${name.toUpperCase()}`;
+  const program = process.env[variable];
+  if (!program)
+    throw new Error(
+      `${variable} is not set: run scripts/away-integration.sh, or set it to the path that ` +
+        `cargo test -p nocturne-app --features fake-helpers --test ${name} --no-run prints`,
+    );
+  return program;
 }
 
 export function fakeCloudflared(): string {
