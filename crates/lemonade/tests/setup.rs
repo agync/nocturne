@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nocturne_contract::{LedgerKind, PauseReason, SetupError, SetupPhase, SetupView, Tier};
+use nocturne_lemonade::npu;
 use nocturne_lemonade::tier::{self, DISK_HEADROOM};
 use nocturne_lemonade::{Dirs, Setup, SetupOptions, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
@@ -732,5 +733,104 @@ async fn a_standard_install_from_before_the_reranker_is_still_installed() {
     let pulls_after = requests_to(&rig.sup, "/v1/pull").await.len();
     assert_eq!(pulls_after, pulls_before, "checking fetches nothing");
     assert_eq!(rig.sup.admin().config().await.unwrap()["offline"], true);
+    rig.sup.shutdown().await.unwrap();
+}
+
+/// What setup fetched, by the names it gave the ledger: `recipe:backend` or the model.
+fn fetched(ledger: &Ledger) -> Vec<String> {
+    ledger
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, label, _)| label.clone())
+        .collect()
+}
+
+const NPU_RUNTIME: &str = "flm:npu";
+
+#[tokio::test]
+async fn a_usable_npu_gets_its_runtime_and_model_and_counts_their_size() {
+    let rig = rig("download-ms=100,npu=ready", 32).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Standard).await.unwrap();
+    let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    assert_eq!(
+        done.total_bytes,
+        (tier::download_bytes(Tier::Standard) + npu::SPEECH.bytes) as f64
+    );
+    let got = fetched(&rig.ledger);
+    assert!(got.iter().any(|l| l == NPU_RUNTIME), "{got:?}");
+    assert!(got.iter().any(|l| l == npu::SPEECH.model), "{got:?}");
+    let info = rig.sup.client().system_info().await.unwrap();
+    assert_eq!(npu::readiness(&info, false), npu::Readiness::Ready);
+    let models = rig.sup.client().models().await.unwrap();
+    assert!(
+        models
+            .iter()
+            .any(|m| m.id == npu::SPEECH.model && m.present())
+    );
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn nothing_for_the_npu_is_fetched_when_it_will_not_be_used() {
+    // No NPU, an NPU the engine cannot use, and an 8 GB computer where the model does not fit.
+    for (mode, ram, tier) in [
+        ("download-ms=50", 32, Tier::Standard),
+        ("download-ms=50,npu=unsupported", 32, Tier::Standard),
+        ("download-ms=50,npu=driver-missing", 32, Tier::Standard),
+        ("download-ms=50,npu=ready", 8, Tier::Tiny),
+    ] {
+        let rig = rig(mode, ram).await;
+        let mut rx = rig.setup.view();
+        rig.setup.start(tier).await.unwrap();
+        let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+        assert_eq!(
+            done.total_bytes,
+            tier::download_bytes(tier) as f64,
+            "{mode}"
+        );
+        let got = fetched(&rig.ledger);
+        assert!(!got.iter().any(|l| l == NPU_RUNTIME), "{mode}: {got:?}");
+        assert!(
+            !got.iter().any(|l| l == npu::SPEECH.model),
+            "{mode}: {got:?}"
+        );
+        rig.sup.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_chosen_speech_model_keeps_the_npu_share_away() {
+    // Set up without an NPU, choose a speech model, then set up again once the NPU is usable.
+    let rig = rig("download-ms=50", 32).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Standard).await.unwrap();
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    nocturne_lemonade::selection::update(&rig.dirs.config(), |s| {
+        s.custom.insert(
+            nocturne_contract::ComponentRole::Speech,
+            "Whisper-Large-v3".to_string(),
+        );
+    })
+    .unwrap();
+    common::set_mode(&rig.dirs, "download-ms=50,npu=ready");
+    raw(
+        &rig.sup,
+        "POST",
+        "/fake/mode",
+        json!({"mode": "download-ms=50,npu=ready"}),
+    )
+    .await;
+    rig.ledger.lock().unwrap().clear();
+    let again = new_setup(&rig.sup, &rig.dirs, 32, &rig.ledger);
+    let mut rx = again.view();
+    again.start(Tier::Standard).await.unwrap();
+    wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    let info = rig.sup.client().system_info().await.unwrap();
+    assert_eq!(npu::readiness(&info, false), npu::Readiness::Fetch);
+    let got = fetched(&rig.ledger);
+    assert!(!got.iter().any(|l| l == NPU_RUNTIME), "{got:?}");
+    assert!(!got.iter().any(|l| l == npu::SPEECH.model), "{got:?}");
     rig.sup.shutdown().await.unwrap();
 }

@@ -15,6 +15,7 @@ use tokio::task::JoinHandle;
 
 use crate::client::{Action, BackendState, Client, Download, SystemInfo};
 use crate::error::RuntimeError;
+use crate::npu;
 use crate::record::{self, SetupRecord};
 use crate::selection;
 use crate::supervisor::{Control, OnlineHold, Supervisor};
@@ -217,6 +218,8 @@ struct Inner {
     dropped: Mutex<Option<Tier>>,
     /// Setup's share of the download window, which model changes may hold at the same time.
     window: Mutex<Option<OnlineHold>>,
+    /// This run also fetches the NPU's runtime and model, because they will be used.
+    npu: Mutex<bool>,
 }
 
 /// Drives setup for one engine. Dropping it stops its work; the engine's downloads carry on.
@@ -318,6 +321,7 @@ impl Setup {
                 wake: Notify::new(),
                 dropped: Mutex::new(None),
                 window: Mutex::new(None),
+                npu: Mutex::new(false),
             }),
         }
     }
@@ -432,7 +436,36 @@ impl Inner {
         if self.opts.components.is_some() {
             Vec::new()
         } else {
-            tier::extras(tier)
+            let mut out = tier::extras(tier);
+            if *lock(&self.npu) {
+                out.push(npu::SPEECH);
+            }
+            out
+        }
+    }
+
+    /// Whether recordings will be read on the NPU with `tier`, so that its runtime and model
+    /// are worth fetching: the engine can use the NPU, the person has not chosen a speech model
+    /// and the NPU model fits beside the others. Decided once per run, before anything is
+    /// fetched.
+    fn decide_npu(&self, tier: Tier, info: &SystemInfo, ram: u64) -> bool {
+        let chosen = selection::Selection {
+            tier,
+            ..selection::read(&self.config_dir)
+        };
+        let wanted = self.opts.components.is_none()
+            && npu::readiness(info, false).wanted()
+            && !chosen.custom.contains_key(&ComponentRole::Speech)
+            && npu::fits(&chosen, ram);
+        *lock(&self.npu) = wanted;
+        wanted
+    }
+
+    /// True for a step setup may leave out: the tier works without it.
+    fn optional(&self, tier: Tier, step: &Step) -> bool {
+        match step {
+            Step::Backend { recipe, .. } => *recipe == npu::RECIPE,
+            Step::Model(c) => self.extras(tier).iter().any(|e| e.model == c.model),
         }
     }
 
@@ -572,6 +605,7 @@ impl Inner {
             });
             return Ok(());
         }
+        let with_npu = self.decide_npu(tier, &info, ram);
         let models: u64 = self
             .missing(tier)
             .await?
@@ -579,6 +613,13 @@ impl Inner {
             .chain(&self.missing_extras(tier).await?)
             .map(|c| c.bytes)
             .sum();
+        let npu_runtime = if with_npu
+            && info.backend_state(npu::RECIPE, npu::BACKEND) != BackendState::Installed
+        {
+            npu::RUNTIME_BYTES
+        } else {
+            0
+        };
         let backends: u64 = self
             .recipes(tier)
             .into_iter()
@@ -589,7 +630,8 @@ impl Inner {
                     _ => backend_estimate(recipe, backend),
                 }
             })
-            .sum();
+            .sum::<u64>()
+            + npu_runtime;
         let remaining = models + backends;
         if free < remaining + DISK_HEADROOM {
             self.disk_failed(remaining, None);
@@ -736,13 +778,11 @@ impl Inner {
         record::write(&self.config_dir, &rec).map_err(engine)?;
 
         let steps = self.plan(tier, &info, &rec).await.map_err(Fail::Error)?;
-        let extras = self.extras(tier);
         for step in &steps {
             match self.run_step(step).await {
                 // The tier works without an extra: one that cannot be fetched is left out.
-                Err(Fail::Error(_)) if matches!(step, Step::Model(c) if extras.iter().any(|e| e.model == c.model)) =>
-                {
-                    tracing::warn!("an optional model could not be fetched; setup goes on");
+                Err(Fail::Error(_)) if self.optional(tier, step) => {
+                    tracing::warn!("an optional download could not be fetched; setup goes on");
                 }
                 other => other?,
             }
@@ -805,6 +845,14 @@ impl Inner {
                 BackendState::Unsupported => return Err(SetupError::EngineFailed),
                 _ => steps.push(Step::Backend { recipe, backend }),
             }
+        }
+        if *lock(&self.npu)
+            && info.backend_state(npu::RECIPE, npu::BACKEND) != BackendState::Installed
+        {
+            steps.push(Step::Backend {
+                recipe: npu::RECIPE,
+                backend: npu::BACKEND.to_string(),
+            });
         }
         let mut missing = self
             .missing(tier)
