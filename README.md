@@ -67,8 +67,8 @@ Both are off until you turn them on.
 
 - **Away from home** pairs your own phone so you can ask, keep and read your page while out. What
   travels is sealed between your phone and your computer, through a connection you choose. That
-  connection's company still sees that traffic exists. The feature has not yet been tried on the
-  real internet. See the [guide](docs/guide/away-from-home.md).
+  connection's company still sees that traffic exists. See the
+  [guide](docs/guide/away-from-home.md).
 - **Online answers** lets one service you choose write answers. It receives the question and the few
   remembered sentences it needs, never anything marked private. See the
   [guide](docs/guide/online-answers.md).

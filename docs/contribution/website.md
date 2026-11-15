@@ -145,5 +145,4 @@ A local deploy is `make site` and then `npx wrangler deploy` from `site/`, after
 ## What the page may say
 
 The landing page claims only what the app does today. When a feature, a platform or a release
-changes, change the page with it: no download button until a release exists, and Away from home
-described as untested on real networks until those trials have run.
+changes, change the page with it: no download button until a release exists.
