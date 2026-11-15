@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
+use zeroize::Zeroizing;
 
 use crate::online::OnlineKey;
 
@@ -35,10 +36,11 @@ pub const FILES_KEPT: usize = 3;
 /// engine being made to wait on its own output.
 const QUEUE: usize = 1024;
 
-/// Takes bodies and the key out of the engine's log lines.
+/// Takes bodies and the keys out of the engine's log lines.
 #[derive(Default)]
 pub struct Redactor {
     key: Mutex<Option<OnlineKey>>,
+    launch_keys: Mutex<Vec<Zeroizing<String>>>,
     withholding: Mutex<bool>,
 }
 
@@ -52,6 +54,12 @@ impl Redactor {
         *self.key.lock().unwrap_or_else(|e| e.into_inner()) = key.cloned();
     }
 
+    /// The keys this launch of the engine checks requests against, hidden as the route's is.
+    pub fn set_launch_keys(&self, keys: &[&str]) {
+        *self.launch_keys.lock().unwrap_or_else(|e| e.into_inner()) =
+            keys.iter().map(|k| Zeroizing::new(k.to_string())).collect();
+    }
+
     /// The line as it may be written, or `None` when all of it is withheld. Lines are judged in
     /// order: a body marker withholds the rest of its line and every line after it until one
     /// starts with the engine's prefix.
@@ -62,7 +70,7 @@ impl Redactor {
         } else if *withholding {
             return None;
         }
-        let mut out = match BODY_MARKERS
+        let out = match BODY_MARKERS
             .iter()
             .filter_map(|m| s.find(m).map(|at| at + m.len()))
             .min()
@@ -73,24 +81,32 @@ impl Redactor {
             }
             None => s.to_string(),
         };
-        if let Some(key) = self.key.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
-            out = hide_key(&out, key.expose());
-        }
+        let route = self.key.lock().unwrap_or_else(|e| e.into_inner());
+        let launch = self.launch_keys.lock().unwrap_or_else(|e| e.into_inner());
+        let keys: Vec<&str> = route
+            .iter()
+            .map(|k| k.expose())
+            .chain(launch.iter().map(|k| k.as_str()))
+            .collect();
+        let out = hide_keys(&out, &keys);
         Some(cap(out))
     }
 }
 
-/// The key and its first and last eight characters, wherever they appear.
-fn hide_key(line: &str, key: &str) -> String {
-    if key.is_empty() {
-        return line.to_string();
+/// Each key whole, then each key's first and last eight characters, wherever they appear. The
+/// whole keys go first so that one key's ends cannot break another's match.
+fn hide_keys(line: &str, keys: &[&str]) -> String {
+    let mut out = line.to_string();
+    for key in keys.iter().filter(|k| !k.is_empty()) {
+        out = out.replace(key, KEY_MARK);
     }
-    let mut out = line.replace(key, KEY_MARK);
-    let chars: Vec<char> = key.chars().collect();
-    if chars.len() >= 8 {
-        let head: String = chars[..8].iter().collect();
-        let tail: String = chars[chars.len() - 8..].iter().collect();
-        out = out.replace(&head, KEY_MARK).replace(&tail, KEY_MARK);
+    for key in keys {
+        let chars: Vec<char> = key.chars().collect();
+        if chars.len() >= 8 {
+            let head: String = chars[..8].iter().collect();
+            let tail: String = chars[chars.len() - 8..].iter().collect();
+            out = out.replace(&head, KEY_MARK).replace(&tail, KEY_MARK);
+        }
     }
     out
 }
@@ -295,6 +311,28 @@ fn open(path: &Path) -> Option<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_launch_keys_are_hidden_whole_and_in_part() {
+        let r = Redactor::new();
+        let (api, admin) = ("a1b2c3d4e5f6a7b8c9d0e1f2", "f0e1d2c3b4a5f6e7d8c9b0a1");
+        r.set_launch_keys(&[api, admin]);
+        let line = format!(
+            "keys {api} {admin} head {} tail {}",
+            &api[..8],
+            &admin[admin.len() - 8..]
+        );
+        let out = r.line(&line).unwrap();
+        assert_eq!(out, "keys [key] [key] head [key] tail [key]");
+    }
+
+    #[test]
+    fn one_keys_end_does_not_break_anothers_match() {
+        let r = Redactor::new();
+        let (api, admin) = ("a1b2c3d4e5f6a7b8", "00a1b2c3d4ffffff");
+        r.set_launch_keys(&[api, admin]);
+        assert_eq!(r.line(&format!("{admin} {api}")).unwrap(), "[key] [key]");
+    }
 
     #[test]
     fn the_prefix_is_recognised() {

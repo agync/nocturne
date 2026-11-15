@@ -49,6 +49,32 @@ fn ready_port(state: &RuntimeState) -> Option<u16> {
     }
 }
 
+/// The engine's own keys never reach its log from either output, even when it names them.
+#[tokio::test]
+async fn the_launch_keys_never_reach_the_engine_log() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    let sup = start(&dirs, Some("say-keys")).await;
+    let log = dirs.logs().join("lemond.log");
+    let mut said = String::new();
+    for _ in 0..100 {
+        said = std::fs::read_to_string(&log).unwrap_or_default();
+        if said.contains("keys ") && said.contains("error keys ") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    sup.shutdown().await.unwrap();
+    let said = std::fs::read_to_string(&log).unwrap_or(said);
+    for (what, line) in [("output", "(Server) keys "), ("errors", "error keys ")] {
+        let said = said
+            .lines()
+            .find(|l| l.contains(line))
+            .unwrap_or_else(|| panic!("the engine named its keys in its {what}"));
+        assert!(said.ends_with("keys [key] [key]"), "{said}");
+    }
+}
+
 #[tokio::test]
 async fn start_reaches_ready_and_live_answers_with_the_key() {
     let tmp = tempfile::tempdir().unwrap();
