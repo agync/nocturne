@@ -7,7 +7,8 @@
 # Everything lands under target/package/: the verified Lemonade bundle, its sha256 manifest, the
 # third-party notices, the packages and SHA256SUMS. Nothing is installed, pushed or uploaded.
 # The only network use is the developer-time download of the pinned Lemonade archive (checked
-# against lemonade.lock) and of the packaging tools the Tauri CLI fetches into its own cache.
+# against lemonade.lock), of the locked crates and npm packages, and of the packaging tools the
+# Tauri CLI fetches into its own cache.
 # --dry-run prints the merged configuration and the steps without building or downloading.
 #
 # macOS (Apple Silicon, built on a Mac) needs no Node there: the app is assembled by
@@ -160,6 +161,8 @@ else
     npm --prefix ui run build
 
     say "third-party notices"
+    # The notices read the crates offline, so a fresh machine downloads them first, as the build would.
+    cargo fetch --locked --target "$rust_target"
     rm -rf "$pkg/notices"
     python3 -I scripts/notices.py --target "$rust_target" --lemonade "$pkg/lemonade/$platform"
 fi
