@@ -104,6 +104,12 @@ describe("WebPlatform shared pieces", () => {
     await expect(platform.pickFolder()).resolves.toBe("Chosen folder");
     await expect(platform.openPath("x")).resolves.toBeUndefined();
   });
+
+  it("offers no backup dialogs, because a browser has no backups", async () => {
+    const platform = new WebPlatform();
+    await expect(platform.pickBackupSave()).resolves.toBeNull();
+    await expect(platform.pickBackup()).resolves.toBeNull();
+  });
 });
 
 describe("WebPlatform printing", () => {

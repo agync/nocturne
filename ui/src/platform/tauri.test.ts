@@ -24,6 +24,21 @@ describe("TauriPlatform shared pieces", () => {
     expect(calls[0]).toEqual({ cmd: "pick_folder", args: {} });
   });
 
+  it("asks the app where to save a backup, and for the backup to restore", async () => {
+    mockIPC(
+      (cmd, args) => {
+        calls.push({ cmd, args });
+        return cmd === "pick_backup_save" ? "/backups/today.nocturne" : null;
+      },
+      { shouldMockEvents: true },
+    );
+    const platform = new TauriPlatform();
+    await expect(platform.pickBackupSave()).resolves.toBe("/backups/today.nocturne");
+    expect(calls[0]).toEqual({ cmd: "pick_backup_save", args: {} });
+    await expect(platform.pickBackup()).resolves.toBeNull();
+    expect(calls[1]).toEqual({ cmd: "pick_backup", args: {} });
+  });
+
   it("asks the app to print the screen", async () => {
     await new TauriPlatform().print();
     expect(calls[0]).toEqual({ cmd: "print_page", args: {} });

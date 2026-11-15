@@ -17,6 +17,8 @@ describe("route table", () => {
       "/pages": "past-pages",
       "/setup": "setup",
       "/privacy": "privacy",
+      "/privacy/backup": "backup",
+      "/privacy/restore": "restore",
       "/settings": "settings",
       "/settings/advanced": "settings",
       "/settings/away": "away",

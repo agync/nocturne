@@ -110,6 +110,33 @@ describe("HttpEngine commands", () => {
     e.dispose();
   });
 
+  it("sends the backup and restore commands the server knows", async () => {
+    const { e, calls } = engine(() => ({ body: null }));
+    await flush();
+    await e.makeBackup("/backups/today.nocturne", "a long passphrase");
+    await e.checkBackup("/backups/today.nocturne", "a long passphrase");
+    await e.restoreBackup("/backups/today.nocturne", "a long passphrase", true);
+    await e.restorePutAside("copy-1");
+    await e.deletePutAside("copy-1");
+    const body = (name: string) => calls.find((c) => c.url === `/api/invoke/${name}`)?.init.body;
+    expect(body("make_backup")).toBe(
+      JSON.stringify({ path: "/backups/today.nocturne", passphrase: "a long passphrase" }),
+    );
+    expect(body("check_backup")).toBe(
+      JSON.stringify({ path: "/backups/today.nocturne", passphrase: "a long passphrase" }),
+    );
+    expect(body("restore_backup")).toBe(
+      JSON.stringify({
+        path: "/backups/today.nocturne",
+        passphrase: "a long passphrase",
+        replace: true,
+      }),
+    );
+    expect(body("restore_put_aside")).toBe(JSON.stringify({ id: "copy-1" }));
+    expect(body("delete_put_aside")).toBe(JSON.stringify({ id: "copy-1" }));
+    e.dispose();
+  });
+
   it("reports whether this window can record", async () => {
     const { e, calls } = engine(() => ({ body: null }));
     await flush();

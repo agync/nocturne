@@ -83,6 +83,30 @@ describe("first open", () => {
   );
 });
 
+const PASS = "lantern orchard tuesday";
+const BACKUP = "/backups/Nocturne backup 2026-11-15.nocturne";
+
+/** Takes the welcome card's restore path to the card that says the memories are back. */
+async function restoreInSetup(
+  engine: ReturnType<typeof createMockEngine>,
+  platform: ReturnType<typeof fakePlatform>,
+) {
+  engine.script.here = null;
+  vi.spyOn(platform, "pickBackup").mockResolvedValue(BACKUP);
+  await userEvent.click(await screen.findByRole("button", { name: "Restore from a backup" }));
+  expect(
+    await screen.findByRole("heading", { level: 1, name: "Restore from a backup" }),
+  ).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Choose backup file…" }));
+  await userEvent.type(await screen.findByLabelText("Passphrase for this backup"), PASS);
+  await userEvent.click(screen.getByRole("button", { name: "Open backup" }));
+  await screen.findByRole("heading", { level: 1, name: "Ready to restore" });
+  await userEvent.click(screen.getByRole("button", { name: "Restore" }));
+  expect(
+    await screen.findByRole("heading", { level: 1, name: "Your memories are back." }),
+  ).toBeInTheDocument();
+}
+
 describe("night", () => {
   it.each([
     ["checking", "#/setup?step=choosing"],
@@ -135,6 +159,69 @@ describe("the welcome", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: /lighter mind/ }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers Restore from a backup before Get started, in the setup card, at night", async () => {
+    await open("notStarted", "#/setup", fakePlatform("light"));
+    expect(
+      await screen.findByRole("button", { name: "Restore from a backup" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Restore from a backup" }));
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Restore from a backup" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Moving from another computer? Choose the backup you made there, then type its passphrase.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back" })).toBeInTheDocument();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+    expect(screen.getByRole("main", { name: "Setting up Nocturne" })).toBeInTheDocument();
+  });
+
+  it("goes Back to the welcome card without changing anything", async () => {
+    const { engine, platform } = await open("notStarted");
+    const discard = vi.spyOn(engine, "discardRestore");
+    const pick = vi.spyOn(platform, "pickBackup");
+    await userEvent.click(await screen.findByRole("button", { name: "Restore from a backup" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Back" }));
+    expect(
+      await screen.findByRole("heading", {
+        level: 1,
+        name: "Keep anything. Nocturne sleeps on it and hands you one page each morning.",
+      }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Get started" })).toBeInTheDocument();
+    expect(discard).toHaveBeenCalled();
+    expect(pick).not.toHaveBeenCalled();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("restores in setup, proceeds to checking, and says Done in the restored words", async () => {
+    const platform = fakePlatform();
+    const { engine } = await open("notStarted", "#/setup", platform);
+
+    await restoreInSetup(engine, platform);
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Checking this computer…" }),
+    ).toBeInTheDocument();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+
+    const doneView = { ...(await engine.getSetup()), phase: "done" as const };
+    vi.spyOn(engine, "getSetup").mockResolvedValue(doneView);
+    await engine.startSetup("standard");
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Nocturne is ready." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your memories from 12 Nov are all here. Your next page arrives tomorrow morning.",
+      ),
     ).toBeInTheDocument();
   });
 });

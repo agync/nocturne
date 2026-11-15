@@ -75,6 +75,15 @@ export class WebPlatform implements Platform {
     return "Chosen folder";
   }
 
+  // A browser has no desktop file dialogs, and backups are not offered there.
+  async pickBackupSave(): Promise<string | null> {
+    return null;
+  }
+
+  async pickBackup(): Promise<string | null> {
+    return null;
+  }
+
   async openPath(path: string): Promise<void> {
     // What the preview holds in memory opens in a new tab, where the browser plays or shows it.
     if (path.startsWith("blob:")) {

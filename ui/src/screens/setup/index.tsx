@@ -3,7 +3,9 @@ import { useEffect, useState } from "react";
 import { goTo, useQueryParam } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
+import type { RestoredView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
+import { RestoreFlow } from "../restore";
 import { Checking } from "./Checking";
 import { Choosing } from "./Choosing";
 import { Done } from "./Done";
@@ -18,6 +20,8 @@ export default function Setup() {
   const engine = useEngine();
   const step = useQueryParam("step");
   const [begun, setBegun] = useState(false);
+  const [restoring, setRestoring] = useState(false);
+  const [restored, setRestored] = useState<RestoredView | null>(null);
   const query = useQuery({ queryKey: ["setup"], queryFn: () => engine.getSetup() });
   const view = query.data;
 
@@ -26,7 +30,23 @@ export default function Setup() {
   }, []);
 
   let body: React.ReactNode;
-  if (query.isError) {
+  if (restoring) {
+    body = (
+      <div className={styles.card}>
+        <RestoreFlow
+          mode="setup"
+          onExit={() => setRestoring(false)}
+          onContinue={(restoredView) => {
+            setRestored(restoredView);
+            setRestoring(false);
+            setBegun(true);
+            goTo("/setup");
+            void query.refetch();
+          }}
+        />
+      </div>
+    );
+  } else if (query.isError) {
     body = (
       <div className={styles.message} role="alert">
         <p>{t("setup.error")}</p>
@@ -58,17 +78,20 @@ export default function Setup() {
       case "done":
         body =
           step === "welcome" ? (
-            <Welcome onStart={() => goTo("/setup", { step: "choosing" })} />
+            <Welcome
+              onStart={() => goTo("/setup", { step: "choosing" })}
+              onRestore={() => setRestoring(true)}
+            />
           ) : step === "choosing" ? (
             <Choosing view={view} onStarted={() => goTo("/setup")} />
           ) : (
-            <Done />
+            <Done restoredAt={restored?.madeAt ?? null} />
           );
         break;
       default:
         // notStarted, checking, choosing
         if (!begun && step !== "choosing") {
-          body = <Welcome onStart={() => setBegun(true)} />;
+          body = <Welcome onStart={() => setBegun(true)} onRestore={() => setRestoring(true)} />;
         } else if (view.phase === "choosing") {
           body = <Choosing view={view} onStarted={() => goTo("/setup")} />;
         } else {

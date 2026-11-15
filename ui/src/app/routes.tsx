@@ -22,6 +22,8 @@ const fading = lazy(() => import("../screens/fading"));
 const pastPages = lazy(() => import("../screens/past-pages"));
 const setup = lazy(() => import("../screens/setup"));
 const privacy = lazy(() => import("../screens/privacy"));
+const backup = lazy(() => import("../screens/backup"));
+const restore = lazy(() => import("../screens/restore"));
 const settings = lazy(() => import("../screens/settings"));
 const editions = lazy(() => import("../screens/editions"));
 const away = lazy(() => import("../screens/away"));
@@ -102,6 +104,20 @@ export const routes: readonly AppRoute[] = [
     title: "screen.privacy.title",
     shell: true,
     Component: privacy,
+  },
+  {
+    path: "/privacy/backup",
+    folder: "backup",
+    title: "screen.backup.title",
+    shell: true,
+    Component: backup,
+  },
+  {
+    path: "/privacy/restore",
+    folder: "restore",
+    title: "screen.restore.title",
+    shell: true,
+    Component: restore,
   },
   {
     path: "/settings",

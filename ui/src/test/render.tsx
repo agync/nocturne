@@ -39,6 +39,8 @@ export function fakePlatform(
     currentTheme: async () => initial,
     pickFiles: async () => [],
     pickFolder: async () => null,
+    pickBackupSave: async () => null,
+    pickBackup: async () => null,
     openPath: async () => undefined,
     openOriginal: async () => undefined,
     openLogs: async () => undefined,

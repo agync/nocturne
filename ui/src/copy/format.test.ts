@@ -25,6 +25,11 @@ describe("format", () => {
     expect(formatDayMonth("nonsense")).toBe("");
   });
 
+  it("reads the stamp that names a copy put aside, with or without its counter", () => {
+    expect(formatDayMonth("2026-11-15 120000")).toBe("15 Nov");
+    expect(formatDayMonth("2026-09-07 235959 (2)")).toBe("7 Sep");
+  });
+
   it("reads a bare day as a calendar day regardless of zone", () => {
     expect(formatDay("2026-03-29")).toBe("Sun 29 Mar");
   });

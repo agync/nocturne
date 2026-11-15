@@ -155,6 +155,63 @@
   font-size: 0.875rem;
 }
 
+.block > p.lastBackup {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.4 var(--font-mono);
+}
+
+.backupButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.putAsideRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-3);
+  margin-top: var(--s-2);
+  padding: var(--s-3) 0 0;
+  border-top: 1px dashed var(--rule);
+}
+
+.putAsideText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.875rem;
+}
+
+.putAsideText strong {
+  font-weight: 500;
+}
+
+.putAsideButtons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-1);
+}
+
+.backupNotice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-3);
+  margin-top: var(--s-2);
+  padding: var(--s-3) 0 0;
+  border-top: 1px dashed var(--rule);
+}
+
+.backupNotice p {
+  margin: 0;
+  color: var(--ink);
+}
+
 .exportStatus:empty {
   display: none;
 }

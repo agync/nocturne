@@ -12,6 +12,7 @@ import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { useOnline } from "../online/useOnline";
 import { AwaySection } from "./AwaySection";
+import { BackupSection } from "./BackupSection";
 import { DeleteEverythingDialog } from "./DeleteEverythingDialog";
 import { OnlineSection, onlineKnown } from "./OnlineSection";
 import styles from "./Privacy.module.css";
@@ -328,6 +329,8 @@ export default function Privacy() {
               </p>
             ) : null}
           </section>
+
+          <BackupSection />
 
           <section aria-labelledby="delete" className={`${styles.block} ${styles.danger}`}>
             <h2 id="delete" className={styles.blockTitle}>

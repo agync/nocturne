@@ -16,6 +16,7 @@ describe("the copy deck is split by area", () => {
       "advanced",
       "ask",
       "away",
+      "backup",
       "capture",
       "common",
       "editions",
