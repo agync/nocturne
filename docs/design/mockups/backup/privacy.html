@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Privacy" data-states="default putaside running bringback delete">
+<div id="content" class="sheet" data-flush>
+  <div class="pcolumns">
+    <div class="proof">
+      <p class="section">Privacy</p>
+      <p class="sentLabel">What Nocturne uses the internet for</p>
+      <h1 class="t-display">Only downloads you agreed to.</h1>
+      <p class="detail">This computer can’t count what leaves it, so Nocturne lists every download below instead.</p>
+      <section class="ledger">
+        <h2 class="section">Downloaded, with your say-so</h2>
+        <ul>
+          <li><span>Setup: Nocturne’s mind</span><span class="mono">8.4 GB · 12 Nov</span></li>
+          <li><span>App update 1.0.3</span><span class="mono">84 MB · 6 Nov</span></li>
+        </ul>
+      </section>
+      <p class="detail" style="margin-top: var(--s-4)">Nocturne has no account, no analytics and no crash reports. Once set up, Nocturne works without the internet.</p>
+    </div>
+
+    <div class="controls">
+      <section>
+        <h2 class="section">On this computer</h2>
+        <p class="sizes"><span>4.3 GB of things you kept</span><span>8.4 GB for Nocturne’s mind</span></p>
+        <div class="bar"><span></span><span></span></div>
+        <p class="where"><span class="mono">Documents/Nocturne</span><button class="button" data-variant="quiet">Open folder</button></p>
+      </section>
+
+      <section class="block">
+        <h2 class="blockTitle">Export everything</h2>
+        <p>A folder of readable files: every memory as text, every page, and all your originals, exactly as kept.</p>
+        <div><button class="button" data-variant="secondary">Export to a folder…</button></div>
+      </section>
+
+      <section class="block" aria-labelledby="backup">
+        <h2 class="blockTitle" id="backup">Back up to one file</h2>
+        <p>Everything in one file, locked with a passphrase you choose. Use it to keep a copy somewhere safe, or to move to a new computer.</p>
+        <p class="lastBackup" data-state="default putaside bringback delete">Last backup 2 Nov, 4.1 GB.</p>
+        <div class="buttons" data-state="default putaside bringback delete">
+          <button class="button" data-variant="secondary">Make a backup…</button>
+          <button class="button" data-variant="quiet">Restore from a backup…</button>
+        </div>
+        <div class="progress" data-state="running">
+          <div class="progressWords"><span>Making your backup</span><span class="progressDetail">1.6 of 4.3 GB · about 4 min left</span></div>
+          <div class="track"><div class="fill" style="width: 37%"></div></div>
+        </div>
+        <div class="buttons" data-state="running">
+          <button class="button" data-variant="secondary">See progress</button>
+        </div>
+        <div class="aside-row" data-state="putaside bringback delete">
+          <span class="text"><strong style="font-weight: 500">Put aside before restoring</strong><span class="mono">15 Nov · 312 memories · 2.1 GB</span></span>
+          <span class="buttons">
+            <button class="button" data-variant="quiet">Bring it back…</button>
+            <button class="button" data-variant="forget">Delete it…</button>
+          </span>
+        </div>
+      </section>
+
+      <section class="block danger">
+        <h2 class="blockTitle">Delete everything</h2>
+        <p>Removes all you kept, all memories and all pages. Export first if you might want them.</p>
+        <div><button class="button" data-variant="forget">Delete everything…</button></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<div id="dialog" class="backdrop" data-state="bringback">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="bb">
+    <div class="panelHead"><h2 class="panelTitle" id="bb">Go back to what was here before?</h2><span class="close"><span data-icon="x" data-size="16"></span>Close</span></div>
+    <p>What you restored from the backup is put aside instead, so you can still change your mind.</p>
+    <div class="buttons">
+      <button class="button" data-variant="secondary" style="outline: 2px solid var(--focus); outline-offset: 2px">Not now</button>
+      <button class="button" data-variant="primary">Bring it back</button>
+    </div>
+  </div>
+</div>
+
+<div id="dialog" class="backdrop" data-state="delete">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="dd">
+    <div class="panelHead"><h2 class="panelTitle" id="dd">Delete what was put aside?</h2><span class="close"><span data-icon="x" data-size="16"></span>Close</span></div>
+    <p>312 memories, 20 pages and 140 originals from before 15 Nov. This can’t be undone.</p>
+    <div class="buttons">
+      <button class="button" data-variant="secondary" style="outline: 2px solid var(--focus); outline-offset: 2px">Keep it</button>
+      <button class="button" data-variant="forget" data-filled>Delete it</button>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

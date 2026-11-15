@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setting up · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="window" data-night data-states="welcome choose passphrase ready restoring restored done">
+<section id="content" class="card">
+  <!-- Welcome, with the new way in -->
+  <span data-mark="0.5" data-size="36" data-state="welcome"></span>
+  <h1 class="t-page-title welcomeTitle" data-state="welcome">Keep anything. Nocturne sleeps on it and hands you one page each morning.</h1>
+  <p class="welcomeBody" data-state="welcome">It remembers what matters, lets go of what doesn’t, and shows you where every answer came from.</p>
+  <div class="welcomeFoot" data-state="welcome">
+    <p><strong>Everything stays on this computer.</strong><span class="small">No account. Nothing leaves this computer unless you turn it on.</span></p>
+    <div class="buttons">
+      <button class="button" data-variant="quiet">Restore from a backup</button>
+      <button class="button" data-variant="primary">Get started</button>
+    </div>
+  </div>
+
+  <!-- Restore inside setup -->
+  <h1 class="stepTitle" tabindex="-1" data-state="choose passphrase">Restore from a backup</h1>
+  <p class="lead" data-state="choose passphrase">Moving from another computer? Choose the backup you made there, then type its passphrase.</p>
+  <div class="cardFoot" data-state="choose">
+    <button class="button" data-variant="primary">Choose backup file…</button>
+    <button class="button" data-variant="quiet">Back</button>
+  </div>
+  <div class="fileRow" data-state="passphrase">
+    <span class="text"><strong>Nocturne backup 2026-11-15.nocturne</strong><span class="mono">4.3 GB · Backup Drive</span></span>
+    <button class="button" data-variant="quiet">Choose another…</button>
+  </div>
+  <div class="fields" data-state="passphrase">
+    <div class="field">
+      <label class="fieldLabel" for="pw">Passphrase for this backup</label>
+      <input class="input" id="pw" type="password" value="lantern-orchard-tuesday" data-focus>
+    </div>
+    <label class="check" style="margin-top: calc(-1 * var(--s-2))"><span class="box"></span>Show passphrase</label>
+  </div>
+  <div class="cardFoot" data-state="passphrase">
+    <button class="button" data-variant="primary">Open backup</button>
+    <button class="button" data-variant="quiet">Back</button>
+  </div>
+
+  <!-- Ready (nothing here yet) -->
+  <h1 class="stepTitle" tabindex="-1" data-state="ready">Ready to restore</h1>
+  <dl class="receipt" data-state="ready">
+    <div><dt>Backup made</dt><dd>12 Nov 2026</dd></div>
+    <div><dt>Holds</dt><dd>1,204 memories, 86 pages and 3,410 originals</dd></div>
+    <div><dt>Size</dt><dd>4.3 GB</dd></div>
+    <div><dt>Checked</dt><dd class="ticked"><span data-icon="check" data-size="16"></span>Everything is there.</dd></div>
+  </dl>
+  <div class="cardFoot" data-state="ready">
+    <button class="button" data-variant="primary">Restore</button>
+    <button class="button" data-variant="quiet">Back</button>
+  </div>
+
+  <!-- Restoring -->
+  <span data-mark="0.72" data-size="36" data-state="restoring"></span>
+  <h1 class="stepTitle" tabindex="-1" data-state="restoring">Restoring your memories</h1>
+  <div class="progress" data-state="restoring" style="max-width: none">
+    <div class="progressWords"><span>Restoring</span><span class="progressDetail">3.0 of 4.3 GB · about 1 min left</span></div>
+    <div class="track" role="progressbar" aria-valuenow="70"><div class="fill" style="width: 70%"></div></div>
+  </div>
+  <p class="lead" data-state="restoring">Keep Nocturne open until this finishes. If it closes, nothing on this computer changes and you can start again.</p>
+  <div class="cardFoot" data-state="restoring"><button class="button" data-variant="secondary">Stop</button></div>
+
+  <!-- Restored, setup carries on -->
+  <h1 class="stepTitle" tabindex="-1" data-state="restored">Your memories are back.</h1>
+  <p class="lead" data-state="restored">1,204 memories, 86 pages and 3,410 originals from your backup of 12 Nov 2026.</p>
+  <dl class="dl" data-state="restored">
+    <div><dt>Nocturne’s mind</dt><dd>Downloads next, during setup (8.4 GB). Your memories and pages are here meanwhile.</dd></div>
+    <div><dt>Online answers</dt><dd>Off until you paste the key for your provider again. You can do that in Settings later.</dd></div>
+    <div><dt>Away from home</dt><dd>Off. Add your phones again when you want them.</dd></div>
+  </dl>
+  <div class="cardFoot" data-state="restored"><button class="button" data-variant="primary">Continue</button></div>
+
+  <!-- Setup's last step, after a restore -->
+  <p class="t-section eyebrow" data-state="done">Step 3 of 3 · Ready</p>
+  <h1 class="t-page-title" tabindex="-1" data-state="done">Nocturne is ready.</h1>
+  <p class="lead" data-state="done">Your memories from 12 Nov are all here. Your next page arrives tomorrow morning.</p>
+  <div class="cardFoot" data-state="done"><button class="button" data-variant="primary">Open today’s page</button></div>
+</section>
+<script src="shell.js"></script>
+</body>
+</html>
