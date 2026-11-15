@@ -256,8 +256,13 @@ To take it off, remove the container. The volume stays until you remove it yours
 
 ### Graphics cards
 
-The image runs on the processor and needs nothing more. A graphics card is optional, and the
-published image does not carry the drivers for one. Do not pass a graphics device to it.
+On a computer you use directly, Nocturne uses the graphics in it when the private engine finds
+some that work: AMD, Intel or NVIDIA. Without any, it runs on the processor, which is slower but
+does everything.
+
+In a container the image runs on the processor and needs nothing more. A graphics card is
+optional, and the published image does not carry the drivers for one. Do not pass a graphics device
+to it.
 
 For an AMD Radeon that Nocturne uses through Vulkan (the usual case for one built into the
 processor), build the image with the Vulkan drivers and pass the device in:
@@ -272,7 +277,8 @@ podman run -d --name nocturne --device /dev/dri \
 With rootless podman, your own user must be able to open `/dev/dri/renderD128`; if it can only
 through the `render` group, add `--group-add keep-groups`. This was tried with rootless podman on a
 Radeon 890M, where the model servers opened the card. A discrete AMD card would use ROCm, which
-needs `--device /dev/kfd --device /dev/dri`; that, Docker and NVIDIA cards have not been tried.
+needs `--device /dev/kfd --device /dev/dri`. Intel graphics take the same Vulkan build and device.
+An NVIDIA card needs NVIDIA's own driver and container tooling.
 
 ## The first run
 
