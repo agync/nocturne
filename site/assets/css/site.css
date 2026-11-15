@@ -639,6 +639,68 @@ figcaption,
   white-space: nowrap;
 }
 
+.tour-screen {
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px var(--rule);
+  background: var(--sheet);
+}
+
+.phone-shot {
+  justify-self: center;
+  width: min(100%, 320px);
+  border-radius: 30px;
+}
+
+.phone-shot img {
+  border-radius: 22px;
+}
+
+.feature-box {
+  margin-top: 18px;
+  max-width: 440px;
+}
+
+.feature-box img {
+  width: 100%;
+  height: auto;
+}
+
+.tour {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+
+/* The tour, set up by tour.js on wide screens when motion is welcome: one still frame beside the
+   text, where only the page changes as each step reaches the middle of the screen. Without the
+   script, each step keeps its own picture. */
+.tour.is-live {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  column-gap: 56px;
+  border-top: 1px solid var(--rule);
+}
+
+.tour.is-live .feature {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  min-height: 78vh;
+  padding: 0;
+  border: 0;
+}
+
+/* The step's own picture stays in the page for screen readers; the frame repeats it for sight. */
+.tour.is-live .feature-shot {
+  position: absolute;
+  padding: 0;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 .tour-frame {
   grid-column: 2;
   grid-row: 1 / span 3;
