@@ -6,13 +6,21 @@ import { createMockEngine } from "../../engine/mock/engine";
 import { renderApp, setViewport } from "../../test/render";
 import { npuDetails, npuFixable } from "./Advanced";
 
-const NONE: NpuView = { present: false, used: false, model: null, causes: [], detail: null };
+const NONE: NpuView = {
+  present: false,
+  used: false,
+  model: null,
+  causes: [],
+  detail: null,
+  mind: null,
+};
 const blocked = (causes: NpuCause[], detail: string | null = null): NpuView => ({
   present: true,
   used: false,
   model: null,
   causes,
   detail,
+  mind: null,
 });
 
 beforeEach(() => {
@@ -37,6 +45,17 @@ describe("the NPU in the advanced details", () => {
     expect(
       npuDetails({ ...NONE, present: true, used: true, model: "whisper-v3-turbo-FLM" }),
     ).toEqual([["NPU", "reads recordings · whisper-v3-turbo-FLM"]]);
+  });
+
+  it("says when it also reads what you keep, or reads and answers", () => {
+    const used = { ...NONE, present: true, used: true, model: "whisper-v3-turbo-FLM" };
+    const mind = (answers: boolean) => ({ model: "gemma4-it-e4b-FLM", answers });
+    expect(npuDetails({ ...used, mind: mind(false) })).toEqual([
+      ["NPU", "reads recordings and what you keep · whisper-v3-turbo-FLM, gemma4-it-e4b-FLM"],
+    ]);
+    expect(npuDetails({ ...used, mind: mind(true) })).toEqual([
+      ["NPU", "reads, answers and reads recordings · whisper-v3-turbo-FLM, gemma4-it-e4b-FLM"],
+    ]);
   });
 
   it("gives every cause a reason and every fixable one its steps", () => {

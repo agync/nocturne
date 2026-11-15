@@ -26,6 +26,8 @@
   "advanced.npu.no": "no NPU",
   "advanced.npu.none": "none found",
   "advanced.npu.used": "reads recordings · {model}",
+  "advanced.npu.reads": "reads recordings and what you keep · {model}, {mind}",
+  "advanced.npu.answers": "reads, answers and reads recordings · {model}, {mind}",
   "advanced.npu.unused": "not used · {causes}",
   "advanced.npu.cause.driverMissing": "the amdxdna kernel driver is not loaded",
   "advanced.npu.cause.driverOld": "the amdxdna driver is too old",

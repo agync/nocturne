@@ -14,7 +14,7 @@
 use std::path::Path;
 use std::sync::Mutex;
 
-use nocturne_contract::{ComponentRole, Fit, NpuCause, NpuView, Tier};
+use nocturne_contract::{ComponentRole, Fit, NpuCause, NpuMind, NpuView, Tier};
 
 use crate::admin::Admin;
 use crate::client::{BackendState, Client, SystemInfo};
@@ -488,12 +488,17 @@ impl Npu {
                 detail = f.detail.clone();
             }
         }
+        let placement = s.placement();
         NpuView {
             present,
             used,
             model: used.then(|| SPEECH.model.to_string()),
             causes,
             detail,
+            mind: (placement != Placement::Gpu).then(|| NpuMind {
+                model: MIND.model.to_string(),
+                answers: placement == Placement::NpuOnly,
+            }),
         }
     }
 }
@@ -700,8 +705,16 @@ mod tests {
         );
         assert_eq!(npu.model_for(Work::Answering), None);
         assert_eq!(npu.models_per_kind(), 2);
+        let mind = |answers| {
+            Some(NpuMind {
+                model: MIND.model.into(),
+                answers,
+            })
+        };
+        assert_eq!(npu.view().mind, mind(false));
         npu.set_placement(Placement::NpuOnly);
         assert_eq!(npu.model_for(Work::Answering), Some(MIND.model));
+        assert_eq!(npu.view().mind, mind(true));
         assert_eq!(
             npu.models_per_kind(),
             1,
@@ -724,6 +737,7 @@ mod tests {
         );
         npu.mind_failed("flm serve exited");
         assert_eq!(npu.model_for(Work::Reading), None);
+        assert_eq!(npu.view().mind, None);
         assert_eq!(npu.models_per_kind(), 1, "from the next launch");
         npu.set_placement(Placement::NpuOnly);
         assert_eq!(

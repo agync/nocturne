@@ -395,6 +395,19 @@ pub struct NpuView {
     pub causes: Vec<NpuCause>,
     /// The engine's own words for the last failure, for the advanced view.
     pub detail: Option<String>,
+    /// The mind's work it takes, if any (decision 0014).
+    pub mind: Option<NpuMind>,
+}
+
+/// The mind's work the NPU takes.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct NpuMind {
+    /// The model that does it.
+    pub model: String,
+    /// It answers too, with no mind loaded on the graphics; otherwise it only reads.
+    pub answers: bool,
 }
 
 /// The only view that may show technical words.

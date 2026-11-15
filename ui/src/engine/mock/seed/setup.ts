@@ -121,7 +121,7 @@ export function advancedSeed(counts: { memories: number; items: number }): Advan
     tier: "standard",
     ramGib: 32,
     gpu: "Radeon 780M (iGPU)",
-    npu: { present: false, used: false, model: null, causes: [], detail: null },
+    npu: { present: false, used: false, model: null, causes: [], detail: null, mind: null },
     components: [
       { role: "mind", name: "Qwen3.5-9B-GGUF", bytes: 5.9e9, backend: "vulkan", loaded: true },
       { role: "speech", name: "Whisper-Small", bytes: 0.5e9, backend: "cpu", loaded: false },
