@@ -12,14 +12,15 @@
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
 #   hygiene    `pre-commit run --all-files`, which validates the docs bundle too
 #
-# Beyond `make check`, four jobs run what a pull request can break and the gate does not reach:
+# Beyond `make check`, five jobs run what a pull request can break and the gate does not reach:
 # `e2e` (ui/e2e, the browser tests against the mock engine), `site` (the landing page and the
 # docs built into one site and checked with axe, as docs/contribution/website.md describes), and
 # the tests on the other machines Nocturne ships for:
 #
-#   rust-platforms  rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64,
-#                   and the real engine started on Windows
-#   ui-platforms    the interface's unit tests on macOS and Windows
+#   rust-platforms       rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64,
+#                        and the real engine started on Windows
+#   rust-lint-platforms  rust/lint's clippy on macOS arm64 and Windows x64
+#   ui-platforms         the interface's unit tests on macOS and Windows
 #
 # A pull request that touches what the packages are built from also builds them, on the platforms
 # release.yml builds on, unsigned and with nothing uploaded:
@@ -260,6 +261,42 @@ jobs:
         with:
           path: vendor/lemonade/windows-x86_64
           key: lemonade-windows-x86_64-${{ hashFiles('lemonade.lock', 'scripts/fetch-lemonade.sh') }}
+
+  # The rust job lints on Linux, where code built for Windows or macOS alone is never compiled.
+  # A job of its own, so a test that hangs on a platform does not keep its lint from running.
+  rust-lint-platforms:
+    name: rust lint (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.rust-platforms != 'false'
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos arm64
+            runs-on: macos-15
+          - name: windows x64
+            runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Rust
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: lint
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # As rust/lint does on Linux: the workspace, then the app with its server.
+      - name: Clippy
+        run: |
+          set -euo pipefail
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy -p nocturne-app --features server --all-targets -- -D warnings
 
   ui:
     name: ui
@@ -593,6 +630,7 @@ jobs:
       - changes
       - rust
       - rust-platforms
+      - rust-lint-platforms
       - ui
       - ui-platforms
       - scripts
