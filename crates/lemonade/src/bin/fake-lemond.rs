@@ -479,7 +479,10 @@ async fn main() {
         .unwrap_or("")
         .to_string();
     let sleeper = if modes.contains_key("spawn-sleeper") || modes.contains_key("leak-sleeper") {
-        std::process::Command::new("sleep").arg("300").spawn().ok()
+        nocturne_lemonade::process::command("sleep")
+            .arg("300")
+            .spawn()
+            .ok()
     } else {
         None
     };

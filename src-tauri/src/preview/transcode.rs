@@ -7,8 +7,6 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
-use tokio::process::Command;
-
 const LIMIT: Duration = Duration::from_secs(120);
 /// What a recording may run to: an hour of audio and half a gigabyte of WAV.
 const MAX_SECONDS: &str = "3600";
@@ -60,7 +58,7 @@ pub async fn to_wav(ffmpeg: &Path, work: &Path, bytes: &[u8]) -> Option<Vec<u8>>
     let _scratch = Scratch(dir.clone());
     let (input, output) = (dir.join("in"), dir.join("out.wav"));
     tokio::fs::write(&input, bytes).await.ok()?;
-    let run = Command::new(ffmpeg)
+    let run = nocturne_lemonade::process::tokio_command(ffmpeg)
         .args(["-nostdin", "-loglevel", "error", "-y"])
         .args(["-protocol_whitelist", "file", "-format_whitelist", FORMATS])
         .args(["-t", MAX_SECONDS, "-i"])

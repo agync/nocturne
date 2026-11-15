@@ -39,7 +39,7 @@ pub fn open_with(
 
 /// Start a program and leave it running; a thread collects its exit so it does not linger.
 fn spawn(program: &str, args: &[&str]) -> io::Result<()> {
-    let mut child = std::process::Command::new(program)
+    let mut child = nocturne_lemonade::process::command(program)
         .args(args)
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::null())

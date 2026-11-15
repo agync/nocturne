@@ -11,7 +11,7 @@ use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use process_wrap::tokio::ChildWrapper;
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -280,7 +280,7 @@ fn spawn(
     let err = file
         .try_clone()
         .map_err(|e| HelperError::Spawn(e.to_string()))?;
-    let mut command = tokio::process::Command::new(&cmd.program);
+    let mut command = nocturne_lemonade::process::tokio_command(&cmd.program);
     command
         .args(&cmd.args)
         .env_clear()
@@ -294,13 +294,7 @@ fn spawn(
     if let Some(cwd) = &cmd.cwd {
         command.current_dir(cwd);
     }
-    let mut wrap = CommandWrap::from(command);
-    #[cfg(unix)]
-    wrap.wrap(process_wrap::tokio::ProcessGroup::leader());
-    #[cfg(windows)]
-    wrap.wrap(process_wrap::tokio::JobObject);
-    wrap.wrap(KillOnDrop);
-    let mut child = wrap
+    let mut child = nocturne_lemonade::process::group(command)
         .spawn()
         .map_err(|e| HelperError::Spawn(format!("could not run {}: {e}", cmd.name)))?;
     let pgid = child.id().unwrap_or(0);

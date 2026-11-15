@@ -8,8 +8,8 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
-use tokio::process::{ChildStdin, Command};
+use process_wrap::tokio::ChildWrapper;
+use tokio::process::ChildStdin;
 use tokio::sync::{mpsc, oneshot, watch};
 
 use crate::admin::{Admin, Keys};
@@ -955,7 +955,7 @@ impl Actor {
         keys: &Keys,
         key: Option<&OnlineKey>,
     ) -> Result<Running, RuntimeError> {
-        let mut cmd = Command::new(&self.exe);
+        let mut cmd = crate::process::tokio_command(&self.exe);
         cmd.arg(self.dirs.cache())
             .arg(self.dirs.config())
             .args(["--port", &port.to_string()])
@@ -981,13 +981,7 @@ impl Actor {
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped());
-        let mut wrap = CommandWrap::from(cmd);
-        #[cfg(unix)]
-        wrap.wrap(process_wrap::tokio::ProcessGroup::leader());
-        #[cfg(windows)]
-        wrap.wrap(process_wrap::tokio::JobObject);
-        wrap.wrap(KillOnDrop);
-        let mut child = wrap
+        let mut child = crate::process::group(cmd)
             .spawn()
             .map_err(|e| RuntimeError::Start(format!("could not run lemond: {e}")))?;
         let pgid = child.id().unwrap_or(0);
@@ -1255,7 +1249,7 @@ pub fn group_members(pgid: u32) -> Vec<u32> {
     if pgid == 0 {
         return Vec::new();
     }
-    let listing = std::process::Command::new("/bin/ps")
+    let listing = crate::process::command("/bin/ps")
         .args(["-ax", "-o", "pid=,pgid=,stat="])
         .env_clear()
         .env("LC_ALL", "C")
