@@ -49,7 +49,7 @@ row below).
 | Docs renderer (okf-wiki) | `VERSION` in `site/toolchain.sh`, the whole `site/okf-wiki.sha256`, and the image digest `OKF_WIKI_IMAGE` in `site/Makefile`, which carries the same release | Change the version, replace `okf-wiki.sha256` with the release's `checksums.txt`, update the image digest, run `make site` | Yes: all three come from one release |
 | `okf` in CI | `OKF_VERSION` and `OKF_SHA256` in the `hygiene` job of `.github/workflows/ci.yml` | Take the release's `checksums.txt` line for `linux_amd64` | Yes |
 | Pre-commit hooks | `rev` in `.pre-commit-config.yaml`, `pre-commit==` in `ci.yml` | `pre-commit autoupdate`, then `make check` | Yes, with `pre-commit autoupdate` |
-| Node and Rust | `NODE_VERSION` in `ci.yml` and `node-version` in `release.yml`; `channel` in `rust-toolchain.toml` and `rust-version` in `Cargo.toml` | Move them together, then fix any new clippy findings; the Flatpak's `node24` extension follows its own runtime | No |
+| Node and Rust | `NODE_VERSION` in `ci.yml` and `node-version` in `release.yml`; `channel` in `rust-toolchain.toml` and `rust-version` in `Cargo.toml` | Move them together, and the `@types/node` major in `ui/package.json`, which `dependabot.yml` ignores; then fix any new clippy findings; the Flatpak's `node24` extension follows its own runtime | No |
 
 The npm and Cargo pull requests move the Playwright package, and `npx playwright install` in CI
 fetches the browser that version needs, so the browsers need no pin of their own.
