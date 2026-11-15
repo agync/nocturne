@@ -188,6 +188,9 @@ fn the_status_is_emitted_once_per_change() {
         "an unchanged status is not re-sent"
     );
     h.ok("keep_text", json!({"text": "a note", "source": "paste"}));
+    wait_for("the status after the keep", || {
+        status.lock().unwrap().len() == 2
+    });
     let all = status.lock().unwrap().clone();
     assert_eq!(all.len(), 2);
     assert_eq!(all[1]["state"], "reading");

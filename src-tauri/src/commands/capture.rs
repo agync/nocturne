@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager, Runtime};
 use super::{change, engine, read, run};
 use crate::ask;
 use crate::error::{CommandError, blocking, blocking_cmd};
-use crate::state::{AppState, refresh_status};
+use crate::state::{AppState, refresh_status_soon};
 
 /// The most a single piece of raw content may weigh on its way in.
 pub const MAX_RAW_BYTES: usize = 256 * 1024 * 1024;
@@ -20,7 +20,8 @@ pub const MAX_FILE_BYTES: u64 = 2 * 1024 * 1024 * 1024;
 pub const NOT_KEPT_NOTICE: &str = "not-kept";
 
 /// Tell the interface about a new item, wake the pipeline and refresh the status. Used by every
-/// way an item can arrive.
+/// way an item can arrive. The recount runs after this returns: it reads the whole store, can
+/// queue behind an import's own recount, and a capture is acknowledged without waiting for it.
 pub async fn announce<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
     let mut any_new = false;
     for k in kept {
@@ -38,7 +39,7 @@ pub async fn announce<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
     if any_new {
         state.wake_pipeline();
     }
-    refresh_status(app).await;
+    refresh_status_soon(app);
 }
 
 /// Remember what the quick capture window kept: it may read and take back those items and no

@@ -130,6 +130,8 @@ pub struct AppState {
     start_hidden: AtomicBool,
     /// One status refresh at a time, so two events cannot publish out of order.
     refresh: tokio::sync::Mutex<()>,
+    /// Whether a background refresh is waiting to start; a second request joins it.
+    refresh_queued: AtomicBool,
     exit_hooks: Mutex<Vec<ExitHook>>,
     services: OnceLock<Arc<Services>>,
 }
@@ -212,6 +214,7 @@ impl AppState {
             window_shown: AtomicBool::new(false),
             start_hidden: AtomicBool::new(false),
             refresh: tokio::sync::Mutex::new(()),
+            refresh_queued: AtomicBool::new(false),
             exit_hooks: Mutex::new(Vec::new()),
             services: OnceLock::new(),
         }
@@ -383,6 +386,12 @@ impl AppState {
         }
     }
 
+    /// The gate that serialises status refreshes, for tests that hold a refresh in progress.
+    #[doc(hidden)]
+    pub fn status_refresh_gate(&self) -> &tokio::sync::Mutex<()> {
+        &self.refresh
+    }
+
     fn setup_view(&self) -> SetupView {
         let mut view = self.setup.read().unwrap_or_else(|e| e.into_inner()).clone();
         if self.mind.state() == MindState::Ready && view.phase == SetupPhase::NotStarted {
@@ -448,6 +457,22 @@ pub async fn refresh_status<R: Runtime>(app: &AppHandle<R>) -> EngineStatus {
         tracing::warn!("could not emit the needs-you count: {e}");
     }
     ev.status
+}
+
+/// Refresh the status without making the caller wait for it. Requests made while one is still
+/// waiting to start share it, since it reads the store afresh when it runs.
+pub fn refresh_status_soon<R: Runtime>(app: &AppHandle<R>) {
+    let state = app.state::<AppState>();
+    if state.refresh_queued.swap(true, Ordering::AcqRel) {
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        app.state::<AppState>()
+            .refresh_queued
+            .store(false, Ordering::Release);
+        refresh_status(&app).await;
+    });
 }
 
 /// Pause reading until an instant (RFC 3339), or (`None`) until the person resumes. The

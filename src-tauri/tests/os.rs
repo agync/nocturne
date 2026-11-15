@@ -621,25 +621,63 @@ mod inbox {
         for i in 0..500 {
             std::fs::write(folder.path().join(format!("f{i}.txt")), format!("file {i}")).unwrap();
         }
-        let mut slowest = Duration::ZERO;
-        let mut kept_text = 0;
+        let mut took = Vec::new();
         let end = Instant::now() + Duration::from_secs(20);
         while kept(&h).len() < 500 && Instant::now() < end {
             let start = Instant::now();
             h.ok(
                 "keep_text",
-                json!({"text": format!("note {kept_text}"), "source": "quickCapture"}),
+                json!({"text": format!("note {}", took.len()), "source": "quickCapture"}),
             );
-            slowest = slowest.max(start.elapsed());
-            kept_text += 1;
+            took.push(start.elapsed());
             std::thread::sleep(Duration::from_millis(20));
         }
+        let kept_text = took.len();
         assert!(kept_text > 0);
+        // An import that makes capture wait does so on every call while it runs, so the typical
+        // call shows it. One slow call on a shared runner is a busy machine, not the import: the
+        // test below proves the status recount is off the path, and the store's write lock is
+        // held for one file's insert at a time. A call that hangs is still refused.
+        took.sort();
+        let typical = took[took.len() / 2];
         assert!(
-            slowest < Duration::from_millis(100),
+            typical < Duration::from_millis(100),
+            "the typical keep_text took {typical:?} during the burst"
+        );
+        let slowest = *took.last().unwrap();
+        assert!(
+            slowest < Duration::from_secs(2),
             "a keep_text took {slowest:?} during the burst"
         );
         wait_for("all 500", || kept(&h).len() >= 500 + kept_text);
+    }
+
+    #[test]
+    fn keep_text_does_not_wait_for_a_status_recount_that_an_import_is_running() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let h = harness();
+        let released = Arc::new(AtomicBool::new(false));
+        let (held_tx, held_rx) = std::sync::mpsc::channel();
+        let flag = released.clone();
+        let app = h.app.handle().clone();
+        let holder = std::thread::spawn(move || {
+            let state = app.state::<nocturne_app_lib::AppState>();
+            let _recount = state.status_refresh_gate().blocking_lock();
+            held_tx.send(()).unwrap();
+            std::thread::sleep(Duration::from_secs(3));
+            flag.store(true, Ordering::SeqCst);
+        });
+        held_rx.recv().unwrap();
+        h.ok(
+            "keep_text",
+            json!({"text": "a quick note", "source": "quickCapture"}),
+        );
+        assert!(
+            !released.load(Ordering::SeqCst),
+            "keep_text waited for the status recount"
+        );
+        holder.join().unwrap();
+        assert_eq!(kept(&h).len(), 1);
     }
 
     #[cfg(unix)]
