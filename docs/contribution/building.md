@@ -65,8 +65,10 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 | `gate` | | fails when any job above failed or was cancelled; the one job to require | always |
 
 The `changed paths` job compares a pull request with its merge base, and its run summary says
-which jobs it chose. A change to a workflow, the `Makefile` or `rust-toolchain.toml`, a push to
-`main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
+which jobs it chose. The table of areas is `scripts/ci-areas.sh`; `scripts/test_ci_areas.py`
+checks one changed path for each of its patterns, and that it writes every flag `ci.yml` reads.
+A change to a workflow, the `Makefile`, `rust-toolchain.toml` or that script, a push to `main`
+and a hand run run every job. Without a merge queue, the run on `main` is the first test of
 the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in
 `ui/` and write the bindings there, and the interface's tests read files in `src-tauri/`, so on
 x86_64 Linux both sides run when either changes, while the other platforms run only their own

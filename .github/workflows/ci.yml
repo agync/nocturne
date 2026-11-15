@@ -28,9 +28,9 @@
 #   package-windows     scripts/package.sh --config windows under Git Bash, and the installers' sums
 #
 # Every job but hygiene and the gate runs only when a path it reads changed: the `changes` job
-# lists the paths and its table says which jobs they run. A change to a workflow, the Makefile or
-# the Rust toolchain, a push to main and a hand run run every job. A job reads its flag as
-# `!= 'false'`, so a flag the table does not write runs the job rather than skipping it.
+# lists the paths and scripts/ci-areas.sh says which jobs they run. A change to a workflow, the
+# Makefile or the Rust toolchain, a push to main and a hand run run every job. A job reads its flag as
+# `!= 'false'`, so a flag the script does not write runs the job rather than skipping it.
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
@@ -98,51 +98,26 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        # The table of areas is scripts/ci-areas.sh, tested by scripts/test_ci_areas.py.
         run: |
           set -euo pipefail
-          # A change here runs every job.
-          everything='^(\.github/workflows/|Makefile$|rust-toolchain\.toml$)'
-          lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
-          rust_side="crates/|src-tauri/|\.cargo/|clippy\.toml$|$lockfiles"
-          declare -A areas=(
-            [rust]="^($rust_side|ui/|scripts/bindings\.sh$)"
-            # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
-            [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
-            # The interface's tests import scripts/build-tokens.mjs and read src-tauri/.
-            [ui]='^(ui/|src-tauri/|scripts/build-tokens\.mjs$)'
-            [ui-platforms]='^(ui/|scripts/build-tokens\.mjs$)'
-            # The scripts' tests read the bundle configuration, the Flatpak files and their doc,
-            # and list the licences of every crate and npm package.
-            [scripts]="^(scripts/|$rust_side|flatpak/|docs/contribution/flatpak\.md$|LICENSE$|ui/package(-lock)?\.json$)"
-            [tailnet]='^(helpers/|scripts/(test-tailnet|tailnet-tags|build-tailnet)\.sh$)'
-            [site]='^(site/|docs/|lemonade\.lock$|ui/package(-lock)?\.json$)'
-            [package]='^(scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|LICENSE$|Cargo\.lock$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$)'
-            [package-linux]='^(scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|LICENSE$|Cargo\.lock$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$|flatpak/)'
-          )
           changed="$RUNNER_TEMP/changed"
-          all=true
-          range=""
-          if [ "$EVENT" = pull_request ]; then range="$BASE_SHA...$HEAD_SHA"; fi
           # Unquoted paths, so a name with accents still meets the ^-anchored patterns.
           # Without rename detection a moved file lists its old path as well as its new one. A
-          # range git cannot read runs everything.
-          if [ -n "$range" ] && git -c core.quotePath=false diff --no-renames --name-only "$range" > "$changed"; then
-            all=false
+          # push, a hand run and a range git cannot read run everything.
+          if [ "$EVENT" = pull_request ] &&
+            git -c core.quotePath=false diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA" > "$changed"; then
             cat "$changed"
-            if grep -Eq "$everything" "$changed"; then all=true; fi
+            scripts/ci-areas.sh < "$changed" > "$RUNNER_TEMP/areas"
+          else
+            scripts/ci-areas.sh --all > "$RUNNER_TEMP/areas"
           fi
+          cat "$RUNNER_TEMP/areas" >> "$GITHUB_OUTPUT"
           {
             echo "### Jobs this run selected"
             echo
-            echo "Every job: $all"
-            echo
-          } >> "$GITHUB_STEP_SUMMARY"
-          for area in "${!areas[@]}"; do
-            run=$all
-            if [ "$run" = false ] && grep -Eq "${areas[$area]}" "$changed"; then run=true; fi
-            echo "$area=$run" | tee -a "$GITHUB_OUTPUT"
-            echo "- $area: $run" >> "$GITHUB_STEP_SUMMARY"
-          done
+            sed 's/^/- /; s/=/: /' "$RUNNER_TEMP/areas"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
 
   rust:
     name: rust
