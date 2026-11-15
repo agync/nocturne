@@ -147,6 +147,11 @@ jobs:
         run: make rust/lint
       - name: Test
         run: make rust/test
+      # The release build differs from the test builds: it compiles the code that only a release
+      # has (cfg(not(debug_assertions))) and leaves the stand-in features off. Checking it needs no
+      # code generation, so it costs a fraction of a package.
+      - name: Check the release build
+        run: cargo check --release -p nocturne-app --features custom-protocol
       # Regenerates the TypeScript bindings and fails when the committed ones are stale.
       - name: Contract drift
         run: make contract/check
@@ -209,6 +214,11 @@ jobs:
           else
             cargo test --workspace --no-fail-fast
           fi
+      # The release build differs from the test builds: it compiles the code that only a release
+      # has (cfg(not(debug_assertions))) and leaves the stand-in features off. Checking it needs no
+      # code generation, so it costs a fraction of a package.
+      - name: Check the release build
+        run: cargo check --release -p nocturne-app --features custom-protocol
       # The packaged engine itself, started as the app starts it. The tests above use a stand-in,
       # which cannot show what the real engine needs from Windows. The download is kept per
       # lemonade.lock and the script; scripts/fetch-lemonade.sh skips it when its stamp matches.
@@ -256,6 +266,13 @@ jobs:
         run: make ui/lint
       - name: Test
         run: make ui/test
+      # The interface the app ships, built and checked as scripts/package.sh does: the browser
+      # tests build only the mock one.
+      - name: Build the app's interface
+        run: |
+          set -euo pipefail
+          npm --prefix ui run build
+          python3 -I scripts/check_ui_dist.py ui/dist
 
   # The packaging scripts' tests, which need only Python 3 and the interface's dependencies.
   scripts:
