@@ -1313,10 +1313,13 @@ fn sse_pieces(
 }
 
 fn map_transport(e: reqwest::Error) -> RuntimeError {
-    if e.is_timeout() {
-        RuntimeError::Timeout
-    } else if e.is_connect() {
+    // An engine that cannot be reached is unavailable, however the connection failed. Windows
+    // takes about two seconds to refuse a connection to a port nobody listens on, so there the
+    // connect limit can run out first.
+    if e.is_connect() {
         RuntimeError::Unavailable
+    } else if e.is_timeout() {
+        RuntimeError::Timeout
     } else if e.is_decode() || e.is_body() {
         RuntimeError::StreamCut
     } else {
