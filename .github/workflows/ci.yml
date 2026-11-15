@@ -10,15 +10,19 @@
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
 #   hygiene    docs/check and `pre-commit run --all-files`
 #
-# Beyond `make check`, two jobs run what a pull request can break and the gate does not reach:
-# `e2e` (ui/e2e, the browser tests against the mock engine) and `site` (the landing page and the
-# docs built into one site and checked with axe, as docs/contribution/website.md describes).
+# Beyond `make check`, four jobs run what a pull request can break and the gate does not reach:
+# `e2e` (ui/e2e, the browser tests against the mock engine), `site` (the landing page and the
+# docs built into one site and checked with axe, as docs/contribution/website.md describes), and
+# the tests on the other machines Nocturne ships for:
+#
+#   rust-platforms  rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64
+#   ui-platforms    the interface's unit tests on macOS and Windows
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
 #   package, smoke, netcheck*         need the embedded engine bundle, a virtual display and a
 #                                     network namespace; release.yml builds and checks the packages
-#   macOS and Windows builds          release.yml builds them on their own runners
+#   macOS, Windows and arm64 packages release.yml builds them on their own runners
 #
 # The workflow holds no secret and never runs pull request code with a write token: it uses
 # `pull_request`, not `pull_request_target`, so Dependabot and fork pull requests are checked too.
@@ -96,6 +100,81 @@ jobs:
             target
           key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
 
+  # The Rust tests on the other machines Nocturne ships for. Linux on Arm runs both test runs of
+  # rust/test; macOS and Windows run the workspace tests, since the server is built for Linux only.
+  # Tests that need a Linux-only piece (/proc, network namespaces, prctl) are compiled out or
+  # ignored with their reason elsewhere. Lint, the bindings and the browser tests stay on x86_64.
+  rust-platforms:
+    name: rust tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    # A cold build and every test take about fifteen minutes; a hung test fails the job soon after.
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux arm64
+            runs-on: ubuntu-24.04-arm
+          - name: macos arm64
+            runs-on: macos-15
+          - name: windows x64
+            runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # The tests compare checked-in files byte for byte, and the repository's files end lines
+      # with LF; Git for Windows would otherwise check them out with CRLF.
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: System libraries
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          read -ra packages <<< "$APT_PACKAGES"
+          sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
+      - name: Rust
+        run: rustup toolchain install
+      # As in the rust job, but one cache per platform: the key names the architecture too.
+      - name: Restore the Cargo caches
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-test-${{ runner.os }}-${{ runner.arch }}-
+      # Every test target is built first, so a compile error in one does not hide another's, and
+      # every test runs, so one failure does not hide the next.
+      - name: Build the tests
+        run: cargo build --workspace --tests --keep-going
+      - name: Test
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = Linux ]; then
+            make rust/test
+          else
+            cargo test --workspace --no-fail-fast
+          fi
+      - name: Save the Cargo caches
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-test-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
   ui:
     name: ui and scripts
     runs-on: ubuntu-24.04
@@ -116,6 +195,40 @@ jobs:
       # The packaging scripts' tests, which need only Python 3 and the interface's dependencies.
       - name: Packaging scripts
         run: make scripts/test
+
+  # The interface's unit tests on a Mac and on Windows; lint and the type check stay on Linux.
+  ui-platforms:
+    name: ui tests (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos arm64
+            runs-on: macos-15
+          - name: windows x64
+            runs-on: windows-2022
+    defaults:
+      run:
+        shell: bash
+        working-directory: ui
+    steps:
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        working-directory: .
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      - name: Test
+        run: npm test
 
   tailnet:
     name: tailnet helper
@@ -246,7 +359,7 @@ jobs:
   gate:
     name: gate
     if: always()
-    needs: [rust, ui, tailnet, hygiene, e2e, site]
+    needs: [rust, rust-platforms, ui, ui-platforms, tailnet, hygiene, e2e, site]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -265,5 +378,5 @@ jobs:
             echo
             echo "- Real-model runs (\`make e2e-real\`, \`e2e-online\`, \`e2e-models\`): they download the real models, about 4.8 GB or more. Run them locally."
             echo "- Packages, \`make smoke\` and \`make netcheck*\`: they need the embedded engine bundle, a virtual display and a network namespace. The release workflow builds and checks the packages."
-            echo "- macOS and Windows builds: the release workflow builds them on their own runners."
+            echo "- macOS, Windows and Linux arm64 packages: the release workflow builds them on their own runners. Their tests run here."
           } >> "$GITHUB_STEP_SUMMARY"

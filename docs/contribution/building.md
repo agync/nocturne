@@ -46,9 +46,10 @@ the engine lives under the data folder, never beside the program, so a read-only
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request and every push to `main`, on Ubuntu 24.04,
-with a read-only token and no secret. `make check` is lint plus test, so the workflow runs its
-targets as parallel jobs and together they cover all of it:
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`, on Ubuntu 24.04
+(x86_64), with the tests also on Linux arm64, macOS and Windows, a read-only token and no secret.
+`make check` is lint plus test, so the workflow runs its targets as parallel jobs and together
+they cover all of it:
 
 | Job | Runs | Covers |
 |---|---|---|
@@ -58,11 +59,17 @@ targets as parallel jobs and together they cover all of it:
 | `docs and hooks` | `make docs/check`, `pre-commit run --all-files` | the OKF bundle and every hook |
 | `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium |
 | `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks |
+| `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo test --workspace --no-fail-fast` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64 |
+| `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows |
 | `gate` | | fails when any job above did not pass; the one job to require |
 
-The last two jobs go beyond `make check`. The jobs are split because one runner would run the Rust
-build, the browser tests and the Go tests one after another, and the split gives each its own
-cache and its own verdict. The Rust job restores `target/` from a cache that only `main` saves.
+The `browser tests` and `site` jobs go beyond `make check`, and so do the platform jobs. Lint, the
+bindings drift check, the browser tests and the Go tests run on x86_64 Linux only. A test that
+needs a piece only Linux has (`/proc`, `prctl`, the PCI device folders) is compiled out or ignored
+elsewhere with its reason, so the other platforms skip it rather than fail; everything the app does
+on a platform is tested there. The jobs are split because one runner would run the Rust build, the
+browser tests and the Go tests one after another, and the split gives each its own cache and its
+own verdict. The Rust jobs restore `target/` from a cache that only `main` saves, one per platform.
 
 CI does not run what needs more than a hosted runner has, and the run summary of the `gate` job
 says so each time:
@@ -71,7 +78,8 @@ says so each time:
 - `make package`, `make smoke` and `make netcheck*` need the embedded engine bundle, a virtual
   display and a network namespace. The release workflow builds and checks the packages; the
   rest runs on a developer's machine.
-- The macOS and Windows builds run in the release workflow, on their own runners.
+- The packages for macOS, Windows and Linux arm64 are built by the release workflow, on their own
+  runners; CI runs only their tests.
 
 The workflow installs `okf` at a version and checksum written in `ci.yml`, and pins every action
 by commit. Dependabot keeps the actions, the Cargo crates, the interface packages and the helper's
