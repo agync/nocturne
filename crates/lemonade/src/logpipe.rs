@@ -430,9 +430,18 @@ fn retry<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
 }
 
 fn is_busy(e: &std::io::Error) -> bool {
-    cfg!(windows)
-        && (e.kind() == std::io::ErrorKind::PermissionDenied
-            || matches!(e.raw_os_error(), Some(32 | 33)))
+    cfg!(windows) && is_busy_on_windows(e)
+}
+
+/// Access denied, a sharing violation (32), a lock violation (33), or a delete that is pending
+/// (303): a file marked for deletion still has an open handle, usually another process's scanner,
+/// and the name is free once that handle closes, so creating or moving onto it works shortly after.
+/// `ERROR_CANNOT_MAKE` (82) is left out: it reports a directory entry that cannot be made, which
+/// does not clear by waiting a moment, and the writer's own retry interval already covers it
+/// without holding the thread for the short retries.
+fn is_busy_on_windows(e: &std::io::Error) -> bool {
+    e.kind() == std::io::ErrorKind::PermissionDenied
+        || matches!(e.raw_os_error(), Some(32 | 33 | 303))
 }
 
 /// The log, readable and writable by its owner only.
@@ -766,5 +775,79 @@ mod tests {
         });
         assert_eq!(opens, 2, "one failed rotation, then none per line");
         assert_eq!(*seen.lock().unwrap(), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn only_transient_windows_errors_are_retried() {
+        let code = std::io::Error::from_raw_os_error;
+        assert!(is_busy_on_windows(
+            &std::io::ErrorKind::PermissionDenied.into()
+        ));
+        for busy in [32, 33, 303] {
+            assert!(is_busy_on_windows(&code(busy)), "{busy}");
+        }
+        for not in [2, 3, 82, 112] {
+            assert!(!is_busy_on_windows(&code(not)), "{not}");
+        }
+        assert_eq!(is_busy(&code(32)), cfg!(windows));
+        assert_eq!(is_busy(&code(5)), cfg!(windows));
+    }
+
+    #[derive(Clone, Default)]
+    struct Captured(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for Captured {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
+        type Writer = Captured;
+
+        fn make_writer(&'a self) -> Captured {
+            self.clone()
+        }
+    }
+
+    #[test]
+    fn a_log_that_stays_closed_warns_once_per_outage() {
+        // write_lines runs on this thread and spawns none, so the scoped default sees every event.
+        let captured = Captured::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(captured.clone())
+            .with_ansi(false)
+            .finish();
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for l in ["a", "b", "c", "d", "e", "f"] {
+            tx.blocking_send(l.into()).unwrap();
+        }
+        drop(tx);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut opens = 0;
+        // Opens 1 to 3 fail, 4 works and its file then fails on the second line, 5 and 6 fail.
+        tracing::subscriber::with_default(subscriber, || {
+            write_lines(rx, Path::new("unused"), ROTATE_AT, Duration::ZERO, |_| {
+                opens += 1;
+                if opens == 4 {
+                    Ok(Flaky {
+                        len_fails: false,
+                        lines: seen.clone(),
+                        fail_from: Some(1),
+                        written: 0,
+                    })
+                } else {
+                    Err(std::io::Error::other("busy"))
+                }
+            });
+        });
+        let text = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        assert_eq!(text.matches("could not be opened").count(), 2, "{text}");
+        assert_eq!(text.matches("could not be written").count(), 1, "{text}");
     }
 }
