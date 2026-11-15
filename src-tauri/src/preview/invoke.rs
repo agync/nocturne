@@ -47,7 +47,14 @@ fn request(cmd: &str, body: InvokeBody, headers: tauri::http::HeaderMap) -> Invo
         cmd: cmd.into(),
         callback: CallbackFn(0),
         error: CallbackFn(1),
-        url: "tauri://localhost".parse().expect("a url"),
+        // The app's own address, which the command permissions are checked against.
+        url: if cfg!(windows) {
+            "http://tauri.localhost"
+        } else {
+            "tauri://localhost"
+        }
+        .parse()
+        .expect("a url"),
         body,
         headers,
         invoke_key: INVOKE_KEY.to_string(),

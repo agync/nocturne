@@ -63,7 +63,7 @@ fn relay(target: Addr) -> (u16, Tape) {
                     }
                     #[cfg(not(unix))]
                     Addr::Unix(_) => {}
-                    Addr::Tcp(port) => {
+                    Addr::Tcp(port) | Addr::Keyed { port, .. } => {
                         let Ok(up) = tokio::net::TcpStream::connect(("127.0.0.1", port)).await
                         else {
                             return;
@@ -108,12 +108,16 @@ fn run(path: u8) {
         json!({"connection": "simple", "allowDownload": false}),
     );
     wait_for("on", || matches!(hub.state(), RemoteState::On { .. }));
-    let target = match hub.listener_origin().unwrap() {
-        Origin::Unix(p) => Addr::Unix(p),
-        Origin::Tcp { port, .. } => Addr::Tcp(port),
+    // On Windows the phone's requests carry the listener's key, as cloudflared's would.
+    let (target, key) = match hub.listener_origin().unwrap() {
+        Origin::Unix(p) => (Addr::Unix(p), None),
+        Origin::Tcp { port, key } => (Addr::Tcp(port), Some(key)),
     };
     let (port, tape) = relay(target);
-    let addr = Addr::Tcp(port);
+    let addr = match key {
+        Some(host) => Addr::Keyed { port, host },
+        None => Addr::Tcp(port),
+    };
 
     // Pair through the relay.
     let offer = h.ok("begin_pairing", json!({}));

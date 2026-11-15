@@ -330,7 +330,7 @@ fn keep_text_returns_before_any_mind_work_even_when_the_mind_is_empty_or_stuck()
                     cmd: "keep_text".into(),
                     callback: tauri::ipc::CallbackFn(0),
                     error: tauri::ipc::CallbackFn(1),
-                    url: "tauri://localhost".parse().unwrap(),
+                    url: APP_URL.parse().unwrap(),
                     body: tauri::ipc::InvokeBody::Json(req),
                     headers: Default::default(),
                     invoke_key: tauri::test::INVOKE_KEY.to_string(),
@@ -1448,16 +1448,20 @@ fn only_regular_files_of_a_sensible_size_are_kept_by_path() {
     // A folder.
     let folder = src.path().join("folder");
     std::fs::create_dir(&folder).unwrap();
-    // A pipe.
+    // A pipe, where the file system has them (Windows keeps its pipes out of it).
     let pipe = src.path().join("pipe");
-    let made = std::process::Command::new("mkfifo").arg(&pipe).status();
+    let made = cfg!(unix)
+        && std::process::Command::new("mkfifo")
+            .arg(&pipe)
+            .status()
+            .is_ok_and(|s| s.success());
     // A sparse file over the cap.
     let huge = src.path().join("huge.pdf");
     let f = std::fs::File::create(&huge).unwrap();
     f.set_len(nocturne_app_lib::commands::MAX_FILE_BYTES + 1)
         .unwrap();
     let mut chosen = vec![folder.clone(), huge.clone()];
-    if made.is_ok_and(|s| s.success()) {
+    if made {
         chosen.push(pipe.clone());
     }
     h.state().allow_paths(chosen.clone());

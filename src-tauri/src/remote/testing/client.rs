@@ -17,6 +17,22 @@ use super::{PhoneKeys, PhonePair};
 pub enum Addr {
     Unix(PathBuf),
     Tcp(u16),
+    /// Loopback TCP reached as cloudflared reaches it on Windows: with the listener's key as the
+    /// Host header of every request.
+    Keyed {
+        port: u16,
+        host: String,
+    },
+}
+
+impl Addr {
+    /// The Host header a request carries unless the test names one.
+    fn host(&self) -> &str {
+        match self {
+            Addr::Keyed { host, .. } => host,
+            _ => "phone.test",
+        }
+    }
 }
 
 trait Io: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -28,7 +44,9 @@ async fn connect(addr: &Addr) -> std::io::Result<Box<dyn Io>> {
         Addr::Unix(p) => Box::new(tokio::net::UnixStream::connect(p).await?),
         #[cfg(not(unix))]
         Addr::Unix(_) => return Err(std::io::Error::other("no unix sockets here")),
-        Addr::Tcp(port) => Box::new(tokio::net::TcpStream::connect(("127.0.0.1", *port)).await?),
+        Addr::Tcp(port) | Addr::Keyed { port, .. } => {
+            Box::new(tokio::net::TcpStream::connect(("127.0.0.1", *port)).await?)
+        }
     })
 }
 
@@ -83,7 +101,7 @@ pub async fn http(
     let mut s = connect(addr).await?;
     let mut req = format!("{method} {path} HTTP/1.1\r\nconnection: close\r\n");
     if !headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("host")) {
-        req.push_str("host: phone.test\r\n");
+        req.push_str(&format!("host: {}\r\n", addr.host()));
     }
     for (k, v) in headers {
         req.push_str(&format!("{k}: {v}\r\n"));
@@ -139,7 +157,7 @@ impl Ws {
              sec-websocket-version: 13\r\nsec-websocket-key: {key}\r\n"
         );
         if !headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("host")) {
-            req.push_str("host: phone.test\r\n");
+            req.push_str(&format!("host: {}\r\n", addr.host()));
         }
         for (k, v) in headers {
             req.push_str(&format!("{k}: {v}\r\n"));

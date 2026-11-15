@@ -395,11 +395,27 @@ impl Drive {
     }
 }
 
+/// Makes a helper folder or binary the owner's alone, as the app's own download does. Windows
+/// keeps the data folder's permissions, as the app does there.
+fn private(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
+/// A helper's file name as the app looks for it: with `.exe` on Windows.
+fn exe(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
+}
+
 /// For a real trial: the tailnet helper, which has no release address yet, goes where a download
 /// would put it. Cloudflared is left to the app's own pinned download.
 fn install_real(data: &std::path::Path, connection: &str) {
     use nocturne_helpers::{HelperKind, HelpersLock};
-    use std::os::unix::fs::PermissionsExt;
     if connection != "mostPrivate" {
         return;
     }
@@ -414,11 +430,11 @@ fn install_real(data: &std::path::Path, connection: &str) {
         data.join("remote/helpers/tailnet"),
         dir.clone(),
     ] {
-        std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700)).unwrap();
+        private(&p);
     }
-    let to = dir.join("nocturne-tailnet");
+    let to = dir.join(exe("nocturne-tailnet"));
     std::fs::copy(from, &to).unwrap();
-    std::fs::set_permissions(to, std::fs::Permissions::from_mode(0o700)).unwrap();
+    private(&to);
 }
 
 #[test]
@@ -434,16 +450,15 @@ fn drive() {
         install_real(h.dir.path(), connection);
     } else {
         std::fs::create_dir_all(&helper_dir).unwrap();
-        use std::os::unix::fs::PermissionsExt;
         let from = std::env::var("AWAY_FAKE_CLOUDFLARED").expect("AWAY_FAKE_CLOUDFLARED");
-        std::fs::copy(from, helper_dir.join("cloudflared")).unwrap();
+        std::fs::copy(from, helper_dir.join(exe("cloudflared"))).unwrap();
         for p in [
             h.dir.path().join("remote"),
             h.dir.path().join("remote/helpers"),
             h.dir.path().join("remote/helpers/cloudflared"),
             helper_dir.clone(),
         ] {
-            std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o700)).unwrap();
+            private(&p);
         }
     }
     let host = std::env::var("AWAY_HOST").unwrap_or_else(|_| HOST.to_string());

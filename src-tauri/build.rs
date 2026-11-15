@@ -6,6 +6,10 @@
 //! folder is needed. If a build with `custom-protocol` finds `ui/dist` absent (a Rust-only
 //! checkout), it embeds `frontend-fallback/` instead and warns, so the crate still compiles.
 //! A packaged build must run `npm --prefix ui run build` first.
+//!
+//! On Windows, Tauri links its application manifest into the programs only. The test programs
+//! get the same manifest here: without its Common Controls 6 dependency they stop at start-up
+//! with STATUS_ENTRYPOINT_NOT_FOUND.
 
 use std::path::Path;
 
@@ -30,4 +34,15 @@ fn main() {
     }
 
     tauri_build::build();
+
+    let target = |key: &str| std::env::var(key).unwrap_or_default();
+    if target("CARGO_CFG_TARGET_OS") == "windows" && target("CARGO_CFG_TARGET_ENV") == "msvc" {
+        let manifest = Path::new(&target("CARGO_MANIFEST_DIR")).join("windows/test-manifest.xml");
+        println!("cargo:rerun-if-changed={}", manifest.display());
+        println!("cargo:rustc-link-arg-tests=/MANIFEST:EMBED");
+        println!(
+            "cargo:rustc-link-arg-tests=/MANIFESTINPUT:{}",
+            manifest.display()
+        );
+    }
 }

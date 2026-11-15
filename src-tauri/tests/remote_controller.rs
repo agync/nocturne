@@ -83,7 +83,7 @@ impl Away {
     fn addr(&self) -> Addr {
         match self.hub.listener_origin().expect("listening") {
             Origin::Unix(p) => Addr::Unix(p),
-            Origin::Tcp { port, .. } => Addr::Tcp(port),
+            Origin::Tcp { port, key } => Addr::Keyed { port, host: key },
         }
     }
 

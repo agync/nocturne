@@ -138,8 +138,9 @@ fn set_start_at_login<R: Runtime>(
     #[cfg(windows)]
     {
         let _ = os;
-        use tauri_plugin_autostart::ManagerExt;
-        let launcher = app.autolaunch();
+        let Some(launcher) = app.try_state::<tauri_plugin_autostart::AutoLaunchManager>() else {
+            return Err("the autostart plugin is not running".into());
+        };
         let result = if want {
             launcher.enable()
         } else {
@@ -169,8 +170,9 @@ fn start_at_login_now<R: Runtime>(app: &AppHandle<R>, os: &OsState) -> Option<bo
     #[cfg(windows)]
     {
         let _ = os;
-        use tauri_plugin_autostart::ManagerExt;
-        app.autolaunch().is_enabled().ok()
+        app.try_state::<tauri_plugin_autostart::AutoLaunchManager>()?
+            .is_enabled()
+            .ok()
     }
     #[cfg(not(windows))]
     {
