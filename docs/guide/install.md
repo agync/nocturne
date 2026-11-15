@@ -45,7 +45,15 @@ Download the one file for your computer from the [latest release](https://github
 | Linux | [Nocturne-linux-x86_64.AppImage](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage) | You want to try Nocturne without installing it, or your desktop is not Fedora or Debian based |
 | Linux | [Nocturne-linux-x86_64.rpm](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm) | Your computer runs Fedora, Red Hat, openSUSE or something similar |
 | Linux | [Nocturne-linux-amd64.deb](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb) | Your computer runs Debian, Ubuntu, Linux Mint or something similar |
-| Linux | Flatpak | You want your software centre to keep Nocturne up to date, on any Linux desktop |
+| Linux on Arm | [Nocturne-linux-aarch64.AppImage](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.AppImage) | As the AppImage above, on a computer with an Arm chip |
+| Linux on Arm | [Nocturne-linux-aarch64.rpm](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.rpm) | As the rpm above, on a computer with an Arm chip |
+| Linux on Arm | [Nocturne-linux-arm64.deb](https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-arm64.deb) | As the deb above, on a computer with an Arm chip |
+| Linux | Flatpak | You want your software centre to keep Nocturne up to date, on any Linux desktop, Arm included |
+
+Most Linux computers have an Intel or AMD chip and take the plain Linux files. If yours has an Arm
+chip, take the Linux on Arm files instead. To check, run `uname -m` in a terminal: `x86_64` means
+the plain files, `aarch64` means the Arm ones. The Arm packages, the Flatpak's included, are new
+and have not yet been tried on an Arm desktop by a person.
 
 The release also has a list of fingerprints to check the files against (`SHA256SUMS`). The release
 page names each file with its version number as well; those are the same files.
@@ -101,7 +109,8 @@ chmod +x Nocturne-linux-x86_64.AppImage
 ./Nocturne-linux-x86_64.AppImage
 ```
 
-Keep the file where you will find it again. It carries everything it needs, including its own
+On a computer with an Arm chip, the file is `Nocturne-linux-aarch64.AppImage`; use that name in
+these commands. Keep the file where you will find it again. It carries everything it needs, including its own
 copy of the parts that run Nocturne's private reading engine.
 
 An AppImage opens by mounting itself, which needs FUSE on your computer (most desktops have it).
@@ -120,6 +129,8 @@ Settings, and copy the shortcut command shown there again, so both point at the 
 sudo dnf install ./Nocturne-linux-x86_64.rpm
 ```
 
+On a computer with an Arm chip, install `Nocturne-linux-aarch64.rpm` the same way.
+
 Your software centre can open the file too. Nocturne then appears in your applications list.
 
 ### deb
@@ -127,6 +138,8 @@ Your software centre can open the file too. Nocturne then appears in your applic
 ```bash
 sudo apt install ./Nocturne-linux-amd64.deb
 ```
+
+On a computer with an Arm chip, install `Nocturne-linux-arm64.deb` the same way.
 
 ### Flatpak
 

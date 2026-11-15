@@ -8,6 +8,7 @@
       "This looks like a Mac with an Intel chip. Nocturne needs a Mac with an Apple chip (M1 or later), so it will not run on this one. About This Mac, in the Apple menu, shows which chip it has.",
     windows: "This looks like a Windows computer, so its download comes first.",
     linux: "This looks like a Linux computer, so its choices come first.",
+    linuxArm: "This looks like a Linux computer with an Arm chip, so its choices come first, Arm downloads first.",
     other:
       "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below.",
   };
@@ -28,9 +29,9 @@
     return "other";
   };
 
-  // Only Chrome and Edge tell an Apple chip from an Intel one; Safari and Firefox report both
-  // as Intel, so their answer is not used.
-  const macChip = async () => {
+  // Only Chrome and Edge tell an Arm chip from an Intel one through the client hints; Safari and
+  // Firefox report a Mac as Intel either way, so their answer is not used.
+  const chip = async () => {
     const hints = navigator.userAgentData;
     if (!hints || typeof hints.getHighEntropyValues !== "function") return "";
     try {
@@ -56,6 +57,20 @@
     list.classList.add("is-sorted");
   };
 
+  // On Linux the Intel or AMD download of each package comes first, unless the browser says the
+  // chip is Arm: through the client hints, or Firefox naming it in its own report.
+  const linuxArm = async () => {
+    if (/aarch64|arm64/i.test(`${navigator.userAgent || ""} ${navigator.platform || ""}`)) return true;
+    return (await chip()) === "arm";
+  };
+
+  const armFirst = (list) => {
+    for (const pair of list.querySelectorAll("[data-arch]")) {
+      const arm = pair.querySelector('[data-chip="arm"]');
+      if (arm) pair.prepend(arm);
+    }
+  };
+
   const undo = (list, os) => {
     const section = list.querySelector(`[data-platform="${os}"]`);
     if (!section) return;
@@ -75,10 +90,18 @@
     here.textContent = MESSAGES[os];
     if (os === "other") return;
     lead(list, os);
+    if (os === "linux") {
+      linuxArm().then((arm) => {
+        if (!arm) return;
+        here.textContent = MESSAGES.linuxArm;
+        armFirst(list);
+      });
+      return;
+    }
     if (os !== "mac") return;
-    macChip().then((chip) => {
-      if (chip === "arm") here.textContent = MESSAGES.macArm;
-      if (chip === "intel") {
+    chip().then((found) => {
+      if (found === "arm") here.textContent = MESSAGES.macArm;
+      if (found === "intel") {
         here.textContent = MESSAGES.macIntel;
         undo(list, "mac");
       }

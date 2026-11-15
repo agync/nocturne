@@ -44,6 +44,7 @@ Packages and checksums are on the [releases page](https://github.com/agync/noctu
 | Platform | Status |
 |---|---|
 | Linux x86_64 (AppImage, deb, rpm, Flatpak) | Tested |
+| Linux aarch64 (AppImage, deb, rpm, Flatpak) | Built by the release workflows; not yet run by a person |
 | macOS, Apple Silicon | Built and run |
 | Windows | Installer configuration exists; not yet run |
 
