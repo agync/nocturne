@@ -343,6 +343,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("open_original", Never),
         ("open_export", Never),
         ("open_logs", Never),
+        ("open_data_folder", Never),
         ("get_remote", Never),
         ("start_remote", Never),
         ("stop_remote", Never),

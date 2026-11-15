@@ -39,10 +39,12 @@ describe("TauriPlatform shared pieces", () => {
     await platform.openPath("/exports/Nocturne export");
     await platform.openOriginal("itm_1");
     await platform.openLogs();
+    await platform.openDataFolder();
     expect(calls).toEqual([
       { cmd: "open_export", args: { path: "/exports/Nocturne export" } },
       { cmd: "open_original", args: { itemId: "itm_1" } },
       { cmd: "open_logs", args: {} },
+      { cmd: "open_data_folder", args: {} },
     ]);
     expect(calls.some((c) => c.cmd.startsWith("plugin:"))).toBe(false);
   });

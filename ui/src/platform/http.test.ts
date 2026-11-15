@@ -28,7 +28,8 @@ describe("HttpPlatform", () => {
     await platform.openPath();
     await platform.openOriginal();
     await platform.openLogs();
-    expect(info).toHaveBeenCalledTimes(3);
+    await platform.openDataFolder();
+    expect(info).toHaveBeenCalledTimes(4);
     info.mockRestore();
   });
 

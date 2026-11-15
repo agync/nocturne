@@ -183,6 +183,7 @@ async fn failures_carry_a_code_and_the_desktop_commands_are_unavailable() {
         "pick_files",
         "open_original",
         "open_logs",
+        "open_data_folder",
         "open_sound_settings",
         "print_page",
         "export_to",

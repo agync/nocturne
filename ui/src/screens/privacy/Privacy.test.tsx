@@ -82,12 +82,21 @@ describe("Privacy", () => {
 
   it("shows what is on this computer and opens that folder", async () => {
     const { platform } = await open();
-    const spy = vi.spyOn(platform, "openPath");
+    const spy = vi.spyOn(platform, "openDataFolder");
     expect(screen.getByText(/^4\.3 GB of things you kept$/)).toBeInTheDocument();
     expect(screen.getByText("8.4 GB for Nocturne’s mind")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: "Space used" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Open folder" }));
-    expect(spy).toHaveBeenCalledWith("Documents/Nocturne");
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("says so when the folder cannot be opened", async () => {
+    const { platform } = await open();
+    vi.spyOn(platform, "openDataFolder").mockRejectedValue(new Error("no folder"));
+    await userEvent.click(screen.getByRole("button", { name: "Open folder" }));
+    expect(
+      await screen.findByText("That didn’t work. Nothing was lost; try again in a moment."),
+    ).toBeInTheDocument();
   });
 
   it("exports to the folder the person picks, shows progress and the finished folder", async () => {

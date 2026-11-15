@@ -22,6 +22,8 @@ export interface Platform {
   openOriginal(itemId: string, shown: string): Promise<void>;
   /** Opens the folder of log files. */
   openLogs(): Promise<void>;
+  /** Opens the data folder. */
+  openDataFolder(): Promise<void>;
   /** A URL the page can show for a kept original on disk. */
   originalSrc(path: string): string;
   /** True in the floating quick-capture window, by the window's own label; never in a browser. */

@@ -4,6 +4,7 @@ import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Progress } from "../../components/Progress/Progress";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
+import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, formatDayMonth, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ExportProgress, ExportReport, LedgerEntry } from "../../engine/bindings";
@@ -53,6 +54,7 @@ type Exporting =
 export default function Privacy() {
   const engine = useEngine();
   const platform = usePlatform();
+  const toast = useToast();
   const refresh = useRefresh();
   const query = useQuery({
     queryKey: ["privacy"],
@@ -253,7 +255,14 @@ export default function Privacy() {
             </div>
             <p className={styles.where}>
               <span className={styles.mono}>{view.dataDir}</span>
-              <Button variant="quiet" onClick={() => void platform.openPath(view.dataDir)}>
+              <Button
+                variant="quiet"
+                onClick={() =>
+                  platform
+                    .openDataFolder()
+                    .catch(() => toast.show({ message: t("notice.action.failed") }))
+                }
+              >
                 {t("privacy.here.open")}
               </Button>
             </p>

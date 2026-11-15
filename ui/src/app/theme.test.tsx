@@ -23,6 +23,7 @@ function fakePlatform(initial: SystemTheme | null) {
     openPath: async () => undefined,
     openOriginal: async () => undefined,
     openLogs: async () => undefined,
+    openDataFolder: async () => undefined,
     inQuickCapture: () => false,
     originalSrc: (path) => `file:${path}`,
     closeQuickCapture: async () => undefined,

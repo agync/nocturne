@@ -3,7 +3,6 @@ import { type KeyboardEvent, useId, useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
 import { useEngine } from "../../engine/context";
-import { shortcutKeys } from "../../platform/shortcutKeys";
 import styles from "./Settings.module.css";
 
 const MODIFIER_KEYS = new Set(["Control", "Shift", "Alt", "Meta", "AltGraph"]);
@@ -117,7 +116,7 @@ export function ShortcutField({ value, available, onChange, describedBy }: Props
           />
         ) : (
           <>
-            <kbd className={styles.kbd}>{shortcutKeys(value).join("+")}</kbd>
+            <kbd className={styles.kbd}>{value}</kbd>
             <Button
               variant="quiet"
               aria-label={t("settings.shortcut.change.named")}
