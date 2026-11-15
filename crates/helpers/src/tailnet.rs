@@ -609,6 +609,12 @@ mod tests {
         }
     }
 
+    /// A path under the test root as the platform writes it: `/data/remote\\x` on Windows.
+    fn under(parts: &[&str]) -> String {
+        let path = parts.iter().fold(dirs().root, |p, part| p.join(part));
+        path.to_string_lossy().into_owned()
+    }
+
     fn unix() -> Origin {
         Origin::Unix("/data/remote/run/listener.sock".into())
     }
@@ -633,7 +639,7 @@ mod tests {
             helper_args(&dirs(), "nocturne-ab12", &unix()),
             [
                 "--state-dir",
-                "/data/remote/tailscale",
+                under(&["tailscale"]).as_str(),
                 "--hostname",
                 "nocturne-ab12",
                 "--target",
