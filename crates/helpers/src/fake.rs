@@ -55,27 +55,27 @@ pub fn record(role: &str, args: &[String]) -> usize {
         "pid": std::process::id(),
         "at_ms": now_ms(),
     });
+    append_line(&path, &line);
+    before + 1
+}
+
+/// Appends `line` to the record in one write, so a reader rarely sees a run's line cut in two and
+/// two runs' lines do not mix.
+fn append_line(path: &std::path::Path, line: &Value) {
     if let Ok(mut f) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
         .open(path)
     {
-        let _ = writeln!(f, "{line}");
+        let _ = f.write_all(format!("{line}\n").as_bytes());
     }
-    before + 1
 }
 
 /// Append one event of a run to the record: an input line it read, or how it ended.
 pub fn note(role: &str, value: Value) {
     let line =
         json!({ "role": role, "value": value, "pid": std::process::id(), "at_ms": now_ms() });
-    if let Ok(mut f) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(exe_dir().join(RECORD_FILE))
-    {
-        let _ = writeln!(f, "{line}");
-    }
+    append_line(&exe_dir().join(RECORD_FILE), &line);
 }
 
 pub fn now_ms() -> u64 {
