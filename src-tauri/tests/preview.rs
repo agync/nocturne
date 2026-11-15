@@ -679,6 +679,33 @@ async fn a_new_token_ends_the_tickets_made_under_the_old_one() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_ticket_asked_for_just_before_a_new_token_is_bound_to_the_old_one() {
+    let (f, old) = file_rig();
+    // The body is read after the gate has admitted the request, so the token changes between
+    // the check and the issue.
+    let path = f.path.clone();
+    let body = Body::from_stream(futures_util::stream::once(async move {
+        preview::rotate_token_file(&path).unwrap();
+        Ok::<_, std::convert::Infallible>(json!({ "kind": "events" }).to_string())
+    }));
+    let response = send(
+        &f.rig,
+        with_bearer(Method::POST, "/api/ticket", &old)
+            .body(body)
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let ticket = json_of(response).await["ticket"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let uri = format!("/api/events?ticket={ticket}");
+    let stream = send(&f.rig, req(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(stream.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_new_token_closes_an_open_event_stream() {
     let (f, old) = file_rig();
     let events = ticket_for(&f.rig, &old, "events").await;

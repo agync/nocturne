@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::{DefaultBodyLimit, Path, Request, State};
+use axum::extract::{DefaultBodyLimit, Extension, Path, Request, State};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::middleware;
 use axum::response::sse::{Event as Sse, KeepAlive};
@@ -170,7 +170,14 @@ async fn health(State(preview): State<Arc<Preview>>) -> Response {
     json_response(status, json!({ "ok": open }))
 }
 
-async fn ticket(State(preview): State<Arc<Preview>>, body: Bytes) -> Response {
+async fn ticket(
+    State(preview): State<Arc<Preview>>,
+    admitted: Option<Extension<auth::Admitted>>,
+    body: Bytes,
+) -> Response {
+    let Some(Extension(admitted)) = admitted else {
+        return auth::refuse(StatusCode::UNAUTHORIZED, "unauthorized");
+    };
     let kind = match serde_json::from_slice::<Value>(&body)
         .ok()
         .and_then(|v| v["kind"].as_str().map(str::to_owned))
@@ -180,17 +187,18 @@ async fn ticket(State(preview): State<Arc<Preview>>, body: Bytes) -> Response {
         Some("media") => TicketKind::Media,
         Some(_) => return failure(json!({ "code": "invalid", "detail": "events or media" })),
     };
-    match preview.issue(kind) {
-        Some(ticket) => json_response(StatusCode::OK, json!({ "ticket": ticket })),
-        None => auth::refuse(StatusCode::UNAUTHORIZED, "unauthorized"),
-    }
+    let ticket = preview.issue(kind, &admitted);
+    json_response(StatusCode::OK, json!({ "ticket": ticket }))
 }
 
 /// Every event the app emits, as server-sent events named as the app names them. A new stream
 /// starts with the current status, so a browser that reconnects is up to date. A stream ends
 /// within a second or so of the token it was opened under being replaced.
-async fn events(State(preview): State<Arc<Preview>>) -> Response {
-    let Some(opened_under) = preview.opts.token.current() else {
+async fn events(
+    State(preview): State<Arc<Preview>>,
+    admitted: Option<Extension<auth::Admitted>>,
+) -> Response {
+    let Some(Extension(auth::Admitted(opened_under))) = admitted else {
         return auth::refuse(StatusCode::UNAUTHORIZED, "unauthorized");
     };
     let rx = preview.events.subscribe();
