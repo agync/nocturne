@@ -6,7 +6,7 @@ import { formatBytes, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { RemoteAdvanced } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
-import { usePlatform } from "../../platform/context";
+import { useOpenLogs } from "../../platform/useOpenLogs";
 import styles from "./Away.module.css";
 import { Confirm } from "./parts";
 import { useBusyAct } from "./useRemote";
@@ -111,7 +111,7 @@ function Hides({ simple }: { simple: boolean }) {
 
 export function AdvancedDetails({ id }: { id: string }) {
   const engine = useEngine();
-  const platform = usePlatform();
+  const openLogs = useOpenLogs();
   const toast = useToast();
   const { run, busy } = useBusyAct();
   const [making, setMaking] = useState(false);
@@ -168,7 +168,7 @@ export function AdvancedDetails({ id }: { id: string }) {
         <p className={styles.muted}>{t("advanced.away.off")}</p>
       )}
       <div className={styles.buttons}>
-        <Button variant="secondary" onClick={() => void platform.openLogs()}>
+        <Button variant="secondary" onClick={openLogs}>
           {t("advanced.away.logs")}
         </Button>
         {remote ? (

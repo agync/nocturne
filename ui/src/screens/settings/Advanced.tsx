@@ -16,7 +16,7 @@ import type {
 } from "../../engine/bindings";
 import type { RecordingState } from "../../engine/client";
 import { useEngine, useRefresh, useSettings } from "../../engine/context";
-import { usePlatform } from "../../platform/context";
+import { useOpenLogs } from "../../platform/useOpenLogs";
 import { useModels } from "../models/useModels";
 import { DeleteEverythingDialog } from "../privacy/DeleteEverythingDialog";
 import styles from "./Settings.module.css";
@@ -237,7 +237,7 @@ function onlineDetails(o: OnlineAdvanced): Array<[string, string]> {
 /** #/settings/advanced */
 export function Advanced() {
   const engine = useEngine();
-  const platform = usePlatform();
+  const openLogs = useOpenLogs();
   const refresh = useRefresh();
   const { data: settings } = useSettings();
   const query = useQuery({ queryKey: ["advanced"], queryFn: () => engine.getAdvanced() });
@@ -300,7 +300,7 @@ export function Advanced() {
         </a>
       ) : null}
       <div className={styles.buttons}>
-        <Button variant="secondary" onClick={() => void platform.openPath(view.logDir)}>
+        <Button variant="secondary" onClick={openLogs}>
           {t("advanced.logs")}
         </Button>
         <Button variant="secondary" onClick={() => goTo("/setup", { step: "choosing" })}>

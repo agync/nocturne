@@ -386,12 +386,22 @@ describe("Advanced details", () => {
 
   it("opens the logs, and goes back into setup", async () => {
     const platform = fakePlatform();
-    const spy = vi.spyOn(platform, "openPath");
+    const spy = vi.spyOn(platform, "openLogs");
     await openAdvanced(platform);
     await userEvent.click(screen.getByRole("button", { name: "Open logs" }));
-    expect(spy).toHaveBeenCalledWith("~/.local/share/nocturne/logs");
+    expect(spy).toHaveBeenCalledOnce();
     await userEvent.click(screen.getByRole("button", { name: "Choose a different mind…" }));
     expect(window.location.hash).toBe("#/setup?step=choosing");
+  });
+
+  it("says so when the logs cannot be opened", async () => {
+    const platform = fakePlatform();
+    vi.spyOn(platform, "openLogs").mockRejectedValue(new Error("there are no logs yet"));
+    await openAdvanced(platform);
+    await userEvent.click(screen.getByRole("button", { name: "Open logs" }));
+    expect(
+      await screen.findByText("That didn’t work. Nothing was lost; try again in a moment."),
+    ).toBeInTheDocument();
   });
 
   it("resets with the same typed phrase as delete everything", async () => {
