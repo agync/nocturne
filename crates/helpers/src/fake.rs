@@ -140,7 +140,7 @@ pub fn behave(control: &Value, index: usize) {
     }
     if control.get("spawn_child").and_then(Value::as_bool) == Some(true)
         && let Ok(exe) = std::env::current_exe()
-        && let Ok(child) = std::process::Command::new(exe)
+        && let Ok(child) = nocturne_lemonade::process::command(exe)
             .env("FAKE_ROLE", "sleeper")
             .spawn()
     {
@@ -198,7 +198,7 @@ pub fn serve_metrics(addr: &str, hostname: String) -> Option<u16> {
 pub fn spawn_spoofer(addr: &str, hostname: &str) -> Option<u16> {
     let file = exe_dir().join(SPOOF_PORT_FILE);
     let _ = std::fs::remove_file(&file);
-    std::process::Command::new(std::env::current_exe().ok()?)
+    nocturne_lemonade::process::command(std::env::current_exe().ok()?)
         .env("FAKE_ROLE", "spoofer")
         .env("FAKE_SPOOF_ADDR", addr)
         .env("FAKE_SPOOF_HOST", hostname)

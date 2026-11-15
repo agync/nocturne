@@ -14,6 +14,7 @@ pub mod logpipe;
 pub mod mind;
 pub mod npu;
 pub mod online;
+pub mod process;
 pub mod record;
 pub mod rerank;
 pub mod residency;

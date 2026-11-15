@@ -61,11 +61,8 @@ pub fn intel_in_listing(listing: &str) -> bool {
 
 #[cfg(windows)]
 fn windows_listing() -> Option<String> {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let out = std::process::Command::new("pnputil")
+    let out = crate::process::command("pnputil")
         .args(["/enum-devices", "/class", "Display", "/connected"])
-        .creation_flags(CREATE_NO_WINDOW)
         .output()
         .ok()?;
     Some(String::from_utf8_lossy(&out.stdout).into_owned())

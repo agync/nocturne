@@ -323,7 +323,7 @@ mod tests {
             launch_agent(Path::new("/Applications/R&D <\"a\"> 'b'/Nocturne")),
         )
         .unwrap();
-        let lint = std::process::Command::new("/usr/bin/plutil")
+        let lint = nocturne_lemonade::process::command("/usr/bin/plutil")
             .arg("-lint")
             .arg(&file)
             .output()
@@ -333,7 +333,7 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&lint.stdout)
         );
-        let read = std::process::Command::new("/usr/bin/plutil")
+        let read = nocturne_lemonade::process::command("/usr/bin/plutil")
             .args(["-extract", "ProgramArguments.0", "raw", "-o", "-"])
             .arg(&file)
             .output()

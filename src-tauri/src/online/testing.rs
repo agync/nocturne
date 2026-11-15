@@ -3,13 +3,14 @@
 //! stand-in's process. Nothing here reaches the system keychain or the network.
 
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use nocturne_engine::BoxFuture;
 use nocturne_lemonade::Client;
 use nocturne_lemonade::online::CloudRoute;
+use nocturne_lemonade::process::command;
 use zeroize::Zeroizing;
 
 use super::keys::{KeyError, Keychain};
@@ -310,7 +311,7 @@ impl StandIn {
     /// Starts the stand-in from `exe` on a free loopback port.
     pub fn start(exe: &Path) -> StandIn {
         use std::io::BufRead;
-        let mut child = Command::new(exe)
+        let mut child = command(exe)
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
             .spawn()
@@ -344,7 +345,7 @@ fn build_fake_provider() -> PathBuf {
         return PathBuf::from(path);
     }
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
-    let mut build = Command::new(cargo);
+    let mut build = command(cargo);
     build
         .args(["build", "--locked", "-p", "nocturne-lemonade"])
         .args(["--features", "fake-server", "--bin", "fake-provider"])
