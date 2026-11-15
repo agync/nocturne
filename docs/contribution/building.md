@@ -162,6 +162,11 @@ actions are Red Hat's buildah, podman login and push actions, pinned by commit.
 make package        # scripts/package.sh: AppImage, deb and rpm under target/package/
 ```
 
+The packages are for the architecture of the machine that builds them: x86_64, or aarch64 (64-bit
+Arm). There is no cross build. The file names say which: `_amd64` or `_aarch64` for the AppImage,
+`_amd64` or `_arm64` for the deb, `.x86_64` or `.aarch64` for the rpm, and
+`scripts/check-package.sh` picks the engine manifest to compare against by that name.
+
 The script works in this order:
 
 1. It fetches the pinned Lemonade archive for the platform into `target/package/download/`, checks
@@ -171,8 +176,9 @@ The script works in this order:
    `vendor/`.
 2. It builds the interface and writes the third-party notices.
 3. It runs the Tauri bundler from `src-tauri/` with `bundle/linux.json` merged over
-   `tauri.conf.json`. The binary is built with the builder's home, Cargo and Rustup folders remapped
-   so no host path is embedded.
+   `tauri.conf.json`, and on aarch64 `bundle/linux-aarch64.json` after it, which points the
+   resources at that engine. The binary is built with the builder's home, Cargo and Rustup
+   folders remapped so no host path is embedded.
 4. For the AppImage it finishes the AppDir by hand: it removes modules the app does not use, copies
    the verified engine files back over whatever the AppImage tool rewrote, adds the licences of the
    bundled libraries and packs the AppImage again. It records the source package of every bundled

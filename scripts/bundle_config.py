@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Merge a bundle overlay into src-tauri/tauri.conf.json the way `tauri build --config` does.
 
-Usage: scripts/bundle_config.py <linux|windows|macos> [--extra FILE]
+Usage: scripts/bundle_config.py <linux|windows|macos> [--extra FILE] [--platform NAME]
 
 Prints the merged configuration as JSON. Exits non-zero when the packaging rules are broken:
 the base file carries a version that differs from the workspace version, or the resources do
-not point at the verified Lemonade folder for the platform.
+not point at the verified Lemonade folder for the platform. The platform is the one the kind
+builds by default; --platform names another (linux-aarch64, with --extra src-tauri/bundle/
+linux-aarch64.json).
 """
 
 import json
@@ -15,6 +17,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PLATFORMS = {"linux": "linux-x86_64", "windows": "windows-x86_64", "macos": "macos-aarch64"}
+OTHER_PLATFORMS = {"linux": ("linux-aarch64",)}
 
 
 def merge(base, patch):
@@ -53,16 +56,16 @@ def effective(kind, extra=None, root=ROOT):
     return merged
 
 
-def problems(kind, merged, root=ROOT):
+def problems(kind, merged, root=ROOT, platform=None):
     found = []
     version = workspace_version(root)
     declared = merged.get("version")
     if declared is not None and declared != version:
         found.append(f"tauri.conf.json version {declared} differs from workspace version {version}")
-    want = f"../target/package/lemonade/{PLATFORMS[kind]}/"
+    want = f"../target/package/lemonade/{platform or PLATFORMS[kind]}/"
     resources = merged.get("bundle", {}).get("resources", {})
-    if resources.get(want) != "lemonade/":
-        found.append(f"resources must map {want} to lemonade/, got {resources}")
+    if resources.get(want) != "lemonade/" or list(resources.values()).count("lemonade/") != 1:
+        found.append(f"resources must map {want}, and only it, to lemonade/, got {resources}")
     if merged.get("bundle", {}).get("active") is not True:
         found.append("bundle.active is not true in the merged configuration")
     return found
@@ -73,8 +76,12 @@ def main(argv):
         print(__doc__, file=sys.stderr)
         return 2
     extra = argv[argv.index("--extra") + 1] if "--extra" in argv else None
+    platform = argv[argv.index("--platform") + 1] if "--platform" in argv else None
+    if platform not in (None, PLATFORMS[argv[0]], *OTHER_PLATFORMS.get(argv[0], ())):
+        print(f"bundle config: no {platform} build for {argv[0]}", file=sys.stderr)
+        return 2
     merged = effective(argv[0], extra)
-    found = problems(argv[0], merged)
+    found = problems(argv[0], merged, platform=platform)
     print(json.dumps(merged, indent=2))
     print(f"version (workspace): {workspace_version()}", file=sys.stderr)
     for line in found:
