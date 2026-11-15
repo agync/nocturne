@@ -294,6 +294,7 @@ impl TailnetTransport {
                 .map(OsString::from)
                 .collect(),
             env: helper_env(&self.dirs),
+            secret_env: Vec::new(),
             cwd: Some(state),
         };
         let mut opts = SuperviseOptions::new(self.dirs.root.join("logs"));
