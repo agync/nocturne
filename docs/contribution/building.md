@@ -53,7 +53,7 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 
 | Job | Runs | Covers | Runs when these change |
 |---|---|---|---|
-| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the release build's compile check, the bindings drift check | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh` |
+| `rust` | `make rust/lint rust/test contract/check`, `scripts/away-integration.sh interop` | rustfmt, clippy for both feature sets, both test runs, the release build's compile check, the bindings drift check, the Rust and TypeScript phone sides against each other | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh`, `scripts/away-integration.sh` |
 | `ui` | `make ui/lint ui/test`, `npm run build`, `scripts/check_ui_dist.py` | Biome, the type check, the interface tests, the interface the app ships and its check | `ui/`, `src-tauri/` |
 | `packaging scripts` | `make scripts/test` | the packaging scripts' tests | `scripts/`, the Rust side, `flatpak/`, `docs/contribution/flatpak.md`, `LICENSE`, `ui/package*.json` |
 | `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` | `helpers/`, `scripts/test-tailnet.sh`, `scripts/tailnet-tags.sh` |
