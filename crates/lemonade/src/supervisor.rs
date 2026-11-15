@@ -406,7 +406,7 @@ struct Running {
     child: Box<dyn ChildWrapper>,
     stdin: Option<ChildStdin>,
     pgid: u32,
-    /// Reads the engine's output into its log; ends with the process.
+    /// Reads the engine's output into its log; ends once both outputs close and the log is written.
     _log: Option<tokio::task::JoinHandle<()>>,
     /// The engine's ports, which no address for Online answers may name.
     _ports: Vec<online::OwnPort>,

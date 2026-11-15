@@ -34,9 +34,9 @@ pub const MAX_BUFFERED: usize = 64 * 1024;
 pub const ROTATE_AT: u64 = 8 * 1024 * 1024;
 pub const FILES_KEPT: usize = 3;
 
-/// How long a failed rotation waits before the next try, so a permanent fault costs one try, not
-/// one per line.
-const RETRY_ROTATION_AFTER: Duration = Duration::from_secs(30);
+/// How long a failed rotation or open waits before the next try, so a permanent fault costs one
+/// try, not one per line.
+const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// Lines waiting for the file. When the file falls behind, lines are dropped rather than the
 /// engine being made to wait on its own output.
 const QUEUE: usize = 1024;
@@ -158,7 +158,20 @@ pub fn spawn_rotating_at<S>(
 where
     S: AsyncRead + Unpin + Send + 'static,
 {
-    pump(stdout, writer(file, rotate_at), redact)
+    let (tx, writer) = writer(file, rotate_at);
+    let pumped = pump(stdout, tx, redact);
+    tokio::spawn(async move {
+        let _ = pumped.await;
+        finish(writer).await;
+    })
+}
+
+/// Waits for the writer thread to write what is queued and exit. Every sender is gone by then,
+/// because each output's task owns its own and has ended.
+async fn finish(writer: Option<std::thread::JoinHandle<()>>) {
+    if let Some(writer) = writer {
+        let _ = tokio::task::spawn_blocking(move || writer.join()).await;
+    }
 }
 
 /// [`spawn`] for both of the engine's outputs, into one file. Each is redacted on its own, so a
@@ -177,25 +190,28 @@ where
     S: AsyncRead + Unpin + Send + 'static,
     E: AsyncRead + Unpin + Send + 'static,
 {
-    let tx = writer(file, ROTATE_AT);
+    let (tx, writer) = writer(file, ROTATE_AT);
     let out = pump(stdout, tx.clone(), redact);
     let err = pump(stderr, tx, errors);
     tokio::spawn(async move {
         let _ = out.await;
         let _ = err.await;
+        finish(writer).await;
     })
 }
 
-/// The queue to a thread that writes lines to `file`.
-fn writer(file: PathBuf, rotate_at: u64) -> mpsc::Sender<String> {
+/// The queue to a thread that writes lines to `file`, and the thread.
+fn writer(
+    file: PathBuf,
+    rotate_at: u64,
+) -> (mpsc::Sender<String>, Option<std::thread::JoinHandle<()>>) {
     let (tx, rx) = mpsc::channel::<String>(QUEUE);
-    if let Err(e) = std::thread::Builder::new()
+    let thread = std::thread::Builder::new()
         .name("lemond-log".into())
-        .spawn(move || write_lines(rx, &file, rotate_at))
-    {
-        tracing::warn!("the engine's log has no writer: {e}");
-    }
-    tx
+        .spawn(move || write_lines(rx, &file, rotate_at, RETRY_AFTER, open))
+        .map_err(|e| tracing::warn!("the engine's log has no writer: {e}"))
+        .ok();
+    (tx, thread)
 }
 
 /// Reads one output line by line, redacts each line and queues it for the writer.
@@ -249,37 +265,48 @@ where
     })
 }
 
-fn write_lines(mut rx: mpsc::Receiver<String>, path: &Path, rotate_at: u64) {
+fn write_lines(
+    mut rx: mpsc::Receiver<String>,
+    path: &Path,
+    rotate_at: u64,
+    retry_after: Duration,
+    mut open: impl FnMut(&Path) -> Option<File>,
+) {
     let mut file = open(path);
-    let mut size = file
-        .as_ref()
-        .and_then(|f| f.metadata().ok())
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let mut size = length(file.as_ref());
     let mut warned = false;
     let mut retry_at = Instant::now();
+    let mut reopen_at = Instant::now() + retry_after;
     while let Some(line) = rx.blocking_recv() {
-        if size >= rotate_at && Instant::now() >= retry_at {
+        if file.is_none() && Instant::now() >= reopen_at {
+            file = open(path);
+            size = length(file.as_ref());
+            if file.is_none() {
+                reopen_at = Instant::now() + retry_after;
+            }
+        }
+        if file.is_some() && size >= rotate_at && Instant::now() >= retry_at {
             // Closed first, so the reopened file is a new live file and not the renamed one.
             drop(file.take());
             let rotated = rotate(path);
             match &rotated {
                 Ok(()) => warned = false,
                 Err(e) => {
-                    retry_at = Instant::now() + RETRY_ROTATION_AFTER;
+                    retry_at = Instant::now() + retry_after;
                     if !std::mem::replace(&mut warned, true) {
                         tracing::warn!("the engine's log could not be rotated: {e}");
                     }
                 }
             }
             file = open(path);
+            if file.is_none() {
+                reopen_at = Instant::now() + retry_after;
+            }
             // A failed rotation leaves the old file in place; it is tried again later.
-            size = match rotated {
-                Ok(()) => 0,
-                Err(_) => file
-                    .as_ref()
-                    .and_then(|f| f.metadata().ok())
-                    .map_or(0, |m| m.len()),
+            size = if rotated.is_ok() {
+                0
+            } else {
+                length(file.as_ref())
             };
         }
         if let Some(f) = file.as_mut()
@@ -288,6 +315,10 @@ fn write_lines(mut rx: mpsc::Receiver<String>, path: &Path, rotate_at: u64) {
             size += line.len() as u64 + 1;
         }
     }
+}
+
+fn length(file: Option<&File>) -> u64 {
+    file.and_then(|f| f.metadata().ok()).map_or(0, |m| m.len())
 }
 
 /// `lemond.log` becomes `lemond.log.1`, which becomes `lemond.log.2`; the oldest is removed. A
@@ -443,6 +474,69 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.path().join("lemond.log.1")).unwrap(),
             "one"
+        );
+    }
+
+    #[test]
+    fn a_log_that_could_not_be_opened_is_opened_again() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lemond.log");
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for l in ["one", "two", "three", "four"] {
+            tx.blocking_send(l.into()).unwrap();
+        }
+        drop(tx);
+        let mut calls = 0;
+        write_lines(rx, &path, ROTATE_AT, Duration::ZERO, |p| {
+            calls += 1;
+            if calls <= 2 { None } else { open(p) }
+        });
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "two\nthree\nfour\n"
+        );
+    }
+
+    #[test]
+    fn a_log_that_cannot_be_opened_is_tried_once_per_period() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lemond.log");
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for l in ["one", "two", "three"] {
+            tx.blocking_send(l.into()).unwrap();
+        }
+        drop(tx);
+        let mut calls = 0;
+        write_lines(rx, &path, ROTATE_AT, Duration::from_secs(60), |_| {
+            calls += 1;
+            None
+        });
+        assert_eq!(calls, 1, "one try at the start, none per line");
+    }
+
+    #[tokio::test]
+    async fn both_outputs_are_written_when_the_task_ends() {
+        use tokio::io::AsyncWriteExt;
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lemond.log");
+        let (mut out_w, out_r) = tokio::io::duplex(1024);
+        let (mut err_w, err_r) = tokio::io::duplex(1024);
+        let task = spawn_both(
+            out_r,
+            err_r,
+            path.clone(),
+            Arc::new(Redactor::new()),
+            Arc::new(Redactor::new()),
+        );
+        out_w.write_all(b"from out\n").await.unwrap();
+        err_w.write_all(b"from err\n").await.unwrap();
+        drop(out_w);
+        drop(err_w);
+        task.await.unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("from out") && text.contains("from err"),
+            "{text}"
         );
     }
 }
