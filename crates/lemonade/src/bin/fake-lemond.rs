@@ -9,6 +9,7 @@
 //! NPU mode, the NPU runtime too; `nvidia` and `nvidia-small` give an 8 and a 4 GB card and its
 //! CUDA backend, `intel` an Intel GPU, which the real engine does not list at all),
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
+//! `say-keys` (its two keys in its log and its errors),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
 //! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
 //! (the first request with a wrong key gets a 503 instead of a 401),
@@ -418,6 +419,12 @@ async fn main() {
     }
 
     note_time(&cache, "launch");
+
+    // An engine that names its keys in its log, which the log pipe must hide.
+    if modes.contains_key("say-keys") {
+        println!("2026-11-13 22:06:22.734 [Info] (Server) keys {key} {admin_key}");
+        eprintln!("error keys {key} {admin_key}");
+    }
 
     if let Some(ms) = modes
         .get("slow-start-ms")

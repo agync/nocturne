@@ -947,8 +947,8 @@ impl Actor {
 
     /// Starts the engine. Its log goes to standard output and its errors to standard error,
     /// which the log pipe redacts into `lemond.log`, hiding `key` (the route's, if there is
-    /// one). The key is never in the engine's environment: it is handed over after the engine
-    /// answers (see `give_route`).
+    /// one) and the launch's own keys. The route's key is never in the engine's environment: it is
+    /// handed over after the engine answers (see `give_route`).
     fn spawn(
         &self,
         port: u16,
@@ -971,10 +971,11 @@ impl Actor {
         for (name, value) in spawn_env(&self.dirs, keys, &temp) {
             cmd.env(name, value);
         }
-        // A redactor of its own for each launch and output: the key it hides is this launch's.
+        // A redactor of its own for each launch and output: the keys it hides are this launch's.
         let redactor = || {
             let r = Arc::new(Redactor::new());
             r.set_key(key);
+            r.set_launch_keys(&[&keys.api, &keys.admin]);
             r
         };
         let (redact, errors) = (redactor(), redactor());
