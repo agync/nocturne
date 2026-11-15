@@ -6,7 +6,8 @@
 # does:
 #
 #   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check
-#   ui         ui/lint, ui/test, scripts/test
+#   ui         ui/lint, ui/test
+#   scripts    scripts/test
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
 #   hygiene    `pre-commit run --all-files`, which validates the docs bundle too
 #
@@ -22,10 +23,14 @@
 # A pull request that touches what the packages are built from also builds them, on the platforms
 # release.yml builds on, unsigned and with nothing uploaded:
 #
-#   changes             decides from the changed paths whether the three jobs below run
 #   package-linux       scripts/package.sh and scripts/check-package.sh on Ubuntu 24.04, x86_64
 #   package-macos       scripts/package.sh --config macos and the disk image check on macOS 15
-#   package-windows     scripts/package.sh --config windows under Git Bash, and the installer sums
+#   package-windows     scripts/package.sh --config windows under Git Bash, and the installers' sums
+#
+# Every job but hygiene and the gate runs only when a path it reads changed: the `changes` job
+# lists the paths and its table says which jobs they run. A change to a workflow, the Makefile or
+# the Rust toolchain, a push to main and a hand run run every job. A job reads its flag as
+# `!= 'false'`, so a flag the table does not write runs the job rather than skipping it.
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
@@ -42,9 +47,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A new push to a pull request cancels the run before it. A run on main always finishes.
+# A new push to a pull request cancels the run before it. Every run on main has a group of its own,
+# so none is cancelled or dropped while queued.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -62,8 +68,86 @@ env:
     librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
 
 jobs:
+  # Which jobs a pull request needs, from the paths it changes against its merge base. A push to
+  # main runs every job: with no merge queue it is the first run of the merged code, and the first
+  # build of the release-only code (cfg(not(debug_assertions)), custom-protocol). Each area lists the paths its jobs read, including the
+  # files one side's tests read from the other: the Rust tests read ui/ and generate the bindings
+  # in ui/src/engine/bindings, and the interface's tests read src-tauri/. A job that is skipped
+  # because its area did not change counts as passed in the gate.
+  changes:
+    name: changed paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      rust: ${{ steps.paths.outputs.rust }}
+      rust-platforms: ${{ steps.paths.outputs.rust-platforms }}
+      ui: ${{ steps.paths.outputs.ui }}
+      ui-platforms: ${{ steps.paths.outputs.ui-platforms }}
+      scripts: ${{ steps.paths.outputs.scripts }}
+      tailnet: ${{ steps.paths.outputs.tailnet }}
+      site: ${{ steps.paths.outputs.site }}
+      package: ${{ steps.paths.outputs.package }}
+      package-linux: ${{ steps.paths.outputs.package-linux }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # A change here runs every job.
+          everything='^(\.github/workflows/|Makefile$|rust-toolchain\.toml$)'
+          lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
+          rust_side="crates/|src-tauri/|\.cargo/|clippy\.toml$|$lockfiles"
+          declare -A areas=(
+            [rust]="^($rust_side|ui/|scripts/bindings\.sh$)"
+            # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
+            [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
+            # The interface's tests import scripts/build-tokens.mjs and read src-tauri/.
+            [ui]='^(ui/|src-tauri/|scripts/build-tokens\.mjs$)'
+            [ui-platforms]='^(ui/|scripts/build-tokens\.mjs$)'
+            # The scripts' tests read the bundle configuration, the Flatpak files and their doc,
+            # and list the licences of every crate and npm package.
+            [scripts]="^(scripts/|$rust_side|flatpak/|docs/contribution/flatpak\.md$|LICENSE$|ui/package(-lock)?\.json$)"
+            [tailnet]='^(helpers/|scripts/(test-tailnet|tailnet-tags|build-tailnet)\.sh$)'
+            [site]='^(site/|docs/|lemonade\.lock$|ui/package(-lock)?\.json$)'
+            [package]='^(scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|LICENSE$|Cargo\.lock$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$)'
+            [package-linux]='^(scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|LICENSE$|Cargo\.lock$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$|flatpak/)'
+          )
+          changed="$RUNNER_TEMP/changed"
+          all=true
+          range=""
+          if [ "$EVENT" = pull_request ]; then range="$BASE_SHA...$HEAD_SHA"; fi
+          # Unquoted paths, so a name with accents still meets the ^-anchored patterns.
+          # Without rename detection a moved file lists its old path as well as its new one. A
+          # range git cannot read runs everything.
+          if [ -n "$range" ] && git -c core.quotePath=false diff --no-renames --name-only "$range" > "$changed"; then
+            all=false
+            cat "$changed"
+            if grep -Eq "$everything" "$changed"; then all=true; fi
+          fi
+          {
+            echo "### Jobs this run selected"
+            echo
+            echo "Every job: $all"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          for area in "${!areas[@]}"; do
+            run=$all
+            if [ "$run" = false ] && grep -Eq "${areas[$area]}" "$changed"; then run=true; fi
+            echo "$area=$run" | tee -a "$GITHUB_OUTPUT"
+            echo "- $area: $run" >> "$GITHUB_STEP_SUMMARY"
+          done
+
   rust:
     name: rust
+    needs: changes
+    if: needs.changes.outputs.rust != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -98,6 +182,8 @@ jobs:
   # ignored with their reason elsewhere. Lint, the bindings and the browser tests stay on x86_64.
   rust-platforms:
     name: rust tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.rust-platforms != 'false'
     runs-on: ${{ matrix.runs-on }}
     # A cold build and every test take about fifteen minutes; a hung test fails the job soon after.
     timeout-minutes: 30
@@ -177,7 +263,9 @@ jobs:
           key: lemonade-windows-x86_64-${{ hashFiles('lemonade.lock', 'scripts/fetch-lemonade.sh') }}
 
   ui:
-    name: ui and scripts
+    name: ui
+    needs: changes
+    if: needs.changes.outputs.ui != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -193,13 +281,31 @@ jobs:
         run: make ui/lint
       - name: Test
         run: make ui/test
-      # The packaging scripts' tests, which need only Python 3 and the interface's dependencies.
-      - name: Packaging scripts
+
+  # The packaging scripts' tests, which need only Python 3 and the interface's dependencies.
+  scripts:
+    name: packaging scripts
+    needs: changes
+    if: needs.changes.outputs.scripts != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Test
         run: make scripts/test
 
   # The interface's unit tests on a Mac and on Windows; lint and the type check stay on Linux.
   ui-platforms:
     name: ui tests (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.ui-platforms != 'false'
     runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 20
     strategy:
@@ -233,6 +339,8 @@ jobs:
 
   tailnet:
     name: tailnet helper
+    needs: changes
+    if: needs.changes.outputs.tailnet != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -288,6 +396,8 @@ jobs:
 
   e2e:
     name: browser tests
+    needs: changes
+    if: needs.changes.outputs.ui != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -317,6 +427,8 @@ jobs:
 
   site:
     name: site
+    needs: changes
+    if: needs.changes.outputs.site != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -354,53 +466,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  # Whether this run builds the packages. A push to main and a hand run always do; a pull request
-  # does when it changes a path the packages are built from. The jobs that wait for the answer are
-  # skipped otherwise, and the gate treats a skipped job as passed.
-  changes:
-    name: packaging paths
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      packaging: ${{ steps.paths.outputs.packaging }}
-      linux: ${{ steps.paths.outputs.linux }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - id: paths
-        env:
-          EVENT: ${{ github.event_name }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -euo pipefail
-          packaging=true
-          linux=true
-          if [ "$EVENT" = pull_request ]; then
-            git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
-            cat "$RUNNER_TEMP/changed"
-            common='^(scripts/|src-tauri/bundle/|src-tauri/tauri[^/]*\.json$|src-tauri/Cargo\.toml$|Cargo\.lock$|ui/package[^/]*\.json$|lemonade\.lock$|helpers\.lock$|\.github/workflows/(release|ci)\.yml$)'
-            packaging=false
-            linux=false
-            if grep -Eq "$common" "$RUNNER_TEMP/changed"; then
-              packaging=true
-              linux=true
-            elif grep -Eq '^flatpak/' "$RUNNER_TEMP/changed"; then
-              linux=true
-            fi
-          fi
-          echo "packaging=$packaging linux=$linux"
-          { echo "packaging=$packaging"; echo "linux=$linux"; } >> "$GITHUB_OUTPUT"
-
   # The three package jobs set up each platform as release.yml does, then run the same commands.
   # They sign nothing, upload nothing and read no secret. A package that builds here but fails
   # the release is a bug in this file, not in the package.
   package-linux:
     name: package (linux x86_64)
     needs: changes
-    if: needs.changes.outputs.linux == 'true'
+    if: needs.changes.outputs.package-linux != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -434,7 +506,7 @@ jobs:
   package-macos:
     name: package (macos arm64)
     needs: changes
-    if: needs.changes.outputs.packaging == 'true'
+    if: needs.changes.outputs.package != 'false'
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -458,7 +530,7 @@ jobs:
   package-windows:
     name: package (windows x64)
     needs: changes
-    if: needs.changes.outputs.packaging == 'true'
+    if: needs.changes.outputs.package != 'false'
     runs-on: windows-2022
     timeout-minutes: 60
     defaults:
@@ -505,21 +577,23 @@ jobs:
           }
 
   # The one job to require in branch protection: it fails when any job above failed or was
-  # cancelled, and it says what this workflow does not cover. A package job that was skipped
-  # because no packaging path changed counts as passed.
+  # cancelled, and it says what this workflow does not cover. A job that was skipped because its
+  # paths did not change counts as passed; if `changes` itself fails, every job waiting on it is
+  # skipped and the gate fails on `changes`. Every job above is listed here.
   gate:
     name: gate
     if: always()
     needs:
+      - changes
       - rust
       - rust-platforms
       - ui
       - ui-platforms
+      - scripts
       - tailnet
       - hygiene
       - e2e
       - site
-      - changes
       - package-linux
       - package-macos
       - package-windows
@@ -532,7 +606,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
+          echo "$RESULTS" | jq -e '.changes.result == "success" and all(.[]; .result == "success" or .result == "skipped")' > /dev/null
       - name: What this run did not cover
         if: always()
         run: |
@@ -541,5 +615,6 @@ jobs:
             echo
             echo "- Real-model runs (\`make e2e-real\`, \`e2e-online\`, \`e2e-models\`): they download the real models, about 4.8 GB or more. Run them locally."
             echo "- \`make smoke\` and \`make netcheck*\`: they need a virtual display and a network namespace."
-            echo "- Linux arm64 packages: the release workflow builds them on their own runner. The Linux x86_64, macOS and Windows packages are built here when a pull request changes a packaging path."
+            echo "- Linux arm64 packages: the release workflow builds them on their own runner. The Linux x86_64, macOS and Windows packages are built here when a packaging path changes."
+            echo "- The jobs whose paths this change did not touch: the summary of \`changed paths\` lists them."
           } >> "$GITHUB_STEP_SUMMARY"
