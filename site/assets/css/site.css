@@ -320,17 +320,14 @@ kbd {
 .when,
 .facts,
 .spec-line,
-figcaption,
-.card-title,
-.spec {
+figcaption {
   font-family: var(--mono);
   font-size: 0.75rem;
   color: var(--ink3);
 }
 
 .eyebrow,
-.when,
-.card-title {
+.when {
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -435,25 +432,12 @@ figcaption,
   color: var(--ink2);
 }
 
-.hero-copy {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  max-width: 520px;
-}
-
-/* The problem leads; the answer follows, quieter. */
 .lede {
+  max-width: 520px;
   font-family: var(--serif);
   font-size: clamp(1.3125rem, 2.2vw, 1.5rem);
   line-height: 1.4;
   color: var(--ink);
-}
-
-.answer {
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--ink2);
 }
 
 .facts {
@@ -479,7 +463,28 @@ figcaption,
   background: var(--sheet);
 }
 
-/* How a day goes */
+/* The keep box sits over the corner of the morning page: what goes in, beside what comes out. */
+.hero-shot {
+  position: relative;
+}
+
+.hero-shot figcaption {
+  margin-top: 44px;
+}
+
+.hero-keep {
+  position: absolute;
+  left: -28px;
+  bottom: 44px;
+  z-index: 1;
+  width: min(400px, 78%);
+}
+
+.hero-keep img {
+  box-shadow: 0 18px 40px -12px rgb(0 0 0 / 0.35);
+}
+
+/* Steps, on the install page */
 
 .steps {
   list-style: none;
@@ -509,23 +514,7 @@ figcaption,
   color: var(--ink2);
 }
 
-/* In the app */
-
-/* The whole window, shown once, with all its furniture. */
-.frame-map {
-  margin: 0;
-}
-
-.frame-map-shot {
-  overflow: hidden;
-  border-radius: 10px;
-  box-shadow: var(--shadow);
-  background: var(--sheet);
-}
-
-#app {
-  gap: 56px;
-}
+/* How it works */
 
 .feature {
   display: grid;
@@ -583,78 +572,6 @@ figcaption,
   background: var(--sheet);
 }
 
-.phone-shot {
-  justify-self: center;
-  width: min(100%, 320px);
-  border-radius: 30px;
-}
-
-.phone-shot img {
-  border-radius: 22px;
-}
-
-.feature-box {
-  margin-top: 18px;
-  max-width: 440px;
-}
-
-.feature-box img {
-  width: 100%;
-  height: auto;
-}
-
-.tour {
-  display: flex;
-  flex-direction: column;
-  gap: 36px;
-}
-
-/* The tour, set up by tour.js on wide screens when motion is welcome: one still frame beside the
-   text, where only the page changes as each step reaches the middle of the screen. Without the
-   script, each step keeps its own picture. */
-.tour.is-live {
-  display: grid;
-  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
-  column-gap: 56px;
-  border-top: 1px solid var(--rule);
-}
-
-.tour.is-live .feature {
-  grid-column: 1;
-  display: flex;
-  align-items: center;
-  min-height: 78vh;
-  padding: 0;
-  border: 0;
-}
-
-/* The step's own picture stays in the page for screen readers; the frame repeats it for sight. */
-.tour.is-live .feature-shot {
-  position: absolute;
-  padding: 0;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
-.tour-screen {
-  border-radius: 6px;
-  box-shadow: 0 0 0 1px var(--rule);
-  background: var(--sheet);
-}
-
-.phone-shot {
-  justify-self: center;
-  width: min(100%, 320px);
-  border-radius: 30px;
-}
-
-.phone-shot img {
-  border-radius: 22px;
-}
-
 .feature-box {
   margin-top: 18px;
   max-width: 440px;
@@ -705,12 +622,18 @@ figcaption,
   grid-column: 2;
   grid-row: 1 / span 3;
   padding: 40px 0;
+  container-type: inline-size;
 }
 
+/* The frame holds a 768 x 900 picture in a 10px mat. It is as wide as the column allows while
+   it still fits the screen's height, and it stays centred on the middle line where each step's
+   text sits. */
 .tour-stage {
+  --w: min(100cqi, calc((100vh - 132px) * 768 / 900 + 20px));
+  --h: calc((var(--w) - 20px) * 900 / 768 + 20px);
   position: sticky;
-  top: 56px;
-  width: min(100%, calc((100vh - 132px) * 768 / 900 + 20px));
+  top: max(56px, calc((100vh - var(--h)) / 2));
+  width: var(--w);
   margin-left: auto;
 }
 
@@ -808,11 +731,17 @@ figcaption,
   margin: -6px 0 -6px -10px;
 }
 
-#engine .intro p:not(.eyebrow) {
+.engine-text {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
   font-size: 1rem;
+  line-height: 1.6;
+  color: var(--ink2);
 }
 
-#engine .intro strong {
+.engine-text strong {
   color: var(--ink);
   font-weight: 500;
 }
@@ -822,41 +751,6 @@ figcaption,
   gap: 8px 20px;
   flex-wrap: wrap;
   font-weight: 500;
-}
-
-.card {
-  background: var(--sheet);
-  border-radius: 10px;
-  box-shadow: 0 0 0 1px var(--rule);
-  padding: 24px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.spec {
-  display: grid;
-  grid-template-columns: minmax(0, 104px) minmax(0, 1fr);
-  gap: 9px 18px;
-  margin: 0;
-  line-height: 1.5;
-  color: var(--ink);
-}
-
-.spec dt {
-  color: var(--ink3);
-}
-
-.spec dd {
-  margin: 0;
-}
-
-.card-foot {
-  font-size: 0.8125rem;
-  line-height: 1.5;
-  color: var(--ink3);
-  border-top: 1px solid var(--rule);
-  padding-top: 12px;
 }
 
 /* Requirements */
@@ -1290,23 +1184,15 @@ figcaption,
     max-width: 640px;
   }
 
-  .phone-shot {
-    justify-self: start;
+  /* Without the still frame, the morning page step would repeat the picture at the top. */
+  .feature-shot.repeat {
+    display: none;
   }
 }
 
 @media (max-width: 640px) {
   :root {
     --gutter: 16px;
-  }
-
-  /* The whole window is too small to read on a phone. */
-  .frame-map {
-    display: none;
-  }
-
-  #app {
-    gap: 40px;
   }
 
   .feature {
@@ -1333,6 +1219,21 @@ figcaption,
     max-height: 560px;
     object-fit: cover;
     object-position: top;
+  }
+
+  .hero-shot figcaption {
+    margin-top: 0;
+  }
+
+  .hero-keep {
+    left: 12px;
+    right: 12px;
+    bottom: 40px;
+    width: auto;
+  }
+
+  .hero-keep img {
+    max-height: none;
   }
 
   .promises div {
