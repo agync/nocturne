@@ -1,0 +1,19 @@
+# Only what the image build reads. Everything else stays out of the build context.
+*
+!Cargo.toml
+!Cargo.lock
+!helpers.lock
+!lemonade.lock
+!crates/
+!src-tauri/
+!ui/
+!scripts/fetch-lemonade.sh
+!scripts/sha256.sh
+**/target/
+**/node_modules/
+src-tauri/gen/
+ui/dist/
+ui/dist-preview/
+ui/dist-server/
+ui/test-results/
+ui/playwright-report/

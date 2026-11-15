@@ -2,6 +2,7 @@
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models preview-real helpers-pin phone tailnet/test \
+	server/build server/image \
 	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
@@ -95,6 +96,16 @@ netcheck-remote: ## Run the built binary with Away from home on through a fake h
 
 netcheck-online: ## Run the built binary with Online answers on against a stand-in provider and judge its traffic
 	scripts/net-check.sh online binary
+
+# The experimental server and its container image. See docs/adr/0012-server-mode.md.
+IMAGE ?= localhost/nocturne:dev
+
+server/build: ui/node_modules ## Build the experimental server and its interface (ui/dist-server)
+	cd ui && npx vite build --mode server
+	cargo build --release -p nocturne-app --features server --bin nocturne-server
+
+server/image: ## Build the experimental server's container image with podman (IMAGE)
+	podman build --format docker --jobs 1 -f Containerfile -t $(IMAGE) .
 
 ##@ Real models
 
