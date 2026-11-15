@@ -34,8 +34,9 @@ The manifest builds three modules:
 2. `libayatana-appindicator`, the tray library Tauri loads at run time.
 3. `nocturne`: the interface (`npm ci --offline`, `npm run build`), the program
    (`cargo build --release --locked --offline --features custom-protocol`), the third-party
-   notices, and the pinned engine. The engine archive is the one `lemonade.lock` names, checked by
-   its sha256, and installed byte for byte into `/app/lib/Nocturne/lemonade/`: the module neither
+   notices, and the pinned engine. The engine archive is the one `lemonade.lock` names for the
+   architecture being built (the manifest lists both, each with `only-arches`), checked by its
+   sha256, and installed byte for byte into `/app/lib/Nocturne/lemonade/`: the module neither
    strips nor splits debug information. The program finds it there the same way the deb does,
    because Tauri's resource folder for `/app/bin/nocturne` is `/app/lib/Nocturne`.
 
@@ -145,16 +146,20 @@ Its jobs:
    pointing at it. Every later job checks out that commit.
 2. `sources` generates the offline sources and hands them on as an artefact.
 3. `build` runs AetherPak's build (with `flatpak-builder-lint`) in the AetherPak builder
-   container, which is privileged and pinned by digest. It sees no secret and cannot push. When
-   publishing, it hands the unsigned repository on as an artefact and turns the build cache off.
+   container, which is privileged and pinned by digest, once for x86_64 on `ubuntu-24.04` and once
+   for aarch64 natively on `ubuntu-24.04-arm`. The digest is a multi-architecture index, so the
+   same pin runs on both. It sees no secret and cannot push. When publishing, it hands the
+   unsigned repository on as an artefact and turns the build cache off.
    It still uses the AetherPak build action, whose own setup and cache actions are not pinned;
    that is acceptable only because nothing secret is reachable from this job.
 4. `publish`, when publishing, runs in the `release-signing` environment without privileges. It
    fails if the key is empty, then signs the images and pushes them with the AetherPak
-   `publish-oci` action, pinned to the same commit as the build action.
-5. `site` runs in `release-signing`. It merges the records with the index live at
-   `https://flatpak.nocturne.is`, signs it with the AetherPak `publish-site` action and hands the
-   site on as an artefact.
+   `publish-oci` action, pinned to the same commit as the build action. It runs once per
+   architecture, each writing its own record; both run on x86_64, because a push only copies the
+   built repository into the registry.
+5. `site` runs in `release-signing`. It merges the records of both architectures with the index
+   live at `https://flatpak.nocturne.is`, signs it with the AetherPak `publish-site` action and
+   hands the site on as an artefact.
 6. `deploy` publishes that artefact to GitHub Pages.
 
 A caller grants `contents: read`, `packages: write`, `pages: write` and `id-token: write`. The two
@@ -181,6 +186,5 @@ Before the first publish, a maintainer:
 - publishes the three screenshots the metainfo names under `https://nocturne.is/screenshots/`.
 
 > [!NOTE]
-> Owner decisions needed: the signing key, the GHCR package name,
-> and whether to build aarch64 too (the engine is pinned for it, the workflow builds x86_64 only).
+> Owner decisions needed: the signing key and the GHCR package name.
 > TODO(owner).
