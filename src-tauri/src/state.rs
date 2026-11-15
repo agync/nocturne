@@ -145,7 +145,7 @@ pub type ExitHook = Box<dyn Fn() + Send + Sync>;
 const MAX_CHOSEN: usize = 4096;
 
 fn canonical(p: &Path) -> PathBuf {
-    std::fs::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
+    dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
 fn blank_setup() -> SetupView {
@@ -174,7 +174,7 @@ pub fn resolve_data_dir(env_override: Option<String>, platform_default: PathBuf)
     // Symlinks and `..` are resolved once, so every path derived from it (the asset scope, the
     // checks that a file is inside) compares like with like.
     let _ = std::fs::create_dir_all(&dir);
-    std::fs::canonicalize(&dir).unwrap_or(dir)
+    dunce::canonicalize(&dir).unwrap_or(dir)
 }
 
 impl AppState {
@@ -551,13 +551,23 @@ mod tests {
         let default = tmp.path().join("default");
         let other = tmp.path().join("other");
         let chosen = resolve_data_dir(Some(other.to_string_lossy().into_owned()), default.clone());
-        assert_eq!(chosen, std::fs::canonicalize(&other).unwrap());
-        let default = std::fs::canonicalize(resolve_data_dir(None, default)).unwrap();
+        assert_eq!(chosen, dunce::canonicalize(&other).unwrap());
+        let default = dunce::canonicalize(resolve_data_dir(None, default)).unwrap();
         assert_eq!(
             resolve_data_dir(Some("  ".into()), default.clone()),
             default
         );
         assert_eq!(resolve_data_dir(None, default.clone()), default);
+    }
+
+    /// The data folder is joined, compared, shown and handed to the engine, so on Windows it must
+    /// not carry the verbatim prefix (`\\?\C:\...`) that plain paths never have.
+    #[test]
+    fn the_data_dir_is_a_plain_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let chosen = resolve_data_dir(None, tmp.path().join("data"));
+        assert!(chosen.is_absolute());
+        assert!(!chosen.to_string_lossy().starts_with(r"\\?\"), "{chosen:?}");
     }
 
     #[cfg(unix)]
@@ -570,7 +580,7 @@ mod tests {
         std::os::unix::fs::symlink(&real, &link).unwrap();
         let tricky = link.join("..").join("link");
         let got = resolve_data_dir(Some(tricky.to_string_lossy().into_owned()), PathBuf::new());
-        assert_eq!(got, std::fs::canonicalize(&real).unwrap());
+        assert_eq!(got, dunce::canonicalize(&real).unwrap());
     }
 
     #[test]

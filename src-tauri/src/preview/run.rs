@@ -27,7 +27,7 @@ pub fn claim(dir: &Path, marker: &str, text: &str) -> Result<PathBuf, String> {
         );
     }
     std::fs::write(&mark, text).map_err(|e| e.to_string())?;
-    dir.canonicalize().map_err(|e| e.to_string())
+    dunce::canonicalize(dir).map_err(|e| e.to_string())
 }
 
 /// The address other machines reach the server from, as an origin. Only `https://`, or plain

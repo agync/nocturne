@@ -69,9 +69,9 @@ pub async fn open_original<R: Runtime>(
             .ok_or_else(|| CommandError::not_found("this item has no original"))?;
         let originals = state.data_dir.join("store").join("originals");
         let inside = blocking_cmd(move || {
-            Ok(std::fs::canonicalize(&path)
+            Ok(dunce::canonicalize(&path)
                 .ok()
-                .filter(|p| std::fs::canonicalize(&originals).is_ok_and(|o| p.starts_with(o))))
+                .filter(|p| dunce::canonicalize(&originals).is_ok_and(|o| p.starts_with(o))))
         })
         .await?
         .ok_or_else(|| CommandError::not_found("the original is not there"))?;

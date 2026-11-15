@@ -262,7 +262,7 @@ fn disk_free(path: &Path) -> Option<u64> {
             return None;
         }
     }
-    let probe = probe.canonicalize().ok()?;
+    let probe = dunce::canonicalize(probe).ok()?;
     let disks = sysinfo::Disks::new_with_refreshed_list().ok()?;
     disks
         .iter()
@@ -1206,6 +1206,15 @@ impl Inner {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// On Windows a resolved path must not carry the verbatim prefix (`\\?\C:\...`), or it is
+    /// under no disk's mount point.
+    #[test]
+    fn the_free_space_of_a_folder_on_a_disk_is_known() {
+        let here = Path::new(env!("CARGO_MANIFEST_DIR"));
+        assert!(disk_free(here).is_some());
+        assert!(disk_free(&here.join("not-there-yet").join("models")).is_some());
+    }
 
     #[test]
     fn reads_the_engines_disk_message() {
