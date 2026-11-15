@@ -410,6 +410,8 @@ jobs:
       pages: write
       id-token: write
     uses: ./.github/workflows/flatpak.yml
+    # A called workflow's job reads its environment's secrets (the Flatpak key) only when inherited.
+    secrets: inherit
     with:
       ref: ${{ needs.plan.outputs.ref }}
       tag: ${{ needs.plan.outputs.tag }}
