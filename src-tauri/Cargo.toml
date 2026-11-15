@@ -79,7 +79,7 @@ tokio-util = { version = "0.7", default-features = false }
 # Away from home: the phone listener and the sealed channel. `sha2_10` is the 0.10 line that
 # `hkdf` 0.12 needs; the workspace `sha2` is 0.11.
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
-p256 = { version = "0.13", features = ["ecdh", "pkcs8"] }
+p256 = { version = "0.14", features = ["ecdh", "pkcs8"] }
 hkdf = "0.12"
 aes-gcm = "0.10.3"
 subtle = "2"
