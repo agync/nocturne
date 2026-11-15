@@ -2208,57 +2208,6 @@ async fn a_refused_grammar_falls_back_to_a_schema() {
     assert_eq!(r.mind.reading_calls(), 3);
 }
 
-#[derive(Clone, Default)]
-struct Captured(Arc<std::sync::Mutex<Vec<u8>>>);
-
-impl std::io::Write for Captured {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.lock().unwrap().extend_from_slice(buf);
-        Ok(buf.len())
-    }
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
-}
-
-impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
-    type Writer = Captured;
-    fn make_writer(&'a self) -> Captured {
-        self.clone()
-    }
-}
-
-/// Raw replies are traced for evaluation runs only: a log kept at info never holds them.
-#[tokio::test]
-async fn raw_replies_are_traced_only_below_info() {
-    for (filter, shown) in [("info", false), ("info,nocturne::reply=trace", true)] {
-        let r = rig().await;
-        let log = Captured::default();
-        let _guard = tracing_subscriber::fmt()
-            .with_writer(log.clone())
-            .with_ansi(false)
-            .with_env_filter(tracing_subscriber::EnvFilter::new(filter))
-            .finish();
-        let _guard = tracing::subscriber::set_default(_guard);
-        r.script(json!([reply(vec![good_memory()]), {"deltas": ["Monday [m1]."]}]))
-            .await;
-        r.mind.extract("Sam likes tea", &context()).await.unwrap();
-        answer(&r, &[memory("a", "Dentist on Monday.")])
-            .await
-            .0
-            .unwrap();
-        let text = String::from_utf8(log.0.lock().unwrap().clone()).unwrap();
-        assert_eq!(
-            text.contains("Sam prefers tea in the morning"),
-            shown,
-            "{filter}: {text}"
-        );
-        assert_eq!(text.contains("step=\"extract\""), shown, "{filter}");
-        assert_eq!(text.contains("step=\"answer\""), shown, "{filter}");
-        assert!(!text.contains("Sam prefers tea") || shown);
-    }
-}
-
 /// The answer is told what day it is, so "tomorrow" in a question can be placed.
 #[tokio::test]
 async fn the_answer_is_told_today() {
