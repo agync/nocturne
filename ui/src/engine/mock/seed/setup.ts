@@ -97,6 +97,14 @@ export const SETUP_SCENARIOS: Record<string, SetupView> = {
   installing: downloading({ phase: "installing", downloadedBytes: 8.4e9, etaSeconds: null }),
   failed: downloading({ phase: "failed", error: "engineFailed", etaSeconds: null }),
   failedQuietly: downloading({ phase: "failed", etaSeconds: null }),
+  engineDown: {
+    ...BASE,
+    phase: "failed",
+    error: "engineFailed",
+    detected: null,
+    chosen: null,
+    downloadedBytes: 0,
+  },
   tooBig: downloading({ phase: "paused", error: "notEnoughMemory" }),
 };
 
