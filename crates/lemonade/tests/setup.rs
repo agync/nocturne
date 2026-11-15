@@ -86,6 +86,21 @@ async fn wait_view(
     .unwrap_or_else(|_| panic!("view never matched; last: {:?}", rx.borrow().clone()))
 }
 
+/// Setup's look at what is installed, failing after twenty seconds.
+async fn check(setup: &Setup) -> SetupView {
+    tokio::time::timeout(Duration::from_secs(20), setup.check())
+        .await
+        .expect("setup looked at what is installed within twenty seconds")
+        .unwrap_or_else(|e| panic!("setup's look at what is installed failed: {e:?}"))
+}
+
+/// Setup's answer on whether a tier is installed, failing after twenty seconds.
+async fn installed_ready(setup: &Setup) -> Option<Tier> {
+    tokio::time::timeout(Duration::from_secs(20), setup.installed_ready())
+        .await
+        .expect("setup said within twenty seconds whether a tier is installed")
+}
+
 async fn raw(sup: &Supervisor, method: &str, path: &str, body: Value) -> Value {
     let http = reqwest::Client::new();
     for _ in 0..100 {
@@ -158,7 +173,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
         })
     };
 
-    let checked = rig.setup.check().await.unwrap();
+    let checked = check(&rig.setup).await;
     assert_eq!(checked.phase, SetupPhase::Choosing);
     assert_eq!(checked.detected, Some(Tier::Standard));
     assert_eq!(checked.ram_gib, 32);
@@ -237,7 +252,7 @@ async fn a_whole_setup_goes_checking_choosing_downloading_installing_done() {
     }
 
     let again = new_setup(&rig.sup, &rig.dirs, 32, &rig.ledger);
-    let view = again.check().await.unwrap();
+    let view = check(&again).await;
     assert_eq!(view.phase, SetupPhase::Done);
     assert_eq!(view.chosen, Some(Tier::Standard));
     rig.sup.shutdown().await.unwrap();
@@ -353,7 +368,7 @@ async fn a_full_disk_stops_with_how_much_more_is_needed() {
 async fn not_enough_free_space_is_reported_before_anything_downloads() {
     let free = tier::download_bytes(Tier::Small) - GIB;
     let rig = rig(&format!("free-bytes={free}"), 16).await;
-    let checked = rig.setup.check().await.unwrap();
+    let checked = check(&rig.setup).await;
     assert_eq!(checked.error, Some(SetupError::DiskFull));
     assert_eq!(checked.detected, Some(Tier::Unsupported));
     assert!(checked.options.iter().all(|o| !o.fits));
@@ -372,7 +387,7 @@ async fn not_enough_free_space_is_reported_before_anything_downloads() {
 #[tokio::test]
 async fn too_little_memory_is_reported() {
     let rig = rig("", 5).await;
-    let checked = rig.setup.check().await.unwrap();
+    let checked = check(&rig.setup).await;
     assert_eq!(checked.detected, Some(Tier::Unsupported));
     assert_eq!(checked.error, Some(SetupError::NotEnoughMemory));
     rig.setup.start(Tier::Tiny).await.unwrap();
@@ -385,7 +400,7 @@ async fn too_little_memory_is_reported() {
 #[tokio::test]
 async fn an_8_gb_computer_is_offered_the_tiny_tier() {
     let rig = rig("", 8).await;
-    let checked = rig.setup.check().await.unwrap();
+    let checked = check(&rig.setup).await;
     assert_eq!(checked.detected, Some(Tier::Tiny));
     assert_eq!(checked.error, None);
     let fitting: Vec<Tier> = checked
@@ -436,13 +451,13 @@ async fn a_restarted_engine_resumes_the_partial_download() {
     common::set_mode(&dirs, "download-ms=30000");
     let sup = Supervisor::start(dirs.clone(), sup_opts()).await.unwrap();
     let setup = new_setup(&sup, &dirs, 16, &ledger);
-    let checked = setup.check().await.unwrap();
+    let checked = check(&setup).await;
     assert_eq!(checked.phase, SetupPhase::Paused);
     assert_eq!(checked.chosen, Some(Tier::Small));
     let mut rx = setup.view();
     setup.resume().await.unwrap();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 10).await;
-    // The download of a model that was cut short, as the engine lists it once it is back.
+    // The download that was cut short, as the engine lists it once it is back.
     let mut listed = json!([]);
     let (name, kept_bytes, resumed) = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
@@ -498,7 +513,7 @@ async fn a_dropped_setup_leaves_the_engine_offline_and_a_new_one_carries_on() {
     wait_offline(&rig.sup).await;
 
     let second = new_setup(&rig.sup, &rig.dirs, 16, &rig.ledger);
-    let checked = second.check().await.unwrap();
+    let checked = check(&second).await;
     assert_eq!(checked.phase, SetupPhase::Paused);
     let mut rx = second.view();
     second.resume().await.unwrap();
@@ -593,11 +608,11 @@ async fn an_unfinished_change_of_tier_keeps_the_tier_that_works() {
         Some(Tier::Small),
         "still the working one"
     );
-    assert_eq!(rig.setup.installed_ready().await, Some(Tier::Small));
+    assert_eq!(installed_ready(&rig.setup).await, Some(Tier::Small));
 
     // A later launch finds the working tier, not a paused setup.
     let later = new_setup(&rig.sup, &rig.dirs, 64, &rig.ledger);
-    let view = later.check().await.unwrap();
+    let view = check(&later).await;
     assert_eq!(view.phase, SetupPhase::Done);
     assert_eq!(view.chosen, Some(Tier::Small));
     rig.sup.shutdown().await.unwrap();
@@ -660,7 +675,7 @@ async fn an_unfinished_change_of_tier_is_dropped_so_resume_does_not_aim_at_it() 
         },
     )
     .unwrap();
-    let view = rig.setup.check().await.unwrap();
+    let view = check(&rig.setup).await;
     assert_eq!(view.phase, SetupPhase::Done);
     assert_eq!(view.chosen, Some(Tier::Small));
     let record = nocturne_lemonade::record::read(&rig.dirs.config()).unwrap();
@@ -729,7 +744,7 @@ async fn a_download_that_stops_on_its_own_is_cleared_and_started_again_through_a
 async fn a_new_standard_setup_fetches_the_reranker_and_counts_its_size() {
     let rig = rig("download-ms=100", 32).await;
     let mut rx = rig.setup.view();
-    let offered = rig.setup.check().await.unwrap();
+    let offered = check(&rig.setup).await;
     let standard = offered
         .options
         .iter()
@@ -784,11 +799,11 @@ async fn a_standard_install_from_before_the_reranker_is_still_installed() {
     let pulls_before = requests_to(&rig.sup, "/v1/pull").await.len();
 
     let later = new_setup(&rig.sup, &rig.dirs, 32, &rig.ledger);
-    let view = later.check().await.unwrap();
+    let view = check(&later).await;
     assert_eq!(view.phase, SetupPhase::Done);
     assert_eq!(view.chosen, Some(Tier::Standard));
     assert_eq!(later.installed(), Some(Tier::Standard));
-    assert_eq!(later.installed_ready().await, Some(Tier::Standard));
+    assert_eq!(installed_ready(&later).await, Some(Tier::Standard));
     let pulls_after = requests_to(&rig.sup, "/v1/pull").await.len();
     assert_eq!(pulls_after, pulls_before, "checking fetches nothing");
     assert_eq!(rig.sup.admin().config().await.unwrap()["offline"], true);
