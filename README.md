@@ -33,7 +33,10 @@ Website: [nocturne.is](https://nocturne.is)
 - **Forgetting is reversible.** Things fade when unused and can be brought back. Deleting is a
   separate, explicit, confirmed action.
 - **Runs on an 8 GB computer.** Nocturne picks the largest set of models your memory and free disk
-  allow, down to a small one for 8 GB machines.
+  allow, down to a small one for 8 GB machines. No graphics card is needed: Macs with Apple silicon
+  and computers with AMD or Intel graphics built in run it on the chip and share the computer's
+  memory, an NVIDIA graphics card with 6 GB or more works too, and other computers run it on the
+  processor.
 - **No jargon.** The interface avoids words like model and token outside an advanced view.
 
 ## Install
