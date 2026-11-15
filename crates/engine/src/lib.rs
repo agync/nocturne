@@ -11,6 +11,7 @@
 
 mod admin;
 mod audio;
+mod backup;
 mod capture;
 mod clock;
 mod entity;
@@ -38,6 +39,10 @@ pub mod private;
 pub mod process;
 pub mod store;
 
+pub use backup::{
+    BACKUP_EXT, BackupRun, MIN_PASSPHRASE_CHARS, check_backup, probe_backup, store_has_data,
+    unpack_backup,
+};
 pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_title, trust_for};
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
@@ -124,6 +129,7 @@ impl Engine {
         // Files with no row (a crash between a commit and the removal, or a half-copied
         // original) are shredded, and a log that could not be truncated last time is retried.
         engine.sweep_orphan_files()?;
+        backup::remove_leftover_scratch(&engine.inner.dir);
         engine.retry_scrub()?;
         Ok(engine)
     }

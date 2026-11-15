@@ -75,3 +75,19 @@ pub(crate) fn create_private_file_new(path: &Path) -> std::io::Result<File> {
     }
     opts.open(path)
 }
+
+/// Overwrite and remove every file under a folder, then the folder itself. A missing folder is
+/// fine. Best effort: errors are ignored.
+pub(crate) fn shred_tree(path: &Path) {
+    if let Ok(entries) = std::fs::read_dir(path) {
+        for e in entries.flatten() {
+            let p = e.path();
+            if e.file_type().is_ok_and(|t| t.is_dir()) {
+                shred_tree(&p);
+            } else {
+                shred(&p);
+            }
+        }
+    }
+    let _ = std::fs::remove_dir(path);
+}

@@ -189,7 +189,7 @@ impl Engine {
         let ext = path
             .extension()
             .map(|e| e.to_string_lossy().to_lowercase())
-            .filter(|e| !e.is_empty());
+            .filter(|e| extension_ok(e));
         let file_name = path
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -827,6 +827,19 @@ fn pending(
             .collect::<rusqlite::Result<_>>()?,
     };
     Ok(rows)
+}
+
+/// Whether an extension can be appended to an original's name without becoming a path or a
+/// name another system refuses.
+pub(crate) fn extension_ok(ext: &str) -> bool {
+    !ext.is_empty()
+        && ext.len() <= 190
+        && ext != "."
+        && ext != ".."
+        && !ext.ends_with([' ', '.'])
+        && !ext.chars().any(|c| {
+            c.is_control() || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|')
+        })
 }
 
 /// Where an original lives: `originals/<sha256>.<ext>`.

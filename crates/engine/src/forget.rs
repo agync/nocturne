@@ -9,7 +9,7 @@
 //! write-ahead log is truncated so no trace stays in the store files.
 
 use std::collections::BTreeSet;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use nocturne_contract::{ForgetOriginal, ForgetPreview, ForgetReport, ForgetRow, PageView};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -28,6 +28,12 @@ use crate::util::{claim_hash, fmt_ts, new_id_hex, parse_enum, parse_ts};
 const TOKEN_MINUTES: i64 = 10;
 /// A keep can be undone for ten minutes.
 const UNKEEP_MINUTES: i64 = 10;
+
+/// SQL condition over `items i` that keeps only rows whose original no pending forget removes:
+/// an unkeep or a forget of the originals that names the item.
+pub(crate) const ORIGINALS_NOT_IN_FORGET: &str = "NOT EXISTS (SELECT 1 FROM forget_jobs j \
+     WHERE (j.kind = 'unkeep' OR j.include_originals = 1) \
+     AND instr(j.items, '\"' || i.id || '\"') > 0)";
 
 /// The requested memories plus every earlier version they replaced or ended.
 fn closure(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
@@ -531,9 +537,7 @@ impl Engine {
                     append_job_files(tx, job, &doomed)?;
                     Ok(doomed)
                 })?;
-                for f in doomed {
-                    fsutil::shred(&f);
-                }
+                shred_in(&dir, &doomed);
             }
         }
 
@@ -547,7 +551,7 @@ impl Engine {
             let paths: Vec<String> = serde_json::from_str(&files)?;
             Ok(paths.into_iter().map(PathBuf::from).collect())
         })?;
-        shred_all(recorded);
+        shred_in(&self.originals_dir(), &recorded);
         self.write(|tx| {
             // Nothing filed under a thing, nothing left of it. One merged into another stays
             // for as long as the one it was merged into does, so the merge can be taken back.
@@ -616,6 +620,28 @@ fn forget_in_pages(tx: &Transaction<'_>, kept_at: &str, was_pending: bool) -> Re
         )?;
     }
     Ok(())
+}
+
+/// Shred only files inside `dir`; a path from a job row can never reach outside it.
+fn shred_in(dir: &Path, files: &[PathBuf]) {
+    let Ok(root) = dunce::canonicalize(dir) else {
+        return;
+    };
+    for file in files {
+        let target = match dunce::canonicalize(file) {
+            Ok(path) => path,
+            Err(_) => match (file.parent(), file.file_name()) {
+                (Some(parent), Some(name)) => match dunce::canonicalize(parent) {
+                    Ok(parent) => parent.join(name),
+                    Err(_) => continue,
+                },
+                _ => continue,
+            },
+        };
+        if target.starts_with(&root) && target != root {
+            fsutil::shred(file);
+        }
+    }
 }
 
 /// Remember files a forget must shred, in the same transaction that makes them unreachable.

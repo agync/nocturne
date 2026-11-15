@@ -22,6 +22,9 @@ tracing.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 getrandom = "0.3"
 unicode-normalization = "0.1"
+age = "0.12.1"
+dunce.workspace = true
+tar = "0.4"
 
 [dev-dependencies]
 nocturne-engine = { workspace = true, features = ["fake"] }
