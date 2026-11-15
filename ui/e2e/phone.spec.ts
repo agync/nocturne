@@ -2,9 +2,9 @@ import { createHash } from "node:crypto";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { gzipSync } from "node:zlib";
-import AxeBuilder from "@axe-core/playwright";
 import { test as base, expect, type Page } from "@playwright/test";
 import { build, preview } from "vite";
+import { runAxe } from "./axe";
 
 // The phone app at its own viewport, built with the scripted engine (no computer, no network)
 // and served by Vite's preview with the phone's own policy, so anything the real page would
@@ -119,7 +119,7 @@ const SCENARIOS: Array<[string, string]> = [
 ];
 
 async function axeClean(page: Page) {
-  const result = await new AxeBuilder({ page }).analyze();
+  const result = await runAxe(page);
   expect(
     result.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`),
   ).toEqual([]);

@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
 
@@ -180,9 +180,9 @@ for (const scheme of ["light", "dark"] as const) {
     const page = await context.newPage();
     for (const hash of ["#/today", ...VARIANTS.map((v) => v[1])]) {
       await ready(page, hash);
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-        .analyze();
+      const results = await runAxe(page, (b) =>
+        b.withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]),
+      );
       expect(
         results.violations.map(
           (v) => `${hash} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
@@ -199,9 +199,9 @@ test("axe passes on today after the page has been used", async ({ page }) => {
   await page.getByRole("button", { name: /Thursday 19 Nov/ }).click();
   await page.getByRole("button", { name: "Yes" }).click();
   await page.getByRole("button", { name: "Bring back" }).first().click();
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
+  const results = await runAxe(page, (b) =>
+    b.withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]),
+  );
   expect(results.violations.map((v) => v.id)).toEqual([]);
 });
 

@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
@@ -12,7 +12,7 @@ const open = async (page: Page, path: string, scenario = "off", check = 150) => 
 };
 
 const axe = async (page: Page) =>
-  (await new AxeBuilder({ page }).withTags(TAGS).analyze()).violations.map(
+  (await runAxe(page, (b) => b.withTags(TAGS))).violations.map(
     (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
   );
 

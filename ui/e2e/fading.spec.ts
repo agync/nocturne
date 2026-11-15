@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
@@ -58,12 +58,12 @@ for (const scheme of ["light", "dark"] as const) {
     });
     const page = await context.newPage();
     await ready(page);
-    let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    let results = await runAxe(page, (b) => b.withTags(TAGS));
     expect(results.violations.map((v) => v.id)).toEqual([]);
     await page
       .getByRole("checkbox", { name: "The old gym door code is 4821." })
       .check({ force: true });
-    results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    results = await runAxe(page, (b) => b.withTags(TAGS));
     expect(results.violations.map((v) => v.id)).toEqual([]);
     await context.close();
   });
