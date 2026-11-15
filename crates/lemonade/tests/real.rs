@@ -13,7 +13,6 @@ use std::time::Duration;
 
 use nocturne_lemonade::client::BackendState;
 use nocturne_lemonade::{RuntimeState, Supervisor, SupervisorOptions, tier};
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 fn bundle() -> PathBuf {
     let given = PathBuf::from(
@@ -144,6 +143,7 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
 #[tokio::test]
 #[ignore = "needs NOCTURNE_LEMOND"]
 async fn the_real_engine_exits_when_its_owner_is_killed() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
     let tmp = tempfile::tempdir().unwrap();
     let mut host = tokio::process::Command::new(env!("CARGO_BIN_EXE_supervisor-host"))
         .arg(bundle())

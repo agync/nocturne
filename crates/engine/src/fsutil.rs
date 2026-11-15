@@ -68,13 +68,16 @@ pub(crate) fn shred(path: &Path) {
 /// Create one new directory, owner-only. Fails if the name exists in any form, a symlink
 /// included, so nothing already there is followed or reused.
 pub(crate) fn create_private_dir_new(path: &Path) -> std::io::Result<()> {
-    let mut b = std::fs::DirBuilder::new();
     #[cfg(unix)]
-    {
+    let builder = {
         use std::os::unix::fs::DirBuilderExt;
+        let mut b = std::fs::DirBuilder::new();
         b.mode(0o700);
-    }
-    b.create(path)
+        b
+    };
+    #[cfg(not(unix))]
+    let builder = std::fs::DirBuilder::new();
+    builder.create(path)
 }
 
 /// Create one new file, owner-only, failing if the name exists (`O_CREAT | O_EXCL`, which does
