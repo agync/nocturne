@@ -6,7 +6,7 @@ import { Progress } from "../../components/Progress/Progress";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, formatEta } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { SetupView, Tier } from "../../engine/bindings";
+import type { SetupView } from "../../engine/bindings";
 import { useEngine, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { Defaults } from "./Defaults";
@@ -74,13 +74,17 @@ export function GettingReady({ view }: { view: SetupView }) {
   };
 
   const retry = () =>
-    run(() =>
-      view.phase === "failed" &&
-      (view.chosen ?? view.detected) &&
-      (view.chosen ?? view.detected) !== "unsupported"
-        ? engine.startSetup((view.chosen ?? view.detected) as Tier)
-        : engine.resumeSetup(),
-    );
+    run(async () => {
+      const tier = view.chosen ?? view.detected;
+      // An engine that stopped is started again first; a running one is left alone. On a first
+      // run it then looks at the computer and offers the choice by itself.
+      if (view.error === "engineFailed") await engine.retryEngine();
+      if (view.phase === "failed" && tier && tier !== "unsupported") {
+        await engine.startSetup(tier);
+      } else if (view.error !== "engineFailed") {
+        await engine.resumeSetup();
+      }
+    });
 
   const pickFiles = async () => {
     const paths = await platform.pickFiles();

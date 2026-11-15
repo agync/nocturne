@@ -103,8 +103,9 @@ pub fn find_bundle<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
         .find(|dir| bundle::locate(dir).is_ok())
 }
 
-/// Start the private engine and everything that follows from it. Quietly does nothing when
-/// there is no bundle (a development checkout that has not fetched one).
+/// Start the private engine and everything that follows from it. With no bundle (a development
+/// checkout that has not fetched one, or an engine a virus scanner took away) setup says it
+/// failed instead of checking forever; its "Try again" looks again.
 pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     let state = app.state::<AppState>();
     let bundle = match &services.opts.bundle {
@@ -114,7 +115,8 @@ pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Servic
         Bundle::At(dir) => Some(dir.clone()),
     };
     let Some(bundle) = bundle else {
-        tracing::info!("no private engine bundle was found; the mind stays away");
+        tracing::warn!("no private engine bundle was found");
+        setup_failed(app);
         return;
     };
     let dirs = Dirs::new(bundle, state.data_dir.join("engine"));
@@ -396,11 +398,7 @@ async fn gave_up<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     let state = app.state::<AppState>();
     state.mind.set_loading(false);
     set_mind(app, None).await;
-    // Setup is not "done" while there is nothing to read with.
-    let mut view = state.get_setup();
-    view.phase = SetupPhase::Failed;
-    view.error = Some(SetupError::EngineFailed);
-    publish_setup(app, view);
+    setup_failed(app);
     state.status.add_notice(Notice {
         id: RESTARTS_NOTICE.to_string(),
         code: NoticeCode::Restarts,
@@ -410,6 +408,14 @@ async fn gave_up<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>) {
     });
     refresh_status(app).await;
     retry_later(app, services);
+}
+
+/// Setup is not "done" while there is nothing to read with.
+fn setup_failed<R: Runtime>(app: &AppHandle<R>) {
+    let mut view = app.state::<AppState>().get_setup();
+    view.phase = SetupPhase::Failed;
+    view.error = Some(SetupError::EngineFailed);
+    publish_setup(app, view);
 }
 
 /// Start the engine again after `retry_after`, once at a time.

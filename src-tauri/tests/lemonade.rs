@@ -340,6 +340,24 @@ fn a_fresh_install_offers_a_choice_and_setup_fills_the_slot() {
     assert!(lab.h.engine().ledger().unwrap().len() >= 4);
 }
 
+/// On a first run an engine that will not start leaves setup failed, not checking forever, and
+/// "Try again" starts it and offers the choice.
+#[test]
+fn a_first_run_whose_engine_will_not_start_can_try_again() {
+    let lab = lab(Plan {
+        restart_limit: 1,
+        ..Plan::new("fail-bind")
+    });
+    wait_for("setup to fail", || lab.setup_phase() == "failed");
+    let setup = lab.h.ok("get_setup", json!({}));
+    assert_eq!(setup["error"], "engineFailed", "{setup}");
+    assert_eq!(setup["chosen"], Value::Null, "{setup}");
+
+    set_mode(&lab.h.dir.path().join("engine"), "");
+    lab.h.ok("retry_engine", json!({}));
+    wait_for("the choice", || lab.setup_phase() == "choosing");
+}
+
 #[test]
 fn setup_can_be_paused_and_resumed() {
     let lab = lab(Plan::new("download-ms=1500"));

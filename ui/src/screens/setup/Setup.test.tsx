@@ -348,6 +348,18 @@ describe("getting ready", () => {
     expect(spy).toHaveBeenCalledWith("standard");
   });
 
+  it("starts the engine again when it never started on a first run", async () => {
+    const { engine } = await open("engineDown");
+    expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t finish getting ready");
+    const retry = vi.spyOn(engine, "retryEngine");
+    const start = vi.spyOn(engine, "startSetup");
+    const resume = vi.spyOn(engine, "resumeSetup");
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledOnce();
+    expect(start).not.toHaveBeenCalled();
+    expect(resume).not.toHaveBeenCalled();
+  });
+
   it("offers Try again for a failed setup even when the engine gave no reason", async () => {
     const { engine } = await open("failedQuietly");
     expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t finish getting ready");
