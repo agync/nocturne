@@ -3048,7 +3048,7 @@ version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "futures-util",
  "getrandom 0.3.4",
  "hkdf",
@@ -3160,7 +3160,7 @@ name = "nocturne-lemonade"
 version = "0.1.0"
 dependencies = [
  "axum",
- "base64 0.22.1",
+ "base64 0.23.1",
  "bytes",
  "futures-util",
  "getrandom 0.3.4",
