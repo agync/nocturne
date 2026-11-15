@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::Path;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -69,6 +69,8 @@ struct Shared {
     activity: std::sync::Mutex<HashMap<String, Activity>>,
     alone: RwLock<Vec<String>>,
     saved: RwLock<HashMap<String, serde_json::Map<String, Value>>>,
+    /// Whether `system_info` adds the graphics the engine does not report (see `graphics`).
+    host_graphics: AtomicBool,
 }
 
 /// When a model was last asked for something, and how many requests it is serving now.
@@ -181,7 +183,18 @@ impl Client {
                 activity: std::sync::Mutex::new(HashMap::new()),
                 alone: RwLock::new(Vec::new()),
                 saved: RwLock::new(HashMap::new()),
+                host_graphics: AtomicBool::new(false),
             }),
+        }
+    }
+
+    /// Makes `system_info` look at this computer for the graphics the engine does not report.
+    /// The app turns it on; tests leave it off so a result never depends on the machine.
+    pub fn use_host_graphics(&self) {
+        self.shared.host_graphics.store(true, Ordering::SeqCst);
+        // The first look may start a process; it is not made on a request's own thread.
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn_blocking(crate::graphics::intel_gpus);
         }
     }
 
@@ -446,11 +459,49 @@ pub struct Npu {
 pub struct Devices {
     #[serde(default)]
     pub amd_gpu: Vec<Gpu>,
+    /// NVIDIA's graphics. With none, the engine lists one entry that is not available.
+    #[serde(default)]
+    pub nvidia_gpu: Vec<Gpu>,
+    /// Intel's graphics. The pinned engine has no such entry; `graphics` fills it in from the
+    /// computer, and an engine that adds one is read the same way.
+    #[serde(default)]
+    pub intel_gpu: Vec<Gpu>,
     #[serde(default)]
     pub amd_npu: Option<Npu>,
     /// Apple's graphics, on a Mac.
     #[serde(default)]
     pub metal: Option<Gpu>,
+}
+
+impl Devices {
+    /// Fills in Intel's graphics from `found` unless the engine listed some itself.
+    pub(crate) fn add_intel(&mut self, found: impl FnOnce() -> Vec<Gpu>) {
+        if self.intel_gpu.is_empty() {
+            self.intel_gpu = found();
+        }
+    }
+
+    /// Graphics of any maker are here and usable, apart from Apple's.
+    pub fn has_graphics(&self) -> bool {
+        [&self.amd_gpu, &self.nvidia_gpu, &self.intel_gpu]
+            .into_iter()
+            .flatten()
+            .any(|g| g.available)
+    }
+
+    /// The largest memory a graphics card of its own has, in bytes: integrated graphics share
+    /// the computer's memory and count for none.
+    pub fn largest_pool(&self) -> u64 {
+        let discrete = |g: &&Gpu| g.available && !g.integrated;
+        self.amd_gpu
+            .iter()
+            .filter(discrete)
+            .chain(self.nvidia_gpu.iter().filter(discrete))
+            .chain(self.intel_gpu.iter().filter(discrete))
+            .map(|g| (g.vram_gb * 1e9) as u64)
+            .max()
+            .unwrap_or(0)
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
@@ -789,7 +840,12 @@ const AUDIO_TIMEOUT: Duration = Duration::from_secs(4 * 3600);
 
 impl Client {
     pub async fn system_info(&self) -> Result<SystemInfo, RuntimeError> {
-        Self::json(self.request(Method::GET, "/v1/system-info")?).await
+        let mut info: SystemInfo =
+            Self::json(self.request(Method::GET, "/v1/system-info")?).await?;
+        if self.shared.host_graphics.load(Ordering::SeqCst) {
+            info.devices.add_intel(crate::graphics::intel_gpus);
+        }
+        Ok(info)
     }
 
     /// Every model in the catalogue, downloaded or not.
@@ -1415,6 +1471,29 @@ pub(crate) fn map_status(status: u16, body: &str) -> RuntimeError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn intel_graphics_from_the_computer_never_replace_the_engines_own() {
+        let found = || {
+            vec![Gpu {
+                available: true,
+                ..Gpu::default()
+            }]
+        };
+        let mut none = Devices::default();
+        none.add_intel(found);
+        assert_eq!(none.intel_gpu.len(), 1);
+        assert!(none.has_graphics());
+        let mut reported = Devices {
+            intel_gpu: vec![Gpu {
+                name: "from the engine".into(),
+                ..Gpu::default()
+            }],
+            ..Devices::default()
+        };
+        reported.add_intel(|| panic!("the engine already listed Intel graphics"));
+        assert_eq!(reported.intel_gpu[0].name, "from the engine");
+    }
+
     use super::*;
 
     fn body(code: &str, message: &str) -> String {

@@ -150,6 +150,7 @@ pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Servic
 /// fill the slot.
 async fn adopt<R: Runtime>(app: &AppHandle<R>, services: &Arc<Services>, supervisor: Supervisor) {
     let state = app.state::<AppState>();
+    supervisor.client().use_host_graphics();
     let ledger = state.engine().ok();
     let setup = Arc::new(Setup::with_options(
         &supervisor,
