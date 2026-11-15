@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Restore from a backup · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Privacy" data-states="choose passphrase wrong newer damaged checking confirm ready noroom">
+<div id="content" class="sheet">
+  <a class="back" href="#"><span aria-hidden="true">←</span>Privacy</a>
+  <div class="columns">
+    <div class="main">
+      <h1 class="stepTitle" tabindex="-1" data-state="choose passphrase wrong newer damaged">Restore from a backup</h1>
+      <h1 class="stepTitle" tabindex="-1" data-state="checking noroom">Checking the backup</h1>
+      <h1 class="stepTitle" tabindex="-1" data-state="confirm">Replace what’s on this computer?</h1>
+      <h1 class="stepTitle" tabindex="-1" data-state="ready">Ready to restore</h1>
+
+      <p class="lead" data-state="choose passphrase wrong newer damaged">Bring back everything from a Nocturne backup file. Nothing on this computer changes until you say so.</p>
+
+      <div class="footer" data-state="choose">
+        <button class="button" data-variant="primary">Choose backup file…</button>
+        <button class="button" data-variant="quiet">Cancel</button>
+      </div>
+
+      <!-- A file is chosen -->
+      <div class="fileRow" data-state="passphrase wrong newer damaged">
+        <span class="text"><strong>Nocturne backup 2026-11-15.nocturne</strong><span class="mono">4.3 GB · Backup Drive</span></span>
+        <button class="button" data-variant="quiet">Choose another…</button>
+      </div>
+
+      <div class="fields" data-state="passphrase wrong">
+        <div class="field" data-state="passphrase">
+          <label class="fieldLabel" for="pw">Passphrase for this backup</label>
+          <input class="input" id="pw" type="password" value="lantern-orchard" data-focus>
+        </div>
+        <div class="field" data-invalid data-state="wrong">
+          <label class="fieldLabel" for="pw2">Passphrase for this backup</label>
+          <input class="input" id="pw2" type="password" value="lantern-orchid-tuesday">
+          <span class="error" role="alert">That passphrase doesn’t open this backup. Check capital letters, and try again.</span>
+        </div>
+        <label class="check" style="margin-top: calc(-1 * var(--s-2))"><span class="box"></span>Show passphrase</label>
+      </div>
+      <div class="footer" data-state="passphrase wrong">
+        <button class="button" data-variant="primary">Open backup</button>
+        <button class="button" data-variant="quiet">Cancel</button>
+      </div>
+
+      <div class="result" role="alert" data-state="newer">
+        <p class="resultTitle">This backup is from a newer Nocturne</p>
+        <p>It was made with Nocturne 0.4.0, and this computer has 0.2.2. Update Nocturne on this computer, then try again. Nothing was changed.</p>
+        <div class="buttons"><button class="button" data-variant="secondary">Choose another file…</button></div>
+      </div>
+
+      <div class="result" data-kind="bad" role="alert" data-state="damaged">
+        <p class="resultTitle">This file can’t be restored</p>
+        <p>It isn’t a Nocturne backup, or it’s damaged. Nothing was changed. If you have another copy, try that one.</p>
+        <div class="buttons"><button class="button" data-variant="secondary">Choose another file…</button></div>
+      </div>
+
+      <!-- Checking -->
+      <div class="progress" data-state="checking">
+        <div class="progressWords"><span>Checking</span><span class="progressDetail">2.2 of 4.3 GB · about 2 min left</span></div>
+        <div class="track" role="progressbar" aria-valuenow="51"><div class="fill" style="width: 51%"></div></div>
+      </div>
+      <p class="lead" data-state="checking">Nocturne reads the whole file first, so nothing changes unless all of it is there.</p>
+      <div class="footer" data-state="checking"><button class="button" data-variant="secondary">Stop</button></div>
+
+      <div class="result" data-kind="bad" role="alert" data-state="noroom">
+        <p class="resultTitle">There isn’t room to restore</p>
+        <p>This computer needs 4.6 GB free to restore this backup, and it has 2.9 GB. Free some space, then check again.</p>
+        <div class="buttons"><button class="button" data-variant="secondary">Check again</button><button class="button" data-variant="quiet">Cancel</button></div>
+      </div>
+
+      <!-- Confirm: this computer already holds memories -->
+      <p class="lead" data-state="confirm">Restoring puts what’s on this computer now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from Privacy.</p>
+      <div class="compare" data-state="confirm">
+        <section class="side" data-incoming>
+          <div class="sideHead"><span class="sideName">In the backup</span><span class="sideFate">Comes in</span></div>
+          <dl>
+            <div><dt>Made</dt><dd>12 Nov 2026</dd></div>
+            <div><dt>Memories</dt><dd>1,204</dd></div>
+            <div><dt>Pages</dt><dd>86</dd></div>
+            <div><dt>Originals</dt><dd>3,410</dd></div>
+          </dl>
+        </section>
+        <section class="side" data-aside>
+          <div class="sideHead"><span class="sideName">On this computer now</span><span class="sideFate">Put aside, not deleted</span></div>
+          <dl>
+            <div><dt>Last kept</dt><dd>Today</dd></div>
+            <div><dt>Memories</dt><dd>312</dd></div>
+            <div><dt>Pages</dt><dd>20</dd></div>
+            <div><dt>Originals</dt><dd>140</dd></div>
+            <div><dt>Kept after the backup</dt><dd>14</dd></div>
+          </dl>
+        </section>
+      </div>
+      <div class="footer" data-state="confirm">
+        <button class="button" data-variant="secondary">Keep what’s here</button>
+        <button class="button" data-variant="primary">Replace with the backup</button>
+      </div>
+
+      <!-- Ready: this computer is empty -->
+      <dl class="receipt" data-state="ready">
+        <div><dt>Backup made</dt><dd>12 Nov 2026</dd></div>
+        <div><dt>Holds</dt><dd>1,204 memories, 86 pages and 3,410 originals</dd></div>
+        <div><dt>Size</dt><dd>4.3 GB</dd></div>
+        <div><dt>Checked</dt><dd class="ticked"><span data-icon="check" data-size="16"></span>Everything is there.</dd></div>
+      </dl>
+      <div class="footer" data-state="ready">
+        <button class="button" data-variant="primary">Restore</button>
+        <button class="button" data-variant="quiet">Cancel</button>
+      </div>
+
+      <span class="more" data-state="choose passphrase"><span data-icon="chevron-right" data-size="16"></span>Advanced details</span>
+    </div>
+
+    <aside class="aside" data-state="choose passphrase wrong newer damaged checking noroom">
+      <p class="label">What restoring does</p>
+      <ul class="rules">
+        <li>Checks the whole backup before anything changes</li>
+        <li>Brings back what you kept, what Nocturne remembers, every page and your settings</li>
+        <li>Puts anything already here aside, so you can bring it back</li>
+      </ul>
+      <p class="label">Afterwards</p>
+      <ul class="rules out">
+        <li><strong>Online answers</strong> stay off until you paste the key for your provider again.</li>
+        <li><strong>Away from home</strong> stays off until you add your phones again.</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Restoring · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="window" data-states="restoring final quit restored">
+<section id="content" class="card" aria-busy="true">
+  <span data-mark="0.72" data-size="36" data-state="restoring final quit"></span>
+  <span data-mark="0.5" data-size="36" data-state="restored"></span>
+
+  <h1 class="stepTitle cardTitle" tabindex="-1" data-state="restoring final quit" style="margin-top: var(--s-4)">Restoring your memories</h1>
+  <h1 class="stepTitle cardTitle" tabindex="-1" data-state="restored" style="margin-top: var(--s-4)">Your memories are back.</h1>
+
+  <div class="progress" data-state="restoring quit" style="max-width: none; margin-top: var(--s-2)">
+    <div class="progressWords"><span>Restoring</span><span class="progressDetail">1.8 of 4.3 GB · about 2 min left</span></div>
+    <div class="track" role="progressbar" aria-valuenow="42"><div class="fill" style="width: 42%"></div></div>
+  </div>
+  <div class="progress" data-state="final" style="max-width: none; margin-top: var(--s-2)">
+    <div class="progressWords"><span class="working"><span class="breathe"></span>Almost done</span><span class="progressDetail">4.3 of 4.3 GB</span></div>
+    <div class="track" role="progressbar" aria-valuenow="100"><div class="fill" style="width: 100%"></div></div>
+  </div>
+  <p class="lead" data-state="restoring final quit">Keep Nocturne open until this finishes. If it closes, nothing on this computer changes and you can start again.</p>
+  <div class="cardFoot" data-state="restoring quit"><button class="button" data-variant="secondary">Stop</button></div>
+  <div class="cardFoot" data-state="final"><button class="button" data-variant="secondary" disabled aria-describedby="last">Stop</button><span class="small" id="last">Almost done. This last step can’t be stopped.</span></div>
+
+  <p class="lead" data-state="restored">1,204 memories, 86 pages and 3,410 originals from your backup of 12 Nov 2026.</p>
+  <dl class="dl" data-state="restored" style="margin-top: var(--s-2)">
+    <div><dt>Nocturne’s mind</dt><dd>Already on this computer. Nothing to do.</dd></div>
+    <div><dt>Online answers</dt><dd>Off until you paste the key for your provider again.<a href="#">Set up online answers</a></dd></div>
+    <div><dt>Away from home</dt><dd>Off. Add your phones again when you want them.<a href="#">Away from home settings</a></dd></div>
+    <div><dt>What was here before</dt><dd>Put aside 15 Nov. Bring it back any time from Privacy.</dd></div>
+  </dl>
+  <div class="cardFoot" data-state="restored"><button class="button" data-variant="primary">Open today’s page</button></div>
+</section>
+
+<div id="dialog" class="backdrop" data-state="quit">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="q">
+    <div class="panelHead"><h2 class="panelTitle" id="q">Stop restoring and quit?</h2><span class="close"><span data-icon="x" data-size="16"></span>Close</span></div>
+    <p>Nothing on this computer has changed yet. You can restore again later.</p>
+    <div class="buttons">
+      <button class="button" data-variant="secondary" style="outline: 2px solid var(--focus); outline-offset: 2px">Keep restoring</button>
+      <button class="button" data-variant="secondary">Quit anyway</button>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Make a backup · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Privacy" data-states="ready empty invalid noroom making checking stopped drive done quit">
+<div id="content" class="sheet">
+  <a class="back" href="#"><span aria-hidden="true">←</span>Privacy</a>
+  <div class="columns">
+    <div class="main">
+      <h1 class="stepTitle" tabindex="-1" data-state="ready empty invalid noroom stopped drive">Make a backup</h1>
+      <h1 class="stepTitle" tabindex="-1" data-state="making checking quit">Making your backup</h1>
+            <h1 class="stepTitle" tabindex="-1" data-state="done">Your backup is saved.</h1>
+
+      <p class="lead" data-state="ready empty invalid noroom stopped drive">One file with everything Nocturne holds, locked with a passphrase you choose.</p>
+
+      <!-- The form -->
+      <div class="fields" data-state="ready empty invalid noroom stopped drive">
+        <div class="field" data-state="ready empty noroom stopped drive">
+          <label class="fieldLabel" for="p1">Choose a passphrase</label>
+          <span class="hint">At least 8 characters. A few words that don’t go together are strong and easy to remember.</span>
+          <input class="input" id="p1" type="password" value="" data-state="empty" data-focus>
+          <input class="input" id="p1" type="password" value="lantern-orchard-tuesday-wool" data-state="ready noroom stopped drive">
+          <span class="strength" data-state="ready noroom stopped drive" aria-live="polite"><span class="marks" data-level="3" aria-hidden="true"><span></span><span></span><span></span></span>Strong.</span>
+        </div>
+        <div class="field" data-state="invalid">
+          <label class="fieldLabel" for="p1b">Choose a passphrase</label>
+          <span class="hint">At least 8 characters. A few words that don’t go together are strong and easy to remember.</span>
+          <input class="input" id="p1b" type="password" value="sunshine2">
+          <span class="strength" aria-live="polite"><span class="marks" data-level="1" aria-hidden="true"><span></span><span></span><span></span></span>Easy to guess. Three or four words that don’t go together are stronger.</span>
+        </div>
+        <div class="field" data-state="ready empty noroom stopped drive">
+          <label class="fieldLabel" for="p2">Type it again</label>
+          <input class="input" id="p2" type="password" value="" data-state="empty">
+          <input class="input" id="p2" type="password" value="lantern-orchard-tuesday-wool" data-state="ready noroom stopped drive">
+        </div>
+        <div class="field" data-invalid data-state="invalid">
+          <label class="fieldLabel" for="p2b">Type it again</label>
+          <input class="input" id="p2b" type="password" value="sunshine">
+          <span class="error" role="alert">The two passphrases don’t match.</span>
+        </div>
+        <label class="check" style="margin-top: calc(-1 * var(--s-2))"><span class="box"></span>Show passphrases</label>
+      </div>
+
+      <div class="note" data-state="ready empty invalid noroom stopped drive">
+        <span data-icon="lock" data-size="20"></span>
+        <div class="noteText">
+          <p class="noteTitle">Keep this passphrase safe</p>
+          <p>Nocturne doesn’t keep a copy. If the passphrase is lost, nobody can open this backup, not even Nocturne. Write it down and keep it somewhere safe, or save it in a password manager.</p>
+          <label class="check"><span class="box" data-state="ready noroom stopped drive" data-on></span><span class="box" data-state="empty invalid"></span>I’ve written it down or saved it somewhere safe</label>
+        </div>
+      </div>
+
+      <div class="result" data-kind="bad" role="alert" data-state="noroom">
+        <p class="resultTitle">There isn’t room there</p>
+        <p>The backup needs about 4.3 GB, and Backup Drive has 1.2 GB free. Choose another place, or free some space there.</p>
+        <div class="buttons"><button class="button" data-variant="secondary">Choose another place…</button></div>
+      </div>
+
+      <div class="result" role="status" data-state="stopped">
+        <p class="resultTitle">Stopped.</p>
+        <p>Nothing was saved, and nothing in Nocturne changed.</p>
+      </div>
+
+      <div class="result" data-kind="bad" role="alert" data-state="drive">
+        <p class="resultTitle">The backup stopped</p>
+        <p>The drive was disconnected before the backup finished, so it wasn’t saved. Nothing in Nocturne changed. Plug the drive back in and try again.</p>
+        <div class="buttons"><button class="button" data-variant="secondary">Try again</button><button class="button" data-variant="quiet">Choose another place…</button></div>
+      </div>
+
+      <div class="footer" data-state="ready invalid empty stopped">
+        <button class="button" data-variant="primary" data-state="ready stopped">Save backup…</button>
+        <button class="button" data-variant="primary" disabled data-state="empty invalid">Save backup…</button>
+        <button class="button" data-variant="quiet">Cancel</button>
+        <span class="footerHint" data-state="ready stopped">About 4.3 GB. Next, choose where to save it.</span>
+        <span class="footerHint" data-state="empty invalid">Choose a passphrase, type it again and tick the box to go on.</span>
+      </div>
+
+      <!-- Making -->
+      <div class="progress" data-state="making quit">
+        <div class="progressWords"><span>Saving</span><span class="progressDetail">1.6 of 4.3 GB · about 4 min left</span></div>
+        <div class="track" role="progressbar" aria-valuenow="37"><div class="fill" style="width: 37%"></div></div>
+      </div>
+      <div class="progress" data-state="checking">
+        <div class="progressWords"><span>Checking the backup</span><span class="progressDetail">3.9 of 4.3 GB · about 1 min left</span></div>
+        <div class="track" role="progressbar" aria-valuenow="90"><div class="fill" style="width: 90%"></div></div>
+      </div>
+      <p class="mono" data-state="making checking quit">Saving to Backup Drive/Nocturne backup 2026-11-15.nocturne</p>
+      <p class="lead" data-state="making checking quit">You can keep using Nocturne, or close this window. The backup carries on. Anything you keep from now on goes in your next backup.</p>
+      <p class="small" data-state="making checking quit">If you’re saving to a drive, leave it plugged in until this finishes.</p>
+      <div class="footer" data-state="making checking quit"><button class="button" data-variant="secondary">Stop</button></div>
+
+      <!-- Done -->
+      <dl class="receipt" data-state="done">
+        <div><dt>File</dt><dd class="fileName">Nocturne backup 2026-11-15.nocturne</dd></div>
+        <div><dt>Saved in</dt><dd class="mono" style="font-size: 0.8125rem; color: var(--ink)">Backup Drive/</dd></div>
+        <div><dt>Holds</dt><dd>4.3 GB · 1,204 memories, 86 pages and 3,410 originals</dd></div>
+        <div><dt>Checked</dt><dd class="ticked"><span data-icon="check" data-size="16"></span>It opens with your passphrase.</dd></div>
+      </dl>
+      <p class="lead" data-state="done">To use it on another computer, install Nocturne there and choose Restore from a backup. You’ll need the passphrase.</p>
+      <div class="footer" data-state="done">
+        <button class="button" data-variant="secondary">Show in folder</button>
+        <button class="button" data-variant="primary">Done</button>
+      </div>
+
+      <span class="more" data-state="ready"><span data-icon="chevron-right" data-size="16"></span>Advanced details</span>
+      <span class="more" data-state="done" aria-expanded="true"><span data-icon="chevron-down" data-size="16"></span>Advanced details</span>
+      <dl class="advanced" data-state="done">
+        <dt>file</dt><dd>Nocturne backup 2026-11-15.nocturne · written as .partial until complete</dd>
+        <dt>format</dt><dd>backup format 1 · data schema 1 · made by Nocturne 0.2.2 on 15 Nov 2026, 14:32</dd>
+        <dt>locking</dt><dd>{cipher}, key derived from the passphrase by {kdf}; the passphrase is never stored</dd>
+        <dt>contents</dt><dd>store 1.1 GB · originals 3.1 GB · pages 96 MB · settings 4 KB</dd>
+        <dt>checked</dt><dd>every part verified after writing</dd>
+        <dt>left out</dt><dd>engine/ (models) · online answers key · Away from home device keys · logs</dd>
+      </dl>
+    </div>
+
+    <aside class="aside" data-state="ready empty invalid noroom stopped drive">
+      <p class="label">In the backup</p>
+      <ul class="rules">
+        <li>Everything you kept, exactly as kept</li>
+        <li>What Nocturne remembers, including what’s fading</li>
+        <li>Every page</li>
+        <li>Your settings</li>
+        <li>Things you marked private, locked like everything else</li>
+      </ul>
+      <p class="label">Not in the backup</p>
+      <ul class="rules out">
+        <li><strong>Nocturne’s mind.</strong> A new computer downloads it again during setup.</li>
+        <li><strong>The key for your provider.</strong> You paste it in again when you turn on online answers.</li>
+        <li><strong>Phones you added.</strong> You add them again in Away from home.</li>
+      </ul>
+    </aside>
+    <aside class="aside" data-state="making checking quit">
+      <p class="label">Going in</p>
+      <ul class="rules">
+        <li>1,204 memories</li>
+        <li>86 pages</li>
+        <li>3,410 originals<small>Photos, recordings, notes and documents</small></li>
+        <li>Your settings</li>
+      </ul>
+    </aside>
+  </div>
+</div>
+
+<div id="dialog" class="backdrop" data-state="quit">
+  <div class="panel" role="dialog" aria-modal="true" aria-labelledby="q">
+    <div class="panelHead"><h2 class="panelTitle" id="q">Stop the backup and quit?</h2><span class="close"><span data-icon="x" data-size="16"></span>Close</span></div>
+    <p>Your backup is 37% done. If Nocturne quits now, it won’t be saved. You can make it again later.</p>
+    <div class="buttons">
+      <button class="button" data-variant="secondary" style="outline: 2px solid var(--focus); outline-offset: 2px">Keep backing up</button>
+      <button class="button" data-variant="secondary">Quit anyway</button>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>
