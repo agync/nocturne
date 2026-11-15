@@ -25,3 +25,12 @@ apps:
       exceptions:
         # The screenshots are on nocturne.is, which the offline build sandbox cannot fetch.
         - appstream-missing-screenshots
+
+# The repository page at flatpak.nocturne.is. The template is AetherPak's default restyled as
+# nocturne.is; see docs/contribution/flatpak.md.
+branding:
+  index_template: flatpak/site/index.html
+  logo_url: https://nocturne.is/apple-touch-icon.png
+  favicon_url: https://nocturne.is/favicon.svg
+  accent_color: "#2c4bcf"
+  footer_text: 'Nocturne · Apache 2.0 · Built with <a href="https://aetherpak.org/">AetherPak</a>'

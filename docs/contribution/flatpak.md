@@ -20,7 +20,8 @@ single-instance lock, and it cannot be a Flatpak id because an id may not end in
 | `flatpak/is.nocturne.Nocturne.yml` | The manifest: GNOME 51 runtime, the Rust and Node SDK extensions, three modules |
 | `flatpak/is.nocturne.Nocturne.desktop` | The desktop entry |
 | `flatpak/is.nocturne.Nocturne.metainfo.xml` | The AppStream description, with screenshots from nocturne.is |
-| `flatpak/aetherpak.yaml` | Where AetherPak pushes the images and how it names the repository |
+| `flatpak/aetherpak.yaml` | Where AetherPak pushes the images, how it names the repository and how its page looks |
+| `flatpak/site/index.html` | The repository page at `flatpak.nocturne.is` |
 | `flatpak/shared-modules/` | The tray library and intltool modules, copied unchanged from `flathub/shared-modules` at commit `c91a8110` |
 | `scripts/flatpak-sources.sh` | Writes the offline Cargo and npm sources into `flatpak/generated/` |
 | `scripts/check_flatpak.py` | The drift check `make check` runs through its tests |
@@ -116,6 +117,17 @@ the app as OCI images in GHCR (`ghcr.io/agync/nocturne-flatpak`) and writes a sm
 a `nocturne.flatpakrepo`, a `.flatpakref` per channel and a landing page under
 `https://flatpak.nocturne.is`. The remote is named `nocturne` and titled "Nocturne", so software
 centres show it under its own name.
+
+The landing page is `flatpak/site/index.html`, which `branding.index_template` in
+`aetherpak.yaml` names. It is AetherPak's default template restyled as nocturne.is: AetherPak
+fills in the channels, the install links, the commands and the key fingerprint when it builds the
+site, so the page uses only the template fields the pinned CLI (v0.34.0) provides. The fonts and
+icons load from `nocturne.is`, whose `_headers` lets this origin use the fonts. To preview it,
+build the CLI at that tag into a scratch folder and run
+`aetherpak preview --config flatpak/aetherpak.yaml` from the repository root. It serves the
+template with made-up apps but without the logo, icon, colour and footer; for those and for
+Nocturne's own channels, run `aetherpak build-site --config flatpak/aetherpak.yaml --landing-page
+--allow-unsigned --no-sign` against a small records folder and serve the result.
 
 The workflow runs by hand (`workflow_dispatch`) or from another workflow (`workflow_call`). It is
 never started by a push.
