@@ -324,6 +324,13 @@ impl Control {
         self.shared.online.load(Ordering::SeqCst)
     }
 
+    /// How many holders the download window has now, or `None` while one is opening or closing
+    /// it. For tests that report what a stuck wait was waiting on.
+    #[doc(hidden)]
+    pub fn download_holds(&self) -> Option<u32> {
+        self.shared.holds.try_lock().ok().map(|h| *h)
+    }
+
     /// Whether a route for Online answers is set for the launches outside the download window.
     pub fn has_cloud(&self) -> bool {
         self.shared
