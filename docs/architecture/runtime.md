@@ -250,7 +250,7 @@ setup:
 | Quick keep shortcut | `CommandOrControl+Shift+Space` by default. Not grabbed on a Wayland session, where a grab only fires with an X11 window focused; Settings offers a command for a desktop shortcut instead. A change registers the new one before dropping the old |
 | Quick capture | A small always-on-top window, made when asked and destroyed when closed. It may call only a short list of commands |
 | Notification | One quiet note when the page is ready, at most once per page date, never carrying anything the person kept |
-| Start with this computer | On Linux the app writes its own autostart entry (the plugin would start the running executable, which is a temporary mount in an AppImage); it passes `--hidden` |
+| Start with this computer | On Linux the app writes its own autostart entry (the plugin would start the running executable, which is a temporary mount in an AppImage); it passes `--hidden`. In a Flatpak the Background portal writes it |
 | Watched folder | Files that appear in a chosen folder are kept once, after they stop changing. The folder is only read. Links are never followed |
 | Editions | The spoken page (`src-tauri/src/editions`) and the print view of the page |
 

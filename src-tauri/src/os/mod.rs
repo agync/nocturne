@@ -13,6 +13,8 @@ pub mod autostart;
 pub mod copy;
 pub mod inbox;
 pub mod notify;
+#[cfg(target_os = "linux")]
+pub mod portal;
 pub mod quick_capture;
 pub mod sandbox;
 pub mod shortcut;
@@ -65,14 +67,26 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         shortcut::install(&os, &settings.shortcut, shortcut::session_allows_grab_now());
     }
+    #[cfg(target_os = "linux")]
+    if sandbox::flatpak_app_id_now().is_some() {
+        os.set_autostart_portal(portal::Bus::session());
+    }
     #[cfg(not(windows))]
-    if let Some(target) = autostart::Target::from_env() {
+    if sandbox::flatpak_app_id_now().is_none()
+        && let Some(target) = autostart::Target::from_env()
+    {
         os.set_autostart(target);
     }
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
-        match set_start_at_login(app, &os, settings.start_at_login) {
-            Ok(()) => tracing::info!("start with this computer: {}", settings.start_at_login),
-            Err(e) => tracing::warn!("start with this computer could not be reconciled: {e}"),
+        #[cfg(target_os = "linux")]
+        if let Some(bus) = os.autostart_portal() {
+            tell_portal_once(app, bus, settings.start_at_login);
+        }
+        if sandbox::flatpak_app_id_now().is_none() {
+            match set_start_at_login(app, &os, settings.start_at_login) {
+                Ok(()) => tracing::info!("start with this computer: {}", settings.start_at_login),
+                Err(e) => tracing::warn!("start with this computer could not be reconciled: {e}"),
+            }
         }
     }
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
@@ -166,6 +180,61 @@ fn set_start_at_login<R: Runtime>(
     }
 }
 
+/// Inside a Flatpak the Background portal writes the entry, which runs the app through
+/// `flatpak run`: the sandbox cannot reach the folder the desktop reads.
+#[cfg(target_os = "linux")]
+async fn start_at_login_by_portal(bus: &portal::Bus, want: bool) -> Result<(), portal::Failed> {
+    let exe = std::env::current_exe().unwrap_or_else(|_| "nocturne".into());
+    let exe = exe.to_string_lossy();
+    let conn = bus.connect().await.map_err(portal::Failed::silent)?;
+    portal::autostart(&conn, want, &[&exe, "--hidden"]).await
+}
+
+/// A version before the portal wrote the entry inside the sandbox, where it never ran, yet the
+/// saved setting says on. The portal is asked until the desktop gives an answer, yes or no, at
+/// the first start with it on; after that the portal holds the entry and nothing is asked at
+/// start. When the setting is off but the portal was told it is on (a removal that did not get
+/// through, for one), the portal is asked to remove the entry.
+#[cfg(target_os = "linux")]
+fn tell_portal_once<R: Runtime>(app: &AppHandle<R>, bus: portal::Bus, want: bool) {
+    let Some(os) = app.try_state::<OsState>() else {
+        return;
+    };
+    let told = os.file().autostart_by_portal;
+    if want == told {
+        if want {
+            tracing::info!("start with this computer: left to the desktop");
+        }
+        return;
+    }
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let result = start_at_login_by_portal(&bus, want).await;
+        let settled = result.is_ok() || result.as_ref().is_err_and(|e| e.answered);
+        if let Err(e) = &result {
+            tracing::warn!("start with this computer could not be handed over: {e}");
+        }
+        if settled && let Some(os) = app.try_state::<OsState>() {
+            os.update(|f| f.autostart_by_portal = want);
+        }
+    });
+}
+
+/// [`set_start_at_login`], or the Background portal inside a Flatpak.
+async fn change_start_at_login<R: Runtime>(
+    app: &AppHandle<R>,
+    os: &OsState,
+    want: bool,
+) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    if let Some(bus) = os.autostart_portal() {
+        start_at_login_by_portal(&bus, want).await?;
+        os.update(|f| f.autostart_by_portal = want);
+        return Ok(());
+    }
+    set_start_at_login(app, os, want)
+}
+
 /// Whether the desktop will start the app at login, or `None` when it cannot tell.
 fn start_at_login_now<R: Runtime>(app: &AppHandle<R>, os: &OsState) -> Option<bool> {
     #[cfg(windows)]
@@ -214,7 +283,7 @@ pub async fn apply_settings<R: Runtime>(
         change_inbox(app, &os, folder).await?;
     }
     if let Some(want) = patch.start_at_login {
-        set_start_at_login(app, &os, want).map_err(|e| {
+        change_start_at_login(app, &os, want).await.map_err(|e| {
             tracing::warn!("start with this computer was not changed: {e}");
             // The one refusal the person can act on keeps its reason, for the settings screen.
             if e == autostart::MOVE_FIRST {
@@ -280,16 +349,41 @@ pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     let Some(os) = app.try_state::<OsState>() else {
         return;
     };
+    let told_portal = os.file().autostart_by_portal;
     os.forget_all();
     webview::remove(&os.webview_dirs());
-    if let Err(e) = set_start_at_login(app, &os, false) {
-        tracing::warn!("start with this computer could not be switched off: {e}");
-    }
+    switch_off_start_at_login(app, &os, told_portal);
     if let Err(e) = shortcut::change(&os, shortcut::DEFAULT) {
         tracing::warn!(
             "the shortcut could not be put back to its default: {:?}",
             e.code
         );
+    }
+}
+
+/// Switch start at login off. The portal is asked only when it was told before, so a delete
+/// does not raise a question from the desktop; its answer is not waited for. When the removal
+/// does not get through, the portal still counts as told, and the next start asks it again.
+#[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+fn switch_off_start_at_login<R: Runtime>(app: &AppHandle<R>, os: &OsState, told_portal: bool) {
+    #[cfg(target_os = "linux")]
+    if let Some(bus) = os.autostart_portal() {
+        if !told_portal {
+            return;
+        }
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(e) = start_at_login_by_portal(&bus, false).await {
+                tracing::warn!("start with this computer could not be switched off: {e}");
+                if let Some(os) = app.try_state::<OsState>() {
+                    os.update(|f| f.autostart_by_portal = true);
+                }
+            }
+        });
+        return;
+    }
+    if let Err(e) = set_start_at_login(app, os, false) {
+        tracing::warn!("start with this computer could not be switched off: {e}");
     }
 }
 
