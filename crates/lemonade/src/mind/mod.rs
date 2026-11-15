@@ -29,7 +29,7 @@ use tokio::sync::{Mutex, mpsc};
 
 use crate::client::{ChatRequest, Client, LoadOptions, Message, Transcription};
 use crate::error::RuntimeError;
-use crate::npu::Npu;
+use crate::npu::{Npu, Placement, Work};
 use crate::selection::Picks;
 
 use cite::CiteFilter;
@@ -190,25 +190,102 @@ impl LemonadeMind {
     /// Loads the thinking model once per engine launch, with a context size to suit the tier.
     async fn warm_mind(&self) -> Result<String, MindError> {
         let model = self.installed(ComponentRole::Mind).await?;
-        let mut seen = self.seen.lock().await;
-        if !seen.loaded.contains(&model) {
-            let ctx = crate::residency::mind_context(self.tier);
-            self.client
-                .load(
-                    &model,
-                    &LoadOptions {
-                        ctx_size: Some(ctx),
-                        ..LoadOptions::default()
-                    },
-                )
-                .await
-                .map_err(|e| match e {
-                    RuntimeError::Rejected { .. } => MindError::Unavailable,
-                    other => other.into(),
-                })?;
-            seen.loaded.insert(model.clone());
-        }
+        let ctx = crate::residency::mind_context(self.tier);
+        self.warm(&model, ctx).await.map_err(|e| match e {
+            RuntimeError::Rejected { .. } => MindError::Unavailable,
+            other => other.into(),
+        })?;
         Ok(model)
+    }
+
+    /// Loads `model` with a context of `ctx` once per engine launch.
+    /// The lock is not held while the engine loads, so a slow load of one model never holds up
+    /// a request to another.
+    async fn warm(&self, model: &str, ctx: u32) -> Result<(), RuntimeError> {
+        if self.seen.lock().await.loaded.contains(model) {
+            return Ok(());
+        }
+        self.client
+            .load(
+                model,
+                &LoadOptions {
+                    ctx_size: Some(ctx),
+                    ..LoadOptions::default()
+                },
+            )
+            .await?;
+        self.seen.lock().await.loaded.insert(model.to_string());
+        Ok(())
+    }
+
+    /// Does `work` with `run`, given a model: on the NPU's mind when it takes that work, else on
+    /// the GPU mind, which also does it again when the NPU fails. While both minds are loaded, a
+    /// result `kept` turns down (an empty reading) is done again on the GPU mind too, and counts as
+    /// the NPU's failure only when the GPU mind's result is kept. With the NPU's mind alone, that
+    /// would load the GPU mind in its place for every item with nothing to remember.
+    async fn with_mind<'a, T>(
+        &'a self,
+        work: Work,
+        kept: impl Fn(&T) -> bool,
+        run: impl Fn(String) -> BoxFuture<'a, Result<T, MindError>>,
+    ) -> Result<T, MindError> {
+        let mut doubted = false;
+        if let Some((npu, model)) = self.npu_mind(work).await {
+            match run(model.to_string()).await {
+                Ok(done) if kept(&done) || npu.placement() != Placement::Split => {
+                    npu.mind_worked();
+                    return Ok(done);
+                }
+                Ok(_) => doubted = true,
+                Err(e) => self.npu_failed(npu, &e),
+            }
+        }
+        let model = self.warm_mind().await?;
+        let done = run(model).await;
+        if doubted && let Some(npu) = &self.npu {
+            match &done {
+                Ok(d) if kept(d) => {
+                    npu.mind_failed("an empty reading the GPU mind could read");
+                    self.client.set_models_per_kind(npu.models_per_kind());
+                }
+                _ => npu.mind_worked(),
+            }
+        }
+        done
+    }
+
+    /// Counts a failure of the NPU's mind. An unusable reply is named only as such: its words can
+    /// quote the item.
+    fn npu_failed(&self, npu: &Npu, e: &MindError) {
+        match e {
+            MindError::Failed(_) => npu.mind_failed("an unusable reply"),
+            other => npu.mind_failed(&other.to_string()),
+        }
+        self.client.set_models_per_kind(npu.models_per_kind());
+    }
+
+    /// The NPU's mind, loaded, when it takes `work`. It is never fetched on use: when it is not
+    /// on this computer the GPU mind does the work from then on.
+    async fn npu_mind(&self, work: Work) -> Option<(&Npu, &'static str)> {
+        let npu = self.npu.as_deref()?;
+        let model = npu.model_for(work)?;
+        if self.installed_model(model.to_string()).await.is_err() {
+            if let Ok(listed) = self.client.models().await
+                && !listed.iter().any(|m| m.id == model && m.present())
+            {
+                npu.mind_missing();
+                self.client.set_models_per_kind(npu.models_per_kind());
+            }
+            return None;
+        }
+        if let Err(e) = self.warm(model, crate::npu::MIND_CONTEXT).await {
+            // A failed load unloads every model, so the GPU mind is loaded again with its context.
+            self.forget_loaded().await;
+            npu.mind_failed(&engine_message(&e));
+            self.client.set_models_per_kind(npu.models_per_kind());
+            return None;
+        }
+        Some((npu, model))
     }
 
     async fn forget_loaded(&self) {
@@ -284,7 +361,8 @@ impl LemonadeMind {
         })
     }
 
-    /// A reading request: the item's grammar, and a ceiling that suits `text`.
+    /// A reading request: the item's grammar (a JSON schema on the NPU, whose runtime ignores a
+    /// grammar without saying so), and a ceiling that suits `text`.
     /// `roomy` gives a short note the ceiling every reading had before short notes got a lower
     /// one.
     fn extract_request(
@@ -298,7 +376,11 @@ impl LemonadeMind {
         let ceiling = extract_tokens(text);
         req.max_tokens = Some(if roomy { ceiling.max(ROOMY) } else { ceiling });
         req.timeout = Some(self.client.timeouts().json);
-        req.grammar = Some(prompts::extraction_grammar());
+        if crate::npu::on_npu(model) {
+            by_schema(&mut req);
+        } else {
+            req.grammar = Some(prompts::extraction_grammar());
+        }
         req
     }
 
@@ -310,9 +392,14 @@ impl LemonadeMind {
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let model = self.warm_mind().await?;
         let before = self.reading_calls();
-        let found = self.extract_part(&model, text, cx, 0, false).await;
+        let found = self
+            .with_mind(
+                Work::Reading,
+                |f: &Vec<Candidate>| non_empty_reading(f),
+                |m| Box::pin(async move { self.extract_part(&m, text, cx, 0, false).await }),
+            )
+            .await;
         tracing::info!("a reading took {} requests", self.reading_calls() - before);
         found
     }
@@ -477,9 +564,14 @@ impl LemonadeMind {
         if lines.is_empty() || text.trim().is_empty() {
             return Ok(Vec::new());
         }
-        let model = self.warm_mind().await?;
         let before = self.reading_calls();
-        let found = self.focused(&model, text, cx, lines, 0).await;
+        let found = self
+            .with_mind(
+                Work::Reading,
+                |f: &Vec<Candidate>| non_empty_reading(f),
+                |m| Box::pin(async move { self.focused(&m, text, cx, lines, 0).await }),
+            )
+            .await;
         tracing::info!(
             "a second look took {} requests",
             self.reading_calls() - before
@@ -542,23 +634,46 @@ impl LemonadeMind {
                 online: None,
             });
         }
-        let model = self.warm_mind().await?;
         let nonce = prompts::nonce();
         let shown = prompts::facts_for(self.tier, facts);
         let facts = shown.as_slice();
         let system = prompts::answer_system(self.tier, &nonce);
+        let (system, nonce) = (system.as_str(), nonce.as_str());
+        let judged = self
+            .with_mind(
+                Work::Answering,
+                |_| true,
+                |m| {
+                    Box::pin(
+                        async move { self.judged_answer(&m, question, facts, system, nonce).await },
+                    )
+                },
+            )
+            .await?;
+        conclude(judged, facts, &out).await
+    }
+
+    /// An answer to `question` from `model`, judged against `facts` before any of it is shown.
+    async fn judged_answer(
+        &self,
+        model: &str,
+        question: &str,
+        facts: &[Fact],
+        system: &str,
+        nonce: &str,
+    ) -> Result<Judged, MindError> {
         let mut messages = vec![
-            Message::system(&system),
+            Message::system(system),
             Message::user(&prompts::answer_user(
                 self.tier,
                 question,
                 facts,
-                &nonce,
+                nonce,
                 Some(self.today()),
             )),
         ];
-        let mut reply = self.reply_to(&model, &messages, "answer").await?;
-        let mut judged = judge(&reply, facts, &system);
+        let mut reply = self.reply_to(model, &messages, "answer").await?;
+        let mut judged = judge(&reply, facts, system);
         // A small mind often drops the date or number of the fact it cites, or gives one side of a
         // disagreement. It is asked once more, naming what was wrong; the better of the two
         // answers is kept.
@@ -573,8 +688,8 @@ impl LemonadeMind {
                     "{} Answer again in one or two short sentences, with the number of the fact after each sentence, like [m1].",
                     wrong.join(" ")
                 )));
-                if let Ok(second) = self.reply_to(&model, &messages, "answer_retry").await {
-                    let again = judge(&second, facts, &system);
+                if let Ok(second) = self.reply_to(model, &messages, "answer_retry").await {
+                    let again = judge(&second, facts, system);
                     if !again.not_sure
                         && !again.cited.is_empty()
                         && (again.text.len() >= judged.text.len() || judged.cited.is_empty())
@@ -596,9 +711,9 @@ impl LemonadeMind {
             && !judged.not_sure
             && let Some(&(n, m)) = one_sided(&judged, facts).first()
         {
-            judged = judge(&both_sides(n, m, facts), facts, &system);
+            judged = judge(&both_sides(n, m, facts), facts, system);
         }
-        conclude(judged, facts, &out).await
+        Ok(judged)
     }
 
     /// The whole reply to `messages`, read before any of it is shown: a reply that ends in the
@@ -634,16 +749,30 @@ impl LemonadeMind {
     }
 
     async fn read_image_impl(&self, image: &Path) -> Result<Understanding, MindError> {
-        let model = self.warm_mind().await?;
         let path = image.to_path_buf();
         let uri = tokio::task::spawn_blocking(move || image_data_uri(&path))
             .await
             .map_err(|e| MindError::Failed(e.to_string()))??;
+        let uri = uri.as_str();
+        self.with_mind(
+            Work::Reading,
+            |_| true,
+            |m| Box::pin(async move { self.read_image_with(&m, image, uri).await }),
+        )
+        .await
+    }
+
+    async fn read_image_with(
+        &self,
+        model: &str,
+        image: &Path,
+        uri: &str,
+    ) -> Result<Understanding, MindError> {
         let mut req = ChatRequest::new(
-            &model,
+            model,
             vec![
                 Message::system(&prompts::image_system()),
-                Message::user_with_image("Describe and read this image.", &uri),
+                Message::user_with_image("Describe and read this image.", uri),
             ],
         )
         .sampled(&self.sampling.image);
@@ -688,10 +817,22 @@ impl LemonadeMind {
     }
 
     async fn headline_impl(&self, page: &PageView) -> Result<(String, String), MindError> {
-        let model = self.warm_mind().await?;
+        self.with_mind(
+            Work::Answering,
+            |_| true,
+            |m| Box::pin(async move { self.headline_with(&m, page).await }),
+        )
+        .await
+    }
+
+    async fn headline_with(
+        &self,
+        model: &str,
+        page: &PageView,
+    ) -> Result<(String, String), MindError> {
         let nonce = prompts::nonce();
         let mut req = ChatRequest::new(
-            &model,
+            model,
             vec![
                 Message::system(&prompts::headline_system(&nonce)),
                 Message::user(&prompts::headline_user(page, &nonce)),
@@ -882,6 +1023,11 @@ fn merged(mut kept: Vec<Candidate>, more: Vec<Candidate>) -> Vec<Candidate> {
 /// Where a model's raw replies are traced, for evaluation runs: at trace level on a target of
 /// its own, so a log kept at info never holds the words of a memory.
 pub const REPLY_TARGET: &str = "nocturne::reply";
+
+/// A reading that found something: an empty one from the NPU is read again by the GPU mind.
+fn non_empty_reading(found: &[Candidate]) -> bool {
+    !found.is_empty()
+}
 
 fn raw_reply(step: &str, reply: &str) {
     tracing::trace!(target: REPLY_TARGET, step, reply = %reply);

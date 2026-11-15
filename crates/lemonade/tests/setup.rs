@@ -824,13 +824,13 @@ const NPU_RUNTIME: &str = "flm:npu";
 
 #[tokio::test]
 async fn a_usable_npu_gets_its_runtime_and_model_and_counts_their_size() {
-    let rig = rig("download-ms=100,npu=ready", 32).await;
+    let rig = rig("download-ms=100,npu=ready", 16).await;
     let mut rx = rig.setup.view();
-    rig.setup.start(Tier::Standard).await.unwrap();
+    rig.setup.start(Tier::Small).await.unwrap();
     let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     assert_eq!(
         done.total_bytes,
-        (tier::download_bytes(Tier::Standard) + npu::SPEECH.bytes) as f64
+        (tier::download_bytes(Tier::Small) + npu::SPEECH.bytes) as f64
     );
     let got = fetched(&rig.ledger);
     assert!(got.iter().any(|l| l == NPU_RUNTIME), "{got:?}");
@@ -843,6 +843,54 @@ async fn a_usable_npu_gets_its_runtime_and_model_and_counts_their_size() {
             .iter()
             .any(|m| m.id == npu::SPEECH.model && m.present())
     );
+    rig.sup.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn the_npus_mind_is_fetched_only_where_it_will_work() {
+    let reader = npu::MIND.model.to_string();
+    for (ram, tier, wanted) in [
+        (48, Tier::Standard, true),
+        (32, Tier::Standard, true),
+        (16, Tier::Small, false),
+        (64, Tier::Small, true),
+        (64, Tier::Large, false),
+    ] {
+        let rig = rig("download-ms=50,npu=ready", ram).await;
+        let mut rx = rig.setup.view();
+        rig.setup.start(tier).await.unwrap();
+        let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+        let extra = if wanted { npu::MIND.bytes } else { 0 };
+        assert_eq!(
+            done.total_bytes,
+            (tier::download_bytes(tier) + npu::SPEECH.bytes + extra) as f64,
+            "{ram} GB {tier:?}"
+        );
+        assert_eq!(
+            fetched(&rig.ledger).contains(&reader),
+            wanted,
+            "{ram} GB {tier:?}"
+        );
+        rig.sup.shutdown().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn a_disk_without_room_for_the_reader_still_gets_the_tier() {
+    let backends = 3 * 150_000_000 + npu::RUNTIME_BYTES;
+    let free =
+        tier::download_bytes(Tier::Standard) + npu::SPEECH.bytes + backends + DISK_HEADROOM + GIB;
+    let rig = rig(&format!("download-ms=50,npu=ready,free-bytes={free}"), 48).await;
+    let mut rx = rig.setup.view();
+    rig.setup.start(Tier::Standard).await.unwrap();
+    let done = wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+    assert_eq!(
+        done.total_bytes,
+        (tier::download_bytes(Tier::Standard) + npu::SPEECH.bytes) as f64
+    );
+    let got = fetched(&rig.ledger);
+    assert!(!got.iter().any(|l| l == npu::MIND.model), "{got:?}");
+    assert!(got.iter().any(|l| l == npu::SPEECH.model), "{got:?}");
     rig.sup.shutdown().await.unwrap();
 }
 
@@ -877,9 +925,9 @@ async fn nothing_for_the_npu_is_fetched_when_it_will_not_be_used() {
 #[tokio::test]
 async fn a_chosen_speech_model_keeps_the_npu_share_away() {
     // Set up without an NPU, choose a speech model, then set up again once the NPU is usable.
-    let rig = rig("download-ms=50", 32).await;
+    let rig = rig("download-ms=50", 16).await;
     let mut rx = rig.setup.view();
-    rig.setup.start(Tier::Standard).await.unwrap();
+    rig.setup.start(Tier::Small).await.unwrap();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     nocturne_lemonade::selection::update(&rig.dirs.config(), |s| {
         s.custom.insert(
@@ -897,9 +945,9 @@ async fn a_chosen_speech_model_keeps_the_npu_share_away() {
     )
     .await;
     rig.ledger.lock().unwrap().clear();
-    let again = new_setup(&rig.sup, &rig.dirs, 32, &rig.ledger);
+    let again = new_setup(&rig.sup, &rig.dirs, 16, &rig.ledger);
     let mut rx = again.view();
-    again.start(Tier::Standard).await.unwrap();
+    again.start(Tier::Small).await.unwrap();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     let info = rig.sup.client().system_info().await.unwrap();
     assert_eq!(npu::readiness(&info, false), npu::Readiness::Fetch);

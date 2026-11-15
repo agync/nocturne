@@ -73,11 +73,19 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
         "chat,reasoning,vision",
     ),
     (NPU_SPEECH, 0.62, "flm", "audio,transcription"),
+    (
+        NPU_MIND,
+        9.1,
+        "flm",
+        "audio,chat,reasoning,tool-calling,vision",
+    ),
 ];
 
 /// The NPU's speech model, listed only once the `flm:npu` backend is installed.
 const NPU_SPEECH: &str = "whisper-v3-turbo-FLM";
 const NPU_BACKEND: &str = "flm:npu";
+/// The NPU's chat model. Like the real runtime it ignores a grammar.
+const NPU_MIND: &str = "gemma4-it-e4b-FLM";
 
 const SCALE: f64 = 5000.0;
 const ONLINE_MODEL: &str = "user.nocturne-online";
@@ -113,7 +121,8 @@ struct Inner {
     log: Vec<Value>,
     script: VecDeque<Value>,
     config: Map<String, Value>,
-    loaded: Option<String>,
+    /// Loaded models, the one used longest ago first.
+    loaded: Vec<String>,
     pulls: u64,
     fetched_on_use: Vec<String>,
     conflicts: u64,
@@ -673,8 +682,9 @@ async fn health(State(app): State<Shared>) -> Json<Value> {
     };
     let mut all: Vec<Value> = loaded
         .iter()
-        .map(|m| json!({"model_name": m, "type": "llm"}))
+        .map(|m| json!({"model_name": m, "type": kind_of(m)}))
         .collect();
+    let loaded = loaded.last();
     if cloud_loaded {
         all.push(json!({"model_name": ONLINE_MODEL, "type": "llm", "recipe": "cloud"}));
     }
@@ -945,9 +955,7 @@ async fn delete(State(app): State<Shared>, Json(body): Json<Value>) -> Response 
     app.tick(&mut inner);
     inner.downloaded.retain(|d| d != &name);
     inner.partial.remove(&name);
-    if inner.loaded.as_deref() == Some(name.as_str()) {
-        inner.loaded = None;
-    }
+    inner.loaded.retain(|m| m != &name);
     app.persist_locked(&mut inner);
     Json(json!({"status": "success", "message": format!("Deleted model: {name}")})).into_response()
 }
@@ -958,7 +966,7 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         // The real engine unloads every model after a failed load, the online one too.
         {
             let mut inner = app.inner();
-            inner.loaded = None;
+            inner.loaded.clear();
             inner.cloud_loaded = false;
         }
         return err(
@@ -973,6 +981,11 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     if name == ONLINE_MODEL {
         return load_online(&app);
     }
+    if name == NPU_MIND
+        && let Some(failure) = npu_failure(&app, &name)
+    {
+        return failure;
+    }
     let mut inner = app.inner();
     app.tick(&mut inner);
     if !CATALOG.iter().any(|m| m.0 == name) {
@@ -982,7 +995,7 @@ async fn load(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
         inner.downloaded.push(name.clone());
         inner.fetched_on_use.push(name.clone());
     }
-    inner.loaded = Some(name.clone());
+    admit(&mut inner, &name);
     Json(json!({"status": "success", "model_name": name})).into_response()
 }
 
@@ -990,13 +1003,61 @@ async fn unload(State(app): State<Shared>, body: Option<Json<Value>>) -> Json<Va
     let mut inner = app.inner();
     match body.as_ref().and_then(|b| b["model_name"].as_str()) {
         Some(ONLINE_MODEL) => inner.cloud_loaded = false,
-        Some(_) => inner.loaded = None,
+        Some(name) => inner.loaded.retain(|m| m != name),
         None => {
-            inner.loaded = None;
+            inner.loaded.clear();
             inner.cloud_loaded = false;
         }
     }
     Json(json!({"status": "success"}))
+}
+
+/// The engine's kind of a catalogue model, from its labels.
+fn kind_of(name: &str) -> &'static str {
+    let labels = CATALOG.iter().find(|m| m.0 == name).map_or("", |m| m.3);
+    [
+        ("embeddings", "embedding"),
+        ("reranking", "reranking"),
+        ("transcription", "transcription"),
+        ("tts", "tts"),
+    ]
+    .into_iter()
+    .find(|(label, _)| labels.split(',').any(|l| l == *label))
+    .map_or("llm", |(_, kind)| kind)
+}
+
+/// Loads `name` as the real engine does (lemonade v2026.46.2, `Router::load_model`): a model of
+/// its kind on the NPU is evicted first, since FastFlowLM holds one of each kind, and then the
+/// one used longest ago of its kind while `max_loaded_models` of them are loaded, whatever their
+/// device.
+fn admit(inner: &mut Inner, name: &str) {
+    inner.loaded.retain(|m| m != name);
+    let kind = kind_of(name);
+    if name.ends_with("-FLM") {
+        inner
+            .loaded
+            .retain(|m| !(m.ends_with("-FLM") && kind_of(m) == kind));
+    }
+    let limit = inner
+        .config
+        .get("max_loaded_models")
+        .and_then(Value::as_u64)
+        .unwrap_or(1) as usize;
+    while inner.loaded.iter().filter(|m| kind_of(m) == kind).count() >= limit {
+        let Some(at) = inner.loaded.iter().position(|m| kind_of(m) == kind) else {
+            break;
+        };
+        inner.loaded.remove(at);
+    }
+    inner.loaded.push(name.to_string());
+}
+
+/// `name` was used: like the real engine, a model that is not loaded is loaded first, and either
+/// way it is the last of its kind to be evicted.
+fn used(inner: &mut Inner, name: &str) {
+    if CATALOG.iter().any(|m| m.0 == name) {
+        admit(inner, name);
+    }
 }
 
 /// The provider entry `config.json` gave this launch for `name`.
@@ -1175,9 +1236,11 @@ async fn chat_online(app: &App, body: &Value) -> Response {
 }
 
 fn default_chat_content(body: &Value) -> String {
-    if body["grammar"]
-        .as_str()
-        .is_some_and(|g| g.contains("memories"))
+    let flm = body["model"].as_str().is_some_and(|m| m.ends_with("-FLM"));
+    if !flm
+        && body["grammar"]
+            .as_str()
+            .is_some_and(|g| g.contains("memories"))
     {
         return json!({"memories": []}).to_string();
     }
@@ -1200,7 +1263,14 @@ async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     if body["model"] == ONLINE_MODEL {
         return chat_online(&app, &body).await;
     }
-    app.touch_model(body["model"].as_str().unwrap_or(""));
+    let model = body["model"].as_str().unwrap_or("");
+    app.touch_model(model);
+    if model == NPU_MIND
+        && let Some(failure) = npu_failure(&app, model)
+    {
+        return failure;
+    }
+    used(&mut app.inner(), model);
     let scripted = app.inner().script.pop_front();
     let spec = scripted.unwrap_or_else(|| json!({"content": default_chat_content(&body)}));
     if let Some(status) = spec["status"].as_u64() {
@@ -1346,10 +1416,11 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
         "multipart": true, "fields": fields, "file_name": file_name, "file_len": file_len,
     }));
     if model == NPU_SPEECH
-        && let Some(failure) = npu_failure(&app)
+        && let Some(failure) = npu_failure(&app, &model)
     {
         return failure;
     }
+    used(&mut app.inner(), &model);
     if fields.get("response_format").and_then(|v| v.as_str()) == Some("verbose_json") {
         return Json(json!({
             "text": " hello world",
@@ -1366,13 +1437,13 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
 }
 
 /// How the NPU modes make a request to the NPU model fail, as the real engine does.
-fn npu_failure(app: &App) -> Option<Response> {
+fn npu_failure(app: &App, model: &str) -> Option<Response> {
     let validation = |reason: &str| {
         err(
             500,
             "model_load_error",
             &format!(
-                "Failed to load model '{NPU_SPEECH}': FLM NPU validation failed: {reason}\nVisit https://lemonade-server.ai/driver_install.html for driver installation instructions."
+                "Failed to load model '{model}': FLM NPU validation failed: {reason}\nVisit https://lemonade-server.ai/driver_install.html for driver installation instructions."
             ),
         )
     };

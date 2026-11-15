@@ -10,7 +10,9 @@ tags: [guide, npu, linux, speed, advanced]
 
 Some AMD computers have an NPU, a separate part made for this kind of work. When Nocturne can use
 it, voice notes and other recordings are read there, so answers and the overnight tidy are not
-slowed by them. Everything works without it: recordings are then read the way they always were.
+slowed by them. With about 32 GB of memory it also reads everything you keep and answers your
+questions; with about 48 GB, or about 72 GB and more, it reads everything you keep while the graphics
+answer. Everything works without it: recordings and items are then read the way they always were.
 This page uses the word NPU because the advanced details do.
 
 Settings shows a quiet note, "This computer has a part that could make Nocturne faster, but it

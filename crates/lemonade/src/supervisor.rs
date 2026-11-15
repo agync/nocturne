@@ -831,6 +831,7 @@ impl Actor {
                     whispercpp_backend: whisper.as_deref(),
                     llamacpp_args: installed.map(config::llamacpp_args).unwrap_or(""),
                     cloud: route.as_ref().map(online::entry),
+                    models_per_kind: self.client.models_per_kind(),
                 },
             )?;
             online::write_row(&self.dirs.config(), route.as_ref())?;

@@ -12,7 +12,7 @@ use nocturne_lemonade::client::{ModelInfo, SystemInfo};
 use nocturne_lemonade::fit::{self, Budget, role_of};
 use nocturne_lemonade::jobs::{JobOptions, JobProgress, ModelJobs};
 use nocturne_lemonade::selection::{self, Selection};
-use nocturne_lemonade::{Client, Control};
+use nocturne_lemonade::{Client, Control, npu, tier};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 use tokio_util::sync::CancellationToken;
 
@@ -295,14 +295,42 @@ impl ModelsHub {
         let judged = fit::judge(job, m, &host.catalogue, &host.info, &s, &host.budget);
         let download = if m.present() { 0 } else { fit::gb(m.size) };
         let chosen = fit::with_choice(&s, role, model);
-        let now = fit::busiest(&s, &host.catalogue, &host.budget);
-        let mut after = fit::busiest(&chosen, &host.catalogue, &host.budget);
+        // The NPU's mind stays loaded beside the GPU mind in Split, with the tier's speech model
+        // after a fallback: neither is in the selection.
+        let split = app
+            .state::<AppState>()
+            .services()
+            .is_some_and(|sv| sv.npu.placement() == npu::Placement::Split);
+        let beside = if split {
+            let fallback = if s.custom.contains_key(&ComponentRole::Speech) {
+                0
+            } else {
+                tier::model_for(s.tier, ComponentRole::Speech)
+                    .map_or(0, |m| fit::memory_of(m, None))
+            };
+            fit::memory_of(npu::MIND.model, None) + fallback
+        } else {
+            0
+        };
+        let now = fit::busiest(&s, &host.catalogue, &host.budget) + beside;
+        // A mind the person chooses does all its own work, so the NPU's mind leaves with it.
+        let kept_beside = if role == ComponentRole::Mind {
+            0
+        } else {
+            beside
+        };
+        let mut after = fit::busiest(&chosen, &host.catalogue, &host.budget) + kept_beside;
         if job == Job::Finding {
             // While memories are read again, asks still find them with the old model and the
-            // re-read uses the new one. The engine keeps one finding model loaded at a time
-            // (`max_loaded_models` 1 evicts the other before a load), so the larger of the two
-            // sets is the most this needs.
-            after = after.max(now);
+            // re-read uses the new one. With one model of each kind the engine evicts the other
+            // before a load, so the larger of the two sets is the most this needs; in Split it
+            // holds two of each kind, so both finding models stay loaded.
+            after = if split {
+                let old = selection::picks(&s).recall;
+                after + fit::memory_of(&old, host.catalogue.iter().find(|c| c.id == old))
+            } else {
+                after.max(now)
+            };
         }
         let (reindex_items, reindex_eta_seconds) = if job == Job::Finding {
             let total = app

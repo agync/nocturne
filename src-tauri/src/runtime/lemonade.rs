@@ -340,11 +340,18 @@ async fn put_mind<R: Runtime>(
         .sum();
     let recall = picks.recall.clone();
     let info = client.system_info().await.unwrap_or_default();
+    let before = services.npu.placement();
     services.npu.set(
         npu::readiness(&info, npu::pci_xdna2()),
         npu::fits(&chosen, ram),
         chosen.custom.contains_key(&ComponentRole::Speech),
     );
+    let placement = npu::placement(&chosen, ram, info.devices.largest_pool());
+    let admin = services.admin().await;
+    services
+        .npu
+        .move_to(admin.as_ref(), &client, before, placement, &picks.mind)
+        .await;
     let mind: Arc<dyn Mind> = Arc::new(
         LemonadeMind::new(client, picks, tier)
             .with_clock(state.clock.clone())
@@ -561,6 +568,7 @@ impl Services {
         if let Some(lemonade) = self.lemonade.lock().await.as_ref() {
             let picks = selection::picks(&selection::read(&lemonade.supervisor.dirs().config()));
             models.extend([picks.mind, picks.speech, picks.voice, picks.recall]);
+            models.push(npu::MIND.model.to_string());
         }
         models.sort();
         models.dedup();
