@@ -70,7 +70,14 @@ export function npuFixable(npu: NpuView | undefined): boolean {
 export function npuDetails(npu: NpuView): Array<[string, string]> {
   if (!npu.present) return [[t("advanced.row.npu"), t("advanced.npu.none")]];
   if (npu.used) {
-    return [[t("advanced.row.npu"), t("advanced.npu.used", { model: npu.model ?? "?" })]];
+    const model = npu.model ?? "?";
+    const value = npu.mind
+      ? t(npu.mind.answers ? "advanced.npu.answers" : "advanced.npu.reads", {
+          model,
+          mind: npu.mind.model,
+        })
+      : t("advanced.npu.used", { model });
+    return [[t("advanced.row.npu"), value]];
   }
   const causes = npu.causes.map((c) => t(NPU_CAUSE[c])).join("; ");
   const rows: Array<[string, string]> = [

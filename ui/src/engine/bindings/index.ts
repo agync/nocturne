@@ -60,6 +60,7 @@ export type { NeedsYouEntry } from "./NeedsYouEntry";
 export type { Notice } from "./Notice";
 export type { NoticeCode } from "./NoticeCode";
 export type { NpuCause } from "./NpuCause";
+export type { NpuMind } from "./NpuMind";
 export type { NpuView } from "./NpuView";
 export type { OldModelView } from "./OldModelView";
 export type { OnlineAdvanced } from "./OnlineAdvanced";

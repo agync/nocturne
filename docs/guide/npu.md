@@ -40,6 +40,8 @@ Settings, then "Show advanced details". The NPU row says one of:
 |---|---|
 | none found | No NPU, or one Nocturne cannot see at all |
 | reads recordings | It is in use |
+| reads recordings and what you keep | It also reads what you keep, while the graphics answer |
+| reads, answers and reads recordings | It does all of it, and nothing runs on the graphics |
 | not used, and a reason | The reason, the engine's own words when it gave any, and the steps |
 
 ## What Linux needs
