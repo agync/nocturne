@@ -457,3 +457,140 @@ pub struct ExportProgress {
     pub done: u32,
     pub total: u32,
 }
+
+/// What a backup file holds, after it was made or checked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BackupReport {
+    /// The backup file that was written.
+    pub path: String,
+    pub memories: u32,
+    pub pages: u32,
+    pub originals: u32,
+    /// The size of the file.
+    pub bytes: f64,
+}
+
+/// What a backup that was opened with its passphrase holds.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BackupSummary {
+    /// When the backup was made.
+    pub made_at: String,
+    pub app_version: String,
+    pub store_version: u32,
+    pub memories: u32,
+    pub items: u32,
+    pub pages: u32,
+    pub originals: u32,
+    /// Online answers was set up when this backup was made.
+    pub online_used: bool,
+    /// Away from home had been turned on when this backup was made.
+    pub away_used: bool,
+    /// The size of the file.
+    pub bytes: f64,
+}
+
+/// Which part of a backup or a restore the person is watching.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum BackupPhase {
+    /// Writing the file.
+    Saving,
+    /// Reading the whole file back to prove it.
+    Checking,
+    /// Writing the staged store out for a restore.
+    Restoring,
+}
+
+/// The phase, bytes done and bytes in all, while a backup or a restore runs.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BackupProgress {
+    pub phase: BackupPhase,
+    pub done: f64,
+    pub total: f64,
+}
+
+/// What an install holds now, for showing both sides of a restore.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Holdings {
+    pub memories: u32,
+    pub pages: u32,
+    pub originals: u32,
+    /// The last thing kept, when anything was.
+    pub last_kept: Option<String>,
+    /// What was kept after the backup being restored was made.
+    pub kept_after_backup: u32,
+    /// What a backup of this install would roughly take.
+    pub bytes: f64,
+}
+
+/// A backup file that was opened and checked, and what restoring it would do here.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RestoreCheck {
+    pub summary: BackupSummary,
+    /// What this install holds, so the person is asked before it is replaced.
+    pub here: Option<Holdings>,
+    /// When the newest copy already put aside was made.
+    pub put_aside: Option<String>,
+}
+
+/// The last backup this install finished.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct LastBackup {
+    pub at: String,
+    pub bytes: f64,
+}
+
+/// One copy of what was here, kept aside before a restore.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PutAsideView {
+    /// The folder name, which names this copy everywhere.
+    pub id: String,
+    pub at: String,
+    pub memories: u32,
+    pub pages: u32,
+    pub originals: u32,
+    pub bytes: f64,
+}
+
+/// Everything the backup screen shows about this install.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BackupsView {
+    pub last: Option<LastBackup>,
+    pub put_aside: Vec<PutAsideView>,
+    /// The progress of the backup, check or restore running now.
+    pub running: Option<BackupProgress>,
+    pub interrupted_backup: bool,
+    pub interrupted_restore: bool,
+}
+
+/// What the app restored from, for the screen after a restore.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RestoredView {
+    pub made_at: String,
+    pub memories: u32,
+    pub pages: u32,
+    pub originals: u32,
+    pub online_used: bool,
+    pub away_used: bool,
+    /// When what was here before the restore was put aside.
+    pub put_aside_at: Option<String>,
+}

@@ -29,6 +29,21 @@ pub enum Error {
     /// The window for undoing a keep has passed.
     #[error("it is too late to undo this")]
     TooLate,
+    /// The passphrase does not open this backup.
+    #[error("that passphrase does not open this backup")]
+    WrongPassphrase,
+    /// The file is not a Nocturne backup.
+    #[error("that file is not a Nocturne backup")]
+    NotABackup,
+    /// The backup was made by a newer Nocturne than this one.
+    #[error("that backup was made by a newer Nocturne")]
+    BackupTooNew,
+    /// The backup is damaged or incomplete.
+    #[error("that backup is damaged")]
+    BackupDamaged,
+    /// The person stopped the work.
+    #[error("cancelled")]
+    Cancelled,
 }
 
 impl Error {

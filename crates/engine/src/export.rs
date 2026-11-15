@@ -81,24 +81,9 @@ impl ExportGuard {
 impl Drop for ExportGuard {
     fn drop(&mut self) {
         if !self.committed {
-            shred_tree(&self.root);
+            fsutil::shred_tree(&self.root);
         }
     }
-}
-
-/// Overwrite and remove every file under a folder, then the folder.
-fn shred_tree(path: &Path) {
-    if let Ok(entries) = std::fs::read_dir(path) {
-        for e in entries.flatten() {
-            let p = e.path();
-            if e.file_type().is_ok_and(|t| t.is_dir()) {
-                shred_tree(&p);
-            } else {
-                fsutil::shred(&p);
-            }
-        }
-    }
-    let _ = std::fs::remove_dir(path);
 }
 
 fn marks(m: &MemRow) -> String {
@@ -257,11 +242,10 @@ impl Engine {
             let rows: Vec<ItemExport> = {
                 let mut stmt = conn.prepare(&format!(
                     "SELECT {}, i.origin, i.metadata FROM items i \
-                     WHERE NOT EXISTS (SELECT 1 FROM forget_jobs j \
-                       WHERE (j.kind = 'unkeep' OR j.include_originals = 1) \
-                       AND instr(j.items, '\"' || i.id || '\"') > 0) \
+                     WHERE {} \
                      ORDER BY i.kept_at, i.id",
-                    crate::rows::ITEM_COLS
+                    crate::rows::ITEM_COLS,
+                    crate::forget::ORIGINALS_NOT_IN_FORGET
                 ))?;
                 let to_view = crate::rows::item_view(&originals_src);
                 stmt.query_map([], |r| {

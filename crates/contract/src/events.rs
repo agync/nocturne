@@ -18,6 +18,8 @@ pub const EVENT_PAGE: &str = "page-ready";
 pub const EVENT_NEEDS_YOU: &str = "needs-you-changed";
 /// Payload: `ExportProgress`.
 pub const EVENT_EXPORT: &str = "export-progress";
+/// Payload: `BackupProgress`, while a backup is written or a backup file is checked.
+pub const EVENT_BACKUP: &str = "backup-progress";
 /// Payload: `RemoteView`.
 pub const EVENT_REMOTE: &str = "remote-changed";
 /// Payload: `PairingRequest`.
@@ -29,7 +31,7 @@ pub const EVENT_ONLINE: &str = "online-changed";
 /// Payload: `ModelsView`.
 pub const EVENT_MODELS: &str = "models-changed";
 
-pub const ALL_EVENTS: [&str; 12] = [
+pub const ALL_EVENTS: [&str; 13] = [
     EVENT_STATUS,
     EVENT_ITEM,
     EVENT_SETUP,
@@ -37,6 +39,7 @@ pub const ALL_EVENTS: [&str; 12] = [
     EVENT_PAGE,
     EVENT_NEEDS_YOU,
     EVENT_EXPORT,
+    EVENT_BACKUP,
     EVENT_REMOTE,
     EVENT_PAIRING,
     EVENT_DEVICE,
