@@ -63,9 +63,9 @@ fn main() {
     };
     if let (Some(origin), Ok(listener)) = (origin, TcpListener::bind("127.0.0.1:0")) {
         if let Ok(addr) = listener.local_addr() {
-            let _ = std::fs::write(
-                fake::exe_dir().join(fake::PUBLIC_PORT_FILE),
-                addr.port().to_string(),
+            fake::write_whole(
+                &fake::exe_dir().join(fake::PUBLIC_PORT_FILE),
+                &addr.port().to_string(),
             );
         }
         let key = std::env::var("TUNNEL_HTTP_HOST_HEADER")
