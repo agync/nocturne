@@ -11,6 +11,7 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc;
@@ -32,6 +33,10 @@ pub const MAX_BUFFERED: usize = 64 * 1024;
 /// A log file is rotated at this size, and this many files are kept in all.
 pub const ROTATE_AT: u64 = 8 * 1024 * 1024;
 pub const FILES_KEPT: usize = 3;
+
+/// How long a failed rotation waits before the next try, so a permanent fault costs one try, not
+/// one per line.
+const RETRY_ROTATION_AFTER: Duration = Duration::from_secs(30);
 /// Lines waiting for the file. When the file falls behind, lines are dropped rather than the
 /// engine being made to wait on its own output.
 const QUEUE: usize = 1024;
@@ -251,12 +256,31 @@ fn write_lines(mut rx: mpsc::Receiver<String>, path: &Path, rotate_at: u64) {
         .and_then(|f| f.metadata().ok())
         .map(|m| m.len())
         .unwrap_or(0);
+    let mut warned = false;
+    let mut retry_at = Instant::now();
     while let Some(line) = rx.blocking_recv() {
-        if size >= rotate_at {
+        if size >= rotate_at && Instant::now() >= retry_at {
+            // Closed first, so the reopened file is a new live file and not the renamed one.
             drop(file.take());
-            rotate(path);
+            let rotated = rotate(path);
+            match &rotated {
+                Ok(()) => warned = false,
+                Err(e) => {
+                    retry_at = Instant::now() + RETRY_ROTATION_AFTER;
+                    if !std::mem::replace(&mut warned, true) {
+                        tracing::warn!("the engine's log could not be rotated: {e}");
+                    }
+                }
+            }
             file = open(path);
-            size = 0;
+            // A failed rotation leaves the old file in place; it is tried again later.
+            size = match rotated {
+                Ok(()) => 0,
+                Err(_) => file
+                    .as_ref()
+                    .and_then(|f| f.metadata().ok())
+                    .map_or(0, |m| m.len()),
+            };
         }
         if let Some(f) = file.as_mut()
             && writeln!(f, "{line}").is_ok()
@@ -266,18 +290,46 @@ fn write_lines(mut rx: mpsc::Receiver<String>, path: &Path, rotate_at: u64) {
     }
 }
 
-/// `lemond.log` becomes `lemond.log.1`, which becomes `lemond.log.2`; the oldest is removed.
-fn rotate(path: &Path) {
+/// `lemond.log` becomes `lemond.log.1`, which becomes `lemond.log.2`; the oldest is removed. A
+/// file that is not there is skipped. The first other error stops the rotation and is returned,
+/// so no older generation is overwritten by one that could not move on.
+fn rotate(path: &Path) -> std::io::Result<()> {
     let name = |n: usize| {
         let mut p = path.as_os_str().to_owned();
         p.push(format!(".{n}"));
         PathBuf::from(p)
     };
-    let _ = std::fs::remove_file(name(FILES_KEPT - 1));
+    let step = |r: std::io::Result<()>| match r {
+        Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(e),
+        _ => Ok(()),
+    };
+    step(retry(|| std::fs::remove_file(name(FILES_KEPT - 1))))?;
     for n in (1..FILES_KEPT - 1).rev() {
-        let _ = std::fs::rename(name(n), name(n + 1));
+        step(retry(|| std::fs::rename(name(n), name(n + 1))))?;
     }
-    let _ = std::fs::rename(path, name(1));
+    step(retry(|| std::fs::rename(path, name(1))))
+}
+
+/// Another process (a scanner, an indexer) can hold a file for a moment. Windows then refuses the
+/// move with a sharing or lock violation, which `std` reports as an uncategorized error, or with
+/// access denied. Elsewhere a refusal is permanent and is returned at once.
+fn retry(mut op: impl FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
+    let mut tries = 0;
+    loop {
+        match op() {
+            Err(e) if tries < 5 && is_busy(&e) => {
+                tries += 1;
+                std::thread::sleep(Duration::from_millis(20 * tries));
+            }
+            other => return other,
+        }
+    }
+}
+
+fn is_busy(e: &std::io::Error) -> bool {
+    cfg!(windows)
+        && (e.kind() == std::io::ErrorKind::PermissionDenied
+            || matches!(e.raw_os_error(), Some(32 | 33)))
 }
 
 /// The log, readable and writable by its owner only.
@@ -349,5 +401,48 @@ mod tests {
         let out = cap("é".repeat(MAX_LINE));
         assert!(out.len() <= MAX_LINE);
         assert!(out.is_char_boundary(out.len()));
+    }
+
+    #[test]
+    fn rotation_shifts_every_generation_and_skips_missing_ones() {
+        let dir = tempfile::tempdir().unwrap();
+        let live = dir.path().join("lemond.log");
+        std::fs::write(&live, "c").unwrap();
+        rotate(&live).unwrap();
+        assert!(!live.exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("lemond.log.1")).unwrap(),
+            "c"
+        );
+        std::fs::write(&live, "d").unwrap();
+        rotate(&live).unwrap();
+        std::fs::write(&live, "e").unwrap();
+        rotate(&live).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("lemond.log.1")).unwrap(),
+            "e"
+        );
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("lemond.log.2")).unwrap(),
+            "d"
+        );
+    }
+
+    #[test]
+    fn a_failed_step_stops_the_rotation_and_keeps_the_files() {
+        let dir = tempfile::tempdir().unwrap();
+        let live = dir.path().join("lemond.log");
+        std::fs::write(&live, "live").unwrap();
+        std::fs::write(dir.path().join("lemond.log.1"), "one").unwrap();
+        // A directory in the way makes removing `.2` fail on every platform.
+        let two = dir.path().join("lemond.log.2");
+        std::fs::create_dir(&two).unwrap();
+        std::fs::write(two.join("keep"), "x").unwrap();
+        assert!(rotate(&live).is_err());
+        assert_eq!(std::fs::read_to_string(&live).unwrap(), "live");
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("lemond.log.1")).unwrap(),
+            "one"
+        );
     }
 }
