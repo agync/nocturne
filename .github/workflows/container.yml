@@ -123,8 +123,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - uses: redhat-actions/push-to-registry@5860fc963bf8f2b3221773a023141612f010c469 # v2
         with:
-          image: ${{ steps.build.outputs.image }}
-          tags: ${{ steps.build.outputs.tags }}
+          tags: ${{ steps.build.outputs.image-with-tag }}
 
   # Both architectures under <tag> and latest.
   manifest:
