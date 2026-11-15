@@ -234,15 +234,7 @@ async fn windows_key_by_environment_not_argv() {
     let t = transport(&sb);
     let origin = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = origin.local_addr().unwrap().port();
-    let (seen_tx, seen_rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-        if let Ok((mut s, _)) = origin.accept() {
-            let mut buf = [0u8; 1024];
-            let n = s.read(&mut buf).unwrap_or(0);
-            let _ = seen_tx.send(String::from_utf8_lossy(&buf[..n]).into_owned());
-            let _ = s.write_all(b"HTTP/1.0 200 OK\r\n\r\nok");
-        }
-    });
+    let seen = common::origin_for(origin, "/from-the-test", b"HTTP/1.0 200 OK\r\n\r\nok");
     let key = "k3y-0123456789abcdef";
     let mut rx = t
         .start(spec(Origin::Tcp {
@@ -264,9 +256,15 @@ async fn windows_key_by_environment_not_argv() {
         .parse()
         .unwrap();
     let mut conn = TcpStream::connect(("127.0.0.1", public)).unwrap();
-    conn.write_all(b"GET / HTTP/1.1\r\nHost: whatever.trycloudflare.com\r\n\r\n")
+    conn.write_all(b"GET /from-the-test HTTP/1.1\r\nHost: whatever.trycloudflare.com\r\n\r\n")
         .unwrap();
-    let head = seen_rx.recv_timeout(Duration::from_secs(10)).unwrap();
+    let head = tokio::time::timeout(
+        Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || seen.join().unwrap()),
+    )
+    .await
+    .expect("the request reached the origin")
+    .unwrap();
     assert!(head.contains(&format!("Host: {key}")), "{head}");
     t.stop().await.unwrap();
 }

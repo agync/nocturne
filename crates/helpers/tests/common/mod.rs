@@ -131,3 +131,37 @@ pub fn argv(record: &Value) -> Vec<String> {
         })
         .unwrap_or_default()
 }
+
+/// An origin on `listener` that answers every request with `reply` and hands back the head of the
+/// first one for `path`. Other programs on this computer may connect to a loopback port too, so
+/// a request for another path is answered and passed over, never taken for the test's own. A
+/// connection that goes quiet or sends too much is dropped after two seconds or 64 KiB.
+pub fn origin_for(
+    listener: std::net::TcpListener,
+    path: &'static str,
+    reply: &'static [u8],
+) -> std::thread::JoinHandle<String> {
+    use std::io::{Read, Write};
+    std::thread::spawn(move || {
+        let wanted = format!("GET {path} ");
+        loop {
+            let Ok((mut conn, _)) = listener.accept() else {
+                return String::new();
+            };
+            let _ = conn.set_read_timeout(Some(std::time::Duration::from_secs(2)));
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while head.len() < 65536
+                && !head.ends_with(b"\r\n\r\n")
+                && conn.read(&mut byte).unwrap_or(0) == 1
+            {
+                head.push(byte[0]);
+            }
+            let _ = conn.write_all(reply);
+            let head = String::from_utf8_lossy(&head).into_owned();
+            if head.starts_with(&wanted) {
+                return head;
+            }
+        }
+    })
+}
