@@ -36,8 +36,15 @@ done
 [[ $# -eq 1 ]] || { printf 'usage: scripts/check-package.sh [--manifest FILE | --no-manifest] <artefact>\n' >&2; exit 2; }
 input=$(realpath -- "$1")
 [[ -e "$input" ]] || { printf 'not found: %s\n' "$1" >&2; exit 2; }
+# The engine manifest to compare against: the package's architecture by its name, else this
+# machine's.
 platform=linux-x86_64
-case "$input" in *.app | *.app/ | *.dmg) platform=macos-aarch64 ;; esac
+if [[ "$(uname -m)" == aarch64 ]]; then platform=linux-aarch64; fi
+case "$input" in
+    *.app | *.app/ | *.dmg) platform=macos-aarch64 ;;
+    *_amd64.AppImage | *_amd64.deb | *.x86_64.rpm) platform=linux-x86_64 ;;
+    *_aarch64.AppImage | *_arm64.deb | *.aarch64.rpm) platform=linux-aarch64 ;;
+esac
 ((manifest_set)) || manifest=target/package/lemonade/$platform.manifest
 if [[ -n "$manifest" && ! -f "$manifest" ]]; then
     printf 'manifest not found: %s (run scripts/package.sh first, or pass --no-manifest)\n' "$manifest" >&2

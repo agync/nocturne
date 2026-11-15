@@ -1,0 +1,8 @@
+{
+  "bundle": {
+    "resources": {
+      "../target/package/lemonade/linux-x86_64/": null,
+      "../target/package/lemonade/linux-aarch64/": "lemonade/"
+    }
+  }
+}

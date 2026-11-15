@@ -11,6 +11,9 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 
 
+HOST_LINUX = "linux-aarch64" if os.uname().machine == "aarch64" else "linux-x86_64"
+
+
 def dry_run(*args):
     return subprocess.run(
         [os.path.join(HERE, "package.sh"), "--dry-run", *args],
@@ -31,7 +34,7 @@ class Merge(unittest.TestCase):
 
 class Overlays(unittest.TestCase):
     def test_both_files_parse(self):
-        for name in ("linux", "windows", "macos"):
+        for name in ("linux", "linux-aarch64", "windows", "macos"):
             path = os.path.join(ROOT, "src-tauri", "bundle", f"{name}.json")
             with open(path, encoding="utf-8") as handle:
                 json.load(handle)
@@ -47,6 +50,17 @@ class Overlays(unittest.TestCase):
         self.assertEqual(
             sorted(merged["bundle"]["targets"]), ["appimage", "deb", "rpm"]
         )
+
+    def test_aarch64_overlay_swaps_the_engine_folder(self):
+        overlay = os.path.join(ROOT, "src-tauri", "bundle", "linux-aarch64.json")
+        merged = bundle_config.effective("linux", overlay)
+        self.assertEqual(bundle_config.problems("linux", merged, platform="linux-aarch64"), [])
+        self.assertNotIn("../target/package/lemonade/linux-x86_64/", merged["bundle"]["resources"])
+        self.assertEqual(merged["bundle"]["linux"], bundle_config.effective("linux")["bundle"]["linux"])
+
+    def test_the_x86_64_folder_is_refused_for_aarch64(self):
+        merged = bundle_config.effective("linux")
+        self.assertTrue(bundle_config.problems("linux", merged, platform="linux-aarch64"))
 
     def test_windows_resources_and_bootstrapper(self):
         merged = bundle_config.effective("windows")
@@ -95,7 +109,7 @@ class DryRun(unittest.TestCase):
     def test_linux_dry_run_prints_config_and_steps(self):
         proc = dry_run()
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("../target/package/lemonade/linux-x86_64/", proc.stdout)
+        self.assertIn(f"../target/package/lemonade/{HOST_LINUX}/", proc.stdout)
         self.assertIn(f"version {bundle_config.workspace_version()}", proc.stdout)
         self.assertIn("--bundles appimage,deb,rpm", proc.stdout)
         self.assertIn("fetch and verify lemonade", proc.stdout)

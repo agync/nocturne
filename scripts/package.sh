@@ -35,10 +35,21 @@ while (($#)); do
     shift
 done
 [[ "$kind" == linux || "$kind" == windows || "$kind" == macos ]] || { printf 'unknown config: %s\n' "$kind" >&2; exit 2; }
+# Linux packages are for the architecture of the machine that builds them, x86_64 or aarch64.
+# aarch64 merges one more overlay that points the resources at its engine.
 platform=linux-x86_64
 rust_target=x86_64-unknown-linux-gnu
+appimage_arch=x86_64
+appimage_label=amd64
+overlay=""
 defaults=(appimage deb rpm)
-if [[ "$kind" == windows ]]; then
+if [[ "$kind" == linux && "$(uname -m)" == aarch64 ]]; then
+    platform=linux-aarch64
+    rust_target=aarch64-unknown-linux-gnu
+    appimage_arch=aarch64
+    appimage_label=aarch64
+    overlay=bundle/linux-aarch64.json
+elif [[ "$kind" == windows ]]; then
     platform=windows-x86_64
     rust_target=x86_64-pc-windows-msvc
     defaults=(nsis msi)
@@ -49,6 +60,12 @@ elif [[ "$kind" == macos ]]; then
 fi
 ((${#targets[@]})) || targets=("${defaults[@]}")
 bundles=$(IFS=,; printf '%s' "${targets[*]}")
+config_args=(--config "bundle/$kind.json")
+check_args=("$kind" --platform "$platform")
+if [[ -n "$overlay" ]]; then
+    config_args+=(--config "$overlay")
+    check_args+=(--extra "src-tauri/$overlay")
+fi
 pkg=target/package
 version=$(python3 -I -c 'import sys; sys.path.insert(0, "scripts"); import bundle_config; print(bundle_config.workspace_version())')
 
@@ -59,7 +76,7 @@ if [[ -n "$(git status --porcelain 2> /dev/null)" ]]; then
 fi
 
 say "configuration ($kind, version $version)"
-python3 -I scripts/bundle_config.py "$kind"
+python3 -I scripts/bundle_config.py "${check_args[@]}"
 
 if ((dry)) && [[ "$kind" == macos ]]; then
     say "dry run: steps that would run"
@@ -80,7 +97,7 @@ if ((dry)); then
 fetch and verify lemonade $platform into $pkg/lemonade/$platform (manifest $pkg/lemonade/$platform.manifest)
 npm --prefix ui ci && npm --prefix ui run build
 scripts/notices.py --target $rust_target --lemonade $pkg/lemonade/$platform
-(cd src-tauri && ../ui/node_modules/.bin/tauri build --config bundle/$kind.json --bundles $bundles)
+(cd src-tauri && ../ui/node_modules/.bin/tauri build ${config_args[*]} --bundles $bundles)
 for AppImage: remove unused modules, restore the verified engine files, add the bundled libraries' licences, pack again
 copy artefacts to $pkg and write $pkg/SHA256SUMS (with SOURCES.txt, the source packages of the bundled libraries)
 STEPS
@@ -98,8 +115,8 @@ elif [[ "$kind" == macos ]]; then
         printf 'the Mac package is built on Apple Silicon; --inputs-only prepares what it needs anywhere\n' >&2
         exit 2
     fi
-elif [[ "$host" != Linux-x86_64 ]]; then
-    printf 'Linux packages are built on Linux x86_64\n' >&2
+elif [[ "$host" != Linux-x86_64 && "$host" != Linux-aarch64 ]]; then
+    printf 'Linux packages are built on Linux x86_64 or aarch64\n' >&2
     exit 2
 fi
 
@@ -177,7 +194,7 @@ fi
 # Run from src-tauri, as the Makefile's dev target does: the CLI runs the interface build hook
 # relative to the project it finds there.
 build() {
-    (cd src-tauri && ../ui/node_modules/.bin/tauri build --config "bundle/$kind.json" --bundles "$1" "${@:2}")
+    (cd src-tauri && ../ui/node_modules/.bin/tauri build "${config_args[@]}" --bundles "$1" "${@:2}")
 }
 export NO_STRIP=true APPIMAGE_EXTRACT_AND_RUN=1
 
@@ -237,10 +254,10 @@ if [[ " ${targets[*]} " == *" appimage "* ]]; then
     python3 -I scripts/notices.py --bundled-libs "$appdir/usr/lib" --out "$pkg/notices-appimage" --sources "$pkg/SOURCES.txt"
     cp "$pkg/notices-appimage/BUNDLED-LIBRARIES.txt" "$appdir/usr/lib/Nocturne/notices/"
     rm -f target/release/bundle/appimage/*.AppImage
-    (cd target/release/bundle/appimage && ARCH=x86_64 LINUXDEPLOY_OUTPUT_VERSION="$version" "$plugin" --appdir "$(basename "$appdir")")
+    (cd target/release/bundle/appimage && ARCH="$appimage_arch" LINUXDEPLOY_OUTPUT_VERSION="$version" "$plugin" --appdir "$(basename "$appdir")")
     packed=$(find target/release/bundle/appimage -maxdepth 1 -name '*.AppImage' | head -1)
     [[ -n "$packed" ]] || { printf 'the AppImage was not packed\n' >&2; exit 1; }
-    mv "$packed" "target/release/bundle/appimage/Nocturne_${version}_amd64.AppImage"
+    mv "$packed" "target/release/bundle/appimage/Nocturne_${version}_${appimage_label}.AppImage"
 fi
 
 say "collect"

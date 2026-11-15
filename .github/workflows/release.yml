@@ -2,10 +2,10 @@
 #
 # release-please.yml opens the release pull request and, when it is merged, tags the release and
 # creates its page as a draft. The tag push (vX.Y.Z) starts this workflow: it builds the packages
-# for Linux, macOS and Windows, checks each one with scripts/check-package.sh where it applies,
-# and attaches them, with one SHA256SUMS, to the draft. The Most private helper (tailnet.yml) and
-# the Flatpak (flatpak.yml) are built by their own workflows, called from here. The last job
-# publishes the draft when every one of them has finished.
+# for Linux (x86_64 and aarch64), macOS and Windows, checks each one with scripts/check-package.sh
+# where it applies, and attaches them, with one SHA256SUMS, to the draft. The Most private helper
+# (tailnet.yml) and the Flatpak (flatpak.yml) are built by their own workflows, called from here.
+# The last job publishes the draft when every one of them has finished.
 #
 # Run by hand (workflow_dispatch) with an existing release tag (vX.Y.Z) in `tag` to build that
 # tag and attach the files to its release. With `tag` empty it builds the chosen commit unsigned
@@ -111,11 +111,22 @@ jobs:
             echo "helper=true" >> "$GITHUB_OUTPUT"
           fi
 
+  # Each architecture is built natively on its own runner; scripts/package.sh builds for the
+  # machine it runs on.
   linux:
     needs: plan
     if: ${{ !cancelled() && needs.plan.outputs.build == 'true' }}
-    runs-on: ubuntu-24.04
+    name: linux (${{ matrix.arch }})
+    runs-on: ${{ matrix.runs-on }}
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runs-on: ubuntu-24.04
+          - arch: aarch64
+            runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -145,7 +156,7 @@ jobs:
           done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: desktop-linux
+          name: desktop-linux-${{ matrix.arch }}
           if-no-files-found: error
           path: |
             target/package/*.AppImage
@@ -427,15 +438,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir out
-          for platform in linux macos windows; do
+          for platform in linux-x86_64 linux-aarch64 macos windows; do
             dir="desktop/desktop-$platform"
             [ -d "$dir-signed" ] && dir="$dir-signed"
             echo "$platform: $dir"
             (cd "$dir" && sha256sum -c SHA256SUMS)
-            find "$dir" -type f ! -name SHA256SUMS -exec cp {} out/ \;
+            find "$dir" -type f ! -name SHA256SUMS ! -name SOURCES.txt -exec cp {} out/ \;
+            # Each Linux build lists the source packages of its own AppImage's libraries.
+            if [ -f "$dir/SOURCES.txt" ]; then cp "$dir/SOURCES.txt" "out/SOURCES-$platform.txt"; fi
           done
           # The landing site links to these fixed names (releases/latest/download/<name>). Each is a
-          # copy of exactly one packaged file; the versioned originals stay.
+          # copy of exactly one packaged file; the versioned originals stay. The Linux patterns
+          # name the architecture as the bundler spells it (Nocturne_<v>_amd64.AppImage,
+          # Nocturne_<v>_arm64.deb, Nocturne-<v>-1.aarch64.rpm), which no fixed name matches.
           one() {
             local name=$1 pattern=$2 found=()
             mapfile -t found < <(compgen -G "out/$pattern" || true)
@@ -445,9 +460,12 @@ jobs:
           one Nocturne-macos-arm64.dmg '*.dmg'
           one Nocturne-windows-x64-setup.exe '*-setup.exe'
           one Nocturne-windows-x64.msi '*.msi'
-          one Nocturne-linux-x86_64.AppImage '*.AppImage'
-          one Nocturne-linux-amd64.deb '*.deb'
-          one Nocturne-linux-x86_64.rpm '*.rpm'
+          one Nocturne-linux-x86_64.AppImage '*_amd64.AppImage'
+          one Nocturne-linux-amd64.deb '*_amd64.deb'
+          one Nocturne-linux-x86_64.rpm '*.x86_64.rpm'
+          one Nocturne-linux-aarch64.AppImage '*_aarch64.AppImage'
+          one Nocturne-linux-arm64.deb '*_arm64.deb'
+          one Nocturne-linux-aarch64.rpm '*.aarch64.rpm'
           (cd out && sha256sum -- * > SHA256SUMS)
           cat out/SHA256SUMS
       - name: Get GitHub App installation token

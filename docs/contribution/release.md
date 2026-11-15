@@ -82,6 +82,7 @@ because release-please rewrites the body on every push. `CHANGELOG.md` keeps the
 | Platform | Runner | How | Files | Checked with |
 |---|---|---|---|---|
 | Linux x86_64 | Ubuntu 24.04 | `scripts/package.sh` | AppImage, deb, rpm, `SOURCES.txt` | `scripts/check-package.sh` on each |
+| Linux aarch64 | Ubuntu 24.04 on Arm (`ubuntu-24.04-arm`) | `scripts/package.sh`, built natively | AppImage, deb, rpm, `SOURCES.txt` | `scripts/check-package.sh` on each |
 | macOS Apple Silicon | macOS 15 | `scripts/package.sh --config macos` | `.dmg` | `scripts/check-package.sh` on the ad hoc image (engine manifest); after a Developer ID signature, with `--no-manifest` and `spctl` in a job of its own |
 | Windows x86_64 | Windows Server 2022 | `scripts/package.sh --config windows` under Git Bash | NSIS `.exe`, `.msi` | the sums, and `signtool verify` when signed (`scripts/check-package.sh` does not read installers) |
 | Most private helper | `tailnet.yml` | `scripts/build-tailnet.sh`, built twice | four binaries and the licence report | the two builds agree byte for byte |
@@ -99,12 +100,17 @@ versioned originals stay on the release, and `SHA256SUMS` lists both.
 | `Nocturne-macos-arm64.dmg` | the Mac disk image |
 | `Nocturne-windows-x64-setup.exe` | the NSIS installer |
 | `Nocturne-windows-x64.msi` | the MSI installer |
-| `Nocturne-linux-x86_64.AppImage` | the AppImage |
-| `Nocturne-linux-amd64.deb` | the deb |
-| `Nocturne-linux-x86_64.rpm` | the rpm |
+| `Nocturne-linux-x86_64.AppImage` | the x86_64 AppImage (`*_amd64.AppImage`) |
+| `Nocturne-linux-amd64.deb` | the x86_64 deb (`*_amd64.deb`) |
+| `Nocturne-linux-x86_64.rpm` | the x86_64 rpm (`*.x86_64.rpm`) |
+| `Nocturne-linux-aarch64.AppImage` | the aarch64 AppImage (`*_aarch64.AppImage`) |
+| `Nocturne-linux-arm64.deb` | the aarch64 deb (`*_arm64.deb`) |
+| `Nocturne-linux-aarch64.rpm` | the aarch64 rpm (`*.aarch64.rpm`) |
 
 The job fails if a pattern matches no file or more than one, so a renamed package never ships
-without its fixed name.
+without its fixed name. The Linux patterns name the architecture as the bundler spells it, so each
+matches one package of one architecture and none of the fixed names. Each Linux build's
+`SOURCES.txt` goes on the release as `SOURCES-linux-x86_64.txt` or `SOURCES-linux-aarch64.txt`.
 
 ## First-open notes
 
