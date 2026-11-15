@@ -131,9 +131,36 @@ every tier (a temperature only); a debug build with the `test-sampling` feature 
 `NOCTURNE_TEST_SAMPLING` change it for evaluation runs. The mind's raw replies are traced at trace
 level on their own target, `nocturne::reply`, so a log kept at info never holds them.
 
-The backend follows the hardware: Metal on a Mac (the engine offers nothing else there), Vulkan on
-an integrated GPU, ROCm on a discrete AMD GPU, otherwise the CPU. When the machine runs short of
-memory later, the app offers the next smaller tier rather than failing (Large to Standard,
+The backend follows the hardware, one choice per engine recipe (`tier::choose_backend`): Metal on
+a Mac (the engine offers nothing else there), ROCm on a discrete AMD GPU, Vulkan on any other
+graphics (AMD integrated, NVIDIA, Intel), otherwise the CPU. A backend the engine reports as
+unsupported for the recipe is never chosen; the choice then falls to the CPU, except on a Mac. The
+engine's CUDA backend is not used: it serves llama.cpp only (speech and voice would still need
+another backend), needs a Turing or newer card and brings a runtime of its own, while Vulkan runs on
+every NVIDIA card the engine finds and shares one download with the other graphics.
+
+What the pinned engine reports, from its source and from a real `lemond` on an AMD machine:
+
+| Graphics | `devices` entry | Backends it lists as usable for llama.cpp |
+|---|---|---|
+| AMD | `amd_gpu`, one per GPU: `available`, `integrated`, `family` (`gfx...`), `vram_gb` | `rocm` (families it supports), `vulkan` |
+| NVIDIA | `nvidia_gpu`, one per card: `available`, `name`, `family` (`sm_...`), `compute_capability`, `vram_gb`, `driver_version`; with none, one entry with `available` false and an `error`. Discrete cards only, so no `integrated` field | `cuda` (Turing and newer), `vulkan` |
+| Intel | none: the engine has no Intel entry | `vulkan`, because the Vulkan backend lists the CPU as a device it runs on, so it is installable on every x86-64 computer |
+
+Because the engine says nothing about Intel graphics, `graphics::intel_gpus` finds them on the
+computer: on Linux a PCI display device from Intel that has a driver and a render node, with
+`/dev/dri` in view (so a container without the device stays on the CPU); on Windows a connected
+Intel display adapter, from `pnputil`. `Client::use_host_graphics` (turned on by the app, never by tests) adds the result to
+`devices.intel_gpu`, which an engine that reports Intel graphics itself fills the same way. The
+lookup runs once per launch.
+
+Graphics memory does not enter the memory budget, which is the computer's. The pool of a discrete
+card, as the engine reports its `vram_gb`, only lifts the engine's size cap, as the engine's own
+memory pools do. The Intel graphics found on the computer carry no size and count as integrated.
+A model larger than a card's memory is not refused: Nocturne passes no layer count, so llama.cpp
+offloads as many layers as the card has room for (its `--fit` default) and keeps the rest in the
+computer's memory, which the budget already counts in full. A card with less room should
+therefore be slower rather than fail. When the machine runs short of memory later, the app offers the next smaller tier rather than failing (Large to Standard,
 Standard to Small, Small to Tiny; Tiny has nothing smaller), and keeps the working one until the
 smaller one is ready. The tier is shown in plain words; model names appear only in the advanced
 details view.
