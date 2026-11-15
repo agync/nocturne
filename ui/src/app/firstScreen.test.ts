@@ -20,14 +20,27 @@ const base: SetupView = {
 describe("firstScreen", () => {
   it("opens setup until a size has been chosen, whatever the phase", () => {
     for (const phase of ["notStarted", "checking", "choosing", "failed"] as const) {
-      expect(firstScreen({ ...base, phase, chosen: null })).toBe("/setup");
+      expect(firstScreen({ ...base, phase, chosen: null }, "gettingReady")).toBe("/setup");
+      expect(firstScreen({ ...base, phase, chosen: null }, null)).toBe("/setup");
     }
   });
 
-  it("opens today's page once a size was chosen, even while it downloads or failed", () => {
-    for (const phase of ["notStarted", "downloading", "paused", "installing", "failed"] as const) {
-      expect(firstScreen({ ...base, phase, chosen: "small" })).toBe("/today");
+  it("opens setup again while a chosen first size is on its way", () => {
+    for (const phase of ["choosing", "downloading", "paused", "installing"] as const) {
+      expect(firstScreen({ ...base, phase, chosen: "small" }, "gettingReady")).toBe("/setup");
     }
-    expect(firstScreen(base)).toBe("/today");
+  });
+
+  it("opens today's page while a change from an earlier size is on its way", () => {
+    for (const phase of ["downloading", "paused", "installing"] as const) {
+      expect(firstScreen({ ...base, phase, chosen: "small" }, "resting")).toBe("/today");
+    }
+  });
+
+  it("opens today's page once set up, while the engine starts or after it gave up", () => {
+    for (const phase of ["notStarted", "checking", "failed"] as const) {
+      expect(firstScreen({ ...base, phase, chosen: "small" }, "gettingReady")).toBe("/today");
+    }
+    expect(firstScreen(base, "resting")).toBe("/today");
   });
 });

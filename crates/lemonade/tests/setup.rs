@@ -494,6 +494,8 @@ async fn the_first_view_carries_the_size_chosen_before() {
     let record = nocturne_lemonade::record::SetupRecord {
         version: 1,
         tier: Some(Tier::Small),
+        done: true,
+        completed: Some(Tier::Small),
         ..Default::default()
     };
     nocturne_lemonade::record::write(&rig.dirs.config(), &record).unwrap();

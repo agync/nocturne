@@ -49,8 +49,33 @@ describe("first open", () => {
     },
   );
 
-  it.each(["downloading", "done"])(
-    "opens today's page once a size was chosen (%s)",
+  /** An engine in one of the states of getting ready, with nothing yet to read with. */
+  const unready = (name: string) => {
+    const engine = at(name);
+    const status = engine.getStatus.bind(engine);
+    vi.spyOn(engine, "getStatus").mockImplementation(async () => ({
+      ...(await status()),
+      state: "gettingReady",
+    }));
+    return engine;
+  };
+
+  it.each(["downloading", "paused", "engineDown"])(
+    "opens setup again while the first size is not in place (%s)",
+    async (name) => {
+      renderApp({ hash: "", engine: unready(name), platform: fakePlatform() });
+      await screen.findByRole("main", { name: "Setting up Nocturne" });
+      expect(window.location.hash).toBe("#/setup");
+    },
+  );
+
+  it("opens today's page while a change to another size downloads", async () => {
+    renderApp({ hash: "", engine: at("downloading"), platform: fakePlatform() });
+    await waitFor(() => expect(window.location.hash).toBe("#/today"));
+  });
+
+  it.each(["done", "failed"])(
+    "opens today's page for someone already set up (%s)",
     async (name) => {
       renderApp({ hash: "", engine: at(name), platform: fakePlatform() });
       await waitFor(() => expect(window.location.hash).toBe("#/today"));

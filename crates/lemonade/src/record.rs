@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use nocturne_contract::Tier;
+use nocturne_contract::{PauseReason, SetupPhase, SetupView, Tier};
 use serde::{Deserialize, Serialize};
 
 use crate::error::RuntimeError;
@@ -39,10 +39,20 @@ pub fn read(config_dir: &Path) -> Option<SetupRecord> {
     serde_json::from_slice(&bytes).ok()
 }
 
-/// The tier setup was last asked for, read before the engine answers: none means setup has never
-/// begun on this computer.
-pub fn chosen(config_dir: &Path) -> Option<Tier> {
-    read(config_dir).and_then(|r| r.tier)
+/// `view` as far as the record can tell before the engine answers: the size last asked for (none
+/// means setup has never begun on this computer), and, when no size was ever finished, paused by
+/// the person, as `Setup::check` will find it. A finished size whose files have since gone reads
+/// as not started here; `Setup::check` finds that out and offers the choice again.
+pub fn seed(mut view: SetupView, config_dir: &Path) -> SetupView {
+    let Some(record) = read(config_dir) else {
+        return view;
+    };
+    view.chosen = record.tier;
+    if record.tier.is_some() && record.working_tier().is_none() {
+        view.phase = SetupPhase::Paused;
+        view.paused = Some(PauseReason::Person);
+    }
+    view
 }
 
 pub fn write(config_dir: &Path, record: &SetupRecord) -> Result<(), RuntimeError> {
@@ -62,7 +72,6 @@ mod tests {
     fn round_trips_and_tolerates_absence() {
         let tmp = tempfile::tempdir().unwrap();
         assert!(read(tmp.path()).is_none());
-        assert_eq!(chosen(tmp.path()), None);
         let mut record = SetupRecord {
             version: 1,
             tier: Some(Tier::Standard),
@@ -73,7 +82,55 @@ mod tests {
         record.backends.insert("llamacpp".into(), "vulkan".into());
         write(tmp.path(), &record).unwrap();
         assert_eq!(read(tmp.path()), Some(record));
-        assert_eq!(chosen(tmp.path()), Some(Tier::Standard));
+    }
+
+    #[test]
+    fn the_seed_tells_a_first_run_an_unfinished_first_setup_and_a_finished_one() {
+        let tmp = tempfile::tempdir().unwrap();
+        let blank = SetupView {
+            phase: SetupPhase::NotStarted,
+            detected: None,
+            chosen: None,
+            ram_gib: 0,
+            free_disk_bytes: 0.0,
+            options: Vec::new(),
+            downloaded_bytes: 0.0,
+            total_bytes: 0.0,
+            eta_seconds: None,
+            paused: None,
+            error: None,
+            needed_bytes: None,
+        };
+        let seen = |record: Option<SetupRecord>| {
+            if let Some(r) = record {
+                write(tmp.path(), &r).unwrap();
+            }
+            let v = seed(blank.clone(), tmp.path());
+            (v.phase, v.chosen, v.paused)
+        };
+        assert_eq!(seen(None), (SetupPhase::NotStarted, None, None));
+        let started = SetupRecord {
+            version: 1,
+            tier: Some(Tier::Small),
+            ..Default::default()
+        };
+        assert_eq!(
+            seen(Some(started.clone())),
+            (
+                SetupPhase::Paused,
+                Some(Tier::Small),
+                Some(PauseReason::Person)
+            )
+        );
+        let finished = SetupRecord {
+            done: true,
+            completed: Some(Tier::Small),
+            ..started
+        };
+        assert_eq!(
+            seen(Some(finished)),
+            (SetupPhase::NotStarted, Some(Tier::Small), None)
+        );
     }
 
     #[test]
