@@ -343,20 +343,6 @@ fn build_fake_provider() -> PathBuf {
     if let Some(path) = std::env::var_os("NOCTURNE_FAKE_PROVIDER") {
         return PathBuf::from(path);
     }
-    let exe = std::env::current_exe().expect("the test binary");
-    let profile_dir = exe
-        .parent()
-        .and_then(Path::parent)
-        .expect("the profile folder");
-    let profile = profile_dir
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let triple = profile_dir
-        .parent()
-        .and_then(Path::file_name)
-        .map(|n| n.to_string_lossy().into_owned())
-        .filter(|n| n.contains('-'));
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut build = Command::new(cargo);
     build
@@ -364,12 +350,13 @@ fn build_fake_provider() -> PathBuf {
         .args(["--features", "fake-server", "--bin", "fake-provider"])
         .args([
             "--profile",
-            if profile == "debug" { "dev" } else { &profile },
+            if cfg!(debug_assertions) {
+                "dev"
+            } else {
+                "release"
+            },
         ])
         .arg("--message-format=json-render-diagnostics");
-    if let Some(triple) = triple {
-        build.args(["--target", &triple]);
-    }
     let out = build.stderr(Stdio::inherit()).output().expect("cargo runs");
     assert!(out.status.success(), "the stand-in is built");
     String::from_utf8_lossy(&out.stdout)

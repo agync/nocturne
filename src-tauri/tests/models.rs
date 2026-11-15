@@ -32,14 +32,6 @@ fn fake_engine() -> PathBuf {
             if let Some(path) = std::env::var_os("NOCTURNE_FAKE_LEMOND") {
                 return PathBuf::from(path);
             }
-            let exe = std::env::current_exe().unwrap();
-            let profile_dir = exe.parent().and_then(Path::parent).unwrap();
-            let profile = profile_dir.file_name().unwrap().to_string_lossy();
-            let triple = profile_dir
-                .parent()
-                .and_then(Path::file_name)
-                .map(|n| n.to_string_lossy().into_owned())
-                .filter(|n| n.contains('-'));
             let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
             let mut build = std::process::Command::new(cargo);
             build
@@ -47,12 +39,13 @@ fn fake_engine() -> PathBuf {
                 .args(["--features", "fake-server", "--bin", "fake-lemond"])
                 .args([
                     "--profile",
-                    if profile == "debug" { "dev" } else { &profile },
+                    if cfg!(debug_assertions) {
+                        "dev"
+                    } else {
+                        "release"
+                    },
                 ])
                 .arg("--message-format=json-render-diagnostics");
-            if let Some(triple) = triple {
-                build.args(["--target", &triple]);
-            }
             let out = build
                 .stderr(std::process::Stdio::inherit())
                 .output()

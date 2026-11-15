@@ -36,16 +36,6 @@ fn build_fake_engine() -> PathBuf {
         assert!(path.is_file(), "NOCTURNE_FAKE_LEMOND is a file");
         return path;
     }
-    // The tests sit in `<target>/[<triple>/]<profile>/deps`, so the profile and the triple are
-    // read from there and cargo is asked where it put the binary.
-    let exe = std::env::current_exe().unwrap();
-    let profile_dir = exe.parent().and_then(Path::parent).unwrap();
-    let profile = profile_dir.file_name().unwrap().to_string_lossy();
-    let triple = profile_dir
-        .parent()
-        .and_then(Path::file_name)
-        .map(|n| n.to_string_lossy().into_owned())
-        .filter(|n| n.contains('-'));
     let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
     let mut build = std::process::Command::new(cargo);
     build
@@ -53,12 +43,13 @@ fn build_fake_engine() -> PathBuf {
         .args(["--features", "fake-server", "--bin", "fake-lemond"])
         .args([
             "--profile",
-            if profile == "debug" { "dev" } else { &profile },
+            if cfg!(debug_assertions) {
+                "dev"
+            } else {
+                "release"
+            },
         ])
         .arg("--message-format=json-render-diagnostics");
-    if let Some(triple) = triple {
-        build.args(["--target", &triple]);
-    }
     let out = build
         .stderr(std::process::Stdio::inherit())
         .output()
