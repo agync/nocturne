@@ -111,17 +111,19 @@ async fn the_child_environment_holds_only_what_we_allow() {
         .filter(|k| !common::set_by_the_platform(k))
         .collect();
     keys.sort_unstable();
-    assert_eq!(
-        keys,
-        [
-            "HOME",
-            "LANG",
-            "LEMONADE_ADMIN_API_KEY",
-            "LEMONADE_API_KEY",
-            "PATH",
-            "XDG_RUNTIME_DIR"
-        ]
-    );
+    let mut allowed = vec![
+        "HOME",
+        "LANG",
+        "LEMONADE_ADMIN_API_KEY",
+        "LEMONADE_API_KEY",
+        "PATH",
+        "XDG_RUNTIME_DIR",
+    ];
+    if cfg!(windows) {
+        allowed.extend(["TEMP", "TMP", "USERPROFILE"]);
+        allowed.sort_unstable();
+    }
+    assert_eq!(keys, allowed);
     assert_eq!(env["LEMONADE_API_KEY"], endpoint.key.as_str());
     let admin = env["LEMONADE_ADMIN_API_KEY"].as_str().unwrap();
     assert!(!admin.is_empty());
