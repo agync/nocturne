@@ -56,6 +56,9 @@ pub struct Settings<'a> {
     pub llamacpp_args: &'a str,
     /// The provider for Online answers; `None` (off) writes an empty list.
     pub cloud: Option<CloudEntry<'a>>,
+    /// Models of each kind the engine may hold at once: one, or two while the NPU reads items
+    /// beside the mind (the engine counts NPU and GPU chat models in one pool).
+    pub models_per_kind: u32,
 }
 
 /// Merges `settings` into `<config_dir>/config.json`, creating it when absent.
@@ -81,8 +84,7 @@ pub fn write(config_dir: &Path, settings: &Settings<'_>) -> Result<(), RuntimeEr
         ("auto_update_models", json!(false)),
         ("inhibit_suspend", json!(false)),
         ("auto_evict", json!(true)),
-        // One model of each kind at a time.
-        ("max_loaded_models", json!(1)),
+        ("max_loaded_models", json!(settings.models_per_kind)),
         // A model loaded with no saved context would otherwise be sized to fill the free memory.
         ("ctx_size", json!(8192)),
         ("log_level", json!("info")),
@@ -178,6 +180,7 @@ mod tests {
             whispercpp_backend: None,
             llamacpp_args: "",
             cloud: None,
+            models_per_kind: 1,
         }
     }
 
@@ -213,6 +216,12 @@ mod tests {
         assert_eq!(v["llamacpp"]["args"], "");
         assert_eq!(v["max_loaded_models"], 1);
         assert_eq!(v["ctx_size"], 8192);
+        let two = Settings {
+            models_per_kind: 2,
+            ..settings(&models)
+        };
+        write(tmp.path(), &two).unwrap();
+        assert_eq!(read(tmp.path())["max_loaded_models"], 2);
     }
 
     #[test]

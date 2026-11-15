@@ -5,13 +5,19 @@
 //! a speech model and the busiest moment with it still fits the memory budget (decision 0006).
 //! Every other job stays where it was. A failed NPU load or request is read again by the tier's
 //! own speech model; the engine's reason is kept for the advanced details.
+//!
+//! The NPU also takes the mind's work with [`MIND`] (decision 0014, [`placement`]): it reads items
+//! while the GPU mind answers where both fit, or does both where only one fits. Work the NPU
+//! cannot do goes to the GPU mind; after [`STRIKES`] failures in a row the GPU mind does all of it
+//! until Nocturne restarts.
 
 use std::path::Path;
 use std::sync::Mutex;
 
-use nocturne_contract::{ComponentRole, Fit, NpuCause, NpuView};
+use nocturne_contract::{ComponentRole, Fit, NpuCause, NpuView, Tier};
 
-use crate::client::{BackendState, SystemInfo};
+use crate::admin::Admin;
+use crate::client::{BackendState, Client, SystemInfo};
 use crate::fit;
 use crate::residency;
 use crate::selection::{self, Selection};
@@ -27,6 +33,24 @@ pub const SPEECH: Component = Component {
     model: "whisper-v3-turbo-FLM",
     bytes: 620_000_000,
 };
+
+/// The NPU's mind: it reads items, and answers too where the GPU mind does not fit beside it.
+pub const MIND: Component = Component {
+    role: ComponentRole::Mind,
+    model: "gemma4-it-e4b-FLM",
+    bytes: 9_100_000_000,
+};
+
+/// The context [`MIND`] is loaded with: the Standard tier's, which answering on the NPU replaces.
+pub const MIND_CONTEXT: u32 = 8192;
+
+/// Failures in a row after which the GPU mind does all the work until Nocturne restarts.
+pub const STRIKES: u32 = 3;
+
+/// Whether `model` runs on the NPU: the engine names every FastFlowLM model with this suffix.
+pub fn on_npu(model: &str) -> bool {
+    model.ends_with("-FLM")
+}
 
 /// The engine's NPU runtime download (FastFlowLM's portable build at the pinned engine).
 pub const RUNTIME_BYTES: u64 = 41_200_000;
@@ -138,6 +162,79 @@ pub fn fits(s: &Selection, ram: u64) -> bool {
     fit::fit_for(fit::peak(&picks, alone_voice), &budget) == Fit::Fits
 }
 
+/// Where the mind's work runs on a computer with an NPU the engine can use.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum Placement {
+    /// All of it on the GPU mind.
+    #[default]
+    Gpu,
+    /// [`MIND`] on the NPU reads items; the GPU mind answers. Both stay loaded.
+    Split,
+    /// [`MIND`] on the NPU reads and answers; the GPU mind loads only when the NPU fails.
+    NpuOnly,
+}
+
+/// Work the NPU's mind may do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Work {
+    /// Reading items: notes, second looks, photos.
+    Reading,
+    /// Answering and writing the page's headline.
+    Answering,
+}
+
+/// Where the mind's work for `s` runs on a computer with `ram` bytes of memory and `vram` bytes
+/// on its largest graphics card of its own (0 for graphics that share the memory). A mind the
+/// person chose does all its own work.
+///
+/// On shared memory every model draws on one budget: [`Placement::Split`] when the busiest moment
+/// with [`MIND`] beside the GPU mind Fits, else [`Placement::NpuOnly`] when it Fits with [`MIND`] in
+/// place of the GPU mind. Large is never NPU only, since its mind is far larger than [`MIND`]; the
+/// NPU reads beside it whenever the budget holds both, Tight included. On a card that holds the
+/// GPU mind and recall, those live in its memory, and only what runs off the card counts against
+/// `ram`. While two models of a kind may be held, the tier's speech model can stay beside
+/// the NPU's after a fallback, so it is counted too.
+pub fn placement(s: &Selection, ram: u64, vram: u64) -> Placement {
+    let mut picks = selection::picks(s);
+    if picks.mind.is_empty()
+        || s.tier == Tier::Unsupported
+        || s.custom.contains_key(&ComponentRole::Mind)
+    {
+        return Placement::Gpu;
+    }
+    let mem = |m: &str| fit::memory_of(m, None);
+    let mut fallback_speech = 0;
+    if !s.custom.contains_key(&ComponentRole::Speech) {
+        fallback_speech = mem(&picks.speech);
+        picks.speech = SPEECH.model.to_string();
+    }
+    let budget = fit::budget(ram, 0, u64::MAX);
+    let fits = |need: u64| fit::fit_for(need, &budget) == Fit::Fits;
+    let alone_voice = !residency::alone_for(s, &budget).is_empty();
+    let on_card = mem(&picks.mind) + mem(&picks.recall);
+    let split = if vram > 0 && on_card <= vram {
+        mem(&picks.speech) + mem(&picks.voice) + fallback_speech + mem(MIND.model)
+    } else {
+        fit::peak(&picks, alone_voice) + fallback_speech + mem(MIND.model)
+    };
+    // Large's mind is the one worth keeping, so the NPU reads beside it up to the budget itself,
+    // past the Fits line every other tier keeps to.
+    let large_fits = s.tier == Tier::Large && fit::fit_for(split, &budget) != Fit::WontFit;
+    if fits(split) || large_fits {
+        return Placement::Split;
+    }
+    if vram > 0 && on_card <= vram || s.tier == Tier::Large {
+        return Placement::Gpu;
+    }
+    let gpu_alone = fit::peak(&picks, alone_voice);
+    picks.mind = MIND.model.to_string();
+    if fits(fit::peak(&picks, alone_voice).max(gpu_alone)) {
+        Placement::NpuOnly
+    } else {
+        Placement::Gpu
+    }
+}
+
 /// True when a PCI device under `devices` (a `/sys/bus/pci/devices` folder) is an XDNA 2 NPU.
 pub fn pci_xdna2_under(devices: &Path) -> bool {
     let Ok(entries) = std::fs::read_dir(devices) else {
@@ -174,9 +271,24 @@ struct State {
     fits: bool,
     chosen: bool,
     failure: Option<Failure>,
+    /// Chosen at the last mind start, whatever has failed since.
+    placement: Placement,
+    /// Failures of the NPU's mind since it last did its work.
+    strikes: u32,
+    /// The NPU's mind failed too often, or is not on this computer: the GPU mind does everything
+    /// until Nocturne restarts.
+    mind_off: bool,
 }
 
 impl State {
+    fn placement(&self) -> Placement {
+        if self.readiness == Readiness::Ready && !self.mind_off {
+            self.placement
+        } else {
+            Placement::Gpu
+        }
+    }
+
     fn eligible(&self) -> bool {
         self.readiness == Readiness::Ready && self.fits && !self.chosen
     }
@@ -210,6 +322,113 @@ impl Npu {
             .as_ref()
             .is_some_and(|f| f.generation == generation);
         (s.eligible() && !failed_now).then_some(SPEECH.model)
+    }
+
+    /// Moves the mind's work from `before` to `placement` without the engine ever holding fewer
+    /// models of a kind than are in use: the limit goes up to two before the NPU's mind may load
+    /// beside the GPU mind (if the engine does not take it, the GPU keeps the work), and back to
+    /// one only once the mind that no longer belongs is unloaded. `client` launches the engine
+    /// with the same limit from then on.
+    pub async fn move_to(
+        &self,
+        admin: Option<&Admin>,
+        client: &Client,
+        before: Placement,
+        placement: Placement,
+        gpu_mind: &str,
+    ) {
+        let limit = |n: u32| async move {
+            let Some(admin) = admin else { return false };
+            admin
+                .set(&serde_json::json!({"max_loaded_models": n}))
+                .await
+                .inspect_err(|e| {
+                    tracing::warn!("could not set how many models the engine may hold: {e}")
+                })
+                .is_ok()
+        };
+        if placement == Placement::Split {
+            let held = limit(2).await;
+            self.set_placement(if held { placement } else { Placement::Gpu });
+        } else {
+            self.set_placement(placement);
+            let gone = match (before, placement) {
+                (Placement::Split, Placement::NpuOnly) => Some(gpu_mind),
+                (Placement::Split, _) => Some(MIND.model),
+                _ => None,
+            };
+            let unloaded = match gone {
+                Some(m) => client
+                    .unload(m)
+                    .await
+                    .inspect_err(|e| {
+                        tracing::warn!("could not unload {m}; keeping two of a kind: {e}")
+                    })
+                    .is_ok(),
+                None => true,
+            };
+            if unloaded {
+                limit(1).await;
+            }
+        }
+        client.set_models_per_kind(self.models_per_kind());
+    }
+
+    /// The placement chosen at this mind start (see [`placement`]).
+    pub fn set_placement(&self, p: Placement) {
+        self.state().placement = p;
+    }
+
+    /// Where the mind's work runs now: [`Placement::Gpu`] once the NPU cannot take it.
+    pub fn placement(&self) -> Placement {
+        self.state().placement()
+    }
+
+    /// The model to do `work` with on the NPU, if any.
+    pub fn model_for(&self, work: Work) -> Option<&'static str> {
+        match (self.placement(), work) {
+            (Placement::NpuOnly, _) | (Placement::Split, Work::Reading) => Some(MIND.model),
+            _ => None,
+        }
+    }
+
+    /// How many models of each kind the engine may hold: two while the NPU's mind sits beside the
+    /// GPU mind, else one.
+    pub fn models_per_kind(&self) -> u32 {
+        if self.placement() == Placement::Split {
+            2
+        } else {
+            1
+        }
+    }
+
+    /// The NPU's mind did its work.
+    pub fn mind_worked(&self) {
+        self.state().strikes = 0;
+    }
+
+    /// The NPU's mind failed, for `why`, and the GPU mind did the work instead.
+    pub fn mind_failed(&self, why: &str) {
+        let mut s = self.state();
+        s.strikes += 1;
+        tracing::warn!(
+            "the NPU could not do the mind's work; the GPU did it: {}",
+            engine_words(why)
+        );
+        if s.strikes >= STRIKES && !s.mind_off {
+            s.mind_off = true;
+            tracing::warn!(
+                "the NPU failed {} times in a row; the GPU does the mind's work until restart",
+                s.strikes
+            );
+        }
+    }
+
+    /// The NPU's mind is not on this computer: the GPU mind does everything until Nocturne
+    /// restarts.
+    pub fn mind_missing(&self) {
+        self.state().mind_off = true;
+        tracing::warn!("the NPU's mind is not on this computer; the GPU does its work");
     }
 
     /// The NPU read a recording.
@@ -408,6 +627,120 @@ mod tests {
         assert!(fits_at(Tier::Standard, 28));
         assert!(fits_at(Tier::Large, 60));
         assert!(!fits(&Selection::preset(Tier::Unsupported), 128 * GIB));
+    }
+
+    #[test]
+    fn the_npu_takes_the_minds_work_by_memory_and_graphics() {
+        use Placement::{Gpu, NpuOnly, Split};
+        const GIB: u64 = 1 << 30;
+        let at = |tier, gib: u64, vram: u64| placement(&Selection::preset(tier), gib * GIB, vram);
+        let shared = |tier, gib| at(tier, gib, 0);
+        let card = |tier, gib, vram_gb: u64| at(tier, gib, vram_gb * 1_000_000_000);
+        for gib in [6, 8, 16, 21] {
+            assert_eq!(shared(Tier::Tiny, gib), Gpu, "Tiny {gib}");
+        }
+        assert_eq!(shared(Tier::Tiny, 22), NpuOnly);
+        assert_eq!(shared(Tier::Tiny, 28), NpuOnly);
+        assert_eq!(shared(Tier::Tiny, 29), Split);
+        assert_eq!(shared(Tier::Small, 14), Gpu);
+        assert_eq!(shared(Tier::Small, 16), Gpu, "a 16 GB laptop keeps the GPU");
+        assert_eq!(shared(Tier::Small, 21), Gpu);
+        assert_eq!(shared(Tier::Small, 22), NpuOnly);
+        assert_eq!(shared(Tier::Small, 34), NpuOnly);
+        assert_eq!(shared(Tier::Small, 35), Split);
+        assert_eq!(shared(Tier::Standard, 26), Gpu);
+        assert_eq!(shared(Tier::Standard, 28), NpuOnly, "a 32 GB laptop");
+        assert_eq!(shared(Tier::Standard, 44), NpuOnly);
+        assert_eq!(shared(Tier::Standard, 45), Split);
+        assert_eq!(shared(Tier::Large, 60), Gpu, "Large keeps its own mind");
+        assert_eq!(shared(Tier::Large, 68), Gpu);
+        assert_eq!(
+            shared(Tier::Large, 69),
+            Split,
+            "within the budget, past the Fits line"
+        );
+        assert_eq!(shared(Tier::Large, 128), Split);
+        assert_eq!(shared(Tier::Unsupported, 128), Gpu);
+        assert_eq!(card(Tier::Standard, 28, 12), Split, "the mind on the card");
+        assert_eq!(
+            card(Tier::Small, 14, 8),
+            Gpu,
+            "too little memory beside the card"
+        );
+        assert_eq!(card(Tier::Small, 16, 8), Gpu);
+        assert_eq!(card(Tier::Standard, 28, 16), Split);
+        assert_eq!(
+            card(Tier::Standard, 28, 8),
+            NpuOnly,
+            "a card too small for the mind counts as shared memory"
+        );
+        assert_eq!(card(Tier::Large, 60, 32), Split);
+        assert_eq!(card(Tier::Large, 60, 16), Gpu);
+        let mut own = Selection::preset(Tier::Standard);
+        own.custom
+            .insert(ComponentRole::Mind, "Qwen3.5-4B-MTP-GGUF".into());
+        assert_eq!(
+            placement(&own, 128 * GIB, 0),
+            Gpu,
+            "a chosen mind does its own work"
+        );
+    }
+
+    #[test]
+    fn the_npus_mind_needs_a_usable_npu_and_stops_after_failures_in_a_row() {
+        let npu = Npu::default();
+        npu.set_placement(Placement::Split);
+        assert_eq!(npu.model_for(Work::Reading), None, "no NPU");
+        assert_eq!(npu.models_per_kind(), 1);
+        npu.set(Readiness::Ready, false, true);
+        assert_eq!(
+            npu.model_for(Work::Reading),
+            Some(MIND.model),
+            "whatever happens to recordings"
+        );
+        assert_eq!(npu.model_for(Work::Answering), None);
+        assert_eq!(npu.models_per_kind(), 2);
+        npu.set_placement(Placement::NpuOnly);
+        assert_eq!(npu.model_for(Work::Answering), Some(MIND.model));
+        assert_eq!(
+            npu.models_per_kind(),
+            1,
+            "the GPU mind loads only in its place"
+        );
+        npu.set_placement(Placement::Gpu);
+        assert_eq!(npu.model_for(Work::Reading), None);
+        npu.set_placement(Placement::Split);
+        for _ in 1..STRIKES {
+            npu.mind_failed("flm serve exited");
+        }
+        npu.mind_worked();
+        for _ in 1..STRIKES {
+            npu.mind_failed("flm serve exited");
+        }
+        assert_eq!(
+            npu.model_for(Work::Reading),
+            Some(MIND.model),
+            "a success starts the count again"
+        );
+        npu.mind_failed("flm serve exited");
+        assert_eq!(npu.model_for(Work::Reading), None);
+        assert_eq!(npu.models_per_kind(), 1, "from the next launch");
+        npu.set_placement(Placement::NpuOnly);
+        assert_eq!(
+            npu.model_for(Work::Answering),
+            None,
+            "until Nocturne restarts"
+        );
+        assert!(
+            !npu.view().causes.contains(&NpuCause::Failed),
+            "recordings are not affected"
+        );
+    }
+
+    #[test]
+    fn only_npu_models_are_on_the_npu() {
+        assert!(on_npu(MIND.model) && on_npu(SPEECH.model));
+        assert!(!on_npu("Qwen3.5-9B-GGUF"));
     }
 
     #[test]

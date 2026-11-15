@@ -76,6 +76,9 @@ pub fn saved_options() -> Vec<(&'static str, Map<String, Value>)> {
         npu.insert("evict_idle_timeout".into(), json!(secs));
     }
     out.push((crate::npu::SPEECH.model, npu));
+    let mut npu_mind = Map::new();
+    npu_mind.insert("ctx_size".into(), json!(crate::npu::MIND_CONTEXT));
+    out.push((crate::npu::MIND.model, npu_mind));
     out
 }
 

@@ -107,6 +107,8 @@ pub const TABLE: &[Entry] = &[
     row("Whisper-Large-v3", 380, false, true),
     // Reading recordings on the NPU: 0.3 GB in its process and 0.7 GB of NPU buffers, measured.
     row("whisper-v3-turbo-FLM", 100, true, true),
+    // Reading items on the NPU: its process while reading, measured.
+    row("gemma4-it-e4b-FLM", 980, true, true),
     // Reading aloud: the voice speaking alone, whatever its size.
     row("kokoro-v1", 340, true, true),
     // Finding memories.

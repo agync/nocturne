@@ -190,7 +190,7 @@ How Nocturne keeps to it:
 | Small llama.cpp caches on Tiny and Small | `config::llamacpp_args` (`--cache-ram 256 --ctx-checkpoints 4`) in the engine's `config.json`, set at launch from the installed tier and again when the mind is ready | The defaults keep up to 8 GiB of old prompts and 32 snapshots per conversation, which grow with every answer. Standard and Large keep the defaults, which were not measured with these caps |
 | Idle models are unloaded by the engine | `auto_evict` in `config.json`, and `evict_idle_timeout` saved per model by `residency::saved_options` (voice 60 seconds, speech 120, the Tiny mind 180; the other minds and recall keep the engine's 300). A load that saves its own options sends these too, so they are not dropped | Memory goes back to the computer between uses; the next request loads the model again with its saved options. The engine never evicts a model that is serving a request. On a Mac the engine has no memory-pressure eviction, so these timers are the only thing that frees memory there |
 | Every model's context is saved | `residency::saved_options`, and `ctx_size` 8192 in `config.json` as the default | A model loaded with nothing saved would be sized to fill the free memory |
-| One model of each kind at a time | `max_loaded_models` 1 in `config.json` | A second mind never loads beside the first |
+| One model of each kind at a time | `max_loaded_models` 1 in `config.json`, 2 while the NPU's mind reads beside the GPU mind (`Npu::models_per_kind`) | A second mind loads beside the first only where the budget holds both |
 | The voice runs alone on Tiny and Small | `residency::alone`, `Client::set_alone`, and `Mind::ready_to_speak`, called once per page | Before the page is read aloud, every other model that is not busy is unloaded once, so the voice (2 to 3 GB while it speaks) never shares memory with the mind; the engine has no setting for this |
 | The page is read aloud one line at a time | `editions::speech::make` asks the voice for one line per request and `wav::Joiner` takes each answer into the file at once | The voice's memory grows with the length of what it is asked to say, so no request is longer than a line, and nothing is held between requests but the samples. Section starts are still written into the file, so skipping between sections works as before |
 | No overnight tidy on battery | the scheduler | The night tidy waits for mains power; the one deliberate exception is the catch-up tidy after a sleep or a missed night, which keeps running on battery above 40 per cent (the owner decided this); below 40 it waits for power unless the person asks |
@@ -258,7 +258,8 @@ setup:
 
 | Work | Device | Why |
 |---|---|---|
-| Answers and reading items | GPU | The mind needs the bandwidth and the KV cache; FastFlowLM ignores the reading grammar |
+| Answers | GPU; NPU (`gemma4-it-e4b-FLM`) where only one mind fits on shared memory | The mind needs the bandwidth and the KV cache; the NPU where the GPU mind does not fit beside it ([decision 0014](/adr/0014-npu-mind.md)) |
+| Reading items | NPU (`gemma4-it-e4b-FLM`) when usable and it fits, otherwise the GPU mind | Leaves the GPU to answers ([decision 0014](/adr/0014-npu-mind.md)) |
 | Reading recordings | NPU (`whisper-v3-turbo-FLM`) when usable and it fits, otherwise the tier's speech model on the GPU or CPU | Leaves the GPU to answers and reading ([decision 0006](/adr/0006-npu-optional.md)) |
 | Finding memories, reranking | GPU or CPU | The NPU embedding model has no GPU twin, so a fallback would mix vectors; no NPU reranker |
 | Reading aloud | CPU (Metal on a Mac) | No NPU voice in the catalogue |
@@ -271,8 +272,13 @@ with the NPU model (1.0 GB measured, in `fit_table`) still Fits. A failed NPU lo
 again by the tier's speech model; when that works the NPU is left alone until the engine restarts,
 and the engine's reason (`flm validate`: driver, kernel, firmware, memory lock) is kept for the
 advanced details. Setup fetches the runtime and the model as optional steps, only when they will be
-used. The engine has one slot per kind of model, shared by every device, so an NPU chat model would
-evict the GPU mind; nothing is placed by how busy the GPU is.
+used. `npu::placement` decides where the mind's work runs: Split (the NPU's mind reads, the GPU
+mind answers, both loaded) where both fit, NPU only (the NPU's mind reads and answers) on shared
+memory where only one fits, GPU otherwise. A graphics card that holds the GPU mind keeps it out of
+the computer's memory budget. Reading requests to the NPU carry the reading JSON schema, since
+FastFlowLM ignores a grammar. The engine counts models per kind across every device, so in Split
+`max_loaded_models` is 2. Work the NPU cannot do goes to the GPU mind; three failures in a row
+leave it all there until Nocturne restarts. Nothing is placed by how busy the GPU is.
 
 ## Failure modes
 

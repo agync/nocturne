@@ -218,8 +218,8 @@ struct Inner {
     dropped: Mutex<Option<Tier>>,
     /// Setup's share of the download window, which model changes may hold at the same time.
     window: Mutex<Option<OnlineHold>>,
-    /// This run also fetches the NPU's runtime and model, because they will be used.
-    npu: Mutex<bool>,
+    /// The NPU models this run also fetches, with the NPU's runtime, because they will be used.
+    npu: Mutex<Vec<Component>>,
 }
 
 /// Drives setup for one engine. Dropping it stops its work; the engine's downloads carry on.
@@ -322,7 +322,7 @@ impl Setup {
                 wake: Notify::new(),
                 dropped: Mutex::new(None),
                 window: Mutex::new(None),
-                npu: Mutex::new(false),
+                npu: Mutex::new(Vec::new()),
             }),
         }
     }
@@ -438,27 +438,31 @@ impl Inner {
             Vec::new()
         } else {
             let mut out = tier::extras(tier);
-            if *lock(&self.npu) {
-                out.push(npu::SPEECH);
-            }
+            out.extend(lock(&self.npu).iter().copied());
             out
         }
     }
 
-    /// Whether recordings will be read on the NPU with `tier`, so that its runtime and model
-    /// are worth fetching: the engine can use the NPU, the person has not chosen a speech model
-    /// and the NPU model fits beside the others. Decided once per run, before anything is
-    /// fetched.
+    /// Whether the NPU will be used with `tier`, so that its runtime is worth fetching, with
+    /// the models it will use: the speech model when the person has not chosen one and it fits
+    /// beside the others, the NPU's mind when it will take the mind's work ([`npu::placement`]).
+    /// Decided once per run, before anything is fetched.
     fn decide_npu(&self, tier: Tier, info: &SystemInfo, ram: u64) -> bool {
         let chosen = selection::Selection {
             tier,
             ..selection::read(&self.config_dir)
         };
-        let wanted = self.opts.components.is_none()
-            && npu::readiness(info, false).wanted()
-            && !chosen.custom.contains_key(&ComponentRole::Speech)
-            && npu::fits(&chosen, ram);
-        *lock(&self.npu) = wanted;
+        let mut models = Vec::new();
+        if self.opts.components.is_none() && npu::readiness(info, false).wanted() {
+            if !chosen.custom.contains_key(&ComponentRole::Speech) && npu::fits(&chosen, ram) {
+                models.push(npu::SPEECH);
+            }
+            if npu::placement(&chosen, ram, info.devices.largest_pool()) != npu::Placement::Gpu {
+                models.push(npu::MIND);
+            }
+        }
+        let wanted = !models.is_empty();
+        *lock(&self.npu) = models;
         wanted
     }
 
@@ -606,21 +610,15 @@ impl Inner {
             });
             return Ok(());
         }
-        let with_npu = self.decide_npu(tier, &info, ram);
-        let models: u64 = self
+        let mut with_npu = self.decide_npu(tier, &info, ram);
+        let extras = self.missing_extras(tier).await?;
+        let mut models: u64 = self
             .missing(tier)
             .await?
             .iter()
-            .chain(&self.missing_extras(tier).await?)
+            .chain(&extras)
             .map(|c| c.bytes)
             .sum();
-        let npu_runtime = if with_npu
-            && info.backend_state(npu::RECIPE, npu::BACKEND) != BackendState::Installed
-        {
-            npu::RUNTIME_BYTES
-        } else {
-            0
-        };
         let backends: u64 = self
             .recipes(tier)
             .into_iter()
@@ -631,9 +629,22 @@ impl Inner {
                     _ => backend_estimate(recipe, backend),
                 }
             })
-            .sum::<u64>()
-            + npu_runtime;
-        let remaining = models + backends;
+            .sum();
+        let runtime = if info.backend_state(npu::RECIPE, npu::BACKEND) != BackendState::Installed {
+            npu::RUNTIME_BYTES
+        } else {
+            0
+        };
+        let need =
+            |models: u64, with_npu: bool| models + backends + if with_npu { runtime } else { 0 };
+        // The NPU's mind is optional: a disk with room for the tier but not for it goes without.
+        if free < need(models, with_npu) + DISK_HEADROOM && extras.contains(&npu::MIND) {
+            models -= npu::MIND.bytes;
+            let mut npu_models = lock(&self.npu);
+            npu_models.retain(|c| *c != npu::MIND);
+            with_npu = !npu_models.is_empty();
+        }
+        let remaining = need(models, with_npu);
         if free < remaining + DISK_HEADROOM {
             self.disk_failed(remaining, None);
             return Ok(());
@@ -847,7 +858,7 @@ impl Inner {
                 _ => steps.push(Step::Backend { recipe, backend }),
             }
         }
-        if *lock(&self.npu)
+        if !lock(&self.npu).is_empty()
             && info.backend_state(npu::RECIPE, npu::BACKEND) != BackendState::Installed
         {
             steps.push(Step::Backend {

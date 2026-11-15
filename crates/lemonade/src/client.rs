@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 
@@ -71,6 +71,8 @@ struct Shared {
     saved: RwLock<HashMap<String, serde_json::Map<String, Value>>>,
     /// Whether `system_info` adds the graphics the engine does not report (see `graphics`).
     host_graphics: AtomicBool,
+    /// What each launch writes as the engine's `max_loaded_models`.
+    models_per_kind: AtomicU32,
 }
 
 /// When a model was last asked for something, and how many requests it is serving now.
@@ -184,6 +186,7 @@ impl Client {
                 alone: RwLock::new(Vec::new()),
                 saved: RwLock::new(HashMap::new()),
                 host_graphics: AtomicBool::new(false),
+                models_per_kind: AtomicU32::new(1),
             }),
         }
     }
@@ -238,6 +241,18 @@ impl Client {
             .into_iter()
             .map(|(m, o)| (m.to_string(), o))
             .collect();
+    }
+
+    /// How many models of each kind the engine may hold, from the next launch on: two while the
+    /// NPU reads items beside the mind.
+    pub fn set_models_per_kind(&self, n: u32) {
+        self.shared
+            .models_per_kind
+            .store(n.max(1), Ordering::Relaxed);
+    }
+
+    pub fn models_per_kind(&self) -> u32 {
+        self.shared.models_per_kind.load(Ordering::Relaxed).max(1)
     }
 
     /// Models that must run with nothing else loaded: before one of them is used, every other
