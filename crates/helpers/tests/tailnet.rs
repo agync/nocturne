@@ -3,7 +3,7 @@
 
 mod common;
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::time::Duration;
 
 use common::{Sandbox, argv, env_keys, until, wait_state};
@@ -620,16 +620,11 @@ async fn sign_out_while_off_touches_nothing() {
 async fn windows_key_goes_on_input_and_into_the_header() {
     let target = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let port = target.local_addr().unwrap().port();
-    let seen = std::thread::spawn(move || {
-        let (mut conn, _) = target.accept().unwrap();
-        let mut head = Vec::new();
-        let mut byte = [0u8; 1];
-        while !head.ends_with(b"\r\n\r\n") && conn.read(&mut byte).unwrap() == 1 {
-            head.push(byte[0]);
-        }
-        let _ = conn.write_all(b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n");
-        String::from_utf8(head).unwrap()
-    });
+    let seen = common::origin_for(
+        target,
+        "/p",
+        b"HTTP/1.1 204 No Content\r\ncontent-length: 0\r\n\r\n",
+    );
     let sb = Sandbox::new("tn-key-header");
     let t = transport(&sb);
     let key = "k3yk3yk3y0123456789abcdefABCDEF";
@@ -661,9 +656,13 @@ async fn windows_key_goes_on_input_and_into_the_header() {
     phone
         .write_all(b"GET /p HTTP/1.1\r\nHost: x\r\nnocturne_helper_key: forged\r\n\r\n")
         .unwrap();
-    let head = tokio::task::spawn_blocking(move || seen.join().unwrap())
-        .await
-        .unwrap();
+    let head = tokio::time::timeout(
+        Duration::from_secs(10),
+        tokio::task::spawn_blocking(move || seen.join().unwrap()),
+    )
+    .await
+    .expect("the request reached the origin")
+    .unwrap();
     let keys: Vec<&str> = head
         .lines()
         .filter(|l| {
