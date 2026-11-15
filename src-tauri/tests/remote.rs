@@ -38,6 +38,15 @@ fn block<T>(f: impl std::future::Future<Output = T>) -> T {
     tauri::async_runtime::block_on(f)
 }
 
+/// [`block`], failing with `what` when `f` takes longer than ten seconds.
+fn block_within<T>(what: &str, f: impl std::future::Future<Output = T>) -> T {
+    block(async {
+        tokio::time::timeout(Duration::from_secs(10), f)
+            .await
+            .unwrap_or_else(|_| panic!("{what}: not within ten seconds"))
+    })
+}
+
 fn on_with(mind: Arc<dyn Mind>) -> Phone {
     let h = harness_with_mind(mind);
     let files = tempfile::tempdir().unwrap();
@@ -453,7 +462,7 @@ fn removed_phone_long_poll_ends_within_a_second() {
     call(&mut c, RemoteCall::GetStatus);
     let held = std::thread::spawn(move || {
         let started = Instant::now();
-        let r = block(c.next());
+        let r = block_within("the removed phone's held poll", c.next());
         (r.is_err(), started.elapsed())
     });
     std::thread::sleep(Duration::from_millis(300));
@@ -1432,7 +1441,7 @@ fn original_only_if_cited_in_the_last_hour() {
     );
     let mut got = Vec::new();
     loop {
-        match block(c.next()).unwrap() {
+        match block_within("the next piece of the original", c.next()).unwrap() {
             Down::Chunk(ch) => {
                 got.extend_from_slice(&ch.bytes);
                 if ch.last {

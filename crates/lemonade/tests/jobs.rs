@@ -127,6 +127,17 @@ async fn until(
     .unwrap_or_else(|_| panic!("progress never matched; last {:?}", rx.borrow().clone()))
 }
 
+/// Waits until `control`'s download window is open, failing with `what` after ten seconds.
+async fn window_opens(control: &nocturne_lemonade::Control, what: &str) {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while !control.download_window_open() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("{what}: not within ten seconds"));
+}
+
 #[tokio::test]
 async fn a_download_finishes_once_into_the_ledger_and_closes_the_window() {
     let r = rig("download-ms=300").await;
@@ -396,9 +407,7 @@ async fn resuming_while_the_download_is_cancelled_leaves_the_window_closed() {
     let resume = r.jobs.resume();
     let cancel = async {
         // The resume has asked for the window, and its relaunch takes half a second.
-        while !control.download_window_open() {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
+        window_opens(&control, "the resume asked for the download window").await;
         r.jobs.cancel().await
     };
     let (resumed, cancelled) = tokio::join!(resume, cancel);
@@ -423,9 +432,11 @@ async fn following_an_engine_while_the_download_is_cancelled_leaves_its_window_c
     until(&mut rx, |p| p.received > 0).await;
     let follow = r.jobs.follow(theirs.clone());
     let cancel = async {
-        while !theirs.download_window_open() {
-            tokio::time::sleep(Duration::from_millis(5)).await;
-        }
+        window_opens(
+            &theirs,
+            "the follow asked for the new engine's download window",
+        )
+        .await;
         r.jobs.cancel().await
     };
     let (followed, cancelled) = tokio::join!(follow, cancel);

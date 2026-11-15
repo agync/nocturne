@@ -420,13 +420,14 @@ async fn a_restarted_engine_resumes_the_partial_download() {
     let state: Value =
         serde_json::from_slice(&std::fs::read(dirs.cache().join("fake-state.json")).unwrap())
             .unwrap();
-    let kept: u64 = state["partial"]
+    let kept: Vec<(String, u64)> = state["partial"]
         .as_object()
         .unwrap()
-        .values()
-        .map(|v| v.as_u64().unwrap())
-        .sum();
-    assert!(kept > 0, "{state}");
+        .iter()
+        .map(|(name, bytes)| (name.clone(), bytes.as_u64().unwrap()))
+        .filter(|(_, bytes)| *bytes > 0)
+        .collect();
+    assert!(!kept.is_empty(), "{state}");
 
     // Slow at first, so the resumed download is still in the engine's list when it is looked
     // at: a download that finished first leaves the list, and nothing would be found.
@@ -439,21 +440,34 @@ async fn a_restarted_engine_resumes_the_partial_download() {
     let mut rx = setup.view();
     setup.resume().await.unwrap();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 10).await;
-    let jobs = tokio::time::timeout(Duration::from_secs(10), async {
+    // The download of a model that was cut short, as the engine lists it once it is back.
+    let mut listed = json!([]);
+    let (name, kept_bytes, resumed) = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let jobs = raw(&sup, "GET", "/v1/downloads", json!({})).await;
-            if !jobs.as_array().unwrap().is_empty() {
-                return jobs;
+            listed = jobs.clone();
+            let found = jobs.as_array().unwrap().iter().find_map(|job| {
+                let name = job["model_name"].as_str()?;
+                let (_, kept_bytes) = kept.iter().find(|(k, _)| k == name)?;
+                Some((
+                    name.to_string(),
+                    *kept_bytes,
+                    job["bytes_downloaded"].as_u64()?,
+                ))
+            });
+            if let Some(found) = found {
+                return found;
             }
             tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await
-    .expect("the resumed download shows in the engine's list");
-    let resumed = jobs[0]["bytes_downloaded"].as_u64().unwrap();
+    .unwrap_or_else(|_| {
+        panic!("no download of {kept:?} in the engine's list, which is {listed}");
+    });
     assert!(
-        resumed >= kept.min(20_000),
-        "restarted from {resumed}, kept {kept}"
+        resumed >= kept_bytes,
+        "{name} restarted from {resumed}, though {kept_bytes} bytes were kept"
     );
     raw(
         &sup,
