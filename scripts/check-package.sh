@@ -110,7 +110,9 @@ else
             ;;
         *.rpm)
             kind=rpm
-            (cd "$root" && rpm2cpio "$input" | cpio -idm --quiet)
+            # rpm2cpio from rpm 4.18 (Ubuntu 24.04) exits 1 when the header has no archive size,
+            # which the Tauri bundler leaves out; rpm2archive checks the payload without it.
+            rpm2archive -n - < "$input" | tar -xf - -C "$root"
             pkg_version=$(rpm -qp --qf '%{VERSION}' "$input" 2> /dev/null)
             rpm -qpR "$input" > "$scratch/requires" 2> /dev/null
             requires="$scratch/requires"
