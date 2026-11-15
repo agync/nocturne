@@ -188,8 +188,8 @@ own, and then to `lemond.log` (owner-only, rotated at 8 MB, 3 files in all: `lem
 response:`, `body:`, `Body:`), and every following line of that output until one that starts with
 the engine's own log prefix, so a multi-line body is withheld whole. Standard error never has that
 prefix, so a marker there withholds the rest of it until the engine starts again. Any
-occurrence of the key or of the launch's two engine keys, or of the first or last eight characters
-of one, becomes `[key]`, and lines are capped at 1 KB. When the file falls behind, lines are
+occurrence of the key or of the launch's two engine keys, or of any eight or more characters in a
+row from one, becomes `[key]`, and lines are capped at 1 KB. When the file falls behind, lines are
 dropped rather than the engine waiting, and a log that cannot be opened is tried again at most every
 30 s, with lines dropped meanwhile. The engine's log level stays at `info`, so reply text is
 never produced. The whole app sets `RLIMIT_CORE` to 0 at start and on Linux is made undumpable;
