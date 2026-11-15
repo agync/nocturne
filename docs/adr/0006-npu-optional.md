@@ -24,7 +24,7 @@ Per job, from what the engine's catalogue offers on the NPU and what was measure
 | Job | Where | Why |
 |---|---|---|
 | Reading recordings | NPU, `whisper-v3-turbo-FLM` | Same model as the Large tier's and stronger than the Base and Small models of the other tiers; reading a recording beside an answer slows the answer far less (below) |
-| Answering and reading items | GPU | FastFlowLM ignores the reading grammar without saying so; an NPU chat model takes the engine's one chat slot and evicts the GPU mind; no NPU model has been scored on Nocturne's answers |
+| Answering and reading items | GPU | FastFlowLM ignores the reading grammar without saying so; an NPU chat model takes the engine's one chat slot and evicts the GPU mind; no NPU model has been scored on Nocturne's answers. The NPU takes this work where it fits in [0014](0014-npu-mind.md) |
 | Finding memories | GPU | The one NPU model (`embed-gemma-300m-FLM`) has no GPU twin, so a fallback would mix two kinds of vector; changing it means reading every memory again |
 | Reranking, reading aloud | GPU, CPU | The catalogue has no NPU model for either |
 
