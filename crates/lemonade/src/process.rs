@@ -12,13 +12,7 @@ const CREATE_NO_WINDOW: u32 = windows::Win32::System::Threading::CREATE_NO_WINDO
 
 /// A program to run and wait for, or to leave running unsupervised. A program that must end with
 /// the app goes through [`group`].
-pub fn command(program: impl AsRef<std::ffi::OsStr>) -> std::process::Command {
-    #[cfg_attr(not(windows), allow(unused_mut))]
-    let mut cmd = std::process::Command::new(program);
-    #[cfg(windows)]
-    std::os::windows::process::CommandExt::creation_flags(&mut cmd, CREATE_NO_WINDOW);
-    cmd
-}
+pub use nocturne_engine::process::command;
 
 /// [`command`] for async callers.
 pub fn tokio_command(program: impl AsRef<std::ffi::OsStr>) -> tokio::process::Command {
@@ -52,9 +46,11 @@ pub fn group(cmd: tokio::process::Command) -> CommandWrap {
 mod tests {
     use std::path::{Path, PathBuf};
 
-    /// Sources that may build a command themselves: this module, and code built for macOS only.
+    /// Sources that may build a command themselves: this module, the engine's, which it
+    /// re-exports, and code built for macOS only.
     const OWN_BUILDERS: &[&str] = &[
         "crates/lemonade/src/process.rs",
+        "crates/engine/src/process.rs",
         "crates/intelligence/src/host/macos.rs",
     ];
 

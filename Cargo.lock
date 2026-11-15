@@ -3168,6 +3168,7 @@ name = "nocturne-helpers"
 version = "0.2.2"
 dependencies = [
  "flate2",
+ "nocturne-engine",
  "nocturne-lemonade",
  "process-wrap",
  "reqwest",

@@ -1,4 +1,5 @@
-//! Private files: the data directory is for the person alone (mode 0700, files 0600 on Unix).
+//! Private files: the data directory is for the person alone (mode 0700, files 0600 on Unix; an
+//! owner-only access list on Windows, see [`crate::private`]).
 
 use std::fs::File;
 use std::path::Path;
@@ -7,18 +8,7 @@ use crate::error::Result;
 
 /// Create a directory (and parents) readable only by the owner.
 pub(crate) fn create_private_dir(path: &Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)?;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
-    }
-    #[cfg(not(unix))]
-    std::fs::create_dir_all(path)?;
-    Ok(())
+    Ok(crate::private::create_dir(path)?)
 }
 
 /// Create (or truncate) a file readable only by the owner.
@@ -65,19 +55,12 @@ pub(crate) fn shred(path: &Path) {
     let _ = std::fs::remove_file(path);
 }
 
-/// Create one new directory, owner-only. Fails if the name exists in any form, a symlink
-/// included, so nothing already there is followed or reused.
-pub(crate) fn create_private_dir_new(path: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    let builder = {
-        use std::os::unix::fs::DirBuilderExt;
-        let mut b = std::fs::DirBuilder::new();
-        b.mode(0o700);
-        b
-    };
-    #[cfg(not(unix))]
-    let builder = std::fs::DirBuilder::new();
-    builder.create(path)
+/// Create one new directory, owner-only, in a place the person chose. Fails if the name exists
+/// in any form, a symlink included, so nothing already there is followed or reused. Where the
+/// file system cannot hold an access list the folder stays, the reason is logged and the answer
+/// says it is not private.
+pub(crate) fn create_chosen_dir_new(path: &Path) -> std::io::Result<crate::private::Privacy> {
+    crate::private::create_chosen_dir_new(path)
 }
 
 /// Create one new file, owner-only, failing if the name exists (`O_CREAT | O_EXCL`, which does

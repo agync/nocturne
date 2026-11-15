@@ -34,6 +34,8 @@ mod util;
 
 pub mod coverage;
 pub mod day;
+pub mod private;
+pub mod process;
 pub mod store;
 
 pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_title, trust_for};

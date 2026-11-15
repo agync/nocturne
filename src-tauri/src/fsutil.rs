@@ -1,20 +1,11 @@
-//! Private files: the data folder is for the person alone (folders 0700, files 0600 on Unix).
+//! Private files: the data folder is for the person alone (folders 0700, files 0600 on Unix; an
+//! owner-only access list on Windows, see `nocturne_engine::private`).
 
 use std::path::Path;
 
 /// Create a folder (and parents) readable only by the owner.
 pub fn create_private_dir(path: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-        std::fs::DirBuilder::new()
-            .recursive(true)
-            .mode(0o700)
-            .create(path)?;
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
-    }
-    #[cfg(not(unix))]
-    std::fs::create_dir_all(path)
+    nocturne_engine::private::create_dir(path)
 }
 
 /// Make a file readable only by the owner. Missing files are ignored.

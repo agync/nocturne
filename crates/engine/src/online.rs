@@ -700,7 +700,7 @@ pub(crate) fn export_section(conn: &Connection, dir: &Path) -> Result<()> {
         }
     }
     let folder = dir.join("online");
-    std::fs::create_dir_all(&folder)?;
+    crate::private::create_dir(&folder)?;
     std::fs::write(folder.join("sent.md"), out)?;
     Ok(())
 }

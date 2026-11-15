@@ -160,7 +160,7 @@ fn remove(path: &Path) -> std::io::Result<()> {
 /// Writes `text` to `path`, mode 0600 in a folder of mode 0700, replacing it whole.
 fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
     let dir = path.parent().unwrap_or(Path::new("."));
-    std::fs::create_dir_all(dir)?;
+    nocturne_engine::private::create_dir(dir)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;

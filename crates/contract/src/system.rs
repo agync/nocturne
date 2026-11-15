@@ -398,6 +398,8 @@ pub struct AdvancedView {
 }
 
 /// What an export wrote. `path` is the fresh folder created inside the chosen directory.
+/// `not_private` is set when that drive keeps no access lists (FAT or exFAT on Windows), so the
+/// folder is open to anyone who can read the drive.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -406,6 +408,8 @@ pub struct ExportReport {
     pub memories: u32,
     pub pages: u32,
     pub originals: u32,
+    #[serde(default)]
+    pub not_private: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

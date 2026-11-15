@@ -1418,6 +1418,7 @@ export class MockEngine implements EngineClient {
       memories: this.memories.length,
       pages: this.pages.length,
       originals: this.items.filter((i) => i.hasOriginal).length,
+      notPrivate: false,
     };
     const total = report.memories + report.pages + report.originals;
     for (const done of [Math.round(total / 3), Math.round((2 * total) / 3), total]) {

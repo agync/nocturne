@@ -375,8 +375,7 @@ pub(crate) fn hex(bytes: &[u8]) -> String {
 
 /// Create a folder only the owner can open.
 pub(crate) fn make_private_dir(path: &Path) -> Result<(), HelperError> {
-    std::fs::create_dir_all(path).map_err(disk_error)?;
-    restrict(path, 0o700)
+    nocturne_engine::private::create_dir(path).map_err(disk_error)
 }
 
 #[cfg(unix)]

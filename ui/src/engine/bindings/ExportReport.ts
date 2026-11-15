@@ -2,5 +2,7 @@
 
 /**
  * What an export wrote. `path` is the fresh folder created inside the chosen directory.
+ * `not_private` is set when that drive keeps no access lists (FAT or exFAT on Windows), so the
+ * folder is open to anyone who can read the drive.
  */
-export type ExportReport = { path: string, memories: number, pages: number, originals: number, };
+export type ExportReport = { path: string, memories: number, pages: number, originals: number, notPrivate: boolean, };

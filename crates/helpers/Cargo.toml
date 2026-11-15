@@ -21,6 +21,7 @@ path = "src/bin/fake-tailnet.rs"
 required-features = ["fake"]
 
 [dependencies]
+nocturne-engine.workspace = true
 nocturne-lemonade.workspace = true
 tokio = { workspace = true, features = ["process", "io-util", "time", "fs", "sync", "net"] }
 tokio-util = { version = "0.7", default-features = false }
