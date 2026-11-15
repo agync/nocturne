@@ -66,7 +66,8 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 
 The `changed paths` job compares a pull request with its merge base, and its run summary says
 which jobs it chose. The table of areas is `scripts/ci-areas.sh`; `scripts/test_ci_areas.py`
-checks one changed path for each of its patterns, and that it writes every flag `ci.yml` reads.
+checks one changed path for each of its patterns, that each job's `if:` reads the flag of its
+area and it needs only `changes`, that none continues on error, and that `gate` needs every job.
 A change to a workflow, the `Makefile`, `rust-toolchain.toml` or that script, a push to `main`
 and a hand run run every job. Without a merge queue, the run on `main` is the first test of
 the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in

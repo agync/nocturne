@@ -56,6 +56,53 @@ CASES = (
 )
 
 
+# The flag each job of ci.yml runs on; None for the jobs that always run.
+JOBS = {
+    "changes": None,
+    "hygiene": None,
+    "gate": None,
+    "rust": "rust",
+    "rust-platforms": "rust-platforms",
+    "ui": "ui",
+    "e2e": "ui",
+    "ui-platforms": "ui-platforms",
+    "scripts": "scripts",
+    "tailnet": "tailnet",
+    "site": "site",
+    "package-linux": "package-linux",
+    "package-macos": "package",
+    "package-windows": "package",
+}
+
+
+def workflow_jobs():
+    """Each job of ci.yml with its `if:` and the jobs it needs, read from the YAML's layout."""
+    with open(WORKFLOW, encoding="utf-8") as f:
+        lines = f.read().split("\n")
+    start = next(i for i, line in enumerate(lines) if re.fullmatch(r"jobs:\s*(#.*)?", line))
+    jobs, job, key = {}, None, None
+    for line in lines[start + 1 :]:
+        if m := re.fullmatch(r"  ([A-Za-z_][A-Za-z0-9_-]*):\s*(#.*)?", line):
+            job = jobs[m[1]] = {"if": None, "needs": [], "continue-on-error": False}
+        elif job is None:
+            assert not line.strip() or line.lstrip().startswith("#"), f"not a job: {line!r}"
+        elif re.fullmatch(r"  [^\s#].*", line):
+            raise AssertionError(f"a job id the parser does not read: {line!r}")
+        elif m := re.fullmatch(r"    (if|needs|continue-on-error):(.*)", line):
+            key, value = m[1], m[2].strip()
+            if key == "if":
+                job["if"] = value
+            elif key == "continue-on-error":
+                job[key] = True
+            elif value:
+                job["needs"] = [value]
+        elif key == "needs" and (m := re.fullmatch(r"      - ([A-Za-z_][A-Za-z0-9_-]*)", line)):
+            job["needs"].append(m[1])
+        elif re.match(r"    \S", line):
+            key = None
+    return jobs
+
+
 def areas(*args, paths=()):
     proc = subprocess.run(
         [SCRIPT, *args],
@@ -81,8 +128,26 @@ class Table(unittest.TestCase):
             read = set(re.findall(r"needs\.changes\.outputs\.([A-Za-z0-9_-]+)", f.read()))
         self.assertEqual(read, EVERY)
 
+    def test_each_job_runs_on_its_flag(self):
+        jobs = workflow_jobs()
+        self.assertEqual(set(jobs), set(JOBS))
+        self.assertFalse([n for n, j in jobs.items() if j["continue-on-error"]])
+        for name, flag in JOBS.items():
+            with self.subTest(job=name):
+                if flag is None:
+                    self.assertIn(jobs[name]["if"], (None, "always()"))
+                else:
+                    self.assertIn(flag, EVERY)
+                    self.assertEqual(jobs[name]["if"], f"needs.changes.outputs.{flag} != 'false'")
+                    self.assertEqual(jobs[name]["needs"], ["changes"])
+
+    def test_the_gate_needs_every_job(self):
+        jobs = workflow_jobs()
+        self.assertEqual(jobs["gate"]["if"], "always()")
+        self.assertEqual(set(jobs["gate"]["needs"]), set(jobs) - {"gate"})
+
     def test_an_unknown_argument_is_refused(self):
-        for args in (["--al"], ["--all", "extra"], ["-"]):
+        for args in (["--al"], ["--all", "extra"], ["-"], [""], [""]):
             with self.subTest(args=args):
                 proc = subprocess.run(
                     [SCRIPT, *args], input="", capture_output=True, text=True
