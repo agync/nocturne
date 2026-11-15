@@ -1,7 +1,7 @@
 ---
 type: Guide
 title: Building and packaging
-description: The development loop, the real preview, the Linux packages, the checks that prove them, and the Windows and macOS builds.
+description: The development loop, the continuous integration jobs, the real preview, the Linux packages, the checks that prove them, and the Windows and macOS builds.
 status: draft
 tags: [contribution, build, packaging, windows, macos]
 ---
@@ -43,6 +43,40 @@ cd src-tauri && NOCTURNE_DATA_DIR=<scratch> ../ui/node_modules/.bin/tauri dev
 A debug build finds the bundle there. A release build finds it among its own resources, and
 `NOCTURNE_LEMOND` (a folder, or the `lemond` file in it) overrides both. Every working folder of
 the engine lives under the data folder, never beside the program, so a read-only install works.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`, on Ubuntu 24.04,
+with a read-only token and no secret. `make check` is lint plus test, so the workflow runs its
+targets as parallel jobs and together they cover all of it:
+
+| Job | Runs | Covers |
+|---|---|---|
+| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the bindings drift check |
+| `ui and scripts` | `make ui/lint ui/test scripts/test` | Biome, the type check, the interface tests, the packaging scripts' tests |
+| `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` |
+| `docs and hooks` | `make docs/check`, `pre-commit run --all-files` | the OKF bundle and every hook |
+| `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium |
+| `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks |
+| `gate` | | fails when any job above did not pass; the one job to require |
+
+The last two jobs go beyond `make check`. The jobs are split because one runner would run the Rust
+build, the browser tests and the Go tests one after another, and the split gives each its own
+cache and its own verdict. The Rust job restores `target/` from a cache that only `main` saves.
+
+CI does not run what needs more than a hosted runner has, and the run summary of the `gate` job
+says so each time:
+
+- `make e2e-real`, `e2e-online` and `e2e-models` download the real models, about 4.8 GB or more.
+- `make package`, `make smoke` and `make netcheck*` need the embedded engine bundle, a virtual
+  display and a network namespace. The release workflow builds and checks the packages; the
+  rest runs on a developer's machine.
+- The macOS and Windows builds run in the release workflow, on their own runners.
+
+The workflow installs `okf` at a version and checksum written in `ci.yml`, and pins every action
+by commit. Dependabot keeps the actions, the Cargo crates, the interface packages and the helper's
+Go modules current (`.github/dependabot.yml`); what it cannot see is in
+[Pin bumps](pin-bumps.md).
 
 ## Real preview in a browser
 

@@ -1,0 +1,268 @@
+# The quality gate on every pull request and every push to main.
+#
+# `make check` is the gate the git hooks and this workflow share (docs/contribution/building.md).
+# It is `make lint` plus `make test`, and one runner would take the sum of all its parts, so the
+# jobs below run the same Makefile targets in parallel. Together they cover everything `make check`
+# does:
+#
+#   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check
+#   ui         ui/lint, ui/test, scripts/test
+#   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
+#   hygiene    docs/check and `pre-commit run --all-files`
+#
+# Beyond `make check`, two jobs run what a pull request can break and the gate does not reach:
+# `e2e` (ui/e2e, the browser tests against the mock engine) and `site` (the landing page and the
+# docs built into one site and checked with axe, as docs/contribution/website.md describes).
+#
+# Not run here, on purpose, and listed again in the run summary:
+#   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
+#   package, smoke, netcheck*         need the embedded engine bundle, a virtual display and a
+#                                     network namespace; release.yml builds and checks the packages
+#   macOS and Windows builds          release.yml builds them on their own runners
+#
+# The workflow holds no secret and never runs pull request code with a write token: it uses
+# `pull_request`, not `pull_request_target`, so Dependabot and fork pull requests are checked too.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a pull request cancels the run before it. A run on main always finishes.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # Smaller build outputs, so the cache holds one copy and not several.
+  CARGO_INCREMENTAL: "0"
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  NODE_VERSION: "22"
+  # The system libraries the Tauri crates link against, as release.yml installs them.
+  APT_PACKAGES: >-
+    build-essential curl file libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+    librsvg2-dev libxdo-dev libssl-dev libdbus-1-dev
+
+jobs:
+  rust:
+    name: rust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: System libraries
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends $APT_PACKAGES
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+      # The registry is small and cached on every run. The build output is big, so it is saved
+      # from main only and a pull request restores it.
+      - name: Restore the Cargo caches
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+      - name: Lint
+        run: make rust/lint
+      - name: Test
+        run: make rust/test
+      # Regenerates the TypeScript bindings and fails when the committed ones are stale.
+      - name: Contract drift
+        run: make contract/check
+      - name: Save the Cargo caches
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+  ui:
+    name: ui and scripts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Lint
+        run: make ui/lint
+      - name: Test
+        run: make ui/test
+      # The packaging scripts' tests, which need only Python 3 and the interface's dependencies.
+      - name: Packaging scripts
+        run: make scripts/test
+
+  tailnet:
+    name: tailnet helper
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The Go version is the one the helper's go.mod pins, the same one tailnet.yml builds with.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: helpers/tailnet/go.mod
+          cache-dependency-path: helpers/tailnet/go.sum
+      # With the variable set, a missing or different Go fails the job instead of skipping.
+      - name: Vet and test, plain and with the release tags
+        env:
+          NOCTURNE_REQUIRE_TAILNET_TESTS: "1"
+        run: make tailnet/test GO="$(command -v go)"
+
+  hygiene:
+    name: docs and hooks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # The cargo-fmt hook runs rustfmt from the toolchain.
+      - name: Rust
+        run: rustup toolchain install stable --profile minimal --component rustfmt && rustup default stable
+      - name: Install okf and pre-commit
+        env:
+          OKF_VERSION: "0.5.2"
+          OKF_SHA256: 05ecf191f1ef1396cdeefa9a1fd877d491b32b91f2a4a4d06393656e880e90b6
+        run: |
+          set -euo pipefail
+          archive="okf_${OKF_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/okfcli/okf/releases/download/v${OKF_VERSION}/$archive"
+          echo "$OKF_SHA256  $RUNNER_TEMP/$archive" | sha256sum --check --status -
+          mkdir -p "$HOME/.local/bin"
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$HOME/.local/bin" okf
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          python3 -m pip install --quiet pre-commit==4.7.0
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+      - name: Docs bundle
+        run: make docs/check
+      - name: Hooks on every file
+        run: pre-commit run --all-files --show-diff-on-failure
+
+  e2e:
+    name: browser tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: make ui/install
+      # Chromium only. The Playwright config adds its WebKit project only when WebKit is installed.
+      - name: Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: ui
+      - name: Browser tests against the mock engine
+        run: make ui/e2e
+      - name: Keep the results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-results
+          path: ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  site:
+    name: site
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: make ui/install
+      - name: Playwright Chromium
+        run: npx playwright install --with-deps chromium
+        working-directory: ui
+      # PODMAN points at nothing, so the docs are rendered by the pinned okf-wiki release that
+      # site/toolchain.sh fetches and verifies, as the Cloudflare build does. No container image.
+      - name: Build the site
+        run: make site PODMAN=/nonexistent
+      - name: Check the site
+        run: |
+          set -euo pipefail
+          make site/serve > "$RUNNER_TEMP/serve.log" 2>&1 &
+          for _ in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:4180/ && break
+            sleep 1
+          done
+          make -C site check
+      - name: Keep the screenshots of a failed run
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: site-check
+          path: site/build/check
+          if-no-files-found: ignore
+          retention-days: 7
+
+  # The one job to require in branch protection: it fails when any job above failed or was
+  # cancelled, and it says what this workflow does not cover.
+  gate:
+    name: gate
+    if: always()
+    needs: [rust, ui, tailnet, hygiene, e2e, site]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Every job passed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success")' > /dev/null
+      - name: What this run did not cover
+        if: always()
+        run: |
+          {
+            echo "### Not run by ci.yml"
+            echo
+            echo "- Real-model runs (\`make e2e-real\`, \`e2e-online\`, \`e2e-models\`): they download the real models, about 4.8 GB or more. Run them locally."
+            echo "- Packages, \`make smoke\` and \`make netcheck*\`: they need the embedded engine bundle, a virtual display and a network namespace. The release workflow builds and checks the packages."
+            echo "- macOS and Windows builds: the release workflow builds them on their own runners."
+          } >> "$GITHUB_STEP_SUMMARY"
