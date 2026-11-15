@@ -14,8 +14,9 @@ export LC_ALL=C
 everything='^(\.github/workflows/|Makefile$|rust-toolchain\.toml$|scripts/ci-areas\.sh$)'
 lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
 rust_side="crates/|src-tauri/|\.cargo/|clippy\.toml$|$lockfiles"
-# What the packages are built from.
-package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|LICENSE$|Cargo\.lock$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$"
+# What the packages are built from. The Rust sources are not here: the rust and rust-platforms
+# jobs check their release build.
+package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|Cargo\.(toml|lock)$|LICENSE$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$"
 
 names=(rust rust-platforms ui ui-platforms scripts tailnet site package package-linux)
 declare -A areas=(
@@ -24,7 +25,7 @@ declare -A areas=(
     # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
     [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
     # The interface's tests import scripts/build-tokens.mjs and read src-tauri/.
-    [ui]='^(ui/|src-tauri/|scripts/build-tokens\.mjs$)'
+    [ui]='^(ui/|src-tauri/|scripts/(build-tokens\.mjs|check_ui_dist\.py|check_tree\.py)$)'
     [ui-platforms]='^(ui/|scripts/build-tokens\.mjs$)'
     # The scripts' tests read the bundle configuration, the Flatpak files and their doc, and list
     # the licences of every crate and npm package.

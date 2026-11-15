@@ -17,7 +17,7 @@ PACKAGE = {"package", "package-linux"}
 CASES = (
     (".cargo/config.toml", RUST),
     ("clippy.toml", RUST),
-    ("Cargo.toml", RUST),
+    ("Cargo.toml", RUST | PACKAGE),
     ("Cargo.lock", RUST | PACKAGE),
     ("helpers.lock", RUST | PACKAGE),
     ("lemonade.lock", RUST | PACKAGE | {"site"}),
@@ -36,6 +36,8 @@ CASES = (
     ("scripts/bindings.sh", {"rust", "scripts"} | PACKAGE),
     ("scripts/away-integration.sh", {"scripts"} | PACKAGE),
     ("scripts/fetch-lemonade.sh", {"rust-platforms", "scripts"} | PACKAGE),
+    ("scripts/check_ui_dist.py", {"scripts", "ui"} | PACKAGE),
+    ("scripts/check_tree.py", {"scripts", "ui"} | PACKAGE),
     ("scripts/build-tokens.mjs", {"ui", "ui-platforms", "scripts"} | PACKAGE),
     ("scripts/package.sh", {"scripts"} | PACKAGE),
     ("scripts/test-tailnet.sh", {"scripts", "tailnet"} | PACKAGE),

@@ -53,8 +53,8 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 
 | Job | Runs | Covers | Runs when these change |
 |---|---|---|---|
-| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the bindings drift check | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh` |
-| `ui` | `make ui/lint ui/test` | Biome, the type check, the interface tests | `ui/`, `src-tauri/` |
+| `rust` | `make rust/lint rust/test contract/check` | rustfmt, clippy for both feature sets, both test runs, the release build's compile check, the bindings drift check | the Rust side (`crates/`, `src-tauri/`, `.cargo/`, `clippy.toml`, `Cargo.*`, both lock files), `ui/`, `scripts/bindings.sh` |
+| `ui` | `make ui/lint ui/test`, `npm run build`, `scripts/check_ui_dist.py` | Biome, the type check, the interface tests, the interface the app ships and its check | `ui/`, `src-tauri/` |
 | `packaging scripts` | `make scripts/test` | the packaging scripts' tests | `scripts/`, the Rust side, `flatpak/`, `docs/contribution/flatpak.md`, `LICENSE`, `ui/package*.json` |
 | `tailnet helper` | `make tailnet/test` with `NOCTURNE_REQUIRE_TAILNET_TESTS=1` | vet and tests, plain and with the release tags, on the Go version in `helpers/tailnet/go.mod` | `helpers/`, `scripts/test-tailnet.sh`, `scripts/tailnet-tags.sh` |
 | `docs and hooks` | `pre-commit run --all-files` | every hook, the OKF bundle among them | always |
@@ -97,9 +97,16 @@ The Linux x86_64, macOS and Windows packages are built by CI too, unsigned and u
 so that a packaging bug fails a pull request and not a release. The `package-*` jobs run on every
 push to `main`, and on a pull request that touches `scripts/`, `src-tauri/bundle/`,
 `src-tauri/macos/`, `src-tauri/icons/`, a `src-tauri/tauri*.json` file, `src-tauri/Info.plist`,
-`src-tauri/Cargo.toml`, `src-tauri/build.rs`, `LICENSE`, `Cargo.lock`, `ui/package*.json`,
-`lemonade.lock`, `helpers.lock` or `release.yml` (the Linux job also runs for `flatpak/`). A release builds every package from its
-tag in `release.yml`, whatever CI ran.
+`src-tauri/Cargo.toml`, `src-tauri/build.rs`, `Cargo.toml`, `Cargo.lock`, `LICENSE`,
+`ui/package*.json`, `lemonade.lock`, `helpers.lock` or `release.yml` (the Linux job also runs for
+`flatpak/`). A change to the Rust sources does not build a package. The release build differs from
+every other build in CI: some of the app's code is compiled only for a release
+(`cfg(not(debug_assertions))`), and the tests turn on the crates' stand-in features (`fake`,
+`fake-server`), which a release leaves off. So the `rust` and `rust tests` jobs also run
+`cargo check --release -p nocturne-app --features custom-protocol`, which compiles all of it
+without generating code.
+The `ui` job builds the interface the packages ship and checks it as `scripts/package.sh` does. A
+release builds every package from its tag in `release.yml`, whatever CI ran.
 
 The workflow installs `okf` at a version and checksum written in `ci.yml`, and pins every action
 by commit. Dependabot keeps the actions, the Cargo crates, the interface packages and the helper's
