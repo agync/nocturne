@@ -70,6 +70,12 @@ pub fn saved_options() -> Vec<(&'static str, Map<String, Value>)> {
             out.push((c.model, options));
         }
     }
+    // The NPU reads recordings for any tier it fits, and leaves as soon as the speech model would.
+    let mut npu = Map::new();
+    if let Some(secs) = evict_after(Tier::Standard, ComponentRole::Speech) {
+        npu.insert("evict_idle_timeout".into(), json!(secs));
+    }
+    out.push((crate::npu::SPEECH.model, npu));
     out
 }
 
@@ -151,7 +157,12 @@ mod tests {
     #[test]
     fn the_voice_speech_and_tiny_mind_go_sooner_and_the_other_minds_keep_the_engine_default() {
         assert_eq!(options_for("kokoro-v1").unwrap()["evict_idle_timeout"], 60);
-        for speech in ["Whisper-Base", "Whisper-Small", "Whisper-Large-v3-Turbo"] {
+        for speech in [
+            "Whisper-Base",
+            "Whisper-Small",
+            "Whisper-Large-v3-Turbo",
+            crate::npu::SPEECH.model,
+        ] {
             assert_eq!(options_for(speech).unwrap()["evict_idle_timeout"], 120);
         }
         assert_eq!(

@@ -144,6 +144,8 @@ pub struct Services {
     memory_watch: AtomicBool,
     /// How many times the watcher has looked at memory, for tests that wait on it.
     memory_checks: std::sync::atomic::AtomicU64,
+    /// Where recordings are read, for the mind and the advanced details.
+    pub npu: Arc<nocturne_lemonade::npu::Npu>,
 }
 
 impl Services {
@@ -268,6 +270,7 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         out_of_memory: Mutex::new(Vec::new()),
         memory_watch: AtomicBool::new(false),
         memory_checks: std::sync::atomic::AtomicU64::new(0),
+        npu: Arc::default(),
     });
     if !state.install_services(services.clone()) {
         services.token.cancel();

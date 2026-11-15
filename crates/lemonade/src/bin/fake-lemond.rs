@@ -5,12 +5,17 @@
 //! environment variable or, because the supervisor scrubs the environment, from a
 //! `fake_mode` key in `config.json`. Modes: `crash-after-ms=N`, `crash-first-after-ms=N`,
 //! `slow-start-ms=N`, `fail-bind`, `fail-bind-first=N`, `no-progress`, `disk-full`,
-//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all`,
+//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all` (with an
+//! NPU mode, the NPU runtime too),
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
 //! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
 //! (the first request with a wrong key gets a 503 instead of a 401),
 //! `load-oom`, `load-error`, `ignore-term` (SIGTERM does nothing; only SIGKILL ends it).
+//! `npu=ready|driver-missing|unsupported|memlock|firmware|broken` gives it an XDNA 2 NPU with the
+//! `flm:npu` backend (its models listed once that is installed, as the real engine discovers
+//! them), an NPU without a driver, one the backend does not support, one whose loads fail as the
+//! real engine's `flm validate` check does, or one whose requests fail.
 //! `POST /fake/crash` kills it on demand. `POST /v1/delete` removes a model's files, as the real
 //! engine does.
 //!
@@ -65,7 +70,12 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
         "llamacpp",
         "chat,reasoning,vision",
     ),
+    (NPU_SPEECH, 0.62, "flm", "audio,transcription"),
 ];
+
+/// The NPU's speech model, listed only once the `flm:npu` backend is installed.
+const NPU_SPEECH: &str = "whisper-v3-turbo-FLM";
+const NPU_BACKEND: &str = "flm:npu";
 
 const SCALE: f64 = 5000.0;
 const ONLINE_MODEL: &str = "user.nocturne-online";
@@ -454,6 +464,13 @@ async fn main() {
     }
     if modes.get("downloaded").map(String::as_str) == Some("all") {
         inner.downloaded = CATALOG.iter().map(|m| m.0.to_string()).collect();
+        // Everything on disk includes the NPU runtime, on a computer whose NPU can take it.
+        let npu = modes.get("npu").map(String::as_str);
+        if npu.is_some_and(|m| m != "driver-missing" && m != "unsupported")
+            && !inner.backends.iter().any(|b| b == NPU_BACKEND)
+        {
+            inner.backends.push(NPU_BACKEND.to_string());
+        }
     }
     let models_dir = config
         .get("models_dir")
@@ -708,10 +725,27 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
             })
         })
         .collect();
+    let npu_mode = app.mode("npu");
+    let amd_npu = match npu_mode.as_deref() {
+        None => json!({"available": false, "error": "No NPU device found"}),
+        Some("driver-missing") => {
+            json!({"available": false, "error": "NPU hardware found but driver not installed"})
+        }
+        Some(_) => json!({"available": true, "family": "XDNA2", "utilization": 0.0}),
+    };
+    let flm = match npu_mode.as_deref() {
+        Some("unsupported") => json!({"backends": {"npu": {
+            "state": "unsupported", "message": "Requires AMD XDNA 2 NPU", "devices": []}}}),
+        _ if inner.backends.iter().any(|b| b == NPU_BACKEND) => {
+            json!({"backends": {"npu": {"state": "installed", "message": "", "devices": ["amd_npu"]}}})
+        }
+        _ => json!({"backends": {"npu": {"state": "installable",
+            "message": "Backend is supported but not installed.", "devices": ["amd_npu"]}}}),
+    };
     Json(json!({
         "OS Version": "Fake",
         "cloud": {"providers": providers},
-        "devices": {"amd_gpu": amd_gpu, "amd_npu": {"available": false}, "cpu": {"available": true}},
+        "devices": {"amd_gpu": amd_gpu, "amd_npu": amd_npu, "cpu": {"available": true}},
         "model_storage": {
             "free_bytes": app.mode_u64("free-bytes").unwrap_or(5_000_000_000_000),
             "path": app.models_dir,
@@ -720,6 +754,7 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
             "llamacpp": recipe("llamacpp", &["rocm", "vulkan", "cpu"]),
             "whispercpp": recipe("whispercpp", &["vulkan", "cpu"]),
             "kokoro": recipe("kokoro", &["cpu"]),
+            "flm": flm,
         }
     }))
 }
@@ -728,8 +763,10 @@ async fn models(State(app): State<Shared>) -> Json<Value> {
     let mut inner = app.inner();
     app.tick(&mut inner);
     let half = app.flag("half-present");
+    let flm = inner.backends.iter().any(|b| b == NPU_BACKEND);
     let data: Vec<Value> = CATALOG
         .iter()
+        .filter(|m| m.2 != "flm" || flm)
         .map(|(name, size, recipe, labels)| {
             let present = inner.downloaded.iter().any(|d| d == name);
             json!({
@@ -1271,10 +1308,20 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
             fields.insert(name, json!(field.text().await.unwrap_or_default()));
         }
     }
-    app.touch_model(fields.get("model").and_then(|m| m.as_str()).unwrap_or(""));
+    let model = fields
+        .get("model")
+        .and_then(|m| m.as_str())
+        .unwrap_or("")
+        .to_string();
+    app.touch_model(&model);
     app.inner().log.push(json!({
         "multipart": true, "fields": fields, "file_name": file_name, "file_len": file_len,
     }));
+    if model == NPU_SPEECH
+        && let Some(failure) = npu_failure(&app)
+    {
+        return failure;
+    }
     if fields.get("response_format").and_then(|v| v.as_str()) == Some("verbose_json") {
         return Json(json!({
             "text": " hello world",
@@ -1288,6 +1335,27 @@ async fn transcriptions(State(app): State<Shared>, mut multipart: Multipart) -> 
         .into_response();
     }
     Json(json!({"text": " hello world"})).into_response()
+}
+
+/// How the NPU modes make a request to the NPU model fail, as the real engine does.
+fn npu_failure(app: &App) -> Option<Response> {
+    let validation = |reason: &str| {
+        err(
+            500,
+            "model_load_error",
+            &format!(
+                "Failed to load model '{NPU_SPEECH}': FLM NPU validation failed: {reason}\nVisit https://lemonade-server.ai/driver_install.html for driver installation instructions."
+            ),
+        )
+    };
+    match app.mode("npu").as_deref() {
+        Some("memlock") => Some(validation("Memlock limits are too low.")),
+        Some("firmware") => Some(validation(
+            "NPU firmware is incompatible. Kernel version is incompatible.",
+        )),
+        Some("broken") => Some(err(500, "backend_error", "flm serve exited")),
+        _ => None,
+    }
 }
 
 async fn speech(State(app): State<Shared>, Json(body): Json<Value>) -> Response {

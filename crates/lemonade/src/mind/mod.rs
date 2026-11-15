@@ -27,8 +27,9 @@ use serde::Deserialize;
 use serde_json::Value;
 use tokio::sync::{Mutex, mpsc};
 
-use crate::client::{ChatRequest, Client, LoadOptions, Message};
+use crate::client::{ChatRequest, Client, LoadOptions, Message, Transcription};
 use crate::error::RuntimeError;
+use crate::npu::Npu;
 use crate::selection::Picks;
 
 use cite::CiteFilter;
@@ -82,6 +83,8 @@ pub struct LemonadeMind {
     grammar_refused: AtomicBool,
     /// Requests made to read items, retries and second looks included.
     reading_calls: AtomicU64,
+    /// Where recordings are read, when this computer has an NPU.
+    npu: Option<Arc<Npu>>,
 }
 
 impl LemonadeMind {
@@ -97,7 +100,14 @@ impl LemonadeMind {
             clock: None,
             grammar_refused: AtomicBool::new(false),
             reading_calls: AtomicU64::new(0),
+            npu: None,
         }
+    }
+
+    /// Reads recordings on the NPU whenever `npu` says so.
+    pub fn with_npu(mut self, npu: Arc<Npu>) -> Self {
+        self.npu = Some(npu);
+        self
     }
 
     /// Takes today's date from `clock` (the engine's, with its time zone) rather than from
@@ -713,8 +723,13 @@ impl LemonadeMind {
         if audio::estimate_seconds(audio) > MAX_AUDIO_SECONDS {
             return Err(MindError::TooLong);
         }
-        let model = self.installed(ComponentRole::Speech).await?;
-        let t = self.client.transcribe(audio, &model, None).await?;
+        let t = match self.transcribe_on_npu(audio).await {
+            Some(read) => read?,
+            None => {
+                let model = self.installed(ComponentRole::Speech).await?;
+                self.client.transcribe(audio, &model, None).await?
+            }
+        };
         if t.duration.is_some_and(|d| d > MAX_AUDIO_SECONDS) {
             return Err(MindError::TooLong);
         }
@@ -735,6 +750,51 @@ impl LemonadeMind {
             duration_ms,
             segments,
         })
+    }
+
+    /// Reads a recording on the NPU when that is where recordings go. A failure there is read
+    /// again by the tier's own speech model; when that works, the NPU is left alone until the
+    /// engine next starts, and when it fails too, its error is the one returned. `None` means
+    /// the recording is for the tier's own model.
+    async fn transcribe_on_npu(&self, audio: &Path) -> Option<Result<Transcription, MindError>> {
+        let npu = self.npu.as_ref()?;
+        let generation = self.client.generation();
+        let model = npu.speech_model(generation)?;
+        if self.installed_model(model.to_string()).await.is_err() {
+            let listed = self.client.models().await.ok()?;
+            if !listed.iter().any(|m| m.id == model && m.present()) {
+                npu.not_fetched(generation);
+            }
+            return None;
+        }
+        match self.client.transcribe(audio, model, None).await {
+            Ok(t) => {
+                npu.worked();
+                Some(Ok(t))
+            }
+            Err(e) => {
+                let own = match self.installed(ComponentRole::Speech).await {
+                    Ok(own) => own,
+                    Err(err) => return Some(Err(err)),
+                };
+                let t = match self.client.transcribe(audio, &own, None).await {
+                    Ok(t) => t,
+                    Err(err) => return Some(Err(err.into())),
+                };
+                npu.failed(generation, &engine_message(&e));
+                Some(Ok(t))
+            }
+        }
+    }
+}
+
+/// The engine's own message in an error, without Nocturne's words around it.
+fn engine_message(e: &RuntimeError) -> String {
+    match e {
+        RuntimeError::Server { message, .. }
+        | RuntimeError::Rejected { message, .. }
+        | RuntimeError::LoadFailed { message, .. } => message.clone(),
+        other => other.to_string(),
     }
 }
 

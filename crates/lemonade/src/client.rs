@@ -437,6 +437,9 @@ pub struct Gpu {
 pub struct Npu {
     #[serde(default)]
     pub available: bool,
+    /// Why the engine finds no usable NPU, in its own words.
+    #[serde(default)]
+    pub error: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
@@ -460,6 +463,9 @@ pub struct ModelStorage {
 pub struct BackendInfo {
     #[serde(default)]
     pub state: String,
+    /// Why a backend cannot be used, such as "Requires AMD XDNA 2 NPU".
+    #[serde(default)]
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, PartialEq)]
@@ -493,6 +499,14 @@ impl SystemInfo {
             Some("unsupported") => BackendState::Unsupported,
             _ => BackendState::Unknown,
         }
+    }
+
+    /// The engine's message about `backend` of `recipe`, empty when it gave none.
+    pub fn backend_message(&self, recipe: &str, backend: &str) -> &str {
+        self.recipes
+            .get(recipe)
+            .and_then(|r| r.backends.get(backend))
+            .map_or("", |b| b.message.as_str())
     }
 
     pub fn free_bytes(&self) -> Option<u64> {
