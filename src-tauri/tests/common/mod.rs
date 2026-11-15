@@ -291,13 +291,22 @@ impl Harness {
 
 /// Wait until `done` holds. The limit only catches a condition that never comes; it is far past
 /// what a machine under heavy load needs, and a wait that succeeds returns at once.
-pub fn wait_for(what: &str, mut done: impl FnMut() -> bool) {
+pub fn wait_for(what: &str, done: impl FnMut() -> bool) {
+    wait_for_with(what, done, String::new);
+}
+
+/// [`wait_for`], and a wait that times out says `state()` too: what the condition was waiting on,
+/// so a failure seen once on a runner carries its own evidence.
+pub fn wait_for_with(what: &str, mut done: impl FnMut() -> bool, state: impl FnOnce() -> String) {
     let start = Instant::now();
     while !done() {
-        assert!(
-            start.elapsed() < Duration::from_secs(60),
-            "timed out: {what}"
-        );
+        if start.elapsed() >= Duration::from_secs(60) {
+            let state = state();
+            if state.is_empty() {
+                panic!("timed out: {what}");
+            }
+            panic!("timed out: {what}\n{state}");
+        }
         std::thread::sleep(Duration::from_millis(10));
     }
 }

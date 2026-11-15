@@ -241,6 +241,40 @@ impl Lab {
             .collect()
     }
 
+    /// What the switch to a downloaded model waits on, for a wait that timed out: the change as
+    /// the person would see it, the choice on disk, the ledger, and the engine's window.
+    fn switch_state(&self) -> String {
+        let (window, holds, starting) = block_on(async {
+            match self.services.engine_control().await {
+                Some(c) => (
+                    json!(c.download_window_open()),
+                    json!(c.download_holds()),
+                    json!(c.starting()),
+                ),
+                None => (json!("no engine"), Value::Null, Value::Null),
+            }
+        });
+        let offline = block_on(async {
+            let Some(admin) = self.services.admin().await else {
+                return json!("no engine");
+            };
+            match tokio::time::timeout(Duration::from_secs(3), admin.config()).await {
+                Ok(Ok(cfg)) => cfg["offline"].clone(),
+                Ok(Err(e)) => json!(format!("config failed: {e}")),
+                Err(_) => json!("config timed out"),
+            }
+        });
+        json!({
+            "job": self.job_model("recordings"),
+            "change": self.view()["change"],
+            "selection": self.selection(),
+            "ledger": self.downloads_in_ledger(),
+            "window": { "open": window, "holds": holds, "engineStarting": starting },
+            "engineOffline": offline,
+        })
+        .to_string()
+    }
+
     fn offline(&self) -> bool {
         block_on(async {
             let admin = self.services.admin().await.expect("an engine");
@@ -303,9 +337,11 @@ fn current_keeps_working_until_present_then_switches_with_one_ledger_entry() {
     assert_eq!(lab.job_model("recordings"), "Whisper-Small");
     assert_eq!(selection::picks(&lab.selection()).speech, "Whisper-Small");
     assert_eq!(lab.selection().pending.unwrap().model, "Whisper-Base");
-    wait_for("the switch", || {
-        lab.job_model("recordings") == "Whisper-Base"
-    });
+    wait_for_with(
+        "the switch",
+        || lab.job_model("recordings") == "Whisper-Base",
+        || lab.switch_state(),
+    );
     let s = lab.selection();
     assert!(s.pending.is_none());
     assert_eq!(
