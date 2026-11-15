@@ -1,7 +1,13 @@
-# Nocturne
+<p align="center">
+  <img src="docs/assets/logo.svg" width="96" height="96" alt="">
+</p>
 
-A private desktop app that remembers your day, forgets what does not matter, and hands you one page
-each morning.
+<h1 align="center">Nocturne</h1>
+
+<p align="center">
+  A private desktop app that remembers your day, forgets what does not matter, and hands you one
+  page each morning.
+</p>
 
 ![The morning page in Nocturne, shown with sample data](docs/assets/nocturne-today.webp)
 

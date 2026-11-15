@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help site docs serve check shots clean
+.PHONY: help site docs serve check shots brand clean
 
 # The public origin, used for the canonical and Open Graph links.
 SITE_URL ?= https://nocturne.is
@@ -64,6 +64,9 @@ check: ## Run axe and take screenshots of the served site (needs make serve and 
 
 shots: ## Recapture the app screenshots from a mock interface at $(MOCK), and the phone at $(PHONE)
 	node scripts/shots.mjs $(MOCK) $(PHONE)
+
+brand: ## Render the social preview, the Open Graph image, the logo and the touch icons (needs ../ui/node_modules)
+	node scripts/brand.mjs
 
 clean: ## Remove build output
 	rm -rf $(BUILD) $(DIST)
