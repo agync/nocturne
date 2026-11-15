@@ -22,6 +22,7 @@ import { usePlatform } from "../../platform/context";
 import { useRemote } from "../away/useRemote";
 import { useModels } from "../models/useModels";
 import { useOnline } from "../online/useOnline";
+import { FasterNote } from "./FasterNote";
 import { patch } from "./patch";
 import styles from "./Settings.module.css";
 import { ShortcutField } from "./ShortcutField";
@@ -419,6 +420,7 @@ export function Settings() {
           </Row>
         ) : null}
       </ul>
+      <FasterNote />
       <a className={`${styles.advanced} hit`} href="#/settings/advanced">
         {t("settings.advanced.show")}
       </a>

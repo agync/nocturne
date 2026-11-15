@@ -7,7 +7,13 @@ import { Button } from "../../components/Button/Button";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { formatBytes, formatTime } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
-import type { AdvancedView, ComponentRole, OnlineAdvanced } from "../../engine/bindings";
+import type {
+  AdvancedView,
+  ComponentRole,
+  NpuCause,
+  NpuView,
+  OnlineAdvanced,
+} from "../../engine/bindings";
 import type { RecordingState } from "../../engine/client";
 import { useEngine, useRefresh, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
@@ -30,6 +36,55 @@ function uptime(seconds: number | null): string {
   if (days > 0) return t("advanced.uptime.days", { days, hours });
   if (hours > 0) return t("advanced.uptime.hours", { hours, minutes });
   return t("advanced.uptime.minutes", { minutes });
+}
+
+/** Why the NPU is not used, one phrase per cause. */
+const NPU_CAUSE: Record<NpuCause, CopyId> = {
+  driverMissing: "advanced.npu.cause.driverMissing",
+  driverOld: "advanced.npu.cause.driverOld",
+  kernelOld: "advanced.npu.cause.kernelOld",
+  firmwareOld: "advanced.npu.cause.firmwareOld",
+  memoryLock: "advanced.npu.cause.memoryLock",
+  notSupported: "advanced.npu.cause.notSupported",
+  tooLittleMemory: "advanced.npu.cause.tooLittleMemory",
+  notFetched: "advanced.npu.cause.notFetched",
+  chosen: "advanced.npu.cause.chosen",
+  failed: "advanced.npu.cause.failed",
+};
+
+/** The steps for the causes a person can put right on this computer (`NpuCause::fixable`). */
+export const NPU_FIX: Partial<Record<NpuCause, CopyId>> = {
+  driverMissing: "advanced.npu.fix.driverMissing",
+  driverOld: "advanced.npu.fix.driverOld",
+  kernelOld: "advanced.npu.fix.kernelOld",
+  firmwareOld: "advanced.npu.fix.firmwareOld",
+  memoryLock: "advanced.npu.fix.memoryLock",
+};
+
+/** True when the person can make the NPU work by a step of their own. */
+export function npuFixable(npu: NpuView | undefined): boolean {
+  return !!npu?.present && !npu.used && npu.causes.some((c) => NPU_FIX[c] !== undefined);
+}
+
+/** The NPU rows: what it does here, or why not, the engine's words and the steps. */
+export function npuDetails(npu: NpuView): Array<[string, string]> {
+  if (!npu.present) return [[t("advanced.row.npu"), t("advanced.npu.none")]];
+  if (npu.used) {
+    return [[t("advanced.row.npu"), t("advanced.npu.used", { model: npu.model ?? "?" })]];
+  }
+  const causes = npu.causes.map((c) => t(NPU_CAUSE[c])).join("; ");
+  const rows: Array<[string, string]> = [
+    [t("advanced.row.npu"), t("advanced.npu.unused", { causes })],
+  ];
+  if (npu.detail) rows.push([t("advanced.row.npu.said"), npu.detail]);
+  const steps = npu.causes.flatMap((c) => {
+    const fix = NPU_FIX[c];
+    return fix ? [t(fix)] : [];
+  });
+  if (steps.length > 0) {
+    rows.push([t("advanced.row.npu.fix"), [...steps, t("advanced.npu.fix.guide")].join(" ")]);
+  }
+  return rows;
 }
 
 function component(view: AdvancedView, role: ComponentRole) {
@@ -64,7 +119,7 @@ export function details(
             tier: view.tier,
             ram: view.ramGib,
             gpu: view.gpu ?? t("advanced.gpu.none"),
-            npu: t(view.npu ? "advanced.npu.yes" : "advanced.npu.no"),
+            npu: t(view.npu.present ? "advanced.npu.yes" : "advanced.npu.no"),
           })
         : t("advanced.tier.none"),
     ],
@@ -76,6 +131,7 @@ export function details(
         ? t("advanced.component", { name: speech.name, size: formatBytes(speech.bytes) })
         : "–",
     ],
+    ...npuDetails(view.npu),
     [
       t("advanced.row.voice"),
       voiceC
