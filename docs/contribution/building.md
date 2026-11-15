@@ -317,7 +317,7 @@ Behaviour to know on Windows:
   identity. A `make dev` run shows none.
 - The app does not listen for Windows resume events in v1. After sleep, the scheduler notices the
   wall-clock jump within one 30 second tick and carries on.
-- The default quick keep shortcut is Ctrl+Shift+Space.
+- The default quick keep shortcut is Ctrl+Shift+Space, or Cmd+Shift+Space on a Mac.
 
 ## macOS
 
