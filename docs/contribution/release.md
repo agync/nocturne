@@ -62,6 +62,28 @@ must not be cut without them:
 - The `release-signing` environment has required reviewers, and holds every signing secret,
   including the Flatpak key.
 
+## The first release
+
+The first release is 0.1.0. The manifest (`.release-please-manifest.json`) records the last
+release as `0.0.0` because nothing has shipped, and the root package in
+`release-please-config.json` carries `"release-as": "0.1.0"`, which makes release-please propose
+that version whatever the commits since `bootstrap-sha` would give. The workspace `Cargo.toml` and
+`ui/package.json` already hold 0.1.0, so the version files do not change and the step that brings
+the lock files and the Flatpak metainfo to the version finds nothing to add.
+
+After 0.1.0 ships, remove `release-as` from `release-please-config.json` in a commit of its own, and
+remove `bootstrap-sha` with it, since release-please ignores that value once a release exists. The
+manifest then says `0.1.0`, and later versions follow the commits again. Left in place,
+`release-as` would pin every later release pull request to 0.1.0.
+
+To replace the generated notes of a release with a hand-written summary, edit the body of the
+release pull request just before merging it. release-please takes the release page's notes from
+the body, between its first and its last line that is only three dashes. The notes must begin with
+a `## 0.1.0` heading and must not contain such a line themselves. The `BEGIN_COMMIT_OVERRIDE` block
+is not for this: it rewrites how one merged pull request's commit reads in the generated notes and
+needs a squash-merged pull request. Nothing else may land on `main` between the edit and the merge,
+because release-please rewrites the body on every push. `CHANGELOG.md` keeps the generated list.
+
 ## What the workflow builds
 
 | Platform | Runner | How | Files | Checked with |

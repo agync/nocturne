@@ -9,6 +9,7 @@
     ".": {
       "release-type": "simple",
       "package-name": "nocturne",
+      "release-as": "0.1.0",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "extra-files": [
