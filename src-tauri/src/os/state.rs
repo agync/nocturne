@@ -30,6 +30,8 @@ pub struct OsFile {
     pub seen: Option<String>,
     /// The watched folder's ledger.
     pub inbox: Option<InboxLedger>,
+    /// Whether the Background portal has been told about start with this computer (Flatpak).
+    pub autostart_by_portal: bool,
 }
 
 /// Read the file; a missing or damaged one is an empty one.
@@ -53,6 +55,8 @@ pub struct OsState {
     shortcut: Mutex<ShortcutSlot>,
     notifier: Mutex<Option<Arc<dyn Notifier>>>,
     autostart: Mutex<Option<Target>>,
+    #[cfg(target_os = "linux")]
+    autostart_portal: Mutex<Option<super::portal::Bus>>,
     webview_dirs: Mutex<Vec<PathBuf>>,
     inbox: Mutex<Option<Handle>>,
     before_keep: Mutex<Option<BeforeKeep>>,
@@ -68,6 +72,8 @@ impl OsState {
             shortcut: Mutex::new(ShortcutSlot::default()),
             notifier: Mutex::new(None),
             autostart: Mutex::new(None),
+            #[cfg(target_os = "linux")]
+            autostart_portal: Mutex::new(None),
             webview_dirs: Mutex::new(Vec::new()),
             inbox: Mutex::new(None),
             before_keep: Mutex::new(None),
@@ -115,6 +121,24 @@ impl OsState {
 
     pub fn autostart(&self) -> Option<Target> {
         self.autostart
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+    }
+
+    /// Start with this computer through the Background portal (inside a Flatpak) instead of an
+    /// entry file.
+    #[cfg(target_os = "linux")]
+    pub fn set_autostart_portal(&self, bus: super::portal::Bus) {
+        *self
+            .autostart_portal
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(bus);
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn autostart_portal(&self) -> Option<super::portal::Bus> {
+        self.autostart_portal
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()

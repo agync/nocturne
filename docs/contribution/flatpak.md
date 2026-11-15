@@ -96,14 +96,20 @@ portal too.
 
 The app knows it is in a Flatpak from `/.flatpak-info`, which names its app id.
 
+- **Start with this computer** asks the Background portal, which writes the desktop's start-up
+  entry with `flatpak run`. The sandbox cannot reach the folder the desktop reads, so the app
+  cannot write or check the entry itself: Settings shows the saved choice. The portal is asked
+  when the switch changes, and at start until the desktop has answered, yes or no, when the
+  switch was turned on by a version that wrote the entry inside the sandbox; `os-state.json`
+  records that it has been told. A start that finds it was told but the switch is off asks the
+  portal to remove the entry. Delete everything asks it to remove the entry only when it was
+  told before, and keeps that record if the removal does not get through.
 - **The quick keep command** Settings offers for a desktop shortcut is
   `flatpak run is.nocturne.Nocturne --quick-capture`, since `/app/bin/nocturne` exists only
   inside the sandbox.
 
 ### What does not work in the Flatpak yet
 
-- **Start with this computer.** The app writes its own start-up entry, which inside the sandbox
-  lands in the app's own folder and is never read. It needs the Background portal.
 - **Keeping the computer awake overnight, and knowing the person is away.** The sandbox has no
   access to logind, UPower or the idle monitors on the session bus. Unknown idle time already
   counts as away and mains power is read from `/sys/class/power_supply`, so the overnight tidy
