@@ -84,7 +84,8 @@ export class WebPlatform implements Platform {
     console.info(`Would open ${path}`);
   }
 
-  async openOriginal(itemId: string): Promise<void> {
+  async openOriginal(itemId: string, shown: string): Promise<void> {
+    if (shown.startsWith("blob:")) return this.openPath(shown);
     console.info(`Would open the original of ${itemId}`);
   }
 
