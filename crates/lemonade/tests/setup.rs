@@ -428,7 +428,9 @@ async fn a_restarted_engine_resumes_the_partial_download() {
         .sum();
     assert!(kept > 0, "{state}");
 
-    common::set_mode(&dirs, "download-ms=200");
+    // Slow at first, so the resumed download is still in the engine's list when it is looked
+    // at: a download that finished first leaves the list, and nothing would be found.
+    common::set_mode(&dirs, "download-ms=30000");
     let sup = Supervisor::start(dirs.clone(), sup_opts()).await.unwrap();
     let setup = new_setup(&sup, &dirs, 16, &ledger);
     let checked = setup.check().await.unwrap();
@@ -437,18 +439,29 @@ async fn a_restarted_engine_resumes_the_partial_download() {
     let mut rx = setup.view();
     setup.resume().await.unwrap();
     wait_view(&mut rx, |v| v.phase == SetupPhase::Downloading, 10).await;
-    let jobs = loop {
-        let jobs = raw(&sup, "GET", "/v1/downloads", json!({})).await;
-        if !jobs.as_array().unwrap().is_empty() {
-            break jobs;
+    let jobs = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let jobs = raw(&sup, "GET", "/v1/downloads", json!({})).await;
+            if !jobs.as_array().unwrap().is_empty() {
+                return jobs;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    };
+    })
+    .await
+    .expect("the resumed download shows in the engine's list");
     let resumed = jobs[0]["bytes_downloaded"].as_u64().unwrap();
     assert!(
         resumed >= kept.min(20_000),
         "restarted from {resumed}, kept {kept}"
     );
+    raw(
+        &sup,
+        "POST",
+        "/fake/mode",
+        json!({"mode": "download-ms=200"}),
+    )
+    .await;
     wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
     sup.shutdown().await.unwrap();
 }
@@ -658,7 +671,13 @@ async fn a_download_that_stops_on_its_own_is_cleared_and_started_again_through_a
     rig.setup.start(Tier::Small).await.unwrap();
     // The engine forgets its log when it restarts at the end, so watch while it runs.
     let mut calls: Vec<String> = Vec::new();
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
     while rx.borrow().phase != SetupPhase::Done {
+        assert!(
+            tokio::time::Instant::now() < deadline,
+            "setup did not finish: {:?} {calls:?}",
+            rx.borrow().phase
+        );
         let log = raw(&rig.sup, "GET", "/fake/requests", json!({})).await;
         let seen: Vec<String> = log
             .as_array()
