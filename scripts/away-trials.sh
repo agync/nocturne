@@ -22,7 +22,9 @@ cd "$(dirname "${BASH_SOURCE[0]}")/.."
 what=${1:-session}
 case "$what" in session | edge | idle | phone) ;; *) printf 'usage: %s [session|edge|idle|phone]\n' "$0" >&2; exit 2 ;; esac
 
-cargo test -p nocturne-app --features fake-helpers --test away_driver --no-run
+# shellcheck source=scripts/away-test-programs.sh
+source scripts/away-test-programs.sh
+build_tests away_driver
 npm --prefix ui run build:phone
 mkdir -p "$TRIALS_DIR/tmp-$what"
 export TMPDIR="$TRIALS_DIR/tmp-$what"

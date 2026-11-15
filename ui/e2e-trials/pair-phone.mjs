@@ -3,11 +3,11 @@
 // folder, and the check words to compare before allowing the phone. Ctrl+C ends it and stops
 // the helper. Nothing here touches the person's own Nocturne data.
 //
-//   TRIALS_DIR=<folder> node ui/e2e-trials/pair-phone.mjs
+//   TRIALS_DIR=<folder> AWAY_AWAY_DRIVER=<built away_driver> node ui/e2e-trials/pair-phone.mjs
 
 import { spawn } from "node:child_process";
 import { Resolver } from "node:dns/promises";
-import { mkdirSync, readdirSync, readlinkSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -18,14 +18,10 @@ if (!trials) throw new Error("TRIALS_DIR names the folder for the code page and 
 const scratch = join(trials, "tmp-phone");
 mkdirSync(scratch, { recursive: true, mode: 0o700 });
 
-const deps = join(repo, "target", "debug", "deps");
-const driver = readdirSync(deps)
-  .filter((f) => f.startsWith("away_driver-") && !f.includes("."))
-  .map((f) => join(deps, f))
-  .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs)[0];
+const driver = process.env.AWAY_AWAY_DRIVER;
 if (!driver)
   throw new Error(
-    "build it first: cargo test -p nocturne-app --features fake-helpers --test away_driver --no-run",
+    "set AWAY_AWAY_DRIVER to the path that cargo test -p nocturne-app --features fake-helpers --test away_driver --no-run prints",
   );
 
 const child = spawn(driver, ["--ignored", "--nocapture", "--exact", "drive", "--test-threads=1"], {
