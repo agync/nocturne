@@ -416,15 +416,22 @@ mod tests {
         }
     }
 
+    /// A path under the test root as the platform writes it: `/data/remote\\x` on Windows.
+    fn under(parts: &[&str]) -> String {
+        let path = parts.iter().fold(dirs().root, |p, part| p.join(part));
+        path.to_string_lossy().into_owned()
+    }
+
     #[test]
     fn args_are_exact() {
         let cfg = config_path(&dirs());
         let unix = tunnel_args(&Origin::Unix("/data/remote/run/listener.sock".into()), &cfg);
+        let config = under(&["cloudflared", "config.yml"]);
         let mut expected: Vec<String> = [
             "tunnel",
             "--no-autoupdate",
             "--config",
-            "/data/remote/cloudflared/config.yml",
+            config.as_str(),
             "--metrics",
             "127.0.0.1:0",
             "--loglevel",
@@ -548,12 +555,9 @@ mod tests {
                 .find(|(key, _)| key == k)
                 .map(|(_, v)| v.to_string_lossy().into_owned())
         };
-        assert_eq!(get("HOME").as_deref(), Some("/data/remote/cloudflared"));
+        assert_eq!(get("HOME"), Some(under(&["cloudflared"])));
         assert_eq!(get("PATH").as_deref(), Some(""));
-        assert_eq!(
-            get("TMPDIR").as_deref(),
-            Some("/data/remote/cloudflared/tmp")
-        );
+        assert_eq!(get("TMPDIR"), Some(under(&["cloudflared", "tmp"])));
         let keys: Vec<_> = env
             .iter()
             .map(|(k, _)| k.to_string_lossy().into_owned())
