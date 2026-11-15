@@ -8,7 +8,7 @@ not deleted.
 - [0003 One SQLite file](0003-sqlite-single-file.md) - The tape and the memory live in one local SQLite file.
 - [0004 An open engine](0004-open-engine.md) - The memory engine is open source and self-contained.
 - [0005 The page first](0005-page-first.md) - The morning page is the first milestone; senses and print follow.
-- [0006 The NPU is optional](0006-npu-optional.md) - The NPU works only when the GPU is idle, with a GPU fallback.
+- [0006 The NPU reads recordings by default](0006-npu-optional.md) - A usable NPU reads recordings when its model fits; every other job stays on the GPU, and any NPU failure falls back to the GPU.
 - [0007 Forgetting by default](0007-forgetting-by-default.md) - Facts fade at 30 days and archive at 90; deletion is explicit.
 - [0008 A small schema](0008-small-schema.md) - A short list of predicates; new ones are quarantined until confirmed.
 - [0009 Package locally and prove it stays local](0009-packaging.md) - Linux packages with the private engine inside, and a release-time proof that nothing leaves the computer.
