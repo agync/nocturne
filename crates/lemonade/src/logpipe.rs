@@ -265,20 +265,34 @@ where
     })
 }
 
-fn write_lines(
+/// Where the log is written: a file, or a stand-in in tests.
+trait Sink: Write {
+    fn len(&self) -> u64;
+}
+
+impl Sink for File {
+    fn len(&self) -> u64 {
+        self.metadata().map_or(0, |m| m.len())
+    }
+}
+
+fn write_lines<W: Sink>(
     mut rx: mpsc::Receiver<String>,
     path: &Path,
     rotate_at: u64,
     retry_after: Duration,
-    mut open: impl FnMut(&Path) -> Option<File>,
+    mut open: impl FnMut(&Path) -> Option<W>,
 ) {
     let mut file = open(path);
     let mut size = length(file.as_ref());
     let mut warned = false;
+    let mut write_warned = false;
     let mut retry_at = Instant::now();
     let mut reopen_at = Instant::now() + retry_after;
+    let mut opened_at = Instant::now();
     while let Some(line) = rx.blocking_recv() {
         if file.is_none() && Instant::now() >= reopen_at {
+            opened_at = Instant::now();
             file = open(path);
             size = length(file.as_ref());
             if file.is_none() {
@@ -298,6 +312,7 @@ fn write_lines(
                     }
                 }
             }
+            opened_at = Instant::now();
             file = open(path);
             if file.is_none() {
                 reopen_at = Instant::now() + retry_after;
@@ -309,16 +324,29 @@ fn write_lines(
                 length(file.as_ref())
             };
         }
-        if let Some(f) = file.as_mut()
-            && writeln!(f, "{line}").is_ok()
-        {
-            size += line.len() as u64 + 1;
+        if let Some(f) = file.as_mut() {
+            match f.write_all(format!("{line}\n").as_bytes()) {
+                Ok(()) => {
+                    size += line.len() as u64 + 1;
+                    write_warned = false;
+                }
+                Err(e) => {
+                    // The handle may be dead. It is opened again on a later line, but at most
+                    // once per interval counted from the last open, so a young handle that fails
+                    // waits out the rest of the interval.
+                    if !std::mem::replace(&mut write_warned, true) {
+                        tracing::warn!("the engine's log could not be written: {e}");
+                    }
+                    file = None;
+                    reopen_at = opened_at + retry_after;
+                }
+            }
         }
     }
 }
 
-fn length(file: Option<&File>) -> u64 {
-    file.and_then(|f| f.metadata().ok()).map_or(0, |m| m.len())
+fn length<W: Sink>(file: Option<&W>) -> u64 {
+    file.map_or(0, Sink::len)
 }
 
 /// `lemond.log` becomes `lemond.log.1`, which becomes `lemond.log.2`; the oldest is removed. A
@@ -509,7 +537,7 @@ mod tests {
         let mut calls = 0;
         write_lines(rx, &path, ROTATE_AT, Duration::from_secs(60), |_| {
             calls += 1;
-            None
+            None::<File>
         });
         assert_eq!(calls, 1, "one try at the start, none per line");
     }
@@ -538,5 +566,83 @@ mod tests {
             text.contains("from out") && text.contains("from err"),
             "{text}"
         );
+    }
+
+    struct Flaky {
+        lines: Arc<Mutex<Vec<String>>>,
+        fail_from: Option<usize>,
+        written: usize,
+    }
+
+    impl Write for Flaky {
+        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+            if self.fail_from.is_some_and(|n| self.written >= n) {
+                return Err(std::io::Error::other("gone"));
+            }
+            self.written += 1;
+            self.lines
+                .lock()
+                .unwrap()
+                .push(String::from_utf8_lossy(buf).trim_end().to_string());
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl Sink for Flaky {
+        fn len(&self) -> u64 {
+            0
+        }
+    }
+
+    #[test]
+    fn a_log_that_fails_to_write_is_opened_again() {
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for l in ["a", "b", "c", "d"] {
+            tx.blocking_send(l.into()).unwrap();
+        }
+        drop(tx);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut opens = 0;
+        write_lines(rx, Path::new("unused"), ROTATE_AT, Duration::ZERO, |_| {
+            opens += 1;
+            Some(Flaky {
+                lines: seen.clone(),
+                fail_from: (opens == 1).then_some(1),
+                written: 0,
+            })
+        });
+        assert_eq!(opens, 2);
+        assert_eq!(*seen.lock().unwrap(), ["a", "c", "d"]);
+    }
+
+    #[test]
+    fn a_log_that_keeps_failing_is_opened_once_per_period() {
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for l in ["a", "b", "c", "d"] {
+            tx.blocking_send(l.into()).unwrap();
+        }
+        drop(tx);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut opens = 0;
+        write_lines(
+            rx,
+            Path::new("unused"),
+            ROTATE_AT,
+            Duration::from_secs(60),
+            |_| {
+                opens += 1;
+                Some(Flaky {
+                    lines: seen.clone(),
+                    fail_from: Some(1),
+                    written: 0,
+                })
+            },
+        );
+        assert_eq!(opens, 1);
+        assert_eq!(*seen.lock().unwrap(), ["a"]);
     }
 }
