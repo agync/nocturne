@@ -575,12 +575,18 @@ async fn the_health_check_needs_no_token_but_an_accepted_host() {
     assert_eq!(send(&r, wrong).await.status(), StatusCode::FORBIDDEN);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn a_token_kept_in_a_file_admits_and_a_new_one_replaces_it() {
+/// A rig whose token is kept in a file, as the server keeps it.
+struct FileRig {
+    rig: Rig,
+    path: std::path::PathBuf,
+    _keep: tempfile::TempDir,
+}
+
+fn file_rig() -> (FileRig, String) {
     let h = harness();
     let keep = tempfile::tempdir().unwrap();
     let path = keep.path().join("server-token");
-    let (first, _) = preview::ensure_token_file(&path).unwrap();
+    let (token, _) = preview::ensure_token_file(&path).unwrap();
     let opts = Options {
         token: preview::Token::file(&path),
         port: PORT,
@@ -593,19 +599,101 @@ async fn a_token_kept_in_a_file_admits_and_a_new_one_replaces_it() {
         h.dir.path(),
         opts,
     );
-    let router = preview::router(server);
+    let rig = Rig {
+        router: preview::router(server),
+        h,
+    };
+    (
+        FileRig {
+            rig,
+            path,
+            _keep: keep,
+        },
+        token,
+    )
+}
+
+fn with_bearer(method: Method, uri: &str, token: &str) -> axum::http::request::Builder {
+    req(method, uri).header("authorization", format!("Bearer {token}"))
+}
+
+async fn ticket_for(rig: &Rig, token: &str, kind: &str) -> String {
+    let response = send(
+        rig,
+        with_bearer(Method::POST, "/api/ticket", token)
+            .body(Body::from(json!({ "kind": kind }).to_string()))
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    json_of(response).await["ticket"]
+        .as_str()
+        .unwrap()
+        .to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_token_kept_in_a_file_admits_and_a_new_one_replaces_it() {
+    let (f, first) = file_rig();
     let status_with = |token: String| {
-        let router = router.clone();
+        let router = f.rig.router.clone();
         async move {
-            let request = req(Method::POST, "/api/invoke/get_status")
-                .header("authorization", format!("Bearer {token}"))
+            let request = with_bearer(Method::POST, "/api/invoke/get_status", &token)
                 .body(Body::empty())
                 .unwrap();
             router.oneshot(request).await.unwrap().status()
         }
     };
     assert_eq!(status_with(first.clone()).await, StatusCode::OK);
-    let second = preview::rotate_token_file(&path).unwrap();
+    let second = preview::rotate_token_file(&f.path).unwrap();
     assert_eq!(status_with(second).await, StatusCode::OK);
     assert_eq!(status_with(first).await, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_token_ends_the_tickets_made_under_the_old_one() {
+    let (f, old) = file_rig();
+    let events = ticket_for(&f.rig, &old, "events").await;
+    let media = ticket_for(&f.rig, &old, "media").await;
+    let probe = format!("/audio/none.wav?t={media}");
+    let before = send(
+        &f.rig,
+        req(Method::GET, &probe).body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(
+        before.status(),
+        StatusCode::NOT_FOUND,
+        "admitted, then not found"
+    );
+    preview::rotate_token_file(&f.path).unwrap();
+    let uri = format!("/api/events?ticket={events}");
+    let stream = send(&f.rig, req(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(stream.status(), StatusCode::UNAUTHORIZED);
+    let after = send(
+        &f.rig,
+        req(Method::GET, &probe).body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(after.status(), StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_token_closes_an_open_event_stream() {
+    let (f, old) = file_rig();
+    let events = ticket_for(&f.rig, &old, "events").await;
+    let uri = format!("/api/events?ticket={events}");
+    let response = send(&f.rig, req(Method::GET, &uri).body(Body::empty()).unwrap()).await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let mut body = response.into_body();
+    read_event(&mut body, "status-changed").await;
+    preview::rotate_token_file(&f.path).unwrap();
+    let ended = async {
+        while let Some(frame) = body.frame().await {
+            frame.unwrap();
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(10), ended)
+        .await
+        .expect("the stream ends after the token is replaced");
 }

@@ -46,6 +46,10 @@ const EVENTS_TICKET_TTL: Duration = Duration::from_secs(30);
 /// How long a ticket for showing originals lives after it was made or last used. Media elements
 /// cannot send a header, so the ticket rides in the address and is kept short.
 const MEDIA_TICKET_TTL: Duration = Duration::from_secs(3600);
+/// The longest a media ticket lives from when it was made, however often it is used.
+const MEDIA_TICKET_MAX: Duration = Duration::from_secs(12 * 3600);
+/// How often an open event stream checks that its token is still the current one.
+const STREAM_TOKEN_CHECK: Duration = Duration::from_secs(1);
 /// Raw uploads (recordings, files) that may be read and converted at once.
 const RAW_UPLOADS: usize = 2;
 
@@ -73,7 +77,10 @@ pub(crate) enum TicketKind {
 
 struct Ticket {
     kind: TicketKind,
+    issued: Instant,
     expires: Instant,
+    /// The token in force when it was made: a new token ends it.
+    token: String,
 }
 
 /// The tickets in use. Expired ones are dropped whenever the set is touched.
@@ -81,7 +88,7 @@ struct Ticket {
 struct Tickets(HashMap<String, Ticket>);
 
 impl Tickets {
-    fn issue(&mut self, kind: TicketKind, now: Instant) -> String {
+    fn issue(&mut self, kind: TicketKind, now: Instant, token: String) -> String {
         let ticket = auth::random_hex(16);
         let ttl = match kind {
             TicketKind::Events => EVENTS_TICKET_TTL,
@@ -92,23 +99,38 @@ impl Tickets {
             ticket.clone(),
             Ticket {
                 kind,
+                issued: now,
                 expires: now + ttl,
+                token,
             },
         );
         ticket
     }
 
-    /// An events ticket is spent by the check; a media ticket is renewed by it.
-    fn redeem(&mut self, ticket: &str, kind: TicketKind, now: Instant) -> bool {
+    /// An events ticket is spent by the check; a media ticket is renewed by it, up to its
+    /// maximum. A ticket made under another token than `current` is dropped.
+    fn redeem(
+        &mut self,
+        ticket: &str,
+        kind: TicketKind,
+        now: Instant,
+        current: Option<&str>,
+    ) -> bool {
         self.0.retain(|_, t| t.expires > now);
         let Some(found) = self.0.get_mut(ticket).filter(|t| t.kind == kind) else {
             return false;
         };
+        if !current.is_some_and(|c| auth::same(c, &found.token)) {
+            self.0.remove(ticket);
+            return false;
+        }
         match kind {
             TicketKind::Events => {
                 self.0.remove(ticket);
             }
-            TicketKind::Media => found.expires = now + MEDIA_TICKET_TTL,
+            TicketKind::Media => {
+                found.expires = (now + MEDIA_TICKET_TTL).min(found.issued + MEDIA_TICKET_MAX);
+            }
         }
         true
     }
@@ -170,16 +192,19 @@ impl Preview {
         })
     }
 
-    /// A ticket for the event stream (once, soon) or for media (for an hour after its last use).
-    pub(crate) fn issue(&self, kind: TicketKind) -> String {
+    /// A ticket for the event stream (once, soon) or for media (for an hour after its last use,
+    /// twelve at most), tied to the token in force. `None` when there is no token.
+    pub(crate) fn issue(&self, kind: TicketKind) -> Option<String> {
+        let token = self.opts.token.current()?;
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        all.issue(kind, Instant::now())
+        Some(all.issue(kind, Instant::now(), token))
     }
 
-    /// Whether `ticket` is a live one of this kind.
+    /// Whether `ticket` is a live one of this kind, made under the token in force.
     pub(crate) fn redeem(&self, ticket: &str, kind: TicketKind) -> bool {
+        let current = self.opts.token.current();
         let mut all = self.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        all.redeem(ticket, kind, Instant::now())
+        all.redeem(ticket, kind, Instant::now(), current.as_deref())
     }
 
     pub(crate) fn engine(&self) -> Option<nocturne_engine::Engine> {
@@ -222,42 +247,74 @@ fn allowed(opts: &Options) -> (Vec<String>, Vec<String>) {
 mod tests {
     use super::*;
 
+    const T: &str = "token-a";
+
+    fn issue(tickets: &mut Tickets, kind: TicketKind, now: Instant) -> String {
+        tickets.issue(kind, now, T.into())
+    }
+
     #[test]
     fn a_media_ticket_is_renewed_by_use_and_dropped_when_it_lapses() {
         let t0 = Instant::now();
         let mut tickets = Tickets::default();
-        let ticket = tickets.issue(TicketKind::Media, t0);
+        let ticket = issue(&mut tickets, TicketKind::Media, t0);
         let later = t0 + MEDIA_TICKET_TTL - Duration::from_secs(1);
-        assert!(tickets.redeem(&ticket, TicketKind::Media, later));
+        assert!(tickets.redeem(&ticket, TicketKind::Media, later, Some(T)));
         let again = later + MEDIA_TICKET_TTL - Duration::from_secs(1);
-        assert!(tickets.redeem(&ticket, TicketKind::Media, again));
-        assert!(!tickets.redeem(&ticket, TicketKind::Events, again));
+        assert!(tickets.redeem(&ticket, TicketKind::Media, again, Some(T)));
+        assert!(!tickets.redeem(&ticket, TicketKind::Events, again, Some(T)));
         let lapsed = again + MEDIA_TICKET_TTL;
-        assert!(!tickets.redeem(&ticket, TicketKind::Media, lapsed));
+        assert!(!tickets.redeem(&ticket, TicketKind::Media, lapsed, Some(T)));
         assert!(tickets.0.is_empty());
+    }
+
+    #[test]
+    fn a_media_ticket_ends_at_its_maximum_however_often_it_is_used() {
+        let t0 = Instant::now();
+        let mut tickets = Tickets::default();
+        let ticket = issue(&mut tickets, TicketKind::Media, t0);
+        let step = MEDIA_TICKET_TTL / 2;
+        let mut now = t0;
+        while now + step < t0 + MEDIA_TICKET_MAX {
+            now += step;
+            assert!(tickets.redeem(&ticket, TicketKind::Media, now, Some(T)));
+        }
+        let end = t0 + MEDIA_TICKET_MAX;
+        assert!(!tickets.redeem(&ticket, TicketKind::Media, end, Some(T)));
+    }
+
+    #[test]
+    fn a_ticket_made_under_another_token_is_refused_and_dropped() {
+        let t0 = Instant::now();
+        let mut tickets = Tickets::default();
+        let media = issue(&mut tickets, TicketKind::Media, t0);
+        let events = issue(&mut tickets, TicketKind::Events, t0);
+        assert!(!tickets.redeem(&media, TicketKind::Media, t0, Some("token-b")));
+        assert!(!tickets.redeem(&events, TicketKind::Events, t0, None));
+        assert!(tickets.0.is_empty());
+        assert!(!tickets.redeem(&media, TicketKind::Media, t0, Some(T)));
     }
 
     #[test]
     fn an_events_ticket_works_once_and_lapses_quickly() {
         let t0 = Instant::now();
         let mut tickets = Tickets::default();
-        let used = tickets.issue(TicketKind::Events, t0);
-        assert!(tickets.redeem(&used, TicketKind::Events, t0));
-        assert!(!tickets.redeem(&used, TicketKind::Events, t0));
-        let old = tickets.issue(TicketKind::Events, t0);
-        assert!(!tickets.redeem(&old, TicketKind::Events, t0 + EVENTS_TICKET_TTL));
+        let used = issue(&mut tickets, TicketKind::Events, t0);
+        assert!(tickets.redeem(&used, TicketKind::Events, t0, Some(T)));
+        assert!(!tickets.redeem(&used, TicketKind::Events, t0, Some(T)));
+        let old = issue(&mut tickets, TicketKind::Events, t0);
+        let late = t0 + EVENTS_TICKET_TTL;
+        assert!(!tickets.redeem(&old, TicketKind::Events, late, Some(T)));
     }
 
     #[test]
     fn expired_tickets_are_purged_when_a_new_one_is_made() {
         let t0 = Instant::now();
         let mut tickets = Tickets::default();
-        tickets.issue(TicketKind::Media, t0);
-        tickets.issue(TicketKind::Events, t0);
-        tickets.issue(
-            TicketKind::Media,
-            t0 + MEDIA_TICKET_TTL + Duration::from_secs(1),
-        );
+        issue(&mut tickets, TicketKind::Media, t0);
+        issue(&mut tickets, TicketKind::Events, t0);
+        let later = t0 + MEDIA_TICKET_TTL + Duration::from_secs(1);
+        issue(&mut tickets, TicketKind::Media, later);
         assert_eq!(tickets.0.len(), 1);
     }
 }
