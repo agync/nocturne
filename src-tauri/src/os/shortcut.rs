@@ -159,9 +159,13 @@ pub fn release(state: &OsState) {
     }
 }
 
-/// The command a desktop shortcut runs to open quick capture: the AppImage when there is one
-/// (the running executable of an AppImage is a temporary mount), else the executable.
-pub fn quick_keep_command(appimage: Option<&str>, exe: &Path) -> String {
+/// The command a desktop shortcut runs to open quick capture: `flatpak run` with the app id
+/// inside a Flatpak (the executable's path exists only in the sandbox), the AppImage when there
+/// is one (the running executable of an AppImage is a temporary mount), else the executable.
+pub fn quick_keep_command(flatpak: Option<&str>, appimage: Option<&str>, exe: &Path) -> String {
+    if let Some(id) = flatpak {
+        return format!("flatpak run {id} {}", quick_capture::FLAG);
+    }
     let program = match appimage {
         Some(a) if !a.is_empty() => a.to_string(),
         _ => exe.to_string_lossy().into_owned(),
@@ -184,7 +188,11 @@ pub fn quick_keep_command(appimage: Option<&str>, exe: &Path) -> String {
 
 pub fn quick_keep_command_now() -> String {
     let exe = std::env::current_exe().unwrap_or_else(|_| "nocturne".into());
-    quick_keep_command(std::env::var("APPIMAGE").ok().as_deref(), &exe)
+    quick_keep_command(
+        super::sandbox::flatpak_app_id_now(),
+        std::env::var("APPIMAGE").ok().as_deref(),
+        &exe,
+    )
 }
 
 #[cfg(test)]
@@ -299,20 +307,40 @@ mod tests {
     fn quick_keep_command_prefers_appimage() {
         let exe = Path::new("/tmp/.mount_abc/usr/bin/nocturne");
         assert_eq!(
-            quick_keep_command(Some("/opt/apps/Nocturne.AppImage"), exe),
+            quick_keep_command(None, Some("/opt/apps/Nocturne.AppImage"), exe),
             "/opt/apps/Nocturne.AppImage --quick-capture"
         );
         assert_eq!(
-            quick_keep_command(None, Path::new("/usr/bin/nocturne")),
+            quick_keep_command(None, None, Path::new("/usr/bin/nocturne")),
             "/usr/bin/nocturne --quick-capture"
         );
         assert_eq!(
-            quick_keep_command(Some(""), Path::new("/usr/bin/nocturne")),
+            quick_keep_command(None, Some(""), Path::new("/usr/bin/nocturne")),
             "/usr/bin/nocturne --quick-capture"
         );
         assert_eq!(
-            quick_keep_command(None, Path::new("/opt/My Apps/nocturne")),
+            quick_keep_command(None, None, Path::new("/opt/My Apps/nocturne")),
             "\"/opt/My Apps/nocturne\" --quick-capture"
+        );
+    }
+
+    #[test]
+    fn inside_a_flatpak_the_desktop_runs_the_app_through_flatpak() {
+        assert_eq!(
+            quick_keep_command(
+                Some("is.nocturne.Nocturne"),
+                None,
+                Path::new("/app/bin/nocturne")
+            ),
+            "flatpak run is.nocturne.Nocturne --quick-capture"
+        );
+        assert_eq!(
+            quick_keep_command(
+                Some("is.nocturne.Nocturne"),
+                Some("/opt/apps/Nocturne.AppImage"),
+                Path::new("/app/bin/nocturne")
+            ),
+            "flatpak run is.nocturne.Nocturne --quick-capture"
         );
     }
 }

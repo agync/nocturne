@@ -92,6 +92,14 @@ portal too.
 | `--own-name=app.nocturne.desktop.SingleInstance` | The single-instance lock: a second launch hands its file to the running window instead of starting another app |
 | `--env=WEBKIT_DISABLE_DMABUF_RENDERER=1` | The web view's DMA-BUF renderer shows a blank window inside the sandbox on some graphics drivers |
 
+### What works differently in the Flatpak
+
+The app knows it is in a Flatpak from `/.flatpak-info`, which names its app id.
+
+- **The quick keep command** Settings offers for a desktop shortcut is
+  `flatpak run is.nocturne.Nocturne --quick-capture`, since `/app/bin/nocturne` exists only
+  inside the sandbox.
+
 ### What does not work in the Flatpak yet
 
 - **Start with this computer.** The app writes its own start-up entry, which inside the sandbox
@@ -105,8 +113,8 @@ portal too.
   file inside the app's data folder, which the app already falls back to.
 - **Sound settings.** The button that opens the system's sound settings finds no program inside
   the sandbox and reports it as unavailable.
-- **The quick keep shortcut on Wayland.** The command Settings shows is the program inside the
-  sandbox; a desktop shortcut needs `flatpak run is.nocturne.Nocturne --quick-capture` instead.
+- **The quick keep shortcut on Wayland.** The app cannot take keys from inside the sandbox, so
+  the person adds a desktop shortcut that runs the quick keep command.
 - **An inbox folder** chosen through the portal is watched by the regular rescan once a minute,
   since change notifications do not cross the documents portal.
 
