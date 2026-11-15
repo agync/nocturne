@@ -44,7 +44,7 @@ reqwest.workspace = true
 process-wrap = { version = "10", features = ["tokio1"] }
 getrandom = "0.3"
 sysinfo = { version = "0.39", default-features = false, features = ["system", "disk"] }
-base64 = "0.22"
+base64 = "0.23"
 futures-util = "0.3"
 bytes = "1"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
