@@ -487,6 +487,26 @@ mod tests {
     use tokio::io::AsyncReadExt;
     use tokio::net::TcpListener;
 
+    /// The head of a request, read for at most two seconds and 64 KiB, or `None` when the
+    /// connection ends, stalls or sends a longer head first.
+    async fn request_head(stream: &mut tokio::net::TcpStream) -> Option<String> {
+        let read = async {
+            let mut head = Vec::new();
+            let mut byte = [0u8; 1];
+            while !head.ends_with(b"\r\n\r\n") {
+                if head.len() >= 64 * 1024 || stream.read(&mut byte).await.unwrap_or(0) == 0 {
+                    return None;
+                }
+                head.push(byte[0]);
+            }
+            Some(String::from_utf8_lossy(&head).into_owned())
+        };
+        tokio::time::timeout(Duration::from_secs(2), read)
+            .await
+            .ok()
+            .flatten()
+    }
+
     pub(crate) struct TempDir(pub PathBuf);
 
     impl TempDir {
@@ -539,15 +559,9 @@ mod tests {
                 let body = body.clone();
                 let (h, r) = (h.clone(), r.clone());
                 tokio::spawn(async move {
-                    let mut head = Vec::new();
-                    let mut byte = [0u8; 1];
-                    while !head.ends_with(b"\r\n\r\n") {
-                        if stream.read(&mut byte).await.unwrap_or(0) == 0 {
-                            return;
-                        }
-                        head.push(byte[0]);
-                    }
-                    let head = String::from_utf8_lossy(&head).into_owned();
+                    let Some(head) = request_head(&mut stream).await else {
+                        return;
+                    };
                     // Another program on this computer may connect to a loopback port too: only
                     // the download's own requests are answered and counted.
                     if !head
@@ -596,6 +610,24 @@ mod tests {
             }
         });
         Server { port, hits, ranges }
+    }
+
+    /// Another program's request to the test server is turned away and not counted.
+    #[tokio::test]
+    async fn the_test_server_answers_only_the_download() {
+        let server = serve(b"body".to_vec(), None).await;
+        let mut other = tokio::net::TcpStream::connect(("127.0.0.1", server.port))
+            .await
+            .unwrap();
+        other
+            .write_all(b"GET /cloudflared-bin HTTP/1.1\r\nuser-agent: Go-http-client/1.1\r\n\r\n")
+            .await
+            .unwrap();
+        let mut answer = String::new();
+        other.read_to_string(&mut answer).await.unwrap();
+        assert!(answer.starts_with("HTTP/1.1 404"), "{answer}");
+        assert_eq!(server.hits.load(Ordering::SeqCst), 0);
+        assert!(server.ranges.lock().unwrap().is_empty());
     }
 
     fn sha(bytes: &[u8]) -> String {
@@ -927,15 +959,9 @@ mod tests {
             while let Ok((mut stream, _)) = listener.accept().await {
                 let response = response.clone();
                 tokio::spawn(async move {
-                    let mut head = Vec::new();
-                    let mut byte = [0u8; 1];
-                    while !head.ends_with(b"\r\n\r\n") {
-                        if stream.read(&mut byte).await.unwrap_or(0) == 0 {
-                            return;
-                        }
-                        head.push(byte[0]);
+                    if request_head(&mut stream).await.is_some() {
+                        let _ = stream.write_all(&response).await;
                     }
-                    let _ = stream.write_all(&response).await;
                 });
             }
         });
