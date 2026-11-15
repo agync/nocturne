@@ -648,8 +648,11 @@ async fn windows_key_goes_on_input_and_into_the_header() {
         .1;
     assert_eq!(first, json!({ "key": key }).to_string());
 
-    let public: u16 = std::fs::read_to_string(sb.bin_file("t", "fake-public-port"))
+    let port_file = sb.bin_file("t", "fake-public-port");
+    until("the public port", 20, || port_file.exists()).await;
+    let public: u16 = std::fs::read_to_string(port_file)
         .unwrap()
+        .trim()
         .parse()
         .unwrap();
     let mut phone = std::net::TcpStream::connect(("127.0.0.1", public)).unwrap();
