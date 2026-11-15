@@ -13,10 +13,6 @@ you are out. It is off until you turn it on. Everything stays on your computer; 
 it through a connection you choose, and what travels is sealed so that only your phone and your
 computer can read it.
 
-> [!NOTE]
-> This page describes how the feature is designed to behave. It has not yet been tried on the real
-> internet, and the notes below say so where it matters.
-
 ## Turn it on
 
 1. Open Away from home and turn it on.
