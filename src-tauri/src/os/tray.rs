@@ -116,18 +116,61 @@ pub fn icon_for(status: &EngineStatus, public_needs: u32) -> Icon {
     }
 }
 
-/// `CommandOrControl+Shift+Space` as a person reads it.
-pub fn shortcut_label(spelling: &str) -> String {
+/// The keyboard whose key names a shortcut label uses.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Keyboard {
+    Mac,
+    Windows,
+    Linux,
+}
+
+fn this_keyboard() -> Keyboard {
+    if cfg!(target_os = "macos") {
+        Keyboard::Mac
+    } else if cfg!(windows) {
+        Keyboard::Windows
+    } else {
+        Keyboard::Linux
+    }
+}
+
+/// Matches `shortcutKeys` in the interface, so the tray and the window name keys alike.
+fn label_for(spelling: &str, kind: Keyboard) -> String {
     spelling
         .split('+')
-        .map(|p| match p.to_ascii_lowercase().as_str() {
-            "commandorcontrol" | "commandorctrl" | "cmdorctrl" | "cmdorcontrol" | "control" => {
-                "Ctrl".to_string()
+        .map(|part| {
+            let trimmed = part.trim().to_ascii_lowercase();
+            match trimmed.as_str() {
+                "commandorcontrol" | "commandorctrl" | "cmdorctrl" | "cmdorcontrol" => {
+                    if kind == Keyboard::Mac {
+                        "Cmd".to_string()
+                    } else {
+                        "Ctrl".to_string()
+                    }
+                }
+                "control" | "ctrl" => "Ctrl".to_string(),
+                "command" | "cmd" | "super" => match kind {
+                    Keyboard::Mac => "Cmd".to_string(),
+                    Keyboard::Windows => "Win".to_string(),
+                    Keyboard::Linux => "Super".to_string(),
+                },
+                "alt" | "option" => {
+                    if kind == Keyboard::Mac {
+                        "Option".to_string()
+                    } else {
+                        "Alt".to_string()
+                    }
+                }
+                _ => part.trim().to_string(),
             }
-            _ => p.to_string(),
         })
         .collect::<Vec<_>>()
         .join("+")
+}
+
+/// `CommandOrControl+Shift+Space` as a person reads it.
+pub fn shortcut_label(spelling: &str) -> String {
+    label_for(spelling, this_keyboard())
 }
 
 fn clock_text(at: &Zoned) -> String {
@@ -835,7 +878,14 @@ mod tests {
         };
         assert_eq!(
             label(Some("CommandOrControl+Shift+Space")),
-            "Keep something\u{2026} (Ctrl+Shift+Space)"
+            format!(
+                "Keep something\u{2026} ({}+Shift+Space)",
+                if cfg!(target_os = "macos") {
+                    "Cmd"
+                } else {
+                    "Ctrl"
+                }
+            )
         );
         assert_eq!(label(None), "Keep something\u{2026}");
     }
@@ -1189,5 +1239,45 @@ mod tests {
                 assert!(!spaced.contains(&format!(" {word} ")), "{text} says {word}");
             }
         }
+    }
+
+    #[test]
+    fn the_keep_shortcut_is_spelled_for_the_keyboard() {
+        assert_eq!(
+            label_for("CommandOrControl+Shift+Space", Keyboard::Mac),
+            "Cmd+Shift+Space"
+        );
+        assert_eq!(
+            label_for("CommandOrControl+Shift+Space", Keyboard::Windows),
+            "Ctrl+Shift+Space"
+        );
+        assert_eq!(
+            label_for("CommandOrControl+Shift+Space", Keyboard::Linux),
+            "Ctrl+Shift+Space"
+        );
+        assert_eq!(label_for("Control+Alt+K", Keyboard::Mac), "Ctrl+Option+K");
+        assert_eq!(label_for("Control+Alt+K", Keyboard::Linux), "Ctrl+Alt+K");
+        assert_eq!(label_for("Super+K", Keyboard::Mac), "Cmd+K");
+        assert_eq!(label_for("Super+K", Keyboard::Windows), "Win+K");
+        assert_eq!(label_for("Super+K", Keyboard::Linux), "Super+K");
+    }
+
+    #[test]
+    fn aliases_and_spacing_are_spelled_the_same() {
+        assert_eq!(label_for("CmdOrCtrl + K", Keyboard::Mac), "Cmd+K");
+        assert_eq!(label_for("cmdorctrl+k", Keyboard::Windows), "Ctrl+k");
+        assert_eq!(label_for("ctrl+Option+K", Keyboard::Linux), "Ctrl+Alt+K");
+    }
+
+    #[test]
+    fn this_keyboard_follows_the_build_target() {
+        let expected = if cfg!(target_os = "macos") {
+            Keyboard::Mac
+        } else if cfg!(target_os = "windows") {
+            Keyboard::Windows
+        } else {
+            Keyboard::Linux
+        };
+        assert_eq!(this_keyboard(), expected);
     }
 }
