@@ -150,23 +150,32 @@ pub(crate) fn tunnel_args(origin: &Origin, config: &std::path::Path) -> Vec<Stri
     args
 }
 
-/// The exact environment: nothing is inherited. The helper key, when there is one, travels here
-/// as the Host the origin sees, never in the arguments.
-pub(crate) fn tunnel_env(dirs: &HelperDirs, origin: &Origin) -> Vec<(OsString, OsString)> {
+/// The exact environment: nothing is inherited.
+pub(crate) fn tunnel_env(dirs: &HelperDirs) -> Vec<(OsString, OsString)> {
     let home = home(dirs);
-    let mut env: Vec<(OsString, OsString)> = vec![
+    let env: Vec<(OsString, OsString)> = vec![
         ("PATH".into(), "".into()),
         ("HOME".into(), home.clone().into()),
         ("TMPDIR".into(), home.join("tmp").into()),
     ];
     #[cfg(windows)]
-    if let Some(root) = std::env::var_os("SystemRoot") {
-        env.push(("SystemRoot".into(), root));
-    }
-    if let Origin::Tcp { key, .. } = origin {
-        env.push(("TUNNEL_HTTP_HOST_HEADER".into(), key.into()));
-    }
+    let env = {
+        let mut env = env;
+        if let Some(root) = std::env::var_os("SystemRoot") {
+            env.push(("SystemRoot".into(), root));
+        }
+        env
+    };
     env
+}
+
+/// The helper key, when there is one, travels in the environment as the Host the origin sees,
+/// never in the arguments.
+pub(crate) fn tunnel_secret_env(origin: &Origin) -> Vec<(OsString, OsString)> {
+    match origin {
+        Origin::Tcp { key, .. } => vec![("TUNNEL_HTTP_HOST_HEADER".into(), key.into())],
+        Origin::Unix(_) => Vec::new(),
+    }
 }
 
 fn write_config(path: &std::path::Path, origin: &Origin) -> Result<(), HelperError> {
@@ -237,7 +246,8 @@ impl Transport for CloudflaredTransport {
                     .into_iter()
                     .map(OsString::from)
                     .collect(),
-                env: tunnel_env(&self.dirs, &spec.origin),
+                env: tunnel_env(&self.dirs),
+                secret_env: tunnel_secret_env(&spec.origin),
                 cwd: Some(home),
             };
             let mut sup_opts = SuperviseOptions::new(logs);
@@ -502,6 +512,11 @@ mod tests {
     }
 
     #[test]
+    fn a_unix_origin_has_no_secret_environment() {
+        assert!(tunnel_secret_env(&Origin::Unix("/s".into())).is_empty());
+    }
+
+    #[test]
     fn windows_key_by_environment_not_argv() {
         let origin = Origin::Tcp {
             port: 5000,
@@ -512,7 +527,7 @@ mod tests {
                 .iter()
                 .any(|a| a.contains("s3cret-key-value"))
         );
-        let env = tunnel_env(&dirs(), &origin);
+        let env = tunnel_secret_env(&origin);
         assert!(env.contains(&(
             OsString::from("TUNNEL_HTTP_HOST_HEADER"),
             OsString::from("s3cret-key-value")
@@ -549,7 +564,7 @@ mod tests {
 
     #[test]
     fn own_home_not_the_persons() {
-        let env = tunnel_env(&dirs(), &Origin::Unix("/s".into()));
+        let env = tunnel_env(&dirs());
         let get = |k: &str| {
             env.iter()
                 .find(|(key, _)| key == k)

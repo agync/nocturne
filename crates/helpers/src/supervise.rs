@@ -21,7 +21,7 @@ use tokio::time::Instant;
 use crate::HelperError;
 
 /// What to run. The environment is exactly `env`: nothing is inherited.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct HelperCommand {
     pub name: &'static str,
     pub program: PathBuf,
@@ -29,7 +29,27 @@ pub struct HelperCommand {
     pub sha256: String,
     pub args: Vec<OsString>,
     pub env: Vec<(OsString, OsString)>,
+    /// More of the environment, whose values are secret: given to the helper like `env` and
+    /// hidden wherever they show in its log, as is the first line it is sent.
+    pub secret_env: Vec<(OsString, OsString)>,
     pub cwd: Option<PathBuf>,
+}
+
+/// The environment's names only: a value can be a secret.
+impl std::fmt::Debug for HelperCommand {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("HelperCommand")
+            .field("name", &self.name)
+            .field("program", &self.program)
+            .field("args", &self.args)
+            .field("env", &self.env.iter().map(|(k, _)| k).collect::<Vec<_>>())
+            .field(
+                "secret_env",
+                &self.secret_env.iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            )
+            .field("cwd", &self.cwd)
+            .finish_non_exhaustive()
+    }
 }
 
 /// A line written to a helper that must never show in `Debug` output or logs.
@@ -142,6 +162,8 @@ struct Running {
     stdin: Option<ChildStdin>,
     /// Forwards output lines and returns the run's last ones at the end of its output.
     reader: Option<JoinHandle<Vec<String>>>,
+    /// Copy the run's other output into its log.
+    copies: Vec<JoinHandle<()>>,
 }
 
 /// Asks a supervised helper to stop; the stop itself is still waited for by `Supervisor::stop`.
@@ -277,19 +299,17 @@ fn spawn(
 ) -> Result<(Running, u64), HelperError> {
     crate::verify_file(&cmd.program, &cmd.sha256)?;
     let (file, offset) = open_log(log, opts.log_limit)?;
-    let err = file
-        .try_clone()
-        .map_err(|e| HelperError::Spawn(e.to_string()))?;
     let mut command = nocturne_lemonade::process::tokio_command(&cmd.program);
     command
         .args(&cmd.args)
         .env_clear()
-        .envs(cmd.env.iter().map(|(k, v)| (k, v)))
-        .stderr(Stdio::from(err));
+        .envs(cmd.env.iter().chain(&cmd.secret_env).map(|(k, v)| (k, v)))
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
     if opts.lines {
-        command.stdin(Stdio::piped()).stdout(Stdio::piped());
+        command.stdin(Stdio::piped());
     } else {
-        command.stdin(Stdio::null()).stdout(Stdio::from(file));
+        command.stdin(Stdio::null());
     }
     if let Some(cwd) = &cmd.cwd {
         command.current_dir(cwd);
@@ -299,19 +319,90 @@ fn spawn(
         .map_err(|e| HelperError::Spawn(format!("could not run {}: {e}", cmd.name)))?;
     let pgid = child.id().unwrap_or(0);
     let stdin = child.stdin().take();
-    let reader = child
-        .stdout()
-        .take()
-        .map(|out| tokio::spawn(read_lines(out, lines.clone())));
+    let secrets: Arc<[Secret]> = cmd
+        .secret_env
+        .iter()
+        .map(|(_, v)| Secret(v.to_string_lossy().into_owned()))
+        .chain(opts.first_line.clone())
+        .collect();
+    let copy = |out| -> Result<JoinHandle<()>, HelperError> {
+        let file = file
+            .try_clone()
+            .map_err(|e| HelperError::Spawn(e.to_string()))?;
+        Ok(tokio::spawn(copy_to_log(out, file, secrets.clone())))
+    };
+    let mut copies = Vec::new();
+    if let Some(err) = child.stderr().take() {
+        copies.push(copy(Box::new(err) as Box<dyn AsyncRead + Unpin + Send>)?);
+    }
+    let mut reader = None;
+    if let Some(out) = child.stdout().take() {
+        if opts.lines {
+            reader = Some(tokio::spawn(read_lines(out, lines.clone())));
+        } else {
+            copies.push(copy(Box::new(out))?);
+        }
+    }
     Ok((
         Running {
             child,
             pgid,
             stdin,
             reader,
+            copies,
         },
         offset,
     ))
+}
+
+/// Longest line copied to the log; the rest of a longer line is dropped.
+const LOG_PIECE: u64 = 64 * 1024;
+
+/// Copies one of the helper's outputs into its log line by line, with every secret it was given
+/// hidden as the engine's log hides its keys. A line cut at [`LOG_PIECE`] loses the last few
+/// characters too, since a key may start there, and the rest of it is read and dropped.
+async fn copy_to_log(
+    out: Box<dyn AsyncRead + Unpin + Send>,
+    file: std::fs::File,
+    secrets: Arc<[Secret]>,
+) {
+    let keys: Vec<&str> = secrets.iter().map(|s| s.0.as_str()).collect();
+    let mut reader = BufReader::new(out);
+    let mut file = tokio::fs::File::from_std(file);
+    let mut buf = Vec::new();
+    loop {
+        buf.clear();
+        match (&mut reader)
+            .take(LOG_PIECE)
+            .read_until(b'\n', &mut buf)
+            .await
+        {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        let cut = buf.len() as u64 == LOG_PIECE && !buf.ends_with(b"\n");
+        let mut line = nocturne_lemonade::logpipe::hide_keys(&String::from_utf8_lossy(&buf), &keys);
+        if cut {
+            for _ in 1..nocturne_lemonade::logpipe::KEY_PART {
+                line.pop();
+            }
+            line.push('\n');
+        }
+        if file.write_all(line.as_bytes()).await.is_err() {
+            break;
+        }
+        while cut && !buf.ends_with(b"\n") {
+            buf.clear();
+            match (&mut reader)
+                .take(LOG_PIECE)
+                .read_until(b'\n', &mut buf)
+                .await
+            {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+        }
+    }
 }
 
 /// Forward each output line until the output ends; return the last few.
@@ -369,14 +460,26 @@ async fn greet(running: &mut Running, opts: &SuperviseOptions) {
     }
 }
 
-/// The last lines of a run that ended, once its output is read to the end.
+/// The last lines of a run that ended, once its output is read to the end and in its log.
 async fn tail_of(running: &mut Running) -> Vec<String> {
-    match running.reader.take() {
-        Some(reader) => tokio::time::timeout(Duration::from_secs(2), reader)
+    // A copy still going after that holds an output a left-over process keeps open: it is
+    // stopped, so no copy outlives its run.
+    for mut copy in running.copies.drain(..) {
+        if tokio::time::timeout(Duration::from_secs(2), &mut copy)
             .await
-            .ok()
-            .and_then(Result::ok)
-            .unwrap_or_default(),
+            .is_err()
+        {
+            copy.abort();
+        }
+    }
+    match running.reader.take() {
+        Some(mut reader) => match tokio::time::timeout(Duration::from_secs(2), &mut reader).await {
+            Ok(lines) => lines.unwrap_or_default(),
+            Err(_) => {
+                reader.abort();
+                Vec::new()
+            }
+        },
         None => Vec::new(),
     }
 }

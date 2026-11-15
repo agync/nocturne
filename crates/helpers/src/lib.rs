@@ -266,16 +266,6 @@ pub fn transport_for(
 mod tests {
     use super::*;
 
-    #[test]
-    fn only_a_tcp_origin_carries_a_secret_to_hide() {
-        let tcp = Origin::Tcp {
-            port: 1,
-            key: "k".into(),
-        };
-        assert_eq!(tcp.secrets().len(), 1);
-        assert!(Origin::Unix("/s".into()).secrets().is_empty());
-    }
-
     fn helper(dir: &std::path::Path, bytes: &[u8], sha256: &str) -> Installed {
         let path = dir.join("helper");
         std::fs::write(&path, bytes).unwrap();
