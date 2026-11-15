@@ -556,7 +556,8 @@ figcaption {
    of the app rather than as part of this page. */
 .feature-shot,
 .feature-box,
-.tour-stage {
+.tour-stage,
+.phone-frame {
   margin: 0;
   padding: 10px;
   border-radius: 14px;
@@ -714,6 +715,39 @@ figcaption {
   margin: 0;
   line-height: 1.55;
   color: var(--ink2);
+}
+
+/* Away from home, beside the promise that names it. On two columns it fills the space under the
+   intro while the promises run down the other side. */
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(100%, 240px);
+  margin: 0;
+  justify-self: center;
+}
+
+.phone-frame {
+  border-radius: 30px;
+}
+
+.phone-frame img {
+  border-radius: 22px;
+  box-shadow: 0 0 0 1px var(--rule);
+  background: var(--sheet);
+}
+
+@media (min-width: 824px) {
+  #privacy .promises {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  #privacy .phone {
+    grid-column: 1;
+    justify-self: start;
+  }
 }
 
 /* Engine */
