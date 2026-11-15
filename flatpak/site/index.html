@@ -1,0 +1,814 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install {{.RepoTitle}} with Flatpak</title>
+<meta name="description" content="Install {{.RepoTitle}} on any Linux desktop with Flatpak. Your software centre keeps it up to date.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="{{.RepoTitle}}">
+<meta property="og:title" content="Install {{.RepoTitle}} with Flatpak">
+<meta property="og:description" content="Install {{.RepoTitle}} on any Linux desktop with Flatpak. Your software centre keeps it up to date.">
+<meta property="og:image" content="https://nocturne.is/assets/img/og.png">
+<link rel="icon" type="image/svg+xml" href="{{.FaviconURL}}">
+<link rel="apple-touch-icon" href="{{.LogoURL}}">
+<link rel="preload" href="https://nocturne.is/assets/fonts/newsreader-latin-opsz-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="https://nocturne.is/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script>
+  (() => {
+    try {
+      const value = localStorage.getItem("wiki-theme");
+      if (value === "light" || value === "dark") document.documentElement.setAttribute("data-theme", value);
+    } catch {}
+  })();
+</script>
+<style>
+  /* Built from AetherPak's default index template; the type, colours and spacing are nocturne.is's.
+     The fonts load from nocturne.is, which allows this origin to use them. */
+  @font-face {
+    font-family: "Newsreader";
+    font-style: normal;
+    font-weight: 200 800;
+    font-display: swap;
+    src: url("https://nocturne.is/assets/fonts/newsreader-latin-opsz-normal.woff2") format("woff2-variations");
+  }
+  @font-face {
+    font-family: "IBM Plex Sans";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("https://nocturne.is/assets/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "IBM Plex Sans";
+    font-style: normal;
+    font-weight: 500;
+    font-display: swap;
+    src: url("https://nocturne.is/assets/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
+  }
+  @font-face {
+    font-family: "IBM Plex Mono";
+    font-style: normal;
+    font-weight: 400;
+    font-display: swap;
+    src: url("https://nocturne.is/assets/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  }
+
+  :root {
+    color-scheme: light;
+    --bg: #eeebe4;
+    --sheet: #fbfaf6;
+    --ink: #17181c;
+    --ink2: #4a4b50;
+    --ink3: #66645e;
+    --rule: #dad5ca;
+    --rule2: #17181c;
+    --accent: {{.AccentColor}};
+    --ember: #a8402a;
+    --marker: #f2d488;
+    --focus: var(--accent);
+    --mat: color-mix(in srgb, var(--ink) 6%, var(--bg));
+    --serif: "Newsreader", Georgia, serif;
+    --sans: "IBM Plex Sans", system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, monospace;
+    --gutter: 28px;
+    --settle: 240ms cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #0e1014;
+      --sheet: #16191f;
+      --ink: #ece8df;
+      --ink2: #aba79e;
+      --ink3: #8a877f;
+      --rule: #2a2e37;
+      --rule2: #ece8df;
+      --accent: #9db0ff;
+      --ember: #ee8c6f;
+      --marker: #5c4a18;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0e1014;
+    --sheet: #16191f;
+    --ink: #ece8df;
+    --ink2: #aba79e;
+    --ink3: #8a877f;
+    --rule: #2a2e37;
+    --rule2: #ece8df;
+    --accent: #9db0ff;
+    --ember: #ee8c6f;
+    --marker: #5c4a18;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 1rem;
+    line-height: 1.55;
+    transition: background-color var(--settle), color var(--settle);
+  }
+
+  a {
+    color: var(--accent);
+    text-underline-offset: 3px;
+    text-decoration-thickness: 1px;
+  }
+
+  a:hover { color: var(--ink); }
+
+  :focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 2px;
+  }
+
+  ::selection { background: var(--marker); color: var(--ink); }
+
+  h1, h2, h3 { margin: 0; font-weight: 400; text-wrap: balance; }
+  p { margin: 0; text-wrap: pretty; }
+  img { display: block; max-width: 100%; height: auto; }
+
+  .skip {
+    position: absolute;
+    left: 16px;
+    top: -48px;
+    z-index: 10;
+    padding: 8px 12px;
+    background: var(--ink);
+    color: var(--sheet);
+    border-radius: 4px;
+    text-decoration: none;
+  }
+
+  .skip:focus { top: 12px; }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 0 var(--gutter);
+  }
+
+  /* Header */
+
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px 20px;
+    flex-wrap: wrap;
+    padding: 22px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    text-decoration: none;
+    font-family: var(--serif);
+    font-weight: 500;
+    font-size: 1.5rem;
+    letter-spacing: -0.02em;
+    line-height: 1;
+  }
+
+  .brand:hover { color: var(--ink); }
+  .brand small {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 400;
+    letter-spacing: 0;
+    color: var(--ink3);
+  }
+  .mark { flex: none; }
+
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 8px 22px;
+    flex-wrap: wrap;
+    font-size: 0.875rem;
+  }
+
+  .nav a {
+    color: var(--ink2);
+    text-decoration: none;
+    padding: 6px 0;
+  }
+
+  .nav a:hover { color: var(--ink); text-decoration: underline; }
+
+  .theme {
+    display: flex;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+  }
+
+  .theme button {
+    height: 28px;
+    padding: 0 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--ink2);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .theme button:hover { color: var(--ink); }
+  .theme button[aria-pressed="true"] { background: var(--ink); color: var(--sheet); }
+  .theme[hidden] { display: none; }
+
+  /* Opening */
+
+  .get {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 680px;
+    padding: 80px 0 48px;
+  }
+
+  .get h1 {
+    font-family: var(--serif);
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    line-height: 1.04;
+    letter-spacing: -0.02em;
+  }
+
+  .lede {
+    font-family: var(--serif);
+    font-size: clamp(1.3125rem, 2.2vw, 1.5rem);
+    line-height: 1.4;
+  }
+
+  .here {
+    font-size: 1rem;
+    line-height: 1.6;
+    color: var(--ink2);
+  }
+
+  /* The app and its channels */
+
+  .app {
+    padding-bottom: 56px;
+    border-top: 1px solid var(--rule2);
+  }
+
+  .app-head {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 28px 0 24px;
+  }
+
+  .app-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 13px;
+    box-shadow: 0 0 0 1px var(--rule);
+  }
+
+  .app-head h2 {
+    font-family: var(--serif);
+    font-size: 1.75rem;
+    font-weight: 460;
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+  }
+
+  .app-head p { color: var(--ink2); font-size: 0.9375rem; }
+
+  .channel {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: 20px 56px;
+    padding: 36px 0;
+    border-top: 1px solid var(--rule);
+  }
+
+  /* The channel to install: a sheet of its own. */
+  .channel.is-main {
+    padding: 36px 40px;
+    margin-bottom: 8px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--sheet);
+    box-shadow: 0 0 0 1px var(--rule);
+  }
+
+  .channel.is-main + .channel { border-top: 0; }
+
+  .channel-head {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .channel-head h3 {
+    font-family: var(--serif);
+    font-size: clamp(2.125rem, 3.2vw, 2.375rem);
+    font-weight: 460;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+  }
+
+  .spec-line span { white-space: nowrap; }
+
+  .spec-line {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--ink3);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ember);
+  }
+
+  .tag::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+
+  .channel-body {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    max-width: 620px;
+  }
+
+  .note {
+    font-size: 0.9375rem;
+    line-height: 1.55;
+    color: var(--ink2);
+  }
+
+  .download {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+  }
+
+  .button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 18px;
+    border: 1px solid var(--rule2);
+    border-radius: 6px;
+    color: var(--ink);
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+
+  .button:hover { background: var(--ink); color: var(--sheet); }
+
+  .button.primary {
+    background: var(--ink);
+    border-color: var(--ink);
+    color: var(--sheet);
+  }
+
+  .button.primary:hover {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--sheet);
+  }
+
+  .file {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    color: var(--ink3);
+    overflow-wrap: anywhere;
+  }
+
+  .why {
+    font-size: 0.875rem;
+    line-height: 1.55;
+    color: var(--ink3);
+  }
+
+  details { font-size: 0.875rem; color: var(--ink2); }
+
+  summary {
+    width: fit-content;
+    cursor: pointer;
+    color: var(--accent);
+  }
+
+  summary:hover { color: var(--ink); }
+
+  details > * + * { margin-top: 10px; }
+
+  /* Commands */
+
+  .command {
+    position: relative;
+    margin: 0;
+  }
+
+  .command pre {
+    margin: 0;
+    padding: 14px 16px;
+    border-radius: 6px;
+    background: var(--mat);
+    box-shadow: 0 0 0 1px var(--rule);
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    color: var(--ink);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+  }
+
+  .command.can-copy pre { padding-right: 84px; }
+
+  .copy {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--ink2);
+    font: inherit;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    cursor: pointer;
+  }
+
+  .copy:hover { color: var(--ink); border-color: var(--ink3); }
+  .copy.is-done { color: var(--ink); }
+
+  .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+  /* Bands */
+
+  .band {
+    display: grid;
+    grid-template-columns: minmax(0, 4fr) minmax(0, 8fr);
+    gap: 20px 56px;
+    padding: 64px 0;
+    border-top: 1px solid var(--rule2);
+  }
+
+  .band + .band { border-top-color: var(--rule); }
+
+  .band h2 {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 3.6vw, 2.5rem);
+    line-height: 1.1;
+    letter-spacing: -0.015em;
+  }
+
+  .band-body {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 620px;
+  }
+
+  .band-body > p { font-size: 0.9375rem; line-height: 1.6; color: var(--ink2); }
+
+  .key {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 20px;
+    margin: 0;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--rule);
+    font-size: 0.875rem;
+  }
+
+  .key dt { color: var(--ink3); }
+  .key dd { margin: 0; }
+
+  .fingerprint {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    overflow-wrap: anywhere;
+  }
+
+  .empty {
+    padding: 48px 0;
+    border-top: 1px solid var(--rule2);
+    color: var(--ink2);
+  }
+
+  /* Footer */
+
+  .foot {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    padding: 20px 0 32px;
+    border-top: 1px solid var(--rule);
+    font-size: 0.8125rem;
+    color: var(--ink3);
+  }
+
+  .foot-brand { display: flex; align-items: center; gap: 8px; }
+  .foot-brand p { color: var(--ink3); }
+  .foot-brand a, .foot nav a { color: var(--ink2); }
+
+  .foot nav { display: flex; gap: 8px 20px; flex-wrap: wrap; }
+
+  .foot nav a { text-decoration: none; padding: 6px 0; }
+  .foot a:hover { color: var(--ink); text-decoration: underline; }
+
+  @media (max-width: 959px) {
+    .channel, .band { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  @media (max-width: 640px) {
+    :root { --gutter: 16px; }
+    .get { padding: 48px 0 36px; }
+    .channel.is-main { padding: 24px 20px; }
+    .band { padding: 48px 0; }
+    .key { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .key dd + dt { margin-top: 10px; }
+    .command.can-copy pre { padding-right: 16px; padding-top: 46px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    body { transition: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="{{.RepoHomepage}}" aria-label="{{.RepoTitle}}, home">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>{{.RepoTitle}}</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a href="https://nocturne.is/install">Download</a>
+    <a href="https://nocturne.is/docs/">Docs</a>
+    <div class="theme" role="group" aria-label="Colour theme" hidden>
+      <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
+      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
+    </div>
+  </nav>
+</header>
+
+<main id="main">
+
+<section class="get" aria-labelledby="get-title">
+  <h1 id="get-title">Install {{.RepoTitle}} with Flatpak.</h1>
+  <p class="lede">For any Linux desktop. Your software centre installs it and keeps it up to date.</p>
+  <p class="here">Using a Mac, Windows, or a deb or rpm package instead? Every way to get {{.RepoTitle}} is on the <a href="https://nocturne.is/install">download page</a>.</p>
+</section>
+
+{{range $app := .Apps}}
+{{$hasStable := false}}{{range .Branches}}{{if eq .Branch "stable"}}{{$hasStable = true}}{{end}}{{end}}
+<section class="app" aria-labelledby="app-{{.ID}}">
+  <div class="app-head">
+    {{if $.LogoURL}}<img class="app-icon" src="{{$.LogoURL}}" alt="" width="56" height="56">{{end}}
+    <div>
+      <h2 id="app-{{.ID}}">{{.Name}}</h2>
+      {{if .Summary}}<p>{{.Summary}}</p>{{end}}
+    </div>
+  </div>
+
+  {{range .Branches}}{{if eq .Branch "stable"}}
+  <section class="channel is-main" aria-labelledby="ch-{{$app.ID}}-stable">
+    <div class="channel-head">
+      <h3 id="ch-{{$app.ID}}-stable">Stable</h3>
+      <p class="spec-line">{{if .Timestamp}}<span>Released {{formatDate .Timestamp "2 January 2006"}}</span> · {{end}}<span>{{formatSize .DownloadSize}} download</span></p>
+      <p class="tag">Recommended</p>
+    </div>
+    <div class="channel-body">
+      <p class="note">The version we recommend for everyday use.</p>
+      <div class="download">
+        <a class="button primary" href="{{.RefFile}}" download>Install {{$app.Name}}</a>
+        <p class="file">{{$app.ID}} · {{join .Arches ", "}}</p>
+      </div>
+      <p class="why">Your software centre opens and asks you to confirm. If the file only downloads, open it from your downloads.</p>
+      <details>
+        <summary>Or install it from a terminal</summary>
+        <div class="command"><pre><code>flatpak remote-add --user --if-not-exists {{$.RemoteName}} <span data-pages-url>{{$.PagesURL}}</span>/{{$.RemoteName}}.flatpakrepo
+{{.InstallCmd}}</code></pre></div>
+      </details>
+    </div>
+  </section>
+  {{end}}{{end}}
+
+
+  {{range .Branches}}{{if ne .Branch "stable"}}
+  <section class="channel{{if and (not $hasStable) (eq .Branch "beta")}} is-main{{end}}" aria-labelledby="ch-{{$app.ID}}-{{.Branch}}">
+    <div class="channel-head">
+      <h3 id="ch-{{$app.ID}}-{{.Branch}}">{{if eq .Branch "beta"}}Beta{{else}}{{.Branch}}{{end}}</h3>
+      <p class="spec-line">{{if .Timestamp}}<span>Released {{formatDate .Timestamp "2 January 2006"}}</span> · {{end}}<span>{{formatSize .DownloadSize}} download</span></p>
+      {{if and (not $hasStable) (eq .Branch "beta")}}<p class="tag">Available now</p>{{end}}
+    </div>
+    <div class="channel-body">
+      {{if eq .Branch "beta"}}<p class="note">Early builds of the next version, for trying new things first. Expect rough edges, and keep a copy of anything you cannot lose.</p>{{end}}
+      <div class="download">
+        <a class="button{{if and (not $hasStable) (eq .Branch "beta")}} primary{{end}}" href="{{.RefFile}}" download>Install the {{if eq .Branch "beta"}}beta{{else}}{{.Branch}} version{{end}}</a>
+        <p class="file">{{$app.ID}} · {{join .Arches ", "}}</p>
+      </div>
+      {{if not $hasStable}}<p class="why">Your software centre opens and asks you to confirm. If the file only downloads, open it from your downloads.</p>{{end}}
+      <details>
+        <summary>Or install it from a terminal</summary>
+        <div class="command"><pre><code>flatpak remote-add --user --if-not-exists {{$.RemoteName}} <span data-pages-url>{{$.PagesURL}}</span>/{{$.RemoteName}}.flatpakrepo
+{{.InstallCmd}}</code></pre></div>
+      </details>
+    </div>
+  </section>
+  {{end}}{{end}}
+
+  {{if not $hasStable}}
+  <section class="channel" aria-labelledby="ch-{{$app.ID}}-stable">
+    <div class="channel-head">
+      <h3 id="ch-{{$app.ID}}-stable">Stable</h3>
+      <p class="spec-line">Not out yet</p>
+    </div>
+    <div class="channel-body">
+      <p class="note">The first stable version comes with the first release. Until then, the beta above is the version to install.</p>
+    </div>
+  </section>
+  {{end}}
+</section>
+{{else}}
+<p class="empty">Nothing is published here yet. Until it is, the <a href="https://nocturne.is/install">download page</a> has every other way to install {{.RepoTitle}}.</p>
+{{end}}
+
+<section class="band" aria-labelledby="repo-title">
+  <h2 id="repo-title">Add the repository once.</h2>
+  <div class="band-body">
+    <p>Adding the repository lets your software centre find {{.RepoTitle}} and bring its updates with your other apps. This needs Flatpak 1.17 or later.</p>
+    <div class="command"><pre><code>flatpak remote-add --user --if-not-exists {{.RemoteName}} <span data-pages-url>{{.PagesURL}}</span>/{{.RemoteName}}.flatpakrepo</code></pre></div>
+    <div class="actions">
+      <a class="button" href="{{.RemoteName}}.flatpakrepo" download>Download the repository file</a>
+    </div>
+    <details>
+      <summary>With Flatpak older than 1.17</summary>
+      <p>Older versions cannot read where the signatures live from the repository file. Add the repository, then tell Flatpak where to find them:</p>
+      <div class="command"><pre><code>flatpak remote-add --if-not-exists --user --no-gpg-verify {{.RemoteName}} oci+<span data-pages-url>{{.PagesURL}}</span>{{if .Signing.Enabled}}
+flatpak remote-modify --user --signature-lookaside=<span data-pages-url>{{.PagesURL}}</span>/{{.Signing.Lookaside}} {{.RemoteName}}{{end}}</code></pre></div>
+    </details>
+  </div>
+</section>
+
+{{if .Signing.Enabled}}
+<section class="band" aria-labelledby="signed-title">
+  <h2 id="signed-title">Signed by us.</h2>
+  <div class="band-body">
+    <p>Every version here is signed with our key. Flatpak checks the signature before it installs or updates anything, and refuses a version that does not match.</p>
+    <dl class="key">
+      <dt>Fingerprint</dt>
+      <dd class="fingerprint">{{.Signing.Fingerprint}}</dd>
+      <dt>Public key</dt>
+      <dd><a href="{{.Signing.PublicKey}}">{{.Signing.PublicKey}}</a></dd>
+    </dl>
+  </div>
+</section>
+{{end}}
+
+<section class="band" aria-labelledby="more-title">
+  <h2 id="more-title">More help.</h2>
+  <div class="band-body">
+    <p>The <a href="https://nocturne.is/docs/guide/install.html">install guide</a> explains each way to install, what the first start looks like, and how to take {{.RepoTitle}} off again. To remove the Flatpak from a terminal:</p>
+    <div class="command"><pre><code>flatpak uninstall --user {{range $i, $a := .Apps}}{{if $i}} {{end}}{{$a.ID}}{{end}}</code></pre></div>
+    <details>
+      <summary>Details for Flatpak experts</summary>
+      <dl class="key">
+        <dt>Remote name</dt>
+        <dd class="fingerprint">{{.RemoteName}}</dd>
+        <dt>Images index</dt>
+        <dd><a href="index/static">index/static</a></dd>
+        {{range $app := .Apps}}{{range .Branches}}
+        <dt>{{.Branch}}</dt>
+        <dd class="fingerprint">{{if .Commit}}commit {{.Commit}}<br>{{end}}{{formatSize .InstalledSize}} installed, {{formatSize .DownloadSize}} download</dd>
+        {{range .Companions}}
+        <dt>{{.Type}}, {{.ID}}</dt>
+        <dd><div class="command"><pre><code>{{.InstallCmd}}</code></pre></div></dd>
+        {{end}}{{end}}{{end}}
+      </dl>
+    </details>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <div class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <p>{{.FooterText}}</p>
+  </div>
+  <nav aria-label="Footer">
+    <a href="{{.RepoHomepage}}">nocturne.is</a>
+    <a href="https://nocturne.is/install">Download</a>
+    <a href="https://nocturne.is/docs/guide/install.html">Install guide</a>
+    <a href="https://nocturne.is/assets/fonts/OFL.txt">Font licence</a>
+  </nav>
+</footer>
+
+</div>
+<script>
+  (() => {
+    const KEY = "wiki-theme";
+    const root = document.documentElement;
+    const read = () => {
+      try {
+        const value = localStorage.getItem(KEY);
+        return value === "light" || value === "dark" ? value : "system";
+      } catch {
+        return "system";
+      }
+    };
+    const apply = (choice) => {
+      if (choice === "system") root.removeAttribute("data-theme");
+      else root.setAttribute("data-theme", choice);
+      for (const button of document.querySelectorAll("[data-theme-choice]")) {
+        button.setAttribute("aria-pressed", String(button.dataset.themeChoice === choice));
+      }
+    };
+    const group = document.querySelector(".theme");
+    if (group) group.hidden = false;
+    apply(read());
+    for (const button of document.querySelectorAll("[data-theme-choice]")) {
+      button.addEventListener("click", () => {
+        const choice = button.dataset.themeChoice;
+        try {
+          if (choice === "system") localStorage.removeItem(KEY);
+          else localStorage.setItem(KEY, choice);
+        } catch {}
+        apply(choice);
+      });
+    }
+
+    // A local preview has no address for the repository; use the one the page is served from.
+    const here = location.origin + location.pathname.replace(/\/(index\.html)?$/, "");
+    for (const span of document.querySelectorAll("[data-pages-url]")) {
+      if (!span.textContent.trim()) span.textContent = here;
+    }
+
+    if (!navigator.clipboard) return;
+    for (const box of document.querySelectorAll(".command")) {
+      const code = box.querySelector("code");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "copy";
+      button.textContent = "Copy";
+      button.setAttribute("aria-label", "Copy the command");
+      button.addEventListener("click", () => {
+        navigator.clipboard.writeText(code.textContent.trim()).then(() => {
+          button.textContent = "Copied";
+          button.classList.add("is-done");
+          setTimeout(() => {
+            button.textContent = "Copy";
+            button.classList.remove("is-done");
+          }, 1500);
+        });
+      });
+      box.classList.add("can-copy");
+      box.appendChild(button);
+    }
+  })();
+</script>
+</body>
+</html>
