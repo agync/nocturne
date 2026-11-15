@@ -81,6 +81,15 @@ class Table(unittest.TestCase):
             read = set(re.findall(r"needs\.changes\.outputs\.([A-Za-z0-9_-]+)", f.read()))
         self.assertEqual(read, EVERY)
 
+    def test_an_unknown_argument_is_refused(self):
+        for args in (["--al"], ["--all", "extra"], ["-"]):
+            with self.subTest(args=args):
+                proc = subprocess.run(
+                    [SCRIPT, *args], input="", capture_output=True, text=True
+                )
+                self.assertEqual(proc.returncode, 2)
+                self.assertEqual(proc.stdout, "")
+
     def test_all_and_an_empty_change(self):
         self.assertEqual(areas("--all")[0], EVERY)
         self.assertEqual(selected(), set())
