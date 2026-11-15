@@ -146,7 +146,11 @@ fn lab_with(mode: &str, extra: &[&str], before: impl FnOnce(&Path), pause: Durat
         ram_bytes: Some(32 * GIB),
     });
     models::install(h.app.handle()).unwrap();
-    let mut opts = StartOptions::with_engine(FakeHost::new(), bundle.path());
+    // These tests keep and read notes by hand. On battery the reader leaves new notes alone, so
+    // it cannot read one a test is applying and take back the memories the test made.
+    let host = FakeHost::new();
+    host.on_battery(100);
+    let mut opts = StartOptions::with_engine(host, bundle.path());
     opts.supervisor = SupervisorOptions {
         health_interval: Duration::from_millis(200),
         start_timeout: Duration::from_secs(20),
