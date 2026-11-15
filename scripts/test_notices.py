@@ -188,6 +188,22 @@ class Output(unittest.TestCase):
         self.assertIn("Permission is hereby granted", out)
 
 
+class Run(unittest.TestCase):
+    def test_runs_the_command_the_path_lookup_finds(self):
+        seen = []
+        real_which, real_run = notices.shutil.which, notices.subprocess.run
+        notices.shutil.which = lambda name: {"npm": r"C:\\node\\npm.cmd"}.get(name)
+        notices.subprocess.run = lambda cmd, **kw: seen.append((cmd, kw)) or subprocess.CompletedProcess(cmd, 0, "", "")
+        try:
+            notices.run(["npm", "ls"])
+            notices.run(["not-on-path", "x"])
+        finally:
+            notices.shutil.which, notices.subprocess.run = real_which, real_run
+        self.assertEqual(seen[0][0], [r"C:\\node\\npm.cmd", "ls"])
+        self.assertEqual(seen[1][0], ["not-on-path", "x"])
+        self.assertEqual(seen[0][1]["encoding"], "utf-8")
+
+
 class Offline(unittest.TestCase):
     @unittest.skipUnless(shutil.which("unshare") and shutil.which("cargo"), "needs unshare and cargo")
     def test_offline(self):

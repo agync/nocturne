@@ -24,6 +24,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -460,8 +461,10 @@ def digest_of(text):
 
 
 def run(cmd, cwd=None):
-    # Cargo and npm write UTF-8; Windows would otherwise decode with its local code page.
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
+    # On Windows npm is npm.cmd, which only a PATHEXT-aware lookup finds; cargo and npm write UTF-8,
+    # which Windows would otherwise decode with its local code page.
+    exe = shutil.which(cmd[0]) or cmd[0]
+    return subprocess.run([exe, *cmd[1:]], cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
 
 def load_rust(target):
