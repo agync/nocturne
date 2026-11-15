@@ -42,27 +42,26 @@ const RETRY_AFTER: Duration = Duration::from_secs(30);
 const QUEUE: usize = 1024;
 
 /// Takes bodies and the keys out of the engine's log lines.
-#[derive(Default)]
 pub struct Redactor {
-    key: Mutex<Option<OnlineKey>>,
-    launch_keys: Mutex<Vec<Zeroizing<String>>>,
+    keys: Vec<Zeroizing<String>>,
     withholding: Mutex<bool>,
 }
 
 impl Redactor {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// The key the engine is given at this launch, if any.
-    pub fn set_key(&self, key: Option<&OnlineKey>) {
-        *self.key.lock().unwrap_or_else(|e| e.into_inner()) = key.cloned();
-    }
-
-    /// The keys this launch of the engine checks requests against, hidden as the route's is.
-    pub fn set_launch_keys(&self, keys: &[&str]) {
-        *self.launch_keys.lock().unwrap_or_else(|e| e.into_inner()) =
-            keys.iter().map(|k| Zeroizing::new(k.to_string())).collect();
+    /// The redactor for one launch of the engine, which hides the route's key, when there is one,
+    /// and the keys the launch checks requests against. It is the only way to make one, so none
+    /// can leave a key out.
+    pub fn for_launch(route: Option<&OnlineKey>, launch: &[&str]) -> Self {
+        let keys = route
+            .map(OnlineKey::expose)
+            .into_iter()
+            .chain(launch.iter().copied())
+            .map(|k| Zeroizing::new(k.to_string()))
+            .collect();
+        Redactor {
+            keys,
+            withholding: Mutex::new(false),
+        }
     }
 
     /// The line as it may be written, or `None` when all of it is withheld. Lines are judged in
@@ -86,13 +85,7 @@ impl Redactor {
             }
             None => s.to_string(),
         };
-        let route = self.key.lock().unwrap_or_else(|e| e.into_inner());
-        let launch = self.launch_keys.lock().unwrap_or_else(|e| e.into_inner());
-        let keys: Vec<&str> = route
-            .iter()
-            .map(|k| k.expose())
-            .chain(launch.iter().map(|k| k.as_str()))
-            .collect();
+        let keys: Vec<&str> = self.keys.iter().map(|k| k.as_str()).collect();
         let out = hide_keys(&out, &keys);
         Some(cap(out))
     }
@@ -397,9 +390,8 @@ mod tests {
 
     #[test]
     fn the_launch_keys_are_hidden_whole_and_in_part() {
-        let r = Redactor::new();
         let (api, admin) = ("a1b2c3d4e5f6a7b8c9d0e1f2", "f0e1d2c3b4a5f6e7d8c9b0a1");
-        r.set_launch_keys(&[api, admin]);
+        let r = Redactor::for_launch(None, &[api, admin]);
         let line = format!(
             "keys {api} {admin} head {} tail {}",
             &api[..8],
@@ -411,9 +403,8 @@ mod tests {
 
     #[test]
     fn one_keys_end_does_not_break_anothers_match() {
-        let r = Redactor::new();
         let (api, admin) = ("a1b2c3d4e5f6a7b8", "00a1b2c3d4ffffff");
-        r.set_launch_keys(&[api, admin]);
+        let r = Redactor::for_launch(None, &[api, admin]);
         assert_eq!(r.line(&format!("{admin} {api}")).unwrap(), "[key] [key]");
     }
 
@@ -525,8 +516,8 @@ mod tests {
             out_r,
             err_r,
             path.clone(),
-            Arc::new(Redactor::new()),
-            Arc::new(Redactor::new()),
+            Arc::new(Redactor::for_launch(None, &[])),
+            Arc::new(Redactor::for_launch(None, &[])),
         );
         out_w.write_all(b"from out\n").await.unwrap();
         err_w.write_all(b"from err\n").await.unwrap();
