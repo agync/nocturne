@@ -1,11 +1,11 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 /** WCAG 2.5.3: a control's name contains the words drawn on it. Axe keeps this rule experimental. */
 const mismatches = async (page: Page) =>
-  (
-    await new AxeBuilder({ page }).withRules(["label-content-name-mismatch"]).analyze()
-  ).violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`);
+  (await runAxe(page, (b) => b.withRules(["label-content-name-mismatch"]))).violations.map(
+    (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
+  );
 
 const SCREENS = [
   "#/today",

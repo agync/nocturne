@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
@@ -70,7 +70,7 @@ for (const scheme of ["light", "dark"] as const) {
         await page.getByRole("button", { name: /^Leo is allergic to nuts\./ }).click();
         await page.getByRole("button", { name: "Correct" }).click();
       }
-      const results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+      const results = await runAxe(page, (b) => b.withTags(TAGS));
       expect(
         results.violations.map(
           (v) => `${hash} ${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,

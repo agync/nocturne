@@ -1,12 +1,12 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
 const HEAVY = "2026-01-01";
 const SHOTS = "test-results/screens";
 
 const axe = async (page: Page) =>
-  (await new AxeBuilder({ page }).withTags(TAGS).analyze()).violations.map(
+  (await runAxe(page, (b) => b.withTags(TAGS))).violations.map(
     (v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`,
   );
 

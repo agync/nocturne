@@ -1,5 +1,5 @@
-import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
+import { runAxe } from "./axe";
 
 const SHOTS = "test-results/screens";
 const TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
@@ -51,12 +51,12 @@ for (const scheme of ["light", "dark"] as const) {
     });
     const page = await context.newPage();
     await ready(page);
-    let results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    let results = await runAxe(page, (b) => b.withTags(TAGS));
     expect(results.violations.map((v) => v.id)).toEqual([]);
     await page.getByRole("button", { name: "Delete everything…" }).click();
     await page.getByRole("dialog", { name: "Delete everything?" }).waitFor();
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/privacy-delete-dark.png` });
-    results = await new AxeBuilder({ page }).withTags(TAGS).analyze();
+    results = await runAxe(page, (b) => b.withTags(TAGS));
     expect(results.violations.map((v) => v.id)).toEqual([]);
     await context.close();
   });
