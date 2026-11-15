@@ -178,15 +178,24 @@ fn keep_bytes(
 
 /// Ask and collect every delta up to the terminal one.
 fn ask(c: &mut PhoneClient, q: &str) -> Vec<(Instant, nocturne_contract::AskDelta)> {
-    let id = block(c.request(RemoteCall::Ask { question: q.into() })).unwrap();
-    let started = block(c.answer(id)).unwrap();
+    let id = block_within(
+        "the question to be sent",
+        c.request(RemoteCall::Ask { question: q.into() }),
+    )
+    .unwrap();
+    let started = block_within("the answer to start", c.answer(id)).unwrap();
     assert!(
         matches!(started, RemoteAnswer::AskStarted { .. }),
         "{started:?}"
     );
+    let until = Instant::now() + Duration::from_secs(60);
     let mut out = Vec::new();
     loop {
-        match block(c.answer(id)).unwrap() {
+        assert!(
+            Instant::now() < until,
+            "the answer did not end within a minute: {out:?}"
+        );
+        match block_within("the next part of the answer", c.answer(id)).unwrap() {
             RemoteAnswer::AskDelta { delta } => {
                 let end = is_terminal(delta.phase);
                 out.push((Instant::now(), delta));
