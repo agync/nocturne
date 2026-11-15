@@ -350,3 +350,90 @@ async fn a_paused_download_does_not_open_a_new_engines_window() {
     until(&mut rx, |p| p.done).await;
     other.wait_offline(true).await;
 }
+
+/// A new engine is followed while the finished download is still giving its window back: the
+/// download is over, so the window is never asked to open again for a job that no longer runs.
+#[tokio::test]
+async fn following_an_engine_while_the_window_closes_does_not_reopen_it() {
+    let r = rig("download-ms=300,slow-start-ms=1000").await;
+    let control = r.sup.control();
+    let mut rx = r.get("Whisper-Tiny").await;
+    // The window is flagged closed as the job gives it back; the relaunch that closes it takes a
+    // second.
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while control.download_window_open() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("the job never gave its window back");
+    assert!(
+        !rx.borrow().done,
+        "the end is announced after the window closes"
+    );
+    r.jobs.follow(control.clone()).await.unwrap();
+    until(&mut rx, |p| p.done).await;
+    r.wait_offline(true).await;
+    assert!(
+        !control.download_window_open(),
+        "a finished download left the window open"
+    );
+    // The engine launched for the start, the window opening and the window closing, and for
+    // nothing else: it was never allowed online, not even for an instant, after the end.
+    assert_eq!(common::launch_count(r.sup.dirs()), 3);
+}
+
+/// A download resumed while it is being cancelled: what the resume asked for goes back with the
+/// cancel, and nothing opens the window after it.
+#[tokio::test]
+async fn resuming_while_the_download_is_cancelled_leaves_the_window_closed() {
+    let r = rig("download-ms=3000,slow-start-ms=500").await;
+    let control = r.sup.control();
+    let mut rx = r.get("Whisper-Small").await;
+    until(&mut rx, |p| p.received > 0).await;
+    r.jobs.pause().await.unwrap();
+    assert!(!control.download_window_open());
+    let resume = r.jobs.resume();
+    let cancel = async {
+        // The resume has asked for the window, and its relaunch takes half a second.
+        while !control.download_window_open() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        r.jobs.cancel().await
+    };
+    let (resumed, cancelled) = tokio::join!(resume, cancel);
+    resumed.unwrap();
+    cancelled.unwrap();
+    r.wait_offline(true).await;
+    assert!(
+        !control.download_window_open(),
+        "a cancelled download left the window open"
+    );
+    assert_eq!(r.jobs.model(), None);
+}
+
+/// A new engine is followed while the download is cancelled: the new engine's window opens for
+/// the follow only if it closes again with the cancel.
+#[tokio::test]
+async fn following_an_engine_while_the_download_is_cancelled_leaves_its_window_closed() {
+    let r = rig("download-ms=3000").await;
+    let other = rig("download-ms=300,slow-start-ms=500").await;
+    let theirs = other.sup.control();
+    let mut rx = r.get("Whisper-Small").await;
+    until(&mut rx, |p| p.received > 0).await;
+    let follow = r.jobs.follow(theirs.clone());
+    let cancel = async {
+        while !theirs.download_window_open() {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        r.jobs.cancel().await
+    };
+    let (followed, cancelled) = tokio::join!(follow, cancel);
+    followed.unwrap();
+    cancelled.unwrap();
+    other.wait_offline(true).await;
+    assert!(
+        !theirs.download_window_open(),
+        "a cancelled download left the new engine's window open"
+    );
+}

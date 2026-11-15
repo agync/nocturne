@@ -2,6 +2,7 @@
 //! the shared download window. One download at a time. Pausing gives the window back and keeps
 //! what was received; cancelling removes it; a failure keeps it, so trying again carries on.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -56,6 +57,14 @@ struct Run {
 struct Gate {
     paused: Mutex<bool>,
     hold: Mutex<Option<OnlineHold>>,
+    /// The download is over (finished, failed or cancelled) and its share of the window is
+    /// given back for good. Set only with `life` held.
+    ended: AtomicBool,
+    /// Held by whoever asks for the window on this download's behalf, from the check that the
+    /// download is not over until the hold is placed, and by the end of the download. So the
+    /// window is never asked to open once the download is over, and an ask already under way
+    /// is placed before the end gives everything back.
+    life: tokio::sync::Mutex<()>,
     wake: Notify,
 }
 
@@ -64,8 +73,25 @@ impl Gate {
         *lock(&self.paused)
     }
 
+    fn ended(&self) -> bool {
+        self.ended.load(Ordering::SeqCst)
+    }
+
     async fn release(&self) {
         let hold = lock(&self.hold).take();
+        if let Some(h) = hold {
+            h.release().await;
+        }
+    }
+
+    /// Gives the window back at the end of the download. What asks for the window later (a
+    /// follow of a new engine, a resume) finds the download over and asks for nothing.
+    async fn end(&self) {
+        let hold = {
+            let _life = self.life.lock().await;
+            self.ended.store(true, Ordering::SeqCst);
+            lock(&self.hold).take()
+        };
         if let Some(h) = hold {
             h.release().await;
         }
@@ -121,14 +147,16 @@ impl ModelJobs {
     /// with a share of that engine's download window.
     pub async fn follow(&self, control: Control) -> Result<(), RuntimeError> {
         *lock(&self.engine.control) = control.clone();
-        if let Some((_, gate, _)) = self.running()
-            && !gate.paused()
-        {
+        if let Some((_, gate, _)) = self.running() {
+            let _life = gate.life.lock().await;
+            if gate.paused() || gate.ended() {
+                return Ok(());
+            }
             let hold = control.hold_online().await?;
             // Checked again with the hold's lock taken: a pause meanwhile gave the window back,
             // and this hold goes back with it.
             let mut held = lock(&gate.hold);
-            if gate.paused() {
+            if gate.paused() || gate.ended() {
                 drop(held);
                 hold.release().await;
                 return Ok(());
@@ -212,11 +240,19 @@ impl ModelJobs {
         let Some((_, gate, tx)) = self.running() else {
             return Ok(());
         };
-        if !gate.paused() {
+        let _life = gate.life.lock().await;
+        if !gate.paused() || gate.ended() {
             return Ok(());
         }
         let hold = self.engine.control().hold_online().await?;
-        let spare = lock(&gate.hold).replace(hold);
+        let mut held = lock(&gate.hold);
+        if gate.ended() {
+            drop(held);
+            hold.release().await;
+            return Ok(());
+        }
+        let spare = held.replace(hold);
+        drop(held);
         drop(spare);
         *lock(&gate.paused) = false;
         tx.send_modify(|p| p.paused = false);
@@ -248,7 +284,7 @@ impl ModelJobs {
         if !finished && let Err(e) = client.delete(&run.model).await {
             tracing::info!("the partial download of {} stays: {e}", run.model);
         }
-        run.gate.release().await;
+        run.gate.end().await;
         Ok(())
     }
 
@@ -318,7 +354,7 @@ async fn fetch(
     // The window closes before the end is announced: what follows (the re-read of a new
     // finding model) starts on the engine that will keep running, not on one the closing
     // relaunch is about to replace.
-    gate.release().await;
+    gate.end().await;
     match finished {
         Some(_) => tx.send_modify(|p| {
             p.done = true;
