@@ -29,6 +29,12 @@ EXCLUDED = (
     ("gio/modules/libgvfsdbus.so", "network and trash file backends; the app opens local files only"),
     ("gio/modules/libgioremote-volume-monitor.so", "volume monitor backend; not used"),
     ("libgvfscommon.so*", "shared by the removed file backends"),
+    ("gdk-pixbuf-2.0/*/loaders/libpixbufloader-tiff.so", "TIFF image loader; the app shows no TIFF through GTK"),
+    ("libpixbufloader-tiff.so", "the loader's copy beside the libraries"),
+    ("libtiff.so*", "only the TIFF loader uses it"),
+    ("libjbig.so*", "used only by libtiff; GPL-2.0-or-later on Debian"),
+    ("libLerc.so*", "used only by libtiff"),
+    ("libdeflate.so*", "used only by libtiff"),
 )
 
 # (package, library name) -> why a GPL licence in the package does not bind the library. Fedora
@@ -193,6 +199,8 @@ def prune(libdir):
             os.remove(path)
             removed.append(os.path.relpath(path, libdir))
     gone = {os.path.basename(r) for r in removed}
+    for cache in glob.glob(os.path.join(libdir, "gdk-pixbuf-2.0", "*", "loaders.cache")):
+        drop_loaders(cache, gone)
     broken = []
     for path in glob.glob(os.path.join(libdir, "**", "*.so*"), recursive=True):
         if os.path.isdir(path):
@@ -204,6 +212,22 @@ def prune(libdir):
     if broken:
         raise notices.LicenceError("a removed library is still needed: " + "; ".join(broken))
     return removed
+
+
+def drop_loaders(cache, gone):
+    """Remove the entries of removed loaders from a gdk-pixbuf loaders.cache."""
+    with open(cache, encoding="utf-8") as handle:
+        blocks = handle.read().split("\n\n")
+    keep = []
+    for block in blocks:
+        lines = block.split("\n")
+        entry = [line for line in lines if line and not line.startswith("#")]
+        if entry and os.path.basename(entry[0].strip('"')) in gone:
+            lines = [line for line in lines if line.startswith("#")]
+        if lines:
+            keep.append("\n".join(lines))
+    with open(cache, "w", encoding="utf-8") as handle:
+        handle.write("\n\n".join(keep))
 
 
 def normalise(token):

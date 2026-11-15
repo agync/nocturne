@@ -68,6 +68,29 @@ class Pruning(unittest.TestCase):
         self.assertIn("libcanberra.so.0", removed)
         self.assertTrue(os.path.exists(os.path.join(tmp, "libkeep.so.1")))
 
+    def test_a_removed_pixbuf_loader_leaves_the_loader_cache(self):
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        loaders = os.path.join(tmp, "gdk-pixbuf-2.0", "2.10.0", "loaders")
+        os.makedirs(loaders)
+        for rel in ("libpixbufloader-png.so", "libpixbufloader-tiff.so"):
+            with open(os.path.join(loaders, rel), "wb") as handle:
+                handle.write(b"not an elf")
+        cache = os.path.join(tmp, "gdk-pixbuf-2.0", "2.10.0", "loaders.cache")
+        with open(cache, "w") as handle:
+            handle.write(
+                "# GdkPixbuf Image Loader Modules file\n#\n"
+                '"libpixbufloader-tiff.so"\n"tiff" 5 "gdk-pixbuf" "TIFF" "LGPL"\n"image/tiff" ""\n\n'
+                '"libpixbufloader-png.so"\n"png" 5 "gdk-pixbuf" "PNG" "LGPL"\n"image/png" ""\n\n'
+            )
+        removed = b.prune(tmp)
+        self.assertEqual(removed, ["gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-tiff.so"])
+        with open(cache) as handle:
+            text = handle.read()
+        self.assertNotIn("tiff", text)
+        self.assertIn('"libpixbufloader-png.so"', text)
+        self.assertTrue(text.startswith("# GdkPixbuf Image Loader Modules file"))
+
 
 class Documents(unittest.TestCase):
     PKGS = {
