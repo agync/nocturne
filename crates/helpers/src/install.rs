@@ -13,6 +13,7 @@ use tokio_util::sync::CancellationToken;
 use crate::lock::{HelpersLock, is_unpinned, platform, safe_member};
 use crate::{HelperDirs, HelperError, HelperKind, InstallProgress, Installed};
 
+const USER_AGENT: &str = "nocturne-helper-download";
 /// The most a single extracted binary may take, so a hostile archive cannot fill the disk.
 const MAX_MEMBER_BYTES: u64 = 512 * 1024 * 1024;
 
@@ -143,7 +144,7 @@ pub(crate) fn client(no_proxy: bool, hosts: &[String]) -> Result<reqwest::Client
     });
     let mut builder = reqwest::Client::builder()
         .redirect(policy)
-        .user_agent("nocturne-helper-download")
+        .user_agent(USER_AGENT)
         .connect_timeout(Duration::from_secs(20))
         .read_timeout(Duration::from_secs(60));
     if no_proxy {
@@ -536,9 +537,8 @@ mod tests {
                 let Ok((mut stream, _)) = listener.accept().await else {
                     return;
                 };
-                let n = h.fetch_add(1, Ordering::SeqCst);
                 let body = body.clone();
-                let r = r.clone();
+                let (h, r) = (h.clone(), r.clone());
                 tokio::spawn(async move {
                     let mut head = Vec::new();
                     let mut byte = [0u8; 1];
@@ -549,6 +549,18 @@ mod tests {
                         head.push(byte[0]);
                     }
                     let head = String::from_utf8_lossy(&head).into_owned();
+                    // Another program on this computer may connect to a loopback port too: only
+                    // the download's own requests are answered and counted.
+                    if !head
+                        .to_ascii_lowercase()
+                        .contains(&format!("user-agent: {}", USER_AGENT.to_ascii_lowercase()))
+                    {
+                        let _ = stream
+                            .write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n")
+                            .await;
+                        return;
+                    }
+                    let n = h.fetch_add(1, Ordering::SeqCst);
                     let range = head
                         .lines()
                         .find_map(|l| {
