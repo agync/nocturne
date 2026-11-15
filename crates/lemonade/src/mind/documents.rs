@@ -168,27 +168,24 @@ fn word_text(xml: &str) -> Result<String, MindError> {
             .read_event()
             .map_err(|e| MindError::Failed(format!("could not read the document: {e}")))?
         {
-            Event::Start(e) if e.name().as_ref() == b"w:t" => in_text = true,
-            Event::End(e) if e.name().as_ref() == b"w:t" => in_text = false,
-            Event::End(e) if e.name().as_ref() == b"w:p" => out.push('\n'),
-            Event::Empty(e) if e.name().as_ref() == b"w:tab" => out.push('\t'),
-            Event::Empty(e) if e.name().as_ref() == b"w:br" => out.push('\n'),
+            Event::Start(e) if e.name().as_ref() == "w:t" => in_text = true,
+            Event::End(e) if e.name().as_ref() == "w:t" => in_text = false,
+            Event::End(e) if e.name().as_ref() == "w:p" => out.push('\n'),
+            Event::Empty(e) if e.name().as_ref() == "w:tab" => out.push('\t'),
+            Event::Empty(e) if e.name().as_ref() == "w:br" => out.push('\n'),
             Event::Text(t) if in_text => {
-                let text = t
-                    .xml_content()
-                    .map_err(|e| MindError::Failed(format!("could not read the document: {e}")))?;
-                out.push_str(&text);
+                out.push_str(&t.xml10_content());
             }
             Event::GeneralRef(r) if in_text => {
                 if let Some(c) = r.resolve_char_ref().ok().flatten() {
                     out.push(c);
                 } else {
                     match &*r {
-                        b"amp" => out.push('&'),
-                        b"lt" => out.push('<'),
-                        b"gt" => out.push('>'),
-                        b"quot" => out.push('"'),
-                        b"apos" => out.push('\''),
+                        "amp" => out.push('&'),
+                        "lt" => out.push('<'),
+                        "gt" => out.push('>'),
+                        "quot" => out.push('"'),
+                        "apos" => out.push('\''),
                         _ => {}
                     }
                 }
