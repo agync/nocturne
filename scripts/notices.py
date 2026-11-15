@@ -460,7 +460,8 @@ def digest_of(text):
 
 
 def run(cmd, cwd=None):
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+    # Cargo and npm write UTF-8; Windows would otherwise decode with its local code page.
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, encoding="utf-8")
 
 
 def load_rust(target):
