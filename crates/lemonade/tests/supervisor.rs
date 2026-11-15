@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 
 use nocturne_lemonade::{Dirs, RuntimeError, RuntimeState, Supervisor, SupervisorOptions};
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 fn quick() -> SupervisorOptions {
     SupervisorOptions {
@@ -505,6 +504,7 @@ async fn dropping_the_supervisor_stops_the_engine() {
 #[cfg(unix)]
 #[tokio::test]
 async fn killing_the_owner_makes_the_engine_exit_by_itself() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
     let tmp = tempfile::tempdir().unwrap();
     let dirs = common::dirs(tmp.path());
     common::set_mode(&dirs, "spawn-sleeper");

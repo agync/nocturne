@@ -9,6 +9,8 @@
 //!
 //! The models and the engine's backends are linked in read-only; everything the engine writes
 //! goes to a fresh folder under the build directory. Offline: nothing is pulled.
+// The models are linked in with Unix symlinks, so the test is built for Unix only.
+#![cfg(unix)]
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
@@ -44,7 +46,6 @@ fn path_from(var: &str) -> PathBuf {
         .join(given)
 }
 
-#[cfg(unix)]
 fn link(from: &Path, to: &Path) {
     std::fs::create_dir_all(to.parent().unwrap()).unwrap();
     std::os::unix::fs::symlink(from, to).unwrap();
@@ -70,7 +71,6 @@ impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for Captured {
     }
 }
 
-#[cfg(unix)]
 #[tokio::test]
 #[ignore = "needs NOCTURNE_LEMOND and NOCTURNE_E2E_DIR"]
 async fn a_tiny_mind_reads_by_the_grammar_in_reading_order() {
