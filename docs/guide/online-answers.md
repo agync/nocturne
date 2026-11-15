@@ -12,10 +12,6 @@ Online answers lets a service you already use write the answer when you ask Noct
 off until you turn it on. Everything else stays on your computer: reading what you keep, the overnight
 tidy and your morning page never use it.
 
-> [!NOTE]
-> This page describes how the feature is designed to behave. It has not yet been tried with a real
-> provider, and Nocturne cannot check what a provider keeps.
-
 ## Turn it on
 
 1. Open Settings, then Advanced details, choose Online answers and "Set up…". The setup has five
