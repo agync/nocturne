@@ -349,7 +349,7 @@ case "$variant" in
         if [[ "$variant" == deb ]]; then
             (cd "$scratch" && ar x "$f" && tar -xf data.tar.* -C root)
         else
-            (cd "$scratch/root" && rpm2cpio "$f" | cpio -idm --quiet)
+            rpm2archive -n - < "$f" | tar -xf - -C "$scratch/root"
         fi
         launch=$scratch/root/usr/bin/nocturne
         procexe=$launch

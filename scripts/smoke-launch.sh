@@ -142,7 +142,7 @@ for v in "${variants[@]}"; do
             f=$(ls "$pkg"/*.rpm 2> /dev/null | head -1)
             [[ -n "$f" ]] || { printf 'SKIP  rpm: none in %s\n' "$pkg"; verdict=1; continue; }
             mkdir -p "$scratch/root"
-            (cd "$scratch/root" && rpm2cpio "$f" | cpio -idm --quiet)
+            rpm2archive -n - < "$f" | tar -xf - -C "$scratch/root"
             exe=$scratch/root/usr/bin/nocturne
             procexe=$exe
             ;;
