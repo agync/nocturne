@@ -484,6 +484,28 @@ async fn a_dropped_setup_leaves_the_engine_offline_and_a_new_one_carries_on() {
     wait_offline(&rig.sup).await;
     rig.sup.shutdown().await.unwrap();
 }
+
+/// Before the first check, the view already says whether a size was ever chosen, so the window
+/// can tell a first run from a later one while the engine is still starting.
+#[tokio::test]
+async fn the_first_view_carries_the_size_chosen_before() {
+    let rig = rig("", 16).await;
+    assert_eq!(rig.setup.view().borrow().chosen, None);
+    let record = nocturne_lemonade::record::SetupRecord {
+        version: 1,
+        tier: Some(Tier::Small),
+        ..Default::default()
+    };
+    nocturne_lemonade::record::write(&rig.dirs.config(), &record).unwrap();
+    let again = new_setup(&rig.sup, &rig.dirs, 16, &rig.ledger);
+    let first = again.view().borrow().clone();
+    assert_eq!(
+        (first.phase, first.chosen),
+        (SetupPhase::NotStarted, Some(Tier::Small))
+    );
+    rig.sup.shutdown().await.unwrap();
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn setup_rides_out_an_engine_crash() {

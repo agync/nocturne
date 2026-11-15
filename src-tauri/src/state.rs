@@ -148,11 +148,13 @@ fn canonical(p: &Path) -> PathBuf {
     dunce::canonicalize(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-fn blank_setup() -> SetupView {
+/// Setup before the engine answers. `chosen` comes from disk, so the window can tell a first run
+/// (none) from a later one straight away.
+fn blank_setup(data_dir: &Path) -> SetupView {
     SetupView {
         phase: SetupPhase::NotStarted,
         detected: None,
-        chosen: None,
+        chosen: nocturne_lemonade::record::chosen(&crate::models::config_dir(data_dir)),
         ram_gib: 0,
         free_disk_bytes: 0.0,
         options: Vec::new(),
@@ -201,7 +203,7 @@ impl AppState {
             mind: MindSlot::default(),
             status,
             asks: AskRegistry::default(),
-            setup: RwLock::new(blank_setup()),
+            setup: RwLock::new(blank_setup(data_dir)),
             clock,
             data_dir: data_dir.to_path_buf(),
             tray_available: AtomicBool::new(false),
@@ -542,6 +544,7 @@ pub async fn set_mind<R: Runtime>(app: &AppHandle<R>, mind: Option<Arc<dyn Mind>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use nocturne_contract::Tier;
     use nocturne_engine::SystemClock;
 
     #[test]
@@ -581,6 +584,25 @@ mod tests {
         let tricky = link.join("..").join("link");
         let got = resolve_data_dir(Some(tricky.to_string_lossy().into_owned()), PathBuf::new());
         assert_eq!(got, dunce::canonicalize(&real).unwrap());
+    }
+
+    /// The window opens setup on a first run, and only then, before the engine has answered.
+    #[test]
+    fn setup_says_from_disk_whether_a_size_was_ever_chosen() {
+        let dir = tempfile::tempdir().unwrap();
+        let first = AppState::open(dir.path(), Arc::new(SystemClock)).get_setup();
+        assert_eq!((first.phase, first.chosen), (SetupPhase::NotStarted, None));
+        let record = nocturne_lemonade::record::SetupRecord {
+            version: 1,
+            tier: Some(Tier::Small),
+            ..Default::default()
+        };
+        nocturne_lemonade::record::write(&crate::models::config_dir(dir.path()), &record).unwrap();
+        let later = AppState::open(dir.path(), Arc::new(SystemClock)).get_setup();
+        assert_eq!(
+            (later.phase, later.chosen),
+            (SetupPhase::NotStarted, Some(Tier::Small))
+        );
     }
 
     #[test]

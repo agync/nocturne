@@ -305,11 +305,15 @@ impl Setup {
     ) -> Setup {
         let control = sup.control();
         let ram = opts.ram_bytes.unwrap_or_else(memory_bytes);
-        let (view, _) = watch::channel(blank_view(ram));
+        let config_dir = control.dirs().config();
+        let (view, _) = watch::channel(SetupView {
+            chosen: record::chosen(&config_dir),
+            ..blank_view(ram)
+        });
         Setup {
             inner: Arc::new(Inner {
                 client: sup.client(),
-                config_dir: control.dirs().config(),
+                config_dir,
                 control,
                 models_dir,
                 on_download: Arc::new(on_download),
