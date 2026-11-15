@@ -644,9 +644,8 @@ fn line(severity: &str, tag: &str, message: &str) -> String {
 async fn piped(lines: &[String], key: Option<&str>) -> String {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("logs").join("lemond.log");
-    let redact = Arc::new(Redactor::new());
     let key = key.map(|k| OnlineKey::new(k.into()));
-    redact.set_key(key.as_ref());
+    let redact = Arc::new(Redactor::for_launch(key.as_ref(), &[]));
     let (mut engine, stdout) = tokio::io::duplex(4096);
     let task = logpipe::spawn(stdout, file.clone(), redact);
     let end = line("Info", "Server", "end-of-feed");
@@ -759,7 +758,11 @@ async fn log_pipe_never_blocks_engine() {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("lemond.log");
     let (mut engine, stdout) = tokio::io::duplex(1024);
-    let task = logpipe::spawn(stdout, file.clone(), Arc::new(Redactor::new()));
+    let task = logpipe::spawn(
+        stdout,
+        file.clone(),
+        Arc::new(Redactor::for_launch(None, &[])),
+    );
     let began = Instant::now();
     let filler = line("Info", "Server", &"x".repeat(900));
     for _ in 0..20_000 {
@@ -780,7 +783,12 @@ async fn log_file_owner_only_and_rotated() {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("lemond.log");
     let (mut engine, stdout) = tokio::io::duplex(4096);
-    let task = logpipe::spawn_rotating_at(stdout, file.clone(), Arc::new(Redactor::new()), 2048);
+    let task = logpipe::spawn_rotating_at(
+        stdout,
+        file.clone(),
+        Arc::new(Redactor::for_launch(None, &[])),
+        2048,
+    );
     for i in 0..200 {
         let l = line("Info", "Server", &format!("line {i} {}", "y".repeat(60)));
         engine.write_all(l.as_bytes()).await.unwrap();

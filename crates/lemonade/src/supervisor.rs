@@ -972,12 +972,7 @@ impl Actor {
             cmd.env(name, value);
         }
         // A redactor of its own for each launch and output: the keys it hides are this launch's.
-        let redactor = || {
-            let r = Arc::new(Redactor::new());
-            r.set_key(key);
-            r.set_launch_keys(&[&keys.api, &keys.admin]);
-            r
-        };
+        let redactor = || Arc::new(Redactor::for_launch(key, &[&keys.api, &keys.admin]));
         let (redact, errors) = (redactor(), redactor());
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
