@@ -15,12 +15,13 @@ repository by a command. Publishing is the owner's decision.
 | Path | What it is |
 |---|---|
 | `site/index.html`, `site/404.html` | The landing page and the not-found page, plain HTML with no inline script or style |
-| `site/assets/` | The stylesheet, the theme switch and tour scripts, the self-hosted fonts and the screenshots |
+| `site/assets/` | The stylesheet, the theme switch and tour scripts, the self-hosted fonts, the screenshots and the Open Graph image |
 | `site/docs-theme/` | The okf-wiki theme for `/docs/`: the app's colours and faces, and a link back to the landing page |
 | `site/_headers` | Response headers, including the content security policies; the build fills in the docs' script hashes |
 | `site/wrangler.jsonc` | The Cloudflare Worker `nocturne`: static assets only, serving `site/dist/`, with the empty `previews` block pull request builds need |
 | `site/toolchain.sh` | Builds the docs renderer from source for a host with no container runtime |
-| `site/scripts/` | The build, a local server that applies `_headers`, the checks and the screenshot capture |
+| `site/brand/` | The sources of the social card and the touch icon; not deployed |
+| `site/scripts/` | The build, a local server that applies `_headers`, the checks, the screenshot capture and the brand images |
 
 ## Build
 
@@ -74,7 +75,6 @@ cd ui && npx vite --mode mock --port 4173  # in another terminal
 cd ui && VITE_ENGINE=phone-mock PHONE_OUT_DIR=/tmp/phone npx vite build --config vite.phone.config.ts
 python3 -m http.server -d /tmp/phone --bind 127.0.0.1 4174   # in another terminal
 make -C site shots PHONE=http://127.0.0.1:4174   # writes site/assets/img/*.webp in both themes
-node site/scripts/og.mjs http://127.0.0.1:4180   # the Open Graph image, from the served site
 ```
 
 `make shots` prints where the highlighted part of each tour picture sits. When a recapture moves
@@ -85,6 +85,31 @@ Keep, Ask and morning page steps into one still frame beside the text: as each s
 middle of the screen only the page in the frame cross-fades, and a short highlighter pass shows
 where to look. Without the script, with reduced motion or on narrow screens, each step keeps its
 own picture.
+
+## Brand images
+
+The mark is the app icon, a half moon on a dark tile, and `site/favicon.svg` draws it. Every other
+brand image derives from it or from the morning page screenshot, and `make -C site brand` renders
+them all again with a headless browser:
+
+| Image | Source | Used by |
+|---|---|---|
+| `docs/assets/social-preview.png`, 1280 x 640 | `site/brand/card.html` | The repository's social preview |
+| `site/assets/img/og.png`, 1200 x 630 | `site/brand/card.html` | The link preview of the landing page, the install page and every docs page |
+| `docs/assets/logo.svg` and `logo.png`, 512 x 512 | A copy of `site/favicon.svg` | The README header |
+| `site/apple-touch-icon.png`, 180 x 180 | `site/brand/touch-icon.svg`, the icon without rounded corners | Phones and tablets, which round it themselves |
+| `site/favicon-32.png` | `site/favicon.svg` | Browsers that cannot show an SVG favicon |
+
+The card sets the landing page's headline and its one-line description on the dark theme, beside
+the light morning page with demo data, in the faces the site ships. Its words, its mark and its
+address stay inside the central 1100 x 540, clear of the edges GitHub crops on some pages. Change
+the card when the landing page's headline changes, and render it again after `make shots`
+refreshes the morning page.
+
+GitHub does not read the social preview from the repository: after a change, upload
+`docs/assets/social-preview.png` under the repository's Settings, General, Social preview. The docs
+theme adds the Open Graph image through its `head` slot (`site/docs-theme/head.html`), and the
+build fills in the site origin there as it does on the landing page.
 
 ## Deploy
 
