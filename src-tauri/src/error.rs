@@ -18,6 +18,20 @@ pub enum ErrorCode {
     TokenExpired,
     /// Too late to undo: the moment for it has passed.
     TooLate,
+    /// The passphrase does not open the backup.
+    WrongPassphrase,
+    /// The file is not a Nocturne backup.
+    NotABackup,
+    /// The backup was made by a newer Nocturne than this one.
+    NewerBackup,
+    /// The backup is damaged or incomplete.
+    DamagedBackup,
+    /// The person stopped the work.
+    Cancelled,
+    /// There is not enough room on that drive.
+    NoRoom,
+    /// That folder does not let Nocturne write.
+    CantWrite,
     Internal,
 }
 
@@ -53,6 +67,12 @@ impl CommandError {
     pub fn internal(detail: impl std::fmt::Display) -> Self {
         Self::new(ErrorCode::Internal, detail)
     }
+
+    /// A code with nothing beside it: a failure whose text could name a file or repeat what the
+    /// person typed.
+    fn bare(code: ErrorCode) -> Self {
+        CommandError { code, detail: None }
+    }
 }
 
 impl std::fmt::Display for CommandError {
@@ -74,6 +94,27 @@ impl From<nocturne_engine::Error> for CommandError {
             E::StaleToken => Self::new(ErrorCode::TokenExpired, &e),
             E::LeaseLost | E::Busy => Self::new(ErrorCode::Busy, &e),
             E::TooLate => Self::new(ErrorCode::TooLate, &e),
+            E::WrongPassphrase => Self::bare(ErrorCode::WrongPassphrase),
+            E::NotABackup => Self::bare(ErrorCode::NotABackup),
+            E::BackupTooNew => Self::bare(ErrorCode::NewerBackup),
+            E::BackupDamaged => Self::bare(ErrorCode::DamagedBackup),
+            E::Cancelled => Self::bare(ErrorCode::Cancelled),
+            E::Io(io)
+                if matches!(
+                    io.kind(),
+                    std::io::ErrorKind::StorageFull | std::io::ErrorKind::FileTooLarge
+                ) =>
+            {
+                Self::bare(ErrorCode::NoRoom)
+            }
+            E::Io(io)
+                if matches!(
+                    io.kind(),
+                    std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::ReadOnlyFilesystem
+                ) =>
+            {
+                Self::bare(ErrorCode::CantWrite)
+            }
             E::Io(io) if io.kind() == std::io::ErrorKind::NotFound => {
                 Self::new(ErrorCode::NotFound, &e)
             }
@@ -164,9 +205,26 @@ mod tests {
         assert_eq!(code(Error::LeaseLost), ErrorCode::Busy);
         assert_eq!(code(Error::Busy), ErrorCode::Busy);
         assert_eq!(code(Error::TooLate), ErrorCode::TooLate);
+        assert_eq!(code(Error::WrongPassphrase), ErrorCode::WrongPassphrase);
+        assert_eq!(code(Error::NotABackup), ErrorCode::NotABackup);
+        assert_eq!(code(Error::BackupTooNew), ErrorCode::NewerBackup);
+        assert_eq!(code(Error::BackupDamaged), ErrorCode::DamagedBackup);
+        assert_eq!(code(Error::Cancelled), ErrorCode::Cancelled);
+        assert_eq!(
+            code(Error::Io(std::io::ErrorKind::StorageFull.into())),
+            ErrorCode::NoRoom
+        );
+        assert_eq!(
+            code(Error::Io(std::io::ErrorKind::FileTooLarge.into())),
+            ErrorCode::NoRoom
+        );
         assert_eq!(
             code(Error::Io(std::io::ErrorKind::PermissionDenied.into())),
-            ErrorCode::Internal
+            ErrorCode::CantWrite
+        );
+        assert_eq!(
+            code(Error::Io(std::io::ErrorKind::ReadOnlyFilesystem.into())),
+            ErrorCode::CantWrite
         );
         assert_eq!(
             code(Error::Io(std::io::ErrorKind::NotFound.into())),
@@ -181,6 +239,18 @@ mod tests {
         assert_eq!(v["code"], "notFound");
         let t = CommandError::from(Error::StaleToken);
         assert_eq!(serde_json::to_value(&t).unwrap()["code"], "tokenExpired");
+        // Backup failures carry no text: no file name and no passphrase can leak through.
+        for (e, want) in [
+            (Error::WrongPassphrase, "wrongPassphrase"),
+            (Error::NotABackup, "notABackup"),
+            (Error::BackupTooNew, "newerBackup"),
+            (Error::BackupDamaged, "damagedBackup"),
+            (Error::Cancelled, "cancelled"),
+        ] {
+            let mapped = CommandError::from(e);
+            assert!(mapped.detail.is_none(), "{want}");
+            assert_eq!(serde_json::to_value(&mapped).unwrap()["code"], want);
+        }
     }
 
     #[tokio::test]

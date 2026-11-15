@@ -63,6 +63,7 @@ pub fn build(
     let dir = tempfile::tempdir().unwrap();
     let clock = Arc::new(ManualClock::at("2026-11-13T07:00:00Z", "Europe/London"));
     let state = AppState::open(dir.path(), clock.clone());
+    state.set_backup_work_factor(10);
     if let Some(m) = mind {
         state.mind.set(m);
     }

@@ -187,6 +187,21 @@ async fn failures_carry_a_code_and_the_desktop_commands_are_unavailable() {
         "open_sound_settings",
         "print_page",
         "export_to",
+        "pick_backup",
+        "pick_backup_save",
+        "make_backup",
+        "probe_backup",
+        "estimate_backup",
+        "check_backup",
+        "restore_backup",
+        "restore_put_aside",
+        "delete_put_aside",
+        "get_backups",
+        "dismiss_backup_notices",
+        "get_restored",
+        "finish_restore",
+        "cancel_backup",
+        "discard_restore",
     ] {
         let (status, body) = invoke(&r, command, json!({})).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");
