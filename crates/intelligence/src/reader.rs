@@ -134,6 +134,19 @@ struct DrainState {
     durations: VecDeque<Duration>,
 }
 
+impl DrainState {
+    /// A drain of `ids`. An item the reader takes up between the two queries that list them is
+    /// in both lists; it counts once.
+    fn over(ids: Vec<String>) -> DrainState {
+        let remaining: HashSet<String> = ids.into_iter().collect();
+        DrainState {
+            total: remaining.len() as u32,
+            remaining,
+            ..DrainState::default()
+        }
+    }
+}
+
 /// The items the tidy asked to have read before it writes the page.
 #[derive(Debug, Clone)]
 pub struct DrainHandle {
@@ -438,11 +451,7 @@ impl Reader {
             })
             .await?;
         let handle = DrainHandle {
-            st: Arc::new(Mutex::new(DrainState {
-                total: ids.len() as u32,
-                remaining: ids.into_iter().collect(),
-                ..DrainState::default()
-            })),
+            st: Arc::new(Mutex::new(DrainState::over(ids))),
         };
         let old = self.state().drain.replace(handle.clone());
         if let Some(old) = old {
@@ -1211,6 +1220,13 @@ fn merge_candidates(into: &mut Vec<Candidate>, found: Vec<Candidate>) {
 mod tests {
     use super::*;
     use nocturne_engine::Predicate;
+
+    #[test]
+    fn an_item_listed_as_waiting_and_as_being_read_counts_once() {
+        let st = DrainState::over(["a", "b", "a"].map(String::from).to_vec());
+        assert_eq!(st.total, 2);
+        assert_eq!(st.remaining.len(), 2);
+    }
 
     fn c(subject: &str, object: &str, confidence: f32) -> Candidate {
         Candidate::new(subject, Predicate::Knows, object, "A sentence.", confidence)
