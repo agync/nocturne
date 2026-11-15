@@ -35,7 +35,7 @@ pub const ROTATE_AT: u64 = 8 * 1024 * 1024;
 pub const FILES_KEPT: usize = 3;
 
 /// How long a failed rotation or open waits before the next try, so a permanent fault costs one
-/// try, not one per line.
+/// round of tries, not one per line.
 const RETRY_AFTER: Duration = Duration::from_secs(30);
 /// Lines waiting for the file. When the file falls behind, lines are dropped rather than the
 /// engine being made to wait on its own output.
@@ -298,12 +298,12 @@ where
 
 /// Where the log is written: a file, or a stand-in in tests.
 trait Sink: Write {
-    fn len(&self) -> u64;
+    fn len(&self) -> std::io::Result<u64>;
 }
 
 impl Sink for File {
-    fn len(&self) -> u64 {
-        self.metadata().map_or(0, |m| m.len())
+    fn len(&self) -> std::io::Result<u64> {
+        self.metadata().map(|m| m.len())
     }
 }
 
@@ -312,8 +312,24 @@ fn write_lines<W: Sink>(
     path: &Path,
     rotate_at: u64,
     retry_after: Duration,
-    mut open: impl FnMut(&Path) -> Option<W>,
+    mut open: impl FnMut(&Path) -> std::io::Result<W>,
 ) {
+    let mut open_warned = false;
+    let mut open = |path: &Path| match open(path) {
+        Ok(f) => {
+            open_warned = false;
+            Some(f)
+        }
+        Err(e) => {
+            if !std::mem::replace(&mut open_warned, true) {
+                tracing::warn!("the engine's log could not be opened: {e}");
+            }
+            None
+        }
+    };
+    // A size that cannot be read is taken as full, so the next line rotates the file and the
+    // size is known again, and a file that has grown is never mistaken for an empty one.
+    let length = |file: Option<&W>| file.map_or(0, |f| f.len().unwrap_or(rotate_at));
     let mut file = open(path);
     let mut size = length(file.as_ref());
     let mut warned = false;
@@ -376,10 +392,6 @@ fn write_lines<W: Sink>(
     }
 }
 
-fn length<W: Sink>(file: Option<&W>) -> u64 {
-    file.map_or(0, Sink::len)
-}
-
 /// `lemond.log` becomes `lemond.log.1`, which becomes `lemond.log.2`; the oldest is removed. A
 /// file that is not there is skipped. The first other error stops the rotation and is returned,
 /// so no older generation is overwritten by one that could not move on.
@@ -402,8 +414,9 @@ fn rotate(path: &Path) -> std::io::Result<()> {
 
 /// Another process (a scanner, an indexer) can hold a file for a moment. Windows then refuses the
 /// move with a sharing or lock violation, which `std` reports as an uncategorized error, or with
-/// access denied. Elsewhere a refusal is permanent and is returned at once.
-fn retry(mut op: impl FnMut() -> std::io::Result<()>) -> std::io::Result<()> {
+/// access denied. Elsewhere a refusal is permanent and is returned at once. Used for moves, removals
+/// and opening the log.
+fn retry<T>(mut op: impl FnMut() -> std::io::Result<T>) -> std::io::Result<T> {
     let mut tries = 0;
     loop {
         match op() {
@@ -423,7 +436,7 @@ fn is_busy(e: &std::io::Error) -> bool {
 }
 
 /// The log, readable and writable by its owner only.
-fn open(path: &Path) -> Option<File> {
+fn open(path: &Path) -> std::io::Result<File> {
     if let Some(dir) = path.parent() {
         let _ = std::fs::create_dir_all(dir);
     }
@@ -434,20 +447,13 @@ fn open(path: &Path) -> Option<File> {
         use std::os::unix::fs::OpenOptionsExt;
         opts.mode(0o600);
     }
-    match opts.open(path) {
-        Ok(f) => {
-            #[cfg(unix)]
-            {
-                use std::os::unix::fs::PermissionsExt;
-                let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
-            }
-            Some(f)
-        }
-        Err(e) => {
-            tracing::warn!("the engine's log could not be opened: {e}");
-            None
-        }
+    let f = retry(|| opts.open(path))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = f.set_permissions(std::fs::Permissions::from_mode(0o600));
     }
+    Ok(f)
 }
 
 #[cfg(test)]
@@ -575,7 +581,11 @@ mod tests {
         let mut calls = 0;
         write_lines(rx, &path, ROTATE_AT, Duration::ZERO, |p| {
             calls += 1;
-            if calls <= 2 { None } else { open(p) }
+            if calls <= 2 {
+                Err(std::io::Error::other("busy"))
+            } else {
+                open(p)
+            }
         });
         assert_eq!(
             std::fs::read_to_string(&path).unwrap(),
@@ -595,7 +605,7 @@ mod tests {
         let mut calls = 0;
         write_lines(rx, &path, ROTATE_AT, Duration::from_secs(60), |_| {
             calls += 1;
-            None::<File>
+            Err::<File, _>(std::io::Error::other("busy"))
         });
         assert_eq!(calls, 1, "one try at the start, none per line");
     }
@@ -627,6 +637,7 @@ mod tests {
     }
 
     struct Flaky {
+        len_fails: bool,
         lines: Arc<Mutex<Vec<String>>>,
         fail_from: Option<usize>,
         written: usize,
@@ -651,8 +662,12 @@ mod tests {
     }
 
     impl Sink for Flaky {
-        fn len(&self) -> u64 {
-            0
+        fn len(&self) -> std::io::Result<u64> {
+            if self.len_fails {
+                Err(std::io::Error::other("no size"))
+            } else {
+                Ok(0)
+            }
         }
     }
 
@@ -667,7 +682,8 @@ mod tests {
         let mut opens = 0;
         write_lines(rx, Path::new("unused"), ROTATE_AT, Duration::ZERO, |_| {
             opens += 1;
-            Some(Flaky {
+            Ok(Flaky {
+                len_fails: false,
                 lines: seen.clone(),
                 fail_from: (opens == 1).then_some(1),
                 written: 0,
@@ -693,7 +709,8 @@ mod tests {
             Duration::from_secs(60),
             |_| {
                 opens += 1;
-                Some(Flaky {
+                Ok(Flaky {
+                    len_fails: false,
                     lines: seen.clone(),
                     fail_from: Some(1),
                     written: 0,
@@ -702,5 +719,52 @@ mod tests {
         );
         assert_eq!(opens, 1);
         assert_eq!(*seen.lock().unwrap(), ["a"]);
+    }
+
+    #[test]
+    fn a_size_that_cannot_be_read_counts_as_full() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lemond.log");
+        let (tx, rx) = mpsc::channel::<String>(8);
+        tx.blocking_send("a".into()).unwrap();
+        drop(tx);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut opens = 0;
+        write_lines(rx, &path, ROTATE_AT, Duration::ZERO, |_| {
+            opens += 1;
+            Ok(Flaky {
+                len_fails: opens == 1,
+                lines: seen.clone(),
+                fail_from: None,
+                written: 0,
+            })
+        });
+        assert_eq!(opens, 2, "opened again after rotating");
+        assert_eq!(*seen.lock().unwrap(), ["a"]);
+    }
+
+    #[test]
+    fn a_size_that_stays_unreadable_rotates_once_per_period() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("lemond.log");
+        std::fs::create_dir(tmp.path().join("lemond.log.2")).unwrap();
+        let (tx, rx) = mpsc::channel::<String>(8);
+        for line in ["a", "b", "c"] {
+            tx.blocking_send(line.into()).unwrap();
+        }
+        drop(tx);
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let mut opens = 0;
+        write_lines(rx, &path, ROTATE_AT, Duration::from_secs(60), |_| {
+            opens += 1;
+            Ok(Flaky {
+                len_fails: true,
+                lines: seen.clone(),
+                fail_from: None,
+                written: 0,
+            })
+        });
+        assert_eq!(opens, 2, "one failed rotation, then none per line");
+        assert_eq!(*seen.lock().unwrap(), ["a", "b", "c"]);
     }
 }
