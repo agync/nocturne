@@ -71,15 +71,7 @@ const MIN_CONTEXT: u32 = 8192;
 /// The limits for this computer: `ram` and `disk_free` in bytes, the largest pool read from the
 /// engine's view of the graphics.
 pub fn for_host(info: &SystemInfo, ram: u64, disk_free: u64) -> Budget {
-    let pool = info
-        .devices
-        .amd_gpu
-        .iter()
-        .filter(|g| g.available && !g.integrated)
-        .map(|g| (g.vram_gb * 1e9) as u64)
-        .max()
-        .unwrap_or(0);
-    budget(ram, pool, disk_free)
+    budget(ram, info.devices.largest_pool(), disk_free)
 }
 
 /// The memory this computer has, in bytes.

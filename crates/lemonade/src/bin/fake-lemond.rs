@@ -5,8 +5,9 @@
 //! environment variable or, because the supervisor scrubs the environment, from a
 //! `fake_mode` key in `config.json`. Modes: `crash-after-ms=N`, `crash-first-after-ms=N`,
 //! `slow-start-ms=N`, `fail-bind`, `fail-bind-first=N`, `no-progress`, `disk-full`,
-//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete`, `downloaded=all` (with an
-//! NPU mode, the NPU runtime too),
+//! `download-ms=N`, `free-bytes=N`, `gpu=none|integrated|discrete|nvidia|nvidia-small|intel`, `downloaded=all` (with an
+//! NPU mode, the NPU runtime too; `nvidia` and `nvidia-small` give an 8 and a 4 GB card and its
+//! CUDA backend, `intel` an Intel GPU, which the real engine does not list at all),
 //! `spawn-sleeper` (a helper process that the engine cleans up), `leak-sleeper` (one it leaves),
 //! `hang-shutdown`, `no-watchdog`, `ignore-key`, `bad-ws-port`, `half-present`, `pause-lag-ms=N`,
 //! `conflict-first-remove`, `pause-itself-ms=N` (each download stops on its own once, after N ms), `busy-on-first-refusal`
@@ -683,16 +684,33 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
     let gpu_mode = app.mode("gpu");
     let gpu = gpu_mode.as_deref().unwrap_or("integrated");
     let amd_gpu = match gpu {
-        "none" => json!([]),
         "discrete" => {
             json!([{"available": true, "family": "gfx1100", "integrated": false, "vram_gb": 16.0}])
         }
+        "none" | "nvidia" | "nvidia-small" | "intel" => json!([]),
         _ => json!([{"available": true, "family": "gfx1150", "integrated": true, "vram_gb": 0.5}]),
+    };
+    // As the real engine: one card with its compute capability, or one entry saying why not.
+    let nvidia_gpu = match gpu {
+        "nvidia" | "nvidia-small" => json!([{
+            "available": true, "name": "NVIDIA GeForce RTX 4060", "index": 0, "family": "sm_89",
+            "compute_capability": "8.9", "driver_version": "570.0",
+            "vram_gb": if gpu == "nvidia" { 8.0 } else { 4.0 },
+        }]),
+        _ => json!([{"available": false, "error": "No NVIDIA discrete GPU found", "name": ""}]),
     };
     let state = |recipe: &str, backend: &str| -> &'static str {
         if inner.backends.contains(&format!("{recipe}:{backend}")) {
             "installed"
-        } else if backend != "cpu" && gpu == "none" {
+        } else if backend == "cuda" {
+            if gpu.starts_with("nvidia") {
+                "installable"
+            } else {
+                "unsupported"
+            }
+        } else if backend != "cpu" && gpu == "none"
+            || backend == "rocm" && matches!(gpu, "nvidia" | "nvidia-small" | "intel")
+        {
             "unsupported"
         } else {
             "installable"
@@ -745,14 +763,14 @@ async fn system_info(State(app): State<Shared>) -> Json<Value> {
     Json(json!({
         "OS Version": "Fake",
         "cloud": {"providers": providers},
-        "devices": {"amd_gpu": amd_gpu, "amd_npu": amd_npu, "cpu": {"available": true}},
+        "devices": {"amd_gpu": amd_gpu, "nvidia_gpu": nvidia_gpu, "amd_npu": amd_npu, "cpu": {"available": true}},
         "model_storage": {
             "free_bytes": app.mode_u64("free-bytes").unwrap_or(5_000_000_000_000),
             "path": app.models_dir,
         },
         "recipes": {
-            "llamacpp": recipe("llamacpp", &["rocm", "vulkan", "cpu"]),
-            "whispercpp": recipe("whispercpp", &["vulkan", "cpu"]),
+            "llamacpp": recipe("llamacpp", &["rocm", "cuda", "vulkan", "cpu"]),
+            "whispercpp": recipe("whispercpp", &["rocm", "vulkan", "cpu"]),
             "kokoro": recipe("kokoro", &["cpu"]),
             "flm": flm,
         }

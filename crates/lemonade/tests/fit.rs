@@ -4,7 +4,7 @@
 use nocturne_contract::{ComponentRole, Fit, FitReason, Job, ModelChoice, Tier};
 use nocturne_lemonade::client::{CheckpointStatus, ModelInfo, SystemInfo};
 use nocturne_lemonade::fit::{
-    Exclusion, budget, choices, fit_for, memory_of, peak, peak_with, qualifies,
+    Exclusion, budget, choices, fit_for, for_host, memory_of, peak, peak_with, qualifies,
 };
 use nocturne_lemonade::fit_table::{self, VOICE_ALONE, preset_peak};
 use nocturne_lemonade::selection::{Selection, picks};
@@ -374,6 +374,83 @@ fn unsupported_backend_cant_use() {
     assert_eq!(c.reason, Some(FitReason::NotAvailable));
     let list = choices(Job::Recordings, &catalogue(), &no_llama, &s, &b);
     assert_eq!(find(&list, "Whisper-Tiny").fit, Fit::Fits);
+}
+
+fn with_cards(cards: &str) -> SystemInfo {
+    serde_json::from_str(&format!(
+        r#"{{"devices": {{{cards}}},
+            "recipes": {{"llamacpp": {{"backends": {{"vulkan": {{"state": "installable"}}, "cpu": {{"state": "installable"}}}}}}}}}}"#
+    ))
+    .unwrap()
+}
+
+#[test]
+fn a_cards_own_memory_lifts_the_engine_cap_and_never_the_memory_budget() {
+    let ram = 16 * GIB;
+    let plain = for_host(&with_cards(r#""amd_gpu": []"#), ram, PLENTY);
+    let small = for_host(
+        &with_cards(r#""nvidia_gpu": [{"available": true, "vram_gb": 4.0}]"#),
+        ram,
+        PLENTY,
+    );
+    let large = for_host(
+        &with_cards(r#""nvidia_gpu": [{"available": true, "vram_gb": 24.0}]"#),
+        ram,
+        PLENTY,
+    );
+    // 4 GB of graphics memory is under 0.8 x RAM, so it changes nothing.
+    assert_eq!(small, plain);
+    assert_eq!(large.engine_cap, 24_000_000_000);
+    // The memory a choice may use is still the computer's, whatever the card holds.
+    assert_eq!(large.budget, plain.budget);
+}
+
+#[test]
+fn only_a_card_of_its_own_counts_as_a_pool() {
+    let pool = |cards: &str| for_host(&with_cards(cards), 4 * GIB, PLENTY).engine_cap;
+    let floor = pool(r#""amd_gpu": []"#);
+    // The engine lists one placeholder when it finds no NVIDIA card.
+    assert_eq!(
+        pool(r#""nvidia_gpu": [{"available": false, "vram_gb": 12.0, "error": "none"}]"#),
+        floor
+    );
+    assert_eq!(
+        pool(r#""amd_gpu": [{"available": true, "integrated": true, "vram_gb": 8.0}]"#),
+        floor
+    );
+    assert_eq!(
+        pool(r#""intel_gpu": [{"available": true, "integrated": true, "vram_gb": 8.0}]"#),
+        floor
+    );
+    assert_eq!(
+        pool(r#""intel_gpu": [{"available": true, "vram_gb": 16.0}]"#),
+        16_000_000_000
+    );
+    assert_eq!(
+        pool(
+            r#""amd_gpu": [{"available": true, "vram_gb": 8.0}],
+               "nvidia_gpu": [{"available": true, "vram_gb": 12.0}]"#
+        ),
+        12_000_000_000
+    );
+}
+
+#[test]
+fn a_model_too_big_for_a_small_card_still_fits_by_the_computers_memory() {
+    // A 4 GB card holds none of the 6.9 GB Standard mind; the engine loads what the card cannot
+    // hold from the computer's memory, so the judgement is the memory's alone.
+    let (s, b) = standard_on(32);
+    let nvidia = with_cards(r#""nvidia_gpu": [{"available": true, "vram_gb": 4.0}]"#);
+    let none = with_cards(r#""amd_gpu": []"#);
+    let on_card = choices(Job::Answering, &catalogue(), &nvidia, &s, &b);
+    let on_cpu = choices(Job::Answering, &catalogue(), &none, &s, &b);
+    let key = |l: &[ModelChoice]| {
+        l.iter()
+            .map(|c| (c.id.clone(), c.fit, c.reason.clone()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(key(&on_card), key(&on_cpu));
+    assert_eq!(find(&on_card, "Qwen3.5-9B-GGUF").fit, Fit::Fits);
 }
 
 #[test]

@@ -834,3 +834,31 @@ async fn a_chosen_speech_model_keeps_the_npu_share_away() {
     assert!(!got.iter().any(|l| l == npu::SPEECH.model), "{got:?}");
     rig.sup.shutdown().await.unwrap();
 }
+
+#[tokio::test]
+async fn setup_records_the_backend_each_kind_of_graphics_runs_on() {
+    // The fake engine lists graphics as the real one does: an NVIDIA card (with CUDA offered, and
+    // not wanted), and nothing at all for an Intel GPU, which the app reads from the computer.
+    for (mode, llamacpp, whispercpp, kokoro) in [
+        ("download-ms=50,gpu=nvidia", "vulkan", "vulkan", "cpu"),
+        ("download-ms=50,gpu=nvidia-small", "vulkan", "vulkan", "cpu"),
+        ("download-ms=50,gpu=discrete", "rocm", "rocm", "cpu"),
+        ("download-ms=50,gpu=none", "cpu", "cpu", "cpu"),
+        ("download-ms=50,gpu=intel", "cpu", "cpu", "cpu"),
+    ] {
+        let rig = rig(mode, 32).await;
+        let mut rx = rig.setup.view();
+        rig.setup.start(Tier::Small).await.unwrap();
+        wait_view(&mut rx, |v| v.phase == SetupPhase::Done, 60).await;
+        let record: Value = serde_json::from_slice(
+            &std::fs::read(rig.dirs.config().join("nocturne-setup.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(record["backends"]["llamacpp"], llamacpp, "{mode}");
+        assert_eq!(record["backends"]["whispercpp"], whispercpp, "{mode}");
+        assert_eq!(record["backends"]["kokoro"], kokoro, "{mode}");
+        let got = fetched(&rig.ledger);
+        assert!(!got.iter().any(|l| l.ends_with(":cuda")), "{mode}: {got:?}");
+        rig.sup.shutdown().await.unwrap();
+    }
+}
