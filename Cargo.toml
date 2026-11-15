@@ -38,6 +38,8 @@ tracing-appender = "0.2"
 base64 = "0.23"
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
 url = "2"
+# canonicalize without Windows' verbatim prefix (\\?\C:\...), which other paths never have.
+dunce = "1"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

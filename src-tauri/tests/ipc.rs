@@ -1283,7 +1283,7 @@ fn the_asset_scope_reaches_originals_and_nothing_beside_them() {
     let original = std::path::PathBuf::from(item["originalPath"].as_str().unwrap());
     let scope = h.app.asset_protocol_scope();
     assert!(scope.is_allowed(&original), "an original may be shown");
-    let store = std::fs::canonicalize(h.dir.path()).unwrap().join("store");
+    let store = dunce::canonicalize(h.dir.path()).unwrap().join("store");
     assert!(
         !scope.is_allowed(store.join("nocturne.db")),
         "the database is not an original"
@@ -1565,8 +1565,8 @@ fn open_original_opens_only_the_kept_original() {
     let seen = opened.lock().unwrap().clone();
     assert_eq!(seen.len(), 1);
     assert_eq!(
-        std::fs::canonicalize(&seen[0]).unwrap(),
-        std::fs::canonicalize(item["originalPath"].as_str().unwrap()).unwrap()
+        dunce::canonicalize(&seen[0]).unwrap(),
+        dunce::canonicalize(item["originalPath"].as_str().unwrap()).unwrap()
     );
     // A note has no original; a missing item is not found.
     let note = h.ok(

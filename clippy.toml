@@ -1,0 +1,6 @@
+# On Windows the standard canonicalize returns the verbatim form (\\?\C:\...), which compares
+# unequal to every plain path, is shown oddly and confuses programs it is passed to.
+disallowed-methods = [
+    { path = "std::fs::canonicalize", reason = "use dunce::canonicalize, which has no verbatim prefix on Windows" },
+    { path = "std::path::Path::canonicalize", reason = "use dunce::canonicalize, which has no verbatim prefix on Windows" },
+]

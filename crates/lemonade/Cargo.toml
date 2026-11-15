@@ -32,6 +32,7 @@ path = "src/bin/supervisor-host.rs"
 required-features = ["fake-server"]
 
 [dependencies]
+dunce.workspace = true
 nocturne-contract.workspace = true
 nocturne-engine.workspace = true
 serde.workspace = true

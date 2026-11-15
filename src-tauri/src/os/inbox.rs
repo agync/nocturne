@@ -75,15 +75,15 @@ pub fn validate(folder: &str, data_dir: &Path, home: Option<&Path>) -> Result<Pa
     if !path.is_absolute() {
         return Err(InboxError::NotAbsolute);
     }
-    let real = std::fs::canonicalize(path).map_err(|_| InboxError::Missing)?;
+    let real = dunce::canonicalize(path).map_err(|_| InboxError::Missing)?;
     if !real.is_dir() {
         return Err(InboxError::Missing);
     }
-    let home = home.and_then(|h| std::fs::canonicalize(h).ok());
+    let home = home.and_then(|h| dunce::canonicalize(h).ok());
     if real.parent().is_none() || home.is_some_and(|h| h == real) {
         return Err(InboxError::TooBroad);
     }
-    let data = std::fs::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
+    let data = dunce::canonicalize(data_dir).unwrap_or_else(|_| data_dir.to_path_buf());
     if real.starts_with(&data) || data.starts_with(&real) {
         return Err(InboxError::Overlap);
     }
@@ -202,7 +202,7 @@ fn walk(root: &Path, dir: &Path, depth: usize, limit: usize, out: &mut Listing) 
 /// another process of the same user could use it, and that process could read the file itself.
 /// (Opening without following links needs `libc`, which this app does not depend on.)
 pub fn confirm_inside(root: &Path, rel: &str) -> Option<PathBuf> {
-    let root = std::fs::canonicalize(root).ok()?;
+    let root = dunce::canonicalize(root).ok()?;
     let mut at = root.clone();
     let mut parts = Path::new(rel).components().peekable();
     while let Some(part) = parts.next() {
@@ -216,7 +216,7 @@ pub fn confirm_inside(root: &Path, rel: &str) -> Option<PathBuf> {
             return None;
         }
     }
-    let real = std::fs::canonicalize(&at).ok()?;
+    let real = dunce::canonicalize(&at).ok()?;
     real.starts_with(&root).then_some(real)
 }
 
@@ -1001,10 +1001,10 @@ mod tests {
             std::fs::create_dir_all(d).unwrap();
         }
         let check = |p: &Path| validate(&p.to_string_lossy(), &data, Some(&home));
-        assert_eq!(
-            check(&outside).unwrap(),
-            std::fs::canonicalize(&outside).unwrap()
-        );
+        let chosen = check(&outside).unwrap();
+        assert_eq!(chosen, dunce::canonicalize(&outside).unwrap());
+        // The folder is saved and shown: never the Windows verbatim form (`\\?\C:\...`).
+        assert!(!chosen.to_string_lossy().starts_with(r"\\?\"), "{chosen:?}");
         let top = if cfg!(windows) { "C:\\" } else { "/" };
         assert_eq!(check(Path::new(top)), Err(InboxError::TooBroad));
         assert_eq!(check(&home), Err(InboxError::TooBroad));
@@ -1071,7 +1071,7 @@ mod tests {
         std::fs::write(folder.path().join("a.txt"), b"fine").unwrap();
         let seen = list(folder.path(), 10).unwrap();
         assert_eq!(seen.entries.len(), 1);
-        let real = std::fs::canonicalize(folder.path().join("a.txt")).unwrap();
+        let real = dunce::canonicalize(folder.path().join("a.txt")).unwrap();
         assert_eq!(confirm_inside(folder.path(), "a.txt"), Some(real));
 
         std::fs::remove_file(folder.path().join("a.txt")).unwrap();

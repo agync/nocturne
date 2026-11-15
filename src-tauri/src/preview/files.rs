@@ -56,8 +56,8 @@ pub async fn audio_of(preview: &Preview, name: String) -> Option<PathBuf> {
 
 /// `path` as a real file inside `root`, or nothing.
 fn inside(path: &Path, root: &Path) -> Option<PathBuf> {
-    let real = std::fs::canonicalize(path).ok()?;
-    let root = std::fs::canonicalize(root).ok()?;
+    let real = dunce::canonicalize(path).ok()?;
+    let root = dunce::canonicalize(root).ok()?;
     (real.starts_with(root) && real.is_file()).then_some(real)
 }
 

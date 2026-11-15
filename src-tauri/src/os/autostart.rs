@@ -112,7 +112,7 @@ impl Target {
             return Some(Target {
                 dir: home()?.join("Library").join("LaunchAgents"),
                 exec: std::env::current_exe()
-                    .and_then(|exe| exe.canonicalize())
+                    .and_then(dunce::canonicalize)
                     .unwrap_or_default(),
             });
         }
@@ -349,7 +349,7 @@ mod tests {
     fn on_a_mac_the_target_is_the_launch_agents_folder_and_a_real_path() {
         let t = Target::from_env().expect("HOME and the executable resolve");
         assert!(t.dir.ends_with("Library/LaunchAgents"), "{:?}", t.dir);
-        assert_eq!(t.exec, t.exec.canonicalize().unwrap());
+        assert_eq!(t.exec, dunce::canonicalize(&t.exec).unwrap());
         assert!(exec_is_safe(&t.exec));
     }
 

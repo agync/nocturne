@@ -1122,7 +1122,7 @@ fn the_whole_product_works_with_real_models() {
         .map(PathBuf::from)
         .unwrap_or_else(|| manifest.join("../target/e2e-real"));
     std::fs::create_dir_all(&scratch).expect("the scratch folder");
-    let scratch = scratch.canonicalize().unwrap();
+    let scratch = dunce::canonicalize(&scratch).unwrap();
     let data_dir = scratch.join("data");
     prepare_data_dir(&data_dir);
     let tag = std::env::var("NOCTURNE_E2E_TAG").unwrap_or_default();
