@@ -96,17 +96,16 @@ pub async fn open_export<R: Runtime>(app: AppHandle<R>, path: String) -> Result<
     .await
 }
 
-/// Open the folder of log files.
+/// Open the folder of log files, making it first if it is not there.
 #[tauri::command]
 pub async fn open_logs<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
     run(app, move |app| async move {
         let state = app.state::<AppState>();
         let dir = state.log_dir();
-        let exists = blocking_cmd(move || Ok(dir.is_dir())).await?;
-        if !exists {
-            return Err(CommandError::not_found("there are no logs yet"));
-        }
-        open(&state, &state.log_dir())
+        let made = dir.clone();
+        blocking_cmd(move || std::fs::create_dir_all(&made).map_err(CommandError::internal))
+            .await?;
+        open(&state, &dir)
     })
     .await
 }

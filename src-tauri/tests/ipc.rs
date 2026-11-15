@@ -1619,13 +1619,26 @@ fn open_export_opens_only_a_folder_an_export_made_in_this_session() {
 fn open_logs_opens_the_log_folder_inside_the_data_folder() {
     let h = harness();
     let opened = h.recording_opener();
-    assert_eq!(h.code("open_logs", json!({})), "notFound", "no logs yet");
     std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
     h.ok("open_logs", json!({}));
     assert_eq!(
         opened.lock().unwrap().as_slice(),
         &[h.dir.path().join("logs")]
     );
+}
+
+#[test]
+fn open_logs_still_opens_after_the_log_folder_is_deleted() {
+    let h = harness();
+    let opened = h.recording_opener();
+    let logs = h.dir.path().join("logs");
+    assert!(!logs.exists());
+    h.ok("open_logs", json!({}));
+    assert!(logs.is_dir(), "the folder is made before it is opened");
+    std::fs::remove_dir_all(&logs).unwrap();
+    h.ok("open_logs", json!({}));
+    assert!(logs.is_dir());
+    assert_eq!(opened.lock().unwrap().as_slice(), &[logs.clone(), logs]);
 }
 
 #[test]
