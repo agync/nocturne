@@ -961,8 +961,13 @@ impl Actor {
             .args(["--host", "127.0.0.1", "--no-broadcast"]);
         #[cfg(unix)]
         cmd.args(["--watchdog-fd", "0"]);
+        // Windows has no clean-up of its own for the engine's temporary files.
+        #[cfg(windows)]
+        let temp = self.dirs.launch_temp()?;
+        #[cfg(not(windows))]
+        let temp = self.dirs.run();
         cmd.env_clear();
-        for (name, value) in spawn_env(&self.dirs, keys) {
+        for (name, value) in spawn_env(&self.dirs, keys, &temp) {
             cmd.env(name, value);
         }
         // A redactor of its own for each launch: the key it hides is this launch's.
@@ -1139,8 +1144,10 @@ enum Launch {
 }
 
 /// The whole environment the engine starts with: a home, a path, its runtime folder, a locale
-/// and the launch's two keys. Nothing else, no provider key and no proxy.
-fn spawn_env(dirs: &Dirs, keys: &Keys) -> Vec<(&'static str, std::ffi::OsString)> {
+/// and the launch's two keys, and on Windows its profile and temporary folders. Nothing else, no
+/// provider key and no proxy.
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn spawn_env(dirs: &Dirs, keys: &Keys, temp: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
     let env: Vec<(&'static str, std::ffi::OsString)> = vec![
         ("HOME", dirs.root.clone().into_os_string()),
         ("PATH", default_path().into()),
@@ -1149,9 +1156,14 @@ fn spawn_env(dirs: &Dirs, keys: &Keys) -> Vec<(&'static str, std::ffi::OsString)
         ("LEMONADE_API_KEY", keys.api.clone().into()),
         ("LEMONADE_ADMIN_API_KEY", keys.admin.clone().into()),
     ];
+    // On Windows the engine reads its home from USERPROFILE, and stops at once without it. Its
+    // temporary files go to `temp`, a folder of their own under its runtime folder.
     #[cfg(windows)]
     let env = {
         let mut env = env;
+        env.push(("USERPROFILE", dirs.root.clone().into_os_string()));
+        env.push(("TMP", temp.into()));
+        env.push(("TEMP", temp.into()));
         if let Some(root) = std::env::var_os("SystemRoot") {
             env.push(("SystemRoot", root));
         }
@@ -1294,7 +1306,7 @@ mod tests {
     fn the_spawn_environment_holds_no_provider_key() {
         let dirs = Dirs::new("/bundle", "/root");
         let keys = Keys::new("api-key".into(), "admin-key".into()).unwrap();
-        let env = spawn_env(&dirs, &keys);
+        let env = spawn_env(&dirs, &keys, &dirs.run());
         let names: Vec<&str> = env.iter().map(|(n, _)| *n).collect();
         let keys_given: Vec<&str> = names
             .iter()
@@ -1321,6 +1333,24 @@ mod tests {
                 "LEMONADE_ADMIN_API_KEY"
             ]
         );
+    }
+
+    /// The engine on Windows resolves its default folders from USERPROFILE while it reads its
+    /// arguments, and exits with 1 when it is not set, even though the folders are given. Its
+    /// temporary files go to the folder it is given.
+    #[cfg(windows)]
+    #[test]
+    fn the_engine_on_windows_has_its_profile_and_temp_inside_its_root() {
+        let dirs = Dirs::new(r"C:\bundle", r"C:\root");
+        let keys = Keys::new("api-key".into(), "admin-key".into()).unwrap();
+        let env = spawn_env(&dirs, &keys, &dirs.run());
+        let given = |name: &str| env.iter().find(|(n, _)| *n == name).map(|(_, v)| v.clone());
+        assert_eq!(
+            given("USERPROFILE"),
+            Some(dirs.root.clone().into_os_string())
+        );
+        assert_eq!(given("TMP"), Some(dirs.run().into_os_string()));
+        assert_eq!(given("TEMP"), Some(dirs.run().into_os_string()));
     }
 
     #[test]

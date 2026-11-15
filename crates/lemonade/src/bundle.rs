@@ -1,8 +1,12 @@
 //! Where the engine lives: the shipped bundle and the per-person working directories.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, SystemTime};
 
 use crate::error::RuntimeError;
+
+const TEMP_PREFIX: &str = "tmp-";
+const TEMP_KEPT: Duration = Duration::from_secs(24 * 3600);
 
 /// The bundle holds the read-only `lemond`; the root holds everything the person owns:
 /// `cache`, `config`, `models`, `logs` and `run`.
@@ -55,6 +59,36 @@ impl Dirs {
         restrict(&self.run())?;
         Ok(())
     }
+
+    /// A new folder under `run` for the temporary files of one start of the engine, which Windows
+    /// never cleans up by itself. Folders earlier starts left are removed once they have not
+    /// changed for a day, so one that an engine still stopping uses is left alone.
+    pub fn launch_temp(&self) -> Result<PathBuf, RuntimeError> {
+        self.launch_temp_keeping(TEMP_KEPT)
+    }
+
+    fn launch_temp_keeping(&self, kept: Duration) -> Result<PathBuf, RuntimeError> {
+        if let Ok(entries) = std::fs::read_dir(self.run()) {
+            for entry in entries.flatten() {
+                let old = entry.file_name().to_string_lossy().starts_with(TEMP_PREFIX)
+                    && entry
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .is_ok_and(|at| at.elapsed().unwrap_or_default() >= kept);
+                if old {
+                    let _ = std::fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+        let since = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default();
+        let dir = self
+            .run()
+            .join(format!("{TEMP_PREFIX}{}", since.as_nanos()));
+        std::fs::create_dir_all(&dir)?;
+        Ok(dir)
+    }
 }
 
 #[cfg(unix)]
@@ -89,6 +123,26 @@ pub fn locate(bundle: &Path) -> Result<PathBuf, RuntimeError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn each_start_gets_its_own_temp_folder_and_old_ones_go() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dirs = Dirs::new(tmp.path().join("bundle"), tmp.path().join("root"));
+        dirs.ensure().unwrap();
+        std::fs::write(dirs.run().join("lemond.pid"), "1").unwrap();
+        let first = dirs.launch_temp().unwrap();
+        std::fs::write(first.join("part"), "x").unwrap();
+        let second = dirs.launch_temp().unwrap();
+        assert_ne!(first, second);
+        assert!(first.join("part").exists(), "a recent folder is left alone");
+        let third = dirs.launch_temp_keeping(Duration::ZERO).unwrap();
+        assert!(!first.exists() && !second.exists());
+        assert!(third.is_dir());
+        assert!(
+            dirs.run().join("lemond.pid").exists(),
+            "only temp folders go"
+        );
+    }
 
     #[test]
     fn locates_lemond_at_the_top_and_under_bin() {
