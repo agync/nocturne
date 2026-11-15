@@ -91,21 +91,59 @@ impl Redactor {
     }
 }
 
-/// Each key whole, then each key's first and last eight characters, wherever they appear. The
-/// whole keys go first so that one key's ends cannot break another's match.
-fn hide_keys(line: &str, keys: &[&str]) -> String {
-    let mut out = line.to_string();
-    for key in keys.iter().filter(|k| !k.is_empty()) {
-        out = out.replace(key, KEY_MARK);
+/// The shortest run of a key's characters that is hidden on its own. A key wrapped over two
+/// lines shows at most one character fewer than this on either side. A caller that cuts a line
+/// hides the keys first and then drops the last `KEY_PART - 1` characters of the piece.
+pub const KEY_PART: usize = 8;
+
+/// Every key whole, however short, and every run of [`KEY_PART`] or more bytes that also appears
+/// in one, becomes [`KEY_MARK`]. The keys are compared as they are, byte by byte, and a run that
+/// ends inside a character stops short of it. The longest run starting at each place wins, so one key's part cannot break
+/// the match of another.
+pub fn hide_keys(line: &str, keys: &[&str]) -> String {
+    let bytes = line.as_bytes();
+    let keys: Vec<&[u8]> = keys
+        .iter()
+        .filter(|k| !k.is_empty())
+        .map(|k| k.as_bytes())
+        .collect();
+    if keys.is_empty() {
+        return line.to_string();
     }
-    for key in keys {
-        let chars: Vec<char> = key.chars().collect();
-        if chars.len() >= 8 {
-            let head: String = chars[..8].iter().collect();
-            let tail: String = chars[chars.len() - 8..].iter().collect();
-            out = out.replace(&head, KEY_MARK).replace(&tail, KEY_MARK);
+    let mut out = String::with_capacity(line.len());
+    let mut at = 0;
+    let mut kept = 0;
+    while at < bytes.len() {
+        let run = keys
+            .iter()
+            .flat_map(|key| (0..key.len()).map(move |from| (*key, from)))
+            .map(|(key, from)| {
+                let mut run = key[from..]
+                    .iter()
+                    .zip(&bytes[at..])
+                    .take_while(|(a, b)| a == b)
+                    .count();
+                while run > 0 && !line.is_char_boundary(at + run) {
+                    run -= 1;
+                }
+                if line.is_char_boundary(at) && run >= KEY_PART.min(key.len()) {
+                    run
+                } else {
+                    0
+                }
+            })
+            .max()
+            .unwrap_or(0);
+        if run > 0 {
+            out.push_str(&line[kept..at]);
+            out.push_str(KEY_MARK);
+            at += run;
+            kept = at;
+        } else {
+            at += 1;
         }
     }
+    out.push_str(&line[kept..]);
     out
 }
 
@@ -389,6 +427,18 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_key_with_wide_characters_is_hidden_on_char_boundaries() {
+        let key = "k3y-\u{e9}\u{e9}\u{e9}-9f8e7d6c";
+        assert_eq!(
+            hide_keys(&format!("a\u{e9}{key}z"), &[key]),
+            "a\u{e9}[key]z"
+        );
+        let near = "k3y-\u{e9}\u{e9}\u{e9}-\u{e3}";
+        assert_eq!(hide_keys(near, &[key]), "[key]\u{e3}");
+        assert_eq!(hide_keys("k3y-\u{e9}", &[key]), "k3y-\u{e9}");
+    }
+
+    #[test]
     fn the_launch_keys_are_hidden_whole_and_in_part() {
         let (api, admin) = ("a1b2c3d4e5f6a7b8c9d0e1f2", "f0e1d2c3b4a5f6e7d8c9b0a1");
         let r = Redactor::for_launch(None, &[api, admin]);
@@ -399,6 +449,23 @@ mod tests {
         );
         let out = r.line(&line).unwrap();
         assert_eq!(out, "keys [key] [key] head [key] tail [key]");
+    }
+
+    #[test]
+    fn a_key_wrapped_over_two_lines_is_hidden_down_to_its_last_few_characters() {
+        let key = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6";
+        let r = Redactor::for_launch(None, &[key]);
+        // Wrapped over two lines: each part is hidden whole.
+        assert_eq!(
+            r.line(&format!("auth {}", &key[..13])).unwrap(),
+            "auth [key]"
+        );
+        assert_eq!(r.line(&format!("{} ok", &key[13..])).unwrap(), "[key] ok");
+        // A part shorter than KEY_PART is not, and is too short to matter.
+        assert_eq!(r.line(&key[..7]).unwrap(), &key[..7]);
+        // A short key is still hidden whole.
+        let short = Redactor::for_launch(None, &["k3y"]);
+        assert_eq!(short.line("the k3y").unwrap(), "the [key]");
     }
 
     #[test]

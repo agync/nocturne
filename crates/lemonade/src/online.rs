@@ -157,7 +157,7 @@ impl OnlineKey {
         OnlineKey(Zeroizing::new(key))
     }
 
-    /// The key itself, for the engine's key request and nowhere else.
+    /// The key itself, for the engine's key request and the log redactor.
     pub fn expose(&self) -> &str {
         &self.0
     }
