@@ -52,8 +52,7 @@ Download the one file for your computer from the [latest release](https://github
 
 Most Linux computers have an Intel or AMD chip and take the plain Linux files. If yours has an Arm
 chip, take the Linux on Arm files instead. To check, run `uname -m` in a terminal: `x86_64` means
-the plain files, `aarch64` means the Arm ones. The Arm packages, the Flatpak's included, are new
-and have not yet been tried on an Arm desktop by a person.
+the plain files, `aarch64` means the Arm ones. The Flatpak picks the right one by itself.
 
 The release also has a list of fingerprints to check the files against (`SHA256SUMS`). The release
 page names each file with its version number as well; those are the same files.
