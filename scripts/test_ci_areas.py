@@ -63,6 +63,7 @@ JOBS = {
     "gate": None,
     "rust": "rust",
     "rust-platforms": "rust-platforms",
+    "rust-lint-platforms": "rust-platforms",
     "ui": "ui",
     "e2e": "ui",
     "ui-platforms": "ui-platforms",

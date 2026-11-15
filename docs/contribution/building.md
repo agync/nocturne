@@ -61,6 +61,7 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 | `browser tests` | `make ui/e2e` | the Playwright tests against the mock engine, in Chromium | `ui/`, `src-tauri/` |
 | `site` | `make site`, then `make -C site check` | the site build and its axe and layout checks | `site/`, `docs/`, `lemonade.lock`, `ui/package*.json` |
 | `rust tests` | `make rust/test` on `ubuntu-24.04-arm`; `cargo test --workspace --no-fail-fast` on `macos-15` and `windows-2022` | the Rust tests on Linux arm64, macOS arm64 and Windows x64 | the Rust side |
+| `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | the Rust side |
 | `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
 | `gate` | | fails when any job above failed or was cancelled; the one job to require | always |
 
@@ -76,8 +77,9 @@ x86_64 Linux both sides run when either changes, while the other platforms run o
 side. A job skipped this way counts as passed in `gate`. Every run on `main` finishes, and none is
 dropped while queued.
 
-The `browser tests` and `site` jobs go beyond `make check`, and so do the platform jobs. Lint, the
-bindings drift check, the browser tests and the Go tests run on x86_64 Linux only. A test that
+The `browser tests` and `site` jobs go beyond `make check`, and so do the platform jobs.
+Rustfmt, the clippy pass with the `server` feature, the bindings drift check, the browser tests
+and the Go tests run on x86_64 Linux only. A test that
 needs a piece only Linux has (`/proc`, `prctl`, the PCI device folders) is compiled out or ignored
 elsewhere with its reason, so the other platforms skip it rather than fail; everything the app does
 on a platform is tested there. The jobs are split because one runner would run the Rust build, the
