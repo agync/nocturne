@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Which jobs of .github/workflows/ci.yml a change needs.
 #
-# Usage: scripts/ci-areas.sh < changed-paths
+# Usage: scripts/ci-areas.sh < changed-paths   (any other argument is refused)
 #        scripts/ci-areas.sh --all
 #
 # Reads the changed paths, one per line, and prints one `area=true|false` line per area, in a
@@ -48,12 +48,17 @@ matches() {
 changed=$(mktemp)
 trap 'rm -f "$changed"' EXIT
 all=false
-if [ "${1:-}" = --all ]; then
-    all=true
-else
-    cat > "$changed"
-    if matches "$everything" "$changed"; then all=true; fi
-fi
+case "$#:${1:-}" in
+    1:--all) all=true ;;
+    0:)
+        cat > "$changed"
+        if matches "$everything" "$changed"; then all=true; fi
+        ;;
+    *)
+        printf 'usage: %s [--all] < changed-paths\n' "$0" >&2
+        exit 2
+        ;;
+esac
 
 for area in "${names[@]}"; do
     run=$all
