@@ -1086,6 +1086,25 @@ figcaption,
   white-space: nowrap;
 }
 
+.note code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+}
+
+/* The two Linux builds of one package, Intel or AMD and Arm. install.js puts Arm first when the
+   browser says it runs on an Arm chip. */
+.arch {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  justify-self: end;
+}
+
+.arch .button {
+  justify-content: center;
+  text-align: center;
+}
+
 .terminal {
   grid-column: 1 / -1;
   font-size: 0.875rem;
@@ -1275,7 +1294,8 @@ figcaption,
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .choices .button {
+  .choices .button,
+  .arch {
     justify-self: start;
   }
 

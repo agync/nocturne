@@ -117,7 +117,7 @@
   <section class="platform" id="linux" data-platform="linux" aria-labelledby="linux-title">
     <div class="platform-head">
       <h2 id="linux-title">Linux</h2>
-      <p class="spec-line">64-bit Intel or AMD computer</p>
+      <p class="spec-line">64-bit computer with an Intel, AMD or Arm chip</p>
       <p class="here-tag" data-here-tag hidden>For this computer</p>
     </div>
     <div class="platform-body">
@@ -139,23 +139,33 @@ flatpak install --user nocturne is.nocturne.Nocturne</code></pre>
             <h3>Ubuntu, Linux Mint or Debian</h3>
             <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
           </div>
-          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">Download .deb</a>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">.deb for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-arm64.deb">.deb for Arm</a>
+          </div>
         </li>
         <li>
           <div class="choice-text">
             <h3>Fedora, Red Hat or openSUSE</h3>
             <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
           </div>
-          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">Download .rpm</a>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">.rpm for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.rpm">.rpm for Arm</a>
+          </div>
         </li>
         <li>
           <div class="choice-text">
             <h3>Try it without installing</h3>
             <p>One file that runs on most desktops. In its properties, allow it to run as a program, then open it.</p>
           </div>
-          <a class="button" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">Download AppImage</a>
+          <div class="arch" data-arch>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">AppImage for Intel or AMD</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.AppImage">AppImage for Arm</a>
+          </div>
         </li>
       </ul>
+      <p class="note">Most Linux computers have an Intel or AMD chip. To check, run <code>uname -m</code> in a terminal: <code>x86_64</code> means Intel or AMD, <code>aarch64</code> means Arm. The Flatpak picks the right one by itself. The Arm downloads are new and have not yet been tried on an Arm desktop by a person.</p>
       <p class="why">Linux shows no warning the first time you open Nocturne.</p>
     </div>
   </section>
