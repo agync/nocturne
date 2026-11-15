@@ -81,6 +81,14 @@
   gap: 2px;
 }
 
+.welcomeButtons {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
 .detail {
   color: var(--ink2);
   font-size: 0.8125rem;
@@ -387,7 +395,12 @@
     align-items: stretch;
   }
 
-  .welcomeFoot > button {
+  .welcomeButtons {
+    flex-direction: column-reverse;
+    align-items: stretch;
+  }
+
+  .welcomeButtons > button {
     width: 100%;
   }
 

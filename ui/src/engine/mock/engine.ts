@@ -3,6 +3,8 @@ import type {
   AdvancedView,
   AskDelta,
   AskPlace,
+  BackupReport,
+  BackupsView,
   ChangePreview,
   CheckOutcome,
   DeviceView,
@@ -45,6 +47,8 @@ import type {
   RemoteSettingsPatch,
   RemoteView,
   RenameOutcome,
+  RestoreCheck,
+  RestoredView,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -63,6 +67,7 @@ import type {
 } from "../client";
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
+import { MockBackups, type MockBackupsScript } from "./backup";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
@@ -329,6 +334,9 @@ export class MockEngine implements EngineClient {
   readonly online = new OnlineSim({ onChange: (v) => this.emit("online-changed", v) });
   /** Choosing the model for each job. */
   readonly models = new ModelsSim();
+  /** Backups and restores. Tests drive their next steps through `script`. */
+  readonly backups: MockBackups;
+  readonly script: MockBackupsScript;
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
@@ -360,6 +368,18 @@ export class MockEngine implements EngineClient {
       ...remoteFromAddress(),
       ...options.remote,
     });
+    this.backups = new MockBackups({
+      counts: () => ({
+        memories: this.memories.length,
+        pages: this.pages.length,
+        originals: this.items.filter((item) => item.hasOriginal).length,
+      }),
+      now: () => this.clock.getTime(),
+      onlineUsed: () => this.online.view().setUp,
+      awayUsed: () => this.remote.view().devices.length > 0,
+      onProgress: (progress) => this.emit("backup-progress", progress),
+    });
+    this.script = this.backups.script;
     this.refreshStatus();
   }
 
@@ -1441,6 +1461,44 @@ export class MockEngine implements EngineClient {
       p.question = null;
     }
     this.needsChanged();
+  }
+
+  // Backups and restores
+
+  async estimateBackup(): Promise<number> {
+    return this.backups.estimate();
+  }
+
+  makeBackup = (path: string, passphrase: string): Promise<BackupReport> =>
+    this.backups.makeBackup(path, passphrase);
+
+  async cancelBackup(): Promise<void> {
+    this.backups.cancel();
+  }
+
+  async getBackups(): Promise<BackupsView> {
+    return this.backups.view();
+  }
+
+  async dismissBackupNotices(): Promise<void> {
+    this.backups.dismissNotices();
+  }
+
+  probeBackup = (path: string): Promise<void> => this.backups.probeBackup(path);
+  checkBackup = (path: string, passphrase: string): Promise<RestoreCheck> =>
+    this.backups.checkBackup(path, passphrase);
+  restoreBackup = (path: string, passphrase: string, replace: boolean): Promise<void> =>
+    this.backups.restoreBackup(path, passphrase, replace);
+  restorePutAside = (id: string): Promise<void> => this.backups.restorePutAside(id);
+  deletePutAside = (id: string): Promise<void> => this.backups.deletePutAside(id);
+  async getRestored(): Promise<RestoredView | null> {
+    return this.backups.getRestored();
+  }
+  async finishRestore(): Promise<void> {
+    this.backups.finishRestore();
+  }
+  async discardRestore(): Promise<void> {
+    this.backups.discardRestore();
   }
 
   async getSettings(): Promise<SettingsView> {

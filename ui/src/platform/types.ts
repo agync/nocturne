@@ -13,6 +13,10 @@ export interface Platform {
   pickFiles(): Promise<string[]>;
   /** Asks the person for a folder; null when they cancel. */
   pickFolder(): Promise<string | null>;
+  /** Asks where a backup should be saved; null when they cancel. */
+  pickBackupSave(): Promise<string | null>;
+  /** Asks for the backup file to restore; null when they cancel. */
+  pickBackup(): Promise<string | null>;
   /** Opens the folder an export just made, with the system's own app. */
   openPath(path: string): Promise<void>;
   /**

@@ -1,6 +1,7 @@
 import advanced from "./en-GB/advanced.json";
 import ask from "./en-GB/ask.json";
 import away from "./en-GB/away.json";
+import backup from "./en-GB/backup.json";
 import capture from "./en-GB/capture.json";
 import common from "./en-GB/common.json";
 import editions from "./en-GB/editions.json";
@@ -36,6 +37,7 @@ export const enGB = {
   ...memories,
   ...fading,
   ...setup,
+  ...backup,
   ...privacy,
   ...settings,
   ...advanced,

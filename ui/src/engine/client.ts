@@ -2,6 +2,9 @@ import type {
   AdvancedView,
   AskDelta,
   AskPlace,
+  BackupProgress,
+  BackupReport,
+  BackupsView,
   ChangePreview,
   CheckOutcome,
   DeviceView,
@@ -41,6 +44,8 @@ import type {
   RemoteSettingsPatch,
   RemoteView,
   RenameOutcome,
+  RestoreCheck,
+  RestoredView,
   SettingsPatch,
   SettingsView,
   SetupView,
@@ -82,6 +87,7 @@ export interface EngineEvents {
   "item-changed": ItemView;
   "setup-progress": SetupView;
   "export-progress": ExportProgress;
+  "backup-progress": BackupProgress;
   "ask-delta": AskDelta;
   "page-ready": PageSummary;
   "needs-you-changed": number;
@@ -99,6 +105,7 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "item-changed",
   "setup-progress",
   "export-progress",
+  "backup-progress",
   "ask-delta",
   "page-ready",
   "needs-you-changed",
@@ -198,6 +205,32 @@ export interface EngineClient {
   /** Progress arrives as `export-progress` events while it runs. */
   exportTo(dir: string): Promise<ExportReport>;
   deleteEverything(confirmPhrase: string): Promise<void>;
+
+  /** About how many bytes a backup would take. */
+  estimateBackup(): Promise<number>;
+  /**
+   * Writes the backup to `path`; progress arrives as `backup-progress` events. Rejects with
+   * `invalid`, `busy`, `noRoom`, `cantWrite`, `notFound`, `damagedBackup` or `cancelled`.
+   */
+  makeBackup(path: string, passphrase: string): Promise<BackupReport>;
+  /** Stops a backup, a check or a restore that is running; a finished one is unaffected. */
+  cancelBackup(): Promise<void>;
+  getBackups(): Promise<BackupsView>;
+  /** Clears the notices about a backup or restore that stopped unexpectedly. */
+  dismissBackupNotices(): Promise<void>;
+
+  /** Whether a picked file is a Nocturne backup at all, before any passphrase is asked for. */
+  probeBackup(path: string): Promise<void>;
+  /** Reads the whole file and says what restoring it would do here. */
+  checkBackup(path: string, passphrase: string): Promise<RestoreCheck>;
+  restoreBackup(path: string, passphrase: string, replace: boolean): Promise<void>;
+  /** Brings back one of the copies put aside; what is here now is put aside in turn. */
+  restorePutAside(id: string): Promise<void>;
+  deletePutAside(id: string): Promise<void>;
+  /** What the last restore brought in, until the screen has shown it. */
+  getRestored(): Promise<RestoredView | null>;
+  finishRestore(): Promise<void>;
+  discardRestore(): Promise<void>;
   getSettings(): Promise<SettingsView>;
   updateSettings(patch: SettingsPatch): Promise<SettingsView>;
   pause(until: string | null): Promise<void>;

@@ -156,6 +156,24 @@ export class TauriEngine implements EngineClient {
   exportTo: EngineClient["exportTo"] = (dir) => this.call("export_to", { dir });
   deleteEverything: EngineClient["deleteEverything"] = (confirmPhrase) =>
     this.call("delete_everything", { confirmPhrase });
+
+  estimateBackup: EngineClient["estimateBackup"] = () => this.call("estimate_backup");
+  makeBackup: EngineClient["makeBackup"] = (path, passphrase) =>
+    this.call("make_backup", { path, passphrase });
+  cancelBackup: EngineClient["cancelBackup"] = () => this.call("cancel_backup");
+  getBackups: EngineClient["getBackups"] = () => this.call("get_backups");
+  dismissBackupNotices: EngineClient["dismissBackupNotices"] = () =>
+    this.call("dismiss_backup_notices");
+  probeBackup: EngineClient["probeBackup"] = (path) => this.call("probe_backup", { path });
+  checkBackup: EngineClient["checkBackup"] = (path, passphrase) =>
+    this.call("check_backup", { path, passphrase });
+  restoreBackup: EngineClient["restoreBackup"] = (path, passphrase, replace) =>
+    this.call("restore_backup", { path, passphrase, replace });
+  restorePutAside: EngineClient["restorePutAside"] = (id) => this.call("restore_put_aside", { id });
+  deletePutAside: EngineClient["deletePutAside"] = (id) => this.call("delete_put_aside", { id });
+  getRestored: EngineClient["getRestored"] = () => this.call("get_restored");
+  finishRestore: EngineClient["finishRestore"] = () => this.call("finish_restore");
+  discardRestore: EngineClient["discardRestore"] = () => this.call("discard_restore");
   getSettings: EngineClient["getSettings"] = () => this.call("get_settings");
   updateSettings: EngineClient["updateSettings"] = (patch) =>
     this.call("update_settings", { patch });

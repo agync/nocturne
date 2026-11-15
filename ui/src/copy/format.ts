@@ -11,6 +11,13 @@ function toDate(input: string | Date): Date {
       ? new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]), 12)
       : new Date(Number.NaN);
   }
+  // A copy put aside is named by the local time it was made: "2026-11-15 120000", and
+  // " (2)" after it when two share a second.
+  const stamp = /^(\d{4})-(\d{2})-(\d{2}) (\d{2})(\d{2})(\d{2})(?: \(\d+\))?$/.exec(input);
+  if (stamp) {
+    const [y = 0, mo = 1, d = 1, h = 0, mi = 0, sec = 0] = stamp.slice(1).map(Number);
+    return new Date(y, mo - 1, d, h, mi, sec);
+  }
   return new Date(input);
 }
 

@@ -74,6 +74,14 @@ export class TauriPlatform implements Platform {
     return (await invoke<string | null>("pick_folder")) ?? null;
   }
 
+  async pickBackupSave(): Promise<string | null> {
+    return (await invoke<string | null>("pick_backup_save")) ?? null;
+  }
+
+  async pickBackup(): Promise<string | null> {
+    return (await invoke<string | null>("pick_backup")) ?? null;
+  }
+
   async openPath(path: string): Promise<void> {
     await invoke("open_export", { path });
   }
