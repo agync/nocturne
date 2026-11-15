@@ -455,9 +455,12 @@ pub async fn decline_tier_offer<R: Runtime>(app: &AppHandle<R>) {
 }
 
 fn available_memory() -> u64 {
-    let mut system = sysinfo::System::new();
-    system.refresh_memory();
-    system.available_memory()
+    sysinfo::System::new()
+        .map(|mut system| {
+            system.refresh_memory();
+            system.available_memory()
+        })
+        .unwrap_or(0)
 }
 
 fn smaller(tier: Tier) -> Option<Tier> {

@@ -6,6 +6,7 @@ use std::path::Path;
 /// The computer's host name, or a plain fallback.
 pub fn computer_name() -> String {
     sysinfo::System::host_name()
+        .ok()
         .map(|n| n.trim().to_string())
         .filter(|n| !n.is_empty())
         .unwrap_or_else(|| "This computer".to_string())

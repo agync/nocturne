@@ -84,9 +84,12 @@ pub fn for_host(info: &SystemInfo, ram: u64, disk_free: u64) -> Budget {
 
 /// The memory this computer has, in bytes.
 pub fn ram_bytes() -> u64 {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_memory();
-    sys.total_memory()
+    sysinfo::System::new()
+        .map(|mut sys| {
+            sys.refresh_memory();
+            sys.total_memory()
+        })
+        .unwrap_or(0)
 }
 
 /// The component role that does `job`.

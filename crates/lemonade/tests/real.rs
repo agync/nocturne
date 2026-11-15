@@ -76,7 +76,7 @@ async fn the_real_engine_starts_answers_and_stops_cleanly() {
         true
     );
     let ram = {
-        let mut sys = sysinfo::System::new();
+        let mut sys = sysinfo::System::new().expect("system memory is readable");
         sys.refresh_memory();
         sys.total_memory()
     };

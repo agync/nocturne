@@ -243,9 +243,12 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 fn memory_bytes() -> u64 {
-    let mut sys = sysinfo::System::new();
-    sys.refresh_memory();
-    sys.total_memory()
+    sysinfo::System::new()
+        .map(|mut sys| {
+            sys.refresh_memory();
+            sys.total_memory()
+        })
+        .unwrap_or(0)
 }
 
 /// Free bytes on the volume that holds `path`.
@@ -257,9 +260,8 @@ fn disk_free(path: &Path) -> Option<u64> {
         }
     }
     let probe = probe.canonicalize().ok()?;
-    let disks = sysinfo::Disks::new_with_refreshed_list();
+    let disks = sysinfo::Disks::new_with_refreshed_list().ok()?;
     disks
-        .list()
         .iter()
         .filter(|d| probe.starts_with(d.mount_point()))
         .max_by_key(|d| d.mount_point().as_os_str().len())
