@@ -6,7 +6,8 @@
 
     build.py assemble --site-url URL --render <render-out> --lock <lemonade.lock> <site> <dist>
         Copy the landing page and its assets into <dist>, fill in the placeholders, add the
-        rendered docs under docs/ and write _headers with the hashes of the docs' inline scripts.
+        rendered docs under docs/ with the site origin filled in, and write _headers with the
+        hashes of the docs' inline scripts.
 """
 
 import argparse
@@ -19,6 +20,7 @@ import sys
 import tomllib
 
 LANDING = ("index.html", "install.html", "404.html", "favicon.svg", "robots.txt")
+ICONS = ("favicon-32.png", "apple-touch-icon.png")
 INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)([^>]*)>(.*?)</script>", re.S)
 
 
@@ -64,11 +66,18 @@ def assemble(args: argparse.Namespace) -> None:
             if "{{" in text:
                 sys.exit(f"build.py: {name} has an unfilled placeholder")
         (dist / name).write_text(text, encoding="utf-8")
+    for name in ICONS:
+        shutil.copy2(site / name, dist / name)
 
     rendered = pathlib.Path(args.render) / "docs"
     if not (rendered / "index.html").is_file():
         sys.exit(f"build.py: no rendered docs at {rendered}")
     shutil.copytree(rendered, dist / "docs")
+    # The theme's head slot carries the Open Graph image, whose address must be absolute.
+    for page in (dist / "docs").rglob("*.html"):
+        text = page.read_text(encoding="utf-8")
+        if "{{SITE_URL}}" in text:
+            page.write_text(text.replace("{{SITE_URL}}", url), encoding="utf-8")
 
     hashes = script_hashes(dist / "docs")
     headers = (site / "_headers").read_text(encoding="utf-8")
