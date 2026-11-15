@@ -707,6 +707,10 @@ figcaption {
   font-size: 0.9375rem;
 }
 
+.promises.needs {
+  max-width: 880px;
+}
+
 .promises dt {
   font-weight: 500;
 }
