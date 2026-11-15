@@ -15,7 +15,7 @@ RUN npx vite build --mode server
 
 # The server. The app crate links the desktop toolkit even when it runs headless, so its
 # development headers are needed here and its libraries in the final stage.
-FROM docker.io/library/rust:1.97.1-slim-trixie@sha256:8e8cf8f7fd54a2d23d5a743b3a03f56e26b6c774276c33fa0595111704ebb15c AS server
+FROM docker.io/library/rust:1.100.0-slim-trixie@sha256:e9d95b74296f7126a83ae3d041aeaba1ff4c478f13abc5cc034fcf7c131c3d4a AS server
 RUN apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev libdbus-1-dev \
         libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev \
