@@ -27,6 +27,22 @@ fn bundle() -> PathBuf {
         .join(given)
 }
 
+/// The bundled engine starts with the arguments and the environment the app gives it, and
+/// answers. CI runs this one on Windows, where the stand-in engine cannot show what the real one
+/// needs from its surroundings.
+#[tokio::test]
+#[ignore = "needs NOCTURNE_LEMOND"]
+async fn the_real_engine_starts_with_what_the_app_gives_it() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = nocturne_lemonade::Dirs::new(bundle(), tmp.path().join("root"));
+    let sup = Supervisor::start(dirs, SupervisorOptions::default())
+        .await
+        .unwrap();
+    let health = sup.client().health().await.unwrap();
+    assert!(!health.version.is_empty());
+    sup.shutdown().await.unwrap();
+}
+
 #[tokio::test]
 #[ignore = "needs NOCTURNE_LEMOND"]
 async fn the_real_engine_starts_answers_and_stops_cleanly() {
