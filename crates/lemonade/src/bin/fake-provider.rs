@@ -131,11 +131,21 @@ async fn main() {
     let _ = axum::serve(listener, router).await;
 }
 
-/// Records every request except the stand-in's own controls, then hands it on.
+/// Records every request except the stand-in's own controls and stray probes, then hands it on.
+/// The port comes from the system's free ports, and on a shared machine a Go program polling a
+/// port it expects to find a server on sometimes sends a `GET /` here. Neither the engine nor
+/// the app is a Go client.
 async fn record(State(app): State<Shared>, req: Request, next: Next) -> Response {
     let (parts, body) = req.into_parts();
     let bytes = to_bytes(body, MAX_BODY).await.unwrap_or_default();
-    if !parts.uri.path().starts_with("/fake/") {
+    let probe = parts.method == axum::http::Method::GET
+        && parts.uri.path() == "/"
+        && parts
+            .headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|ua| ua.starts_with("Go-http-client/"));
+    if !parts.uri.path().starts_with("/fake/") && !probe {
         let headers: Map<String, Value> = parts
             .headers
             .iter()
