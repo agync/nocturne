@@ -13,6 +13,7 @@ use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use futures_util::Stream;
 use serde_json::{Value, json};
+use tauri::Manager;
 use tokio::sync::broadcast::error::RecvError;
 use tower::ServiceExt;
 use tower_http::services::{ServeDir, ServeFile};
@@ -34,6 +35,7 @@ pub fn router(preview: Arc<Preview>) -> Router {
             post(invoke_command).layer(DefaultBodyLimit::disable()),
         )
         .route("/api/ticket", post(ticket))
+        .route("/healthz", get(health))
         .route("/api/events", get(events))
         .route("/originals/{id}", get(original))
         .route("/audio/{name}", get(audio))
@@ -154,6 +156,18 @@ async fn invoke_command(
         }
         Err(_) => failure(json!({ "code": "internal", "detail": "the command did not finish" })),
     }
+}
+
+/// Whether the store is open, for a container's health check. It carries no data, so it needs no
+/// token, but it still needs an accepted host.
+async fn health(State(preview): State<Arc<Preview>>) -> Response {
+    let open = preview.app.state::<crate::AppState>().has_engine();
+    let status = if open {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+    json_response(status, json!({ "ok": open }))
 }
 
 async fn ticket(State(preview): State<Arc<Preview>>, body: Bytes) -> Response {

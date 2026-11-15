@@ -1,5 +1,6 @@
 //! The token, the tickets and the checks every request passes.
 
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -20,6 +21,90 @@ pub fn random_hex(bytes: usize) -> String {
 /// A fresh 256-bit token.
 pub fn new_token() -> String {
     random_hex(32)
+}
+
+/// What a request's bearer token is checked against.
+#[derive(Clone)]
+pub enum Token {
+    /// Made at launch and held in memory: the development preview.
+    Fixed(String),
+    /// Kept owner-only in a file and read at each check, so a new token takes effect without a
+    /// restart: the server.
+    File(Arc<TokenFile>),
+}
+
+impl std::fmt::Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::Fixed(_) => f.write_str("Token::Fixed(..)"),
+            Token::File(file) => write!(f, "Token::File({:?})", file.path),
+        }
+    }
+}
+
+impl From<&str> for Token {
+    fn from(token: &str) -> Self {
+        Token::Fixed(token.to_string())
+    }
+}
+
+impl From<String> for Token {
+    fn from(token: String) -> Self {
+        Token::Fixed(token)
+    }
+}
+
+impl Token {
+    /// A token kept in `path`, which [`ensure_token_file`] made.
+    pub fn file(path: &Path) -> Token {
+        Token::File(Arc::new(TokenFile {
+            path: path.to_path_buf(),
+        }))
+    }
+
+    fn matches(&self, presented: &str) -> bool {
+        match self {
+            Token::Fixed(token) => same(presented, token),
+            Token::File(file) => file.current().is_some_and(|t| same(presented, &t)),
+        }
+    }
+}
+
+/// The token file. It is read at every request that needs it: a few bytes, and no cache that a
+/// change within the file system's timestamp granularity could leave stale.
+pub struct TokenFile {
+    path: PathBuf,
+}
+
+impl TokenFile {
+    /// The token in the file now. A missing, unreadable or malformed file admits nobody.
+    fn current(&self) -> Option<String> {
+        read_token(&self.path)
+    }
+}
+
+/// A well-formed token from `path`: 64 hex digits, surrounding space ignored.
+fn read_token(path: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(path).ok()?;
+    let token = text.trim();
+    (token.len() == 64 && token.bytes().all(|b| b.is_ascii_hexdigit())).then(|| token.to_string())
+}
+
+/// The token in `path`, made (owner-only) when there is none or it is malformed. `true` when it
+/// was made now.
+pub fn ensure_token_file(path: &Path) -> std::io::Result<(String, bool)> {
+    if let Some(token) = read_token(path) {
+        crate::fsutil::restrict_file(path);
+        return Ok((token, false));
+    }
+    rotate_token_file(path).map(|token| (token, true))
+}
+
+/// Replace the token in `path` with a new one. A running server takes it at the next request.
+pub fn rotate_token_file(path: &Path) -> std::io::Result<String> {
+    let token = new_token();
+    crate::fsutil::write_private(path, format!("{token}\n").as_bytes())?;
+    Ok(token)
 }
 
 /// Equal strings, in time that does not depend on where they differ.
@@ -88,7 +173,7 @@ fn admit(
     if !protected(path) {
         return Ok(());
     }
-    if bearer(headers).is_some_and(|t| same(t, &preview.opts.token)) {
+    if bearer(headers).is_some_and(|t| preview.opts.token.matches(t)) {
         return Ok(());
     }
     if method == Method::GET {
@@ -142,6 +227,58 @@ mod tests {
         assert!(same("abc", "abc"));
         assert!(!same("abc", "abd"));
         assert!(!same("abc", "ab"));
+    }
+
+    #[test]
+    fn a_token_file_is_made_owner_only_and_kept_across_starts() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server-token");
+        let (made, fresh) = ensure_token_file(&path).unwrap();
+        assert!(fresh);
+        assert_eq!(made.len(), 64);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&path).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+        let (again, fresh) = ensure_token_file(&path).unwrap();
+        assert!(!fresh);
+        assert_eq!(again, made);
+    }
+
+    #[test]
+    fn a_malformed_token_file_is_replaced_and_admits_nobody_until_then() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server-token");
+        std::fs::write(&path, "short\n").unwrap();
+        let token = Token::file(&path);
+        assert!(!token.matches("short"));
+        assert!(!token.matches(""));
+        let (made, fresh) = ensure_token_file(&path).unwrap();
+        assert!(fresh);
+        assert!(token.matches(&made));
+    }
+
+    #[test]
+    fn a_rotated_token_takes_effect_and_the_old_one_stops_working() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("server-token");
+        let (old, _) = ensure_token_file(&path).unwrap();
+        let token = Token::file(&path);
+        assert!(token.matches(&old));
+        let new = rotate_token_file(&path).unwrap();
+        assert_ne!(new, old);
+        assert!(token.matches(&new));
+        assert!(!token.matches(&old));
+        std::fs::remove_file(&path).unwrap();
+        assert!(!token.matches(&new));
+    }
+
+    #[test]
+    fn the_token_is_never_in_debug_output() {
+        let text = format!("{:?}", Token::from("secret-value"));
+        assert!(!text.contains("secret-value"), "{text}");
     }
 
     #[test]

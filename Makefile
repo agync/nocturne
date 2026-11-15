@@ -45,12 +45,12 @@ rust/build: ## Build the Rust workspace
 
 rust/test: ## Test the Rust workspace
 	cargo test --workspace
-	cargo test -p nocturne-app --features preview --lib --test preview
+	cargo test -p nocturne-app --features server --lib --test preview
 
 rust/lint: ## Clippy and rustfmt check
 	cargo fmt --all --check
 	cargo clippy --workspace --all-targets -- -D warnings
-	cargo clippy -p nocturne-app --features preview --all-targets -- -D warnings
+	cargo clippy -p nocturne-app --features server --all-targets -- -D warnings
 
 rust/fmt: ## Format Rust code
 	cargo fmt --all

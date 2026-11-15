@@ -1,4 +1,4 @@
-//! The development-only preview server: what it admits, what it forwards and what it shows.
+//! The HTTP front of the preview and the server: what it admits, what it forwards and what it shows.
 //! Requests go straight to the router, without a socket.
 
 mod common;
@@ -555,4 +555,57 @@ async fn the_data_folder_is_named_nowhere_in_an_answer() {
         let (_, body) = invoke(&r, command, json!({ "id": "missing" })).await;
         assert!(!body.to_string().contains(&dir), "{command}: {body}");
     }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_health_check_needs_no_token_but_an_accepted_host() {
+    let r = rig();
+    let ok = send(
+        &r,
+        req(Method::GET, "/healthz").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(ok.status(), StatusCode::OK);
+    assert_eq!(json_of(ok).await, json!({ "ok": true }));
+    let wrong = Request::builder()
+        .uri("/healthz")
+        .header("host", "rebind.example.test")
+        .body(Body::empty())
+        .unwrap();
+    assert_eq!(send(&r, wrong).await.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_token_kept_in_a_file_admits_and_a_new_one_replaces_it() {
+    let h = harness();
+    let keep = tempfile::tempdir().unwrap();
+    let path = keep.path().join("server-token");
+    let (first, _) = preview::ensure_token_file(&path).unwrap();
+    let opts = Options {
+        token: preview::Token::file(&path),
+        port: PORT,
+        public_origin: None,
+        ui_dir: None,
+    };
+    let server = Preview::new(
+        h.app.handle().clone(),
+        h.webview.clone(),
+        h.dir.path(),
+        opts,
+    );
+    let router = preview::router(server);
+    let status_with = |token: String| {
+        let router = router.clone();
+        async move {
+            let request = req(Method::POST, "/api/invoke/get_status")
+                .header("authorization", format!("Bearer {token}"))
+                .body(Body::empty())
+                .unwrap();
+            router.oneshot(request).await.unwrap().status()
+        }
+    };
+    assert_eq!(status_with(first.clone()).await, StatusCode::OK);
+    let second = preview::rotate_token_file(&path).unwrap();
+    assert_eq!(status_with(second).await, StatusCode::OK);
+    assert_eq!(status_with(first).await, StatusCode::UNAUTHORIZED);
 }

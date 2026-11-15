@@ -29,10 +29,12 @@ FORBIDDEN_PARTS = (".agents", "vendor/", "/home/")
 HOME_PATTERN = re.compile(rb"/home/")
 MAC_HOME_PATTERN = re.compile(rb"/Users/[^/\s]")
 APP_IDENTIFIER = "app.nocturne.desktop"
-# The development-only real preview (the `preview` feature) must never ship: its binary has this
-# name and prints the first marker, and its interface keeps the token under the second.
-PREVIEW_BINARY = "nocturne-preview"
-PREVIEW_MARKERS = (b"nocturne-preview-dev-only", b"nocturne.preview.token")
+# The development-only real preview (the `preview` feature) and the experimental server (the
+# `server` feature, shipped only as a container image) are never in a desktop package: their
+# binaries have these names, the preview prints the first marker, and their interfaces keep the
+# token under the second and third.
+PREVIEW_BINARY = ("nocturne-preview", "nocturne-server")
+PREVIEW_MARKERS = (b"nocturne-preview-dev-only", b"nocturne.preview.token", b"nocturne.server.token")
 
 
 def walk(root):
@@ -192,9 +194,9 @@ def check(root, kind, manifest, requires, report, builder_home=None, sources=Non
         if any(marker in data for marker in PREVIEW_MARKERS):
             preview.append(r)
     if preview:
-        report.fail(f"the development-only real preview is in the package: {preview[:5]}")
+        report.fail(f"the development-only real preview or the server is in the package: {preview[:5]}")
     else:
-        report.ok("no development-only real preview in the package")
+        report.ok("no development-only real preview or server in the package")
 
     leaks = []
     for r, p in rel.items():

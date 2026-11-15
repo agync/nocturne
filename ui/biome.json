@@ -5,6 +5,7 @@
       "**",
       "!dist",
       "!dist-preview",
+      "!dist-server",
       "!test-results",
       "!playwright-report",
       "!node_modules",

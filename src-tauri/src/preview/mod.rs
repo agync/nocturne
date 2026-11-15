@@ -1,15 +1,17 @@
-//! A development-only server that puts the real app behind HTTP, so the real product (the
-//! private engine, the real models, every command) can be used from a browser, a phone on the
-//! owner's network included.
+//! The HTTP front that puts the real app behind a browser, so the real product (the private
+//! engine, the real models, every command) can be used without the desktop shell. Two programs
+//! use it: the development preview (`nocturne-preview`, the `preview` feature) and the
+//! experimental server (`nocturne-server`, the `server` feature, for the container image; see
+//! docs/adr/0012-server-mode.md).
 //!
 //! It builds the app on Tauri's mock runtime, the way the real-model end-to-end test does, and
 //! forwards what a browser sends to the app's own commands through the same window allowlist as
-//! the main window. It binds loopback only and is never packaged: it sits behind the `preview`
-//! feature, which no default or release build enables, and the package checks fail if it shows
-//! up in one.
+//! the main window. Neither feature is in a default or release desktop build, and the package
+//! checks fail if either program shows up in a desktop package.
 //!
-//! A bearer token, made at every launch, guards everything that carries data. The interface is
-//! served without it, since a browser cannot send a header for a page load.
+//! A bearer token guards everything that carries data: made at every launch for the preview,
+//! kept owner-only in the data folder for the server. The interface is served without it, since
+//! a browser cannot send a header for a page load.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -24,10 +26,12 @@ use tokio::sync::broadcast;
 mod auth;
 mod files;
 mod invoke;
+mod run;
 mod server;
 mod transcode;
 
-pub use auth::new_token;
+pub use auth::{Token, ensure_token_file, new_token, rotate_token_file};
+pub use run::{claim, public_origin, serve, start_app};
 pub use server::router;
 
 /// Text the server prints and the package checks look for in anything that ships.
@@ -52,8 +56,8 @@ pub(crate) const WORK_DIR: &str = "preview-tmp";
 #[derive(Clone, Debug)]
 pub struct Options {
     /// The bearer token every request carrying data must present.
-    pub token: String,
-    /// The one port the server listens on, on loopback.
+    pub token: Token,
+    /// The port the server listens on; `127.0.0.1` on it is always an accepted host.
     pub port: u16,
     /// Where the interface is reached from other machines, such as `https://host.example:8443`.
     pub public_origin: Option<String>,
