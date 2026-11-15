@@ -3,7 +3,7 @@
 use std::path::PathBuf;
 
 use nocturne_contract::{
-    AdvancedView, EVENT_EXPORT, ExportProgress, ExportReport, PrivacyView, SettingsPatch,
+    AdvancedView, EVENT_EXPORT, ExportProgress, ExportReport, NpuView, PrivacyView, SettingsPatch,
     SettingsView,
 };
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -160,15 +160,19 @@ pub async fn get_advanced<R: Runtime>(app: AppHandle<R>) -> Result<AdvancedView,
         let state = app.state::<AppState>();
         let e = engine(&app)?;
         let (stats, agents) = blocking(move || Ok((e.stats()?, e.settings()?.agents))).await?;
-        let (tier, engine) = match state.services() {
-            Some(services) => (services.tier(), services.engine_details().await),
-            None => (None, EngineDetails::default()),
+        let (tier, engine, npu) = match state.services() {
+            Some(services) => (
+                services.tier(),
+                services.engine_details().await,
+                services.npu.view(),
+            ),
+            None => (None, EngineDetails::default(), NpuView::default()),
         };
         Ok(AdvancedView {
             tier,
             ram_gib: 0,
             gpu: None,
-            npu: false,
+            npu,
             components: Vec::new(),
             engine_version: engine.version,
             engine_port: engine.port,

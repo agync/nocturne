@@ -380,7 +380,7 @@ pub struct AdvancedView {
     pub tier: Option<Tier>,
     pub ram_gib: u32,
     pub gpu: Option<String>,
-    pub npu: bool,
+    pub npu: NpuView,
     pub components: Vec<ComponentView>,
     pub engine_version: Option<String>,
     pub engine_port: Option<u16>,
