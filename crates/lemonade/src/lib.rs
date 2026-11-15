@@ -8,6 +8,7 @@ pub mod config;
 mod error;
 pub mod fit;
 pub mod fit_table;
+pub mod graphics;
 pub mod jobs;
 pub mod logpipe;
 pub mod mind;
