@@ -182,10 +182,12 @@ state and answers on this computer. It never appears in a view, event, notice, l
 
 ## Logs and core files
 
-The engine's output goes to Nocturne's own pipe and then to `lemond.log` (owner-only, rotated at
-8 MB, 3 files in all: `lemond.log`, `.1` and `.2`). The pipe withholds text after a provider error
-body marker (`Backend returned error response:`, `body:`, `Body:`), and every following line until
-one that starts with the engine's own log prefix, so a multi-line body is withheld whole. Any
+The engine's standard output and standard error go to Nocturne's own pipe, each redacted on its
+own, and then to `lemond.log` (owner-only, rotated at 8 MB, 3 files in all: `lemond.log`, `.1` and
+`.2`). The pipe withholds text after a provider error body marker (`Backend returned error
+response:`, `body:`, `Body:`), and every following line of that output until one that starts with
+the engine's own log prefix, so a multi-line body is withheld whole. Standard error never has that
+prefix, so a marker there withholds the rest of it until the engine starts again. Any
 occurrence of the key, or of its first or last eight characters, becomes `[key]`, and lines are
 capped at 1 KB. When the file falls behind, lines are dropped rather than the engine waiting. The
 engine's log level stays at

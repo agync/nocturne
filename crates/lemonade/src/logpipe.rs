@@ -1,5 +1,5 @@
-//! The engine's log, read from its standard output and written to `lemond.log` with provider
-//! bodies and the key withheld. Some of the engine's lines carry an upstream body: cut to
+//! The engine's log, read from its standard output and error and written to `lemond.log` with
+//! provider bodies and the key withheld. Some of the engine's lines carry an upstream body: cut to
 //! about 200 bytes in the streaming error and the discovery warning, and whole in the
 //! non-streaming error dump. A cut body can hold part of a key, so replacing the key is not
 //! enough: everything after a body marker is withheld up to the next line that starts with the
@@ -137,6 +137,36 @@ pub fn spawn_rotating_at<S>(
 where
     S: AsyncRead + Unpin + Send + 'static,
 {
+    pump(stdout, writer(file, rotate_at), redact)
+}
+
+/// [`spawn`] for both of the engine's outputs, into one file. Each is redacted on its own, so a
+/// body that starts on one is never ended by a line on the other. Standard error has no line
+/// that starts with the engine's prefix, so a body marker there withholds the rest of it for that
+/// launch. That is meant: it holds only errors from before the engine's log starts and what its
+/// backends print, and a body there could run to any length.
+pub fn spawn_both<S, E>(
+    stdout: S,
+    stderr: E,
+    file: PathBuf,
+    redact: Arc<Redactor>,
+    errors: Arc<Redactor>,
+) -> JoinHandle<()>
+where
+    S: AsyncRead + Unpin + Send + 'static,
+    E: AsyncRead + Unpin + Send + 'static,
+{
+    let tx = writer(file, ROTATE_AT);
+    let out = pump(stdout, tx.clone(), redact);
+    let err = pump(stderr, tx, errors);
+    tokio::spawn(async move {
+        let _ = out.await;
+        let _ = err.await;
+    })
+}
+
+/// The queue to a thread that writes lines to `file`.
+fn writer(file: PathBuf, rotate_at: u64) -> mpsc::Sender<String> {
     let (tx, rx) = mpsc::channel::<String>(QUEUE);
     if let Err(e) = std::thread::Builder::new()
         .name("lemond-log".into())
@@ -144,6 +174,14 @@ where
     {
         tracing::warn!("the engine's log has no writer: {e}");
     }
+    tx
+}
+
+/// Reads one output line by line, redacts each line and queues it for the writer.
+fn pump<S>(stdout: S, tx: mpsc::Sender<String>, redact: Arc<Redactor>) -> JoinHandle<()>
+where
+    S: AsyncRead + Unpin + Send + 'static,
+{
     tokio::spawn(async move {
         let mut stdout = stdout;
         let mut chunk = vec![0u8; 8192];

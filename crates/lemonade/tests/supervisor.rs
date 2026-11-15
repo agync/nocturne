@@ -288,6 +288,17 @@ async fn giving_up_on_ports_after_five_tries() {
         common::processes_mentioning(&dirs.cache().to_string_lossy()),
         Vec::<u32>::new()
     );
+    // What the engine said on standard error is kept, so a start that fails can be explained.
+    let log = dirs.logs().join("lemond.log");
+    let mut said = String::new();
+    for _ in 0..100 {
+        said = std::fs::read_to_string(&log).unwrap_or_default();
+        if said.contains("address already in use") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(said.contains("address already in use"), "{said:?}");
 }
 
 #[tokio::test]

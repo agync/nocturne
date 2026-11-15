@@ -945,9 +945,10 @@ impl Actor {
         let _ = self.admin.set_endpoint(None);
     }
 
-    /// Starts the engine. Its log goes to standard output, which the log pipe redacts into
-    /// `lemond.log`, hiding `key` (the route's, when there is one). The key is never in the
-    /// engine's environment: it is handed over after the engine answers (see `give_route`).
+    /// Starts the engine. Its log goes to standard output and its errors to standard error,
+    /// which the log pipe redacts into `lemond.log`, hiding `key` (the route's, if there is
+    /// one). The key is never in the engine's environment: it is handed over after the engine
+    /// answers (see `give_route`).
     fn spawn(
         &self,
         port: u16,
@@ -970,12 +971,16 @@ impl Actor {
         for (name, value) in spawn_env(&self.dirs, keys, &temp) {
             cmd.env(name, value);
         }
-        // A redactor of its own for each launch: the key it hides is this launch's.
-        let redact = Arc::new(Redactor::new());
-        redact.set_key(key);
+        // A redactor of its own for each launch and output: the key it hides is this launch's.
+        let redactor = || {
+            let r = Arc::new(Redactor::new());
+            r.set_key(key);
+            r
+        };
+        let (redact, errors) = (redactor(), redactor());
         cmd.stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+            .stderr(Stdio::piped());
         let mut wrap = CommandWrap::from(cmd);
         #[cfg(unix)]
         wrap.wrap(process_wrap::tokio::ProcessGroup::leader());
@@ -987,10 +992,16 @@ impl Actor {
             .map_err(|e| RuntimeError::Start(format!("could not run lemond: {e}")))?;
         let pgid = child.id().unwrap_or(0);
         let stdin = child.stdin().take();
-        let log = child
-            .stdout()
-            .take()
-            .map(|out| logpipe::spawn(out, self.dirs.logs().join("lemond.log"), redact));
+        let log = match (child.stdout().take(), child.stderr().take()) {
+            (Some(out), Some(err)) => Some(logpipe::spawn_both(
+                out,
+                err,
+                self.dirs.logs().join("lemond.log"),
+                redact,
+                errors,
+            )),
+            _ => None,
+        };
         Ok(Running {
             child,
             stdin,
