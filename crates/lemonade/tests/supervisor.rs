@@ -108,6 +108,7 @@ async fn the_child_environment_holds_only_what_we_allow() {
         .unwrap()
         .keys()
         .map(String::as_str)
+        .filter(|k| !common::set_by_the_platform(k))
         .collect();
     keys.sort_unstable();
     assert_eq!(

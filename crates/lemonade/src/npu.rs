@@ -411,6 +411,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "the PCI device folders it reads are Linux's, and their names hold a colon Windows refuses"
+    )]
     fn finds_an_npu_on_the_bus_without_a_driver() {
         let root = tempfile::tempdir().unwrap();
         let dev = |name: &str, vendor: &str, device: &str| {

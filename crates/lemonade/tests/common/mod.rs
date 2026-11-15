@@ -9,6 +9,26 @@ use nocturne_lemonade::Dirs;
 
 pub const FAKE: &str = env!("CARGO_BIN_EXE_fake-lemond");
 
+/// Whether a variable in a child's environment is there for the platform's sake rather than
+/// passed on purpose: on macOS, CoreFoundation sets `__CF_USER_TEXT_ENCODING` in every process
+/// that loads it, and on Windows the child gets `SystemRoot` (see [`clear_env`]).
+pub fn set_by_the_platform(name: &str) -> bool {
+    (cfg!(target_os = "macos") && name == "__CF_USER_TEXT_ENCODING")
+        || (cfg!(windows) && name == "SystemRoot")
+}
+
+/// Clears a child's environment as the supervisor does. Winsock cannot start in a Windows process
+/// without `SystemRoot`, so there it is passed on, as the supervisor passes it.
+pub fn clear_env(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    cmd.env_clear();
+    if cfg!(windows)
+        && let Some(root) = std::env::var_os("SystemRoot")
+    {
+        cmd.env("SystemRoot", root);
+    }
+    cmd
+}
+
 /// A bundle directory holding the fake engine under the name the supervisor looks for.
 pub fn bundle(parent: &Path) -> PathBuf {
     let dir = parent.join("bundle");
@@ -190,12 +210,11 @@ impl Fake {
             set_mode(&dirs, m);
         }
         let port = free_port();
-        let child = std::process::Command::new(FAKE)
+        let child = clear_env(&mut std::process::Command::new(FAKE))
             .arg(dirs.cache())
             .arg(dirs.config())
             .args(["--port", &port.to_string(), "--host", "127.0.0.1"])
             .args(["--no-broadcast", "--watchdog-fd", "0"])
-            .env_clear()
             .env("LEMONADE_API_KEY", "k3y")
             .env("LEMONADE_ADMIN_API_KEY", "adm1n")
             .stdin(std::process::Stdio::piped())
@@ -216,9 +235,16 @@ impl Fake {
         format!("http://127.0.0.1:{}{path}", self.port)
     }
 
-    async fn live_within(&self, tries: u32) -> bool {
-        for _ in 0..tries {
-            if let Ok(r) = self.http.get(self.url("/live")).send().await
+    /// Whether the fake answers `/live` within `limit`. Each probe has its own short limit: on
+    /// Windows a connection to a port nobody listens on takes about two seconds to be refused.
+    async fn live_within(&self, limit: Duration) -> bool {
+        let deadline = Instant::now() + limit;
+        while Instant::now() < deadline {
+            let probe = self
+                .http
+                .get(self.url("/live"))
+                .timeout(Duration::from_millis(500));
+            if let Ok(r) = probe.send().await
                 && r.status().is_success()
             {
                 return true;
@@ -228,23 +254,38 @@ impl Fake {
         false
     }
 
-    pub async fn wait_live(&self) {
-        assert!(self.live_within(100).await, "fake did not come up");
+    /// What a test that waited in vain reports: the port and whether the fake is still running.
+    fn not_live(&mut self, limit: Duration) -> String {
+        format!(
+            "fake-lemond did not answer /live on 127.0.0.1:{} within {limit:?} (exit status: {:?})",
+            self.port,
+            self.child.try_wait().ok().flatten()
+        )
+    }
+
+    pub async fn wait_live(&mut self) {
+        let limit = Duration::from_secs(5);
+        if !self.live_within(limit).await {
+            panic!("{}", self.not_live(limit));
+        }
     }
 
     /// Start a fake and wait for it. A free port is chosen, then released, then bound by the
     /// child, and another test's connection can take it in between (a Mac hands out the same
     /// range for both), so a fake that does not come up is started again on a new port.
     pub async fn started(mode: Option<&str>) -> Fake {
+        let limit = Duration::from_secs(3);
+        let mut last = String::new();
         for _ in 0..3 {
             let mut fake = Fake::start(mode);
-            if fake.live_within(60).await {
+            if fake.live_within(limit).await {
                 return fake;
             }
+            last = fake.not_live(limit);
             let _ = fake.child.kill();
             let _ = fake.child.wait();
         }
-        panic!("fake did not come up");
+        panic!("three tries: {last}");
     }
 
     pub fn wait_exit(&mut self, within: Duration) -> Option<std::process::ExitStatus> {

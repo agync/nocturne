@@ -8,7 +8,7 @@ use serde_json::Value;
 
 #[tokio::test]
 async fn live_needs_no_key_and_everything_else_does() {
-    let fake = common::Fake::start(None);
+    let mut fake = common::Fake::start(None);
     fake.wait_live().await;
     let no_key = fake.http.get(fake.url("/v1/health")).send().await.unwrap();
     assert_eq!(no_key.status(), 401);
@@ -59,7 +59,7 @@ async fn crash_mode_comes_from_config_and_exits_nonzero() {
 
 #[tokio::test]
 async fn echoes_its_environment() {
-    let fake = common::Fake::start(None);
+    let mut fake = common::Fake::start(None);
     fake.wait_live().await;
     let env: Value = fake
         .http
@@ -71,6 +71,11 @@ async fn echoes_its_environment() {
         .json()
         .await
         .unwrap();
-    let keys: Vec<&String> = env.as_object().unwrap().keys().collect();
+    let keys: Vec<&String> = env
+        .as_object()
+        .unwrap()
+        .keys()
+        .filter(|k| !common::set_by_the_platform(k))
+        .collect();
     assert_eq!(keys, vec!["LEMONADE_ADMIN_API_KEY", "LEMONADE_API_KEY"]);
 }
