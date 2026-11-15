@@ -14,3 +14,4 @@ not deleted.
 - [0009 Package locally and prove it stays local](0009-packaging.md) - Linux packages with the private engine inside, and a release-time proof that nothing leaves the computer.
 - [0010 Away from home, opt-in and sealed](0010-away-from-home.md) - Ask and keep from a paired phone through Cloudflare or Tailscale, sealed end to end, off by default.
 - [0011 Online answers, opt-in and through the engine](0011-online-answers.md) - A provider the person chose may write the last step of an answer, called by the embedded engine, bounded and logged.
+- [0012 Run as a server, experimental](0012-server-mode.md) - A nocturne-server program and container image for a browser, signed in with a token kept in the data folder, behind the person's own TLS proxy.
