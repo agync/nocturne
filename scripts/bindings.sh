@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Regenerate the TypeScript contract from crates/contract and write a barrel index.
 set -euo pipefail
+# Glob order follows the locale; byte order keeps the index the same everywhere.
+export LC_ALL=C
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 out=ui/src/engine/bindings
 rm -rf "$out"
