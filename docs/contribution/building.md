@@ -191,6 +191,16 @@ The script works in this order:
    the verified engine files back over whatever the AppImage tool rewrote, adds the licences of the
    bundled libraries and packs the AppImage again. It records the source package of every bundled
    library in `target/package/SOURCES.txt`, which ships beside the artefacts, not inside them.
+   The licences come from the build computer's package database, whichever of rpm and dpkg knows
+   its C library: on Fedora each package's licence tag and licence files, on Debian and Ubuntu
+   every licence the package's machine-readable copyright file names, with that file and the
+   common licence texts it refers to. A package whose copyright file does not name its licences
+   in a form that parses takes a reviewed licence from `DEBIAN_LICENCES` in
+   `scripts/bundled_libs.py`, and `BUNDLED-LIBRARIES.txt` says so; a package in neither fails the
+   step. `SOURCES.txt` names the source rpm, or the Debian source package and version
+   (`glib2.0_2.80.0-6ubuntu3.10`). The step prints one line per library with the package that
+   owns it. It fails at once when neither database knows the C library, and after the list,
+   naming them, when no package owns some of the libraries.
 5. It copies the artefacts to `target/package/` and writes `SHA256SUMS`.
 
 The version has one source: the workspace `Cargo.toml`. `tauri.conf.json` carries no version, and
