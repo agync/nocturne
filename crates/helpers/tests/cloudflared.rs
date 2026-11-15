@@ -244,7 +244,9 @@ async fn windows_key_by_environment_not_argv() {
         .await
         .unwrap();
     wait_state(&mut rx, "up", 180, is_up).await;
-    for record in sb.records("c") {
+    let records = sb.records("c");
+    assert!(!records.is_empty(), "the helper ran and was recorded");
+    for record in records {
         assert!(!argv(&record).iter().any(|a| a.contains(key)), "{record}");
         assert_eq!(record["env"]["TUNNEL_HTTP_HOST_HEADER"], key);
     }
