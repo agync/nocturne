@@ -15,7 +15,8 @@
 # docs built into one site and checked with axe, as docs/contribution/website.md describes), and
 # the tests on the other machines Nocturne ships for:
 #
-#   rust-platforms  rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64
+#   rust-platforms  rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64,
+#                   and the real engine started on Windows
 #   ui-platforms    the interface's unit tests on macOS and Windows
 #
 # A pull request that touches what the packages are built from also builds them, on the platforms
@@ -172,6 +173,33 @@ jobs:
           else
             cargo test --workspace --no-fail-fast
           fi
+      # The packaged engine itself, started as the app starts it. The tests above use a stand-in,
+      # which cannot show what the real engine needs from Windows. The download is kept per
+      # lemonade.lock and the script; scripts/fetch-lemonade.sh skips it when its stamp matches.
+      - name: Restore the engine download
+        id: engine-cache
+        if: runner.os == 'Windows'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/lemonade/windows-x86_64
+          key: lemonade-windows-x86_64-${{ hashFiles('lemonade.lock', 'scripts/fetch-lemonade.sh') }}
+      - name: Start the real engine
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          scripts/fetch-lemonade.sh
+          NOCTURNE_LEMOND=vendor/lemonade/windows-x86_64 cargo test -p nocturne-lemonade \
+            --test real -- --ignored --exact the_real_engine_starts_with_what_the_app_gives_it \
+            | tee engine-test.log
+          grep -q "test result: ok. 1 passed" engine-test.log
+      - name: Save the engine download
+        if: >-
+          runner.os == 'Windows' && github.ref == 'refs/heads/main'
+          && steps.engine-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: vendor/lemonade/windows-x86_64
+          key: lemonade-windows-x86_64-${{ hashFiles('lemonade.lock', 'scripts/fetch-lemonade.sh') }}
       - name: Save the Cargo caches
         if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
