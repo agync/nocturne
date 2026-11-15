@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.1](https://github.com/agync/nocturne/compare/v0.2.0...v0.2.1) (2026-11-15)
+
+
+### Bug Fixes
+
+* **lemonade:** a finished download keeps no window ([ada8893](https://github.com/agync/nocturne/commit/ada889391df0143735885c72ddeb44744860cf1c))
+* **package:** bundled licences on Debian hosts ([1916709](https://github.com/agync/nocturne/commit/1916709d47dca57c870bc498cf5db94d62804300))
+* **package:** leave the TIFF pixbuf loader out ([64bd6f6](https://github.com/agync/nocturne/commit/64bd6f647834bd90d2f54a529be04af369abaff6))
+* **package:** parse only real bundled entries ([c1d365f](https://github.com/agync/nocturne/commit/c1d365f747e6b98e1fe1e1bdaa845ac573455a11))
+* **package:** read cargo output as UTF-8 ([f5a3e1c](https://github.com/agync/nocturne/commit/f5a3e1c49185ff156654391743dd6cf09c3e237c))
+* **package:** unpack rpms with rpm2archive ([5f7cbd0](https://github.com/agync/nocturne/commit/5f7cbd0b5bfd662c3ecad8e09d95aa5720d10f95))
+
 ## [0.2.0](https://github.com/agync/nocturne/compare/v0.1.0...v0.2.0) (2026-11-15)
 
 
