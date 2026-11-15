@@ -4,12 +4,10 @@
   "bump-minor-pre-major": true,
   "draft": true,
   "force-tag-creation": true,
-  "bootstrap-sha": "7a98221e1f72f83557f5918358b76715d38b6cb6",
   "packages": {
     ".": {
       "release-type": "simple",
       "package-name": "nocturne",
-      "release-as": "0.1.0",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "extra-files": [

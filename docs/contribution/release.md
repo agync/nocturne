@@ -24,9 +24,10 @@ request and approves it; merging that pull request is the decision to publish.
 3. release-please tags the merge (`v<version>`) and creates the release page with the notes as a
    draft.
 4. The tag push starts the release workflow, which builds the packages, checks them and attaches
-   them to the draft with one `SHA256SUMS`. It also calls `tailnet.yml` for the Most private helper
-   and, for a tag push only, `flatpak.yml` for the Flatpak, which publishes to its own repository.
-5. When every file is attached and the Flatpak is published, the last job publishes the draft.
+   them to the draft with one `SHA256SUMS`. It also calls `tailnet.yml` for the Most private helper,
+   but only once `helpers.lock` has no `PLACEHOLDER` pins, and, for a tag push only, `flatpak.yml` for the Flatpak, which publishes to its own repository.
+5. When every file is attached, the Flatpak is published and the helper is attached or skipped, the
+   last job publishes the draft.
    A failed run leaves the draft in place.
 
 release-please runs in its own workflow, so the release workflow, which can wait days for a signing
@@ -64,17 +65,9 @@ must not be cut without them:
 
 ## The first release
 
-The first release is 0.1.0. The manifest (`.release-please-manifest.json`) records the last
-release as `0.0.0` because nothing has shipped, and the root package in
-`release-please-config.json` carries `"release-as": "0.1.0"`, which makes release-please propose
-that version whatever the commits since `bootstrap-sha` would give. The workspace `Cargo.toml` and
-`ui/package.json` already hold 0.1.0, so the version files do not change and the step that brings
-the lock files and the Flatpak metainfo to the version finds nothing to add.
-
-After 0.1.0 ships, remove `release-as` from `release-please-config.json` in a commit of its own, and
-remove `bootstrap-sha` with it, since release-please ignores that value once a release exists. The
-manifest then says `0.1.0`, and later versions follow the commits again. Left in place,
-`release-as` would pin every later release pull request to 0.1.0.
+The first release pull request (0.1.0) was merged, but its build failed on clean runners and the
+draft and tag were deleted before anything was published, so the first published release is 0.1.1.
+The manifest records 0.1.0 and versions follow the commits from there.
 
 To replace the generated notes of a release with a hand-written summary, edit the body of the
 release pull request just before merging it. release-please takes the release page's notes from

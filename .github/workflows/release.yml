@@ -49,6 +49,7 @@ jobs:
       build: ${{ steps.plan.outputs.build }}
       ref: ${{ steps.plan.outputs.ref }}
       tag: ${{ steps.plan.outputs.tag }}
+      helper: ${{ steps.plan.outputs.helper }}
     steps:
       # A draft release is visible only to a token with write access, so this one needs contents
       # write. The job runs no code from the repository.
@@ -102,6 +103,13 @@ jobs:
             || { echo "no release for $tag" >&2; exit 1; }
           echo "$tag is $sha"
           { echo "build=true"; echo "ref=$sha"; echo "tag=$tag"; } >> "$GITHUB_OUTPUT"
+          # The Most private helper ships only once helpers.lock pins its licence tool and address.
+          if gh api "repos/$GITHUB_REPOSITORY/contents/helpers.lock?ref=$sha" --jq .content \
+            | base64 -d | grep -q PLACEHOLDER; then
+            echo "helper=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "helper=true" >> "$GITHUB_OUTPUT"
+          fi
 
   linux:
     needs: plan
@@ -373,7 +381,7 @@ jobs:
   # only for a release tag.
   tailnet:
     needs: plan
-    if: ${{ !cancelled() && needs.plan.outputs.tag != '' }}
+    if: ${{ !cancelled() && needs.plan.outputs.tag != '' && needs.plan.outputs.helper == 'true' }}
     permissions:
       contents: write
     uses: ./.github/workflows/tailnet.yml
@@ -472,7 +480,7 @@ jobs:
     needs: [plan, publish, tailnet, flatpak]
     if: >-
       ${{ !cancelled() && needs.plan.outputs.tag != '' && needs.publish.result == 'success'
-      && needs.tailnet.result == 'success'
+      && (needs.tailnet.result == 'success' || needs.tailnet.result == 'skipped')
       && (needs.flatpak.result == 'success' || needs.flatpak.result == 'skipped') }}
     runs-on: ubuntu-24.04
     environment: release-app
