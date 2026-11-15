@@ -430,9 +430,7 @@ jobs:
           # copy of exactly one packaged file; the versioned originals stay.
           one() {
             local name=$1 pattern=$2 found=()
-            shopt -s nullglob
-            found=(out/$pattern)
-            shopt -u nullglob
+            mapfile -t found < <(compgen -G "out/$pattern" || true)
             [ "${#found[@]}" -eq 1 ] || { echo "$name: expected one $pattern, found ${#found[@]}" >&2; exit 1; }
             cp -- "${found[0]}" "out/$name"
           }
