@@ -18,11 +18,18 @@
 #   rust-platforms  rust/test on Linux arm64; the workspace tests on macOS arm64 and Windows x64
 #   ui-platforms    the interface's unit tests on macOS and Windows
 #
+# A pull request that touches what the packages are built from also builds them, on the platforms
+# release.yml builds on, unsigned and with nothing uploaded:
+#
+#   changes             decides from the changed paths whether the three jobs below run
+#   package-linux       scripts/package.sh and scripts/check-package.sh on Ubuntu 24.04, x86_64
+#   package-macos       scripts/package.sh --config macos and the disk image check on macOS 15
+#   package-windows     scripts/package.sh --config windows under Git Bash, and the installer sums
+#
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
-#   package, smoke, netcheck*         need the embedded engine bundle, a virtual display and a
-#                                     network namespace; release.yml builds and checks the packages
-#   macOS, Windows and arm64 packages release.yml builds them on their own runners
+#   smoke, netcheck*                  need a virtual display and a network namespace
+#   Linux arm64 package               release.yml builds it on its own runner
 #
 # The workflow holds no secret and never runs pull request code with a write token: it uses
 # `pull_request`, not `pull_request_target`, so Dependabot and fork pull requests are checked too.
@@ -32,6 +39,7 @@ on:
   pull_request:
   push:
     branches: [main]
+  workflow_dispatch:
 
 # A new push to a pull request cancels the run before it. A run on main always finishes.
 concurrency:
@@ -354,12 +362,232 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  # Whether this run builds the packages. A push to main and a hand run always do; a pull request
+  # does when it changes a path the packages are built from. The jobs that wait for the answer are
+  # skipped otherwise, and the gate treats a skipped job as passed.
+  changes:
+    name: packaging paths
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      packaging: ${{ steps.paths.outputs.packaging }}
+      linux: ${{ steps.paths.outputs.linux }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: paths
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          packaging=true
+          linux=true
+          if [ "$EVENT" = pull_request ]; then
+            git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed"
+            cat "$RUNNER_TEMP/changed"
+            common='^(scripts/|src-tauri/bundle/|src-tauri/tauri[^/]*\.json$|src-tauri/Cargo\.toml$|Cargo\.lock$|ui/package[^/]*\.json$|lemonade\.lock$|helpers\.lock$|\.github/workflows/(release|ci)\.yml$)'
+            packaging=false
+            linux=false
+            if grep -Eq "$common" "$RUNNER_TEMP/changed"; then
+              packaging=true
+              linux=true
+            elif grep -Eq '^flatpak/' "$RUNNER_TEMP/changed"; then
+              linux=true
+            fi
+          fi
+          echo "packaging=$packaging linux=$linux"
+          { echo "packaging=$packaging"; echo "linux=$linux"; } >> "$GITHUB_OUTPUT"
+
+  # The three package jobs set up each platform as release.yml does, then run the same commands.
+  # They sign nothing, upload nothing and read no secret. A package that builds here but fails
+  # the release is a bug in this file, not in the package.
+  package-linux:
+    name: package (linux x86_64)
+    needs: changes
+    if: needs.changes.outputs.linux == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          read -ra packages <<< "$APT_PACKAGES"
+          sudo apt-get install -y -qq --no-install-recommends "${packages[@]}" rpm
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Rust
+        run: rustup toolchain install
+      - name: Restore the Cargo caches
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+      - name: build the AppImage, deb and rpm
+        run: scripts/package.sh
+      - name: check each package
+        run: |
+          set -euo pipefail
+          for f in target/package/*.AppImage target/package/*.deb target/package/*.rpm; do
+            scripts/check-package.sh "$f"
+          done
+      - name: Save the Cargo caches
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
+  package-macos:
+    name: package (macos arm64)
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Rust
+        run: rustup toolchain install
+      - name: Restore the Cargo caches
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+      - name: build the app and the disk image (signed ad hoc)
+        run: scripts/package.sh --config macos
+      - name: check the disk image
+        run: scripts/check-package.sh target/package/*.dmg
+      - name: Save the Cargo caches
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
+  package-windows:
+    name: package (windows x64)
+    needs: changes
+    if: needs.changes.outputs.packaging == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Keep LF line endings
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.13"
+      # The scripts call python3, which Python on Windows does not provide by that name.
+      - name: python3 on the path
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/bin"
+          printf '#!/usr/bin/env bash\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
+          chmod +x "$RUNNER_TEMP/bin/python3"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - name: Rust
+        run: rustup toolchain install
+      - name: Restore the Cargo caches
+        id: cargo-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-package-${{ runner.os }}-${{ runner.arch }}-
+      - name: build the NSIS and MSI installers
+        run: scripts/package.sh --config windows
+      # scripts/check-package.sh reads Linux and macOS packages only; the installers are checked
+      # against their sums.
+      - name: check the installers
+        shell: pwsh
+        run: |
+          Set-Location target/package/windows
+          Get-Content SHA256SUMS | ForEach-Object {
+            $sum, $name = $_ -split '\s+\*?', 2
+            if ((Get-FileHash -Algorithm SHA256 $name).Hash.ToLower() -ne $sum) { throw "sha256 mismatch: $name" }
+            Write-Output "ok    $name"
+          }
+      - name: Save the Cargo caches
+        if: github.ref == 'refs/heads/main' && steps.cargo-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+            !target/package
+          key: cargo-package-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('Cargo.lock') }}
+
   # The one job to require in branch protection: it fails when any job above failed or was
-  # cancelled, and it says what this workflow does not cover.
+  # cancelled, and it says what this workflow does not cover. A package job that was skipped
+  # because no packaging path changed counts as passed.
   gate:
     name: gate
     if: always()
-    needs: [rust, rust-platforms, ui, ui-platforms, tailnet, hygiene, e2e, site]
+    needs:
+      - rust
+      - rust-platforms
+      - ui
+      - ui-platforms
+      - tailnet
+      - hygiene
+      - e2e
+      - site
+      - changes
+      - package-linux
+      - package-macos
+      - package-windows
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
@@ -369,7 +597,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$RESULTS" | jq -e 'all(.[]; .result == "success")' > /dev/null
+          echo "$RESULTS" | jq -e 'all(.[]; .result == "success" or .result == "skipped")' > /dev/null
       - name: What this run did not cover
         if: always()
         run: |
@@ -377,6 +605,6 @@ jobs:
             echo "### Not run by ci.yml"
             echo
             echo "- Real-model runs (\`make e2e-real\`, \`e2e-online\`, \`e2e-models\`): they download the real models, about 4.8 GB or more. Run them locally."
-            echo "- Packages, \`make smoke\` and \`make netcheck*\`: they need the embedded engine bundle, a virtual display and a network namespace. The release workflow builds and checks the packages."
-            echo "- macOS, Windows and Linux arm64 packages: the release workflow builds them on their own runners. Their tests run here."
+            echo "- \`make smoke\` and \`make netcheck*\`: they need a virtual display and a network namespace."
+            echo "- Linux arm64 packages: the release workflow builds them on their own runner. The Linux x86_64, macOS and Windows packages are built here when a pull request changes a packaging path."
           } >> "$GITHUB_STEP_SUMMARY"
