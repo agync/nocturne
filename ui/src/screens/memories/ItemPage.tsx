@@ -210,7 +210,11 @@ export function ItemPage({ id }: { id: string }) {
             {it.hasOriginal && it.originalPath ? (
               <Button
                 variant="quiet"
-                onClick={() => void platform.openPath(it.originalPath as string)}
+                onClick={() =>
+                  platform
+                    .openOriginal(id, it.originalPath as string)
+                    .catch(() => toast.show({ message: t("notice.action.failed") }))
+                }
               >
                 {t("item.action.open")}
               </Button>

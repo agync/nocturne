@@ -15,8 +15,11 @@ export interface Platform {
   pickFolder(): Promise<string | null>;
   /** Opens the folder an export just made, with the system's own app. */
   openPath(path: string): Promise<void>;
-  /** Opens the kept original of an item with the system's own app. */
-  openOriginal(itemId: string): Promise<void>;
+  /**
+   * Opens the kept original of an item with the system's own app. `shown` is the path the page
+   * shows it from, which is all the browser preview has to open.
+   */
+  openOriginal(itemId: string, shown: string): Promise<void>;
   /** Opens the folder of log files. */
   openLogs(): Promise<void>;
   /** A URL the page can show for a kept original on disk. */

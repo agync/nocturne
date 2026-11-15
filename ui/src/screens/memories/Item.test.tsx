@@ -168,10 +168,20 @@ describe("an original", () => {
 
   it("opens the stored original with the system's own app", async () => {
     const platform = fakePlatform();
-    const spy = vi.spyOn(platform, "openPath");
+    const spy = vi.spyOn(platform, "openOriginal");
     await open("item-letter", createMockEngine(), platform);
     await userEvent.click(screen.getByRole("button", { name: "Open original" }));
-    expect(spy).toHaveBeenCalledWith("originals/item-letter");
+    expect(spy).toHaveBeenCalledWith("item-letter", expect.any(String));
+  });
+
+  it("says so when the original cannot be opened", async () => {
+    const platform = fakePlatform();
+    vi.spyOn(platform, "openOriginal").mockRejectedValue(new Error("gone"));
+    await open("item-letter", createMockEngine(), platform);
+    await userEvent.click(screen.getByRole("button", { name: "Open original" }));
+    expect(
+      await screen.findByText("That didn’t work. Nothing was lost; try again in a moment."),
+    ).toBeInTheDocument();
   });
 
   it("forgets the original and its memories, then leaves for the list", async () => {
