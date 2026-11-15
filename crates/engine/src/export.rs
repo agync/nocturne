@@ -3,6 +3,7 @@
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
+use crate::private::Privacy;
 use nocturne_contract::{ExportReport, PageLine, PageView};
 use rusqlite::Connection;
 use serde_json::{Value, json};
@@ -218,6 +219,7 @@ impl Engine {
             .to_string();
         std::fs::create_dir_all(dir)?;
         let mut n = 0u32;
+        let mut private = true;
         let root: PathBuf = loop {
             let name = if n == 0 {
                 format!("Nocturne export {day}")
@@ -225,8 +227,11 @@ impl Engine {
                 format!("Nocturne export {day} ({n})")
             };
             let candidate = dir.join(name);
-            match fsutil::create_private_dir_new(&candidate) {
-                Ok(()) => break candidate,
+            match fsutil::create_chosen_dir_new(&candidate) {
+                Ok(privacy) => {
+                    private &= privacy == Privacy::Private;
+                    break candidate;
+                }
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => n += 1,
                 Err(e) => return Err(e.into()),
             }
@@ -236,8 +241,9 @@ impl Engine {
             committed: false,
         };
         let dir = guard.root.as_path();
-        fsutil::create_private_dir_new(&dir.join("pages"))?;
-        fsutil::create_private_dir_new(&dir.join("originals"))?;
+        for sub in ["pages", "originals"] {
+            private &= fsutil::create_chosen_dir_new(&dir.join(sub))? == Privacy::Private;
+        }
         let mut report = self.read(|conn| {
             // One snapshot for the whole export: what is written is one consistent moment,
             // however much changes while the files are being copied.
@@ -429,6 +435,7 @@ impl Engine {
                 pages: dates.len() as u32,
                 originals: copied,
                 path: String::new(),
+                not_private: false,
             })
         })?;
         // A forget or an undone keep began while files were being copied: what was written may
@@ -441,6 +448,7 @@ impl Engine {
         {
             return Err(Error::Busy);
         }
+        report.not_private = !private;
         report.path = guard.commit().to_string_lossy().into_owned();
         Ok(report)
     }

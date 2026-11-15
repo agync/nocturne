@@ -136,7 +136,7 @@ describe("Privacy", () => {
     expect(await screen.findByRole("progressbar", { name: "Exporting" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export to a folder…" })).toBeDisabled();
     await act(async () => {
-      finish({ path: "/chosen/x", memories: 1, pages: 2, originals: 3 });
+      finish({ path: "/chosen/x", memories: 1, pages: 2, originals: 3, notPrivate: false });
     });
     expect(await screen.findByText("Exported to /chosen/x.")).toBeInTheDocument();
     await waitFor(() =>

@@ -91,15 +91,8 @@ impl Dirs {
     }
 }
 
-#[cfg(unix)]
 fn restrict(dir: &Path) -> Result<(), RuntimeError> {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-fn restrict(_dir: &Path) -> Result<(), RuntimeError> {
+    nocturne_engine::private::restrict_dir(dir)?;
     Ok(())
 }
 

@@ -174,8 +174,9 @@ readable `online/sent.md` without the key, and are cleared by Delete everything.
 ## The key
 
 The key is kept in the system keychain (service `Nocturne`). Where there is no keychain, or it
-refuses, it is kept in a mode 0600 file (`online/key` in the data folder, in a mode 0700 folder) and
-the advanced view says so ("owner-only file" or "system keychain"). The file is left out of the
+refuses, it is kept in a mode 0600 file (`online/key` in the data folder, in a mode 0700 folder;
+on Windows the folder lets in the current user, SYSTEM and Administrators, through its access list) and the advanced
+view says so ("owner-only file" or "system keychain"). The file is left out of the
 export, and "Forget the key" and Delete everything remove it. If a removal fails, the view still
 says the key is kept. A key that cannot be read when first needed leaves Online answers in a problem
 state and answers on this computer. It never appears in a view, event, notice, log or export.
