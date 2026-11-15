@@ -41,6 +41,10 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # helpers.lock is read with tomllib, which ubuntu-22.04's Python 3.10 lacks.
+          python-version: "3.12"
       - id: pins
         name: pinned Go version (from helpers.lock)
         run: python3 -I -c 'import tomllib; l = tomllib.load(open("helpers.lock", "rb")); print("go=" + next(h for h in l["helpers"] if h["kind"] == "tailnet")["go_version"].removeprefix("go"))' >> "$GITHUB_OUTPUT"
@@ -88,6 +92,10 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
           persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          # helpers.lock is read with tomllib, which ubuntu-22.04's Python 3.10 lacks.
+          python-version: "3.12"
       - id: pins
         name: pinned versions (from helpers.lock)
         run: |
