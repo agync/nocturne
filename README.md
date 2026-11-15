@@ -44,12 +44,12 @@ Website: [nocturne.is](https://nocturne.is)
 Packages and checksums are on the [releases page](https://github.com/agync/nocturne/releases). The
 [install guide](docs/guide/install.md) covers each package and removal.
 
-| Platform | Status |
+| Platform | Packages |
 |---|---|
-| Linux x86_64 (AppImage, deb, rpm, Flatpak) | Tested |
-| Linux aarch64 (AppImage, deb, rpm, Flatpak) | Built by the release workflows; not yet run by a person |
-| macOS, Apple Silicon | Built and run |
-| Windows | Installer configuration exists; not yet run |
+| Linux x86_64 | AppImage, deb, rpm, Flatpak |
+| Linux aarch64 | AppImage, deb, rpm, Flatpak |
+| macOS, Apple Silicon | dmg |
+| Windows x64 | Setup program, msi |
 
 The first release is unsigned, so macOS and Windows may warn before opening it.
 
