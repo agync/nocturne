@@ -14,6 +14,8 @@ import zlib
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, HERE)
+import check_tree  # noqa: E402
+
 HOME = "/" + "home" + "/someone"
 BUILDER = "/" + "home" + "/builder"
 
@@ -406,6 +408,23 @@ class Review(unittest.TestCase):
         code, out = run_tree(self.tmp, "--kind", "appimage", "--sources", other)
         self.assertEqual(code, 1)
         self.assertIn("missing from the SOURCES manifest", out)
+
+
+class BundledDocument(unittest.TestCase):
+    def test_licence_text_that_looks_like_an_entry_or_a_file_is_not_one(self):
+        doc = (
+            "Shared libraries\n\n"
+            "libatomic1 14.2.0-4ubuntu2  (GPL-3.0-or-later WITH GCC-exception-3.1)\n"
+            "  source package: gcc-14_14.2.0-4ubuntu2\n"
+            "  libatomic.so.1\n\n"
+            "--- copyright\n"
+            "libgcc emulation  (hppa targets only)\n"
+            "  libgcc_s.so.1\n"
+        )
+        entries = check_tree.parse_bundled(doc)
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["files"], ["libatomic.so.1"])
+        self.assertEqual(entries[0]["srpm"], "gcc-14_14.2.0-4ubuntu2")
 
 
 if __name__ == "__main__":
