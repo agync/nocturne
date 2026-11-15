@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/agync/nocturne/compare/v0.2.1...v0.2.2) (2026-11-15)
+
+
+### Bug Fixes
+
+* **package:** find npm.cmd on Windows ([99c8707](https://github.com/agync/nocturne/commit/99c87076df3e23ec87c5089e988003b439f7d226))
+
 ## [0.2.1](https://github.com/agync/nocturne/compare/v0.2.0...v0.2.1) (2026-11-15)
 
 
