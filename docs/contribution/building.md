@@ -75,11 +75,16 @@ CI does not run what needs more than a hosted runner has, and the run summary of
 says so each time:
 
 - `make e2e-real`, `e2e-online` and `e2e-models` download the real models, about 4.8 GB or more.
-- `make package`, `make smoke` and `make netcheck*` need the embedded engine bundle, a virtual
-  display and a network namespace. The release workflow builds and checks the packages; the
-  rest runs on a developer's machine.
-- The packages for macOS, Windows and Linux arm64 are built by the release workflow, on their own
-  runners; CI runs only their tests.
+- `make smoke` and `make netcheck*` need a virtual display and a network namespace and run on a
+  developer's machine.
+- The Linux arm64 package is built by the release workflow, on its own runner.
+
+The Linux x86_64, macOS and Windows packages are built by CI too, unsigned and uploaded nowhere,
+so that a packaging bug fails a pull request and not a release. The `package-*` jobs run on a push
+to main, on a hand run, and on a pull request that changes `scripts/`, `src-tauri/bundle/`, a
+`src-tauri/tauri*.json` file, `src-tauri/Cargo.toml`, `Cargo.lock`, `ui/package*.json`,
+`lemonade.lock`, `helpers.lock`, `release.yml` or `ci.yml` (the Linux job also runs for
+`flatpak/`). On any other pull request they are skipped and `gate` counts that as a pass.
 
 The workflow installs `okf` at a version and checksum written in `ci.yml`, and pins every action
 by commit. Dependabot keeps the actions, the Cargo crates, the interface packages and the helper's

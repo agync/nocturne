@@ -44,6 +44,7 @@ jobs:
   # release tag. Every job checks out the commit resolved here, never a name.
   plan:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: release-app
     outputs:
       build: ${{ steps.plan.outputs.build }}
@@ -428,6 +429,7 @@ jobs:
       && (vars.MACOS_SIGNING != 'true' || needs.check-macos.result == 'success')
       && (vars.WINDOWS_SIGNING != 'true' || needs.sign-windows.result == 'success') }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 30
     environment: release-app
     permissions:
       contents: read
@@ -503,6 +505,7 @@ jobs:
       && (needs.tailnet.result == 'success' || needs.tailnet.result == 'skipped')
       && (needs.flatpak.result == 'success' || needs.flatpak.result == 'skipped') }}
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     environment: release-app
     permissions:
       contents: read
