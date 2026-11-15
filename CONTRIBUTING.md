@@ -16,6 +16,8 @@ if you touch those parts.
 
 ## Rules
 
+- **Design before build.** Anything a person sees starts as a design in `docs/design/` (screens
+  or mockups, copy and behaviour) and is agreed before it is built.
 - **One topic per pull request and per commit.** Stage explicit paths.
 - **Conventional Commits.** Summary under 50 characters, body lines under 72, for example
   `fix: keep the page after a restart`. Prefer a summary alone.

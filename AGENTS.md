@@ -5,6 +5,14 @@ you one page each morning. It is a Tauri 2 app (Rust core, web-view interface) t
 supervises a private, embedded Lemonade server. It targets people who are not technical about AI.
 The design lives in `docs/` (start at `docs/overview.md` and `docs/design/`).
 
+## Design and experience lead
+
+Nocturne is design and experience led. Anything a person sees or touches (screens, flows, copy,
+errors, notifications, the site, the install path) is agreed as design first: the screens or
+mockups, the copy and the behaviour are written down in `docs/design/` and approved before
+implementation starts. Code follows the agreed design. A change to what a person sees goes back
+through design, not around it.
+
 ## Invariants
 
 1. **No elevation.** Never run `sudo`, a system package manager, or a privileged script unless a
@@ -28,6 +36,8 @@ The design lives in `docs/` (start at `docs/overview.md` and `docs/design/`).
 10. **Parallel work in worktrees.** One worktree per change, on a branch rebased on the latest `main`.
 11. **Automation over manual conformance.** `make check` and the git hooks own style and quality.
     Never bypass hooks.
+12. **Design before build.** Nothing a person sees is implemented before its screens, copy and
+    behaviour are agreed in `docs/design/`.
 
 ## Automation and conventions
 

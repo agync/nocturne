@@ -41,6 +41,8 @@ flowchart LR
 
 ## Rules a first change trips on
 
+- Anything a person sees starts as a design in `docs/design/` (screens or mockups, copy and
+  behaviour) and is approved before it is built. Code follows the agreed design.
 - Interface text follows the [experience principles](../design/experience-principles.md): no model,
   token, GPU, NPU, embedding or graph outside an advanced details view.
 - Every answer and page line cites its original, and nothing leaves the computer except the
