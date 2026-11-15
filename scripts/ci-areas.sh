@@ -20,8 +20,9 @@ package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist
 
 names=(rust rust-platforms ui ui-platforms scripts tailnet site package package-linux)
 declare -A areas=(
-    # The Rust tests read ui/ and write the bindings there.
-    [rust]="^($rust_side|ui/|scripts/bindings\.sh$)"
+    # The Rust tests read ui/ and write the bindings there, and the interop tests run the phone
+    # client from ui/ against the Rust side.
+    [rust]="^($rust_side|ui/|scripts/(bindings|away-integration|away-test-programs)\.sh$)"
     # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
     [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
     # The interface's tests import scripts/build-tokens.mjs and read src-tauri/.

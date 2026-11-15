@@ -5,7 +5,8 @@
 # jobs below run the same Makefile targets in parallel. Together they cover everything `make check`
 # does:
 #
-#   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check
+#   rust       rust/lint (rustfmt, clippy twice), rust/test (two runs), contract/check, and the
+#              Away from home interop tests (scripts/away-integration.sh interop)
 #   ui         ui/lint, ui/test
 #   scripts    scripts/test
 #   tailnet    tailnet/test, which fails instead of skipping when the pinned Go is missing
@@ -155,6 +156,19 @@ jobs:
       # Regenerates the TypeScript bindings and fails when the committed ones are stale.
       - name: Contract drift
         run: make contract/check
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      # The Rust test phone and the TypeScript phone client against each other's real side
+      # (ui/interop). It reuses this job's build of the dependencies; only the crates built with
+      # the stand-in helpers are compiled again.
+      - name: Away from home interop
+        run: |
+          set -euo pipefail
+          make ui/install
+          scripts/away-integration.sh interop
 
   # The Rust tests on the other machines Nocturne ships for. Linux on Arm runs both test runs of
   # rust/test; macOS and Windows run the workspace tests, since the server is built for Linux only.
