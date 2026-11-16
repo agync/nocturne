@@ -4,6 +4,7 @@ import { type CopyId, t } from "../../copy/t";
 import type { RemoteView } from "../../engine/bindings";
 import { usePage, useStatus } from "../../engine/context";
 import { useRemote } from "../../screens/away/useRemote";
+import { Icon, type IconName } from "../Icon/Icon";
 import { Mark, markStateFor } from "../Mark/Mark";
 import styles from "./Rail.module.css";
 
@@ -17,6 +18,8 @@ interface RailProps {
 interface Entry {
   to: string;
   label: CopyId;
+  /** Drawn before the label. A control chip names the link with the same icon. */
+  icon?: IconName;
   /** Other paths that keep this entry marked as the current one. */
   also?: string[];
 }
@@ -32,7 +35,7 @@ const MAIN: Entry[] = [
 
 const FOOT: Entry[] = [
   { to: "/privacy", label: "rail.privacy" },
-  { to: "/settings", label: "rail.settings" },
+  { to: "/settings", label: "rail.settings", icon: "settings" },
 ];
 
 function isCurrent(entry: Entry, location: string): boolean {
@@ -95,7 +98,14 @@ export function Rail({ onNavigate, brand = true }: RailProps) {
         aria-current={current ? "page" : undefined}
         onClick={onNavigate}
       >
-        <span>{t(entry.label)}</span>
+        {entry.icon ? (
+          <span className={styles.named}>
+            <Icon name={entry.icon} size={16} />
+            {t(entry.label)}
+          </span>
+        ) : (
+          <span>{t(entry.label)}</span>
+        )}
         {entry.to === "/today" && page ? (
           <span className={styles.mono}>{formatWeekday(page.date)}</span>
         ) : null}{" "}
