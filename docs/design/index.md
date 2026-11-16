@@ -7,4 +7,4 @@ screen follows, the data model, and how quality is measured.
 - [Experience principles](experience-principles.md) - The rules every screen, string and flow follows.
 - [Data model](data-model.md) - The event tape, the fact graph, the status lifecycle and the provenance rules.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
-- [Quick keep shortcut through the desktop, proposed copy](shortcut-portal-copy.md) - Proposed words for the shortcut where the desktop holds it, awaiting approval.
+- [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
