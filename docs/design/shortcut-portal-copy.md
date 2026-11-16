@@ -53,6 +53,17 @@ shortcut. Change it in your desktop's keyboard settings."
 
 A "Try again" button asks the desktop again. "Set it to run:" and the command stay as they are.
 
+## 3a. While the desktop is asking
+
+Added after the first test on GNOME, where the desktop's window stayed open for minutes and the
+row showed only the keys. Approved by the owner on 2026-11-16.
+
+| Place | Now | Approved |
+|---|---|---|
+| Note under the row | none | Your desktop is asking whether to add this shortcut. |
+
+No button shows while the desktop is asking.
+
 ## 4. The guide's paragraph (Desktops, Quick keep shortcut)
 
 Proposed replacement for the paragraph that starts "On most current desktops":
