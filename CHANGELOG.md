@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.4.0](https://github.com/agync/nocturne/compare/v0.3.0...v0.4.0) (2026-11-16)
+
+
+### Features
+
+* **app:** back up and restore from the app shell ([45f82fd](https://github.com/agync/nocturne/commit/45f82fdd46e5f8e87879e49cba5e4f4136819646))
+* **engine:** back up the store with a passphrase ([7e13bff](https://github.com/agync/nocturne/commit/7e13bff0c9bb7790a80a451998f5f4447dec4fdb))
+* **lemonade:** run the mind on the NPU ([da1bf96](https://github.com/agync/nocturne/commit/da1bf965cd0c8da7d6a0a5497b0386de6be0b13d))
+* **ui:** back up and restore screens ([29cc23a](https://github.com/agync/nocturne/commit/29cc23a0dfb58d6013f979a4beef0853fa16aedb))
+* **ui:** say what the NPU's mind does ([f0c8813](https://github.com/agync/nocturne/commit/f0c881336cf6958ab3a13d91ba5f52752bd9e64e))
+* **ui:** say when desktop settings do not open ([4b15a87](https://github.com/agync/nocturne/commit/4b15a87ef048c508b55c8d8f13d5b918b81011cd))
+
+
+### Bug Fixes
+
+* **engine:** compare a restored schema in full ([09a938c](https://github.com/agync/nocturne/commit/09a938cf4b7f2f8a74cfe45104439d816f477aee))
+* **os:** remove the old in-sandbox start entry ([b31d0dd](https://github.com/agync/nocturne/commit/b31d0dda6575c531a9d59bc1ccb3c53f58bfb229))
+* **os:** survive portal restarts and races ([3217bdb](https://github.com/agync/nocturne/commit/3217bdbc53a9b5bb96611ad00570a21970e38156))
+* **os:** withdraw an unanswered Background ask ([ebe59c7](https://github.com/agync/nocturne/commit/ebe59c7df80e8d5535124994585a6b9d044cbc7e))
+
 ## [0.3.0](https://github.com/agync/nocturne/compare/v0.2.2...v0.3.0) (2026-11-16)
 
 
