@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Icon } from "../../components/Icon/Icon";
 import { type CopyId, t } from "../../copy/t";
 import { useEngine } from "../../engine/context";
@@ -189,8 +190,9 @@ export function Consent({
       <div className={styles.sec}>
         <h2>{t("online.consent.mind.heading")}</h2>
         <p className={styles.body}>
-          {mind} {t("online.consent.mind.rest")}
+          {mind} {tc("online.consent.mind.rest")}
         </p>
+        <p className={styles.body}>{tc("online.consent.mind.where")}</p>
       </div>
 
       {failed ? (

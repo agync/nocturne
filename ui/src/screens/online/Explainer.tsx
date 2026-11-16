@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Chevron } from "../../components/Disclosure/Chevron";
 import { t } from "../../copy/t";
 import styles from "./Online.module.css";
@@ -36,7 +37,7 @@ export function Explainer({ onNext, onLeave }: { onNext: () => void; onLeave: ()
           </ul>
           <p className={styles.sub}>{t("online.explain.aside.fallback")}</p>
           <p className={styles.sub} style={{ paddingTop: 12, borderTop: "1px solid var(--rule)" }}>
-            {t("online.explain.aside.off")}
+            {tc("online.explain.aside.off")}
           </p>
         </>
       }

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CheckOutcome } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import type { OnlineScenario } from "../../engine/mock/online";
+import { chipsIn, sentence } from "../../test/sentence";
 import { openOnline } from "./testing";
 
 afterEach(() => {
@@ -78,6 +79,31 @@ describe("setup", () => {
     await click("Open Advanced details");
     await heading(CONNECT);
     expect(window.location.hash).toBe("#/settings/advanced/online?from=online");
+  });
+
+  it("service_step: says where the form is later, with the words of the controls on the way", async () => {
+    await openOnline(`${SETUP}?step=send`, "off", STEP2);
+    const where = screen.getByText(
+      sentence(
+        "Later, find it in Settings, then Show advanced details, then Connect an online service.",
+      ),
+    );
+    expect(chipsIn(where)).toEqual([
+      "Settings",
+      "Show advanced details",
+      "Connect an online service",
+    ]);
+  });
+
+  it("explainer: says what is needed without sending the person off, and where to turn it off", async () => {
+    await openOnline(SETUP, "off", STEP1);
+    expect(
+      screen.getByText(
+        "An account with an online service. You add its details in step 2, and Nocturne checks that they work.",
+      ),
+    ).toBeInTheDocument();
+    const off = screen.getByText(sentence("Turn it off at any time in Settings or Privacy."));
+    expect(chipsIn(off)).toEqual(["Settings", "Privacy"]);
   });
 
   it("service_step: without a passed check, going straight to a later step asks for one", async () => {
@@ -249,6 +275,16 @@ describe("setup", () => {
     expect(screen.getByRole("switch", { name: "Questions from your phones" })).toBeChecked();
   });
 
+  it("send_lead: says where these choices can be changed later", async () => {
+    await toSend();
+    const lead = screen.getByText(
+      sentence(
+        "Nocturne only sends what each answer needs. You can change these later in Settings, under Online answers.",
+      ),
+    );
+    expect(chipsIn(lead)).toEqual(["Settings", "Online answers"]);
+  });
+
   it("sensitive_off_by_default: health, money and ID stay here until switched on", async () => {
     await toSend();
     expect(screen.getByRole("switch", { name: "Health, money and ID details" })).not.toBeChecked();
@@ -285,6 +321,12 @@ describe("setup", () => {
     expect(
       screen.getByText(/Then questions are answered on this computer until the 1st/),
     ).toBeInTheDocument();
+    const hint = screen.getByText(
+      sentence(
+        "Then questions are answered on this computer until the 1st. Settings shows how many are left, under Online answers.",
+      ),
+    );
+    expect(chipsIn(hint)).toEqual(["Settings", "Online answers"]);
     expect(screen.queryByText(/Changed from 200/)).toBeNull();
     expect(
       screen.getByText(/doesn’t tell Nocturne what each one costs, so the limit counts questions/),
@@ -347,6 +389,12 @@ describe("setup", () => {
     expect(screen.getByText(/can see each question, the lines sent with it/)).toBeInTheDocument();
     expect(screen.getByText(/Nocturne can’t check what the service keeps/)).toBeInTheDocument();
     expect(screen.getByText(/At most 200 questions a month go online/)).toBeInTheDocument();
+    const off = screen.getByText(sentence("Turn it off at any time in Settings or Privacy."));
+    expect(chipsIn(off)).toEqual(["Settings", "Privacy"]);
+    const receipts = screen.getByText(
+      sentence("Every answer says where it was written. See what was sent shows the exact words."),
+    );
+    expect(chipsIn(receipts)).toEqual(["See what was sent"]);
     await userEvent.click(within(choices).getByRole("button", { name: "Change: Monthly limit" }));
     await heading(STEP4);
   });
