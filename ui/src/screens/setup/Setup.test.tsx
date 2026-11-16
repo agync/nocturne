@@ -345,6 +345,7 @@ describe("what this computer can run", () => {
     await open("choosing", "#/setup?step=choosing");
     const why = await screen.findByRole("button", { name: "Why this one?" });
     expect(why).toHaveAttribute("aria-expanded", "false");
+    expect(why.firstElementChild).toHaveAttribute("data-chevron");
     await userEvent.click(why);
     expect(why).toHaveAttribute("aria-expanded", "true");
     expect(

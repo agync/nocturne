@@ -84,6 +84,7 @@ describe("Make a backup: the form", () => {
     await open();
     const more = screen.getByRole("button", { name: "Advanced details" });
     expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(more.firstElementChild).toHaveAttribute("data-chevron");
     await userEvent.click(more);
     expect(more).toHaveAttribute("aria-expanded", "true");
     expect(

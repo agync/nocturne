@@ -6,7 +6,7 @@ import { goTo } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
-import { Icon } from "../../components/Icon/Icon";
+import { Chevron } from "../../components/Disclosure/Chevron";
 import { Progress } from "../../components/Progress/Progress";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { TextInput } from "../../components/TextInput/TextInput";
@@ -856,7 +856,7 @@ function Advanced({
         aria-controls={id}
         onClick={onToggle}
       >
-        <Icon name="chevron-down" size={16} />
+        <Chevron />
         {t("advanced.title")}
       </button>
       {open ? (

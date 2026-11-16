@@ -95,6 +95,7 @@ describe("Restore from a backup: choosing a file", () => {
     await pick(platform);
     const more = screen.getByRole("button", { name: "Advanced details" });
     expect(more).toHaveAttribute("aria-expanded", "false");
+    expect(more.firstElementChild).toHaveAttribute("data-chevron");
     await userEvent.click(more);
     expect(more).toHaveAttribute("aria-expanded", "true");
     expect(screen.getAllByText("Nocturne backup 2026-11-15.nocturne").length).toBeGreaterThan(1);
