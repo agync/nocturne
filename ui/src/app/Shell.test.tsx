@@ -3,6 +3,8 @@ import { resolve } from "node:path";
 import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { CHIPS } from "../components/ControlChip/registry";
+import { t } from "../copy/t";
 import type { EngineClient } from "../engine/client";
 import { createMockEngine } from "../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../test/render";
@@ -162,6 +164,17 @@ describe("rail", () => {
       "Past pages",
     ]);
     expect(names.slice(6)).toEqual(["Privacy", "Settings"]);
+  });
+
+  it("draws the gear beside Settings, as the Settings chip does, and no icon beside Privacy", async () => {
+    renderApp();
+    const settings = await screen.findByRole("link", { name: "Settings" });
+    expect(settings.querySelector("svg")).toHaveAttribute("data-icon", CHIPS.settings.icon);
+    expect(settings.querySelector("svg")).toHaveAttribute("aria-hidden", "true");
+    expect(t(CHIPS.settings.copy)).toBe(settings.textContent?.trim());
+    const privacy = screen.getByRole("link", { name: "Privacy" });
+    expect(privacy.querySelector("svg")).toBeNull();
+    expect(t(CHIPS.privacy.copy)).toBe(privacy.textContent?.trim());
   });
 
   it("shows the state and what was sent to the internet, from the live status", async () => {

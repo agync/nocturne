@@ -55,6 +55,12 @@
   box-shadow: 0 0 0 1px var(--rule);
 }
 
+.named {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+
 .mono {
   color: var(--ink3);
   font: 400 0.75rem / 1.33 var(--font-mono);
