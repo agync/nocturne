@@ -6,6 +6,7 @@ import { EngineProvider } from "../../engine/context";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
 import { PlatformProvider } from "../../platform/context";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
+import { chipsIn, sentence } from "../../test/sentence";
 import { RestoreFlow } from "./Restore";
 
 const PASS = "lantern orchard tuesday";
@@ -170,9 +171,10 @@ describe("Restore from a backup: the empty computer", () => {
     expect(screen.getByText("Away from home")).toBeInTheDocument();
     expect(screen.getByText("Away from home settings")).toHaveAttribute("href", "#/settings/away");
     expect(screen.getByText("What was here before")).toBeInTheDocument();
-    expect(
-      screen.getByText("Put aside 15 Nov. Bring it back any time from Privacy."),
-    ).toBeInTheDocument();
+    const before = screen.getByText(
+      sentence("Put aside 15 Nov. Bring it back any time from Privacy."),
+    );
+    expect(chipsIn(before)).toEqual(["Privacy"]);
     expect(screen.getByRole("button", { name: "Open today’s page" })).toBeInTheDocument();
   });
 });
@@ -208,6 +210,12 @@ describe("Restore from a backup: replacing what is here", () => {
       name: "Replace what’s on this computer?",
     });
     expect(heading).toHaveFocus();
+    const body = screen.getByText(
+      sentence(
+        "Restoring puts what’s on this computer now aside, then brings in the backup. Nothing is deleted. You can bring back what was here from Privacy.",
+      ),
+    );
+    expect(chipsIn(body)).toEqual(["Privacy"]);
     expect(screen.getByRole("heading", { level: 2, name: "In the backup" })).toBeInTheDocument();
     expect(screen.getByText("Comes in")).toBeInTheDocument();
     expect(
@@ -456,11 +464,12 @@ describe("Restore from a backup: in setup", () => {
         "Downloads next, during setup (8.4 GB). Your memories and pages are here meanwhile.",
       ),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Off until you paste the key for your provider again. You can do that in Settings later.",
+    const later = screen.getByText(
+      sentence(
+        "Off until you paste the key for your provider again. Do that later in Settings, under Online answers.",
       ),
-    ).toBeInTheDocument();
+    );
+    expect(chipsIn(later)).toEqual(["Settings", "Online answers"]);
     expect(screen.queryByText("Set up online answers")).toBeNull();
     expect(screen.queryByText("Away from home settings")).toBeNull();
     expect(screen.queryByRole("link", { name: "Privacy" })).toBeNull();

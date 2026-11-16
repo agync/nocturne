@@ -5,6 +5,7 @@ import type { BackupReport } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
+import { chipsIn, sentence } from "../../test/sentence";
 
 const PASS = "lantern orchard tuesday";
 const BACKUP = "/backups/Nocturne backup 2026-11-15.nocturne";
@@ -78,6 +79,10 @@ describe("Make a backup: the form", () => {
     await open(engine);
     expect(await screen.findByText("The key for your provider.")).toBeInTheDocument();
     expect(screen.getByText("Phones you added.")).toBeInTheDocument();
+    const again = screen.getByText(
+      sentence("You add them again in Settings, under Away from home."),
+    );
+    expect(chipsIn(again)).toEqual(["Settings", "Away from home"]);
   });
 
   it("keeps the technical rows behind Advanced details, and says what is left out", async () => {
@@ -204,6 +209,12 @@ describe("Make a backup: a run", () => {
       screen.getByText(/^4\.3 GB · \d+ memories, \d+ pages and \d+ originals$/),
     ).toBeInTheDocument();
     expect(screen.getByText("It opens with your passphrase.")).toBeInTheDocument();
+    const another = screen.getByText(
+      sentence(
+        "On another computer, install Nocturne and choose Restore from a backup. You’ll need the passphrase.",
+      ),
+    );
+    expect(chipsIn(another)).toEqual(["Restore from a backup"]);
     expect(screen.getByRole("heading", { level: 1 })).toHaveFocus();
     passphraseNotShown();
 

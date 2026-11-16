@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EngineError } from "../../engine/client";
 import type { ModelsScenario } from "../../engine/mock/models";
 import { renderApp, setViewport } from "../../test/render";
+import { chipsIn } from "../../test/sentence";
 import { modelsEngine } from "./testing";
 
 beforeEach(() => setViewport(1280));
@@ -142,7 +143,9 @@ describe("picker", () => {
 
   it("picker.aloud_single_choice: one voice, informational, nothing to confirm", async () => {
     await open("/settings/models/aloud");
-    await screen.findByText(/is the only voice Nocturne can use for now/);
+    const only = await screen.findByText(/is the only voice Nocturne can use for now/);
+    expect(only).toHaveTextContent(/Choose its voice and speed in Settings, under Voice\.$/);
+    expect(chipsIn(only)).toEqual(["Settings", "Voice"]);
     const radios = screen.getAllByRole("radio");
     expect(radios).toHaveLength(1);
     expect(radios[0]).toBeDisabled();
@@ -163,6 +166,10 @@ describe("confirm", () => {
     expect(dialog).toHaveTextContent("220 GB now, about 214 GB after");
     expect(dialog).toHaveTextContent("Up to 7.4 GB, down from 8.1 GB · fits");
     expect(dialog).toHaveTextContent("Nocturne hasn’t been tested with it.");
+    expect(chipsIn(dialog)).toEqual(["Privacy"]);
+    expect(dialog).toHaveTextContent(
+      "The download is listed in Privacy, like every download you agree to.",
+    );
     expect(within(dialog).getByRole("button", { name: "Not now" })).toHaveFocus();
     expect(sim.view().change).toBeNull();
     await user.click(within(dialog).getByRole("button", { name: "Download 6.2 GB" }));

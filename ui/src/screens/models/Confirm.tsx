@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Dialog } from "../../components/Dialog/Dialog";
 import { t } from "../../copy/t";
 import type { ChangePreview } from "../../engine/bindings";
@@ -148,7 +149,7 @@ export function Confirm({
           </>
         )}
       </dl>
-      {downloads ? <p className={styles.hint}>{t("models.confirm.listed")}</p> : null}
+      {downloads ? <p className={styles.hint}>{tc("models.confirm.listed")}</p> : null}
       {failed ? (
         <p className={styles.hint} role="alert">
           {t("models.confirm.failed")}
