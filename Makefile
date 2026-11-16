@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models preview-real helpers-pin phone tailnet/test \
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help preview-real helpers-pin phone tailnet/test \
 	server/build server/image \
 	site site/serve site/clean
 
@@ -117,6 +117,9 @@ e2e-online: ## Run the real small mind with Online answers on against the stand-
 
 e2e-models: ## Run the real models with a model chosen for each job
 	scripts/e2e-real.sh models
+
+e2e-help: ## Run the help check on the real models of one size (NOCTURNE_E2E_TIER)
+	scripts/e2e-real.sh help
 
 ##@ Away from home
 

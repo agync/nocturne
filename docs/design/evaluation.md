@@ -65,6 +65,29 @@ peak grew by 2.5 MB during a 50 MB upload, and after turning it off and after qu
 or listener of Nocturne was left. These are the app's own figures, not the real helper's, and Mac
 and Windows are not measured.
 
+## Help with Nocturne (the help check)
+
+Whether a size of computer may write help answers from the guide is decided by the check in
+[Help with Nocturne, from the ask box](in-app-help.md#blending-on-small-computers-a-gate-for-each-size):
+18 help questions, 5 memory questions that share words with the guide, and 6 mixed questions,
+against eleven seeded memories, each asked three times on this computer. A size passes only when
+every check holds in every run.
+
+| Check | Pass |
+|---|---|
+| Finds the right section | An expected guide section is cited for at least 16 of the 18 help questions |
+| No help where none was asked | No memory question gets a help answer or the guide's words; the unsure prompt for at most 1 |
+| No blending | No sentence citing the guide holds a name, number, date, place or thing of a memory, and no sentence citing a memory holds a control of the guide |
+| Faithful steps | Every control a guide sentence names is spelled as the control is and is in the cited section, in the section's order |
+| Both halves | At least 5 of the 6 mixed questions cite the right section and the right memory |
+| Speed | First useful sentence under 3 seconds at the 95th percentile |
+
+The set and the scoring are in `src-tauri/tests/eval/help.rs`. `cargo test -p nocturne-app --test
+help` runs it on a scripted mind, which checks the wiring and the scoring, not a size; `make
+e2e-help` runs it on the real models of the size `NOCTURNE_E2E_TIER` sets up and writes
+`help.json` with the checks per run and every sentence the script could not settle, for a person
+to read. No size has passed yet, so every size shows the guide's own words.
+
 ## Online answers on the smallest tier (S1b)
 
 Measured against a stand-in provider with a larger model, on the smallest tier, with the same

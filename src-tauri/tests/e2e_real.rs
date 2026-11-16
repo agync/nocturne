@@ -43,6 +43,11 @@
 //! reranking or lines), so the answer step is measured on its own (`answer_only` in the results).
 //! `NOCTURNE_E2E_FROZEN_ASK=<runs>` asks them through the app instead, over the same perfect
 //! store, which measures search and answering together (`frozen_ask`).
+//!
+//! The help check: `NOCTURNE_E2E_HELP=<runs>` skips keeping and reading too. The store gets the
+//! memories the check seeds, and its 29 questions are asked that many times through the app with
+//! help written on this computer (`help_check` in the results). A size passes only when every
+//! check passes in every run; `crate::help::WRITES_HELP` then records it.
 
 mod common;
 mod eval;
@@ -887,6 +892,8 @@ struct Answer {
     answered_by: Value,
     /// What was kept back from an online question, as the last delta said.
     left_out: Value,
+    /// What the guide added, as the last delta said.
+    help: Value,
 }
 
 impl Asker {
@@ -952,6 +959,7 @@ impl Asker {
                     answer.answered_by =
                         serde_json::to_value(&d.answered_by).unwrap_or(Value::Null);
                     answer.left_out = serde_json::to_value(d.left_out).unwrap_or(Value::Null);
+                    answer.help = serde_json::to_value(&d.help).unwrap_or(Value::Null);
                     if d.plain {
                         answer.plain = true;
                         answer.text = plain(&answer.text);
@@ -1169,6 +1177,13 @@ fn the_whole_product_works_with_real_models() {
         .or_else(|| runs_of("NOCTURNE_E2E_FROZEN_ASK").map(|n| (n, "frozen_ask")));
     // Before anything reads: the store holds a perfect reading and nothing is waiting.
     let fixture = frozen.map(|_| seed_fixture(&h.engine(), &h.clock));
+    let help_runs = runs_of("NOCTURNE_E2E_HELP").filter(|_| frozen.is_none());
+    let help_ids: Option<HashMap<&'static str, String>> = help_runs.map(|_| {
+        eval::help::SEEDS
+            .iter()
+            .map(|s| (s.key, h.learn(s.note, s.sentence, s.subject, s.object).1))
+            .collect()
+    });
     let online_model =
         std::env::var("NOCTURNE_E2E_ONLINE_MODEL").unwrap_or_else(|_| "stand-in-model".to_string());
     let stand_in = (std::env::var("NOCTURNE_E2E_ONLINE").as_deref() == Ok("stand-in"))
@@ -1500,6 +1515,57 @@ fn the_whole_product_works_with_real_models() {
             "failed checks: {:?}",
             failed.iter().map(|c| c.id).collect::<Vec<_>>()
         );
+        return;
+    }
+
+    if let (Some(runs), Some(ids)) = (help_runs, help_ids.as_ref()) {
+        mem.phase("help");
+        let inner = h.state().mind.get().expect("a mind");
+        let recorder = Arc::new(eval::help::Recorder::new(inner));
+        h.state().mind.set(recorder.clone());
+        let embedded = block_on(embed_all(&h.engine(), recorder.as_ref()));
+        h.state().help.set_writes(Some(true));
+        tap.drain();
+        let report = eval::help::run_check(runs, ids, |text| {
+            let n = recorder.answers();
+            let a = asks.ask(&h, text);
+            let replies = tap.drain();
+            let reply = replies
+                .iter()
+                .find(|r| r["step"] == "answer")
+                .and_then(|r| r["reply"].as_str())
+                .unwrap_or_default();
+            let said = if recorder.answers() > n {
+                eval::help::cited_sentences(reply, &recorder.facts_of(n))
+            } else {
+                Vec::new()
+            };
+            let (help, sections) = eval::help::help_of(&a.help);
+            eval::help::HelpAnswer {
+                phase: a.phase.clone(),
+                help,
+                sections,
+                memory_ids: a.memory_ids.clone(),
+                said,
+                first_sentence: a.first_sentence_ms.map(Duration::from_millis),
+            }
+        });
+        run.put(
+            "help_check",
+            json!({"tier": tier_name(), "embedded": embedded, "report": report}),
+        );
+        run.check(
+            "help.check",
+            "the help check passes in every run",
+            report["pass"] == true,
+            format!("{runs} runs, tier {}", tier_name()),
+        );
+        h.state().run_exit_hooks();
+        let _ = std::fs::write(
+            run.dir.join(format!("help{}.json", run.tag)),
+            serde_json::to_string_pretty(&report).unwrap_or_default(),
+        );
+        println!("help check: pass = {}", report["pass"]);
         return;
     }
 
