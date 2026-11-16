@@ -1,5 +1,60 @@
 # Changelog
 
+## [0.3.0](https://github.com/agync/nocturne/compare/v0.2.2...v0.3.0) (2026-11-16)
+
+
+### Features
+
+* **lemonade:** find Intel graphics on the computer ([fa25efd](https://github.com/agync/nocturne/commit/fa25efd8ad22e86f298b5111a091821cdf7273cd))
+* **lemonade:** run Intel and NVIDIA on Vulkan ([2fb8cf7](https://github.com/agync/nocturne/commit/2fb8cf7d8b59b9e412bcfb5049cc8a0ecef86c0e))
+* **os:** hold quick keep through the portal ([761c70b](https://github.com/agync/nocturne/commit/761c70b11514ca7788317e2833a9b215b1756739))
+* show the shortcut the desktop holds ([fbcbe39](https://github.com/agync/nocturne/commit/fbcbe394cea3c61ff26dd0ec7196aa61b26efd2a))
+* **site:** answer the requirements in four rows ([977ba38](https://github.com/agync/nocturne/commit/977ba380969fa552bd3a84ae319ef8826b0eddcc))
+* **site:** lead with one promise, cut repeats ([759fedf](https://github.com/agync/nocturne/commit/759fedf8849d2339c3ef9fc26029d279ece35eb8))
+* **site:** share card leads with the new line ([32740ae](https://github.com/agync/nocturne/commit/32740ae76d9e47e56c61ef01a10989f7a1b122f7))
+* **site:** show the phone beside the extras ([07860c2](https://github.com/agync/nocturne/commit/07860c2ded71ab5672710338007409d0dd7f2f36))
+* **ui:** say when the desktop is asking ([991fa77](https://github.com/agync/nocturne/commit/991fa773e957fffcfa66549ebedde09e96bf05b1))
+
+
+### Bug Fixes
+
+* **app:** say Cmd in the tray on a Mac ([3c1197d](https://github.com/agync/nocturne/commit/3c1197d9394c14dd12c5720340d7024ca6284313))
+* **helpers:** hide the helper's key in its log ([391f7a1](https://github.com/agync/nocturne/commit/391f7a17b3064983b10992de815954908579c9c1))
+* keep private folders private on Windows ([8f04419](https://github.com/agync/nocturne/commit/8f04419f01c3f245dd90e9c4dc20603e51ce71c4))
+* keep Unix-only code out of Windows builds ([ac1b365](https://github.com/agync/nocturne/commit/ac1b36503e70ff943e16efac1a642df74b7fdab5))
+* **lemonade:** give the engine a Windows profile ([fd23d21](https://github.com/agync/nocturne/commit/fd23d216a7800355f07babfcdb93878edb668d60))
+* **lemonade:** hide any part of a key in the log ([68c1a39](https://github.com/agync/nocturne/commit/68c1a395f1675fb70a707f9a5cf15f2d639d2bdd))
+* **lemonade:** hide the engine's keys in its log ([953507f](https://github.com/agync/nocturne/commit/953507f768fe0f080b7f6ed7d6b14e17ac54bf9c))
+* **lemonade:** keep the engine's errors ([cfef6bb](https://github.com/agync/nocturne/commit/cfef6bb9de437c6075edadd04783cc38f48deb3c))
+* **lemonade:** make each redactor with its keys ([78663a8](https://github.com/agync/nocturne/commit/78663a8120a4ccd0c93095de45355288dc5fcb89))
+* **lemonade:** name a failed start plainly ([8a75f55](https://github.com/agync/nocturne/commit/8a75f550983f838fdbfa6527149ea6fa13b0ae75))
+* **lemonade:** polish the log's error paths ([17882aa](https://github.com/agync/nocturne/commit/17882aa367e095ae3f3d99ee1ba6b21485d223da))
+* **lemonade:** reopen the log after a failed write ([7253d80](https://github.com/agync/nocturne/commit/7253d80cb6ea8874310e3966d316541e1173ccaa))
+* **lemonade:** reopen the log, join its writer ([fd3c1c6](https://github.com/agync/nocturne/commit/fd3c1c6a8848142f0d4e5ab81056fd17afa90e00))
+* **lemonade:** report log rotation errors and retry locks ([5d35e73](https://github.com/agync/nocturne/commit/5d35e7353a76071b9fbe8b7dce1b74a3acf1c372))
+* **lemonade:** retry a delete-pending log ([d535dd4](https://github.com/agync/nocturne/commit/d535dd4b452c409b11e645840a8a9e2e67824157))
+* let setup try a failed engine again ([7d9a9b2](https://github.com/agync/nocturne/commit/7d9a9b2f22f7972d6bfb5cf4d25ce1a57a63a747))
+* open the data folder from Privacy ([94535ef](https://github.com/agync/nocturne/commit/94535ef15e22115746a0a41da2a03514cd028e4a))
+* **os:** offer flatpak run for quick keep ([8d1d506](https://github.com/agync/nocturne/commit/8d1d506292562e39a9dde5fa2ce3f62c1dd35516))
+* **os:** start at login through the portal ([b288fab](https://github.com/agync/nocturne/commit/b288fab6968ffa62638c1a0730fbeff18a06bc98))
+* **os:** trust only the portal, withdraw asks ([801f58b](https://github.com/agync/nocturne/commit/801f58b302aa1ee355dad90be808910a69ed343b))
+* **os:** wait as long as the desktop asks ([99fb6ac](https://github.com/agync/nocturne/commit/99fb6ac2bcfd579eec0cab93a6484f2ab396300c))
+* reopen an unfinished first setup ([25bafc3](https://github.com/agync/nocturne/commit/25bafc3986149edd722a89bacf9536b446d24fe0))
+* say from disk whether setup ever began ([1ec96dc](https://github.com/agync/nocturne/commit/1ec96dc73c01c0959ec38dd7dcbcf861c7a15431))
+* show only the card in quick capture ([653428c](https://github.com/agync/nocturne/commit/653428c41cf9e38e281928a0620dc03ae0f0d6a8))
+* **site:** centre the tour frame on screen ([401c285](https://github.com/agync/nocturne/commit/401c285abbabce3016c9df1cc8ab86d420de8119))
+* **site:** match setup memory and Arm to docs ([2beb542](https://github.com/agync/nocturne/commit/2beb542c9c88117b3eb6090e3cdf2d34717661a5))
+* **site:** name AMD and NVIDIA cards alike ([7214df0](https://github.com/agync/nocturne/commit/7214df01e87ce559144636c110c9cffa6e411a3b))
+* **site:** name the Mac keep shortcut ([8f5dc1d](https://github.com/agync/nocturne/commit/8f5dc1d7665e4cb5dc0e61fe0c63862a9234fc4d))
+* start programs without a console window ([7a282d0](https://github.com/agync/nocturne/commit/7a282d088c3f07a46e3047124d00d09fc900b743))
+* **tray:** keep the icon file in the app cache ([84f372e](https://github.com/agync/nocturne/commit/84f372e0698deb6076651c64ea84eb76ac853486))
+* **ui:** give the theme back after setup ([da27692](https://github.com/agync/nocturne/commit/da276922b29f3f08daa455b877348b5bde32600f))
+* **ui:** open an original with its own command ([fa7f9b4](https://github.com/agync/nocturne/commit/fa7f9b41dfef7125a4a7dac4edb65cbb383f6466))
+* **ui:** open setup on a first run ([0d32426](https://github.com/agync/nocturne/commit/0d32426b3d984533de0bc8400b4d7ee9f9de8619))
+* **ui:** open the logs, and say when it fails ([bb34471](https://github.com/agync/nocturne/commit/bb34471e6ca2016d0c7704638f84144afc846484))
+* **ui:** restore the spelled-out shortcut keys ([51c279b](https://github.com/agync/nocturne/commit/51c279b04c9a98d40ba2f25ea000c03941475d1e))
+* **ui:** spell out the shortcut's keys ([d851207](https://github.com/agync/nocturne/commit/d8512079647d3e6228760d0f231b2ce932b3f2c0))
+
 ## [0.2.2](https://github.com/agync/nocturne/compare/v0.2.1...v0.2.2) (2026-11-15)
 
 
