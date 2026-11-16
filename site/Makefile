@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help site docs serve check shots brand clean
+.PHONY: help site docs strings serve check shots brand clean
 
 # The public origin, used for the canonical and Open Graph links.
 SITE_URL ?= https://nocturne.is
@@ -48,6 +48,9 @@ help: ## Show this help
 site: docs ## Build the landing page and the docs into dist/ (the deploy directory)
 	python3 -I scripts/build.py assemble --site-url "$(SITE_URL)" --render $(BUILD)/render \
 		--lock ../lemonade.lock . $(DIST)
+
+strings: ## Check every language has every string, none unknown, none stale
+	python3 -I scripts/build.py strings .
 
 docs: ## Render ../docs with the Nocturne theme into build/render
 	$(if $(NEED_TOOLCHAIN),@test -x $(OKF_WIKI) || ./toolchain.sh)

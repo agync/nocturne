@@ -8,14 +8,15 @@ tags: [contribution, website, docs, cloudflare]
 
 # The website
 
-The public site is one directory of static files: a hand-written landing page and this docs
-bundle rendered under `/docs/`. Everything lives in `site/`, and nothing is deployed from this
+The public site is one directory of static files: a hand-written landing page, install page and
+not-found page in six languages, and this docs bundle rendered under `/docs/` in English. Everything lives in `site/`, and nothing is deployed from this
 repository by a command. Publishing is the owner's decision.
 
 | Path | What it is |
 |---|---|
-| `site/index.html`, `site/404.html` | The landing page and the not-found page, plain HTML with no inline script or style |
-| `site/assets/` | The stylesheet, the theme switch and tour scripts, the self-hosted fonts, the screenshots and the Open Graph image |
+| `site/index.html`, `site/install.html`, `site/404.html` | The templates of the landing, install and not-found pages: plain HTML with no inline script or style, each string named by an id |
+| `site/i18n/` | The words, one file per language, keyed by those ids (see [Languages](#languages)) |
+| `site/assets/` | The stylesheet, the theme switch, tour, install and language scripts, the self-hosted fonts, the screenshots and the Open Graph image |
 | `site/docs-theme/` | The okf-wiki theme for `/docs/`: the app's colours and faces, and a link back to the landing page |
 | `site/_headers` | Response headers, including the content security policies; the build fills in the docs' script hashes |
 | `site/wrangler.jsonc` | The Cloudflare Worker `nocturne`: static assets only, serving `site/dist/`, with the empty `previews` block pull request builds need |
@@ -31,8 +32,10 @@ make site SITE_URL=https://example.org     # the origin for the canonical and Op
 ```
 
 `SITE_URL` defaults to `https://nocturne.is`. `make site` renders `docs/` with okf-wiki, then
-copies the landing page and its assets into `site/dist/`, fills in the site origin and the pinned
-Lemonade version from `lemonade.lock`, and writes `site/dist/_headers`.
+writes the landing, install and not-found pages once per language into `site/dist/` (English at
+the root, the others under `/de/`, `/fr/`, `/es/`, `/it/` and `/nl/`), copies the assets, fills in
+the site origin and the pinned Lemonade version from `lemonade.lock`, and writes
+`site/dist/_headers`.
 
 Two renderers give the same output:
 
@@ -57,11 +60,41 @@ make site/serve                            # http://127.0.0.1:4180 with the head
 make -C site check                         # axe, policy errors, 360 px, keyboard, screenshots
 ```
 
-The check runs axe on the landing page and on docs pages in both themes at 1440 and 390 px, fails
-on any console or policy error and on sideways scrolling, tabs to the theme buttons, and confirms
-the theme chosen on the landing page carries into the docs. A few findings come from markup the
-renderer writes itself (linked section titles in the sidebar, wide tables, the search button);
-they are reported as warnings because the theme cannot change them.
+The check runs axe on the landing page, the install page, their German and French copies and docs
+pages in both themes at 1440 and 390 px, fails on any console or policy error and on sideways
+scrolling, tabs to the theme buttons, and confirms the theme chosen on the landing page carries
+into the docs. A few findings come from markup the renderer writes itself (linked section titles in
+the sidebar, wide tables, the search button); they are reported as warnings because the theme
+cannot change them.
+
+## Languages
+
+The design is [the site in five languages](../design/site-localisation.md), and the approved words
+are in [site copy](../design/site-copy/index.md). In the templates, `{{t:id}}` is a string,
+`{{p:/install}}` a link to another page of the site (`/de/install` on the German page), and
+`{{en_link}}` with `{{en_mark}}` mark a link to the English docs on a translated page. The build
+writes the language switch, the footer list, the `hreflang` links and `og:locale` itself.
+
+`site/i18n/en.json` maps each id to its English, written as it appears in the page. Every other
+language maps each id to its words and to the English they were translated from:
+
+```json
+"page.title": { "text": "Morgens sehen, was ansteht.", "from": "Wake to what needs you." }
+```
+
+```bash
+make site/strings                          # also part of make lint and make site
+```
+
+The check fails when a language lacks an id, has one English lacks, or was translated from English
+that has since changed. To change the words, change the English and the copy page together, then
+each language's `text` and `from`. Words in an attribute (a description, an alt text, a label)
+cannot hold a straight quote or markup. In the translations, a plain space before a unit, and in
+French before `: ; ? !` and inside « », becomes a no-break space in the build.
+
+The install page's seven messages stay in `assets/js/install.js` in English; a translated page
+carries its own in `data-msg-*` attributes. `assets/js/lang.js` shows the one-line offer of another
+language on the English pages; the build fills in its words.
 
 ## Screenshots
 
@@ -78,7 +111,7 @@ make -C site shots PHONE=http://127.0.0.1:4174   # writes site/assets/img/*.webp
 ```
 
 `make shots` prints where the highlighted part of each tour picture sits. When a recapture moves
-it, copy the numbers into that step's `data-mark` in `site/index.html`.
+it, copy the numbers into that step's `data-mark` in `site/index.html`; the translated pages share it.
 
 On wide screens, when the reader has not asked for reduced motion, `assets/js/tour.js` turns the
 Keep, Ask and morning page steps into one still frame beside the text: as each step reaches the

@@ -232,19 +232,22 @@ kbd {
   padding: 0 var(--gutter);
 }
 
-/* Header */
+/* Header: the brand, the page's links, then one group of preferences (the colour theme and the
+   language). One row from 640 px up; the links to sections of the page join it from 1024 px. Below
+   640 px the brand and the preferences share the first row and the links take the second. */
 
 .top {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "brand nav prefs";
   align-items: center;
-  justify-content: space-between;
-  gap: 12px 20px;
-  flex-wrap: wrap;
+  gap: 12px 24px;
   padding: 22px 0;
   border-bottom: 1px solid var(--rule);
 }
 
 .brand {
+  grid-area: brand;
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -266,14 +269,18 @@ kbd {
 }
 
 .nav {
+  grid-area: nav;
+  justify-self: end;
   display: flex;
   align-items: center;
-  gap: 8px 22px;
-  flex-wrap: wrap;
+  gap: 20px;
   font-size: 0.875rem;
+  white-space: nowrap;
 }
 
 .nav a {
+  display: inline-flex;
+  align-items: center;
   color: var(--ink2);
   text-decoration: none;
   padding: 6px 0;
@@ -282,36 +289,229 @@ kbd {
 .nav a:hover {
   color: var(--ink);
   text-decoration: underline;
+  text-underline-offset: 4px;
 }
 
-.theme {
+.nav a[aria-current="page"] {
+  color: var(--ink);
+}
+
+.prefs {
+  grid-area: prefs;
   display: flex;
+  align-items: center;
   gap: 2px;
   padding: 2px;
   border: 1px solid var(--rule);
   border-radius: 6px;
 }
 
+.theme {
+  display: flex;
+  gap: 2px;
+}
+
 .theme button {
+  display: grid;
+  place-items: center;
+  width: 30px;
   height: 28px;
-  padding: 0 10px;
+  padding: 0;
   border: 0;
   border-radius: 4px;
   background: transparent;
   color: var(--ink2);
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 500;
   cursor: pointer;
 }
 
 .theme button:hover {
   color: var(--ink);
+  background: var(--mat);
 }
 
 .theme button[aria-pressed="true"] {
   background: var(--ink);
   color: var(--sheet);
+}
+
+/* Languages: the switch in the header, the list in the footer, the offer under the header on the
+   English pages, the mark on links to the English docs and the note on translated pages */
+
+.lang {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lang::before {
+  content: "";
+  width: 1px;
+  height: 18px;
+  margin: 0 2px;
+  background: var(--rule);
+}
+
+.lang summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lang summary::-webkit-details-marker {
+  display: none;
+}
+
+.lang summary::after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  margin: 0 1px 0 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-1.5px) rotate(45deg);
+  transition: transform var(--settle);
+}
+
+.lang[open] summary::after {
+  transform: translateY(1.5px) rotate(225deg);
+}
+
+.lang summary:hover,
+.lang[open] summary {
+  color: var(--ink);
+  background: var(--mat);
+}
+
+.lang-globe {
+  flex: none;
+}
+
+.lang-code {
+  display: none;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.lang ul {
+  position: absolute;
+  right: -3px;
+  top: calc(100% + 8px);
+  z-index: 5;
+  min-width: 168px;
+  margin: 0;
+  padding: 6px;
+  list-style: none;
+  background: var(--raised);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.lang a {
+  display: block;
+  padding: 7px 10px;
+  border-radius: 4px;
+  color: var(--ink2);
+  font-size: 0.875rem;
+  text-decoration: none;
+}
+
+.lang a:hover {
+  color: var(--ink);
+  background: var(--mat);
+}
+
+.lang a[aria-current="true"] {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.foot-langs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex-basis: 100%;
+}
+
+.foot-langs a[aria-current="true"] {
+  color: var(--ink);
+}
+
+.en-mark {
+  margin-left: 6px;
+  padding: 1px 4px;
+  line-height: 1.2;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.04em;
+}
+
+.lang-note {
+  max-width: 520px;
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ink3);
+}
+
+.offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin: 0;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+  font-size: 0.875rem;
+  color: var(--ink2);
+}
+
+.offer a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.offer-close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 1.125rem;
+  cursor: pointer;
+}
+
+.offer-close:hover {
+  color: var(--ink);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Shared pieces */
@@ -864,10 +1064,6 @@ figcaption {
   color: var(--sheet);
 }
 
-.nav a[aria-current="page"] {
-  color: var(--ink);
-}
-
 .get {
   display: flex;
   flex-direction: column;
@@ -1205,11 +1401,68 @@ figcaption {
   color: var(--ink2);
 }
 
-@media (max-width: 760px) {
-  .nav-section {
-    display: none;
+@media (max-width: 1279px) {
+  .top {
+    column-gap: 20px;
   }
 
+  .nav {
+    gap: 16px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .nav .nav-section {
+    display: none;
+  }
+}
+
+@media (max-width: 639px) {
+  .top {
+    grid-template-columns: auto auto;
+    grid-template-areas:
+      "brand prefs"
+      "nav nav";
+    justify-content: space-between;
+    gap: 14px 12px;
+    padding: 18px 0 10px;
+  }
+
+  .nav {
+    justify-self: start;
+    gap: 22px;
+  }
+}
+
+@media (max-width: 439px) {
+  /* The short code shows; the full name stays in the summary's name for screen readers. */
+  .lang-name {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .lang-code {
+    display: inline;
+  }
+}
+
+@media (max-width: 379px) {
+  .top {
+    column-gap: 8px;
+  }
+
+  .theme button {
+    width: 26px;
+  }
+
+  .lang summary {
+    gap: 4px;
+    padding: 0 6px;
+  }
 }
 
 @media (max-width: 959px) {
@@ -1323,6 +1576,8 @@ figcaption {
 
 @media print {
   .top .nav,
+  .prefs,
+  .offer,
   .skip {
     display: none;
   }

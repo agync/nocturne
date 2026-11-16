@@ -1,7 +1,7 @@
-// Checks the served site: axe on the landing page, the install page and a few docs pages in both
-// themes, no policy violations or console errors, no sideways scrolling at 360 px (320 px for the
-// install page), the theme buttons work from the keyboard, and full-page screenshots at 1440 and
-// 390 px.
+// Checks the served site: axe on the landing page, the install page, their German and French
+// copies and a few docs pages in both themes, no policy violations or console errors, no sideways
+// scrolling at 360 px (320 px for the install page), the theme buttons work from the keyboard, and
+// full-page screenshots at 1440 and 390 px.
 //
 //   make serve                                  # in another terminal
 //   node site/scripts/check.mjs http://127.0.0.1:4180
@@ -32,6 +32,10 @@ const pages = [
   { name: "docs-concept", path: "/docs/design/concept.html", shoot: false },
   { name: "docs-install", path: "/docs/guide/install.html", shoot: false },
   { name: "not-found", path: "/no-such-page", shoot: false },
+  { name: "landing-de", path: "/de/", shoot: true },
+  { name: "install-de", path: "/de/install", shoot: true },
+  { name: "landing-fr", path: "/fr/", shoot: false },
+  { name: "not-found-nl", path: "/nl/no-such-page", shoot: false },
 ];
 const sizes = [
   { name: "1440", width: 1440, height: 900 },
@@ -74,7 +78,7 @@ try {
         });
         page.on("pageerror", (e) => problems.push(`pageerror: ${e.message.slice(0, 200)}`));
         const response = await page.goto(origin + p.path, { waitUntil: "networkidle" });
-        const expected = p.name === "not-found" ? 404 : 200;
+        const expected = p.name.startsWith("not-found") ? 404 : 200;
         if (response.status() !== expected) fail(`${p.name}: status ${response.status()}`);
         await page.evaluate(async () => {
           for (const img of document.querySelectorAll("img[loading=lazy]")) img.loading = "eager";

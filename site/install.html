@@ -1,24 +1,26 @@
 <!doctype html>
-<html lang="en-GB">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Get Nocturne · Download for Mac, Windows and Linux</title>
-<meta name="description" content="Download Nocturne for a Mac with an Apple chip, a Windows 10 or 11 computer, or a Linux desktop. Free and open source, with no account. The first time it opens, it sets itself up for the computer it is on.">
+<title>{{t:install.title}}</title>
+<meta name="description" content="{{t:install.description}}">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
-<link rel="canonical" href="{{SITE_URL}}/install">
+<link rel="canonical" href="{{SITE_URL}}{{p:/install}}">
+{{alternates}}
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Nocturne">
-<meta property="og:locale" content="en_GB">
-<meta property="og:title" content="Get Nocturne · Download for Mac, Windows and Linux">
-<meta property="og:description" content="Free and open source, with no account. The first time it opens, Nocturne sets itself up for the computer it is on.">
-<meta property="og:url" content="{{SITE_URL}}/install">
+<meta property="og:locale" content="{{og_locale}}">
+{{og_alternates}}
+<meta property="og:title" content="{{t:install.title}}">
+<meta property="og:description" content="{{t:install.og.description}}">
+<meta property="og:url" content="{{SITE_URL}}{{p:/install}}">
 <meta property="og:image" content="{{SITE_URL}}/assets/img/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data.">
+<meta property="og:image:alt" content="{{t:head.og.image.alt}}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="{{SITE_URL}}/assets/img/og.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -28,37 +30,42 @@
 <link rel="preload" href="/assets/fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="/assets/css/site.css">
 <script src="/assets/js/theme.js"></script>
+{{suggest_script}}
 <script src="/assets/js/install.js" defer></script>
 </head>
 <body>
-<a class="skip" href="#main">Skip to content</a>
+<a class="skip" href="#main">{{t:header.skip}}</a>
 <div class="wrap">
 
 <header class="top">
-  <a class="brand" href="/" aria-label="Nocturne, home">
+  <a class="brand" href="{{p:/}}" aria-label="{{t:header.brand.aria}}">
     <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
     <span>Nocturne</span>
   </a>
-  <nav class="nav" aria-label="Main">
-    <a class="nav-section" href="/#how">How it works</a>
-    <a class="nav-section" href="/#privacy">Privacy</a>
-    <a class="nav-section" href="#needs">Requirements</a>
-    <a href="/install" aria-current="page">Download</a>
-    <a href="/docs/">Docs</a>
-    <div class="theme" role="group" aria-label="Colour theme">
-      <button type="button" data-theme-choice="system" aria-pressed="true">System</button>
-      <button type="button" data-theme-choice="light" aria-pressed="false">Light</button>
-      <button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button>
-    </div>
+  <nav class="nav" aria-label="{{t:nav.aria}}">
+    <a class="nav-section" href="{{p:/}}#how">{{t:nav.how}}</a>
+    <a class="nav-section" href="{{p:/}}#privacy">{{t:nav.privacy}}</a>
+    <a class="nav-section" href="#needs">{{t:nav.requirements}}</a>
+    <a href="{{p:/install}}" aria-current="page">{{t:nav.download}}</a>
+    <a href="/docs/"{{en_link}}>{{t:nav.docs}}{{en_mark}}</a>
   </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="{{t:theme.aria}}">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="{{t:theme.system}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.system}}</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="{{t:theme.light}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">{{t:theme.light}}</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="{{t:theme.dark}}"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">{{t:theme.dark}}</span></button>
+    </div>
+    {{lang_switch}}
+  </div>
 </header>
 
 <main id="main">
 
 <section class="get" aria-labelledby="get-title">
-  <h1 id="get-title">Get Nocturne.</h1>
-  <p class="lede">Free and open source, for Mac, Windows and Linux. No account, nothing to sign in to.</p>
-  <p class="here" data-here>Choose your computer below. Each link gives the latest version.</p>
+  <h1 id="get-title">{{t:install.heading}}</h1>
+  <p class="lede">{{t:install.lede}}</p>
+  {{note}}
+  <p class="here" data-here{{here_messages}}>{{t:install.here}}</p>
 </section>
 
 <!-- Each platform's download and its first-open steps. install.js moves the visitor's platform
@@ -69,24 +76,24 @@
   <section class="platform" id="mac" data-platform="mac" aria-labelledby="mac-title">
     <div class="platform-head">
       <h2 id="mac-title">Mac</h2>
-      <p class="spec-line">Apple chip, M1 or later · macOS 26 or later</p>
-      <p class="here-tag" data-here-tag hidden>For this computer</p>
+      <p class="spec-line">{{t:mac.spec}}</p>
+      <p class="here-tag" data-here-tag hidden>{{t:install.hereTag}}</p>
     </div>
     <div class="platform-body">
       <div class="download">
-        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-macos-arm64.dmg">Download for Mac</a>
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-macos-arm64.dmg">{{t:mac.download}}</a>
         <p class="file">Nocturne-macos-arm64.dmg</p>
       </div>
-      <p class="note">Macs with an Intel chip are not supported. To see which chip yours has, open the Apple menu and choose About This Mac.</p>
+      <p class="note">{{t:mac.note}}</p>
       <div class="first-open">
-        <h3>The first time you open it</h3>
+        <h3>{{t:install.firstOpen}}</h3>
         <ol>
-          <li>Open the downloaded file, then drag Nocturne into Applications.</li>
-          <li>Open Nocturne from Applications. Your Mac says <q>Nocturne</q> Not Opened, because it could not check the app. Click <b>Done</b>.</li>
-          <li>Open System Settings, then <b>Privacy &amp; Security</b>. Scroll down to the line saying Nocturne was blocked and click <b>Open Anyway</b>.</li>
-          <li>Enter your password, then click <b>Open Anyway</b> again.</li>
+          <li>{{t:mac.step1}}</li>
+          <li>{{t:mac.step2}}</li>
+          <li>{{t:mac.step3}}</li>
+          <li>{{t:mac.step4}}</li>
         </ol>
-        <p class="why">You only do this once. Apple charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet.</p>
+        <p class="why">{{t:mac.why}}</p>
       </div>
     </div>
   </section>
@@ -94,22 +101,22 @@
   <section class="platform" id="windows" data-platform="windows" aria-labelledby="windows-title">
     <div class="platform-head">
       <h2 id="windows-title">Windows</h2>
-      <p class="spec-line">Windows 10 or 11, 64-bit</p>
-      <p class="here-tag" data-here-tag hidden>For this computer</p>
+      <p class="spec-line">{{t:win.spec}}</p>
+      <p class="here-tag" data-here-tag hidden>{{t:install.hereTag}}</p>
     </div>
     <div class="platform-body">
       <div class="download">
-        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64-setup.exe">Download for Windows</a>
+        <a class="button primary" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64-setup.exe">{{t:win.download}}</a>
         <p class="file">Nocturne-windows-x64-setup.exe</p>
       </div>
-      <p class="note">Installs for you alone and needs no administrator password. Computers managed by an organisation can use the <a href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64.msi">.msi installer</a> instead.</p>
+      <p class="note">{{t:win.note}}</p>
       <div class="first-open">
-        <h3>The first time you open it</h3>
+        <h3>{{t:install.firstOpen}}</h3>
         <ol>
-          <li>Your browser may warn that the file is not commonly downloaded. In Edge, open the <b>…</b> menu beside the file, choose <b>Keep</b>, then <b>Show more</b>, then <b>Keep anyway</b>.</li>
-          <li>Open the installer. Windows shows <q>Windows protected your PC</q>. Click <b>More info</b>, then <b>Run anyway</b>.</li>
+          <li>{{t:win.step1}}</li>
+          <li>{{t:win.step2}}</li>
         </ol>
-        <p class="why">You only do this once. Microsoft charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet.</p>
+        <p class="why">{{t:win.why}}</p>
       </div>
     </div>
   </section>
@@ -117,105 +124,105 @@
   <section class="platform" id="linux" data-platform="linux" aria-labelledby="linux-title">
     <div class="platform-head">
       <h2 id="linux-title">Linux</h2>
-      <p class="spec-line">64-bit computer with an Intel, AMD or Arm chip</p>
-      <p class="here-tag" data-here-tag hidden>For this computer</p>
+      <p class="spec-line">{{t:linux.spec}}</p>
+      <p class="here-tag" data-here-tag hidden>{{t:install.hereTag}}</p>
     </div>
     <div class="platform-body">
-      <ul class="choices" aria-label="Ways to install on Linux">
+      <ul class="choices" aria-label="{{t:linux.choices.aria}}">
         <li>
           <div class="choice-text">
-            <h3>From your software centre</h3>
-            <p>The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet.</p>
+            <h3>{{t:linux.flatpak.title}}</h3>
+            <p>{{t:linux.flatpak.text}}</p>
           </div>
-          <a class="button primary" href="https://flatpak.nocturne.is">Get the Flatpak</a>
+          <a class="button primary" href="https://flatpak.nocturne.is">{{t:linux.flatpak.button}}</a>
           <details class="terminal">
-            <summary>Or install it from a terminal</summary>
+            <summary>{{t:linux.flatpak.terminal}}</summary>
             <pre><code>flatpak remote-add --user --if-not-exists nocturne https://flatpak.nocturne.is/nocturne.flatpakrepo
 flatpak install --user nocturne is.nocturne.Nocturne</code></pre>
           </details>
         </li>
         <li>
           <div class="choice-text">
-            <h3>Ubuntu, Linux Mint or Debian</h3>
-            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+            <h3>{{t:linux.deb.title}}</h3>
+            <p>{{t:linux.package.text}}</p>
           </div>
           <div class="arch" data-arch>
-            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">.deb for Intel or AMD</a>
-            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-arm64.deb">.deb for Arm</a>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-amd64.deb">{{t:linux.deb.intel}}</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-arm64.deb">{{t:linux.deb.arm}}</a>
           </div>
         </li>
         <li>
           <div class="choice-text">
-            <h3>Fedora, Red Hat or openSUSE</h3>
-            <p>Open the file with your software centre, and Nocturne appears with your other apps.</p>
+            <h3>{{t:linux.rpm.title}}</h3>
+            <p>{{t:linux.package.text}}</p>
           </div>
           <div class="arch" data-arch>
-            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">.rpm for Intel or AMD</a>
-            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.rpm">.rpm for Arm</a>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.rpm">{{t:linux.rpm.intel}}</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.rpm">{{t:linux.rpm.arm}}</a>
           </div>
         </li>
         <li>
           <div class="choice-text">
-            <h3>Try it without installing</h3>
-            <p>One file that runs on most desktops. In its properties, allow it to run as a program, then open it.</p>
+            <h3>{{t:linux.appimage.title}}</h3>
+            <p>{{t:linux.appimage.text}}</p>
           </div>
           <div class="arch" data-arch>
-            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">AppImage for Intel or AMD</a>
-            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.AppImage">AppImage for Arm</a>
+            <a class="button" data-chip="intel" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-x86_64.AppImage">{{t:linux.appimage.intel}}</a>
+            <a class="button" data-chip="arm" href="https://github.com/agync/nocturne/releases/latest/download/Nocturne-linux-aarch64.AppImage">{{t:linux.appimage.arm}}</a>
           </div>
         </li>
       </ul>
-      <p class="note">Most Linux computers have an Intel or AMD chip. To check, run <code>uname -m</code> in a terminal: <code>x86_64</code> means Intel or AMD, <code>aarch64</code> means Arm. The Flatpak picks the right one by itself.</p>
-      <p class="why">Linux shows no warning the first time you open Nocturne.</p>
+      <p class="note">{{t:linux.note}}</p>
+      <p class="why">{{t:linux.why}}</p>
     </div>
   </section>
 
-  <p class="others" data-others hidden>Other computers</p>
+  <p class="others" data-others hidden>{{t:install.others}}</p>
 
 </div>
 
-<p class="checks small">To make sure a download is the one we published, compare it with the fingerprints in <a href="https://github.com/agync/nocturne/releases/latest/download/SHA256SUMS">SHA256SUMS</a>. The <a href="/docs/guide/install.html">install guide</a> shows how, explains each package and how to take Nocturne off again. Earlier versions are on the <a href="https://github.com/agync/nocturne/releases">releases page</a>.</p>
+<p class="checks small">{{t:install.checks}}</p>
 
 <section id="needs" class="band" aria-labelledby="needs-title">
   <div class="intro">
-    <h2 id="needs-title">What your computer needs.</h2>
-    <p>Almost certainly, if it has 8&nbsp;GB of memory: an 8&nbsp;GB MacBook Air, or a typical 8&nbsp;GB Windows or Linux laptop.</p>
+    <h2 id="needs-title">{{t:needs.title}}</h2>
+    <p>{{t:req.body}}</p>
   </div>
   <dl class="promises needs">
-    <div><dt>Memory</dt><dd>8&nbsp;GB is enough. On an 8&nbsp;GB computer Nocturne uses about 5&nbsp;GB at its busiest and gives it back when it has nothing to do. With more memory it offers a larger setup with clearer answers.</dd></div>
-    <div><dt>A graphics card</dt><dd>No graphics card needed. Macs with Apple silicon, and computers with AMD or Intel graphics built in, run Nocturne on the chip and share the computer’s memory. An AMD or NVIDIA graphics card works too, best with 6 GB or more. Other computers run it on the processor.</dd></div>
-    <div><dt>An AI chip</dt><dd>Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them.</dd></div>
-    <div><dt>The system</dt><dd>macOS 26 or later on an Apple chip, Windows 10 or 11 (64-bit), or 64-bit Linux on Intel, AMD or Arm.</dd></div>
+    <div><dt>{{t:req.memory.term}}</dt><dd>{{t:req.memory.detail}}</dd></div>
+    <div><dt>{{t:req.graphics.term}}</dt><dd>{{t:req.graphics.detail}}</dd></div>
+    <div><dt>{{t:req.chip.term}}</dt><dd>{{t:req.chip.detail}}</dd></div>
+    <div><dt>{{t:req.system.term}}</dt><dd>{{t:req.system.detail}}</dd></div>
   </dl>
   <div class="tiers" role="list">
-    <div role="listitem"><h3>Large</h3><p class="spec-line">60 GB+ memory · 28 GB space</p><p>Clearer answers to harder questions.</p></div>
-    <div role="listitem"><h3>Standard</h3><p class="spec-line">28 GB+ memory · 11 GB space</p><p>Many recent laptops with 32 GB.</p></div>
-    <div role="listitem"><h3>Small</h3><p class="spec-line">14 GB+ memory · 7 GB space</p><p>Same page. The daily tidy takes longer.</p></div>
-    <div role="listitem"><h3>Tiny</h3><p class="spec-line">6 GB+ memory · 5.2 GB space</p><p>Made for 8 GB computers. Simpler answers that may miss details.</p></div>
+    <div role="listitem"><h3>{{t:tier.large.name}}</h3><p class="spec-line">{{t:tier.large.spec}}</p><p>{{t:tier.large.text}}</p></div>
+    <div role="listitem"><h3>{{t:tier.standard.name}}</h3><p class="spec-line">{{t:tier.standard.spec}}</p><p>{{t:tier.standard.text}}</p></div>
+    <div role="listitem"><h3>{{t:tier.small.name}}</h3><p class="spec-line">{{t:tier.small.spec}}</p><p>{{t:tier.small.text}}</p></div>
+    <div role="listitem"><h3>{{t:tier.tiny.name}}</h3><p class="spec-line">{{t:tier.tiny.spec}}</p><p>{{t:tier.tiny.text}}</p></div>
   </div>
-  <p class="small">Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all.</p>
+  <p class="small">{{t:req.downloads}}</p>
 </section>
 
 <section id="after" class="band" aria-labelledby="after-title">
   <div class="intro">
-    <h2 id="after-title">After you install.</h2>
-    <p>Nocturne opens a short setup. You can keep things straight away.</p>
+    <h2 id="after-title">{{t:after.title}}</h2>
+    <p>{{t:after.body}}</p>
   </div>
   <ol class="steps">
     <li>
-      <span class="when">When it opens</span>
-      <h3>It looks at the computer</h3>
-      <p>It tells you which setup it will use. You can always pick a smaller one, which uses less memory, space and battery.</p>
+      <span class="when">{{t:after.1.when}}</span>
+      <h3>{{t:after.1.title}}</h3>
+      <p>{{t:after.1.text}}</p>
     </li>
     <li>
-      <span class="when">Once, when you agree</span>
-      <h3>It downloads what it needs</h3>
-      <p>It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops.</p>
+      <span class="when">{{t:after.2.when}}</span>
+      <h3>{{t:after.2.title}}</h3>
+      <p>{{t:after.2.text}}</p>
     </li>
     <li>
-      <span class="when">The next morning</span>
-      <h3>Your first page</h3>
-      <p>From then on, Nocturne works with no internet at all.</p>
+      <span class="when">{{t:after.3.when}}</span>
+      <h3>{{t:after.3.title}}</h3>
+      <p>{{t:after.3.text}}</p>
     </li>
   </ol>
 </section>
@@ -225,14 +232,15 @@ flatpak install --user nocturne is.nocturne.Nocturne</code></pre>
 <footer class="foot">
   <p class="foot-brand">
     <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
-    Nocturne · engine by Lemonade · Apache 2.0
+    {{t:foot.brand}}
   </p>
-  <nav aria-label="Footer">
-    <a href="/docs/">Docs</a>
-    <a href="/docs/guide/your-data.html">Your data</a>
-    <a href="/docs/guide/install.html">Install guide</a>
-    <a href="/assets/fonts/OFL.txt">Font licence</a>
+  <nav aria-label="{{t:foot.aria}}">
+    <a href="/docs/"{{en_link}}>{{t:foot.docs}}{{en_mark}}</a>
+    <a href="/docs/guide/your-data.html"{{en_link}}>{{t:foot.data}}{{en_mark}}</a>
+    <a href="/docs/guide/install.html"{{en_link}}>{{t:foot.install}}{{en_mark}}</a>
+    <a href="/assets/fonts/OFL.txt"{{en_link}}>{{t:foot.font}}{{en_mark}}</a>
   </nav>
+  {{lang_foot}}
 </footer>
 
 </div>
