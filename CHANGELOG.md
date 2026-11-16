@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/agync/nocturne/compare/v0.5.0...v0.5.1) (2026-11-16)
+
+
+### Bug Fixes
+
+* bring the lock files to 0.5.0 ([9a42ef7](https://github.com/agync/nocturne/commit/9a42ef74da1ce98db228cd6add98b763fc6ea169))
+
 ## [0.5.0](https://github.com/agync/nocturne/compare/v0.4.0...v0.5.0) (2026-11-16)
 
 
