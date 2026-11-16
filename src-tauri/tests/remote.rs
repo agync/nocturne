@@ -1099,6 +1099,10 @@ fn retried_upload_replaces_dead_session_upload() {
     }))
     .unwrap();
     block(dead.chunk(id, 0, false, &bytes[..100])).unwrap();
+    // The request is only sent so far: the session counts as live once it has been read.
+    wait_for("the first upload begins", || {
+        p.hub.core.incoming.in_flight() == 1
+    });
     block(dead.wire.close_ref());
     wait_for("closed", || p.hub.core.live_devices().is_empty());
     let mut fresh = p.open(&keys, Mode::WebSocket);
