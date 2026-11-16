@@ -76,6 +76,17 @@ Proposed replacement for the paragraph that starts "On most current desktops":
 
 The numbered steps after it stay.
 
+## 5. When "Change in desktop settings" does not open them
+
+Today a failure is silent: the button does nothing visible. In the same place as the note under
+the row, replacing it until the next time Settings is opened:
+
+| Place | Now | Approved |
+|---|---|---|
+| Note under the row | Your desktop looks after this shortcut. | Your desktop's shortcut settings didn't open. Change the keys in your desktop's keyboard settings instead. |
+
+The button stays, so the person can try again.
+
 ## Open questions
 
 - Whether "Change in desktop settings" fits the row at the narrowest window width.
