@@ -140,12 +140,12 @@ fn install_portal_shortcut<R: Runtime>(app: &AppHandle<R>) {
             tracing::info!("global shortcut not registered: the desktop has no shortcut portal");
             return;
         };
-        os.set_registrar(Arc::new(registrar));
-        shortcut::set_desktop_pending(&os, false);
-        let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) else {
-            return;
-        };
-        shortcut::install(&os, &settings.shortcut, true);
+        let saved = shell.engine().and_then(|e| Ok(e.settings()?)).ok();
+        shortcut::adopt(
+            &os,
+            Arc::new(registrar),
+            saved.as_ref().map(|s| s.shortcut.as_str()),
+        );
     });
 }
 
