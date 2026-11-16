@@ -167,6 +167,8 @@ export class TauriEngine implements EngineClient {
     this.call("get_edition", { date, edition });
   openSoundSettings: EngineClient["openSoundSettings"] = () => this.call("open_sound_settings");
   quickKeepCommand: EngineClient["quickKeepCommand"] = () => this.call("quick_keep_command");
+  configureShortcut: EngineClient["configureShortcut"] = () => this.call("configure_shortcut");
+  retryShortcut: EngineClient["retryShortcut"] = () => this.call("retry_shortcut");
 
   getRemote: EngineClient["getRemote"] = () => this.call("get_remote");
   startRemote: EngineClient["startRemote"] = (connection, allowDownload) =>

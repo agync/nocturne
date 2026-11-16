@@ -33,11 +33,13 @@ Most other desktops, such as KDE Plasma, show the tray without any extra step.
 The default shortcut is Ctrl+Shift+Space on Windows and Linux, and Cmd+Shift+Space on a Mac. It
 opens a small box above whatever you are doing, where
 you can type, paste, drop a file or hold Space in the empty box to talk. Press Esc and it goes away. You can change
-the keys in Settings.
+the keys in Settings, except where your desktop looks after the shortcut (see below).
 
-On most current desktops (those that use Wayland, which is the default on current GNOME and KDE),
-an app cannot listen for keys while you are in another app. If yours is one, Nocturne says so in
-its Settings and shows a command instead. Add it as a custom shortcut:
+On most current desktops (those that use Wayland, which is the default on current GNOME and
+KDE), your desktop looks after the shortcut. The first time Nocturne starts, your desktop may
+ask whether to add it; allow it. To change the keys later, use your desktop's keyboard
+settings. If your desktop can't add it, Nocturne says so in its Settings and shows a command
+instead. Add it as a custom shortcut:
 
 1. Open your desktop's own settings (not Nocturne's), go to Keyboard, then Custom Shortcuts.
 2. Add a shortcut, paste the command Nocturne shows under "Set it to run", and choose your keys.

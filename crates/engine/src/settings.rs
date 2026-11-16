@@ -17,6 +17,7 @@ pub(crate) fn defaults() -> SettingsView {
         voice_speed: 1.0,
         shortcut: "CommandOrControl+Shift+Space".to_string(),
         shortcut_available: true,
+        desktop_shortcut: None,
         inbox_folder: None,
         start_at_login: false,
         letting_go: LettingGo::Normal,

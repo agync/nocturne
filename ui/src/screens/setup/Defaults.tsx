@@ -96,6 +96,7 @@ export function Defaults() {
             <ShortcutField
               value={view.shortcut}
               available={view.shortcutAvailable}
+              desktop={view.desktopShortcut}
               onChange={(shortcut) => void save({ shortcut })}
             />
           </li>

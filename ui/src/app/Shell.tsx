@@ -230,7 +230,13 @@ export function Shell({ children }: ShellProps) {
         placement={narrow ? "bottom" : "top"}
         onKeep={keep}
         onAsk={ask}
-        shortcut={settings?.shortcutAvailable ? settings.shortcut : undefined}
+        shortcut={
+          settings?.shortcutAvailable &&
+          settings.desktopShortcut?.state !== "asking" &&
+          settings.desktopShortcut?.state !== "declined"
+            ? (settings.desktopShortcut?.keys ?? settings.shortcut)
+            : undefined
+        }
         onFiles={keepFiles}
         onTalk={{ start: recorder.start, stop: recorder.stop }}
         recordingSeconds={recorder.seconds}

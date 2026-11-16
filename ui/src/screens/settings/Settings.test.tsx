@@ -253,6 +253,76 @@ describe("Settings", () => {
     expect(await screen.findByText("nocturne --quick-capture")).toBeInTheDocument();
   });
 
+  it("shows the keys the desktop bound and opens the desktop's own settings to change them", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      desktopShortcut: { state: "held", keys: "Ctrl+Alt+K", configurable: true },
+    });
+    await open(engine);
+    expect(screen.getByText("Ctrl+Alt+K")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change quick keep shortcut" })).toBeNull();
+    const button = screen.getByRole("button", { name: "Change in desktop settings" });
+    expect(button).toHaveAccessibleDescription(/Your desktop looks after this shortcut\./);
+    await userEvent.click(button);
+    expect(engine.shortcutSettingsOpened).toBe(1);
+    expect(screen.queryByText(/isn’t working here/)).toBeNull();
+  });
+
+  it("says where to change the shortcut when the desktop cannot open its settings", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      desktopShortcut: { state: "held", keys: null, configurable: false },
+    });
+    await open(engine);
+    expect(screen.getByText(base.shortcut)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your desktop looks after this shortcut. Change it in your desktop’s keyboard settings.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change in desktop settings" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change quick keep shortcut" })).toBeNull();
+  });
+
+  it("offers to ask the desktop again when the shortcut was not added", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      shortcutAvailable: false,
+      desktopShortcut: { state: "declined", keys: null, configurable: true },
+    });
+    const retry = vi.spyOn(engine, "retryShortcut");
+    await open(engine);
+    expect(
+      screen.getByText(/The shortcut wasn’t added\. Choose Try again, or add a desktop shortcut\./),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("nocturne --quick-capture")).toBeInTheDocument();
+    expect(screen.queryByText(/isn’t working here/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
+  it("shows only the keys while the desktop decides", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      shortcut: "CommandOrControl+Shift+Space",
+      shortcutAvailable: false,
+      desktopShortcut: { state: "asking", keys: null, configurable: false },
+    });
+    await open(engine);
+    expect(screen.getByText("Ctrl+Shift+Space")).toBeInTheDocument();
+    expect(screen.queryByText(/isn’t working here/)).toBeNull();
+    expect(screen.queryByText(/wasn’t added/)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Change/ })).toBeNull();
+  });
+
   it("asks nothing about a desktop shortcut while the shortcut works", async () => {
     const engine = createMockEngine();
     const spy = vi.spyOn(engine, "quickKeepCommand");

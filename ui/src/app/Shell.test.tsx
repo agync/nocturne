@@ -47,6 +47,38 @@ describe("the recording report", () => {
   });
 });
 
+describe("the keep bar's shortcut hint", () => {
+  async function hint(
+    desktopShortcut: Awaited<ReturnType<EngineClient["getSettings"]>>["desktopShortcut"],
+  ) {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      shortcutAvailable: true,
+      desktopShortcut,
+    });
+    renderApp({ hash: "#/today", engine });
+    await screen.findByRole("heading", { level: 1 });
+    await waitFor(() => expect(engine.getSettings).toHaveBeenCalled());
+    return () => screen.queryByLabelText(/^Shortcut/);
+  }
+
+  it("names the keys the desktop bound", async () => {
+    const find = await hint({ state: "held", keys: "Ctrl+Alt+K", configurable: false });
+    await waitFor(() => expect(find()).not.toBeNull());
+  });
+
+  it("names nothing while the desktop is asking or has said no", async () => {
+    for (const state of ["asking", "declined"] as const) {
+      cleanup();
+      const find = await hint({ state, keys: null, configurable: false });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(find()).toBeNull();
+    }
+  });
+});
+
 describe("routes", () => {
   for (const [hash, heading] of SCREENS) {
     it(`${hash} renders its h1`, async () => {

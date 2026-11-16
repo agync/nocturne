@@ -22,6 +22,8 @@ pub const UNAVAILABLE: &[&str] = &[
     "open_sound_settings",
     "print_page",
     "quick_keep_command",
+    "configure_shortcut",
+    "retry_shortcut",
     "take_quick_drop",
     "export_to",
     "get_remote",

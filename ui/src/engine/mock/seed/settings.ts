@@ -9,6 +9,7 @@ export function settingsSeed(): SettingsView {
     voiceSpeed: 1,
     shortcut: "Ctrl+Shift+Space",
     shortcutAvailable: true,
+    desktopShortcut: null,
     inboxFolder: null,
     startAtLogin: true,
     lettingGo: "normal",
