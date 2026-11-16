@@ -104,8 +104,9 @@ The app knows it is in a Flatpak from `/.flatpak-info`, which names its app id.
   records that it has been told. A start that finds it was told but the switch is off asks the
   portal to remove the entry. Delete everything asks it to remove the entry only when it was
   told before, and keeps that record if the removal does not get through. A request with no
-  answer after five minutes is withdrawn (`Request.Close`), so a late answer cannot change the
-  entry behind the setting.
+  answer after five minutes is asked to be withdrawn (`Request.Close`, best effort), so a late
+  answer is unlikely to change the entry behind the setting. Once the portal has been told, the entry an earlier version left in
+  the app's own config folder (`autostart/app.nocturne.desktop.desktop`) is removed.
 - **The quick keep shortcut** on Wayland goes through the desktop's GlobalShortcuts portal, as it
   does outside the Flatpak. Portals need no permission in the manifest.
 - **The quick keep command** Settings offers for a desktop shortcut is
