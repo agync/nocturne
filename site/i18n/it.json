@@ -1,0 +1,694 @@
+{
+  "head.title": {
+    "text": "Nocturne · Conserva tutto, fai domande, ricevi una pagina ogni mattina",
+    "from": "Nocturne · Keep everything, ask about it, get one page each morning"
+  },
+  "head.description": {
+    "text": "Nocturne è un’app gratuita e privata per il tuo computer. Conserva note, foto, note vocali e file senza smistarli, né ora né dopo. Più tardi chiedi qualsiasi cosa al riguardo, e ogni mattina ricevi una pagina con quello che ti aspetta, con l’originale dietro ogni riga.",
+    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line."
+  },
+  "head.og.description": {
+    "text": "Conserva note, foto, note vocali e file senza smistarli, né ora né dopo. Più tardi chiedi qualsiasi cosa al riguardo, e ogni mattina ricevi una pagina con quello che ti aspetta, tutto sul tuo computer.",
+    "from": "Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer."
+  },
+  "head.og.image.alt": {
+    "text": "Nocturne. Conserva tutto. Nocturne lo ricorda per te. Più tardi chiedi qualsiasi cosa al riguardo, e ogni mattina ricevi una pagina con quello che ti aspetta. Accanto al testo, la pagina del mattino dell’app con dati di esempio.",
+    "from": "Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data."
+  },
+  "header.skip": {
+    "text": "Vai al contenuto",
+    "from": "Skip to content"
+  },
+  "header.brand.aria": {
+    "text": "Nocturne, pagina iniziale",
+    "from": "Nocturne, home"
+  },
+  "nav.aria": {
+    "text": "Principale",
+    "from": "Main"
+  },
+  "nav.how": {
+    "text": "Come funziona",
+    "from": "How it works"
+  },
+  "nav.privacy": {
+    "text": "Privacy",
+    "from": "Privacy"
+  },
+  "nav.engine": {
+    "text": "Motore",
+    "from": "Engine"
+  },
+  "nav.requirements": {
+    "text": "Requisiti",
+    "from": "Requirements"
+  },
+  "nav.download": {
+    "text": "Scarica",
+    "from": "Download"
+  },
+  "nav.docs": {
+    "text": "Documentazione",
+    "from": "Docs"
+  },
+  "theme.aria": {
+    "text": "Tema colori",
+    "from": "Colour theme"
+  },
+  "theme.system": {
+    "text": "Sistema",
+    "from": "System"
+  },
+  "theme.light": {
+    "text": "Chiaro",
+    "from": "Light"
+  },
+  "theme.dark": {
+    "text": "Scuro",
+    "from": "Dark"
+  },
+  "hero.title": {
+    "text": "Conserva tutto. <em>Nocturne lo ricorda per te.</em>",
+    "from": "Keep everything. <em>Nocturne remembers it for you.</em>"
+  },
+  "hero.lede": {
+    "text": "Conserva note, foto, note vocali e file senza smistarli, né ora né dopo. Più tardi chiedi qualsiasi cosa al riguardo, e ogni mattina ricevi una pagina con quello che ti aspetta, tutto sul tuo computer.",
+    "from": "Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer."
+  },
+  "hero.download": {
+    "text": "Scarica gratis",
+    "from": "Download free"
+  },
+  "hero.how": {
+    "text": "Guarda come funziona",
+    "from": "See how it works"
+  },
+  "hero.facts.aria": {
+    "text": "In breve",
+    "from": "At a glance"
+  },
+  "hero.fact.platforms": {
+    "text": "Mac, Windows, Linux",
+    "from": "Mac, Windows, Linux"
+  },
+  "hero.fact.offline": {
+    "text": "Offline dopo il primo avvio",
+    "from": "Offline after setup"
+  },
+  "hero.fact.free": {
+    "text": "Gratuito e open source",
+    "from": "Free and open source"
+  },
+  "hero.page.alt": {
+    "text": "La pagina del mattino in Nocturne: venerdì 13 novembre, oggi ti aspettano due cose. Il modulo per la gita scolastica va consegnato venerdì prossimo, con la lettera da cui viene. L’appuntamento dal dentista è cambiato, con la scelta tra il biglietto dell’appuntamento e la nota vocale.",
+    "from": "The morning page in Nocturne: Friday 13 November, two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the card and the voice note."
+  },
+  "hero.keep.alt": {
+    "text": "La casella per conservare con un testo scritto: il nuovo numero della nonna finisce con 4471, e i pulsanti Conserva e Chiedi.",
+    "from": "The keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons."
+  },
+  "hero.caption": {
+    "text": "Conserva in una sola casella, leggi sulla pagina del mattino. Dall’app, con dati di esempio.",
+    "from": "Keep it in one box, read it on the morning page. From the app, with demo data."
+  },
+  "how.eyebrow": {
+    "text": "Come funziona",
+    "from": "How it works"
+  },
+  "how.title": {
+    "text": "Conserva ora. Leggi una volta.",
+    "from": "Keep it now. Read it once."
+  },
+  "keep.eyebrow": {
+    "text": "Conserva · quando vuoi",
+    "from": "Keep · any time"
+  },
+  "keep.title": {
+    "text": "Conserva tutto, non archiviare niente.",
+    "from": "Keep anything, file nothing."
+  },
+  "keep.body": {
+    "text": "Premi <kbd>Ctrl Maiusc Spazio</kbd>, o <kbd>Cmd Maiusc Spazio</kbd> su un Mac, poi scrivi, parla, incolla o trascina una foto o un PDF. Nocturne dice «Conservato.» (Kept.) e torni alla tua giornata. Niente cartelle o etichette da tenere in ordine: tu chiedi, e Nocturne lo trova. Se non riesce a leggere qualcosa, ti dice cosa fare.",
+    "from": "Press <kbd>Ctrl Shift Space</kbd>, or <kbd>Cmd Shift Space</kbd> on a Mac, then type, talk, paste or drop a photo or a PDF. Nocturne says “Kept.” and you get back to your day. No folders or tags to keep up: you ask, and it finds it. If it cannot read something, it tells you what to do."
+  },
+  "keep.box.alt": {
+    "text": "La casella per conservare al volo con un testo scritto: il nuovo numero della nonna finisce con 4471, e i pulsanti Conserva e Chiedi.",
+    "from": "The quick keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons."
+  },
+  "keep.recent.alt": {
+    "text": "Conservati di recente: una foto ancora in lettura, note vocali e messaggi incollati segnati come capiti, un PDF protetto da password che Nocturne non è riuscito a leggere, con cosa fare, e una nota vocale che ti aspetta.",
+    "from": "Recently kept: a photo still being read, voice notes and pasted messages marked understood, a password-locked PDF Nocturne could not read with what to do about it, and a voice note that needs you."
+  },
+  "ask.eyebrow": {
+    "text": "Chiedi · quando vuoi",
+    "from": "Ask · any time"
+  },
+  "ask.title": {
+    "text": "Risposte con le prove.",
+    "from": "Answers with receipts."
+  },
+  "ask.body": {
+    "text": "Chiedi con parole semplici. Nocturne risponde solo in base a ciò che hai conservato, con gli originali sotto per poter controllare. Quando non lo sa, lo dice. Se sbaglia qualcosa, digli cosa è giusto e se lo ricorda.",
+    "from": "Ask in plain words. Nocturne answers only from what you kept, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
+  },
+  "ask.alt": {
+    "text": "Una risposta a «Cosa serve a Leo per la gita?»: un pranzo al sacco, e il modulo della gita va consegnato venerdì prossimo con una firma e 12 sterline. Sotto, le due lettere fotografate da cui viene la risposta.",
+    "from": "An answer to “What does Leo need for his trip?”: a packed lunch, and the trip form is due next Friday with a signature and £12. Below it, the two photographed letters it came from."
+  },
+  "page.eyebrow": {
+    "text": "La pagina del mattino · all’ora che scegli",
+    "from": "The morning page · at your time"
+  },
+  "page.title": {
+    "text": "Al risveglio, quello che ti aspetta.",
+    "from": "Wake to what needs you."
+  },
+  "page.body": {
+    "text": "Ogni volta che il computer è collegato alla corrente e inattivo, di notte o di giorno, Nocturne legge ciò che hai conservato e nota cosa è cambiato. All’ora che scegli ricevi un breve elenco da leggere, ascoltare o stampare. Quando due cose si contraddicono, chiede invece di tirare a indovinare.",
+    "from": "Whenever the computer is plugged in and idle, by night or by day, Nocturne reads what you kept and notices what changed. At the time you choose, you get a short list to read, hear or print. When two things disagree, it asks instead of guessing."
+  },
+  "page.alt": {
+    "text": "La pagina del mattino: oggi ti aspettano due cose. Il modulo per la gita scolastica va consegnato venerdì prossimo, con la lettera da cui viene. L’appuntamento dal dentista è cambiato, con la scelta tra il biglietto dell’appuntamento e la nota vocale.",
+    "from": "The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note."
+  },
+  "privacy.eyebrow": {
+    "text": "Cosa promette",
+    "from": "What it promises"
+  },
+  "privacy.title": {
+    "text": "La tua vita resta sul tuo computer.",
+    "from": "Your life stays on your computer."
+  },
+  "privacy.body": {
+    "text": "Di serie, Nocturne va online solo per i download che approvi: il suo cervello al primo avvio e ogni aggiornamento che consenti. Privacy, nell’app, li elenca uno per uno con giorno e dimensione.",
+    "from": "Out of the box, Nocturne goes online only for downloads you agree to: its mind at setup and any update you allow. Privacy in the app lists each one with the day and the size."
+  },
+  "promise.signin.term": {
+    "text": "Nessun accesso da fare",
+    "from": "Nothing to sign in to"
+  },
+  "promise.signin.detail": {
+    "text": "Nessun account, nessuna statistica, nessun rapporto sugli arresti anomali, nessuna copia nel cloud.",
+    "from": "No account, no analytics, no crash reports, no cloud copy."
+  },
+  "promise.checked.term": {
+    "text": "Verificato, non solo promesso",
+    "from": "Checked, not just claimed"
+  },
+  "promise.checked.detail": {
+    "text": "Prima di una versione, Nocturne viene eseguito con la rete tagliata verso tutto tranne questo computer, e qualsiasi tentativo di andare oltre fa fallire la verifica.",
+    "from": "Before a release, Nocturne is run with its network cut off from everything but this computer, and any attempt to reach further fails the check."
+  },
+  "promise.edit.term": {
+    "text": "Non modifica mai ciò che hai conservato",
+    "from": "It never edits what you kept"
+  },
+  "promise.edit.detail": {
+    "text": "Le tue note, foto e file non vengono mai cambiati. Ogni risposta li mostra sotto. Se una è sbagliata, digli cosa è giusto; la versione precedente resta, non viene sovrascritta.",
+    "from": "Your notes, photos and files are never changed. Every answer shows them underneath. If one is wrong, tell it what is right; the old version is kept, not overwritten."
+  },
+  "promise.forget.term": {
+    "text": "Dimentica apposta",
+    "from": "It forgets on purpose"
+  },
+  "promise.forget.detail": {
+    "text": "Ciò che non usi più sbiadisce, e la pagina ti dice quando qualcosa viene messo da parte. Puoi recuperare qualsiasi cosa; per dimenticare per sempre chiede sempre prima.",
+    "from": "Things you no longer use fade, and the page says when one is let go. Bring any back; forgetting for good always asks first."
+  },
+  "promise.note.term": {
+    "text": "Un solo avviso discreto al giorno",
+    "from": "One quiet note a day"
+  },
+  "promise.note.detail": {
+    "text": "Quando la pagina è pronta, un avviso lo dice, insieme a quante cose ti aspettano. Mai cosa hai conservato.",
+    "from": "When the page is ready, one note says so and how many things need you. Never what you kept."
+  },
+  "promise.extras.term": {
+    "text": "Due extra, spenti finché non li chiedi",
+    "from": "Two extras, off until you ask"
+  },
+  "promise.extras.detail": {
+    "text": "Fuori casa (Away from home) permette al tuo telefono di chiedere, conservare e leggere la tua pagina, in forma sigillata perché l’azienda in mezzo non possa leggerlo. Risposte online (Online answers) invia una domanda, e le poche frasi ricordate che le servono, a un solo servizio che scegli tu. Mai niente di segnato come privato.",
+    "from": "Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private."
+  },
+  "phone.alt": {
+    "text": "Nocturne su un telefono abbinato: collegato al computer di casa, con Chiedi, Conserva e la pagina di oggi, e una nota che dice che le cose segnate come private restano sul computer.",
+    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer."
+  },
+  "phone.caption": {
+    "text": "Fuori casa su un telefono abbinato, con dati di esempio.",
+    "from": "Away from home on a paired phone, with demo data."
+  },
+  "engine.eyebrow": {
+    "text": "Il motore",
+    "from": "The engine"
+  },
+  "engine.title": {
+    "text": "Costruito su",
+    "from": "Built on"
+  },
+  "engine.body1": {
+    "text": "Il pensiero di Nocturne gira su <strong>Embeddable Lemonade</strong>, la versione portatile di <a href=\"https://lemonade-server.ai/\">Lemonade</a>, il server di IA locale e open source. Nocturne include una sua copia, Lemonade {{LEMONADE_VERSION}}, che solo questo computer può raggiungere.",
+    "from": "Nocturne’s thinking runs on <strong>Embeddable Lemonade</strong>, the portable build of <a href=\"https://lemonade-server.ai/\">Lemonade</a>, the open-source local AI server. Nocturne ships its own copy, Lemonade {{LEMONADE_VERSION}}, that only this computer can reach."
+  },
+  "engine.body2": {
+    "text": "Lemonade è gratuito con licenza Apache 2.0 ed è sviluppato dalla sua comunità, con ottimizzazioni degli ingegneri di AMD. Senza Lemonade, Nocturne non esisterebbe.",
+    "from": "Lemonade is free under the Apache 2.0 licence and built by its community, with optimisations by AMD engineers. Nocturne would not exist without it."
+  },
+  "req.eyebrow": {
+    "text": "Requisiti",
+    "from": "Requirements"
+  },
+  "req.title": {
+    "text": "Funzionerà sul mio computer?",
+    "from": "Will it run on my computer?"
+  },
+  "req.body": {
+    "text": "Quasi certamente, se ha 8 GB di memoria: un MacBook Air da 8 GB, o un normale portatile Windows o Linux da 8 GB.",
+    "from": "Almost certainly, if it has 8&nbsp;GB of memory: an 8&nbsp;GB MacBook Air, or a typical 8&nbsp;GB Windows or Linux laptop."
+  },
+  "req.memory.term": {
+    "text": "Memoria",
+    "from": "Memory"
+  },
+  "req.memory.detail": {
+    "text": "8 GB bastano. Su un computer da 8 GB, Nocturne usa circa 5 GB nei momenti di massimo lavoro e li restituisce quando non ha niente da fare. Con più memoria propone una configurazione più grande con risposte più chiare.",
+    "from": "8&nbsp;GB is enough. On an 8&nbsp;GB computer Nocturne uses about 5&nbsp;GB at its busiest and gives it back when it has nothing to do. With more memory it offers a larger setup with clearer answers."
+  },
+  "req.graphics.term": {
+    "text": "Una scheda grafica",
+    "from": "A graphics card"
+  },
+  "req.graphics.detail": {
+    "text": "Non serve una scheda grafica. I Mac con chip Apple, e i computer con grafica AMD o Intel integrata, eseguono Nocturne sul chip e condividono la memoria del computer. Va bene anche una scheda grafica AMD o NVIDIA, meglio con 6 GB o più. Gli altri computer lo eseguono sul processore.",
+    "from": "No graphics card needed. Macs with Apple silicon, and computers with AMD or Intel graphics built in, run Nocturne on the chip and share the computer’s memory. An AMD or NVIDIA graphics card works too, best with 6 GB or more. Other computers run it on the processor."
+  },
+  "req.chip.term": {
+    "text": "Un chip IA",
+    "from": "An AI chip"
+  },
+  "req.chip.detail": {
+    "text": "Utile, mai necessario. Su alcuni computer AMD con un chip IA e 16 GB o più, il chip IA legge le tue note vocali, così le risposte e il riordino quotidiano non devono aspettarle.",
+    "from": "Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them."
+  },
+  "req.system.term": {
+    "text": "Il sistema",
+    "from": "The system"
+  },
+  "req.system.detail": {
+    "text": "macOS 26 o successivo su chip Apple, Windows 10 o 11 (64 bit), o Linux a 64 bit su Intel, AMD o Arm.",
+    "from": "macOS 26 or later on an Apple chip, Windows 10 or 11 (64-bit), or 64-bit Linux on Intel, AMD or Arm."
+  },
+  "tier.large.name": {
+    "text": "Grande",
+    "from": "Large"
+  },
+  "tier.large.spec": {
+    "text": "60 GB di memoria o più · 28 GB di spazio",
+    "from": "60 GB+ memory · 28 GB space"
+  },
+  "tier.large.text": {
+    "text": "Risposte più chiare a domande più difficili.",
+    "from": "Clearer answers to harder questions."
+  },
+  "tier.standard.name": {
+    "text": "Standard",
+    "from": "Standard"
+  },
+  "tier.standard.spec": {
+    "text": "28 GB di memoria o più · 11 GB di spazio",
+    "from": "28 GB+ memory · 11 GB space"
+  },
+  "tier.standard.text": {
+    "text": "Molti portatili recenti con 32 GB.",
+    "from": "Many recent laptops with 32 GB."
+  },
+  "tier.small.name": {
+    "text": "Piccola",
+    "from": "Small"
+  },
+  "tier.small.spec": {
+    "text": "14 GB di memoria o più · 7 GB di spazio",
+    "from": "14 GB+ memory · 7 GB space"
+  },
+  "tier.small.text": {
+    "text": "La stessa pagina. Il riordino quotidiano richiede più tempo.",
+    "from": "Same page. The daily tidy takes longer."
+  },
+  "tier.tiny.name": {
+    "text": "Mini",
+    "from": "Tiny"
+  },
+  "tier.tiny.spec": {
+    "text": "6 GB di memoria o più · 5,2 GB di spazio",
+    "from": "6 GB+ memory · 5.2 GB space"
+  },
+  "tier.tiny.text": {
+    "text": "Pensata per computer da 8 GB. Risposte più semplici che possono perdere dei dettagli.",
+    "from": "Made for 8 GB computers. Simpler answers that may miss details."
+  },
+  "req.downloads": {
+    "text": "I download del primo avvio vanno da circa 3 GB a 26 GB, a seconda della configurazione. Dopo, Nocturne funziona senza alcuna connessione a internet.",
+    "from": "Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all."
+  },
+  "get.title": {
+    "text": "Scarica Nocturne.",
+    "from": "Get Nocturne."
+  },
+  "get.body": {
+    "text": "Gratuito e open source, per Mac, Windows e Linux. Scaricalo, aprilo, e si prepara da solo per il computer su cui si trova.",
+    "from": "Free and open source, for Mac, Windows and Linux. Download it, open it, and it sets itself up for the computer it is on."
+  },
+  "get.download": {
+    "text": "Scarica",
+    "from": "Download"
+  },
+  "get.source": {
+    "text": "Compilalo dal codice sorgente",
+    "from": "Build it from source"
+  },
+  "foot.brand": {
+    "text": "Nocturne · motore di Lemonade · Apache 2.0",
+    "from": "Nocturne · engine by Lemonade · Apache 2.0"
+  },
+  "foot.aria": {
+    "text": "Piè di pagina",
+    "from": "Footer"
+  },
+  "foot.docs": {
+    "text": "Documentazione",
+    "from": "Docs"
+  },
+  "foot.data": {
+    "text": "I tuoi dati",
+    "from": "Your data"
+  },
+  "foot.download": {
+    "text": "Scarica",
+    "from": "Download"
+  },
+  "foot.font": {
+    "text": "Licenza dei caratteri",
+    "from": "Font licence"
+  },
+  "install.title": {
+    "text": "Scarica Nocturne · per Mac, Windows e Linux",
+    "from": "Get Nocturne · Download for Mac, Windows and Linux"
+  },
+  "install.description": {
+    "text": "Scarica Nocturne per un Mac con chip Apple, un computer con Windows 10 o 11, o un desktop Linux. Gratuito e open source, senza account. La prima volta che si apre, si prepara da solo per il computer su cui si trova.",
+    "from": "Download Nocturne for a Mac with an Apple chip, a Windows 10 or 11 computer, or a Linux desktop. Free and open source, with no account. The first time it opens, it sets itself up for the computer it is on."
+  },
+  "install.og.description": {
+    "text": "Gratuito e open source, senza account. La prima volta che si apre, Nocturne si prepara da solo per il computer su cui si trova.",
+    "from": "Free and open source, with no account. The first time it opens, Nocturne sets itself up for the computer it is on."
+  },
+  "install.heading": {
+    "text": "Scarica Nocturne.",
+    "from": "Get Nocturne."
+  },
+  "install.lede": {
+    "text": "Gratuito e open source, per Mac, Windows e Linux. Nessun account, nessun accesso da fare.",
+    "from": "Free and open source, for Mac, Windows and Linux. No account, nothing to sign in to."
+  },
+  "install.here": {
+    "text": "Scegli il tuo computer qui sotto. Ogni link porta all’ultima versione.",
+    "from": "Choose your computer below. Each link gives the latest version."
+  },
+  "mac.spec": {
+    "text": "Chip Apple, M1 o successivo · macOS 26 o successivo",
+    "from": "Apple chip, M1 or later · macOS 26 or later"
+  },
+  "install.hereTag": {
+    "text": "Per questo computer",
+    "from": "For this computer"
+  },
+  "mac.download": {
+    "text": "Scarica per Mac",
+    "from": "Download for Mac"
+  },
+  "mac.note": {
+    "text": "I Mac con chip Intel non sono supportati. Per vedere quale chip ha il tuo, apri il menu Apple e scegli Informazioni su questo Mac.",
+    "from": "Macs with an Intel chip are not supported. To see which chip yours has, open the Apple menu and choose About This Mac."
+  },
+  "install.firstOpen": {
+    "text": "La prima volta che lo apri",
+    "from": "The first time you open it"
+  },
+  "mac.step1": {
+    "text": "Apri il file scaricato, poi trascina Nocturne in Applicazioni.",
+    "from": "Open the downloaded file, then drag Nocturne into Applications."
+  },
+  "mac.step2": {
+    "text": "Apri Nocturne da Applicazioni. Il Mac dice che «Nocturne» non è stato aperto, perché non ha potuto verificare l’app. Fai clic su <b>Fine</b>.",
+    "from": "Open Nocturne from Applications. Your Mac says <q>Nocturne</q> Not Opened, because it could not check the app. Click <b>Done</b>."
+  },
+  "mac.step3": {
+    "text": "Apri Impostazioni di Sistema, poi <b>Privacy e sicurezza</b>. Scorri fino alla riga che dice che Nocturne è stato bloccato e fai clic su <b>Apri comunque</b>.",
+    "from": "Open System Settings, then <b>Privacy &amp; Security</b>. Scroll down to the line saying Nocturne was blocked and click <b>Open Anyway</b>."
+  },
+  "mac.step4": {
+    "text": "Inserisci la password, poi fai di nuovo clic su <b>Apri comunque</b>.",
+    "from": "Enter your password, then click <b>Open Anyway</b> again."
+  },
+  "mac.why": {
+    "text": "Lo fai una volta sola. Apple chiede una quota annuale per firmare un’app in modo che si apra senza chiedere; Nocturne è gratuito e open source, e questa versione non è ancora firmata.",
+    "from": "You only do this once. Apple charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet."
+  },
+  "win.spec": {
+    "text": "Windows 10 o 11, 64 bit",
+    "from": "Windows 10 or 11, 64-bit"
+  },
+  "win.download": {
+    "text": "Scarica per Windows",
+    "from": "Download for Windows"
+  },
+  "win.note": {
+    "text": "Si installa solo per te e non serve la password di amministratore. I computer gestiti da un’organizzazione possono usare invece il <a href=\"https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64.msi\">programma di installazione .msi</a>.",
+    "from": "Installs for you alone and needs no administrator password. Computers managed by an organisation can use the <a href=\"https://github.com/agync/nocturne/releases/latest/download/Nocturne-windows-x64.msi\">.msi installer</a> instead."
+  },
+  "win.step1": {
+    "text": "Il browser potrebbe avvisarti che il file non viene scaricato spesso. In Edge, apri il menu <b>…</b> accanto al file, scegli <b>Mantieni</b>, poi <b>Mostra altro</b>, poi <b>Mantieni comunque</b>.",
+    "from": "Your browser may warn that the file is not commonly downloaded. In Edge, open the <b>…</b> menu beside the file, choose <b>Keep</b>, then <b>Show more</b>, then <b>Keep anyway</b>."
+  },
+  "win.step2": {
+    "text": "Apri il programma di installazione. Windows mostra «PC protetto da Windows». Fai clic su <b>Ulteriori informazioni</b>, poi su <b>Esegui comunque</b>.",
+    "from": "Open the installer. Windows shows <q>Windows protected your PC</q>. Click <b>More info</b>, then <b>Run anyway</b>."
+  },
+  "win.why": {
+    "text": "Lo fai una volta sola. Microsoft chiede una quota annuale per firmare un’app in modo che si apra senza chiedere; Nocturne è gratuito e open source, e questa versione non è ancora firmata.",
+    "from": "You only do this once. Microsoft charges a yearly fee to sign an app so it opens without asking; Nocturne is free and open source, and this release is not signed yet."
+  },
+  "linux.spec": {
+    "text": "Computer a 64 bit con chip Intel, AMD o Arm",
+    "from": "64-bit computer with an Intel, AMD or Arm chip"
+  },
+  "linux.choices.aria": {
+    "text": "Modi per installarlo su Linux",
+    "from": "Ways to install on Linux"
+  },
+  "linux.flatpak.title": {
+    "text": "Dal tuo centro software",
+    "from": "From your software centre"
+  },
+  "linux.flatpak.text": {
+    "text": "La scelta per la maggior parte delle persone, su qualsiasi desktop Linux. Il tuo centro software tiene Nocturne aggiornato. In questo modo non può ancora avviarsi insieme al computer.",
+    "from": "The choice for most people, on any Linux desktop. Your software centre keeps Nocturne up to date. Starting with the computer is not available this way yet."
+  },
+  "linux.flatpak.button": {
+    "text": "Ottieni il Flatpak",
+    "from": "Get the Flatpak"
+  },
+  "linux.flatpak.terminal": {
+    "text": "Oppure installalo da un terminale",
+    "from": "Or install it from a terminal"
+  },
+  "linux.deb.title": {
+    "text": "Ubuntu, Linux Mint o Debian",
+    "from": "Ubuntu, Linux Mint or Debian"
+  },
+  "linux.package.text": {
+    "text": "Apri il file con il tuo centro software, e Nocturne compare insieme alle altre app.",
+    "from": "Open the file with your software centre, and Nocturne appears with your other apps."
+  },
+  "linux.deb.intel": {
+    "text": ".deb per Intel o AMD",
+    "from": ".deb for Intel or AMD"
+  },
+  "linux.deb.arm": {
+    "text": ".deb per Arm",
+    "from": ".deb for Arm"
+  },
+  "linux.rpm.title": {
+    "text": "Fedora, Red Hat o openSUSE",
+    "from": "Fedora, Red Hat or openSUSE"
+  },
+  "linux.rpm.intel": {
+    "text": ".rpm per Intel o AMD",
+    "from": ".rpm for Intel or AMD"
+  },
+  "linux.rpm.arm": {
+    "text": ".rpm per Arm",
+    "from": ".rpm for Arm"
+  },
+  "linux.appimage.title": {
+    "text": "Provalo senza installarlo",
+    "from": "Try it without installing"
+  },
+  "linux.appimage.text": {
+    "text": "Un unico file che funziona sulla maggior parte dei desktop. Nelle sue proprietà, consenti di eseguirlo come programma, poi aprilo.",
+    "from": "One file that runs on most desktops. In its properties, allow it to run as a program, then open it."
+  },
+  "linux.appimage.intel": {
+    "text": "AppImage per Intel o AMD",
+    "from": "AppImage for Intel or AMD"
+  },
+  "linux.appimage.arm": {
+    "text": "AppImage per Arm",
+    "from": "AppImage for Arm"
+  },
+  "linux.note": {
+    "text": "La maggior parte dei computer Linux ha un chip Intel o AMD. Per controllare, esegui <code>uname -m</code> in un terminale: <code>x86_64</code> significa Intel o AMD, <code>aarch64</code> significa Arm. Il Flatpak sceglie da solo quello giusto.",
+    "from": "Most Linux computers have an Intel or AMD chip. To check, run <code>uname -m</code> in a terminal: <code>x86_64</code> means Intel or AMD, <code>aarch64</code> means Arm. The Flatpak picks the right one by itself."
+  },
+  "linux.why": {
+    "text": "Linux non mostra alcun avviso la prima volta che apri Nocturne.",
+    "from": "Linux shows no warning the first time you open Nocturne."
+  },
+  "install.others": {
+    "text": "Altri computer",
+    "from": "Other computers"
+  },
+  "install.checks": {
+    "text": "Per verificare che un download sia quello che abbiamo pubblicato, confrontalo con le impronte in <a href=\"https://github.com/agync/nocturne/releases/latest/download/SHA256SUMS\">SHA256SUMS</a>. La <a href=\"/docs/guide/install.html\"{{en_link}}>guida all’installazione{{en_mark}}</a> spiega come fare, descrive ogni pacchetto e come togliere Nocturne. Le versioni precedenti sono nella <a href=\"https://github.com/agync/nocturne/releases\">pagina delle versioni</a>.",
+    "from": "To make sure a download is the one we published, compare it with the fingerprints in <a href=\"https://github.com/agync/nocturne/releases/latest/download/SHA256SUMS\">SHA256SUMS</a>. The <a href=\"/docs/guide/install.html\"{{en_link}}>install guide{{en_mark}}</a> shows how, explains each package and how to take Nocturne off again. Earlier versions are on the <a href=\"https://github.com/agync/nocturne/releases\">releases page</a>."
+  },
+  "needs.title": {
+    "text": "Cosa serve al tuo computer.",
+    "from": "What your computer needs."
+  },
+  "after.title": {
+    "text": "Dopo l’installazione.",
+    "from": "After you install."
+  },
+  "after.body": {
+    "text": "Al primo avvio Nocturne ti guida in pochi passaggi. Puoi conservare cose da subito.",
+    "from": "Nocturne opens a short setup. You can keep things straight away."
+  },
+  "after.1.when": {
+    "text": "All’apertura",
+    "from": "When it opens"
+  },
+  "after.1.title": {
+    "text": "Esamina il computer",
+    "from": "It looks at the computer"
+  },
+  "after.1.text": {
+    "text": "Ti dice quale configurazione userà. Puoi sempre sceglierne una più piccola, che usa meno memoria, spazio e batteria.",
+    "from": "It tells you which setup it will use. You can always pick a smaller one, which uses less memory, space and battery."
+  },
+  "after.2.when": {
+    "text": "Una volta, se sei d’accordo",
+    "from": "Once, when you agree"
+  },
+  "after.2.title": {
+    "text": "Scarica ciò che gli serve",
+    "from": "It downloads what it needs"
+  },
+  "after.2.text": {
+    "text": "Prima chiede, poi scarica ciò che questo computer può eseguire: tra circa 3 GB e 26 GB. È l’unica volta in cui Nocturne ha bisogno di internet, e riprende da solo se la connessione cade.",
+    "from": "It asks first, then downloads what this computer can run: between about 3&nbsp;GB and 26&nbsp;GB. This is the only time Nocturne needs the internet, and it carries on by itself if the connection drops."
+  },
+  "after.3.when": {
+    "text": "La mattina dopo",
+    "from": "The next morning"
+  },
+  "after.3.title": {
+    "text": "La tua prima pagina",
+    "from": "Your first page"
+  },
+  "after.3.text": {
+    "text": "Da quel momento Nocturne funziona senza alcuna connessione a internet.",
+    "from": "From then on, Nocturne works with no internet at all."
+  },
+  "foot.install": {
+    "text": "Guida all’installazione",
+    "from": "Install guide"
+  },
+  "missing.title": {
+    "text": "Non c’è · Nocturne",
+    "from": "Not here · Nocturne"
+  },
+  "missing.eyebrow": {
+    "text": "Non trovata",
+    "from": "Not found"
+  },
+  "missing.heading": {
+    "text": "Qui non c’è nessuna pagina.",
+    "from": "There is no page here."
+  },
+  "missing.body": {
+    "text": "Il link potrebbe essere vecchio, o la pagina potrebbe essere stata spostata.",
+    "from": "The link may be old, or the page may have moved."
+  },
+  "missing.links": {
+    "text": "<a href=\"{{p:/}}\">Vai alla pagina iniziale</a> o <a href=\"/docs/\"{{en_link}}>leggi la documentazione{{en_mark}}</a>.",
+    "from": "<a href=\"{{p:/}}\">Go to the front page</a> or <a href=\"/docs/\"{{en_link}}>read the docs{{en_mark}}</a>."
+  },
+  "lang.aria": {
+    "text": "Lingua",
+    "from": "Language"
+  },
+  "docs.inEnglish": {
+    "text": "in inglese",
+    "from": "in English"
+  },
+  "suggest.text": {
+    "text": "Questa pagina c’è anche in italiano.",
+    "from": "This page is also in this language."
+  },
+  "suggest.link": {
+    "text": "Leggi in italiano",
+    "from": "Read in this language"
+  },
+  "suggest.close": {
+    "text": "Chiudi questo avviso",
+    "from": "Close this note"
+  },
+  "note.english": {
+    "text": "Per ora l’app è in inglese.",
+    "from": "The app is in English for now."
+  },
+  "note.understanding": {
+    "text": "Quanto bene capisce note e voce in italiano dipende dal cervello che scarica, non da Nocturne in sé.",
+    "from": "How well it understands notes and voice in this language depends on the mind it downloads, not on Nocturne itself."
+  },
+  "js.mac": {
+    "text": "Sembra un Mac, quindi il suo download è in cima. Nocturne richiede un Mac con chip Apple.",
+    "from": "This looks like a Mac, so its download comes first. Nocturne needs a Mac with an Apple chip."
+  },
+  "js.macArm": {
+    "text": "Sembra un Mac con chip Apple, quindi il suo download è in cima.",
+    "from": "This looks like a Mac with an Apple chip, so its download comes first."
+  },
+  "js.macIntel": {
+    "text": "Sembra un Mac con chip Intel. Nocturne richiede un Mac con chip Apple (M1 o successivo), quindi su questo non funzionerà. Informazioni su questo Mac, nel menu Apple, mostra quale chip ha.",
+    "from": "This looks like a Mac with an Intel chip. Nocturne needs a Mac with an Apple chip (M1 or later), so it will not run on this one. About This Mac, in the Apple menu, shows which chip it has."
+  },
+  "js.windows": {
+    "text": "Sembra un computer Windows, quindi il suo download è in cima.",
+    "from": "This looks like a Windows computer, so its download comes first."
+  },
+  "js.linux": {
+    "text": "Sembra un computer Linux, quindi le sue opzioni sono in cima.",
+    "from": "This looks like a Linux computer, so its choices come first."
+  },
+  "js.linuxArm": {
+    "text": "Sembra un computer Linux con chip Arm, quindi le sue opzioni sono in cima, con i download per Arm per primi.",
+    "from": "This looks like a Linux computer with an Arm chip, so its choices come first, Arm downloads first."
+  },
+  "js.other": {
+    "text": "Nocturne è un’app per computer desktop Mac, Windows e Linux. Apri questa pagina sul computer su cui vuoi usarla, oppure scegline uno qui sotto.",
+    "from": "Nocturne is a desktop app, for Mac, Windows and Linux computers. Open this page on the computer you want to use it on, or choose one below."
+  }
+}

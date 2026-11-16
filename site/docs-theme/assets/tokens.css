@@ -311,5 +311,6 @@
 /* The wordmark and headings use the serif at the weights the app uses. */
 html .wordmark { font-weight: 500; letter-spacing: -0.02em; }
 
-/* Section links in the sidebar are at least 24 px tall, so each is an easy target (WCAG 2.5.8). */
-html .side-title-link { display: inline-flex; align-items: center; min-height: 24px; }
+/* Section and folder links in the sidebar are at least 24 px tall, so each is an easy target (WCAG 2.5.8). */
+html .side-title-link,
+html .side-subsum a { display: inline-flex; align-items: center; min-height: 24px; }

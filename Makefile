@@ -34,7 +34,7 @@ build: rust/build $(if $(UI_PRESENT),ui/build) ## Build everything
 
 test: rust/test scripts/test tailnet/test $(if $(UI_PRESENT),ui/test) ## Run unit and integration tests
 
-lint: rust/lint $(if $(UI_PRESENT),ui/lint) contract/check docs/check ## Run every linter and drift check
+lint: rust/lint $(if $(UI_PRESENT),ui/lint) contract/check docs/check site/strings ## Run every linter and drift check
 	pre-commit run --all-files
 
 fmt: rust/fmt $(if $(UI_PRESENT),ui/fmt) ## Format all code
@@ -154,6 +154,9 @@ docs/check: ## Validate the OKF docs bundle
 
 site: ## Build the landing page and the docs into site/dist (SITE_URL=<origin>)
 	$(MAKE) -C site site
+
+site/strings: ## Check the site's translations: every string in every language, none stale
+	$(MAKE) -C site strings
 
 site/serve: ## Serve site/dist on loopback with its headers
 	$(MAKE) -C site serve

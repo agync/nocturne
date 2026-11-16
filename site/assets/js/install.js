@@ -1,5 +1,7 @@
 // The install page: puts the download for this computer first. It reads only what the browser says
 // about itself and sends nothing anywhere. Without it, every platform is listed in a fixed order.
+// A translated page carries its own messages in data-msg-* attributes on the line they replace;
+// these English ones are the source the translations in site/i18n follow.
 (() => {
   const MESSAGES = {
     mac: "This looks like a Mac, so its download comes first. Nocturne needs a Mac with an Apple chip.",
@@ -86,23 +88,24 @@
     const list = document.querySelector("[data-platforms]");
     const here = document.querySelector("[data-here]");
     if (!list || !here) return;
+    const say = (key) => here.dataset[`msg${key[0].toUpperCase()}${key.slice(1)}`] || MESSAGES[key];
     const os = detect();
-    here.textContent = MESSAGES[os];
+    here.textContent = say(os);
     if (os === "other") return;
     lead(list, os);
     if (os === "linux") {
       linuxArm().then((arm) => {
         if (!arm) return;
-        here.textContent = MESSAGES.linuxArm;
+        here.textContent = say("linuxArm");
         armFirst(list);
       });
       return;
     }
     if (os !== "mac") return;
     chip().then((found) => {
-      if (found === "arm") here.textContent = MESSAGES.macArm;
+      if (found === "arm") here.textContent = say("macArm");
       if (found === "intel") {
-        here.textContent = MESSAGES.macIntel;
+        here.textContent = say("macIntel");
         undo(list, "mac");
       }
     });

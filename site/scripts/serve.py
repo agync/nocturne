@@ -4,7 +4,8 @@
     serve.py <dist> [port]
 
 Applies _headers (every matching rule, `! Name` detaching a header an earlier rule set), maps
-/path/ to /path/index.html and /path to /path.html, and answers unknown paths with 404.html.
+/path/ to /path/index.html and /path to /path.html, and answers unknown paths with the nearest
+404.html up the path.
 """
 
 import http.server
@@ -48,6 +49,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             candidate = candidate.with_suffix(".html")
         if candidate.is_file():
             return candidate, 200
+        # As the static assets do: the nearest 404.html up the path, so /de/... answers in German.
+        for folder in (root / rel).parents:
+            if (folder / "404.html").is_file() and str(folder.resolve()).startswith(str(root.resolve())):
+                return folder / "404.html", 404
         return root / "404.html", 404
 
     def send_head(self):

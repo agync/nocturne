@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="en-GB">
+<html lang="{{lang}}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Not here · Nocturne</title>
+<title>{{t:missing.title}}</title>
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
@@ -15,17 +15,20 @@
 <body>
 <div class="wrap">
 <header class="top">
-  <a class="brand" href="/" aria-label="Nocturne, home">
+  <a class="brand" href="{{p:/}}" aria-label="{{t:header.brand.aria}}">
     <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
     <span>Nocturne</span>
   </a>
 </header>
 <main class="missing">
-  <p class="eyebrow">Not found</p>
-  <h1>There is no page here.</h1>
-  <p>The link may be old, or the page may have moved.</p>
-  <p><a href="/">Go to the front page</a> or <a href="/docs/">read the docs</a>.</p>
+  <p class="eyebrow">{{t:missing.eyebrow}}</p>
+  <h1>{{t:missing.heading}}</h1>
+  <p>{{t:missing.body}}</p>
+  <p>{{t:missing.links}}</p>
 </main>
+<footer class="foot">
+  {{lang_foot}}
+</footer>
 </div>
 </body>
 </html>
