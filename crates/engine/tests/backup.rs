@@ -407,6 +407,58 @@ fn a_restored_database_with_a_rewritten_trigger_is_refused() {
     assert!(matches!(refused(&file), Error::BackupDamaged));
 }
 
+/// A backup whose database was changed by `edit` after the newest schema was made.
+fn refused_after(edit: &str) {
+    let db = database_with_latest(edit);
+    let out = tempfile::tempdir().unwrap();
+    let file = out.path().join("changed-schema");
+    build(
+        &file,
+        &manifest_text(1, nocturne_engine::store::latest_version()),
+        &db,
+    );
+    assert!(matches!(refused(&file), Error::BackupDamaged));
+}
+
+#[test]
+fn a_table_with_the_right_name_and_an_extra_column_is_refused() {
+    refused_after("ALTER TABLE remote_devices ADD COLUMN extra TEXT;");
+}
+
+#[test]
+fn a_table_with_a_check_of_its_own_is_refused() {
+    refused_after(
+        "PRAGMA writable_schema=ON; \
+         UPDATE sqlite_master SET sql = replace(sql, 'name TEXT NOT NULL', \
+         'name TEXT NOT NULL CHECK(random() >= 0)') WHERE name = 'remote_devices';",
+    );
+}
+
+#[test]
+fn a_table_with_a_generated_column_is_refused() {
+    refused_after("ALTER TABLE remote_devices ADD COLUMN g AS (length(name)) VIRTUAL;");
+}
+
+#[test]
+fn an_index_with_an_expression_is_refused() {
+    refused_after("DROP INDEX items_kept_at; CREATE INDEX items_kept_at ON items(lower(ext));");
+}
+
+#[test]
+fn a_table_or_index_that_is_missing_is_refused() {
+    refused_after("DROP INDEX items_kept_at;");
+    refused_after("DROP TABLE remote_keeps;");
+}
+
+#[test]
+fn an_index_with_the_right_name_and_another_definition_is_refused() {
+    refused_after(
+        "PRAGMA writable_schema=ON; \
+         UPDATE sqlite_master SET sql = replace(sql, 'ON items(', 'ON items(length(sha256), ') \
+         WHERE type = 'index' AND sql LIKE '%ON items(%';",
+    );
+}
+
 /// Write an age file whose tar holds a long-name or extended header naming the manifest, then
 /// the manifest under another name, then a good database.
 fn build_with_name_header(file: &Path, kind: tar::EntryType) {
