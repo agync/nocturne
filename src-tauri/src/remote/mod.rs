@@ -393,6 +393,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("keep_old_model", Never),
         ("remove_old_model", Never),
         ("reset_models_to_tier", Never),
+        ("get_guide", Never),
     ]
 };
 

@@ -17,6 +17,7 @@ mod editions;
 mod files;
 pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_each, keep_paths};
 mod forget;
+mod help;
 mod memories;
 mod models;
 mod needs;
@@ -146,6 +147,7 @@ pub const COMMAND_NAMES: &[&str] = &[
     "keep_old_model",
     "remove_old_model",
     "reset_models_to_tier",
+    "get_guide",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -271,6 +273,7 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         models::keep_old_model,
         models::remove_old_model,
         models::reset_models_to_tier,
+        help::get_guide,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();

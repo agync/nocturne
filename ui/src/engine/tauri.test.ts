@@ -192,6 +192,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["keepOldModel", [], "keep_old_model", []],
   ["removeOldModel", [], "remove_old_model", []],
   ["resetModelsToTier", [], "reset_models_to_tier", []],
+  ["getGuide", [], "get_guide", []],
 ];
 
 describe("TauriEngine commands", () => {

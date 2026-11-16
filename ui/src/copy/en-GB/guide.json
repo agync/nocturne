@@ -1,0 +1,10 @@
+{
+  "screen.guide.title": "Nocturne guide",
+  "guide.page.contents": "On this page",
+  "guide.contents": "In this guide",
+  "guide.version": "This guide came with Nocturne {version}. It is on this computer, and reading it sends nothing.",
+  "guide.row.label": "Nocturne guide",
+  "guide.row.hint": "How to do things in Nocturne",
+  "guide.row.value": "Read",
+  "guide.row.open": "Open the Nocturne guide, {value}"
+}

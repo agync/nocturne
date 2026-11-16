@@ -21,6 +21,7 @@ describe("the copy deck is split by area", () => {
       "common",
       "editions",
       "fading",
+      "guide",
       "memories",
       "models",
       "needs-you",

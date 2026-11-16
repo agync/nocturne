@@ -31,4 +31,14 @@ describe("settings", () => {
       "#/settings/models",
     );
   });
+
+  it("ends with the Nocturne guide, which opens the reader", async () => {
+    renderApp({ hash: "#/settings", engine: createMockEngine() });
+    const row = await screen.findByRole("link", { name: "Open the Nocturne guide, Read" });
+    expect(row).toHaveAttribute("href", "#/guide?from=settings");
+    expect(row).toHaveTextContent("Read ›");
+    expect(row).toHaveAccessibleDescription("How to do things in Nocturne");
+    const rows = screen.getAllByRole("listitem").filter((li) => li.closest("ul"));
+    expect(rows.at(-1)).toContainElement(row);
+  });
 });

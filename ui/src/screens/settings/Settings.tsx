@@ -20,6 +20,7 @@ import { EngineError } from "../../engine/client";
 import { useEngine, useSettings } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { useRemote } from "../away/useRemote";
+import { guideHref } from "../guide/links";
 import { useModels } from "../models/useModels";
 import { useOnline } from "../online/useOnline";
 import { FasterNote } from "./FasterNote";
@@ -420,6 +421,19 @@ export function Settings() {
             )}
           </Row>
         ) : null}
+
+        <Row label={t("guide.row.label")} hint={t("guide.row.hint")}>
+          {(hint) => (
+            <a
+              className={`${styles.value} hit`}
+              href={guideHref("settings")}
+              aria-describedby={hint}
+              aria-label={t("guide.row.open", { value: t("guide.row.value") })}
+            >
+              {t("guide.row.value")} ›
+            </a>
+          )}
+        </Row>
       </ul>
       <FasterNote />
       <a className={`${styles.advanced} hit`} href="#/settings/advanced">
