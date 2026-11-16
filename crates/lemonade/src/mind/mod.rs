@@ -637,7 +637,11 @@ impl LemonadeMind {
         let nonce = prompts::nonce();
         let shown = prompts::facts_for(self.tier, facts);
         let facts = shown.as_slice();
-        let system = prompts::answer_system(self.tier, &nonce);
+        let system = if prompts::is_help(facts) {
+            prompts::help_system(&nonce)
+        } else {
+            prompts::answer_system(self.tier, &nonce)
+        };
         let (system, nonce) = (system.as_str(), nonce.as_str());
         let judged = self
             .with_mind(

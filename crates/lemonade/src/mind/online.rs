@@ -72,9 +72,15 @@ impl OnlineMind {
     }
 
     /// The body for `question`: the first [`MAX_FACTS`] facts that may still be sent, numbered
-    /// again from 1 without gaps. `None` when none may be.
+    /// again from 1 without gaps. `None` when none may be. A section of the Nocturne guide never
+    /// goes: help is written on this computer.
     pub fn prepare(&self, question: &str, facts: &[Fact]) -> Option<Prepared> {
-        let first: Vec<Fact> = facts.iter().take(MAX_FACTS).cloned().collect();
+        let first: Vec<Fact> = facts
+            .iter()
+            .filter(|f| !nocturne_engine::is_guide_section(&f.memory.id))
+            .take(MAX_FACTS)
+            .cloned()
+            .collect();
         let ids: Vec<String> = first.iter().map(|f| f.memory.id.clone()).collect();
         let ok = (self.sendable)(&ids);
         let facts: Vec<Fact> = first
