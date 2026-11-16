@@ -318,6 +318,17 @@ fn launch_with_everything_on_disk_fills_the_slot() {
     );
 }
 
+/// The engine's log is in the folder "Open logs" opens.
+#[test]
+fn the_engine_log_is_with_the_app_logs() {
+    let lab = lab(Plan::new("downloaded=all,say-keys").installed(Tier::Small));
+    let logs = lab.h.state().log_dir();
+    wait_for("the engine to write its log", || {
+        std::fs::read_to_string(logs.join("lemond.log")).is_ok_and(|s| s.contains("keys [key]"))
+    });
+    assert!(!lab.h.dir.path().join("engine/logs/lemond.log").exists());
+}
+
 #[test]
 fn a_fresh_install_offers_a_choice_and_setup_fills_the_slot() {
     let lab = lab(Plan::new(""));

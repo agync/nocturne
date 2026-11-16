@@ -184,7 +184,7 @@ state and answers on this computer. It never appears in a view, event, notice, l
 ## Logs and core files
 
 The engine's standard output and standard error go to Nocturne's own pipe, each redacted on its
-own, and then to `lemond.log` (owner-only, rotated at 8 MB, 3 files in all: `lemond.log`, `.1` and
+own, and then to `lemond.log` in the app's `logs/` folder (owner-only, rotated at 8 MB, 3 files of its own: `lemond.log`, `.1` and
 `.2`). The pipe withholds text after a provider error body marker (`Backend returned error
 response:`, `body:`, `Body:`), and every following line of that output until one that starts with
 the engine's own log prefix, so a multi-line body is withheld whole. Standard error never has that
