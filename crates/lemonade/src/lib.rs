@@ -3,6 +3,7 @@
 
 pub mod admin;
 pub mod bundle;
+mod children;
 pub mod client;
 pub mod config;
 mod error;
