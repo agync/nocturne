@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/agync/nocturne/compare/v0.4.0...v0.5.0) (2026-11-16)
+
+
+### Features
+
+* **site:** say it fits any schedule ([bdcf9f1](https://github.com/agync/nocturne/commit/bdcf9f1ac94ae06590584f96ba27d2419e6e4707))
+* **site:** serve the site in five languages ([780a2c2](https://github.com/agync/nocturne/commit/780a2c2f1c53f1d923d1ac4da269897a17e05ffa))
+
+
+### Bug Fixes
+
+* **app:** keep the engine log with the others ([6b748a1](https://github.com/agync/nocturne/commit/6b748a1d4aff05edf6961aac1619d0a3a4580209))
+* **lemonade:** give lemond the Windows basics ([930b8a3](https://github.com/agync/nocturne/commit/930b8a38665a78701e8df904573a59fdc3c02ac6))
+* **lemonade:** say why the engine did not start ([24cf9b9](https://github.com/agync/nocturne/commit/24cf9b9f963b1d6dc4982da3f92ade1ce1284531))
+* **lemonade:** wait out a slow engine start ([139b0e4](https://github.com/agync/nocturne/commit/139b0e4d0bff33ac6b9c51d6a08eede7e08d5e79))
+* **site:** close the language menu on click away ([470ffe3](https://github.com/agync/nocturne/commit/470ffe38d8bbef90327a91b212d794363a986556))
+* **site:** say daily tidy on the install page ([fb2edcc](https://github.com/agync/nocturne/commit/fb2edcce76dc514339b5f95f590ffdef8ea64e5a))
+
 ## [0.4.0](https://github.com/agync/nocturne/compare/v0.3.0...v0.4.0) (2026-11-16)
 
 
