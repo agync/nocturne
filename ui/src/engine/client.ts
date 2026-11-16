@@ -16,6 +16,7 @@ import type {
   ExportReport,
   ForgetPreview,
   ForgetReport,
+  GuideView,
   ItemFilter,
   ItemView,
   Job,
@@ -298,6 +299,9 @@ export interface EngineClient {
   keepOldModel(): Promise<ModelsView>;
   removeOldModel(): Promise<ModelsView>;
   resetModelsToTier(): Promise<ModelsView>;
+
+  /** The Nocturne guide as it came with this version. Read from inside the app; nothing is fetched. */
+  getGuide(): Promise<GuideView>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

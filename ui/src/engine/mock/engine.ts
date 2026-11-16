@@ -1,3 +1,4 @@
+import pkg from "../../../package.json";
 import { formatLongDay, localDay } from "../../copy/format";
 import type {
   AdvancedView,
@@ -15,6 +16,7 @@ import type {
   ExportReport,
   ForgetPreview,
   ForgetReport,
+  GuideView,
   ItemFilter,
   ItemKind,
   ItemView,
@@ -68,7 +70,7 @@ import type {
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
 import { MockBackups, type MockBackupsScript } from "./backup";
-import { cite, helpView, matchGuide, writtenFor } from "./help";
+import { cite, helpView, matchGuide, mockGuide, writtenFor } from "./help";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
@@ -801,6 +803,10 @@ export class MockEngine implements EngineClient {
     const askId = `ask-${this.counter}`;
     this.runAsk(askId, question, place, help ?? false);
     return askId;
+  }
+
+  async getGuide(): Promise<GuideView> {
+    return mockGuide(pkg.version);
   }
 
   /**

@@ -236,4 +236,5 @@ export class TauriEngine implements EngineClient {
   keepOldModel: EngineClient["keepOldModel"] = () => this.call("keep_old_model");
   removeOldModel: EngineClient["removeOldModel"] = () => this.call("remove_old_model");
   resetModelsToTier: EngineClient["resetModelsToTier"] = () => this.call("reset_models_to_tier");
+  getGuide: EngineClient["getGuide"] = () => this.call("get_guide");
 }

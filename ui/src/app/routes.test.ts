@@ -35,6 +35,7 @@ describe("route table", () => {
       "/settings/models/recordings": "models",
       "/settings/models/aloud": "models",
       "/settings/models/finding": "models",
+      "/guide": "guide",
       "/listen/2026-11-13": "editions",
       "/print/2026-11-13": "editions",
     };

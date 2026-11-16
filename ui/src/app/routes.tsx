@@ -29,6 +29,7 @@ const editions = lazy(() => import("../screens/editions"));
 const away = lazy(() => import("../screens/away"));
 const online = lazy(() => import("../screens/online"));
 const models = lazy(() => import("../screens/models"));
+const guide = lazy(() => import("../screens/guide"));
 
 /** The route table is fixed: later lanes replace screen folders, never this list. */
 export const routes: readonly AppRoute[] = [
@@ -230,6 +231,13 @@ export const routes: readonly AppRoute[] = [
     title: "screen.models.finding.title",
     shell: true,
     Component: models,
+  },
+  {
+    path: "/guide",
+    folder: "guide",
+    title: "screen.guide.title",
+    shell: true,
+    Component: guide,
   },
   {
     path: "/listen/:date",
