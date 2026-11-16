@@ -124,7 +124,7 @@ export function formatEta(seconds: number): string {
   return t("duration.about.minutes", { count: Math.max(1, Math.round(seconds / 60)) });
 }
 
-/** "84 MB", "4.1 GB". Decimal units, as disk sizes are shown by the system. */
+/** "84 MB", "4.1 GB". Decimal units, as disk sizes are shown by the system. A no-break space keeps a number with its unit. */
 export function formatBytes(bytes: number): string {
   const units = ["B", "kB", "MB", "GB", "TB"];
   let value = bytes;
@@ -135,7 +135,7 @@ export function formatBytes(bytes: number): string {
   }
   const digits = value >= 100 || i === 0 ? 0 : 1;
   const n = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: digits }).format(value);
-  return `${n} ${units[i]}`;
+  return `${n}\u00a0${units[i]}`;
 }
 
 /** `YYYY-MM-DD` of an instant in the person's time zone. */

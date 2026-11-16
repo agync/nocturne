@@ -49,7 +49,7 @@ describe("Privacy", () => {
   it("shows an amount, not Nothing., when something was sent", async () => {
     const engine = createMockEngine({ sentMeasured: true });
     await view(engine, { sentToInternetBytes: 84e6 });
-    await open(engine, undefined, "84 MB.");
+    await open(engine, undefined, "84\u00a0MB.");
     expect(screen.getByText("84 MB.")).toBeInTheDocument();
     expect(screen.queryByText("Nothing.")).toBeNull();
   });

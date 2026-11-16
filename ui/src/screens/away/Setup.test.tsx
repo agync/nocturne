@@ -31,7 +31,7 @@ describe("setup", () => {
     await userEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       await screen.findByRole("heading", {
-        name: /small extra part from Cloudflare \(about 40 MB\)/,
+        name: /small extra part from Cloudflare \(about 40\sMB\)/,
       }),
     ).toBeInTheDocument();
     expect(start).not.toHaveBeenCalled();
@@ -57,7 +57,10 @@ describe("setup", () => {
       /Getting the extra part from Cloudflare/,
     );
     const bar = screen.getByRole("progressbar");
-    expect(bar).toHaveAttribute("aria-valuetext", expect.stringContaining("18 MB of 40 MB"));
+    expect(bar).toHaveAttribute(
+      "aria-valuetext",
+      expect.stringContaining("18\u00a0MB of 40\u00a0MB"),
+    );
     await userEvent.click(screen.getByRole("button", { name: "Pause" }));
     expect(await screen.findByRole("button", { name: "Resume" })).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toHaveAttribute(

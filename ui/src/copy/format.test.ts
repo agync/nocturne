@@ -50,8 +50,12 @@ describe("format", () => {
   it("formats estimates and sizes", () => {
     expect(formatEta(40)).toBe("about 40 seconds");
     expect(formatEta(180)).toBe("about 3 min");
-    expect(formatBytes(84_000_000)).toBe("84 MB");
-    expect(formatBytes(4_100_000_000)).toBe("4.1 GB");
+    expect(formatBytes(84_000_000)).toBe("84\u00a0MB");
+    expect(formatBytes(4_100_000_000)).toBe("4.1\u00a0GB");
+  });
+
+  it("keeps a number with its unit", () => {
+    expect(formatBytes(9_000_000_000)).toMatch(/^9\u00a0GB$/);
   });
 
   it("moves days across a clock change", () => {
