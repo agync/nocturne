@@ -1,23 +1,22 @@
 ---
 type: Design
-title: Quick keep shortcut through the desktop, proposed copy
-description: Proposed words for the quick keep shortcut where the desktop holds it (Wayland, the Flatpak), for approval before they reach the interface.
-status: draft
-tags: [proposal, copy, settings, shortcut, wayland, flatpak]
+title: Quick keep shortcut through the desktop, copy
+description: The approved words for the quick keep shortcut where the desktop holds it (Wayland, the Flatpak).
+status: stable
+tags: [approved, copy, settings, shortcut, wayland, flatpak]
 ---
 
-# Quick keep shortcut through the desktop, proposed copy
+# Quick keep shortcut through the desktop, copy
 
 On a Wayland desktop, and so in the Flatpak on one, an app cannot listen for keys while another
 app is in front. The app now asks the desktop to hold the quick keep shortcut through its global
 shortcuts portal, where the desktop has one (GNOME 48 and later, KDE Plasma 5.27 and later). The
 desktop may ask the person first in its own window, and it may choose other keys than the ones
-suggested.
-Where the desktop has no such portal, Settings keeps today's words and the command for a desktop
+suggested. Where the desktop has no such portal, Settings keeps today's words and the command for a desktop
 shortcut.
 
-Nothing below is in the interface yet. Until it is approved, the app sends the desktop the
-existing label "Quick keep shortcut" as the shortcut's name and shows the existing Settings words.
+The owner approved the proposed words below as written on 2026-11-16, and they are in the
+interface. Each table keeps the words from before for the record.
 
 ## 1. The shortcut's name in the desktop's window
 
