@@ -5,6 +5,8 @@
 //! fixture test that runs without models (`eval_fixture.rs`).
 #![allow(dead_code)]
 
+pub mod help;
+
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;

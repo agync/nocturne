@@ -164,8 +164,9 @@ export interface EngineClient {
   /**
    * Resolves with the ask id as soon as the question is accepted; the answer streams as
    * `ask-delta`. `place` is the person's choice for this one question (`auto` when left out).
+   * `help` asks for the Nocturne guide's answer ("Show the guide's answer").
    */
-  ask(question: string, place?: AskPlace): Promise<string>;
+  ask(question: string, place?: AskPlace, help?: boolean): Promise<string>;
   /** Stops an answer in progress; no more of it arrives. Stopping a finished one is fine. */
   cancelAsk(askId: string): Promise<void>;
 

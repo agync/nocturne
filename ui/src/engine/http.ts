@@ -219,8 +219,8 @@ export class HttpEngine implements EngineClient {
   getItem: EngineClient["getItem"] = (id) => this.call("get_item", { id });
   retryItem: EngineClient["retryItem"] = (id) => this.call("retry_item", { id });
 
-  ask: EngineClient["ask"] = (question, place) =>
-    this.call("ask", { question, place: place ?? null });
+  ask: EngineClient["ask"] = (question, place, help) =>
+    this.call("ask", { question, place: place ?? null, help: help ?? null });
   cancelAsk: EngineClient["cancelAsk"] = (askId) => this.call("cancel_ask", { askId });
   appReady: EngineClient["appReady"] = () => this.call("app_ready");
   reportRecording: EngineClient["reportRecording"] = (state) =>

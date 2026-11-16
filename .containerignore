@@ -6,6 +6,7 @@
 !lemonade.lock
 !crates/
 !src-tauri/
+!docs/guide/
 !ui/
 !scripts/fetch-lemonade.sh
 !scripts/sha256.sh

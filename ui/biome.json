@@ -10,6 +10,7 @@
       "!playwright-report",
       "!node_modules",
       "!src/engine/bindings",
+      "!src/engine/mock/seed/guide.json",
       "!src/design/tokens.css"
     ]
   },

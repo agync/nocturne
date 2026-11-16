@@ -26,6 +26,8 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock helpers.lock ./
 COPY crates/ crates/
 COPY src-tauri/ src-tauri/
+# The guide ships inside the app (help with Nocturne).
+COPY docs/guide/ docs/guide/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release -p nocturne-app --features server --bin nocturne-server \

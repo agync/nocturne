@@ -553,6 +553,7 @@ fn phone_ask(
         lane: AskLane::Phone(device.into()),
         sink: AskSink::Channel(tx),
         place: nocturne_contract::AskPlace::Auto,
+        help: false,
     };
     let question = question.to_string();
     let id = tauri::async_runtime::block_on(async move { start_with(&handle, question, opts) });

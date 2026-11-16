@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ICON_NAMES, Icon } from "./Icon";
 
 describe("Icon", () => {
-  it("offers exactly the twenty icons of the design", () => {
+  it("offers exactly the twenty-one icons of the design", () => {
     expect(ICON_NAMES.sort()).toEqual(
       [
         "mic",
@@ -26,6 +26,7 @@ describe("Icon", () => {
         "x",
         "chevron-down",
         "paperclip",
+        "book-open",
       ].sort(),
     );
   });

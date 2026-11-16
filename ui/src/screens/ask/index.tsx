@@ -21,6 +21,15 @@ import { Actions } from "./Actions";
 import { AnswerMark, hasMark, spokenMark } from "./AnswerMark";
 import { AnswerText } from "./AnswerText";
 import styles from "./Ask.module.css";
+import {
+  DidYouMean,
+  GuideReceiptCard,
+  GuideReceiptChip,
+  GuideWords,
+  HelpButtons,
+  HelpMark,
+} from "./Help";
+import helpStyles from "./Help.module.css";
 import { ReceiptCard, receiptMeta } from "./ReceiptCard";
 import { askSession, type Extras, type Snapshot, type Turn } from "./session";
 
@@ -119,6 +128,7 @@ export default function Ask() {
       null,
     [deltas],
   );
+  const liveHelp = useMemo(() => [...deltas].reverse().find((d) => d.help)?.help ?? null, [deltas]);
   const live: Snapshot = useMemo(
     () => ({
       phase: asking.phase,
@@ -132,6 +142,7 @@ export default function Ask() {
       answeredBy: liveBy,
       leftOut: liveLeftOut,
       sendId: liveSendId,
+      help: liveHelp,
     }),
     [
       asking.phase,
@@ -145,6 +156,7 @@ export default function Ask() {
       liveBy,
       liveLeftOut,
       liveSendId,
+      liveHelp,
     ],
   );
   // Coming back to an answer shows what was there; a new question shows the live one.
@@ -154,6 +166,8 @@ export default function Ask() {
   const leftOut = shown.leftOut ?? null;
   const sendId = shown.sendId ?? null;
   const forgotten = extras.forgotten !== null;
+  const help = shown.help ?? null;
+  const written = help?.kind === "written" ? help : null;
 
   const { data: memories = [] } = useQuery({
     queryKey: ["askMemories", memoryIds.join(",")],
@@ -188,7 +202,13 @@ export default function Ask() {
   };
 
   const start = useCallback(
-    (question: string, moveFocus = false, place: AskPlace = "auto", replace = false) => {
+    (
+      question: string,
+      moveFocus = false,
+      place: AskPlace = "auto",
+      replace = false,
+      asHelp = false,
+    ) => {
       const now = latest.current;
       // A finished answer steps up into Earlier; one still being written is simply replaced, and
       // so is one asked again on this computer.
@@ -204,6 +224,10 @@ export default function Ask() {
           answeredBy: gone || now.shown.phase !== "done" ? null : (now.shown.answeredBy ?? null),
           sendId: now.shown.sendId ?? null,
           count: new Set(now.shown.receipts.map((r) => r.itemId)).size,
+          guide:
+            !gone && now.shown.phase === "done" && now.shown.help?.kind === "written"
+              ? now.shown.help.sections
+              : [],
         };
         setEarlier((all) => [...all, turn]);
       }
@@ -217,7 +241,7 @@ export default function Ask() {
       setResult("");
       setKeptAsNote(false);
       announced.current = null;
-      void asking.ask(question, place);
+      void asking.ask(question, place, asHelp);
     },
     [asking.ask],
   );
@@ -297,7 +321,9 @@ export default function Ask() {
     if (!done || announced.current === id) return;
     announced.current = id;
     const marked = hasMark(answeredBy);
-    if (phase === "done") {
+    if (phase === "done" && help?.kind === "written") {
+      setAnnouncement(t("ask.announce.done.guide", { answer: plain(text) }));
+    } else if (phase === "done") {
       setAnnouncement(
         !marked
           ? t("ask.announce.done", { answer: plain(text) })
@@ -316,7 +342,7 @@ export default function Ask() {
       );
     else if (phase === "nothing") setAnnouncement(t("ask.nothing.lead"));
     else setAnnouncement(t("notice.notReady.text"));
-  }, [phase, shown.failed, askId, current, restored, text, near.length, answeredBy, host]);
+  }, [phase, shown.failed, askId, current, restored, text, near.length, answeredBy, host, help]);
 
   useEffect(() => {
     if (restored) return;
@@ -367,7 +393,7 @@ export default function Ask() {
     const group = [...root.querySelectorAll<HTMLElement>("[data-memory]")].find(
       (el) => el.dataset.memory === memoryId,
     );
-    (group ?? root).querySelector<HTMLElement>("button[data-open]")?.focus();
+    (group ?? root).querySelector<HTMLElement>("[data-open]")?.focus();
   };
 
   const keepPhoto = async () => {
@@ -422,6 +448,14 @@ export default function Ask() {
     start(current, false, "thisComputer", waiting);
   };
   const memoriesHref = hashHref("/memories", { q: current });
+  // "Show the guide's answer": the same question again, answered from the guide, in place.
+  const askGuide = () => {
+    if (!current) return;
+    heading.current?.focus({ preventScroll: true });
+    start(current, false, "auto", true, true);
+  };
+  const helpDone = written !== null && phase === "done" && !forgotten;
+  const words = help?.kind === "words" && TERMINAL.has(phase) ? help : null;
 
   const onForgotten = (ids: string[]) => {
     const note = forgetNote(memoryIds.filter((id) => ids.includes(id)).length, memoryIds.length);
@@ -436,7 +470,7 @@ export default function Ask() {
     <ScreenSheet>
       <BackLink to="/today" label={t("screen.today.title")} />
       <div className={styles.column}>
-        {finished && items > 0 && !marked ? (
+        {finished && items > 0 && !marked && !helpDone ? (
           <p className={styles.provenance}>
             {t(internet ? "ask.provenance" : "ask.provenance.plain", { count: items })}
           </p>
@@ -464,8 +498,11 @@ export default function Ask() {
                   <p className={styles.turnAnswer}>
                     {turn.text ? richText(turn.text) : turn.summary}
                   </p>
-                  {turn.receipts.length > 0 ? (
+                  {turn.receipts.length > 0 || (turn.guide?.length ?? 0) > 0 ? (
                     <span className={styles.chips}>
+                      {turn.guide?.map((cite) => (
+                        <GuideReceiptChip key={cite.id} cite={cite} />
+                      ))}
                       {turn.receipts.map((r) => (
                         <ReceiptChip
                           key={`${r.itemId}-${JSON.stringify(r.span)}`}
@@ -483,7 +520,9 @@ export default function Ask() {
 
         {current ? (
           <article className={styles.turnNow} aria-busy={!TERMINAL.has(phase) && !shown.failed}>
-            {marked && markPhase && !forgotten ? (
+            {helpDone && written ? (
+              <HelpMark help={written} count={items} />
+            ) : marked && markPhase && !forgotten ? (
               <AnswerMark
                 by={answeredBy}
                 phase={markPhase}
@@ -498,6 +537,10 @@ export default function Ask() {
             </h1>
 
             <div className={styles.body}>
+              {words ? <GuideWords help={words} /> : null}
+              {words ? (
+                <p className={`${styles.eyebrow} ${helpStyles.keptHead}`}>{t("ask.help.kept")}</p>
+              ) : null}
               {phase === "waking" ? (
                 <div className={styles.waking} role="status">
                   <p className={styles.wakingTitle}>
@@ -609,7 +652,7 @@ export default function Ask() {
               {(phase === "streaming" || phase === "done") && !forgotten ? (
                 <AnswerText
                   text={text}
-                  memoryIds={memoryIds}
+                  memoryIds={written ? written.cited : memoryIds}
                   corrected={extras.corrected.length > 0}
                   onActive={setActive}
                   onJump={jump}
@@ -666,7 +709,11 @@ export default function Ask() {
                 </>
               ) : null}
 
-              {phase === "nothing" ? (
+              {phase === "nothing" && words ? (
+                <p className={styles.note}>{t("ask.help.kept.nothing")}</p>
+              ) : null}
+
+              {phase === "nothing" && !words ? (
                 <>
                   <p className={styles.lead}>{t("ask.nothing.lead")}</p>
                   <p className={styles.note}>{t("ask.nothing.body")}</p>
@@ -701,7 +748,41 @@ export default function Ask() {
                 </>
               ) : null}
 
-              {showReceipts ? (
+              {helpDone && written ? (
+                <div ref={receiptsRef} className={styles.receipts}>
+                  {written.sections.length > 0 ? (
+                    <ul className={styles.group} aria-label={t("ask.help.receipts")}>
+                      {written.sections.map((cite) => (
+                        <GuideReceiptCard key={cite.id} cite={cite} active={active === cite.id} />
+                      ))}
+                    </ul>
+                  ) : null}
+                  {receipts.length > 0
+                    ? groups.map((group) => (
+                        <ul
+                          key={group.id ?? "all"}
+                          className={styles.group}
+                          data-memory={group.id ?? undefined}
+                          aria-label={
+                            group.label
+                              ? t("ask.receipt.groupFor", { sentence: group.label })
+                              : t("receipt.group")
+                          }
+                        >
+                          {group.receipts.map((receipt) => (
+                            <ReceiptCard
+                              key={`${receipt.itemId}-${JSON.stringify(receipt.span)}`}
+                              receipt={receipt}
+                              active={isActive(group.id, receipt)}
+                              onOpen={openReceipt}
+                            />
+                          ))}
+                        </ul>
+                      ))
+                    : null}
+                  <HelpButtons help={written} />
+                </div>
+              ) : showReceipts ? (
                 <div ref={receiptsRef} className={styles.receipts}>
                   {groups.map((group) => (
                     <ul
@@ -750,10 +831,14 @@ export default function Ask() {
                 </div>
               ) : null}
 
+              {help?.kind === "unsure" && TERMINAL.has(phase) && !forgotten ? (
+                <DidYouMean help={help} onShow={askGuide} />
+              ) : null}
+
               {phase === "done" ? (
                 <Actions
                   memories={forgotten ? [] : memories}
-                  showButtons={!forgotten}
+                  showButtons={!forgotten && !(written && memoryIds.length === 0)}
                   result={result}
                   onResult={setResult}
                   onCorrected={(sentence) =>
@@ -795,7 +880,7 @@ export default function Ask() {
 }
 
 function EmptyAsk({ onAsk }: { onAsk: (question: string) => void }) {
-  const EXAMPLES = [t("ask.example.1"), t("ask.example.2"), t("ask.example.3")];
+  const EXAMPLES = [t("ask.example.1"), t("ask.example.2"), t("ask.example.3"), t("ask.example.4")];
   return (
     <section className={styles.empty}>
       <h1 className={`t-page-title ${styles.question}`}>{t("ask.empty.title")}</h1>

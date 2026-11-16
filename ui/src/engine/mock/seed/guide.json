@@ -1,0 +1,2361 @@
+{
+  "asked": {
+    "guide:away-from-home#add-a-phone": [
+      "connect my phone",
+      "pair a phone",
+      "pair my phone",
+      "add a phone",
+      "add my phone",
+      "get nocturne on my phone",
+      "compare the three words"
+    ],
+    "guide:away-from-home#most-private-sign-in": [
+      "sign in to tailscale",
+      "tailscale account",
+      "most private sign in"
+    ],
+    "guide:away-from-home#remove-a-lost-phone": [
+      "lost my phone",
+      "phone was stolen",
+      "stolen phone",
+      "remove a phone",
+      "stop a phone"
+    ],
+    "guide:away-from-home#switching-connection": [
+      "switch connection",
+      "change connection",
+      "change to most private",
+      "change to simple"
+    ],
+    "guide:away-from-home#turn-it-off": [
+      "turn off away from home",
+      "turn away from home off",
+      "stop away from home"
+    ],
+    "guide:away-from-home#turn-it-on": [
+      "get nocturne on my phone",
+      "use nocturne on my phone",
+      "set up away from home",
+      "turn on away from home",
+      "nocturne on my phone"
+    ],
+    "guide:away-from-home#what-the-companies-can-see": [
+      "cloudflare see",
+      "tailscale see",
+      "companies see",
+      "who can see my questions"
+    ],
+    "guide:away-from-home#what-the-phone-can-do": [
+      "phone can do",
+      "when i'm out",
+      "while i'm out",
+      "my phone see",
+      "see on my phone",
+      "read on my phone",
+      "from my phone",
+      "phone app"
+    ],
+    "guide:away-from-home#when-the-address-changes": [
+      "can't connect",
+      "cannot connect",
+      "won't connect",
+      "phone needs the new address",
+      "scan the new code"
+    ],
+    "guide:desktops#a-folder-that-keeps-what-you-drop-in-it": [
+      "save in downloads",
+      "downloads folder",
+      "inbox folder",
+      "watch a folder",
+      "pick up everything",
+      "everything i save"
+    ],
+    "guide:desktops#notifications": [
+      "page is ready",
+      "tell me when my page",
+      "notify me when",
+      "don't interrupt me"
+    ],
+    "guide:desktops#quick-keep-shortcut": [
+      "without opening the window",
+      "quick keep",
+      "keyboard shortcut",
+      "keep from any app",
+      "change the keys"
+    ],
+    "guide:desktops#sound": [
+      "hear me",
+      "use the microphone",
+      "can't record",
+      "won't record",
+      "voice note doesn't"
+    ],
+    "guide:desktops#start-with-this-computer": [
+      "start when i turn",
+      "start by itself",
+      "start automatically",
+      "start with this computer",
+      "start on its own"
+    ],
+    "guide:desktops#the-tray": [
+      "icon by the clock",
+      "little icon",
+      "tray icon",
+      "notification area",
+      "closing the window"
+    ],
+    "guide:index#what-nocturne-does": [
+      "what does nocturne do",
+      "what is nocturne",
+      "how does nocturne work",
+      "what is nocturne for"
+    ],
+    "guide:index#what-this-version-does-not-do": [
+      "can it remind me",
+      "send me reminders",
+      "print by itself",
+      "other languages",
+      "speak french",
+      "password-locked pdf",
+      "keep anyway",
+      "signed by apple"
+    ],
+    "guide:install#take-nocturne-off": [
+      "take nocturne off",
+      "uninstall nocturne",
+      "remove nocturne",
+      "delete the app",
+      "take it off my computer"
+    ],
+    "guide:install#the-first-run": [
+      "first run",
+      "first time i open",
+      "set nocturne up",
+      "setting up nocturne",
+      "the setup download"
+    ],
+    "guide:online-answers#cost-and-the-limit": [
+      "how much does it cost",
+      "monthly limit",
+      "cost of online answers",
+      "spending limit"
+    ],
+    "guide:online-answers#see-what-was-sent": [
+      "see what was sent",
+      "sent online",
+      "went online",
+      "what went out"
+    ],
+    "guide:online-answers#turn-it-off-and-forget-the-key": [
+      "stop sending",
+      "stop it sending",
+      "turn off online answers",
+      "forget the key",
+      "sending my questions"
+    ],
+    "guide:online-answers#turn-it-on": [
+      "ai i already pay for",
+      "already pay for",
+      "use chatgpt",
+      "online service",
+      "answers written online",
+      "set up online answers",
+      "turn on online answers"
+    ],
+    "guide:online-answers#what-is-never-sent": [
+      "never sent",
+      "never goes online",
+      "private things online",
+      "health money and id"
+    ],
+    "guide:online-answers#what-is-sent": [
+      "go online",
+      "goes online",
+      "what is sent",
+      "sent to my provider",
+      "what leaves"
+    ],
+    "guide:online-answers#what-your-provider-sees": [
+      "provider see",
+      "provider keep",
+      "does my provider"
+    ],
+    "guide:online-answers#when-it-does-not-work": [
+      "online answers not working",
+      "online answers taking a while",
+      "provider is slow",
+      "answered on this computer instead"
+    ],
+    "guide:online-answers#where-the-key-is-kept": [
+      "where is the key kept",
+      "key kept",
+      "the keychain"
+    ],
+    "guide:your-data#back-up-and-restore": [
+      "move everything",
+      "new laptop",
+      "new computer",
+      "make a backup",
+      "back up nocturne",
+      "restore a backup",
+      "restore from a backup",
+      "forgot the passphrase"
+    ],
+    "guide:your-data#delete-everything": [
+      "delete everything",
+      "wipe everything",
+      "erase everything",
+      "start again from nothing"
+    ],
+    "guide:your-data#how-you-can-tell-nothing-leaves-your-computer": [
+      "go on the internet",
+      "goes on the internet",
+      "leaves my computer",
+      "nothing leaves",
+      "send anything",
+      "spying on me"
+    ],
+    "guide:your-data#let-go-bring-back-forget": [
+      "get rid of a photo",
+      "get rid of the photo",
+      "get rid of a note",
+      "get rid of something i kept",
+      "delete a photo",
+      "delete a note",
+      "kept has disappeared",
+      "note has gone",
+      "photo has gone",
+      "how do i get it back",
+      "how do i bring it back",
+      "let go of",
+      "fading away"
+    ],
+    "guide:your-data#look-at-what-it-holds": [
+      "see everything it remembers",
+      "what it remembers",
+      "look at what it holds",
+      "see what i kept"
+    ],
+    "guide:your-data#take-a-copy": [
+      "export everything",
+      "take a copy",
+      "copy of everything",
+      "export my data"
+    ],
+    "guide:your-data#where-it-is": [
+      "where is my data",
+      "data folder",
+      "where are my things kept",
+      "where does it keep",
+      "open folder"
+    ]
+  },
+  "pages": [
+    {
+      "opening": [
+        {
+          "text": "How to install Nocturne, live with it on your desktop, and stay in charge of what it holds.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "You keep things as you go: a photo of a letter, a voice note, a file, a line of text. Nocturne reads them overnight while your computer is plugged in and idle (a catch-up after sleep may run on battery while it has 40 per cent or more), joins them up, and hands you one page each morning. Ask it a question and it answers only from what it can show you, with the originals it used underneath. Everything stays on this computer.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What Nocturne does",
+          "slug": "what-nocturne-does"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Nocturne is deliberately small. These are choices, not missing pieces you need to work around.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "It does not print by itself. You can print the morning page whenever you choose to.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It does not remind you. It lists what needs you on the page and in the app, and sends one quiet note when the page is ready if you allow that. It never nags.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It speaks English (UK) only, for the app and for the spoken page.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It has no \"Keep anyway\". If you have already kept the same thing, Nocturne tells you when and keeps nothing new.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It does not open password-locked PDFs. Save an unlocked copy and drop that in instead.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It is not signed by Apple or Microsoft, so a Mac or Windows computer warns you the first time you open it. Install and remove shows what to click.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            }
+          ],
+          "heading": "What this version does not do",
+          "slug": "what-this-version-does-not-do"
+        }
+      ],
+      "slug": "index",
+      "title": "Using Nocturne"
+    },
+    {
+      "opening": [
+        {
+          "text": "Nocturne meets your desktop in four places: a small icon in the tray, a quick keep shortcut, one notification and starting with your computer. Each has a plain fallback when your desktop does not offer it.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "When your desktop has a notification area, Nocturne puts a small icon there. It shows what Nocturne is doing (resting, reading, tidying, needs you, paused) and its menu lets you keep something, ask, open today's page, pause for an hour, until tonight or until you resume, and quit. Closing the window leaves Nocturne running in the tray, so the overnight tidy can still happen.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "GNOME does not show a tray unless you add an extension that provides one (look for \"AppIndicator\" in your extensions app). Without a tray:",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Closing the window quits Nocturne, and nothing is tidied while it is not running. Leave the window open or minimised overnight, or add the extension.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Nothing is lost either way. What you kept is safe, and Nocturne catches up on the next start.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Most other desktops, such as KDE Plasma, show the tray without any extra step.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "The tray",
+          "slug": "the-tray"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "The default shortcut is Ctrl+Shift+Space on Windows and Linux, and Cmd+Shift+Space on a Mac. It opens a small box above whatever you are doing, where you can type, paste, drop a file or hold Space in the empty box to talk. Press Esc and it goes away. You can change the keys in ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": ", under ",
+                  "type": "text"
+                },
+                {
+                  "text": "Quick keep shortcut",
+                  "type": "control"
+                },
+                {
+                  "text": ", except where your desktop looks after the shortcut (see below).",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "On most current desktops (those that use Wayland, which is the default on current GNOME and KDE), your desktop looks after the shortcut. The first time Nocturne starts, your desktop may ask whether to add it; allow it. To change the keys later, use your desktop's keyboard settings. If your desktop can't add it, Nocturne says so in its ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": " and shows a command instead. Add it as a custom shortcut:",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Open your desktop's own settings (not Nocturne's), go to Keyboard, then Custom Shortcuts.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Add a shortcut, paste the command Nocturne shows under ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Set it to run:",
+                    "type": "control"
+                  },
+                  {
+                    "text": ", and choose your keys.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            },
+            {
+              "parts": [
+                {
+                  "text": "On older desktops (those that use X11), the Ctrl+Shift+Space shortcut works directly.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Quick keep shortcut",
+          "slug": "quick-keep-shortcut"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "When your morning page is ready, Nocturne can send one quiet note: the page is ready, and how many things need you. It says nothing about what you kept. It arrives from your page time until six hours later, never after 9 pm, not if you have already opened the page, and not while Nocturne is paused. In ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": ", under ",
+                  "type": "text"
+                },
+                {
+                  "text": "Morning page",
+                  "type": "control"
+                },
+                {
+                  "text": ", choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "Tell me when it's ready",
+                  "type": "control"
+                },
+                {
+                  "text": " or ",
+                  "type": "text"
+                },
+                {
+                  "text": "Don't interrupt me",
+                  "type": "control"
+                },
+                {
+                  "text": ". If your desktop blocks notifications for Nocturne, the page is still there when you open the app and the tray icon shows when something needs you.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Notifications",
+          "slug": "notifications"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Turn on ",
+                  "type": "text"
+                },
+                {
+                  "text": "Start with this computer",
+                  "type": "control"
+                },
+                {
+                  "text": " in ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": " so the overnight tidy can run without you opening Nocturne. It adds a start-up entry for you, and Nocturne then starts in the tray without opening a window. On a desktop with no tray, it opens the window instead, so you can see it is running.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Start with this computer",
+          "slug": "start-with-this-computer"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "In ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": ", press ",
+                  "type": "text"
+                },
+                {
+                  "text": "Choose inbox folder…",
+                  "type": "control"
+                },
+                {
+                  "text": " beside ",
+                  "type": "text"
+                },
+                {
+                  "text": "Nocturne inbox folder",
+                  "type": "control"
+                },
+                {
+                  "text": ". Anything saved there afterwards is kept once. Nocturne only reads the folder: it never moves, changes or deletes what is in it. It reads subfolders up to four levels down and skips hidden files and folders. Files already there when you choose the folder are left alone.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "A folder that keeps what you drop in it",
+          "slug": "a-folder-that-keeps-what-you-drop-in-it"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "To keep a voice note, Nocturne needs permission to use the microphone. If it is switched off, Nocturne says so and offers ",
+                  "type": "text"
+                },
+                {
+                  "text": "Open sound settings",
+                  "type": "control"
+                },
+                {
+                  "text": ". You can still type, or drop a recording onto the window.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If a window cannot record at all, Nocturne says so once and marks the microphone button as unavailable, with the reason, so pressing it again does nothing. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Advanced details",
+                  "type": "control"
+                },
+                {
+                  "text": " shows whether recording is available.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Sound",
+          "slug": "sound"
+        }
+      ],
+      "slug": "desktops",
+      "title": "On your desktop"
+    },
+    {
+      "opening": [
+        {
+          "text": "Away from home lets your phone ask Nocturne a question, keep something and read today's page while you are out. It is off until you turn it on. Everything stays on your computer; your phone talks to it through a connection you choose, and what travels is sealed so that only your phone and your computer can read it.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "items": [
+                [
+                  {
+                    "text": "Open ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Settings",
+                    "type": "control"
+                  },
+                  {
+                    "text": " and choose ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Away from home",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". Press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Set up…",
+                    "type": "control"
+                  },
+                  {
+                    "text": ", or ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Turn on",
+                    "type": "control"
+                  },
+                  {
+                    "text": " if you have set it up before.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Choose a connection. Simple is the default and needs no account. Most private uses your own Tailscale account and is harder for anyone else to observe.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Nocturne asks before it downloads the small helper program the connection needs. Nothing is downloaded until you say yes.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Your computer must stay on and awake for the phone to reach it. Nocturne can keep it awake, but only while it is plugged in.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            }
+          ],
+          "heading": "Turn it on",
+          "slug": "turn-it-on"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Most private uses your own Tailscale account, and Nocturne walks you through what that account asks for. Each step opens the right Tailscale page in your browser, and Nocturne carries on by itself when you are done.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Sign in to Tailscale in your browser, in the page that opens.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "If your Tailscale account asks for new computers to be approved, Nocturne says so and opens the page that lists this computer. Approve it there. It shows under a made-up name.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "If your account does not allow secure links yet, Nocturne opens that page. Choose Enable HTTPS once.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Get Tailscale on your phone, if it is not there already.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Tailscale can take a little while to make the secure address. Nocturne keeps trying. If it is still not ready after 30 seconds, Away from home shows a problem and keeps trying, then returns to normal when it works.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If your Tailscale account asks computers to keep a log of their activity for Tailscale, Most private refuses to join and says so in plain words, because it never sends logs. Use another account, or turn Away from home off.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Most private sign-in",
+          "slug": "most-private-sign-in"
+        },
+        {
+          "blocks": [
+            {
+              "items": [
+                [
+                  {
+                    "text": "Choose ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Add a phone",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". Nocturne shows a code that works once and lasts five minutes.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "On the phone, scan the code with its camera. If you cannot scan it, open the address shown and type the 24 characters of the typed code instead. Type the address exactly: a look-alike site that has your code can pair itself and show matching words, and only the exact address protects you from that.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Name the phone.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Compare the three words. Both screens show three words. If they are the same, press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Allow",
+                    "type": "control"
+                  },
+                  {
+                    "text": " on the computer. If they differ, or you did not start this, press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Don't allow",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". If the computer asks to allow a phone and your phone is not showing three words, someone else is trying to pair, so refuse.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            },
+            {
+              "parts": [
+                {
+                  "text": "A pairing code can leak through a photo, a screen share or a QR scanner that works online. Comparing the words is the only thing that stops someone who has it, so do not press ",
+                  "type": "text"
+                },
+                {
+                  "text": "Allow",
+                  "type": "control"
+                },
+                {
+                  "text": " without comparing.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If an iPhone is involved, add Nocturne to the home screen first and open it from there, so the phone keeps its key.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Add a phone",
+          "slug": "add-a-phone"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Ask a question, keep text, a photo, a document or a voice note, take back what it just kept, read today's page and the last seven, and open an original that an answer or the page cited. It never sees anything you marked private. It cannot forget, delete, export, change settings or add other phones.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If the phone has no signal, what it keeps waits on the phone and is sent when it connects again. That waiting list sits in the phone's own storage and is not hidden from someone who has the phone.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "An unlocked or stolen phone can read everything not marked private until you remove it from the computer, so remove a lost phone first.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What the phone can do",
+          "slug": "what-the-phone-can-do"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Content is sealed, so neither company can read your questions, your page or your files. They can see other things.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Simple (Cloudflare).",
+                    "type": "strong"
+                  },
+                  {
+                    "text": " Your phone's internet address and rough place, a stable id for each phone, when it connects, and the size and timing of every message. Cloudflare also serves the code of the page your phone opens. The phone keeps that page so it opens without a connection, so a change Cloudflare makes, or someone who breaks into it, can stay on the phone until you add the phone again, and a changed page could misuse your phone's key while it is open. After your computer restarts, the phone looks for it at an old name that Cloudflare, or someone who later gets that name, answers. Nothing in the phone app can check this, so it is a known limit. A native phone app would later fix it. Most private makes it much harder: Tailscale would have to vouch for your computer's name in public, where anyone can see it. In Simple, anyone using your computer can also see the public address, though it does not let them in.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Most private (Tailscale).",
+                    "type": "strong"
+                  },
+                  {
+                    "text": " Your account, the computers on it and when they connect. When your phone and computer cannot connect directly, Tailscale carries the sealed traffic. Only your own devices on your Tailscale account can reach your computer. Other people's devices, tagged devices and devices shared with you are refused, and your own still need a code and your Allow to pair.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Both.",
+                    "type": "strong"
+                  },
+                  {
+                    "text": " The helper also talks to its company's computers to stay connected while Away from home is on. Your computer may ask whether Nocturne's helper may accept connections. That is expected. It is why this feature is not described as staying on your own computer: while it is on, a helper uses your computer's network interfaces, not only its internal address.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Nocturne does not measure this live. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " shows what was sent to your phones, under ",
+                  "type": "text"
+                },
+                {
+                  "text": "Sent to your phones",
+                  "type": "control"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What the companies can see",
+          "slug": "what-the-companies-can-see"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "With Simple, the address changes each time Nocturne starts it. Your phones then need the new address. Nocturne shows a code for it: on the phone, open Nocturne from the home screen, choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "Scan the new code",
+                  "type": "control"
+                },
+                {
+                  "text": " and point it at your computer, or type the four words shown. Most private does not need this.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "When the address changes",
+          "slug": "when-the-address-changes"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Changing between Simple and Most private removes every phone, and the screen tells you before it does. Add them again afterwards.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Switching connection",
+          "slug": "switching-connection"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Open ",
+                  "type": "text"
+                },
+                {
+                  "text": "Away from home",
+                  "type": "control"
+                },
+                {
+                  "text": ", choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "See phones",
+                  "type": "control"
+                },
+                {
+                  "text": ", then ",
+                  "type": "text"
+                },
+                {
+                  "text": "Remove",
+                  "type": "control"
+                },
+                {
+                  "text": " beside the phone. It stops at once and any answer in progress ends. Do this first if a phone is lost or stolen. If you set up a new computer key, or choose Delete everything, phones can no longer connect and only show \"can't connect\". That is expected.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Remove a lost phone",
+          "slug": "remove-a-lost-phone"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Open ",
+                  "type": "text"
+                },
+                {
+                  "text": "Away from home",
+                  "type": "control"
+                },
+                {
+                  "text": " and turn it off. The helper stops, and no helper program is left running or listening. Phones stay paired unless you choose to remove them. You can also set it to turn itself off after a day, a week or 30 days unused, under ",
+                  "type": "text"
+                },
+                {
+                  "text": "Turn off by itself",
+                  "type": "control"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Turn it off",
+          "slug": "turn-it-off"
+        }
+      ],
+      "slug": "away-from-home",
+      "title": "Away from home"
+    },
+    {
+      "opening": [
+        {
+          "text": "Online answers lets a service you already use write the answer when you ask Nocturne a question. It is off until you turn it on. Everything else stays on your computer: reading what you keep, the overnight tidy and your morning page never use it.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "items": [
+                [
+                  {
+                    "text": "Open ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Settings",
+                    "type": "control"
+                  },
+                  {
+                    "text": ", choose ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Online answers",
+                    "type": "control"
+                  },
+                  {
+                    "text": ", then press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Set up…",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". The setup has five steps and says what each one changes.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Choose the online service: ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Open Advanced details",
+                    "type": "control"
+                  },
+                  {
+                    "text": " takes you to where you enter three things from your provider's site, the API URL, your API key and the model name. There is nothing to sign in to and no account with Nocturne. An online service's address starts with ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "https://",
+                    "type": "code"
+                  },
+                  {
+                    "text": ". One that runs on this computer (on ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "localhost",
+                    "type": "code"
+                  },
+                  {
+                    "text": ", for example) or elsewhere on your own network works too, and there plain ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "http://",
+                    "type": "code"
+                  },
+                  {
+                    "text": " is fine.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Check",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". Nocturne sends one small test question (\"Reply with the word ready.\") that holds none of your memories. If the check fails, it says why in plain words, and nothing was sent for an address it refuses.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Choose which questions may go online (the ones you ask here, and, when Away from home is on, ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Questions from your phones",
+                    "type": "control"
+                  },
+                  {
+                    "text": "), whether details about health, money or ID may go with them (they stay out unless you allow them, and the check can miss some), and a monthly limit.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Read what will be sent, then press ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Turn on online answers",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". Until you do, nothing is saved and the key is forgotten, and leaving the setup drops what you entered.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            },
+            {
+              "parts": [
+                {
+                  "text": "You can also reach it from the list for answering questions, under ",
+                  "type": "text"
+                },
+                {
+                  "text": "Choose what runs each job",
+                  "type": "control"
+                },
+                {
+                  "text": ", where \"Or have answers written online:\" is followed by a link that starts with \"Online answers\".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Turn it on",
+          "slug": "turn-it-on"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "For each question you ask, only:",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "your question, and",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "up to 12 remembered sentences that Nocturne needs to answer it.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Your photos, recordings, files, pages and everything else stay on this computer. Nocturne reads your answer here and still checks that every line it shows leads back to something you kept.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What is sent",
+          "slug": "what-is-sent"
+        },
+        {
+          "blocks": [
+            {
+              "items": [
+                [
+                  {
+                    "text": "Anything marked private.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Health, money and ID memories, unless you turn that on. It is off by default.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Anything while Online answers is off, and nothing at all from reading, the tidy or the page.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Questions from a paired phone, unless Away from home is on and ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Questions from your phones",
+                    "type": "control"
+                  },
+                  {
+                    "text": " is on. That switch is on by default when Away from home is on during setup, and you can turn it off later in ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Online answers",
+                    "type": "control"
+                  },
+                  {
+                    "text": ".",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "When Nocturne leaves something out, the answer says so, and you can ask again on this computer to include it.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What is never sent",
+          "slug": "what-is-never-sent"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "What your provider sees is your question and those sentences, your internet address, and your key. It also sees one request for its list of services each time Nocturne's private engine starts while Online answers is on; that request holds none of your memories. Nocturne cannot check what your provider keeps or for how long, so read its own terms. Choose a service you already trust with that.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "What your provider sees",
+          "slug": "what-your-provider-sees"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Online answers has no monthly limit unless you set one. You can limit the number of questions a month, or an amount in US dollars (only when your provider reports what each answer costs). When the limit is reached, answers come from this computer and Nocturne tells you once a month. The count starts again on the 1st. Nocturne shows money only if your provider reports the cost of an answer; otherwise it says the cost is \"Not told\". The site of your provider is where you see your real balance and set your own spending cap.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Cost and the limit",
+          "slug": "cost-and-the-limit"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "If you are offline, or your provider cannot be reached, is busy or returns an error, Nocturne answers on this computer and says so. If your provider has not replied after 6 seconds, a note says \"Still waiting: your provider is taking a while.\" with a button ",
+                  "type": "text"
+                },
+                {
+                  "text": "Answer on this computer instead",
+                  "type": "control"
+                },
+                {
+                  "text": ", and after 20 seconds Nocturne switches by itself. You can also choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "This computer",
+                  "type": "control"
+                },
+                {
+                  "text": " for a single question before you ask. It never goes the other way: if answering here fails, it does not send anything online. If your provider refuses your key or has no credit left, Online answers pauses and tells you; check the key or add credit, then press ",
+                  "type": "text"
+                },
+                {
+                  "text": "Try again",
+                  "type": "control"
+                },
+                {
+                  "text": ".",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "When it does not work",
+          "slug": "when-it-does-not-work"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Every answer is marked with where it was written. ",
+                  "type": "text"
+                },
+                {
+                  "text": "See what was sent",
+                  "type": "control"
+                },
+                {
+                  "text": ", on an answer, in Online answers and in ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": ", opens \"Sent online\". It lists each question, the time, your provider and exactly what left, and it keeps this for 90 days. It also lists the connection checks, and questions that were stopped just before sending, as \"not sent\". A line shows again only while the memory is unchanged; if you changed or deleted the memory since, it says so.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "See what was sent",
+          "slug": "see-what-was-sent"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Turn off",
+                  "type": "control"
+                },
+                {
+                  "text": " stops all sending at once, and any question being answered carries on here. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Turn off and forget the key…",
+                  "type": "control"
+                },
+                {
+                  "text": " (or ",
+                  "type": "text"
+                },
+                {
+                  "text": "Forget the key…",
+                  "type": "control"
+                },
+                {
+                  "text": " when it is already off) also removes the key from this computer. You can also remove the key on your provider's site, which is the only way to stop it working anywhere else. Delete everything removes the log and the key too, and export includes the log as readable text (",
+                  "type": "text"
+                },
+                {
+                  "text": "online/sent.md",
+                  "type": "code"
+                },
+                {
+                  "text": ") but never the key.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Turn it off and forget the key",
+          "slug": "turn-it-off-and-forget-the-key"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "In your computer's keychain. If there is none, in a file only you can read in Nocturne's folder, and Nocturne tells you which. It is never shown, logged or exported. Nocturne hands it to the private engine in its memory each time the engine starts, and takes it back from the engine when you turn off, forget the key, delete everything or leave the setup. If the engine does not take it, nothing is sent: questions are answered on this computer, a note says so, and ",
+                  "type": "text"
+                },
+                {
+                  "text": "Try again",
+                  "type": "control"
+                },
+                {
+                  "text": " brings Online answers back. If you think the key was exposed, rotate it on your provider's site.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Where the key is kept",
+          "slug": "where-the-key-is-kept"
+        }
+      ],
+      "slug": "online-answers",
+      "title": "Online answers"
+    },
+    {
+      "opening": [
+        {
+          "text": "Everything Nocturne holds is on your computer, in one folder, and you can see all of it.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "rows": [
+                [
+                  [
+                    {
+                      "text": "System",
+                      "type": "text"
+                    }
+                  ],
+                  [
+                    {
+                      "text": "Folder",
+                      "type": "text"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "text": "Linux",
+                      "type": "text"
+                    }
+                  ],
+                  [
+                    {
+                      "text": "~/.local/share/app.nocturne.desktop/",
+                      "type": "code"
+                    }
+                  ]
+                ],
+                [
+                  [
+                    {
+                      "text": "Mac",
+                      "type": "text"
+                    }
+                  ],
+                  [
+                    {
+                      "text": "~/Library/Application Support/app.nocturne.desktop/",
+                      "type": "code"
+                    }
+                  ]
+                ]
+              ],
+              "type": "table"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Inside are the things you kept and what Nocturne remembers from them (in ",
+                  "type": "text"
+                },
+                {
+                  "text": "store",
+                  "type": "code"
+                },
+                {
+                  "text": "), Nocturne's reading setup (in ",
+                  "type": "text"
+                },
+                {
+                  "text": "engine",
+                  "type": "code"
+                },
+                {
+                  "text": ") and a few small log files (in ",
+                  "type": "text"
+                },
+                {
+                  "text": "logs",
+                  "type": "code"
+                },
+                {
+                  "text": ", Nocturne's own and its reading engine's) that hold counts and error kinds, never what you kept. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " in the app has an ",
+                  "type": "text"
+                },
+                {
+                  "text": "Open folder",
+                  "type": "control"
+                },
+                {
+                  "text": " button that takes you there.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Where it is",
+          "slug": "where-it-is"
+        },
+        {
+          "blocks": [
+            {
+              "items": [
+                [
+                  {
+                    "text": "Today",
+                    "type": "control"
+                  },
+                  {
+                    "text": " and ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Past pages",
+                    "type": "control"
+                  },
+                  {
+                    "text": " show the morning pages.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "What Nocturne remembers",
+                    "type": "control"
+                  },
+                  {
+                    "text": " lists everything it has learned, and every line leads back to the photo, recording or note it came from.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Recently kept",
+                    "type": "control"
+                  },
+                  {
+                    "text": " lists what you kept, and what Nocturne made of it.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            }
+          ],
+          "heading": "Look at what it holds",
+          "slug": "look-at-what-it-holds"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " has Export everything, with the button ",
+                  "type": "text"
+                },
+                {
+                  "text": "Export to a folder…",
+                  "type": "control"
+                },
+                {
+                  "text": ". It writes a folder of readable files: every memory as text, every page, and all your originals exactly as you kept them. If you have used Online answers, it also holds the Sent online log as readable text, and which answering, reading and finding Nocturne uses for each job (as ",
+                  "type": "text"
+                },
+                {
+                  "text": "online/sent.md",
+                  "type": "code"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "text": "models.json",
+                  "type": "code"
+                },
+                {
+                  "text": "); it never holds the key. Nothing is changed or removed by exporting.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Take a copy",
+          "slug": "take-a-copy"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "A backup is one file that holds everything Nocturne needs to start again on this or another computer. It is locked with a passphrase you choose, and nobody can open it without that passphrase. Export everything is for reading your things; a backup is for getting them back.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Make a backup.",
+                  "type": "strong"
+                },
+                {
+                  "text": " ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " has ",
+                  "type": "text"
+                },
+                {
+                  "text": "Make a backup…",
+                  "type": "control"
+                },
+                {
+                  "text": ". Type a passphrase twice (at least 8 characters; Nocturne shows how strong it is), tick the box that says you have kept it safe, then choose where to save the file. Use a long one, such as three or four words that do not go together. ",
+                  "type": "text"
+                },
+                {
+                  "text": "If you forget the passphrase, nobody can open the backup, not even the people who make Nocturne.",
+                  "type": "strong"
+                },
+                {
+                  "text": " Keep it somewhere safe, apart from the file, or in a password manager. The file is named ",
+                  "type": "text"
+                },
+                {
+                  "text": "Nocturne backup",
+                  "type": "code"
+                },
+                {
+                  "text": " with the day, and ends in ",
+                  "type": "text"
+                },
+                {
+                  "text": ".nocturne",
+                  "type": "code"
+                },
+                {
+                  "text": ". You can watch it being saved and stop it. When it has saved the file, Nocturne reads it back to check it, and only then says it is saved. Stopping, or any failure, leaves no half-written file. Making a backup changes nothing in Nocturne.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "What is in it.",
+                  "type": "strong"
+                },
+                {
+                  "text": " Everything you kept, exactly as you kept it, everything Nocturne remembers from it, every page and your settings. Things you marked private are in it too, locked like the rest.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "What is not in it.",
+                  "type": "strong"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "What Nocturne downloads at setup to read and speak. A new computer downloads it again.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "The key for your provider (Online answers). Online answers is off after a restore and you paste the key again.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "The phones you added for Away from home. You add them again.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Spoken pages and log files. They are made again.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Anything you had asked Nocturne to forget completely and it had not finished.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Restore.",
+                  "type": "strong"
+                },
+                {
+                  "text": " On the first screen of setup choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "Restore from a backup",
+                  "type": "control"
+                },
+                {
+                  "text": ", or choose ",
+                  "type": "text"
+                },
+                {
+                  "text": "Restore from a backup…",
+                  "type": "control"
+                },
+                {
+                  "text": " in ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": ". Pick the file and type its passphrase. Nocturne checks the whole file first, tells you what is in it and when it was made, and changes nothing until you agree. A wrong passphrase, a file that is not a backup, a damaged or cut-off file, and a backup made by a newer Nocturne each get their own plain sentence, and nothing changes. A backup made by an older Nocturne is brought up to date. When you agree, Nocturne unpacks the backup, closes and opens again on the restored things. If the reading and speaking files are missing, setup downloads them.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If this computer already holds memories.",
+                  "type": "strong"
+                },
+                {
+                  "text": " Restoring never deletes them quietly. Nocturne shows what is in the backup beside what is here, and you press ",
+                  "type": "text"
+                },
+                {
+                  "text": "Replace with the backup",
+                  "type": "control"
+                },
+                {
+                  "text": " or ",
+                  "type": "text"
+                },
+                {
+                  "text": "Keep what's here",
+                  "type": "control"
+                },
+                {
+                  "text": ". If you replace, everything here is first moved aside, not deleted, into a folder called ",
+                  "type": "text"
+                },
+                {
+                  "text": "put-aside",
+                  "type": "code"
+                },
+                {
+                  "text": " inside the ",
+                  "type": "text"
+                },
+                {
+                  "text": "restore",
+                  "type": "code"
+                },
+                {
+                  "text": " folder in Nocturne's own folder. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " then lists it, with ",
+                  "type": "text"
+                },
+                {
+                  "text": "Bring it back…",
+                  "type": "control"
+                },
+                {
+                  "text": ", which swaps the two again, and ",
+                  "type": "text"
+                },
+                {
+                  "text": "Delete it…",
+                  "type": "control"
+                },
+                {
+                  "text": ", which asks first. Put-aside copies never expire. Delete everything removes them too. Nocturne cannot merge two sets of memories.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Open it without Nocturne.",
+                  "type": "strong"
+                },
+                {
+                  "text": " A backup is a standard age file that holds a tar archive. Any age tool with your passphrase opens it, and the originals inside are your files under content names.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Back up and restore",
+          "slug": "back-up-and-restore"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Nocturne does not delete anything quietly.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Things you have not used fade after 30 days and are let go after 90. That is the Normal setting. Change it under ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Letting go",
+                    "type": "control"
+                  },
+                  {
+                    "text": " in ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Settings",
+                    "type": "control"
+                  },
+                  {
+                    "text": ". ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Fading & let go",
+                    "type": "control"
+                  },
+                  {
+                    "text": " lists them, and ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Bring back",
+                    "type": "control"
+                  },
+                  {
+                    "text": " brings any of them back for another 30 days.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Deleting removes a thing for good, and it asks first. It is ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Delete…",
+                    "type": "control"
+                  },
+                  {
+                    "text": " on a memory and on something you kept, and ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Delete this…",
+                    "type": "control"
+                  },
+                  {
+                    "text": " on an answer. In ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "Fading & let go",
+                    "type": "control"
+                  },
+                  {
+                    "text": ", tick what was let go and choose Delete.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Deleting a memory keeps the original and its transcript. Tick \"Also delete the original\" to remove that too. Anything you exported or printed is out of Nocturne's reach.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Unconfirmed things from the web are never treated as true until you say so.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            }
+          ],
+          "heading": "Let go, bring back, forget",
+          "slug": "let-go-bring-back-forget"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " has Delete everything, with the button ",
+                  "type": "text"
+                },
+                {
+                  "text": "Delete everything…",
+                  "type": "control"
+                },
+                {
+                  "text": ". It removes everything Nocturne holds from this computer: what you kept, what it remembers and every page. You have to type the words it shows before it goes ahead, and it cannot be undone, so export or back up first if you might want a copy. It also removes backups waiting to be restored and the ",
+                  "type": "text"
+                },
+                {
+                  "text": "put-aside",
+                  "type": "code"
+                },
+                {
+                  "text": " copies a restore made. It keeps the reading setup it downloaded and the log files (the Sent online log, the key and your choices of what runs each job are removed), turns off ",
+                  "type": "text"
+                },
+                {
+                  "text": "Start with this computer",
+                  "type": "control"
+                },
+                {
+                  "text": " and resets the quick keep shortcut. It also clears what the Nocturne window keeps for itself outside that folder: on a Mac, the folders named ",
+                  "type": "text"
+                },
+                {
+                  "text": "app.nocturne.desktop",
+                  "type": "code"
+                },
+                {
+                  "text": " in ",
+                  "type": "text"
+                },
+                {
+                  "text": "~/Library/WebKit",
+                  "type": "code"
+                },
+                {
+                  "text": " and ",
+                  "type": "text"
+                },
+                {
+                  "text": "~/Library/Caches",
+                  "type": "code"
+                },
+                {
+                  "text": ", and the saved window state; on Linux, the window's storage inside the data folder and ",
+                  "type": "text"
+                },
+                {
+                  "text": "~/.cache/app.nocturne.desktop",
+                  "type": "code"
+                },
+                {
+                  "text": ". Afterwards Nocturne starts again from setup.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Delete everything",
+          "slug": "delete-everything"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Nocturne has no account, no analytics and no crash reports. Its reading engine is a private one that listens only on your own computer's internal address, with a fresh key every time Nocturne starts.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Away from home and Online answers are the two exceptions, and each is off until you turn it on. While Online answers is on, your private engine sends a question and the few remembered sentences it needs to the one address you entered, and the Sent online log lists exactly what left (Online answers). While Away from home is on, sealed traffic goes to your own paired phones through the connection you chose, and that connection's helper talks to its company. ",
+                  "type": "text"
+                },
+                {
+                  "text": "Privacy",
+                  "type": "control"
+                },
+                {
+                  "text": " then shows what was sent to your phones, and Away from home lists what each company can see.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "parts": [
+                {
+                  "text": "You do not have to take that on trust:",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Privacy",
+                    "type": "control"
+                  },
+                  {
+                    "text": " lists everything Nocturne ever downloaded, with the day and the size. Setup and any update you allowed are the only entries.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Nocturne only goes online to download what you agree to. It does not measure what a program sends while it runs, so it does not claim a figure for that.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Each release is checked to send nothing else. The people who build Nocturne run it with its network cut to the computer's own internal address, and treat every attempt to reach anywhere else as a failure. The check also confirms that Nocturne still starts, shows its window, runs its reading engine and keeps a file in that state. The result goes in the release notes.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "You can run the same sort of check yourself: switch off your internet and use Nocturne. Nothing changes.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            }
+          ],
+          "heading": "How you can tell nothing leaves your computer",
+          "slug": "how-you-can-tell-nothing-leaves-your-computer"
+        }
+      ],
+      "slug": "your-data",
+      "title": "Your data"
+    },
+    {
+      "opening": [
+        {
+          "text": "Choose a package for your computer, open it the first time, set Nocturne up, and take it off again.",
+          "type": "text"
+        }
+      ],
+      "sections": [
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Nocturne opens a short setup:",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "It looks at your computer and tells you which setup it will use.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It downloads that setup once. It asks before it downloads. This is the only download Nocturne needs to start. You can keep things straight away while it downloads, and the download carries on by itself if the connection drops.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "It tells you when it is ready. Your first page arrives the next morning.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "steps"
+            },
+            {
+              "parts": [
+                {
+                  "text": "After setup, Nocturne works with no internet at all.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "The first run",
+          "slug": "the-first-run"
+        },
+        {
+          "blocks": [
+            {
+              "parts": [
+                {
+                  "text": "Removing the app does not remove what you kept. Your things stay in your data folder until you delete them yourself (see Your data).",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            },
+            {
+              "items": [
+                [
+                  {
+                    "text": "Mac: drag Nocturne from Applications to the Bin.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "Windows: open Settings, Apps, find Nocturne and choose Uninstall.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "AppImage: delete the file.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
+                    "text": "rpm: ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "sudo dnf remove nocturne",
+                    "type": "code"
+                  }
+                ],
+                [
+                  {
+                    "text": "deb: ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "sudo apt remove nocturne",
+                    "type": "code"
+                  }
+                ],
+                [
+                  {
+                    "text": "Flatpak: ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "flatpak uninstall --user is.nocturne.Nocturne",
+                    "type": "code"
+                  },
+                  {
+                    "text": ". Your things stay in ",
+                    "type": "text"
+                  },
+                  {
+                    "text": "~/.var/app/is.nocturne.Nocturne/",
+                    "type": "code"
+                  },
+                  {
+                    "text": " until you delete that folder.",
+                    "type": "text"
+                  }
+                ]
+              ],
+              "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "If you turned on ",
+                  "type": "text"
+                },
+                {
+                  "text": "Start with this computer",
+                  "type": "control"
+                },
+                {
+                  "text": ", turn it off in ",
+                  "type": "text"
+                },
+                {
+                  "text": "Settings",
+                  "type": "control"
+                },
+                {
+                  "text": " first. Otherwise your desktop keeps a start-up entry for a program that is no longer there.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
+            }
+          ],
+          "heading": "Take Nocturne off",
+          "slug": "take-nocturne-off"
+        }
+      ],
+      "slug": "install",
+      "title": "Install and remove"
+    }
+  ]
+}

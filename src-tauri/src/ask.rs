@@ -19,15 +19,23 @@
 //! provider that is not sure, when something private or sensitive or a line of an original was
 //! kept back from it, also hands the question to this computer, which has what was kept back
 //! (`notSureOnline`, still linked to what was sent).
+//!
+//! The windows' questions are also matched against the Nocturne guide (`crate::help`). A
+//! confident match on a size of computer that writes help joins the guide's sections to the
+//! facts, and that answer is always written on this computer: nothing of it goes online or into
+//! Sent online. Otherwise the terminal delta carries the guide's own words, or the unsure prompt.
+//! A paired phone never gets help.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nocturne_contract::{
-    AnsweredBy, AskDelta, AskPhase, AskPlace, EVENT_ASK, LeftOut, LocalReason, NearMatch,
-    SendResult,
+    AnsweredBy, AskDelta, AskPhase, AskPlace, EVENT_ASK, HelpKind, HelpView, LeftOut, LocalReason,
+    NearMatch, SendResult,
 };
-use nocturne_engine::{AnswerMeta, Engine, Fact, Hit, Mind, MindError, UseKind, is_source_line};
+use nocturne_engine::{
+    AnswerMeta, Engine, Fact, Hit, Mind, MindError, UseKind, is_guide_section, is_source_line,
+};
 use nocturne_lemonade::mind::online::OnlineMind;
 use nocturne_lemonade::online::{MAX_FACTS, SWITCH_SECONDS, WAIT_SECONDS};
 use nocturne_lemonade::rerank::Reranker;
@@ -95,6 +103,8 @@ pub struct AskOptions {
     pub sink: AskSink,
     /// Where this one question may be answered.
     pub place: AskPlace,
+    /// The person asked for the guide's answer ("Show the guide's answer"). Windows only.
+    pub help: bool,
 }
 
 /// The cancel switch of one ask. Emitting and cancelling take the same lock, so once
@@ -240,6 +250,7 @@ struct Mark {
     answered_by: Option<AnsweredBy>,
     left_out: Option<LeftOut>,
     send_id: Option<f64>,
+    help: Option<HelpView>,
 }
 
 /// One ask's way of talking to the interface.
@@ -268,6 +279,7 @@ impl<R: Runtime> Sink<R> {
             answered_by: None,
             left_out: None,
             send_id: None,
+            help: None,
         };
         edit(&mut delta);
         let terminal = matches!(
@@ -279,6 +291,7 @@ impl<R: Runtime> Sink<R> {
             delta.answered_by = delta.answered_by.take().or(mark.answered_by);
             delta.left_out = delta.left_out.or(mark.left_out);
             delta.send_id = delta.send_id.or(mark.send_id);
+            delta.help = delta.help.take().or(mark.help.map(Box::new));
         }
         let cancelled = self
             .gate
@@ -318,11 +331,17 @@ impl<R: Runtime> Sink<R> {
 
 /// Start answering `question` for the windows; returns the ask id at once.
 pub fn start<R: Runtime>(app: &AppHandle<R>, question: String) -> String {
-    start_placed(app, question, AskPlace::Auto)
+    start_placed(app, question, AskPlace::Auto, false)
 }
 
-/// Like [`start`], with the place the person chose for this question.
-pub fn start_placed<R: Runtime>(app: &AppHandle<R>, question: String, place: AskPlace) -> String {
+/// Like [`start`], with the place the person chose for this question, and whether they asked
+/// for the guide's answer.
+pub fn start_placed<R: Runtime>(
+    app: &AppHandle<R>,
+    question: String,
+    place: AskPlace,
+    help: bool,
+) -> String {
     start_with(
         app,
         question,
@@ -331,6 +350,7 @@ pub fn start_placed<R: Runtime>(app: &AppHandle<R>, question: String, place: Ask
             lane: AskLane::Desktop,
             sink: AskSink::Emit,
             place,
+            help,
         },
     )
 }
@@ -342,6 +362,8 @@ pub fn start_with<R: Runtime>(app: &AppHandle<R>, question: String, opts: AskOpt
     let gate = state.asks.register(&id, opts.lane.clone());
     let public_only = opts.public_only;
     let (lane, place) = (opts.lane.clone(), opts.place);
+    // Help is for the windows only: a phone's question is answered as it always was.
+    let help = opts.help && lane == AskLane::Desktop;
     let sink = Arc::new(Sink {
         app: app.clone(),
         id: id.clone(),
@@ -357,9 +379,10 @@ pub fn start_with<R: Runtime>(app: &AppHandle<R>, question: String, opts: AskOpt
         // The work runs on its own task so that a panic in it (a mind that misbehaves) still
         // ends the ask with a terminal phase instead of leaving the page waiting.
         let worker = sink.clone();
-        let outcome =
-            tokio::spawn(async move { answer(&worker, question, public_only, &lane, place).await })
-                .await;
+        let outcome = tokio::spawn(async move {
+            answer(&worker, question, public_only, &lane, place, help).await
+        })
+        .await;
         if outcome.is_err() {
             tracing::error!("an answer failed unexpectedly");
         }
@@ -430,6 +453,7 @@ async fn answer<R: Runtime>(
     public_only: bool,
     lane: &AskLane,
     place: AskPlace,
+    help_asked: bool,
 ) {
     let state = sink.app.state::<AppState>();
     let (Some(mind), Ok(engine)) = (state.mind.get(), state.engine()) else {
@@ -466,6 +490,31 @@ async fn answer<R: Runtime>(
             Err(_) => break None,
         }
     };
+
+    // The guide, for the windows only. A written help answer is never sent online.
+    let help = if *lane == AskLane::Desktop && !public_only {
+        crate::help::find(
+            &state,
+            mind.as_ref(),
+            &engine,
+            &question,
+            query_vec.as_deref(),
+            help_asked,
+        )
+        .await
+    } else {
+        None
+    };
+    let hub = crate::online::hub(&sink.app);
+    let written = help
+        .as_ref()
+        .filter(|h| h.kind == HelpKind::Written)
+        .cloned();
+    if let Some(found) = &help {
+        let online_on = hub.as_ref().is_some_and(|h| h.is_on());
+        let view = crate::help::help_view(found, online_on);
+        sink.mark(|m| m.help = Some(view));
+    }
 
     let q = question.clone();
     let e = engine.clone();
@@ -528,12 +577,12 @@ async fn answer<R: Runtime>(
     } else {
         hits
     };
-    if hits.is_empty() {
+    if hits.is_empty() && written.is_none() {
         sink.phase(AskPhase::Nothing);
         return;
     }
     let e = engine.clone();
-    let (hits, found, facts, pairs) =
+    let (mut hits, found, facts, pairs) =
         match blocking(move || with_disputes(&e, hits, public_only)).await {
             Ok(v) => v,
             Err(err) => {
@@ -545,13 +594,14 @@ async fn answer<R: Runtime>(
     sink.send(AskPhase::Reading, |d| d.found = Some(facts.len() as u32));
 
     // Where this question may be answered is decided once, before anything is asked: a
-    // failure here never sends it online.
-    let hub = crate::online::hub(&sink.app);
+    // failure here never sends it online. A written help answer stays here.
     // Watched from before the choice: a turn-off from here on stops the question going out.
     let turned_off = hub.as_ref().map(|h| h.gate());
-    let choice = match &hub {
-        Some(h) => h.route_for(lane, place).await,
-        None => RouteChoice::Off,
+    // "Show the guide's answer" asks again here: the question already had its turn online.
+    let choice = match (&hub, &written) {
+        (_, Some(_)) | (None, _) => RouteChoice::Off,
+        (Some(_), None) if help_asked => RouteChoice::Off,
+        (Some(h), None) => h.route_for(lane, place).await,
     };
     let here_because = match (choice, &hub) {
         (RouteChoice::Off, _) => None,
@@ -603,6 +653,21 @@ async fn answer<R: Runtime>(
         });
     }
 
+    // The guide's sections come first among the facts, after the search's own hits among the
+    // hits: they are never offered as near matches.
+    let facts = match &written {
+        Some(found) => {
+            let guide = crate::help::guide();
+            let sections: Vec<Fact> = found.ids.iter().filter_map(|id| guide.fact(id)).collect();
+            hits.extend(sections.iter().map(|f| Hit {
+                memory: f.memory.clone(),
+                score: 0.0,
+                let_go: false,
+            }));
+            sections.into_iter().chain(facts).collect()
+        }
+        None => facts,
+    };
     let mut said = String::new();
     let meta = loop {
         let (tx, mut rx) = mpsc::channel::<String>(32);
@@ -683,10 +748,11 @@ async fn ask_online<R: Runtime>(
 ) -> Online {
     // Lines of originals stay here: they have not been through what decides what may leave.
     let lines_held = asked.facts.iter().any(|f| is_source_line(&f.memory.id));
+    // The guide never goes online: a question it answers is written here.
     let facts: Vec<&Fact> = asked
         .facts
         .iter()
-        .filter(|f| !is_source_line(&f.memory.id))
+        .filter(|f| !is_source_line(&f.memory.id) && !is_guide_section(&f.memory.id))
         .collect();
     let ids: Vec<String> = facts.iter().map(|f| f.memory.id.clone()).collect();
     let e = asked.engine.clone();
@@ -896,6 +962,12 @@ async fn conclude<R: Runtime>(
         .collect();
     // An answer with nothing to cite is not an answer: every claim carries a receipt.
     if meta.not_sure || cited.is_empty() {
+        // A help answer the mind could not write falls back to the guide's own words.
+        sink.mark(|m| {
+            if let Some(h) = m.help.as_mut().filter(|h| h.kind == HelpKind::Written) {
+                h.kind = HelpKind::Words;
+            }
+        });
         // Near matches are what the search found, never a side brought in from a question.
         let near = hits[..found]
             .iter()
@@ -906,7 +978,13 @@ async fn conclude<R: Runtime>(
                 })
             })
             .take(NEAR)
-            .collect();
+            .collect::<Vec<_>>();
+        // Help written from the guide alone, which the mind could not write: nothing kept is
+        // about it, which is not "these come close".
+        if found == 0 {
+            sink.phase(AskPhase::Nothing);
+            return;
+        }
         sink.send(AskPhase::NotSure, |d| d.near = near);
         return;
     }
@@ -917,9 +995,15 @@ async fn conclude<R: Runtime>(
         .collect();
     // A line of an original is no memory: its receipt is the original, and the answer is shown
     // without bold, which would stand for memories one for one.
-    let ids: Vec<String> = cited_ids
+    let spanned: Vec<String> = cited_ids
         .iter()
         .filter(|id| !is_source_line(id))
+        .cloned()
+        .collect();
+    // A guide section is no memory: it is never counted as used, corrected or deleted.
+    let ids: Vec<String> = spanned
+        .iter()
+        .filter(|id| !is_guide_section(id))
         .cloned()
         .collect();
     // Being cited in an answer counts as use; done before the answer is final so the next
@@ -929,7 +1013,27 @@ async fn conclude<R: Runtime>(
     if let Err(e) = blocking(move || engine.mark_used(&used, UseKind::Answer)).await {
         tracing::warn!("could not note the memories used: {e}");
     }
-    let plain = ids.len() != cited_ids.len() || !bold_matches(said, &meta.spans, &ids);
+    let plain = spanned.len() != cited_ids.len() || !bold_matches(said, &meta.spans, &spanned);
+    // A written help answer cites its sections in the order it used them.
+    let guide = crate::help::guide();
+    let sections: Vec<_> = spanned
+        .iter()
+        .filter(|id| is_guide_section(id))
+        .filter_map(|id| guide.cite(id))
+        .collect();
+    sink.mark(|m| {
+        if m.help.as_ref().is_some_and(|h| h.kind == HelpKind::Written) {
+            if sections.is_empty() {
+                // It used none of the guide: the guide's own words stand beside it.
+                if let Some(h) = m.help.as_mut() {
+                    h.kind = HelpKind::Words;
+                }
+            } else if let Some(h) = m.help.as_mut() {
+                h.sections = sections;
+                h.cited = spanned.clone();
+            }
+        }
+    });
     sink.send(AskPhase::Done, |d| {
         d.receipts = receipts;
         d.memory_ids = ids;

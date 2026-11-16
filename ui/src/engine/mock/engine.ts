@@ -68,6 +68,7 @@ import type {
 import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
 import { MockBackups, type MockBackupsScript } from "./backup";
+import { cite, helpView, matchGuide, writtenFor } from "./help";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
@@ -95,6 +96,18 @@ export interface MockOptions {
   emphasis?: boolean;
   /** Away from home: where it starts, and whether its scripted steps move by themselves. */
   remote?: RemoteOptions;
+  /**
+   * Help answers are written from the guide, as on a size of computer that passed the help
+   * check. Off by default, as every size is today: the guide's own words show instead.
+   * `?mockHelp=written` turns it on.
+   */
+  helpWritten?: boolean;
+}
+
+/** `?mockHelp=written` writes help answers in the mock. */
+function helpFromAddress(): boolean {
+  if (typeof location === "undefined") return false;
+  return new URLSearchParams(location.search).get("mockHelp") === "written";
 }
 
 /** `?mockAway=<state>`, `?mockStep=<ms>` and `?mockPhone=typed` start Away from home elsewhere than off. */
@@ -340,6 +353,7 @@ export class MockEngine implements EngineClient {
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
+    this.helpWritten = options.helpWritten ?? helpFromAddress();
     this.emphasis = options.emphasis ?? true;
     const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
     this.clock = new Date(raw);
@@ -767,6 +781,7 @@ export class MockEngine implements EngineClient {
   private firstAsk: boolean;
   private readonly emphasis: boolean;
   private askUnavailable = false;
+  private readonly helpWritten: boolean;
 
   /** Makes every question answer "unavailable", as when the voice that reads cannot start. */
   setAskUnavailable(on: boolean): void {
@@ -781,10 +796,10 @@ export class MockEngine implements EngineClient {
 
   async reportRecording(_state: RecordingState): Promise<void> {}
 
-  async ask(question: string, place?: AskPlace): Promise<string> {
+  async ask(question: string, place?: AskPlace, help?: boolean): Promise<string> {
     this.counter += 1;
     const askId = `ask-${this.counter}`;
-    this.runAsk(askId, question, place);
+    this.runAsk(askId, question, place, help ?? false);
     return askId;
   }
 
@@ -821,8 +836,18 @@ export class MockEngine implements EngineClient {
     return chosen.length > 0 ? chosen.map((m) => ({ m, score: 1 })) : null;
   }
 
-  private runAsk(askId: string, question: string, place?: AskPlace): void {
+  private runAsk(askId: string, question: string, place?: AskPlace, askedForHelp = false): void {
     const by = answeredBy(place, this.online.view());
+    const match = matchGuide(question, askedForHelp);
+    const onlineOn = this.online.view().state.type === "on";
+    const help =
+      match === null
+        ? null
+        : helpView(
+            match,
+            match.confident ? (this.helpWritten ? "written" : "words") : "unsure",
+            onlineOn,
+          );
     const delta = (d: Partial<AskDelta> & Pick<AskDelta, "phase">): AskDelta => ({
       askId,
       textDelta: null,
@@ -835,12 +860,13 @@ export class MockEngine implements EngineClient {
       ...d,
     });
     const terminal = new Set(["done", "notSure", "nothing"]);
-    const send = (d: AskDelta): void => {
+    const send = (step: AskDelta): void => {
       if (this.cancelledAsks.has(askId)) return;
-      if (!terminal.has(d.phase)) {
-        this.emit("ask-delta", d);
+      if (!terminal.has(step.phase)) {
+        this.emit("ask-delta", step);
         return;
       }
+      const d = help && help.kind !== "written" ? { ...step, help } : step;
       if (by.type !== "online") {
         this.emit("ask-delta", { ...d, answeredBy: by, sendId: null });
         return;
@@ -874,6 +900,46 @@ export class MockEngine implements EngineClient {
     const aboutEntity = this.memoriesAboutEntity(question);
     const active = aboutEntity ?? scored("active").slice(0, 2);
     const unconfirmed = scored("unconfirmed").slice(0, 2);
+
+    // A help answer is always written here, from the guide and what was kept: nothing goes
+    // online and nothing is noted as sent.
+    if (help?.kind === "written" && match && !this.askUnavailable) {
+      const kept = active.slice(0, 1);
+      const parts = [
+        ...match.ids.map((id) => writtenFor(id)),
+        ...kept.map((x) => (this.emphasis ? emphasise(x.m.sentence, x.m.object) : x.m.sentence)),
+      ];
+      const done: AskDelta = delta({
+        phase: "done",
+        receipts: kept.flatMap((x) => x.m.receipts),
+        memoryIds: kept.map((x) => x.m.id),
+        help: {
+          ...help,
+          sections: match.ids.flatMap((id) => cite(id) ?? []),
+          cited: [...match.ids, ...kept.map((x) => x.m.id)],
+        },
+      });
+      const steps = [
+        delta({ phase: "searching" }),
+        delta({ phase: "reading", found: kept.length }),
+        ...parts
+          .join(" ")
+          .split(/(?<=\s)/)
+          .map((piece) => delta({ phase: "streaming", textDelta: piece })),
+        done,
+      ];
+      const next = (i: number): void => {
+        const step = steps[i];
+        if (!step) return;
+        setTimeout(() => {
+          if (this.cancelledAsks.has(askId)) return;
+          this.emit("ask-delta", step);
+          next(i + 1);
+        }, 30);
+      };
+      next(0);
+      return;
+    }
 
     if (this.askUnavailable) {
       setTimeout(() => send(delta({ phase: "unavailable" })), 0);

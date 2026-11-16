@@ -89,6 +89,7 @@ fn no_line_of_an_original_reaches_a_phone() {
         lane: AskLane::Phone("phone-1".into()),
         sink: AskSink::Channel(tx),
         place: nocturne_contract::AskPlace::Auto,
+        help: false,
     };
     block_on(async move {
         start_with(
