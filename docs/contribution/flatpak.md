@@ -108,6 +108,18 @@ The app knows it is in a Flatpak from `/.flatpak-info`, which names its app id.
   `flatpak run is.nocturne.Nocturne --quick-capture`, since `/app/bin/nocturne` exists only
   inside the sandbox.
 
+### The tray icon
+
+The tray library writes the icon to a PNG and passes its absolute path to the desktop's panel,
+which runs outside the sandbox. Its default folder is under `XDG_RUNTIME_DIR`, a private overlay
+inside the sandbox, so the panel found no file and drew a blank icon. The app now gives the
+library a folder under its own cache folder (`tray/` in `app_cache_dir`). A Flatpak sets
+`XDG_CACHE_HOME` to the real `~/.var/app/is.nocturne.Nocturne/cache`, the same path on both
+sides, so no `--filesystem=xdg-run/tray-icon` permission is needed and the finish-args stay as
+they are. The library reuses the folder for every later icon change, and the app clears stale
+icon files from it at start. If the cache folder is unknown, cannot be created or has a relative
+path or control characters in it, the library's default is used.
+
 ### What does not work in the Flatpak yet
 
 - **Keeping the computer awake overnight, and knowing the person is away.** The sandbox has no
