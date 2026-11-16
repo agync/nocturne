@@ -350,8 +350,11 @@ describe("what this computer can run", () => {
     const why = await screen.findByRole("button", { name: "Why this one?" });
     expect(why).toHaveAttribute("aria-expanded", "false");
     expect(why.firstElementChild).toHaveAttribute("data-chevron");
+    expect(why).not.toHaveAttribute("aria-controls");
     await userEvent.click(why);
     expect(why).toHaveAttribute("aria-expanded", "true");
+    const panel = why.getAttribute("aria-controls") ?? "";
+    expect(document.getElementById(panel)).not.toBeNull();
     expect(
       screen.getByText(
         "Nocturne picks the biggest mind this computer runs comfortably. It depends on computer memory.",

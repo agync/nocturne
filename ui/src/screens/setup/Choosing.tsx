@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
 import { Chevron } from "../../components/Disclosure/Chevron";
@@ -62,6 +62,7 @@ export function Choosing({ view, onStarted }: Props) {
   const first = view.detected && view.detected !== "unsupported" ? view.detected : fitting[0]?.tier;
   const [picked, setPicked] = useState<Tier | undefined>(first);
   const [why, setWhy] = useState(false);
+  const whyId = useId();
   const [busy, setBusy] = useState(false);
 
   if (unsupported) {
@@ -178,7 +179,7 @@ export function Choosing({ view, onStarted }: Props) {
           variant="quiet"
           flush
           aria-expanded={why}
-          aria-controls="why"
+          aria-controls={why ? whyId : undefined}
           onClick={() => setWhy(!why)}
         >
           <Chevron />
@@ -189,7 +190,7 @@ export function Choosing({ view, onStarted }: Props) {
         </Button>
       </div>
       {why ? (
-        <div id="why" className={styles.why}>
+        <div id={whyId} className={styles.why}>
           <p>{t("setup.why.lead")}</p>
           <p>{t("setup.why.here", { ram: view.ramGib })}</p>
           <table className={styles.sizes}>
