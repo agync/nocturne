@@ -110,6 +110,8 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["getEdition", ["2026-11-13", "print"], "get_edition", ["date", "edition"]],
   ["openSoundSettings", [], "open_sound_settings", []],
   ["quickKeepCommand", [], "quick_keep_command", []],
+  ["configureShortcut", [], "configure_shortcut", []],
+  ["retryShortcut", [], "retry_shortcut", []],
   ["cancelAsk", ["ask_1"], "cancel_ask", ["askId"]],
   ["appReady", [], "app_ready", []],
   ["reportRecording", ["no-devices"], "report_recording", ["state"]],

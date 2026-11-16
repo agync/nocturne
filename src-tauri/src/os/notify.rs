@@ -185,6 +185,7 @@ mod tests {
             voice_speed: 1.0,
             shortcut: "CommandOrControl+Shift+Space".into(),
             shortcut_available: true,
+            desktop_shortcut: None,
             inbox_folder: None,
             start_at_login: false,
             letting_go: LettingGo::Normal,

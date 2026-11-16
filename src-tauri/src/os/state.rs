@@ -232,9 +232,10 @@ impl OsState {
             .clone()
     }
 
-    /// How the registered quick keep shortcut is spelled, when it is registered.
+    /// How the registered quick keep shortcut is spelled, when it is registered: the desktop's
+    /// own name for the keys where the desktop holds it.
     pub fn shortcut_spelling(&self) -> Option<String> {
-        self.shortcut().spelling.clone()
+        super::shortcut::held_keys(self)
     }
 
     /// Whether the quick keep shortcut is registered right now.

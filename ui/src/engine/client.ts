@@ -211,6 +211,10 @@ export interface EngineClient {
   openSoundSettings(): Promise<void>;
   /** The command line that opens quick capture, for a desktop shortcut. */
   quickKeepCommand(): Promise<string>;
+  /** Opens the desktop's own settings for the quick keep shortcut it holds. */
+  configureShortcut(): Promise<void>;
+  /** Asks the desktop again for the quick keep shortcut it did not add. */
+  retryShortcut(): Promise<void>;
 
   /** Away from home: reaching Nocturne from the person's own phones. Main window only. */
   getRemote(): Promise<RemoteView>;

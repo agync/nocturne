@@ -183,17 +183,43 @@ pub async fn autostart(conn: &Connection, want: bool, commandline: &[&str]) -> R
 /// The id of the one shortcut the app binds through the portal.
 pub const QUICK_KEEP: &str = "quick-keep";
 
-/// Whether the desktop offers shortcuts that work from any app through the portal.
-pub async fn has_global_shortcuts(conn: &Connection) -> bool {
+/// The version of the desktop's GlobalShortcuts portal, or `None` when it has none. Version 2
+/// can open the desktop's own settings for a shortcut.
+pub async fn global_shortcuts_version(conn: &Connection) -> Option<u32> {
+    let reply = conn
+        .call_method(
+            Some(DESTINATION),
+            PATH,
+            Some("org.freedesktop.DBus.Properties"),
+            "Get",
+            &(GLOBAL_SHORTCUTS, "version"),
+        )
+        .await
+        .ok()?;
+    let value: OwnedValue = reply.body().deserialize().ok()?;
+    u32::try_from(value).ok()
+}
+
+/// The session object a `CreateSession` with `token` makes for the connection named `unique`.
+pub fn session_path(unique: &str, token: &str) -> String {
+    format!(
+        "{PATH}/session/{}/{token}",
+        unique.trim_start_matches(':').replace('.', "_")
+    )
+}
+
+/// Open the desktop's own settings for the shortcuts of `session` (version 2).
+pub async fn configure(conn: &Connection, session: &OwnedObjectPath) -> Result<(), String> {
     conn.call_method(
         Some(DESTINATION),
         PATH,
-        Some("org.freedesktop.DBus.Properties"),
-        "Get",
-        &(GLOBAL_SHORTCUTS, "version"),
+        Some(GLOBAL_SHORTCUTS),
+        "ConfigureShortcuts",
+        &(session, "", Options::new()),
     )
     .await
-    .is_ok()
+    .map(|_| ())
+    .map_err(|e| e.to_string())
 }
 
 /// An object path the portal sent as a path or, as some versions do, as a string.
@@ -214,17 +240,18 @@ pub struct Bound {
 
 /// Bind the quick keep shortcut in a new session, suggesting `preferred` (in the portal's
 /// spelling, `CTRL+SHIFT+space`). The desktop may ask the person first, and may bind other
-/// keys than the ones suggested. The session lasts until [`close`] or until `conn` closes.
+/// keys than the ones suggested. The session lasts until [`close`] or until `conn` closes; its
+/// path is [`session_path`] of `session_token`, so a caller that stops waiting can close it.
 pub async fn bind_quick_keep(
     conn: &Connection,
     description: &str,
     preferred: Option<&str>,
+    session_token: &str,
 ) -> Result<Bound, String> {
     let request_token = token();
-    let session_token = token();
     let mut options = Options::new();
     options.insert("handle_token", Value::from(request_token.as_str()));
-    options.insert("session_handle_token", Value::from(session_token.as_str()));
+    options.insert("session_handle_token", Value::from(session_token));
     let created = request(conn, GLOBAL_SHORTCUTS, "CreateSession", &(options,)).await?;
     let session = created
         .get("session_handle")
@@ -490,6 +517,9 @@ pub(crate) mod tests {
         pub keys: String,
         pub binds: Binds,
         pub closed: Closed,
+        pub configured: Closed,
+        /// Hold every bind this long before answering, as a person deciding does.
+        pub delay: Duration,
     }
 
     struct FakeSession {
@@ -520,7 +550,16 @@ pub(crate) mod tests {
     impl FakeShortcuts {
         #[zbus(property, name = "version")]
         fn version(&self) -> u32 {
-            1
+            2
+        }
+
+        async fn configure_shortcuts(
+            &self,
+            session: OwnedObjectPath,
+            _parent: &str,
+            _options: HashMap<String, OwnedValue>,
+        ) {
+            self.configured.lock().unwrap().push(session.to_string());
         }
 
         async fn create_session(
@@ -532,9 +571,7 @@ pub(crate) mod tests {
         ) -> zbus::fdo::Result<OwnedObjectPath> {
             let sender = header.sender().unwrap().to_string();
             let request = request_path(&sender, &text(&options, "handle_token").unwrap());
-            let session = request.replace("/request/", "/session/")
-                + "_"
-                + &text(&options, "session_handle_token").unwrap();
+            let session = session_path(&sender, &text(&options, "session_handle_token").unwrap());
             server
                 .at(
                     session.as_str(),
@@ -562,6 +599,9 @@ pub(crate) mod tests {
         ) -> zbus::fdo::Result<OwnedObjectPath> {
             let sender = header.sender().unwrap().to_string();
             let request = request_path(&sender, &text(&options, "handle_token").unwrap());
+            if !self.delay.is_zero() {
+                std::thread::sleep(self.delay);
+            }
             let mut bound = Vec::new();
             for (id, props) in &shortcuts {
                 self.binds
@@ -583,14 +623,24 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) async fn shortcuts_portal(bus: &TestBus, code: u32) -> (Connection, Binds, Closed) {
+    pub(crate) struct Fake {
+        pub server: Connection,
+        pub binds: Binds,
+        pub closed: Closed,
+        pub configured: Closed,
+    }
+
+    pub(crate) async fn shortcuts_portal(bus: &TestBus, code: u32, delay: Duration) -> Fake {
         let binds = Binds::default();
         let closed = Closed::default();
+        let configured = Closed::default();
         let fake = FakeShortcuts {
             code,
             keys: "Ctrl+Shift+Space".into(),
             binds: binds.clone(),
             closed: closed.clone(),
+            configured: configured.clone(),
+            delay,
         };
         let server = zbus::connection::Builder::address(bus.address.as_str())
             .unwrap()
@@ -601,7 +651,12 @@ pub(crate) mod tests {
             .build()
             .await
             .unwrap();
-        (server, binds, closed)
+        Fake {
+            server,
+            binds,
+            closed,
+            configured,
+        }
     }
 
     /// Press the quick keep shortcut of `session`, as the desktop does.
@@ -627,13 +682,28 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn the_quick_keep_shortcut_is_bound_pressed_and_let_go() {
         let bus = TestBus::start();
-        let (server, binds, closed) = shortcuts_portal(&bus, 0).await;
+        let Fake {
+            server,
+            binds,
+            closed,
+            configured,
+        } = shortcuts_portal(&bus, 0, Duration::ZERO).await;
         let conn = Bus::at(&bus.address).connect().await.unwrap();
-        assert!(has_global_shortcuts(&conn).await);
+        assert_eq!(global_shortcuts_version(&conn).await, Some(2));
         let mut presses = activations(&conn).await.unwrap();
-        let bound = bind_quick_keep(&conn, "Quick keep shortcut", Some("CTRL+SHIFT+space"))
-            .await
-            .unwrap();
+        let session_token = token();
+        let bound = bind_quick_keep(
+            &conn,
+            "Keep something",
+            Some("CTRL+SHIFT+space"),
+            &session_token,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            bound.session.as_str(),
+            session_path(conn.unique_name().unwrap(), &session_token)
+        );
         assert_eq!(bound.trigger.as_deref(), Some("Ctrl+Shift+Space"));
         assert_eq!(
             *binds.lock().unwrap(),
@@ -644,6 +714,8 @@ pub(crate) mod tests {
             next_activation(&mut presses).await,
             Some(bound.session.clone())
         );
+        configure(&conn, &bound.session).await.unwrap();
+        assert_eq!(*configured.lock().unwrap(), vec![bound.session.to_string()]);
         close(&conn, &bound.session).await;
         assert_eq!(*closed.lock().unwrap(), vec![bound.session.to_string()]);
     }
@@ -651,24 +723,25 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn a_refused_bind_closes_its_session() {
         let bus = TestBus::start();
-        let (_server, _, closed) = shortcuts_portal(&bus, 1).await;
+        let fake = shortcuts_portal(&bus, 1, Duration::ZERO).await;
         let conn = Bus::at(&bus.address).connect().await.unwrap();
         assert!(
-            bind_quick_keep(&conn, "Quick keep shortcut", None)
+            bind_quick_keep(&conn, "Keep something", None, &token())
                 .await
                 .is_err()
         );
-        assert_eq!(closed.lock().unwrap().len(), 1);
+        assert_eq!(fake.closed.lock().unwrap().len(), 1);
     }
 
     #[tokio::test]
     async fn without_the_portal_there_are_no_global_shortcuts() {
         let bus = TestBus::start();
         let conn = Bus::at(&bus.address).connect().await.unwrap();
-        assert!(!has_global_shortcuts(&conn).await);
+        assert_eq!(global_shortcuts_version(&conn).await, None);
         let (_server, _) = portal(&bus, 0, true).await;
-        assert!(
-            !has_global_shortcuts(&conn).await,
+        assert_eq!(
+            global_shortcuts_version(&conn).await,
+            None,
             "a portal without the interface"
         );
     }

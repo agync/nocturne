@@ -12,6 +12,8 @@ use std::sync::Arc;
 use tauri::{AppHandle, Runtime};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+use nocturne_contract::{DesktopShortcut, DesktopShortcutState};
+
 use super::quick_capture;
 use super::state::OsState;
 
@@ -22,6 +24,32 @@ pub const DEFAULT: &str = "CommandOrControl+Shift+Space";
 pub trait Registrar: Send + Sync {
     fn register(&self, shortcut: &Shortcut) -> Result<(), String>;
     fn unregister(&self, shortcut: &Shortcut) -> Result<(), String>;
+
+    /// Set when the desktop, not the app, holds the shortcut.
+    fn desktop(&self) -> Option<DesktopHold> {
+        None
+    }
+
+    /// Open the desktop's own settings for the shortcut.
+    fn configure(&self) -> Result<(), String> {
+        Err("the app holds this shortcut itself".into())
+    }
+
+    /// What a refused registration means.
+    fn refusal(&self) -> &'static str {
+        "that shortcut is already taken"
+    }
+}
+
+/// What the desktop reports about a shortcut it holds.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct DesktopHold {
+    /// The keys it bound, as the desktop names them.
+    pub keys: Option<String>,
+    /// Whether it can open its own settings for the shortcut.
+    pub configurable: bool,
+    /// Whether the last request to hold it failed (the person said no, or no answer came).
+    pub failed: bool,
 }
 
 #[derive(Default)]
@@ -32,6 +60,8 @@ pub struct ShortcutSlot {
     pub(super) spelling: Option<String>,
     /// Whether this session lets the app grab keys (set at install).
     pub(super) grab_allowed: bool,
+    /// Whether the desktop's shortcut portal is still being reached.
+    pub(super) desktop_pending: bool,
 }
 
 /// The real thing: the global shortcut plugin, opening quick capture when pressed.
@@ -59,7 +89,7 @@ impl<R: Runtime> Registrar for PluginRegistrar<R> {
 
 /// What the desktop lists the shortcut as, in the portal's own dialog and settings.
 #[cfg(target_os = "linux")]
-const PORTAL_DESCRIPTION: &str = "Quick keep shortcut";
+const PORTAL_DESCRIPTION: &str = "Keep something";
 
 /// How long the portal has to answer at all. At login it may still be starting.
 #[cfg(target_os = "linux")]
@@ -71,6 +101,11 @@ const CONNECT_LIMIT: std::time::Duration = std::time::Duration::from_secs(20);
 pub struct PortalRegistrar {
     conn: zbus::Connection,
     held: Arc<std::sync::Mutex<Vec<(Shortcut, zbus::zvariant::OwnedObjectPath)>>>,
+    keys: std::sync::Mutex<Option<String>>,
+    configurable: bool,
+    failed: std::sync::atomic::AtomicBool,
+    /// How long the person has to answer the desktop's question.
+    answer_limit: std::time::Duration,
 }
 
 #[cfg(target_os = "linux")]
@@ -83,13 +118,11 @@ impl PortalRegistrar {
     ) -> Option<PortalRegistrar> {
         let bus = bus.clone();
         // Listening starts before anything is bound, so no press is missed.
-        let (conn, mut presses) = run_bounded(CONNECT_LIMIT, async move {
+        let (conn, version, mut presses) = run_bounded(CONNECT_LIMIT, async move {
             let conn = bus.connect().await.ok()?;
-            if !super::portal::has_global_shortcuts(&conn).await {
-                return None;
-            }
+            let version = super::portal::global_shortcuts_version(&conn).await?;
             let presses = super::portal::activations(&conn).await.ok()?;
-            Some((conn, presses))
+            Some((conn, version, presses))
         })
         .flatten()?;
         let held: Arc<std::sync::Mutex<Vec<(Shortcut, zbus::zvariant::OwnedObjectPath)>>> =
@@ -107,22 +140,57 @@ impl PortalRegistrar {
                 }
             }
         });
-        Some(PortalRegistrar { conn, held })
+        Some(PortalRegistrar {
+            conn,
+            held,
+            keys: std::sync::Mutex::new(None),
+            configurable: version >= 2,
+            failed: std::sync::atomic::AtomicBool::new(false),
+            answer_limit: super::portal::ANSWER_LIMIT,
+        })
     }
 }
 
 #[cfg(target_os = "linux")]
 impl Registrar for PortalRegistrar {
     fn register(&self, shortcut: &Shortcut) -> Result<(), String> {
+        use std::sync::atomic::Ordering;
+        self.failed.store(false, Ordering::SeqCst);
         let conn = self.conn.clone();
         let preferred = portal_trigger(shortcut);
-        let bound = run_bounded(super::portal::ANSWER_LIMIT, async move {
-            super::portal::bind_quick_keep(&conn, PORTAL_DESCRIPTION, preferred.as_deref()).await
-        })
-        .ok_or("the desktop did not answer")??;
+        let token = super::portal::token();
+        let session = self
+            .conn
+            .unique_name()
+            .map(|n| super::portal::session_path(n.as_str(), &token));
+        let answer = run_bounded(self.answer_limit, async move {
+            super::portal::bind_quick_keep(&conn, PORTAL_DESCRIPTION, preferred.as_deref(), &token)
+                .await
+        });
+        let bound = match answer {
+            Some(Ok(bound)) => bound,
+            Some(Err(e)) => {
+                self.failed.store(true, Ordering::SeqCst);
+                return Err(e);
+            }
+            None => {
+                self.failed.store(true, Ordering::SeqCst);
+                // No longer waiting: let go of the session the desktop may still be asking about.
+                if let Some(path) =
+                    session.and_then(|p| zbus::zvariant::OwnedObjectPath::try_from(p).ok())
+                {
+                    let conn = self.conn.clone();
+                    run_bounded(std::time::Duration::from_secs(5), async move {
+                        super::portal::close(&conn, &path).await;
+                    });
+                }
+                return Err("the desktop did not answer".into());
+            }
+        };
         if let Some(keys) = &bound.trigger {
             tracing::info!("the desktop bound the shortcut to {keys}");
         }
+        *self.keys.lock().unwrap_or_else(|e| e.into_inner()) = bound.trigger.clone();
         self.held
             .lock()
             .unwrap_or_else(|e| e.into_inner())
@@ -144,6 +212,36 @@ impl Registrar for PortalRegistrar {
             }
         });
         Ok(())
+    }
+
+    fn desktop(&self) -> Option<DesktopHold> {
+        Some(DesktopHold {
+            keys: self.keys.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            configurable: self.configurable,
+            failed: self.failed.load(std::sync::atomic::Ordering::SeqCst),
+        })
+    }
+
+    fn configure(&self) -> Result<(), String> {
+        if !self.configurable {
+            return Err("the desktop cannot open its shortcut settings".into());
+        }
+        let session = self
+            .held
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .last()
+            .map(|(_, s)| s.clone())
+            .ok_or("no shortcut is held")?;
+        let conn = self.conn.clone();
+        run_bounded(std::time::Duration::from_secs(5), async move {
+            super::portal::configure(&conn, &session).await
+        })
+        .ok_or("the desktop did not answer")?
+    }
+
+    fn refusal(&self) -> &'static str {
+        "the desktop did not add the shortcut"
     }
 }
 
@@ -312,11 +410,82 @@ pub fn change(state: &OsState, spelling: &str) -> Result<(), crate::error::Comma
         (registrar, slot.current)
     };
     apply(registrar.as_ref(), current.as_ref(), &new)
-        .map_err(|_| CommandError::invalid("that shortcut is already taken"))?;
+        .map_err(|_| CommandError::invalid(registrar.refusal()))?;
     let mut slot = state.shortcut();
     slot.current = Some(new);
     slot.spelling = Some(spelling.trim().to_string());
     Ok(())
+}
+
+/// Whether the desktop's shortcut portal is still being reached at start.
+pub fn set_desktop_pending(state: &OsState, pending: bool) {
+    state.shortcut().desktop_pending = pending;
+}
+
+/// Where the desktop holds the shortcut, what the settings show about it.
+pub fn desktop_view(state: &OsState) -> Option<DesktopShortcut> {
+    let slot = state.shortcut();
+    if slot.desktop_pending {
+        return Some(DesktopShortcut {
+            state: DesktopShortcutState::Asking,
+            keys: None,
+            configurable: false,
+        });
+    }
+    let hold = slot.registrar.as_ref()?.desktop()?;
+    let held = slot.current.is_some();
+    let shown = if held {
+        DesktopShortcutState::Held
+    } else if hold.failed {
+        DesktopShortcutState::Declined
+    } else {
+        DesktopShortcutState::Asking
+    };
+    Some(DesktopShortcut {
+        state: shown,
+        keys: if held { hold.keys } else { None },
+        configurable: hold.configurable,
+    })
+}
+
+/// The keys to name for the shortcut while it is held: the desktop's own name for them where the
+/// desktop holds it, else the saved spelling.
+pub fn held_keys(state: &OsState) -> Option<String> {
+    let slot = state.shortcut();
+    slot.current?;
+    slot.registrar
+        .as_ref()
+        .and_then(|r| r.desktop())
+        .and_then(|d| d.keys)
+        .or_else(|| slot.spelling.clone())
+}
+
+/// Ask the desktop again for a shortcut it did not add. Nothing to do where it is held, or where
+/// the app holds its own.
+pub fn retry(state: &OsState, spelling: &str) {
+    let desktop = {
+        let slot = state.shortcut();
+        slot.current.is_none()
+            && slot
+                .registrar
+                .as_ref()
+                .is_some_and(|r| r.desktop().is_some())
+    };
+    if desktop {
+        install(state, spelling, true);
+    }
+}
+
+/// Open the desktop's own settings for the shortcut it holds.
+pub fn configure(state: &OsState) -> Result<(), crate::error::CommandError> {
+    let registrar = state.shortcut().registrar.clone();
+    registrar
+        .ok_or_else(|| crate::error::CommandError::unavailable("no shortcut is held"))?
+        .configure()
+        .map_err(|e| {
+            tracing::warn!("the desktop's shortcut settings did not open: {e}");
+            crate::error::CommandError::unavailable("the desktop's shortcut settings did not open")
+        })
 }
 
 /// Stop holding the shortcut (the app is exiting).
@@ -477,10 +646,10 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn the_desktop_is_given_the_settings_label() {
+    fn the_desktop_names_the_shortcut_as_the_box_it_opens() {
         let copy: serde_json::Value =
-            serde_json::from_str(include_str!("../../../ui/src/copy/en-GB/settings.json")).unwrap();
-        assert_eq!(copy["settings.shortcut.label"], PORTAL_DESCRIPTION);
+            serde_json::from_str(include_str!("../../../ui/src/copy/en-GB/shell.json")).unwrap();
+        assert_eq!(copy["screen.capture.title"], PORTAL_DESCRIPTION);
     }
 
     #[cfg(target_os = "linux")]
@@ -508,8 +677,12 @@ mod tests {
         use std::time::{Duration, Instant};
 
         let bus = TestBus::start();
-        let (server, binds, closed) =
-            tauri::async_runtime::block_on(fake::shortcuts_portal(&bus, 0));
+        let fake::Fake {
+            server,
+            binds,
+            closed,
+            ..
+        } = tauri::async_runtime::block_on(fake::shortcuts_portal(&bus, 0, Duration::ZERO));
         let pressed = Arc::new(AtomicUsize::new(0));
         let counter = pressed.clone();
         let portal = PortalRegistrar::connect(
@@ -552,6 +725,102 @@ mod tests {
             1,
             "only the session still held opens quick keep"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    const ANSWER: std::time::Duration = std::time::Duration::from_secs(10);
+
+    #[cfg(target_os = "linux")]
+    fn portal_state(
+        code: u32,
+        delay: std::time::Duration,
+        answer_limit: std::time::Duration,
+    ) -> (
+        crate::os::portal::testbus::TestBus,
+        crate::os::portal::tests::Fake,
+        Arc<OsState>,
+        tempfile::TempDir,
+    ) {
+        use crate::os::portal::{Bus, testbus::TestBus, tests as fake};
+        let bus = TestBus::start();
+        let fake = tauri::async_runtime::block_on(fake::shortcuts_portal(&bus, code, delay));
+        let dir = tempfile::tempdir().unwrap();
+        let state = Arc::new(OsState::new(dir.path()));
+        let mut portal = PortalRegistrar::connect(&Bus::at(&bus.address), Arc::new(|| {})).unwrap();
+        portal.answer_limit = answer_limit;
+        state.set_registrar(Arc::new(portal));
+        (bus, fake, state, dir)
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_settings_show_the_keys_the_desktop_bound() {
+        let (_bus, fake, state, _dir) = portal_state(0, std::time::Duration::ZERO, ANSWER);
+        set_desktop_pending(&state, true);
+        assert_eq!(
+            desktop_view(&state).map(|d| d.state),
+            Some(DesktopShortcutState::Asking),
+            "still reaching the portal"
+        );
+        set_desktop_pending(&state, false);
+        install(&state, DEFAULT, true);
+        assert_eq!(
+            desktop_view(&state),
+            Some(DesktopShortcut {
+                state: DesktopShortcutState::Held,
+                keys: Some("Ctrl+Shift+Space".into()),
+                configurable: true,
+            })
+        );
+        assert_eq!(held_keys(&state).as_deref(), Some("Ctrl+Shift+Space"));
+        configure(&state).unwrap();
+        assert_eq!(fake.configured.lock().unwrap().len(), 1);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_shortcut_the_person_declined_can_be_asked_for_again() {
+        let (_bus, _fake, state, _dir) = portal_state(1, std::time::Duration::ZERO, ANSWER);
+        install(&state, DEFAULT, true);
+        assert_eq!(
+            desktop_view(&state),
+            Some(DesktopShortcut {
+                state: DesktopShortcutState::Declined,
+                keys: None,
+                configurable: true,
+            })
+        );
+        assert_eq!(held_keys(&state), None);
+        let err = change(&state, "Ctrl+Alt+K").unwrap_err();
+        assert_eq!(
+            err.detail.as_deref(),
+            Some("the desktop did not add the shortcut")
+        );
+        retry(&state, DEFAULT);
+        assert_eq!(
+            desktop_view(&state).map(|d| d.state),
+            Some(DesktopShortcutState::Declined),
+            "asked again, and declined again"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_question_left_unanswered_lets_its_session_go() {
+        // Waits less than the desktop takes.
+        let (_bus, fake, state, _dir) = portal_state(
+            0,
+            std::time::Duration::from_secs(3),
+            std::time::Duration::from_millis(500),
+        );
+        install(&state, DEFAULT, true);
+        assert_eq!(
+            desktop_view(&state).map(|d| d.state),
+            Some(DesktopShortcutState::Declined)
+        );
+        let closed = fake.closed.lock().unwrap().clone();
+        assert_eq!(closed.len(), 1, "{closed:?}");
+        assert!(closed[0].contains("/session/"), "{closed:?}");
     }
 
     #[cfg(target_os = "linux")]

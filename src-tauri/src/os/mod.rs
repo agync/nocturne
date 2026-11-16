@@ -118,24 +118,30 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
 /// binds the keys; the saved shortcut is read once the portal is there.
 #[cfg(target_os = "linux")]
 fn install_portal_shortcut<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(os) = app.try_state::<OsState>() {
+        shortcut::set_desktop_pending(&os, true);
+    }
     let app = app.clone();
     std::thread::spawn(move || {
         let press = app.clone();
-        let Some(registrar) = shortcut::PortalRegistrar::connect(
+        let registrar = shortcut::PortalRegistrar::connect(
             &portal::Bus::session(),
             Arc::new(move || quick_capture::open(&press)),
-        ) else {
-            tracing::info!("global shortcut not registered: the desktop has no shortcut portal");
-            return;
-        };
+        );
         let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>())
         else {
             return;
         };
-        let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) else {
+        let Some(registrar) = registrar else {
+            shortcut::set_desktop_pending(&os, false);
+            tracing::info!("global shortcut not registered: the desktop has no shortcut portal");
             return;
         };
         os.set_registrar(Arc::new(registrar));
+        shortcut::set_desktop_pending(&os, false);
+        let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) else {
+            return;
+        };
         shortcut::install(&os, &settings.shortcut, true);
     });
 }
@@ -288,6 +294,7 @@ pub fn adjust_settings<R: Runtime>(app: &AppHandle<R>, mut view: SettingsView) -
     view.inbox_folder = view.inbox_folder.filter(|f| !f.is_empty());
     if let Some(os) = app.try_state::<OsState>() {
         view.shortcut_available = os.shortcut_registered();
+        view.desktop_shortcut = shortcut::desktop_view(&os);
         if let Some(on) = start_at_login_now(app, &os) {
             view.start_at_login = on;
         }
@@ -394,8 +401,10 @@ pub fn on_delete_everything<R: Runtime>(app: &AppHandle<R>) {
     os.forget_all();
     webview::remove(&os.webview_dirs());
     switch_off_start_at_login(app, &os, told_portal);
-    // Nothing held, nothing to move: through the portal a change would ask the person again.
+    // Nothing held, nothing to move. Where the desktop holds it, the keys are the desktop's and
+    // asking again would only raise its question.
     if os.shortcut_registered()
+        && shortcut::desktop_view(&os).is_none()
         && let Err(e) = shortcut::change(&os, shortcut::DEFAULT)
     {
         tracing::warn!(

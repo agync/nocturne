@@ -183,6 +183,29 @@ pub enum Theme {
     Dark,
 }
 
+/// Where the desktop's shortcut portal, not the app, holds the quick keep shortcut.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DesktopShortcut {
+    pub state: DesktopShortcutState,
+    /// The keys the desktop bound, as the desktop names them.
+    pub keys: Option<String>,
+    /// Whether the desktop can open its own settings for the shortcut.
+    pub configurable: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum DesktopShortcutState {
+    /// The desktop is still deciding, perhaps asking the person.
+    Asking,
+    Held,
+    /// The desktop did not add it: the person said no, or it failed.
+    Declined,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -195,6 +218,8 @@ pub struct SettingsView {
     pub voice_speed: f32,
     pub shortcut: String,
     pub shortcut_available: bool,
+    /// Set where the desktop holds the shortcut; `None` where the app does.
+    pub desktop_shortcut: Option<DesktopShortcut>,
     pub inbox_folder: Option<String>,
     pub start_at_login: bool,
     pub letting_go: LettingGo,

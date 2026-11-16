@@ -16,6 +16,8 @@ export type { ComponentRole } from "./ComponentRole";
 export type { ComponentView } from "./ComponentView";
 export type { CouldntReadReason } from "./CouldntReadReason";
 export type { Delivery } from "./Delivery";
+export type { DesktopShortcut } from "./DesktopShortcut";
+export type { DesktopShortcutState } from "./DesktopShortcutState";
 export type { DeviceView } from "./DeviceView";
 export type { Edition } from "./Edition";
 export type { EngineState } from "./EngineState";

@@ -316,6 +316,8 @@ export class MockEngine implements EngineClient {
   private counter = 0;
   /** How many times the sound settings were asked for, for tests. */
   soundSettingsOpened = 0;
+  /** How many times the desktop's shortcut settings were opened. */
+  shortcutSettingsOpened = 0;
   private readonly snoozed = new Set<string>();
   private tierOffer: Tier | null;
   private unfinishedTier: Tier | null;
@@ -1546,6 +1548,12 @@ export class MockEngine implements EngineClient {
   async quickKeepCommand(): Promise<string> {
     return "nocturne --quick-capture";
   }
+
+  async configureShortcut(): Promise<void> {
+    this.shortcutSettingsOpened += 1;
+  }
+
+  async retryShortcut(): Promise<void> {}
 
   // Away from home
 

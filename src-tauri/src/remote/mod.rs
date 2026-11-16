@@ -331,6 +331,8 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("print_page", Never),
         ("open_sound_settings", Never),
         ("quick_keep_command", Never),
+        ("configure_shortcut", Never),
+        ("retry_shortcut", Never),
         ("app_ready", Never),
         ("report_recording", Never),
         ("tidy_anyway", Never),
