@@ -9,11 +9,13 @@ const TEMP_PREFIX: &str = "tmp-";
 const TEMP_KEPT: Duration = Duration::from_secs(24 * 3600);
 
 /// The bundle holds the read-only `lemond`; the root holds everything the person owns:
-/// `cache`, `config`, `models`, `logs` and `run`.
+/// `cache`, `config`, `models`, `logs` and `run`. The engine's log can live elsewhere
+/// ([`Dirs::with_logs`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dirs {
     pub bundle: PathBuf,
     pub root: PathBuf,
+    logs: Option<PathBuf>,
 }
 
 impl Dirs {
@@ -21,7 +23,14 @@ impl Dirs {
         Dirs {
             bundle: bundle.into(),
             root: root.into(),
+            logs: None,
         }
+    }
+
+    /// The engine's log goes to `logs` instead of the root's own `logs`.
+    pub fn with_logs(mut self, logs: impl Into<PathBuf>) -> Self {
+        self.logs = Some(logs.into());
+        self
     }
 
     pub fn cache(&self) -> PathBuf {
@@ -37,7 +46,7 @@ impl Dirs {
     }
 
     pub fn logs(&self) -> PathBuf {
-        self.root.join("logs")
+        self.logs.clone().unwrap_or_else(|| self.root.join("logs"))
     }
 
     /// Used as `XDG_RUNTIME_DIR` for the engine; owner-only.
@@ -135,6 +144,15 @@ mod tests {
             dirs.run().join("lemond.pid").exists(),
             "only temp folders go"
         );
+    }
+
+    #[test]
+    fn the_log_folder_can_be_put_elsewhere() {
+        let dirs = Dirs::new("/b", "/data/engine");
+        assert_eq!(dirs.logs(), Path::new("/data/engine/logs"));
+        let dirs = dirs.with_logs("/data/logs");
+        assert_eq!(dirs.logs(), Path::new("/data/logs"));
+        assert_eq!(dirs.cache(), Path::new("/data/engine/cache"));
     }
 
     #[test]

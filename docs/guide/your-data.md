@@ -18,8 +18,8 @@ Everything Nocturne holds is on your computer, in one folder, and you can see al
 | Mac | `~/Library/Application Support/app.nocturne.desktop/` |
 
 Inside are the things you kept and what Nocturne remembers from them (in `store`), Nocturne's
-reading setup (in `engine`) and a few small log files (in `logs`) that hold counts and error
-kinds, never what you kept. Privacy in the app has an "Open folder" button that takes you there.
+reading setup (in `engine`) and a few small log files (in `logs`, Nocturne's own and its reading
+engine's) that hold counts and error kinds, never what you kept. Privacy in the app has an "Open folder" button that takes you there.
 
 ## Look at what it holds
 

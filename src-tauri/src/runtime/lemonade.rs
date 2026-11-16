@@ -119,7 +119,8 @@ pub(super) async fn launch<R: Runtime>(app: &AppHandle<R>, services: &Arc<Servic
         setup_failed(app);
         return;
     };
-    let dirs = Dirs::new(bundle, state.data_dir.join("engine"));
+    // The engine's log sits with the app's, where "Open logs" goes.
+    let dirs = Dirs::new(bundle, state.data_dir.join("engine")).with_logs(state.log_dir());
     let route = crate::online::route_at_launch(app);
     let mut start = tokio::spawn(Supervisor::start_with(
         dirs,
