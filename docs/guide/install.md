@@ -2,11 +2,17 @@
 type: Guide
 title: Install and remove
 description: Choose a package for your Mac, Windows or Linux computer, open it past the first-time warning, set Nocturne up and take it off again, or run it as a server in a container.
-status: draft
+status: stable
 tags: [guide, install, packages, setup]
+asked:
+  The first run: [first run, first time i open, set nocturne up, setting up nocturne, the setup download]
+  Take Nocturne off: [take nocturne off, uninstall nocturne, remove nocturne, delete the app, take it off my computer]
 ---
 
 # Install and remove
+
+Choose a package for your computer, open it the first time, set Nocturne up, and take it off
+again.
 
 ## What your computer needs
 
@@ -284,8 +290,8 @@ An NVIDIA card needs NVIDIA's own driver and container tooling.
 Nocturne opens a short setup:
 
 1. It looks at your computer and tells you which setup it will use.
-2. It downloads that setup once. It asks before it downloads. This is the only time Nocturne uses
-   the internet. You can keep things straight away while it downloads, and the download carries on
+2. It downloads that setup once. It asks before it downloads. This is the only download Nocturne
+   needs to start. You can keep things straight away while it downloads, and the download carries on
    by itself if the connection drops.
 3. It tells you when it is ready. Your first page arrives the next morning.
 
@@ -304,5 +310,5 @@ delete them yourself (see [Your data](your-data.md)).
 - Flatpak: `flatpak uninstall --user is.nocturne.Nocturne`. Your things stay in
   `~/.var/app/is.nocturne.Nocturne/` until you delete that folder.
 
-If you turned on "Start with this computer", turn it off in Settings first. Otherwise your desktop
+If you turned on **Start with this computer**, turn it off in **Settings** first. Otherwise your desktop
 keeps a start-up entry for a program that is no longer there.

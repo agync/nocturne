@@ -13,7 +13,7 @@ How to install Nocturne, live with it on your desktop, and stay in charge of wha
 ## What Nocturne does
 
 You keep things as you go: a photo of a letter, a voice note, a file, a line of text. Nocturne
-reads them overnight while your computer is plugged in and idle (a catch-up after sleep may run on battery while it has more than 40 per cent), joins them up, and hands you one
+reads them overnight while your computer is plugged in and idle (a catch-up after sleep may run on battery while it has 40 per cent or more), joins them up, and hands you one
 page each morning. Ask it a question and it answers only from what you kept, and shows you the
 originals it used. Everything stays on this computer.
 

@@ -2,8 +2,15 @@
 type: Guide
 title: On your desktop
 description: The tray, the quick keep shortcut, notifications and starting with your computer.
-status: draft
+status: stable
 tags: [guide, desktop, tray, shortcut, notifications]
+asked:
+  The tray: [icon by the clock, little icon, tray icon, notification area, closing the window]
+  Quick keep shortcut: [without opening the window, quick keep, keyboard shortcut, keep from any app, change the keys]
+  Notifications: [page is ready, tell me when my page, notify me when, don't interrupt me]
+  Start with this computer: [start when i turn, start by itself, start automatically, start with this computer, start on its own]
+  A folder that keeps what you drop in it: [save in downloads, downloads folder, inbox folder, watch a folder, pick up everything, everything i save]
+  Sound: [hear me, use the microphone, can't record, won't record, voice note doesn't]
 ---
 
 # On your desktop
@@ -33,16 +40,16 @@ Most other desktops, such as KDE Plasma, show the tray without any extra step.
 The default shortcut is Ctrl+Shift+Space on Windows and Linux, and Cmd+Shift+Space on a Mac. It
 opens a small box above whatever you are doing, where
 you can type, paste, drop a file or hold Space in the empty box to talk. Press Esc and it goes away. You can change
-the keys in Settings, except where your desktop looks after the shortcut (see below).
+the keys in **Settings**, under **Quick keep shortcut**, except where your desktop looks after the shortcut (see below).
 
 On most current desktops (those that use Wayland, which is the default on current GNOME and
 KDE), your desktop looks after the shortcut. The first time Nocturne starts, your desktop may
 ask whether to add it; allow it. To change the keys later, use your desktop's keyboard
-settings. If your desktop can't add it, Nocturne says so in its Settings and shows a command
+settings. If your desktop can't add it, Nocturne says so in its **Settings** and shows a command
 instead. Add it as a custom shortcut:
 
 1. Open your desktop's own settings (not Nocturne's), go to Keyboard, then Custom Shortcuts.
-2. Add a shortcut, paste the command Nocturne shows under "Set it to run", and choose your keys.
+2. Add a shortcut, paste the command Nocturne shows under **Set it to run:**, and choose your keys.
 
 On older desktops (those that use X11), the Ctrl+Shift+Space shortcut works directly.
 
@@ -50,19 +57,19 @@ On older desktops (those that use X11), the Ctrl+Shift+Space shortcut works dire
 
 When your morning page is ready, Nocturne can send one quiet note: the page is ready, and how many
 things need you. It says nothing about what you kept. It arrives from your page time until six hours later, never after 9 pm, not if you have already
-opened the page, and not while Nocturne is paused. In Settings, choose "Tell me when it's
-ready" or "Don't interrupt me". If your desktop blocks notifications for Nocturne, the page is
+opened the page, and not while Nocturne is paused. In **Settings**, under **Morning page**, choose
+**Tell me when it's ready** or **Don't interrupt me**. If your desktop blocks notifications for Nocturne, the page is
 still there when you open the app and the tray icon shows when something needs you.
 
 ## Start with this computer
 
-Turn this on in Settings so the overnight tidy can run without you opening Nocturne. It adds a
+Turn on **Start with this computer** in **Settings** so the overnight tidy can run without you opening Nocturne. It adds a
 start-up entry for you, and Nocturne then starts in the tray without opening a window. On a desktop
 with no tray, it opens the window instead, so you can see it is running.
 
 ## A folder that keeps what you drop in it
 
-In Settings you can choose an inbox folder. Anything saved there afterwards is kept once. Nocturne
+In **Settings**, press **Choose inbox folder…** beside **Nocturne inbox folder**. Anything saved there afterwards is kept once. Nocturne
 only reads the folder: it never moves, changes or deletes what is in it. It reads subfolders up
 to four levels down and skips hidden files and folders. Files already there when
 you choose the folder are left alone.
@@ -70,9 +77,9 @@ you choose the folder are left alone.
 ## Sound
 
 To keep a voice note, Nocturne needs permission to use the microphone. If it is switched off,
-Nocturne says so and offers to open your sound settings. You can still type, or drop a recording
+Nocturne says so and offers **Open sound settings**. You can still type, or drop a recording
 onto the window.
 
 If a window cannot record at all, Nocturne says so once and marks the microphone button as
-unavailable, with the reason, so pressing it again does nothing. Advanced details shows whether
+unavailable, with the reason, so pressing it again does nothing. **Advanced details** shows whether
 recording is available.
