@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the real end-to-end test, then run it again with the network cut and traced.
 #
-# Usage: scripts/e2e-real.sh [run|offline|all|online|models|relay]     (default: all)
+# Usage: scripts/e2e-real.sh [run|offline|all|online|models|relay|help]     (default: all)
 #   run      the test with real models. The first run downloads the small mind (about 4.8 GB)
 #            through the app's own setup into NOCTURNE_E2E_DIR; later runs reuse it.
 #   offline  the same test in a private network namespace (loopback only) under strace, on what
@@ -23,6 +23,9 @@
 #   models   the test with a model chosen for each job, NOCTURNE_E2E_MODELS="mind=<id>,speech=<id>,
 #            voice=<id>,recall=<id>" (any of the four), through the app's own change command with
 #            the download agreed (`make e2e-models`).
+#   help     the help check (docs/design/in-app-help.md) on the size NOCTURNE_E2E_TIER sets up:
+#            the 29 questions, NOCTURNE_E2E_HELP times (default 3), with help written here
+#            (`make e2e-help`). Results in $NOCTURNE_E2E_DIR/results/help.json.
 #
 # NOCTURNE_E2E_DIR is the scratch folder (default target/e2e-real). It is the only place models
 # are downloaded to, and it is never the app's own data folder. Results are written to
@@ -167,6 +170,12 @@ run_models() {
     cargo test -p nocturne-app --test e2e_real -- --ignored --nocapture --test-threads=1
 }
 
+run_help() {
+    printf '== e2e-real: the help check, tier %s, scratch folder %s\n' "${NOCTURNE_E2E_TIER:-small}" "$dir"
+    NOCTURNE_E2E_HELP=${NOCTURNE_E2E_HELP:-3} \
+        cargo test -p nocturne-app --test e2e_real -- --ignored --nocapture --test-threads=1
+}
+
 test_binary() {
     cargo test -p nocturne-app --test e2e_real --no-run --message-format=json 2> /dev/null |
         python3 -I -c '
@@ -207,6 +216,7 @@ case "$mode" in
     run) run_online ;;
     online) run_stand_in ;;
     models) run_models ;;
+    help) run_help ;;
     relay) start_relay && stop_relay ;;
     offline) run_offline ;;
     all)

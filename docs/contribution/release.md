@@ -208,10 +208,17 @@ with the release notes.
    policy reads Debian package names there: a new GPL entry in a bundled package needs a reviewed
    `ALLOW_GPL` entry for that package's Debian name as well as its Fedora name.
 9. **Check the desktop** (below) on a GNOME Wayland session and on one X11 session.
-10. **Skeptical review.** Review the whole range since the last release as a maintainer who wants
+10. **Read the in-app guide against this build.** Every section help uses
+    (`src-tauri/src/help.rs`) still says what the build does, in the words its controls show.
+11. **Record which sizes write help.** A size of computer writes help answers only after
+    `make e2e-help` passes for it with its preset models (`NOCTURNE_E2E_TIER`), and only the sizes
+    in `WRITES_HELP` in `src-tauri/src/help.rs` do. Run it again for a size whose answering model,
+    answer instructions or preset changed, or when the guide's sections in scope changed, and
+    record in the release notes which sizes write help and which show the guide's own words.
+12. **Skeptical review.** Review the whole range since the last release as a maintainer who wants
     to find a reason not to ship it.
-11. **Record `SHA256SUMS`** and `SOURCES.txt` next to the release notes.
-12. **Approval and merge.** A human approves and merges the release pull request. The workflow
+13. **Record `SHA256SUMS`** and `SOURCES.txt` next to the release notes.
+14. **Approval and merge.** A human approves and merges the release pull request. The workflow
     tags it and builds and attaches the files; check them as in Checking a release above.
 
 > [!NOTE]
