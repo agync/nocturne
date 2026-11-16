@@ -331,6 +331,29 @@ async fn giving_up_on_ports_after_five_tries() {
     assert!(said.contains("address already in use"), "{said:?}");
 }
 
+/// An engine that takes far longer than a fifth of the limit to listen, as one that reads the
+/// computer slowly does, is waited for and starts on the first try.
+#[tokio::test]
+async fn a_slow_start_within_the_limit_is_waited_for() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dirs = common::dirs(tmp.path());
+    common::set_mode(&dirs, "slow-start-ms=2000");
+    let opts = SupervisorOptions {
+        start_timeout: Duration::from_secs(6),
+        ..quick()
+    };
+    let begun = Instant::now();
+    let sup = Supervisor::start(dirs.clone(), opts).await.unwrap();
+    assert!(begun.elapsed() >= Duration::from_secs(2));
+    assert!(ready_port(&sup.state().borrow()).is_some());
+    assert_eq!(
+        common::launch_count(&dirs),
+        1,
+        "it started on the first try"
+    );
+    sup.shutdown().await.unwrap();
+}
+
 #[tokio::test]
 async fn a_slow_start_past_the_timeout_is_an_error_and_leaves_nothing() {
     let tmp = tempfile::tempdir().unwrap();

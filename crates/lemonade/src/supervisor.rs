@@ -41,6 +41,10 @@ pub struct SupervisorOptions {
     /// Restarts allowed inside one hour before the engine is given up on.
     pub restart_limit: u32,
     pub health_interval: Duration,
+    /// How long a start may take before it fails. Before it listens, the engine reads what the
+    /// computer has, and on some computers that alone takes over a minute, at every start: the
+    /// list of graphics a laptop with two can take half a minute to read, and the engine reads
+    /// it twice. A fifth of this in, the log says the engine is still starting.
     pub start_timeout: Duration,
     /// The first restart waits this long; each further one doubles it.
     pub backoff_base: Duration,
@@ -51,7 +55,7 @@ impl Default for SupervisorOptions {
         SupervisorOptions {
             restart_limit: 3,
             health_interval: Duration::from_secs(5),
-            start_timeout: Duration::from_secs(60),
+            start_timeout: Duration::from_secs(300),
             backoff_base: Duration::from_secs(1),
         }
     }
@@ -1012,10 +1016,19 @@ impl Actor {
         let probe = Client::new(port, key);
         let begun = Instant::now();
         let deadline = begun + self.opts.start_timeout;
+        let mut slow = Some(begun + self.opts.start_timeout / 5);
         let mut answered = false;
         loop {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(Launch::Retry(format!("exited early with {status}")));
+            }
+            if slow.is_some_and(|at| Instant::now() >= at) {
+                slow = None;
+                tracing::info!(
+                    "the engine is still starting after {} s; it has up to {} s",
+                    begun.elapsed().as_secs(),
+                    self.opts.start_timeout.as_secs()
+                );
             }
             if probe.live().await.is_ok() {
                 answered = true;
@@ -1351,6 +1364,15 @@ pub fn group_members(_pgid: u32) -> Vec<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A laptop with two graphics has been seen to take 36 s to list them, and the engine lists
+    /// them twice before it listens: the default leaves room for that several times over.
+    #[test]
+    fn the_default_start_waits_out_a_slow_computer() {
+        let opts = SupervisorOptions::default();
+        assert!(opts.start_timeout >= Duration::from_secs(4 * 72));
+        assert!(opts.start_timeout / 5 >= Duration::from_secs(60));
+    }
 
     #[test]
     fn a_taken_port_is_not_free_and_a_probe_takes_nothing() {
