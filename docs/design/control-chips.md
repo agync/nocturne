@@ -13,8 +13,7 @@ says "On a small computer, you can later choose to have answers written online. 
 a quiet "Why this one?" button and "Set up · 3.2 GB" beside it. They could not read
 the box, and asked for icons that look like the buttons the words name.
 
-This page proposes three changes and one set of rules. Nothing here is in the interface yet; every
-string is a proposal for the owner to approve.
+This page sets three changes and one set of rules. All of it is in the interface.
 
 The mockup is `docs/design/mockups/control-chips/setup-box.html`, rendered to
 `before-after-light.png` and `before-after-dark.png` beside it. Each render shows the box before and
@@ -174,8 +173,8 @@ sizes and a closing line:
 | | Words |
 |---|---|
 | Before, `setup.why.body` | Nocturne picks the biggest mind this computer can run comfortably, which depends on its computer memory: {ram} GB here. Large needs {large} GB or more, Standard {standard} GB, Small {small} GB and Tiny {tiny} GB. You can always choose a smaller one: it uses less memory, space and battery. Small makes answers and tidying slower; Tiny also gives simpler answers that may miss details. Everything still works. |
-| After, `setup.why.lead` | Nocturne picks the biggest mind this computer runs comfortably. It depends on computer memory. This computer has {ram} GB. |
-| After, list | Large: {large} GB or more · Standard: {standard} GB or more · Small: {small} GB or more · Tiny: {tiny} GB or more, one per line |
+| After, `setup.why.lead` and `setup.why.here` | Nocturne picks the biggest mind this computer runs comfortably. It depends on computer memory. (New paragraph.) This computer has {ram} GB. |
+| After, table | Large: {large} GB or more · Standard: {standard} GB or more · Small: {small} GB or more · Tiny: {tiny} GB or more, one row each, the size in the first column |
 | After, `setup.why.close` | A smaller mind uses less memory, space and battery. Everything still works. |
 
 The line about Small and Tiny being slower and simpler is dropped from here because each size's own
@@ -207,7 +206,7 @@ buttons, are left out. [Square brackets] mark a chip; ⚙ marks the gear.
 | `online.send.lead` | Nocturne only sends what each answer needs. You can change these later in Settings. | Nocturne only sends what each answer needs. You can change these later in [⚙ Settings], under [Online answers]. | Settings, Online answers |
 | `online.limit.hint` | Then questions are answered on this computer until the 1st. Settings shows how many are left. | Then questions are answered on this computer until the 1st. [⚙ Settings] shows how many are left, under [Online answers]. | Settings, Online answers |
 | `online.explain.aside.off` | Turn it off at any time, in Settings or on the Privacy page. | Turn it off at any time in [⚙ Settings] or [Privacy]. | Settings, Privacy |
-| `online.consent.mind.rest` | Turn it off at any time in Settings or on the Privacy page. Every answer says where it was written, and “See what was sent” shows the exact words. | Turn it off at any time in [⚙ Settings] or [Privacy]. Every answer says where it was written. [See what was sent] shows the exact words. | Settings, Privacy, See what was sent |
+| `online.consent.mind.rest`, new `online.consent.mind.where` | Turn it off at any time in Settings or on the Privacy page. Every answer says where it was written, and “See what was sent” shows the exact words. | Turn it off at any time in [⚙ Settings] or [Privacy]. (New paragraph.) Every answer says where it was written. [See what was sent] shows the exact words. | Settings, Privacy, See what was sent |
 | `online.consent.declined` | Not turned on. To use this service, check it again from Advanced details. | Same words. | None: "Go to Advanced details" is on the same screen |
 | `away.relink.how` | On each phone, open Nocturne and choose Scan the code, then point it at your computer. … | On each phone, open Nocturne and choose [Scan the new code], then point it at your computer. … | Scan the new code; fixes a mismatch with the phone's button |
 | `away.problem.accountBlocked` | … Try another account, or turn Away from home off. | Same words. | None: on the Away from home screen |
@@ -217,7 +216,7 @@ buttons, are left out. [Square brackets] mark a chip; ⚙ marks the gear.
 | `phone.address.where` | On your computer, open Nocturne and choose “Your phones need the new address”. | On your computer, open Nocturne and choose [Your phones need the new address]. | As above |
 | `phone.relink.here.body` | … Open Nocturne from the home screen, choose “Scan the new code”, then point it at your computer. | … Open Nocturne from the home screen, choose [Scan the new code], then point it at your computer. | Scan the new code |
 | `phone.check.body` | If they match, choose **Allow** on your computer. If they don’t, choose Don’t allow there and start again. | If they match, choose [Allow] on your computer. If they don’t, choose [Don’t allow] there and start again. | Allow, Don’t allow; both now marked alike |
-| `phone.ask.mark.sent` | What was sent is listed on your computer, under Online answers. | What was sent is listed on your computer, in [Privacy], under [See what was sent]. | Privacy, See what was sent; path to confirm before approval |
+| `phone.ask.mark.sent` | What was sent is listed on your computer, under Online answers. | What was sent is listed on your computer. Choose [Privacy], then [See what was sent]. | Privacy, See what was sent; the link sits on the Privacy screen, in its Online answers section, so it is a path and not a heading |
 | `phone.iphone.step1` to `step3`, `phone.allowed.step1`, `step2` | Tap **Share** … | Same words. | None: Safari's and the browser's own controls stay bold |
 | `capture.recording.hint.click` | Press Keep when you are done · long recordings are fine | Same words. | None: Keep is on screen |
 | `settings.shortcut.declined` | … Choose Try again, or add a desktop shortcut. | Same words. | None: Try again is on screen |
@@ -255,9 +254,13 @@ approval.
 
 | Key | Now | Proposed |
 |---|---|---|
-| `setup.needs` | Nocturne needs {size} of space (you have {free} free). It downloads once, and you can start keeping things straight away. | Nocturne needs {size} of space. This computer has {free} free. It downloads once, and you can keep things straight away. (Two paragraphs: the first two sentences, then the last.) |
+| `setup.needs`, new `setup.needs.once` | Nocturne needs {size} of space (you have {free} free). It downloads once, and you can start keeping things straight away. | Nocturne needs {size} of space. This computer has {free} free. It downloads once, and you can keep things straight away. (Two paragraphs: the first two sentences, then the last.) |
 | `setup.tier.detail.simpler` | For computers with {ram} GB memory or more · {size} download · uses the least memory, space and battery · answers are simpler and may miss details | Two lines. "{ram} GB memory or more · {size} download" and "Least memory, space and battery. Simpler answers." |
 | `setup.tier.detail.slower` | For computers with {ram} GB memory or more · {size} download · slower · uses less memory, space and battery | Two lines. "{ram} GB memory or more · {size} download" and "Slower. Less memory, space and battery." |
+| `setup.tier.detail` and `setup.tier.detail.fastest` | For computers with {ram} GB memory or more · {size} download, and the same with "· fastest" | The same first line as the other two cards, "{ram} GB memory or more · {size} download", so the four cards read alike; Large adds the line "Fastest." |
+| `setup.unsupported.memory.detail`, `setup.unsupported.disk.detail` | Three and four sentences in one paragraph | Two paragraphs each, two sentences at most: what this computer has and what Nocturne needs, then what happens next |
+| `setup.tonight.body` | When this computer is plugged in and idle, Nocturne reads what you kept, links it together and writes your first page. If the lid is closed, it catches up when you open it. | When this computer is plugged in and idle, Nocturne reads what you kept and writes your first page. If the lid is closed, it catches up when you open it. |
+| `setup.keep.failed`, `setup.action.failed` | "… Nothing is lost; try again." and "… Nothing was lost; try again in a moment." | The semicolon becomes ", so": "Nothing is lost, so try again." and "Nothing was lost, so try again in a moment." |
 | `setup.result.standard` | Nocturne will use a lighter mind. Everything works; tidying takes a little longer. | Nocturne will use a lighter mind. Everything works, and tidying takes a little longer. |
 | `setup.result.small` | Nocturne will use its smallest mind. Everything works; answers and tidying are slower. | Nocturne will use its smallest mind. Everything works, but answers and tidying are slower. |
 
@@ -285,7 +288,12 @@ Agreed by the owner on 2026-11-16:
 - The rail's Privacy link gets no icon: the lock already means "kept private". Its chip has no icon.
 - Check the path in `phone.ask.mark.sent` against the screens when the chip is built.
 - Back up's "Show advanced details" moves to the right-then-down chevron with this change, so the
-  app has one disclosure style.
+  app has one disclosure style. The button there reads "Advanced details", and so does the one on
+  Restore from a backup; both take the chevron.
+- A chip for "Show advanced details" has no icon: the chevron on the real control shows whether it
+  is open, so copying it would teach the wrong shape.
+- The key cap is built and drawn in `bar.hint.slash`, which only a screen reader hears today. No
+  visible running text names a key yet.
 
 ## Review
 
