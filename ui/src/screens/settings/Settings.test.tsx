@@ -270,6 +270,29 @@ describe("Settings", () => {
     expect(screen.queryByText(/isn’t working here/)).toBeNull();
   });
 
+  it("says so when the desktop's shortcut settings do not open, and lets the person try again", async () => {
+    const engine = createMockEngine();
+    const base = await engine.getSettings();
+    vi.spyOn(engine, "getSettings").mockResolvedValue({
+      ...base,
+      desktopShortcut: { state: "held", keys: "Ctrl+Alt+K", configurable: true },
+    });
+    const configure = vi.spyOn(engine, "configureShortcut").mockRejectedValueOnce(new Error("no"));
+    await open(engine);
+    const button = screen.getByRole("button", { name: "Change in desktop settings" });
+    await userEvent.click(button);
+    expect(
+      await screen.findByText(
+        "Your desktop’s shortcut settings didn’t open. Change the keys in your desktop’s keyboard settings instead.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Your desktop looks after this shortcut.")).toBeNull();
+    expect(button).toHaveAccessibleDescription(/shortcut settings didn’t open/);
+    await userEvent.click(button);
+    expect(configure).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText("Your desktop looks after this shortcut.")).toBeInTheDocument();
+  });
+
   it("says where to change the shortcut when the desktop cannot open its settings", async () => {
     const engine = createMockEngine();
     const base = await engine.getSettings();

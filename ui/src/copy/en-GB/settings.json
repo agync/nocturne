@@ -25,6 +25,7 @@
   "settings.shortcut.asking": "Your desktop is asking whether to add this shortcut.",
   "settings.shortcut.desktop": "Your desktop looks after this shortcut.",
   "settings.shortcut.desktop.fallback": "Your desktop looks after this shortcut. Change it in your desktop’s keyboard settings.",
+  "settings.shortcut.desktop.failed": "Your desktop’s shortcut settings didn’t open. Change the keys in your desktop’s keyboard settings instead.",
   "settings.shortcut.configure": "Change in desktop settings",
   "settings.shortcut.declined": "The shortcut wasn’t added. Choose Try again, or add a desktop shortcut.",
   "settings.shortcut.taken": "This shortcut isn’t working here. Another app may be using it, or this desktop doesn’t share keys with other apps. Choose another, or add a desktop shortcut.",
