@@ -85,6 +85,9 @@ pub fn install<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn Error>> {
     if let Ok(settings) = shell.engine().and_then(|e| Ok(e.settings()?)) {
         #[cfg(target_os = "linux")]
         if let Some(bus) = os.autostart_portal() {
+            if os.file().autostart_by_portal {
+                remove_sandbox_entry();
+            }
             tell_portal_once(app, bus, settings.start_at_login);
         }
         if sandbox::flatpak_app_id_now().is_none() {
@@ -254,8 +257,28 @@ fn tell_portal_once<R: Runtime>(app: &AppHandle<R>, bus: portal::Bus, want: bool
         }
         if settled && let Some(os) = app.try_state::<OsState>() {
             os.update(|f| f.autostart_by_portal = want);
+            remove_sandbox_entry();
         }
     });
+}
+
+/// An earlier Flatpak version wrote its entry into the app's own config folder, where it never
+/// ran. Once the portal has been told, that file only misleads, so it goes.
+#[cfg(target_os = "linux")]
+fn remove_sandbox_entry() {
+    if std::env::var_os("XDG_CONFIG_HOME").is_none_or(|v| v.is_empty()) {
+        return;
+    }
+    let Some(dir) = autostart::dir_from_env() else {
+        return;
+    };
+    match autostart::remove_stale(&dir) {
+        Ok(true) => {
+            tracing::info!("start with this computer: removed the old entry in the sandbox")
+        }
+        Ok(false) => {}
+        Err(e) => tracing::warn!("the old start-up entry in the sandbox could not be removed: {e}"),
+    }
 }
 
 /// [`set_start_at_login`], or the Background portal inside a Flatpak.
@@ -268,6 +291,7 @@ async fn change_start_at_login<R: Runtime>(
     if let Some(bus) = os.autostart_portal() {
         start_at_login_by_portal(&bus, want).await?;
         os.update(|f| f.autostart_by_portal = want);
+        remove_sandbox_entry();
         return Ok(());
     }
     set_start_at_login(app, os, want)

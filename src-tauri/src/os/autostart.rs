@@ -103,11 +103,6 @@ impl Target {
     /// canonical path of the running executable (empty when it cannot be resolved, so nothing is
     /// written but an existing entry can still be removed).
     pub fn from_env() -> Option<Target> {
-        let home = || {
-            std::env::var_os("HOME")
-                .filter(|v| !v.is_empty())
-                .map(PathBuf::from)
-        };
         if cfg!(target_os = "macos") {
             return Some(Target {
                 dir: home()?.join("Library").join("LaunchAgents"),
@@ -116,18 +111,39 @@ impl Target {
                     .unwrap_or_default(),
             });
         }
-        let config = std::env::var_os("XDG_CONFIG_HOME")
-            .filter(|v| !v.is_empty())
-            .map(PathBuf::from)
-            .or_else(|| home().map(|h| h.join(".config")))?;
+        let dir = dir_from_env()?;
         let exec = std::env::var_os("APPIMAGE")
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
             .or_else(|| std::env::current_exe().ok())?;
-        Some(Target {
-            dir: config.join("autostart"),
-            exec,
-        })
+        Some(Target { dir, exec })
+    }
+}
+
+/// The autostart folder on Linux: `$XDG_CONFIG_HOME/autostart`, else `~/.config/autostart`.
+/// Inside a Flatpak that is the app's own config folder, which the desktop never reads.
+pub fn dir_from_env() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+        .or_else(|| home().map(|h| h.join(".config")))
+        .map(|config| config.join("autostart"))
+}
+
+fn home() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
+}
+
+/// Remove the entry an earlier Flatpak version wrote into the app's own folder, where it never
+/// ran, once the Background portal holds the real one. `true` when there was one.
+#[cfg(target_os = "linux")]
+pub fn remove_stale(dir: &Path) -> std::io::Result<bool> {
+    match std::fs::remove_file(dir.join(ENTRY)) {
+        Ok(()) => Ok(true),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(e) => Err(e),
     }
 }
 
@@ -477,6 +493,31 @@ mod tests {
             assert!(apply(true, &newline).is_err());
             assert!(apply(false, &newline).is_ok(), "removing is always allowed");
         }
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_stale_entry_is_removed_and_nothing_else() {
+        let root = tempfile::tempdir().unwrap();
+        let dir = root.path().join("autostart");
+        assert!(
+            !remove_stale(&dir).unwrap(),
+            "nothing there is not an error"
+        );
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join(ENTRY),
+            desktop_entry(Path::new("/app/bin/nocturne")),
+        )
+        .unwrap();
+        std::fs::write(dir.join("other.desktop"), "[Desktop Entry]\n").unwrap();
+        assert!(remove_stale(&dir).unwrap());
+        assert!(!dir.join(ENTRY).exists());
+        assert!(
+            dir.join("other.desktop").exists(),
+            "another app's entry stays"
+        );
+        assert!(!remove_stale(&dir).unwrap());
     }
 
     #[test]
