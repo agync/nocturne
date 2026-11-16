@@ -1,8 +1,8 @@
 # Builds the experimental server's container image (Containerfile, docs/adr/0012-server-mode.md)
 # and, for a release tag, publishes it to the GitHub container registry as a manifest list.
 #
-# A pull request that touches what goes into the image only builds it: no login, no push, and the
-# token can only read. A release tag (vX.Y.Z) builds each architecture natively on its own runner,
+# A pull request that touches the image's own files, and a push to main that touches what goes into
+# it, only build it: no login, no push, and the token can only read. A release tag (vX.Y.Z) builds each architecture natively on its own runner,
 # pushes it as <tag>-<arch>, and then puts both under <tag> and latest. release.yml may call this
 # with `tag` and `ref` instead, as it calls tailnet.yml; the tag trigger should then be removed so
 # a release publishes once.
@@ -12,7 +12,19 @@
 name: container
 
 on:
+  # A pull request builds the image only when the image's own files change. Code changes reach the
+  # image through main, which builds it after every merge that touches what goes into it.
   pull_request:
+    paths:
+      - Containerfile
+      - .containerignore
+      - scripts/fetch-lemonade.sh
+      - scripts/sha256.sh
+      - .github/workflows/container.yml
+  # Paths do not apply to tag pushes, so a release tag always builds and publishes.
+  push:
+    branches: [main]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
     paths:
       - Containerfile
       - .containerignore
@@ -26,8 +38,6 @@ on:
       - scripts/fetch-lemonade.sh
       - scripts/sha256.sh
       - .github/workflows/container.yml
-  push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
   workflow_call:
     inputs:
       tag:
@@ -45,8 +55,9 @@ permissions:
   contents: read
 
 # One publish of a tag at a time: both architectures and the manifest list write the same names.
+# A push to main gets its own group, so no queued build of main is replaced by a newer one.
 concurrency:
-  group: container-${{ inputs.tag || github.ref_name }}
+  group: container-${{ inputs.tag || (github.event_name == 'push' && github.ref_type == 'branch' && github.run_id) || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
