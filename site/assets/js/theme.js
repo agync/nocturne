@@ -38,5 +38,22 @@
         apply(choice);
       });
     }
+
+    // The language list in the header is a native disclosure, which stays open until its summary
+    // is pressed again. A click elsewhere or Escape closes it, as a menu is expected to.
+    const menus = document.querySelectorAll("details.lang");
+    document.addEventListener("click", (event) => {
+      for (const menu of menus) {
+        if (menu.open && !menu.contains(event.target)) menu.open = false;
+      }
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") return;
+      for (const menu of menus) {
+        if (!menu.open) continue;
+        menu.open = false;
+        menu.querySelector("summary")?.focus();
+      }
+    });
   });
 })();
