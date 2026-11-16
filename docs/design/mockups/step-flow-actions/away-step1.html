@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Away from home, step 1 · Nocturne</title>
+<!-- The app's own tokens and fonts. Serve the repository root over HTTP after make ui/install. -->
+<link rel="stylesheet" href="../../../../ui/src/design/global.css">
+<style>
+/* Matched to ui/src: Shell, ScreenSheet, Button, Online.module.css, Away.module.css, Setup.module.css. */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.shell { display: flex; height: 100vh; background: var(--bg); color: var(--ink); }
+.rail { display: flex; flex: none; flex-direction: column; gap: var(--s-5); width: var(--size-rail); padding: 20px 14px; border-right: 1px solid var(--rule); overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 var(--s-2); }
+.wordmark { font: 500 1.375rem / 1.2 var(--font-serif); letter-spacing: -0.02em; }
+.links { display: flex; flex-direction: column; gap: 2px; }
+.link { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); min-height: var(--size-control); padding: var(--s-2) 10px; border-radius: 6px; color: var(--ink2); font-size: 0.875rem; line-height: 1.3; text-decoration: none; }
+.link[aria-current="page"] { background: var(--sheet); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--rule); }
+.link .mono { color: var(--ink3); font: 400 0.75rem / 1.33 var(--font-mono); }
+.link .count { color: var(--ember); font: 400 0.75rem / 1.33 var(--font-mono); }
+.railFoot { display: flex; flex-direction: column; gap: 14px; margin-top: auto; font-size: 0.8125rem; }
+.status { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-md); }
+.statusState { display: flex; align-items: center; gap: var(--s-2); color: var(--ink2); }
+.statusLabel { color: var(--ink3); font: 400 0.6875rem / 1.3 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.statusValue { font-weight: 500; }
+.secondary { display: flex; justify-content: space-between; gap: var(--s-2); padding: 0 6px; }
+.secondary .link { padding: 0 var(--s-2); }
+.bodyCol { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.topbar { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) 28px; border-bottom: 1px solid var(--rule); }
+.keepbar { display: flex; flex: 1; align-items: center; gap: var(--s-2); max-width: 680px; min-height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--ink3); border-radius: var(--r-md); background: var(--raised); color: var(--ink3); }
+.keepbar > span:first-child { flex: 1; }
+.kbd { padding: 1px 6px; border: 1px solid var(--ink3); border-radius: var(--r-xs); color: var(--ink2); font: 400 0.6875rem / 1.4 var(--font-mono); }
+.round { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--rule2); border-radius: 50%; color: var(--ink); }
+.dropHint { color: var(--ink3); font-size: 0.8125rem; }
+.narrowHeader { display: none; align-items: center; gap: var(--s-2); min-height: calc(var(--size-touch) + var(--s-4)); padding: var(--s-2) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--bg); font-weight: 500; }
+.narrowHeader .chevron { display: inline-flex; color: var(--ink3); }
+.scroller { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; scroll-padding-bottom: 88px; }
+.frame { display: flex; flex: 1; flex-direction: column; padding: var(--s-5) var(--size-gutter) 0; }
+.sheet { display: flex; flex: 1; flex-direction: column; min-height: 36rem; padding: var(--s-6) var(--s-6) 0; border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.back { display: inline-flex; align-self: flex-start; gap: var(--s-1); margin-bottom: var(--s-4); color: var(--ink2); font: 500 0.875rem / 1.4 var(--font-sans); text-decoration: none; }
+.columns { display: flex; gap: 48px; align-items: flex-start; }
+.columns[data-away] { gap: 56px; }
+.mainCol { display: flex; flex: 1; flex-direction: column; gap: var(--s-5); min-width: 0; max-width: 680px; }
+.asideCol { display: flex; flex: none; flex-direction: column; gap: var(--s-3); width: 260px; padding-top: 6px; }
+.label { margin: 0; color: var(--ink3); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.stepTitle { margin: 0; color: var(--ink); font: 400 1.875rem / 1.18 var(--font-serif); letter-spacing: -0.01em; }
+h1:focus { outline: none; }
+.bodyText { margin: 0; color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.strong { color: var(--ink); }
+.sub { margin: 0; color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+.lede { margin: 0; color: var(--ink2); font: italic 400 1.25rem / 1.5 var(--font-serif); }
+.dl { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.dl > div { display: flex; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.dl dt { flex: none; width: 8rem; color: var(--ink); font-weight: 500; }
+.dl dd { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.short dd { color: var(--ink); }
+.toggleLink { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 24px; padding: 0; border: 0; background: none; color: var(--accent); font: 500 0.875rem / 1.4 var(--font-sans); cursor: pointer; }
+.chev { display: inline-flex; transform: rotate(-90deg); }
+.toggleLink[aria-expanded="true"] .chev { transform: none; }
+.more { display: flex; flex-direction: column; gap: var(--s-4); }
+.more[hidden], .why[hidden] { display: none; }
+.rules { margin: 0; padding: 0; border-top: 1px solid var(--rule); list-style: none; }
+.rules li { padding: 11px 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.875rem; }
+.example { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); font: 400 0.8125rem / 1.6 var(--font-mono); }
+.example ol { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.example li { display: flex; gap: 12px; }
+.example li b { flex: none; width: 14px; color: var(--ink2); font-weight: 500; }
+.exampleNote { color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleHead { color: var(--ink); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleFoot { padding-top: 8px; border-top: 1px solid var(--rule); color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.sec h2 { margin: 0; color: var(--ink); font: 500 1.0625rem / 1.4 var(--font-sans); }
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.node { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 9rem; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink2); font-size: 0.8125rem; line-height: 1.4; }
+.node[data-out="true"] { border-color: var(--ink); }
+.nodeName { color: var(--ink); font-weight: 500; font-size: 0.875rem; }
+.arrow { display: flex; align-items: center; color: var(--ink3); }
+.never { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.never li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink2); font-size: 0.9375rem; line-height: 1.5; }
+.never svg { flex: none; margin-top: 3px; }
+.sum { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.sum div { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.sum dt { color: var(--ink2); font-size: 0.75rem; }
+.sum dd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0; color: var(--ink); font-size: 0.875rem; font-weight: 500; }
+.linkButton { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.monoText { font: 400 0.8125rem / 1.5 var(--font-mono); }
+.choices { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.legend { margin-bottom: var(--s-3); padding: 0; color: var(--ink); font: 500 1rem / 1.4 var(--font-sans); }
+.choice { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-md); background: var(--sheet); cursor: pointer; }
+.choice[data-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.choice input { flex: none; width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); }
+.choiceText { display: flex; flex-direction: column; gap: var(--s-2); color: var(--ink2); font-size: 0.875rem; line-height: 1.5; }
+.choiceText b { color: var(--ink); font-weight: 600; }
+.choiceName { color: var(--ink); font: 500 0.9375rem / 1.4 var(--font-sans); }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); min-height: var(--size-control); padding: 0 var(--s-4); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--ink); font: 500 0.875rem / 1.3 var(--font-sans); cursor: pointer; }
+.button[data-variant="primary"] { background: var(--ink); color: var(--sheet); }
+.button[data-variant="quiet"] { padding: 0 var(--s-3); color: var(--accent); }
+.button:focus-visible, .toggleLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.note { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+
+/* The step's bar: pinned to the bottom of the window on every step. */
+.actionBar { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); margin: auto calc(-1 * var(--s-6)) 0; padding: var(--s-4) var(--s-6); border-top: 1px solid var(--rule); background: var(--sheet); }
+.actionBar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; background: linear-gradient(to bottom, transparent, var(--sheet)); opacity: 0; pointer-events: none; }
+.actionBar[data-more="true"]::before { opacity: 1; }
+.buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.spacer { flex: none; height: var(--s-6); }
+@media (max-height: 28em) { .actionBar { position: static; } }
+
+/* Medium (720 to 1023): the side column drops under the words. */
+:root[data-size="medium"] .columns { flex-direction: column; gap: var(--s-5); }
+:root[data-size="medium"] .asideCol { width: 100%; }
+
+/* Narrow (below 720): the rail folds into the header, and the keep or ask bar is hidden during a step flow. */
+:root[data-size="narrow"] .rail, :root[data-size="narrow"] .topbar { display: none; }
+:root[data-size="narrow"] .narrowHeader { display: flex; }
+:root[data-size="narrow"] .frame { padding: 0; }
+:root[data-size="narrow"] .sheet { min-height: 0; padding: var(--s-5) var(--s-4) 0; border-radius: 0; box-shadow: none; }
+:root[data-size="narrow"] .columns { flex-direction: column; gap: var(--s-5); }
+:root[data-size="narrow"] .asideCol { width: 100%; }
+:root[data-size="narrow"] .dl > div { flex-direction: column; gap: 4px; }
+:root[data-size="narrow"] .actionBar { margin-inline: calc(-1 * var(--s-4)); padding: var(--s-3) var(--s-4); }
+
+/* First-run setup: a card in the window, no rail. */
+.window { display: flex; align-items: center; justify-content: center; height: 100vh; overflow: auto; padding: var(--s-6); background: var(--bg); color: var(--ink); }
+.card { display: flex; flex-direction: column; gap: var(--s-4); width: min(100%, 720px); padding: var(--s-7) var(--s-7) 0; border-radius: var(--r-lg); background: var(--sheet); box-shadow: var(--e2); }
+.card .actionBar { margin: var(--s-2) calc(-1 * var(--s-7)) 0; padding: var(--s-4) var(--s-7); border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.eyebrow { color: var(--ink2); }
+.title { max-width: 28ch; margin: 0; }
+.tiers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); margin: 0; padding: 0; border: 0; }
+.tier { position: relative; display: flex; }
+.tier[data-disabled="true"] { color: var(--ink3); }
+.tier[data-disabled="true"] .tierBody { padding: calc(var(--s-3) + 1px) calc(var(--s-4) + 1px); border: 1px dashed var(--rule); box-shadow: none; }
+.tier[data-disabled="true"] .tierDetail { color: var(--ink3); }
+.tierBody { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: var(--s-3) var(--s-4); border: 2px solid transparent; border-radius: var(--r-md); box-shadow: var(--e0); }
+.tier[data-checked="true"] .tierBody { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.tierName { font-weight: 500; }
+.tierDetail { color: var(--ink2); font: 400 0.8125rem / 1.38 var(--font-sans); }
+.lead { margin: 0; color: var(--ink2); }
+.whyText { margin: 0; color: var(--ink2); font-size: 0.875rem; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+<nav class="rail" aria-label="Main">
+  <div class="brand"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.8"/></svg><span class="wordmark">Nocturne</span></div>
+  <div class="links">
+    <a class="link" href="#"><span>Today</span><span class="mono">Mon</span></a>
+    <a class="link" href="#"><span>Needs you</span><span class="count">2</span></a>
+    <a class="link" href="#"><span>What Nocturne remembers</span></a>
+    <a class="link" href="#"><span>Recently kept</span></a>
+    <a class="link" href="#"><span>Fading &amp; let go</span></a>
+    <a class="link" href="#"><span>Past pages</span></a>
+  </div>
+  <div class="railFoot">
+    <div class="status">
+      <span class="statusState"><svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2.5714285714285716"/></svg> Resting</span>
+      <span><span class="statusLabel">Uses the internet for</span><br><span class="statusValue">Downloads you agreed to</span></span>
+    </div>
+    <div class="secondary"><a class="link" href="#">Privacy</a><a class="link" href="#" aria-current="page">Settings</a></div>
+  </div>
+</nav>
+<div class="bodyCol">
+
+<div class="topbar">
+  <div class="keepbar"><span>Keep something, or ask…</span><span class="kbd">Ctrl Shift Space</span><span class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/></svg></span><span class="round"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></svg></span></div>
+  <span class="dropHint">or drop files anywhere</span>
+</div>
+<header class="narrowHeader"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M 0.75 12 A 11.25 11.25 0 0 0 23.25 12 Z" fill="currentColor"/><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/></svg><span>Settings</span><span class="chevron"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span></header>
+<main class="scroller" id="main" tabindex="-1" aria-label="Turn on Away from home">
+<div class="frame">
+<div class="sheet">
+<a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
+<div class="columns" data-away><section class="mainCol">
+<span class="label">Away from home · step 1</span>
+<h1 class="t-page-title" tabindex="-1" style="margin:0">Use Nocturne from your phone when you’re out: ask, keep things and read today’s page.</h1>
+<fieldset class="choices">
+  <legend class="legend">How should your phone reach this computer?</legend>
+  <label class="choice" data-checked="true">
+    <input type="radio" name="connection" value="simple" checked>
+    <span class="choiceText">
+      <span class="choiceName">Simple</span>
+      <span><b>Needs</b> Nothing to sign up for. Nothing to install on your phone.</span>
+      <span><b>Who sees what</b> Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where, and it supplies the page your phone opens.</span>
+      <span class="sub">Cloudflare offers this for free without promises, so it may sometimes stop working.</span>
+    </span>
+  </label>
+  <label class="choice">
+    <input type="radio" name="connection" value="mostPrivate">
+    <span class="choiceText">
+      <span class="choiceName">Most private</span>
+      <span><b>Needs</b> A Tailscale account and its app on your phone.</span>
+      <span><b>Who sees what</b> Usually your phone and computer talk to each other directly. Tailscale can see your account, the devices on it and when they connect, but not what you keep or ask.</span>
+    </span>
+  </label>
+</fieldset>
+<dl class="dl short">
+  <div><dt>Your phone</dt><dd>Can’t delete, export or change settings. Do those here.</dd></div>
+  <div><dt>Private things</dt><dd>Stay on this computer and never reach your phone.</dd></div>
+</dl>
+<button type="button" class="toggleLink" aria-expanded="false" aria-controls="more"><span class="chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5714285714285716" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>Who sees what, and what your phone can do</button>
+<div class="more" id="more" hidden>
+  <dl class="dl">
+    <div><dt>Simple</dt><dd>Your phone reaches this computer through Cloudflare, a large internet company. Nocturne locks what you ask and keep, so Cloudflare can’t read it on the way. Cloudflare can see when your phone connects, from where, how much, the size and timing of each message, and a number that tells your phones apart. It also serves the page your phone opens. A change it made to that page, or one made by someone who broke into it, could stay on your phone until you add the phone again, and could act as your phone while the page is open. After this computer restarts, your phone looks for it at its old address, which Cloudflare, or whoever gets that address later, may answer.</dd></div>
+    <div><dt>Most private</dt><dd>Usually your phone and computer talk to each other directly. If not, Tailscale passes along locked messages it can’t read. Tailscale, a network company, helps them find each other. It can see your account, the devices on it and when they connect, but not what you keep or ask. Only your own devices on your account can reach this computer, and each still needs your Allow to pair.</dd></div>
+    <div><dt>Either way</dt><dd>While it’s on, the connection part also talks to its company’s servers to stay connected.</dd></div>
+  </dl>
+  <h2 class="label" style="padding-top: var(--s-2)">Your phone can</h2>
+  <ul class="rules">
+    <li>Ask, with where each answer came from</li>
+    <li>Keep a note, a photo or a voice note</li>
+    <li>Read today’s page and the last week’s</li>
+  </ul>
+  <h2 class="label" style="padding-top: var(--s-2)">Your phone can’t</h2>
+  <ul class="rules">
+    <li>Delete anything</li>
+    <li>Export what you’ve kept</li>
+    <li>Change settings or add phones</li>
+  </ul>
+  <p class="sub">Do those here, on this computer.</p>
+  <p class="sub">Anyone holding your unlocked phone can do what it can. If a phone is lost, remove it here and it stops working at once.</p>
+  <p class="sub">Switching between Simple and Most private means pairing your phones again.</p>
+  <p class="sub">Leaving at any step turns Away from home back off.</p>
+</div>
+</section></div>
+<div class="spacer"></div>
+<div class="actionBar"><div class="buttons"><button type="button" class="button" data-variant="primary">Continue</button><button type="button" class="button" data-variant="quiet">Not now</button></div><span class="note">Nothing is downloaded or turned on until the next step.</span></div>
+</div>
+</div>
+</main>
+</div>
+</div>
+
+<script>
+// ?theme=dark|light picks the theme; ?open=1 opens the expander; ?end=1 scrolls to the end.
+const params = new URLSearchParams(location.search);
+const theme = params.get("theme");
+if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+const root = document.documentElement;
+const scale = parseFloat(getComputedStyle(root).fontSize) / 16 || 1;
+function size() {
+  const w = innerWidth;
+  root.dataset.size = w < 720 * scale ? "narrow" : w < 1024 * scale ? "medium" : "wide";
+}
+const scroller = document.querySelector(".scroller, .window");
+const bar = document.querySelector(".actionBar");
+// The bar shows a soft edge only while there is more to read above it.
+function cue() {
+  if (!bar || !scroller) return;
+  bar.dataset.more = String(scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1);
+}
+for (const toggle of document.querySelectorAll("[aria-controls]")) {
+  const region = document.getElementById(toggle.getAttribute("aria-controls"));
+  toggle.addEventListener("click", () => {
+    region.hidden = !region.hidden;
+    toggle.setAttribute("aria-expanded", String(!region.hidden));
+    cue();
+  });
+  if (params.get("open") === "1") { region.hidden = false; toggle.setAttribute("aria-expanded", "true"); }
+}
+size();
+addEventListener("resize", () => { size(); cue(); });
+scroller?.addEventListener("scroll", cue);
+if (params.get("end") === "1" && scroller) scroller.scrollTop = scroller.scrollHeight;
+cue();
+</script>
+</body>
+</html>
