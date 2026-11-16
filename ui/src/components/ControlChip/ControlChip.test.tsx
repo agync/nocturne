@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { t } from "../../copy/t";
 import { ControlChip } from "./ControlChip";
+import { plain, tc } from "./copy";
 import { CHIP_IDS, CHIPS } from "./registry";
 
 describe("ControlChip", () => {
@@ -40,6 +41,18 @@ describe("ControlChip", () => {
   it("is found by its words and named by them alone", () => {
     render(<ControlChip id="settings" />);
     expect(screen.getByText("Settings")).toBeInTheDocument();
+  });
+});
+
+describe("tc", () => {
+  it("reads as the sentence with the chips drawn in it", () => {
+    const { container } = render(<p>{tc("setup.tiny.online.where")}</p>);
+    expect(container.textContent).toBe("Find it in Settings, under Online answers.");
+    expect(container.querySelectorAll("[data-chip]")).toHaveLength(2);
+  });
+
+  it("gives the same words as plain text", () => {
+    expect(plain("setup.tiny.online.where")).toBe("Find it in Settings, under Online answers.");
   });
 });
 
