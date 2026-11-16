@@ -13,6 +13,10 @@ mockups, the copy and the behaviour are written down in `docs/design/` and appro
 implementation starts. Code follows the agreed design. A change to what a person sees goes back
 through design, not around it.
 
+The design and its implementation are two pull requests, stacked: the design PR on `main`, the
+implementation PR on the design branch. They merge together, so `main` never holds a design that
+is not built or a build that is not designed.
+
 ## Invariants
 
 1. **No elevation.** Never run `sudo`, a system package manager, or a privileged script unless a
