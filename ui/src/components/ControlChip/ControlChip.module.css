@@ -1,0 +1,31 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  vertical-align: baseline;
+  cursor: text;
+}
+
+.chip svg {
+  flex: none;
+}
+
+@media (forced-colors: active) {
+  .chip {
+    border-color: CanvasText;
+  }
+}
+
+@media print {
+  .chip {
+    border-color: #000;
+  }
+}
