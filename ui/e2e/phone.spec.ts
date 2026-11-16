@@ -358,7 +358,9 @@ for (const scheme of ["light", "dark"] as const) {
       page.getByText("Answered online by your provider (api.example.test)"),
     ).toBeVisible();
     await expect(
-      page.getByText("What was sent is listed on your computer, under Online answers."),
+      page.getByText(
+        "What was sent is listed on your computer. Choose Privacy, then See what was sent.",
+      ),
     ).toBeVisible();
     await axeClean(page);
   });
