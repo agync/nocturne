@@ -4,6 +4,7 @@ import type { AskPlace } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { usePlatform } from "../../platform/context";
 import { shortcutLabel } from "../../platform/shortcutKeys";
+import { tc } from "../ControlChip/copy";
 import { Icon } from "../Icon/Icon";
 import { useToast } from "../Toast/Toast";
 import { AnswerWhere } from "./AnswerWhere";
@@ -151,7 +152,7 @@ export function KeepAskBar({
         </span>
         {focusShortcut ? (
           <span id={slashId} className="sr-only">
-            {t("bar.hint.slash")}
+            {tc("bar.hint.slash")}
           </span>
         ) : null}
         {hasText ? (

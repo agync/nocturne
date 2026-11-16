@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { tc } from "../ControlChip/copy";
 import { KeyCap, KeyCaps } from "./KeyCap";
 
 describe("KeyCap", () => {
@@ -22,5 +23,11 @@ describe("KeyCap", () => {
     );
     expect(container.textContent).toBe("Ctrl Shift Space");
     expect(container.querySelectorAll("kbd")).toHaveLength(3);
+  });
+
+  it("is drawn by a sentence that names the key", () => {
+    const { container } = render(<p>{tc("bar.hint.slash")}</p>);
+    expect(container.textContent).toBe("Press / from anywhere on the page to come back here.");
+    expect(container.querySelector("kbd")).toHaveTextContent("/");
   });
 });
