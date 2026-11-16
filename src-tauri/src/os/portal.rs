@@ -22,7 +22,7 @@ const GLOBAL_SHORTCUTS: &str = "org.freedesktop.portal.GlobalShortcuts";
 const SESSION: &str = "org.freedesktop.portal.Session";
 
 /// How long the person has to answer the desktop's question.
-pub const ANSWER_LIMIT: Duration = Duration::from_secs(300);
+const ANSWER_LIMIT: Duration = Duration::from_secs(300);
 
 /// Why a portal request did not succeed, and whether the desktop gave an answer. A refusal is an
 /// answer; a bus that is down, a portal that is absent and a wait that ran out are not.
@@ -628,6 +628,14 @@ pub(crate) mod tests {
         pub binds: Binds,
         pub closed: Closed,
         pub configured: Closed,
+    }
+
+    impl Fake {
+        /// The bus name of the client that owns `session` (`/session/1_42/t` is `:1.42`).
+        pub(crate) fn client_of(&self, session: &str) -> String {
+            let owner = session.split('/').rev().nth(1).unwrap();
+            format!(":{}", owner.replace('_', "."))
+        }
     }
 
     pub(crate) async fn shortcuts_portal(bus: &TestBus, code: u32, delay: Duration) -> Fake {
