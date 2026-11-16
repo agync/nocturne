@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setting up, step 1 · Nocturne</title>
+<!-- The app's own tokens and fonts. Serve the repository root over HTTP after make ui/install. -->
+<link rel="stylesheet" href="../../../../ui/src/design/global.css">
+<style>
+/* Matched to ui/src: Shell, ScreenSheet, Button, Online.module.css, Away.module.css, Setup.module.css. */
+html, body { height: 100%; }
+body { overflow: hidden; }
+.shell { display: flex; height: 100vh; background: var(--bg); color: var(--ink); }
+.rail { display: flex; flex: none; flex-direction: column; gap: var(--s-5); width: var(--size-rail); padding: 20px 14px; border-right: 1px solid var(--rule); overflow-y: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 var(--s-2); }
+.wordmark { font: 500 1.375rem / 1.2 var(--font-serif); letter-spacing: -0.02em; }
+.links { display: flex; flex-direction: column; gap: 2px; }
+.link { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); min-height: var(--size-control); padding: var(--s-2) 10px; border-radius: 6px; color: var(--ink2); font-size: 0.875rem; line-height: 1.3; text-decoration: none; }
+.link[aria-current="page"] { background: var(--sheet); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--rule); }
+.link .mono { color: var(--ink3); font: 400 0.75rem / 1.33 var(--font-mono); }
+.link .count { color: var(--ember); font: 400 0.75rem / 1.33 var(--font-mono); }
+.railFoot { display: flex; flex-direction: column; gap: 14px; margin-top: auto; font-size: 0.8125rem; }
+.status { display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-3); border: 1px solid var(--rule); border-radius: var(--r-md); }
+.statusState { display: flex; align-items: center; gap: var(--s-2); color: var(--ink2); }
+.statusLabel { color: var(--ink3); font: 400 0.6875rem / 1.3 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.statusValue { font-weight: 500; }
+.secondary { display: flex; justify-content: space-between; gap: var(--s-2); padding: 0 6px; }
+.secondary .link { padding: 0 var(--s-2); }
+.bodyCol { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.topbar { display: flex; align-items: center; gap: var(--s-4); padding: var(--s-4) 28px; border-bottom: 1px solid var(--rule); }
+.keepbar { display: flex; flex: 1; align-items: center; gap: var(--s-2); max-width: 680px; min-height: 48px; padding: 0 6px 0 16px; border: 1px solid var(--ink3); border-radius: var(--r-md); background: var(--raised); color: var(--ink3); }
+.keepbar > span:first-child { flex: 1; }
+.kbd { padding: 1px 6px; border: 1px solid var(--ink3); border-radius: var(--r-xs); color: var(--ink2); font: 400 0.6875rem / 1.4 var(--font-mono); }
+.round { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 44px; border: 1px solid var(--rule2); border-radius: 50%; color: var(--ink); }
+.dropHint { color: var(--ink3); font-size: 0.8125rem; }
+.narrowHeader { display: none; align-items: center; gap: var(--s-2); min-height: calc(var(--size-touch) + var(--s-4)); padding: var(--s-2) var(--s-4); border-bottom: 1px solid var(--rule); background: var(--bg); font-weight: 500; }
+.narrowHeader .chevron { display: inline-flex; color: var(--ink3); }
+.scroller { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; scroll-padding-bottom: 88px; }
+.frame { display: flex; flex: 1; flex-direction: column; padding: var(--s-5) var(--size-gutter) 0; }
+.sheet { display: flex; flex: 1; flex-direction: column; min-height: 36rem; padding: var(--s-6) var(--s-6) 0; border-radius: var(--r-lg) var(--r-lg) 0 0; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.back { display: inline-flex; align-self: flex-start; gap: var(--s-1); margin-bottom: var(--s-4); color: var(--ink2); font: 500 0.875rem / 1.4 var(--font-sans); text-decoration: none; }
+.columns { display: flex; gap: 48px; align-items: flex-start; }
+.columns[data-away] { gap: 56px; }
+.mainCol { display: flex; flex: 1; flex-direction: column; gap: var(--s-5); min-width: 0; max-width: 680px; }
+.asideCol { display: flex; flex: none; flex-direction: column; gap: var(--s-3); width: 260px; padding-top: 6px; }
+.label { margin: 0; color: var(--ink3); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.stepTitle { margin: 0; color: var(--ink); font: 400 1.875rem / 1.18 var(--font-serif); letter-spacing: -0.01em; }
+h1:focus { outline: none; }
+.bodyText { margin: 0; color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.strong { color: var(--ink); }
+.sub { margin: 0; color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+.lede { margin: 0; color: var(--ink2); font: italic 400 1.25rem / 1.5 var(--font-serif); }
+.dl { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.dl > div { display: flex; gap: var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.9375rem; line-height: 1.55; }
+.dl dt { flex: none; width: 8rem; color: var(--ink); font-weight: 500; }
+.dl dd { display: flex; flex-direction: column; gap: 10px; margin: 0; }
+.short dd { color: var(--ink); }
+.toggleLink { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; min-height: 24px; padding: 0; border: 0; background: none; color: var(--accent); font: 500 0.875rem / 1.4 var(--font-sans); cursor: pointer; }
+.chev { display: inline-flex; transform: rotate(-90deg); }
+.toggleLink[aria-expanded="true"] .chev { transform: none; }
+.more { display: flex; flex-direction: column; gap: var(--s-4); }
+.more[hidden], .why[hidden] { display: none; }
+.rules { margin: 0; padding: 0; border-top: 1px solid var(--rule); list-style: none; }
+.rules li { padding: 11px 0; border-bottom: 1px solid var(--rule); color: var(--ink2); font-size: 0.875rem; }
+.example { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink); font: 400 0.8125rem / 1.6 var(--font-mono); }
+.example ol { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.example li { display: flex; gap: 12px; }
+.example li b { flex: none; width: 14px; color: var(--ink2); font-weight: 500; }
+.exampleNote { color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleHead { color: var(--ink); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.exampleFoot { padding-top: 8px; border-top: 1px solid var(--rule); color: var(--ink2); font: 500 0.8125rem / 1.45 var(--font-sans); }
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.sec h2 { margin: 0; color: var(--ink); font: 500 1.0625rem / 1.4 var(--font-sans); }
+.flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 8px; }
+.node { display: flex; flex: 1; flex-direction: column; gap: 3px; min-width: 9rem; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-sm); background: var(--raised); color: var(--ink2); font-size: 0.8125rem; line-height: 1.4; }
+.node[data-out="true"] { border-color: var(--ink); }
+.nodeName { color: var(--ink); font-weight: 500; font-size: 0.875rem; }
+.arrow { display: flex; align-items: center; color: var(--ink3); }
+.never { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.never li { display: flex; gap: 10px; align-items: flex-start; color: var(--ink2); font-size: 0.9375rem; line-height: 1.5; }
+.never svg { flex: none; margin-top: 3px; }
+.sum { display: flex; flex-direction: column; margin: 0; border-top: 1px solid var(--rule); }
+.sum div { display: flex; flex-direction: column; gap: 2px; padding: 9px 0; border-bottom: 1px solid var(--rule); }
+.sum dt { color: var(--ink2); font-size: 0.75rem; }
+.sum dd { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px; margin: 0; color: var(--ink); font-size: 0.875rem; font-weight: 500; }
+.linkButton { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.monoText { font: 400 0.8125rem / 1.5 var(--font-mono); }
+.choices { display: flex; flex-direction: column; gap: var(--s-3); min-width: 0; margin: 0; padding: 0; border: 0; }
+.legend { margin-bottom: var(--s-3); padding: 0; color: var(--ink); font: 500 1rem / 1.4 var(--font-sans); }
+.choice { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-4); border: 1px solid var(--rule); border-radius: var(--r-md); background: var(--sheet); cursor: pointer; }
+.choice[data-checked="true"] { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.choice input { flex: none; width: 18px; height: 18px; margin-top: 3px; accent-color: var(--accent); }
+.choiceText { display: flex; flex-direction: column; gap: var(--s-2); color: var(--ink2); font-size: 0.875rem; line-height: 1.5; }
+.choiceText b { color: var(--ink); font-weight: 600; }
+.choiceName { color: var(--ink); font: 500 0.9375rem / 1.4 var(--font-sans); }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: var(--s-2); min-height: var(--size-control); padding: 0 var(--s-4); border: 1px solid transparent; border-radius: var(--r-sm); background: transparent; color: var(--ink); font: 500 0.875rem / 1.3 var(--font-sans); cursor: pointer; }
+.button[data-variant="primary"] { background: var(--ink); color: var(--sheet); }
+.button[data-variant="quiet"] { padding: 0 var(--s-3); color: var(--accent); }
+.button:focus-visible, .toggleLink:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.note { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+
+/* The step's bar: pinned to the bottom of the window on every step. */
+.actionBar { position: sticky; bottom: 0; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3) var(--s-4); margin: auto calc(-1 * var(--s-6)) 0; padding: var(--s-4) var(--s-6); border-top: 1px solid var(--rule); background: var(--sheet); }
+.actionBar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 40px; background: linear-gradient(to bottom, transparent, var(--sheet)); opacity: 0; pointer-events: none; }
+.actionBar[data-more="true"]::before { opacity: 1; }
+.buttons { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.spacer { flex: none; height: var(--s-6); }
+@media (max-height: 28em) { .actionBar { position: static; } }
+
+/* Medium (720 to 1023): the side column drops under the words. */
+:root[data-size="medium"] .columns { flex-direction: column; gap: var(--s-5); }
+:root[data-size="medium"] .asideCol { width: 100%; }
+
+/* Narrow (below 720): the rail folds into the header, and the keep or ask bar is hidden during a step flow. */
+:root[data-size="narrow"] .rail, :root[data-size="narrow"] .topbar { display: none; }
+:root[data-size="narrow"] .narrowHeader { display: flex; }
+:root[data-size="narrow"] .frame { padding: 0; }
+:root[data-size="narrow"] .sheet { min-height: 0; padding: var(--s-5) var(--s-4) 0; border-radius: 0; box-shadow: none; }
+:root[data-size="narrow"] .columns { flex-direction: column; gap: var(--s-5); }
+:root[data-size="narrow"] .asideCol { width: 100%; }
+:root[data-size="narrow"] .dl > div { flex-direction: column; gap: 4px; }
+:root[data-size="narrow"] .actionBar { margin-inline: calc(-1 * var(--s-4)); padding: var(--s-3) var(--s-4); }
+
+/* First-run setup: a card in the window, no rail. */
+.window { display: flex; align-items: center; justify-content: center; height: 100vh; overflow: auto; padding: var(--s-6); background: var(--bg); color: var(--ink); }
+.card { display: flex; flex-direction: column; gap: var(--s-4); width: min(100%, 720px); padding: var(--s-7) var(--s-7) 0; border-radius: var(--r-lg); background: var(--sheet); box-shadow: var(--e2); }
+.card .actionBar { margin: var(--s-2) calc(-1 * var(--s-7)) 0; padding: var(--s-4) var(--s-7); border-radius: 0 0 var(--r-lg) var(--r-lg); }
+.eyebrow { color: var(--ink2); }
+.title { max-width: 28ch; margin: 0; }
+.tiers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2); margin: 0; padding: 0; border: 0; }
+.tier { position: relative; display: flex; }
+.tier[data-disabled="true"] { color: var(--ink3); }
+.tier[data-disabled="true"] .tierBody { padding: calc(var(--s-3) + 1px) calc(var(--s-4) + 1px); border: 1px dashed var(--rule); box-shadow: none; }
+.tier[data-disabled="true"] .tierDetail { color: var(--ink3); }
+.tierBody { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: var(--s-3) var(--s-4); border: 2px solid transparent; border-radius: var(--r-md); box-shadow: var(--e0); }
+.tier[data-checked="true"] .tierBody { border-color: var(--accent); background: var(--accent-soft); color: var(--ink); }
+.tierName { font-weight: 500; }
+.tierDetail { color: var(--ink2); font: 400 0.8125rem / 1.38 var(--font-sans); }
+.lead { margin: 0; color: var(--ink2); }
+.whyText { margin: 0; color: var(--ink2); font-size: 0.875rem; }
+</style>
+</head>
+<body>
+<main class="window" data-theme-night>
+<section class="card" aria-labelledby="result">
+  <p class="t-section eyebrow" style="margin:0">Step 1 of 3 · This computer</p>
+  <h1 class="t-page-title title" id="result" tabindex="-1">Nocturne will use a lighter mind. Everything works; tidying takes a little longer.</h1>
+  <fieldset class="tiers">
+    <label class="tier" data-checked="false" data-disabled="true"><span class="tierBody"><span class="tierName">Large</span><span class="tierDetail">For computers with 60 GB memory or more · 26 GB download · fastest</span><span class="tierDetail">Too big for this computer’s memory</span></span></label>
+    <label class="tier" data-checked="true" data-disabled="false"><span class="tierBody"><span class="tierName">Standard · this computer</span><span class="tierDetail">For computers with 28 GB memory or more · 8.4 GB download</span></span></label>
+    <label class="tier" data-checked="false" data-disabled="false"><span class="tierBody"><span class="tierName">Small</span><span class="tierDetail">For computers with 14 GB memory or more · 4.8 GB download · slower · uses less memory, space and battery</span></span></label>
+    <label class="tier" data-checked="false" data-disabled="false"><span class="tierBody"><span class="tierName">Tiny</span><span class="tierDetail">For computers with 6 GB memory or more · 3.2 GB download · uses the least memory, space and battery · answers are simpler and may miss details</span></span></label>
+  </fieldset>
+  <p class="lead">Nocturne needs 8.4 GB of space (you have 220 GB free). It downloads once, and you can start keeping things straight away.</p>
+  <button type="button" class="toggleLink" aria-expanded="false" aria-controls="why"><span class="chev"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5714285714285716" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>Why this one?</button>
+  <p class="whyText why" id="why" hidden>Nocturne picks the biggest mind this computer can run comfortably, which depends on its computer memory: 32 GB here. Large needs 60 GB or more, Standard 28 GB, Small 14 GB and Tiny 6 GB. You can always choose a smaller one: it uses less memory, space and battery. Small makes answers and tidying slower; Tiny also gives simpler answers that may miss details. Everything still works.</p>
+  <div class="actionBar"><div class="buttons"><button type="button" class="button" data-variant="primary">Set up · 8.4 GB</button></div></div>
+</section>
+</main>
+
+<script>
+// ?theme=dark|light picks the theme; ?open=1 opens the expander; ?end=1 scrolls to the end.
+const params = new URLSearchParams(location.search);
+const theme = params.get("theme");
+if (theme === "dark" || theme === "light") document.documentElement.dataset.theme = theme;
+const root = document.documentElement;
+const scale = parseFloat(getComputedStyle(root).fontSize) / 16 || 1;
+function size() {
+  const w = innerWidth;
+  root.dataset.size = w < 720 * scale ? "narrow" : w < 1024 * scale ? "medium" : "wide";
+}
+const scroller = document.querySelector(".scroller, .window");
+const bar = document.querySelector(".actionBar");
+// The bar shows a soft edge only while there is more to read above it.
+function cue() {
+  if (!bar || !scroller) return;
+  bar.dataset.more = String(scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1);
+}
+for (const toggle of document.querySelectorAll("[aria-controls]")) {
+  const region = document.getElementById(toggle.getAttribute("aria-controls"));
+  toggle.addEventListener("click", () => {
+    region.hidden = !region.hidden;
+    toggle.setAttribute("aria-expanded", String(!region.hidden));
+    cue();
+  });
+  if (params.get("open") === "1") { region.hidden = false; toggle.setAttribute("aria-expanded", "true"); }
+}
+size();
+addEventListener("resize", () => { size(); cue(); });
+scroller?.addEventListener("scroll", cue);
+if (params.get("end") === "1" && scroller) scroller.scrollTop = scroller.scrollHeight;
+cue();
+</script>
+</body>
+</html>
