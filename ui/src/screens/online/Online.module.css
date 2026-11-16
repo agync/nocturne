@@ -423,15 +423,6 @@
   cursor: pointer;
 }
 
-.chev {
-  transform: rotate(-90deg);
-  transition: transform 120ms;
-}
-
-.toggleLink[aria-expanded="true"] .chev {
-  transform: none;
-}
-
 .fields {
   display: flex;
   flex-direction: column;

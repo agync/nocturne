@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../../components/Button/Button";
+import { Chevron } from "../../components/Disclosure/Chevron";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
@@ -174,6 +175,7 @@ export function Choosing({ view, onStarted }: Props) {
           aria-controls="why"
           onClick={() => setWhy(!why)}
         >
+          <Chevron />
           {t("setup.why")}
         </Button>
         <Button variant="primary" disabled={busy || !chosen} onClick={() => void start()}>

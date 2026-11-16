@@ -278,14 +278,6 @@
   cursor: pointer;
 }
 
-.moreButton svg {
-  transition: transform 120ms;
-}
-
-.moreButton[aria-expanded="true"] svg {
-  transform: rotate(180deg);
-}
-
 .advanced {
   display: grid;
   grid-template-columns: 8rem minmax(0, 1fr);
@@ -306,12 +298,6 @@
 .advanced dd {
   margin: 0;
   overflow-wrap: anywhere;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .moreButton svg {
-    transition: none;
-  }
 }
 
 :global([data-size="narrow"]) .columns {

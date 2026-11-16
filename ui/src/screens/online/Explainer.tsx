@@ -1,6 +1,6 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
-import { Icon } from "../../components/Icon/Icon";
+import { Chevron } from "../../components/Disclosure/Chevron";
 import { t } from "../../copy/t";
 import styles from "./Online.module.css";
 import { Example, Frame } from "./parts";
@@ -58,9 +58,7 @@ export function Explainer({ onNext, onLeave }: { onNext: () => void; onLeave: ()
               aria-controls={exampleId}
               onClick={() => setOpen(!open)}
             >
-              <span className={styles.chev}>
-                <Icon name="chevron-down" size={14} />
-              </span>
+              <Chevron size={14} />
               {t("online.explain.exactly")}
             </button>
             {open ? (

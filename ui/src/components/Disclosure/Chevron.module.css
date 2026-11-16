@@ -1,0 +1,16 @@
+.chevron {
+  display: inline-flex;
+  flex: none;
+  transform: rotate(-90deg);
+  transition: transform 120ms;
+}
+
+[aria-expanded="true"] > .chevron {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}
