@@ -187,6 +187,17 @@ where
 /// portal writes (or removes) the desktop's own entry, which runs the app through
 /// `flatpak run`; the sandbox cannot reach the folder the desktop reads.
 pub async fn autostart(conn: &Connection, want: bool, commandline: &[&str]) -> Result<(), Failed> {
+    autostart_within(conn, want, commandline, ANSWER_LIMIT).await
+}
+
+/// [`autostart`], waiting at most `limit` for the answer. A request still open then is withdrawn,
+/// so an answer that comes later cannot change the entry behind the setting's back.
+async fn autostart_within(
+    conn: &Connection,
+    want: bool,
+    commandline: &[&str],
+    limit: Duration,
+) -> Result<(), Failed> {
     let token = token();
     let mut options = Options::new();
     options.insert("handle_token", Value::from(token.as_str()));
@@ -194,9 +205,14 @@ pub async fn autostart(conn: &Connection, want: bool, commandline: &[&str]) -> R
     options.insert("commandline", Value::from(commandline.to_vec()));
     let body = ("", options);
     let asked = request(conn, BACKGROUND, "RequestBackground", &body);
-    let results = tokio::time::timeout(ANSWER_LIMIT, asked)
-        .await
-        .map_err(|_| Failed::silent("RequestBackground had no answer"))??;
+    let Ok(answer) = tokio::time::timeout(limit, asked).await else {
+        if let Some(me) = conn.unique_name() {
+            let path = request_path(me.as_str(), &token);
+            let _ = tokio::time::timeout(Duration::from_secs(5), cancel(conn, &path)).await;
+        }
+        return Err(Failed::silent("RequestBackground had no answer"));
+    };
+    let results = answer?;
     let granted = results
         .get("autostart")
         .and_then(|v| bool::try_from(v).ok())
@@ -462,11 +478,25 @@ pub(crate) mod tests {
     type Seen = Arc<Mutex<Vec<(bool, Vec<String>)>>>;
 
     /// The Background portal: answers each request with `code` and `granted`, before the call
-    /// itself returns.
+    /// itself returns. When `silent`, it never answers, and records each request withdrawn.
     struct FakeBackground {
         code: u32,
         granted: bool,
         seen: Seen,
+        silent: bool,
+        withdrawn: Arc<Mutex<Vec<String>>>,
+    }
+
+    struct FakeRequest {
+        path: String,
+        withdrawn: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[zbus::interface(name = "org.freedesktop.portal.Request")]
+    impl FakeRequest {
+        async fn close(&self) {
+            self.withdrawn.lock().unwrap().push(self.path.clone());
+        }
     }
 
     #[zbus::interface(name = "org.freedesktop.portal.Background")]
@@ -475,6 +505,7 @@ pub(crate) mod tests {
             &self,
             #[zbus(header)] header: Header<'_>,
             #[zbus(connection)] conn: &Connection,
+            #[zbus(object_server)] server: &zbus::ObjectServer,
             _parent: &str,
             options: HashMap<String, OwnedValue>,
         ) -> zbus::fdo::Result<OwnedObjectPath> {
@@ -485,6 +516,14 @@ pub(crate) mod tests {
             let token: &str = (&options["handle_token"]).try_into().unwrap();
             let sender = header.sender().unwrap().to_string();
             let path = request_path(&sender, token);
+            if self.silent {
+                let request = FakeRequest {
+                    path: path.clone(),
+                    withdrawn: self.withdrawn.clone(),
+                };
+                server.at(path.as_str(), request).await?;
+                return Ok(OwnedObjectPath::try_from(path).unwrap());
+            }
             let mut results: HashMap<&str, Value> = HashMap::new();
             results.insert("autostart", Value::from(self.granted && want));
             conn.emit_signal(
@@ -500,11 +539,24 @@ pub(crate) mod tests {
     }
 
     async fn portal(bus: &TestBus, code: u32, granted: bool) -> (Connection, Seen) {
+        let (server, seen, _) = fake_portal(bus, code, granted, false).await;
+        (server, seen)
+    }
+
+    async fn fake_portal(
+        bus: &TestBus,
+        code: u32,
+        granted: bool,
+        silent: bool,
+    ) -> (Connection, Seen, Arc<Mutex<Vec<String>>>) {
         let seen = Seen::default();
+        let withdrawn = Arc::new(Mutex::new(Vec::new()));
         let fake = FakeBackground {
             code,
             granted,
             seen: seen.clone(),
+            silent,
+            withdrawn: withdrawn.clone(),
         };
         let server = zbus::connection::Builder::address(bus.address.as_str())
             .unwrap()
@@ -515,7 +567,25 @@ pub(crate) mod tests {
             .build()
             .await
             .unwrap();
-        (server, seen)
+        (server, seen, withdrawn)
+    }
+
+    #[tokio::test]
+    async fn a_request_with_no_answer_in_time_is_withdrawn() {
+        let bus = TestBus::start();
+        let (_server, seen, withdrawn) = fake_portal(&bus, 0, true, true).await;
+        let conn = Bus::at(&bus.address).connect().await.unwrap();
+        let err = autostart_within(&conn, true, &["nocturne"], Duration::from_millis(300))
+            .await
+            .unwrap_err();
+        assert!(!err.answered, "no answer is not a refusal");
+        assert_eq!(seen.lock().unwrap().len(), 1);
+        let withdrawn = withdrawn.lock().unwrap().clone();
+        assert_eq!(withdrawn.len(), 1, "{withdrawn:?}");
+        assert!(
+            withdrawn[0].starts_with(&request_path(conn.unique_name().unwrap().as_str(), "")),
+            "the request this connection made: {withdrawn:?}"
+        );
     }
 
     #[tokio::test]
