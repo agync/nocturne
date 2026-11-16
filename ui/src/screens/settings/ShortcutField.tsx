@@ -95,6 +95,7 @@ function DesktopField({
   const declined = desktop.state === "declined";
   const command = useQuickKeepCommand(declined);
   const [retrying, setRetrying] = useState(false);
+  const [opening, setOpening] = useState(false);
 
   useEffect(() => {
     if (desktop.state !== "asking") return;
@@ -104,6 +105,15 @@ function DesktopField({
     );
     return () => clearInterval(timer);
   }, [client, desktop.state]);
+
+  const configure = async () => {
+    setOpening(false);
+    try {
+      await engine.configureShortcut();
+    } catch {
+      setOpening(true);
+    }
+  };
 
   const retry = async () => {
     setRetrying(true);
@@ -126,7 +136,7 @@ function DesktopField({
           <Button
             variant="quiet"
             aria-describedby={describe || undefined}
-            onClick={() => void engine.configureShortcut().catch(() => undefined)}
+            onClick={() => void configure()}
           >
             {t("settings.shortcut.configure")}
           </Button>
@@ -150,9 +160,11 @@ function DesktopField({
       {held ? (
         <span id={noteId} className={styles.note}>
           {t(
-            desktop.configurable
-              ? "settings.shortcut.desktop"
-              : "settings.shortcut.desktop.fallback",
+            opening
+              ? "settings.shortcut.desktop.failed"
+              : desktop.configurable
+                ? "settings.shortcut.desktop"
+                : "settings.shortcut.desktop.fallback",
           )}
         </span>
       ) : null}
