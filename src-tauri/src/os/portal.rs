@@ -351,7 +351,11 @@ pub(crate) mod testbus {
 
     impl TestBus {
         pub fn start() -> TestBus {
-            let dir = tempfile::tempdir().unwrap();
+            // A socket path is limited to 107 bytes, which a long TMPDIR can exceed.
+            let dir = tempfile::Builder::new()
+                .prefix("nbus")
+                .tempdir_in("/tmp")
+                .unwrap();
             let config = dir.path().join("bus.conf");
             std::fs::write(
                 &config,
@@ -370,7 +374,12 @@ pub(crate) mod testbus {
                 .stdout(Stdio::piped())
                 .stderr(Stdio::null())
                 .spawn()
-                .expect("the tests need dbus-daemon");
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "could not start dbus-daemon ({e}): the portal tests run a private bus \
+                         and need it on the PATH (the dbus or dbus-daemon package)"
+                    )
+                });
             let mut line = String::new();
             BufReader::new(child.stdout.take().unwrap())
                 .read_line(&mut line)
