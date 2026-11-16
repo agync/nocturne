@@ -52,7 +52,8 @@ Out of scope:
 - Cloud processing, accounts, telemetry, or any network traffic other than consented model and app
   downloads.
 - Multi-user memory and cross-device sync (a phone capture companion is a later stage).
-- A general chat assistant. Questions are answered from what the person kept.
+- A general chat assistant. Questions are answered from what the person kept, and questions about
+  using Nocturne from its own guide.
 
 ## Status
 

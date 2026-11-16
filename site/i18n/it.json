@@ -148,8 +148,8 @@
     "from": "Answers with receipts."
   },
   "ask.body": {
-    "text": "Chiedi con parole semplici. Nocturne risponde solo in base a ciò che hai conservato, con gli originali sotto per poter controllare. Quando non lo sa, lo dice. Se sbaglia qualcosa, digli cosa è giusto e se lo ricorda.",
-    "from": "Ask in plain words. Nocturne answers only from what you kept, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
+    "text": "Chiedi con parole semplici. Nocturne risponde solo in base a ciò che può mostrarti, con gli originali sotto per poter controllare. Quando non lo sa, lo dice. Se sbaglia qualcosa, digli cosa è giusto e se lo ricorda.",
+    "from": "Ask in plain words. Nocturne answers only from what it can show you, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
   },
   "ask.alt": {
     "text": "Una risposta a «Cosa serve a Leo per la gita?»: un pranzo al sacco, e il modulo della gita va consegnato venerdì prossimo con una firma e 12 sterline. Sotto, le due lettere fotografate da cui viene la risposta.",

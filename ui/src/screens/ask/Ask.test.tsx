@@ -320,7 +320,7 @@ describe("nothing found", () => {
     platform.pickFiles = vi.fn(async () => ["/tmp/passport.jpg"]);
     const { engine } = await open({ question: "passport", platform });
     expect(await screen.findByText("Nothing you’ve kept answers that.")).toBeVisible();
-    expect(screen.getByText(/Nocturne only answers from what you keep/)).toBeVisible();
+    expect(screen.getByText(/Nocturne answers from what you keep/)).toBeVisible();
     const spy = vi.spyOn(engine, "keepFiles");
     await userEvent.click(screen.getByRole("button", { name: "Keep a photo now" }));
     await waitFor(() => expect(spy).toHaveBeenCalledWith(["/tmp/passport.jpg"], "drop"));

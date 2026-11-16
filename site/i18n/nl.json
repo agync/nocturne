@@ -148,8 +148,8 @@
     "from": "Answers with receipts."
   },
   "ask.body": {
-    "text": "Vraag het in gewone woorden. Nocturne antwoordt alleen uit wat jij hebt bewaard, met de originelen eronder zodat je het kunt nakijken. Als het iets niet weet, zegt het dat. Zit het ernaast, vertel dan wat klopt en het onthoudt het.",
-    "from": "Ask in plain words. Nocturne answers only from what you kept, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
+    "text": "Vraag het in gewone woorden. Nocturne antwoordt alleen met wat het je kan laten zien, met de originelen eronder zodat je het kunt nakijken. Als het iets niet weet, zegt het dat. Zit het ernaast, vertel dan wat klopt en het onthoudt het.",
+    "from": "Ask in plain words. Nocturne answers only from what it can show you, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
   },
   "ask.alt": {
     "text": "Een antwoord op ‘Wat heeft Leo nodig voor zijn schoolreisje?’: een lunchpakket, en het formulier moet volgende week vrijdag binnen zijn met een handtekening en 12 pond. Eronder de twee gefotografeerde brieven waar het antwoord uit komt.",
