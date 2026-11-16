@@ -127,7 +127,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ env.TAG }}
             org.opencontainers.image.revision=${{ inputs.ref || github.sha }}
-      - uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+      - uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -146,7 +146,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: redhat-actions/podman-login@4934294ad0449894bcd1e9f191899d7292469603 # v1
+      - uses: redhat-actions/podman-login@50c2d9a331bb67c8fdab99b86455fad05e2e3252 # v2.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
