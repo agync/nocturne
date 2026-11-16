@@ -456,6 +456,45 @@ fn finish<R: Runtime>(app: &AppHandle<R>, host: bool) {
     }
 }
 
+/// Where the tray library writes the icon file it hands to the desktop's panel. Its default is
+/// under `XDG_RUNTIME_DIR`, which inside a Flatpak is a private overlay the host's panel cannot
+/// read, so the icon shows blank. The app's own cache folder is the same path on both sides.
+/// The library reuses the folder for every later icon change. `None` leaves the library's
+/// default: the folder is unknown, cannot be created, or its path is not one the panel can take.
+#[cfg(target_os = "linux")]
+fn icon_dir<R: Runtime>(app: &AppHandle<R>) -> Option<std::path::PathBuf> {
+    icon_dir_in(&app.path().app_cache_dir().ok()?)
+}
+
+/// The `tray` folder under `cache`, created, with icon files an earlier run left behind removed
+/// (the library deletes its own file only on a clean exit).
+#[cfg(target_os = "linux")]
+fn icon_dir_in(cache: &std::path::Path) -> Option<std::path::PathBuf> {
+    let dir = cache.join("tray");
+    if !usable_icon_dir(&dir) {
+        return None;
+    }
+    std::fs::create_dir_all(&dir).ok()?;
+    for entry in std::fs::read_dir(&dir).ok()?.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with("tray-icon-") && name.ends_with(".png") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    Some(dir)
+}
+
+/// An absolute path the panel can read back out of a text field: valid text, no control
+/// characters.
+#[cfg(target_os = "linux")]
+fn usable_icon_dir(dir: &std::path::Path) -> bool {
+    dir.is_absolute()
+        && dir
+            .to_str()
+            .is_some_and(|s| !s.chars().any(char::is_control))
+}
+
 /// Build the icon. The toolkit's indicator library panics when it cannot be loaded, so a panic
 /// is "unavailable", not a crash.
 fn build<R: Runtime>(app: &AppHandle<R>) -> bool {
@@ -474,7 +513,13 @@ fn build<R: Runtime>(app: &AppHandle<R>) -> bool {
         let state = app.state::<AppState>();
         let model = menu_model(&starting, 0, None, state.now(), &state.clock.tz());
         let menu = build_menu(app, &model)?;
-        TrayIconBuilder::with_id(ID)
+        #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+        let mut builder = TrayIconBuilder::with_id(ID);
+        #[cfg(target_os = "linux")]
+        if let Some(dir) = icon_dir(app) {
+            builder = builder.temp_dir_path(dir);
+        }
+        builder
             .icon(Image::from_bytes(Icon::Reading.png())?)
             .tooltip(copy::TRAY_TOOLTIP)
             .menu(&menu)
@@ -758,6 +803,29 @@ pub fn with_away(mut menu: Vec<MenuEntry>, view: Option<&RemoteView>) -> Vec<Men
 mod tests {
     use super::*;
     use nocturne_contract::TidyProgress;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn the_icon_folder_is_made_under_the_cache_and_swept() {
+        let cache = tempfile::tempdir().unwrap();
+        let tray = cache.path().join("tray");
+        std::fs::create_dir_all(&tray).unwrap();
+        std::fs::write(tray.join("tray-icon-nocturne-3.png"), b"x").unwrap();
+        std::fs::write(tray.join("other.txt"), b"x").unwrap();
+        let dir = icon_dir_in(cache.path()).expect("a folder");
+        assert_eq!(dir, tray);
+        assert!(!tray.join("tray-icon-nocturne-3.png").exists());
+        assert!(tray.join("other.txt").exists());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn an_icon_folder_with_a_control_character_or_no_root_is_refused() {
+        use std::path::Path;
+        assert!(usable_icon_dir(Path::new("/data/a b/app/cache/tray")));
+        assert!(!usable_icon_dir(Path::new("/data/a\nb/cache")));
+        assert!(!usable_icon_dir(Path::new("cache/tray")));
+    }
 
     fn status(state: EngineState) -> EngineStatus {
         EngineStatus {
