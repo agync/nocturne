@@ -6,6 +6,7 @@ import { goTo } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
+import { tc } from "../../components/ControlChip/copy";
 import { Chevron } from "../../components/Disclosure/Chevron";
 import { Progress } from "../../components/Progress/Progress";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
@@ -504,7 +505,7 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
           <p>{t("restore.stopped")}</p>
         </div>
       ) : null}
-      <p className={layout.lead}>{t("restore.confirm.body")}</p>
+      <p className={layout.lead}>{tc("restore.confirm.body")}</p>
       {summary && here ? (
         <div className={styles.compare}>
           <section className={styles.side} data-incoming>
@@ -627,7 +628,7 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
             <dt>{t("restore.restored.online")}</dt>
             <dd>
               <span>
-                {t(
+                {tc(
                   mode === "setup"
                     ? "restore.restored.online.later"
                     : "restore.restored.online.body",
@@ -659,7 +660,7 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
             <dt>{t("restore.restored.before")}</dt>
             <dd>
               <span>
-                {t("restore.restored.before.body", { day: formatDayMonth(view.putAsideAt) })}
+                {tc("restore.restored.before.body", { day: formatDayMonth(view.putAsideAt) })}
               </span>
             </dd>
           </div>

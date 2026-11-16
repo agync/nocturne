@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
 import type { ChangePreview, Fit, Job, ModelChoice, ModelsView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
@@ -321,7 +322,7 @@ export function Picker({ job }: { job: Job }) {
             ) : null}
           </fieldset>
           {informational ? (
-            <p className={styles.body}>{t("models.aloud.only", { name: current?.name ?? "" })}</p>
+            <p className={styles.body}>{tc("models.aloud.only", { name: current?.name ?? "" })}</p>
           ) : null}
           {problem ? (
             <p className={styles.body} role="alert">

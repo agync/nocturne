@@ -237,7 +237,7 @@ describe("the Backup block on Privacy", () => {
     await open(engine);
     expect(
       await screen.findByText(
-        "Restoring didn’t finish, so Nocturne kept what was here. You can try again from Privacy.",
+        "Restoring didn’t finish, so Nocturne kept what was here. You can try again.",
       ),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Restore from a backup…" }));
@@ -261,7 +261,7 @@ describe("the Backup block on Privacy", () => {
     expect(await screen.findByText("Nocturne finished restoring your backup.")).toBeInTheDocument();
     expect(
       screen.queryByText(
-        "Restoring didn’t finish, so Nocturne kept what was here. You can try again from Privacy.",
+        "Restoring didn’t finish, so Nocturne kept what was here. You can try again.",
       ),
     ).toBeNull();
   });

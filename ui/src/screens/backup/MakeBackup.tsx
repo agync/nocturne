@@ -4,6 +4,7 @@ import { goTo } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
+import { tc } from "../../components/ControlChip/copy";
 import { Chevron } from "../../components/Disclosure/Chevron";
 import { Icon } from "../../components/Icon/Icon";
 import { Progress } from "../../components/Progress/Progress";
@@ -446,7 +447,7 @@ export default function MakeBackup() {
                   <dd className={styles.ticked}>{t("backup.saved.checked")}</dd>
                 </div>
               </dl>
-              <p className={styles.lead}>{t("backup.saved.body")}</p>
+              <p className={styles.lead}>{tc("backup.saved.body")}</p>
               <div className={styles.footer}>
                 <Button
                   variant="secondary"
@@ -494,7 +495,7 @@ export default function MakeBackup() {
               {phonesAdded ? (
                 <li>
                   <strong>{t("backup.aside.out.phones.title")}</strong>{" "}
-                  {t("backup.aside.out.phones.body")}
+                  {tc("backup.aside.out.phones.body")}
                 </li>
               ) : null}
             </ul>
