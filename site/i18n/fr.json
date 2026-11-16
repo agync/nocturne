@@ -148,8 +148,8 @@
     "from": "Answers with receipts."
   },
   "ask.body": {
-    "text": "Demandez avec des mots simples. Nocturne répond uniquement à partir de ce que vous avez gardé, avec les originaux en dessous pour vérifier. Quand il ne sait pas, il le dit. S’il se trompe, dites-lui ce qui est juste et il s’en souviendra.",
-    "from": "Ask in plain words. Nocturne answers only from what you kept, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
+    "text": "Demandez avec des mots simples. Nocturne répond uniquement à partir de ce qu’il peut vous montrer, avec les originaux en dessous pour vérifier. Quand il ne sait pas, il le dit. S’il se trompe, dites-lui ce qui est juste et il s’en souviendra.",
+    "from": "Ask in plain words. Nocturne answers only from what it can show you, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
   },
   "ask.alt": {
     "text": "Une réponse à la question « De quoi Leo a-t-il besoin pour sa sortie ? » : un panier-repas, et le formulaire de sortie est à rendre vendredi prochain avec une signature et 12 livres. En dessous, les deux lettres photographiées d’où vient la réponse.",

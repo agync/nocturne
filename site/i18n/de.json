@@ -148,8 +148,8 @@
     "from": "Answers with receipts."
   },
   "ask.body": {
-    "text": "Frag in einfachen Worten. Nocturne antwortet nur aus dem, was du festgehalten hast, mit den Originalen darunter, damit du nachsehen kannst. Wenn es etwas nicht weiß, sagt es das. Liegt es falsch, sag ihm, was stimmt, und es merkt sich das.",
-    "from": "Ask in plain words. Nocturne answers only from what you kept, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
+    "text": "Frag in einfachen Worten. Nocturne antwortet nur mit dem, was es dir zeigen kann, mit den Originalen darunter, damit du nachsehen kannst. Wenn es etwas nicht weiß, sagt es das. Liegt es falsch, sag ihm, was stimmt, und es merkt sich das.",
+    "from": "Ask in plain words. Nocturne answers only from what it can show you, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers."
   },
   "ask.alt": {
     "text": "Eine Antwort auf die Frage, was Leo für seinen Ausflug braucht: ein Lunchpaket, und das Formular muss bis nächsten Freitag abgegeben werden, mit Unterschrift und 12 Pfund. Darunter die zwei fotografierten Briefe, aus denen die Antwort stammt.",
