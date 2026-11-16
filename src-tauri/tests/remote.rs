@@ -1111,6 +1111,35 @@ fn retried_upload_replaces_dead_session_upload() {
 }
 
 #[test]
+fn a_closed_session_call_leaves_the_retry_upload_alone() {
+    use nocturne_app_lib::remote::incoming::Declared;
+    let p = on();
+    let device = p.pair("Pixel").id();
+    let incoming = &p.hub.core.incoming;
+    let decl = || Declared {
+        mime: "image/jpeg".into(),
+        size: 300.0,
+        recording: false,
+    };
+    // Neither conversation is open, so the second upload replaces the first; both are call 1.
+    let (dead, fresh) = (u64::MAX - 1, u64::MAX - 2);
+    let _first = incoming
+        .begin(&p.hub.core, &device, dead, 1, decl())
+        .unwrap();
+    let _retry = incoming
+        .begin(&p.hub.core, &device, fresh, 1, decl())
+        .unwrap();
+    incoming.cancel_call(&device, dead, 1);
+    assert_eq!(
+        incoming.in_flight(),
+        1,
+        "the retry's upload is still coming"
+    );
+    incoming.cancel_call(&device, fresh, 1);
+    assert_eq!(incoming.in_flight(), 0);
+}
+
+#[test]
 fn incoming_total_cap() {
     let p = on();
     let mut held = Vec::new();

@@ -989,6 +989,10 @@ pub struct ReplySink {
 }
 
 impl ReplySink {
+    pub fn conv_id(&self) -> ConvId {
+        self.conv.id
+    }
+
     /// Send one answer. False once the session has closed: stop working on it.
     pub fn send(&self, answer: RemoteAnswer) -> bool {
         if self.conv.closed.is_cancelled() {

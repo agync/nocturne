@@ -247,9 +247,13 @@ impl Incoming {
     }
 
     /// Drop the upload of one call, if it is still coming (the call answered without it).
-    pub fn cancel_call(&self, device: &str, call_id: u32) {
+    /// Each session numbers its calls afresh, so the session is part of the match: a call of a
+    /// closed session never drops the upload a retry from a new session began.
+    pub fn cancel_call(&self, device: &str, conv: ConvId, call_id: u32) {
         let mut uploads = self.uploads();
-        if uploads.get(device).is_some_and(|u| u.call_id == call_id)
+        if uploads
+            .get(device)
+            .is_some_and(|u| u.conv == conv && u.call_id == call_id)
             && let Some(u) = uploads.remove(device)
         {
             drop(uploads);
