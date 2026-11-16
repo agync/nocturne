@@ -22,6 +22,7 @@
   "settings.shortcut.placeholder": "Press the keys…",
   "settings.shortcut.cancel": "Tab or Esc to cancel",
   "settings.shortcut.needsModifier": "Include Ctrl, Alt or Super with another key.",
+  "settings.shortcut.asking": "Your desktop is asking whether to add this shortcut.",
   "settings.shortcut.desktop": "Your desktop looks after this shortcut.",
   "settings.shortcut.desktop.fallback": "Your desktop looks after this shortcut. Change it in your desktop’s keyboard settings.",
   "settings.shortcut.configure": "Change in desktop settings",

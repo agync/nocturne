@@ -293,7 +293,7 @@ describe("Settings", () => {
     const base = await engine.getSettings();
     vi.spyOn(engine, "getSettings").mockResolvedValue({
       ...base,
-      shortcutAvailable: false,
+      shortcutAvailable: true,
       desktopShortcut: { state: "declined", keys: null, configurable: true },
     });
     const retry = vi.spyOn(engine, "retryShortcut");
@@ -307,17 +307,20 @@ describe("Settings", () => {
     expect(retry).toHaveBeenCalledOnce();
   });
 
-  it("shows only the keys while the desktop decides", async () => {
+  it("says the desktop is asking, and offers nothing to press, while it decides", async () => {
     const engine = createMockEngine();
     const base = await engine.getSettings();
     vi.spyOn(engine, "getSettings").mockResolvedValue({
       ...base,
       shortcut: "CommandOrControl+Shift+Space",
-      shortcutAvailable: false,
+      shortcutAvailable: true,
       desktopShortcut: { state: "asking", keys: null, configurable: false },
     });
     await open(engine);
     expect(screen.getByText("Ctrl+Shift+Space")).toBeInTheDocument();
+    expect(
+      screen.getByText("Your desktop is asking whether to add this shortcut."),
+    ).toBeInTheDocument();
     expect(screen.queryByText(/isn’t working here/)).toBeNull();
     expect(screen.queryByText(/wasn’t added/)).toBeNull();
     expect(screen.queryByRole("button", { name: /Change/ })).toBeNull();
