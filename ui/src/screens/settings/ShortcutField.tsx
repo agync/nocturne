@@ -116,6 +116,7 @@ function DesktopField({
   };
 
   const held = desktop.state === "held";
+  const asking = desktop.state === "asking";
   const describe = [describedBy, held || declined ? noteId : null].filter(Boolean).join(" ");
   return (
     <div className={styles.shortcut}>
@@ -141,6 +142,11 @@ function DesktopField({
           </Button>
         ) : null}
       </div>
+      {asking ? (
+        <span id={noteId} className={styles.note}>
+          {t("settings.shortcut.asking")}
+        </span>
+      ) : null}
       {held ? (
         <span id={noteId} className={styles.note}>
           {t(
