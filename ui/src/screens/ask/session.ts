@@ -1,4 +1,11 @@
-import type { AnsweredBy, LeftOut, NearMatch, Receipt } from "../../engine/bindings";
+import type {
+  AnsweredBy,
+  GuideCite,
+  HelpView,
+  LeftOut,
+  NearMatch,
+  Receipt,
+} from "../../engine/bindings";
 import type { AskState } from "../../engine/context";
 
 /** Everything the screen shows about one answer, so it can be drawn again without asking again. */
@@ -17,6 +24,8 @@ export interface Snapshot {
   leftOut?: LeftOut | null;
   /** The sent log entry for an online question. */
   sendId?: number | null;
+  /** What the Nocturne guide added. */
+  help?: HelpView | null;
 }
 
 /** What the person did to the answer on screen. */
@@ -39,6 +48,8 @@ export interface Turn {
   sendId?: number | null;
   /** How many things the answer used. */
   count?: number;
+  /** The guide sections a help answer cited. */
+  guide?: GuideCite[];
 }
 
 export interface Session {

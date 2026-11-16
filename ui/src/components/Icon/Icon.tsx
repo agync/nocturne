@@ -1,5 +1,6 @@
 import {
   AudioLines,
+  BookOpen,
   ChevronDown,
   EyeOff,
   FileText,
@@ -44,6 +45,7 @@ const ICONS = {
   x: X,
   "chevron-down": ChevronDown,
   paperclip: Paperclip,
+  "book-open": BookOpen,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;

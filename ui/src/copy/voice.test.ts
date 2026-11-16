@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { copyDeck } from "./t";
 
-/** Checkboxes the person ticks are in the person's own words, not Nocturne speaking. */
-const PERSONAL = new Set(["backup.note.check"]);
+/**
+ * Checkboxes the person ticks, and questions the person may ask, are in the person's own words,
+ * not Nocturne speaking.
+ */
+const PERSONAL = new Set(["backup.note.check", "ask.example.4"]);
 
 /**
  * Nocturne speaks as "Nocturne", or says nothing about itself: "Nocturne couldn't open this",

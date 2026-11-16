@@ -264,6 +264,7 @@ fn on_a_phone_the_move_is_the_memory_that_says_so() {
         lane: AskLane::Phone("phone-1".into()),
         sink: AskSink::Channel(tx),
         place: nocturne_contract::AskPlace::Auto,
+        help: false,
     };
     tauri::async_runtime::block_on(async move {
         start_with(&handle, "When is my dentist appointment?".into(), opts)

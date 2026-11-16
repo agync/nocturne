@@ -13,7 +13,7 @@ export LC_ALL=C
 # A change here runs every job.
 everything='^(\.github/workflows/|Makefile$|rust-toolchain\.toml$|scripts/ci-areas\.sh$)'
 lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
-rust_side="crates/|src-tauri/|\.cargo/|clippy\.toml$|$lockfiles"
+rust_side="crates/|src-tauri/|docs/guide/|\.cargo/|clippy\.toml$|$lockfiles"
 # What the packages are built from. The Rust sources are not here: the rust and rust-platforms
 # jobs check their release build.
 package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|Cargo\.(toml|lock)$|LICENSE$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$"

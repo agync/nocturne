@@ -157,7 +157,7 @@ export type AskState = "idle" | "asking" | AskPhase;
 
 export interface AskResult {
   /** Resolves with the ask id, or null when the engine refused or a newer question took over. */
-  ask: (question: string, place?: AskPlace) => Promise<string | null>;
+  ask: (question: string, place?: AskPlace, help?: boolean) => Promise<string | null>;
   /** Set when the engine could not take the question; the screen says so in words. */
   error: Error | null;
   askId: string | null;
@@ -203,7 +203,7 @@ export function useAsk(): AskResult {
   );
 
   const ask = useCallback(
-    async (question: string, place?: AskPlace) => {
+    async (question: string, place?: AskPlace, help?: boolean) => {
       const mine = ++call.current;
       // One question at a time: the one on screen is stopped before the next starts.
       const previous = active.current;
@@ -216,7 +216,7 @@ export function useAsk(): AskResult {
       setAskId(null);
       let id: string;
       try {
-        id = await engine.ask(question, place);
+        id = help ? await engine.ask(question, place, true) : await engine.ask(question, place);
       } catch (failure) {
         if (mine === call.current) {
           setAsking(false);

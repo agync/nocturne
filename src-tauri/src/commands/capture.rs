@@ -368,19 +368,26 @@ pub async fn read_now<R: Runtime>(app: AppHandle<R>, id: String) -> Result<ItemV
 }
 
 /// Start answering a question. Returns the ask id; the answer streams as `ask-delta` events.
-/// `place` is the person's choice for this one question; without it, `auto`.
+/// `place` is the person's choice for this one question; without it, `auto`. `help` asks for the
+/// guide's answer ("Show the guide's answer").
 #[tauri::command]
 pub async fn ask<R: Runtime>(
     app: AppHandle<R>,
     question: String,
     place: Option<nocturne_contract::AskPlace>,
+    help: Option<bool>,
 ) -> Result<String, CommandError> {
     run(app, move |app| async move {
         let question = question.trim().to_string();
         if question.is_empty() {
             return Err(CommandError::invalid("there is no question"));
         }
-        Ok(ask::start_placed(&app, question, place.unwrap_or_default()))
+        Ok(ask::start_placed(
+            &app,
+            question,
+            place.unwrap_or_default(),
+            help.unwrap_or(false),
+        ))
     })
     .await
 }

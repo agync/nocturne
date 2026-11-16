@@ -650,6 +650,7 @@ impl<R: Runtime> Call<R> {
                 lane: lane.clone(),
                 sink: AskSink::Channel(tx),
                 place: nocturne_contract::AskPlace::Auto,
+                help: false,
             },
         );
         self.audit(RemoteAction::Asked, RemoteResult::Ok, 0.0);
@@ -877,6 +878,7 @@ fn blank(ask_id: &str, phase: AskPhase) -> AskDelta {
         answered_by: None,
         left_out: None,
         send_id: None,
+        help: None,
     }
 }
 

@@ -106,6 +106,8 @@ pub struct AppState {
     pub mind: MindSlot,
     pub status: StatusHub,
     pub asks: AskRegistry,
+    /// The guide's vectors, for help with Nocturne.
+    pub help: crate::help::HelpStore,
     pub setup: RwLock<SetupView>,
     pub clock: Arc<dyn Clock>,
     pub data_dir: PathBuf,
@@ -224,6 +226,7 @@ impl AppState {
             mind: MindSlot::default(),
             status,
             asks: AskRegistry::default(),
+            help: crate::help::HelpStore::default(),
             setup: RwLock::new(blank_setup(data_dir)),
             clock,
             data_dir: data_dir.to_path_buf(),

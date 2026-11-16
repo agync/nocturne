@@ -214,6 +214,12 @@ impl<R: Runtime> OnlineHub<R> {
         self.port.downloading().await
     }
 
+    /// Whether Online answers is on: a route is in use, whether or not a question may go out
+    /// this moment.
+    pub fn is_on(&self) -> bool {
+        self.routes().active.is_some()
+    }
+
     /// Whether a question may go out now: a route is in use, no check is running, and the
     /// engine is known to hold exactly that route. Checked just before a send.
     pub fn still_on(&self) -> bool {

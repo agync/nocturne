@@ -46,7 +46,8 @@ CASES = (
     ("scripts/build-tailnet.sh", {"scripts", "tailnet"} | PACKAGE),
     ("flatpak/is.nocturne.Nocturne.yml", {"scripts", "package-linux"}),
     ("docs/contribution/flatpak.md", {"scripts", "site"}),
-    ("docs/guide/install.md", {"site"}),
+    # The app bundles the guide, and the Rust tests read it.
+    ("docs/guide/install.md", {"site", "scripts"} | RUST),
     ("docs/ui/notes.md", {"site"}),
     ("site/index.html", {"site"}),
     ("LICENSE", {"scripts"} | PACKAGE),
@@ -177,7 +178,7 @@ class Table(unittest.TestCase):
 
     def test_a_change_selects_the_union_of_its_paths(self):
         self.assertEqual(
-            selected("README.md", "docs/guide/install.md", "site/index.html"), {"site"}
+            selected("README.md", "docs/ui/notes.md", "site/index.html"), {"site"}
         )
         self.assertEqual(
             selected("src-tauri/tests/ipc.rs", "scripts/package.sh"),

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AnsweredBy, LeftOut, Receipt};
+use crate::{AnsweredBy, HelpView, LeftOut, Receipt};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -63,4 +63,8 @@ pub struct AskDelta {
     #[serde(default)]
     #[ts(optional = nullable)]
     pub send_id: Option<f64>,
+    /// Set on the terminal delta when the Nocturne guide answers, or may answer, the question.
+    #[serde(default)]
+    #[ts(optional = nullable)]
+    pub help: Option<Box<HelpView>>,
 }

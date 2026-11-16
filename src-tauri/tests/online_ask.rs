@@ -10,7 +10,7 @@ use std::time::Duration;
 use common::*;
 use nocturne_app_lib::ask::{self, AskLane, AskOptions, AskSink};
 use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
-use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, AskPlace, LeftOut, LocalReason};
+use nocturne_contract::{AnsweredBy, AskDelta, AskPhase, AskPlace, HelpKind, LeftOut, LocalReason};
 use nocturne_engine::{FakeMind, Mind};
 use serde_json::{Value, json};
 use tauri::async_runtime::block_on;
@@ -201,6 +201,78 @@ fn an_online_answer_streams_whole_and_cites_what_was_sent() {
     assert_eq!(sends[0]["id"].as_f64(), done.send_id);
 }
 
+/// Help is always written on this computer: with Online answers on, a question the guide answers
+/// sends nothing to the provider, adds nothing to Sent online, and says so in its mark. A memory
+/// question after it still goes online.
+#[test]
+fn a_help_answer_is_always_written_on_this_computer() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    l.h.state().help.set_writes(Some(true));
+    let sent = |l: &Lab| {
+        l.h.ok("list_online_sends", json!({"limit": 50, "before": null}))
+            .as_array()
+            .unwrap()
+            .len()
+    };
+    let (asked, logged) = (l.questions().len(), sent(&l));
+    for q in [
+        "How do I get Nocturne on my phone?",
+        "How do I make the dentist note private on my phone?",
+    ] {
+        let d = l.ask(q, None);
+        let end = last(&d);
+        assert_eq!(end.phase, AskPhase::Done, "{q}: {end:?}");
+        let help = end.help.as_ref().expect("a help answer");
+        assert_eq!(help.kind, HelpKind::Written, "{q}");
+        assert!(help.online_on, "the mark says help is always written here");
+        assert!(end.send_id.is_none());
+        assert_ne!(end.answered_by, online());
+        assert!(!phases(&d).contains(&AskPhase::AskingOnline));
+    }
+    assert_eq!(l.questions().len(), asked, "nothing went to the provider");
+    assert_eq!(sent(&l), logged, "nothing was added to Sent online");
+    l.script(json!({"reply": "The dentist is on **Thursday** [m1]."}));
+    let d = l.ask("When is the dentist?", None);
+    assert_eq!(last(&d).answered_by, online());
+    assert!(
+        last(&d)
+            .help
+            .as_ref()
+            .is_none_or(|h| h.kind == HelpKind::Unsure),
+        "{:?}",
+        last(&d).help
+    );
+}
+
+/// "Show the guide's answer" asks again on this computer: the question already had its turn
+/// online, and is not sent a second time.
+#[test]
+fn asking_for_the_guides_answer_stays_on_this_computer() {
+    let l = lab();
+    dentist(&l);
+    l.turn_on(true, false, 200);
+    let asked = l.questions().len();
+    let seen = l.h.ask_deltas();
+    let id =
+        l.h.ok(
+            "ask",
+            json!({"question": "When is the dentist?", "place": null, "help": true}),
+        )
+        .as_str()
+        .unwrap()
+        .to_string();
+    wait_for("the answer", || {
+        deltas_for(&seen, &id).iter().any(|d| is_terminal(d.phase))
+    });
+    wait_for("the ask to end", || l.h.state().asks.in_flight() == 0);
+    let d = deltas_for(&seen, &id);
+    assert!(last(&d).help.is_some(), "{:?}", last(&d));
+    assert!(!phases(&d).contains(&AskPhase::AskingOnline));
+    assert_eq!(l.questions().len(), asked, "nothing went to the provider");
+}
+
 #[test]
 fn this_computer_override_once() {
     let l = lab();
@@ -230,6 +302,7 @@ fn phone_ask(l: &Lab, question: &str) -> Vec<AskDelta> {
                 lane: AskLane::Phone("phone-1".into()),
                 sink: AskSink::Channel(tx),
                 place: AskPlace::Auto,
+                help: false,
             },
         );
         while let Some(d) = tokio::time::timeout(Duration::from_secs(60), rx.recv())

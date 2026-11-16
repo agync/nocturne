@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import guide from "../engine/mock/seed/guide.json";
 import neverSay from "./never-say.fixture.json";
 import { copyDeck } from "./t";
 
@@ -62,5 +63,47 @@ describe("the allowed phrases", () => {
     expect(withoutAllowed("Your API keys")).toContain("API keys");
     expect(withoutAllowed("Ask the provider")).toContain("provider");
     expect(JARGON.test(withoutAllowed("Pick a model"))).toBe(true);
+  });
+});
+
+/**
+ * The guide help uses is part of the interface: every section in scope passes the same checks as
+ * the interface's own strings (rule 4 of docs/design/in-app-help.md). The guide's file names and
+ * commands are typed as they are and are not words of the interface.
+ */
+describe("the guide inside the app", () => {
+  const sections = (guide.pages as Array<{ slug: string; sections: unknown[] }>).flatMap((page) =>
+    page.sections.map((section) => {
+      const s = section as { slug: string };
+      const text: string[] = [];
+      const walk = (node: unknown) => {
+        if (Array.isArray(node)) node.forEach(walk);
+        else if (node && typeof node === "object") {
+          const o = node as Record<string, unknown>;
+          if (o.type !== "code" && typeof o.text === "string") text.push(o.text);
+          if (typeof o.heading === "string") text.push(o.heading);
+          for (const [key, value] of Object.entries(o)) if (key !== "text") walk(value);
+        }
+      };
+      walk(section);
+      return [`${page.slug}#${s.slug}`, withoutAllowed(text.join(" "))] as const;
+    }),
+  );
+
+  it("has sections to check", () => {
+    expect(sections.length).toBeGreaterThan(20);
+  });
+
+  it("keeps the technical words and the never-say words out of every section", () => {
+    for (const [id, text] of sections) {
+      expect(JARGON.test(text), `${id}: ${text}`).toBe(false);
+      for (const { never } of neverSay) {
+        for (const word of never) {
+          const re = new RegExp(`\\b${word}\\b`, word === "AI" ? "" : "i");
+          expect(re.test(text), `${id} says "${word}"`).toBe(false);
+        }
+      }
+      expect(text, id).not.toContain(EM_DASH);
+    }
   });
 });
