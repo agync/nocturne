@@ -188,8 +188,10 @@ graphics card variant the install guide describes. Only what `.containerignore` 
 are build cache mounts, so they stay out of the layers. Run it as the
 [install guide](/guide/install.md#run-it-as-a-server) says.
 
-`.github/workflows/container.yml` builds the image natively for amd64 and arm64 on every pull request
-that touches what goes into it, without logging in or pushing. A release tag (`vX.Y.Z`) builds both,
+`.github/workflows/container.yml` builds the image natively for amd64 and arm64, without logging in
+or pushing, on a pull request that changes the image's own files (the `Containerfile`,
+`.containerignore`, the engine fetch scripts or the workflow) and on every push to `main` that
+touches what goes into it. A release tag (`vX.Y.Z`) builds both,
 pushes each as `<tag>-<arch>` to `ghcr.io/agync/nocturne` (the `IMAGE_NAME` repository variable
 overrides it) with the built-in token, and pushes a manifest list as `<tag>` and `latest`. The
 actions are Red Hat's buildah, podman login and push actions, pinned by commit.
