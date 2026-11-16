@@ -13,6 +13,9 @@ afterEach(() => {
 });
 
 /** An engine that starts in one of the states of getting ready. */
+/** A number is kept with its unit by a no-break space, so a name built from a size has one. */
+const nb = (text: string) => text.replace(/(\d) (?=[kMG]?B\b)/g, "$1\u00a0");
+
 const at = (name: string, options: Parameters<typeof createMockEngine>[0] = {}) => {
   window.history.replaceState({}, "", `/?mockSetup=${name}`);
   const engine = createMockEngine(options);
@@ -232,7 +235,7 @@ describe("what this computer can run", () => {
     expect(
       await screen.findByRole("heading", {
         level: 1,
-        name: "Nocturne will use a lighter mind. Everything works; tidying takes a little longer.",
+        name: "Nocturne will use a lighter mind. Everything works, and tidying takes a little longer.",
       }),
     ).toBeInTheDocument();
     const group = screen.getByRole("group", { name: "How much to set up" });
@@ -247,25 +250,26 @@ describe("what this computer can run", () => {
     expect(within(group).getByRole("radio", { name: /Large/ })).toBeDisabled();
     expect(within(group).getByText("Too big for this computer’s memory")).toBeInTheDocument();
     expect(
-      screen.getByText(/Nocturne needs 8\.4 GB of space \(you have 220 GB free\)/),
+      screen.getByText("Nocturne needs 8.4 GB of space. This computer has 220 GB free."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set up · 8.4 GB" })).toBeInTheDocument();
+    expect(
+      screen.getByText("It downloads once, and you can keep things straight away."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: nb("Set up · 8.4 GB") })).toBeInTheDocument();
   });
 
   it("says what each size is for and what it costs in words that read on their own", async () => {
     await open("choosing", "#/setup?step=choosing");
     const group = await screen.findByRole("group", { name: "How much to set up" });
-    expect(
-      within(group).getByText("For computers with 28 GB memory or more · 8.4 GB download"),
-    ).toBeInTheDocument();
-    expect(
-      within(group).getByText(/· 4\.8 GB download · slower · uses less memory, space and battery$/),
-    ).toBeInTheDocument();
-    expect(
-      within(group).getByText(
-        "For computers with 6 GB memory or more · 3.2 GB download · uses the least memory, space and battery · answers are simpler and may miss details",
-      ),
-    ).toBeInTheDocument();
+    const card = (name: RegExp) => within(group).getByRole("radio", { name }).parentElement;
+    expect(card(/^Large/)).toHaveTextContent("60 GB memory or more · 26 GB downloadFastest.");
+    expect(card(/^Standard/)).toHaveTextContent("28 GB memory or more · 8.4 GB download");
+    expect(card(/^Small/)).toHaveTextContent(
+      "14 GB memory or more · 4.8 GB downloadSlower. Less memory, space and battery.",
+    );
+    expect(card(/^Tiny/)).toHaveTextContent(
+      "6 GB memory or more · 3.2 GB downloadLeast memory, space and battery. Simpler answers.",
+    );
   });
 
   it("lets a powerful computer choose the tiny mind", async () => {
@@ -279,7 +283,7 @@ describe("what this computer can run", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "Nocturne will use its lightest mind. Everything works, but answers are simpler and it may miss details.",
     );
-    await userEvent.click(screen.getByRole("button", { name: "Set up · 3.2 GB" }));
+    await userEvent.click(screen.getByRole("button", { name: nb("Set up · 3.2 GB") }));
     expect(spy).toHaveBeenCalledWith("tiny");
   });
 
@@ -332,7 +336,7 @@ describe("what this computer can run", () => {
   it("changes the headline and the button when another tier is chosen", async () => {
     await open("choosing", "#/setup?step=choosing");
     await userEvent.click(await screen.findByRole("radio", { name: /Small/ }));
-    expect(screen.getByRole("button", { name: "Set up · 4.8 GB" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: nb("Set up · 4.8 GB") })).toBeInTheDocument();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(/smallest mind/);
   });
 
@@ -350,7 +354,24 @@ describe("what this computer can run", () => {
     expect(why).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByText(
-        /32 GB here. Large needs 60 GB or more, Standard 28 GB, Small 14 GB and Tiny 6 GB/,
+        "Nocturne picks the biggest mind this computer runs comfortably. It depends on computer memory.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("This computer has 32 GB.")).toBeInTheDocument();
+    const sizes = screen.getByRole("table");
+    expect(
+      within(sizes)
+        .getAllByRole("row")
+        .map((row) => [...row.children].map((cell) => cell.textContent)),
+    ).toEqual([
+      ["Large", "60\u00a0GB or more"],
+      ["Standard", "28\u00a0GB or more"],
+      ["Small", "14\u00a0GB or more"],
+      ["Tiny", "6\u00a0GB or more"],
+    ]);
+    expect(
+      screen.getByText(
+        "A smaller mind uses less memory, space and battery. Everything still works.",
       ),
     ).toBeInTheDocument();
   });
@@ -358,7 +379,7 @@ describe("what this computer can run", () => {
   it("starts setting up with the chosen tier and moves to getting ready", async () => {
     const { engine } = await open("choosing", "#/setup?step=choosing");
     const spy = vi.spyOn(engine, "startSetup");
-    await userEvent.click(await screen.findByRole("button", { name: "Set up · 8.4 GB" }));
+    await userEvent.click(await screen.findByRole("button", { name: nb("Set up · 8.4 GB") }));
     expect(spy).toHaveBeenCalledWith("standard");
     expect(
       await screen.findByRole("heading", {
@@ -377,10 +398,9 @@ describe("what this computer can run", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "This computer has 5 GB of computer memory. Nocturne needs 6 GB or more. Nothing has been downloaded.",
-      ),
+      screen.getByText("This computer has 5 GB of computer memory. Nocturne needs 6 GB or more."),
     ).toBeInTheDocument();
+    expect(screen.getByText("Nothing has been downloaded.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Set up/ })).toBeNull();
   });
 
@@ -390,7 +410,10 @@ describe("what this computer can run", () => {
       await screen.findByRole("heading", { level: 1, name: /needs more free space/ }),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/It has 3 GB free\. Nocturne needs 5\.2 GB to set up/),
+      screen.getByText("It has 3 GB free. Nocturne needs 5.2 GB to set up."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Free some space and check again. Nothing has been downloaded."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Check again" })).toBeInTheDocument();
   });
@@ -402,7 +425,7 @@ describe("getting ready", () => {
     const bar = await screen.findByRole("progressbar", { name: "Setting up Nocturne’s mind" });
     expect(bar).toHaveAttribute(
       "aria-valuetext",
-      "Setting up Nocturne’s mind, 4.9 GB of 8.4 GB · about 17 min",
+      nb("Setting up Nocturne’s mind, 4.9 GB of 8.4 GB · about 17 min"),
     );
     expect(
       screen.getByText("Safe to close. It carries on next time, even after losing Wi-Fi."),

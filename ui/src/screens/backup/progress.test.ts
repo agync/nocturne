@@ -29,9 +29,11 @@ describe("the time left in a backup", () => {
 
 describe("the words under a progress bar", () => {
   it("gives bytes and the estimate only when there is one", () => {
-    expect(progressDetail(progress(1_600_000_000, 4_300_000_000), null)).toBe("1.6 GB of 4.3 GB");
+    expect(progressDetail(progress(1_600_000_000, 4_300_000_000), null)).toBe(
+      "1.6\u00a0GB of 4.3\u00a0GB",
+    );
     expect(progressDetail(progress(1_600_000_000, 4_300_000_000), 240)).toBe(
-      "1.6 GB of 4.3 GB · about 4 min left",
+      "1.6\u00a0GB of 4.3\u00a0GB · about 4 min left",
     );
   });
 });

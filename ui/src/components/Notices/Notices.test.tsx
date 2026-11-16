@@ -60,7 +60,7 @@ describe("Notices", () => {
 
   it("says how much space is needed and how long a catch-up will take", () => {
     expect(noticeText(make("diskFull", { bytes: 6_000_000_000 }))).toBe(
-      "This computer needs 6 GB more free space to finish setting up.",
+      "This computer needs 6\u00a0GB more free space to finish setting up.",
     );
     expect(noticeText(make("catchingUp", { etaSeconds: 40 }))).toBe(
       "The computer was off overnight. Catching up now, about 40 seconds.",
@@ -83,7 +83,7 @@ describe("Notices", () => {
     const decline = vi.fn();
     const notice = make("tierDropped", { bytes: 3_660_000_000 });
     expect(noticeText(notice)).toBe(
-      "This computer is running short of computer memory. Nocturne can switch to a smaller mind, which needs 3.7 GB to download. Nothing you have kept is lost.",
+      "This computer is running short of computer memory. Nocturne can switch to a smaller mind, which needs 3.7\u00a0GB to download. Nothing you have kept is lost.",
     );
     expect(noticeText(make("tierDropped"))).not.toContain("{size}");
     render(

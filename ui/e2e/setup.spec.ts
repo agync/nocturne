@@ -126,7 +126,7 @@ test.describe("using it", () => {
   }) => {
     await ready(page, "choosing", "#/setup?step=choosing", /lighter mind/);
     await page.getByText("Why this one?").click();
-    await expect(page.getByText(/Large needs 60 GB or more/)).toBeVisible();
+    await expect(page.getByRole("row", { name: /^Large 60 GB or more$/ })).toBeVisible();
     await page.getByRole("radio", { name: /Small/ }).check({ force: true });
     await expect(page.getByRole("button", { name: "Set up · 4.8 GB" })).toBeVisible();
     await page.getByRole("radio", { name: /Standard/ }).check({ force: true });
@@ -218,5 +218,85 @@ test.describe("size choice layout", () => {
     expect(box?.height).toBeLessThan(60);
     expect(box?.width).toBeGreaterThan(280);
     await page.close();
+  });
+});
+
+test.describe("reading rules for the tiers screen", () => {
+  test.use({ viewport: { width: 1100, height: 760 } });
+
+  const open = async (page: Page) => {
+    await ready(page, "tiny", "#/setup?step=choosing", /lightest mind/);
+    await page.getByRole("button", { name: "Why this one?" }).click();
+    await expect(page.getByRole("table")).toBeVisible();
+  };
+
+  test("running text is at most 60 characters a line, at a line height of 1.5 or more", async ({
+    page,
+  }) => {
+    await open(page);
+    const problems = await page.evaluate(() => {
+      const found: string[] = [];
+      for (const p of document.querySelectorAll<HTMLElement>("main p:not(.t-section)")) {
+        const style = getComputedStyle(p);
+        const probe = document.createElement("span");
+        probe.style.cssText = `position:absolute;visibility:hidden;width:60ch;font:${style.font}`;
+        document.body.appendChild(probe);
+        const limit = probe.getBoundingClientRect().width;
+        probe.remove();
+        const ratio = Number.parseFloat(style.lineHeight) / Number.parseFloat(style.fontSize);
+        if (p.getBoundingClientRect().width > limit + 1) found.push(`wide: ${p.textContent}`);
+        if (ratio < 1.499) found.push(`tight ${ratio.toFixed(2)}: ${p.textContent}`);
+      }
+      for (const d of document.querySelectorAll<HTMLElement>("main label span:not(:first-child)")) {
+        if (Number.parseFloat(getComputedStyle(d).fontSize) < 15)
+          found.push(`small: ${d.textContent}`);
+      }
+      return found;
+    });
+    expect(problems).toEqual([]);
+  });
+
+  test("a number never parts from its unit", async ({ page }) => {
+    await open(page);
+    const loose = await page.evaluate(() =>
+      document.querySelector("main")?.textContent?.match(/\d (GB|MB)\b/g),
+    );
+    expect(loose ?? []).toEqual([]);
+  });
+
+  test("nothing clips or overlaps with the text spacing of WCAG 1.4.12", async ({ page }) => {
+    await open(page);
+    await page.addStyleTag({
+      content: `* { line-height: 1.5 !important; letter-spacing: 0.12em !important;
+        word-spacing: 0.16em !important; }
+        p { margin-bottom: 2em !important; }`,
+    });
+    const problems = await page.evaluate(() => {
+      const found: string[] = [];
+      for (const el of document.querySelectorAll<HTMLElement>("main *:not(.sr-only)")) {
+        if (getComputedStyle(el).overflowY !== "visible" && el.scrollHeight > el.clientHeight + 1) {
+          found.push(`clipped: ${el.tagName} ${el.textContent?.slice(0, 24)}`);
+        }
+      }
+      const card = document.querySelector<HTMLElement>("main section");
+      const kids = [...(card?.children ?? [])].map((c) => c.getBoundingClientRect());
+      kids.forEach((box, i) => {
+        const next = kids[i + 1];
+        if (next && next.top < box.bottom - 1 && next.left < box.right && box.left < next.right) {
+          found.push(`overlap at child ${i}`);
+        }
+      });
+      for (const body of document.querySelectorAll<HTMLElement>("main label > span")) {
+        const owner = body.getBoundingClientRect();
+        for (const line of body.children) {
+          if (line.getBoundingClientRect().bottom > owner.bottom + 1) {
+            found.push(`outside its card: ${line.textContent}`);
+          }
+        }
+      }
+      return found;
+    });
+    expect(problems).toEqual([]);
+    expect(await overflow(page)).toBeLessThanOrEqual(0);
   });
 });

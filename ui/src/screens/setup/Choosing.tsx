@@ -24,13 +24,15 @@ const RESULT: Record<Exclude<Tier, "unsupported">, CopyId> = {
   tiny: "setup.result.tiny",
 };
 
-/** What each size gives and costs, in a few words after its memory and download. */
-const DETAIL: Record<Exclude<Tier, "unsupported">, CopyId> = {
-  large: "setup.tier.detail.fastest",
-  standard: "setup.tier.detail",
-  small: "setup.tier.detail.slower",
-  tiny: "setup.tier.detail.simpler",
+/** What each size gives and costs, on a line of its own under its memory and download. */
+const NOTE: Record<Exclude<Tier, "unsupported">, CopyId | null> = {
+  large: "setup.tier.note.fastest",
+  standard: null,
+  small: "setup.tier.note.slower",
+  tiny: "setup.tier.note.simpler",
 };
+
+const WHY_ORDER = ["large", "standard", "small", "tiny"] as const;
 
 /** Why nothing fits: not enough memory, or not enough free space for the smallest. */
 function shortfall(
@@ -81,6 +83,13 @@ export function Choosing({ view, onStarted }: Props) {
                 free: formatBytes(view.freeDiskBytes),
                 needed: formatBytes(lack.needed),
               })}
+        </p>
+        <p className={styles.lead}>
+          {t(
+            lack.kind === "memory"
+              ? "setup.unsupported.memory.next"
+              : "setup.unsupported.disk.next",
+          )}
         </p>
         <div className={styles.foot}>
           <Button variant="secondary" onClick={() => refresh("setup")}>
@@ -142,8 +151,9 @@ export function Choosing({ view, onStarted }: Props) {
                   {here ? t("setup.tier.here", { name: t(NAME[tier]) }) : t(NAME[tier])}
                 </span>
                 <span className={styles.tierDetail}>
-                  {t(DETAIL[tier], { ram: o.minRamGib, size: formatBytes(o.downloadBytes) })}
+                  {t("setup.tier.detail", { ram: o.minRamGib, size: formatBytes(o.downloadBytes) })}
                 </span>
+                {NOTE[tier] ? <span className={styles.tierDetail}>{t(NOTE[tier])}</span> : null}
                 {!o.fits ? <span className={styles.tierDetail}>{t(tooBig)}</span> : null}
               </span>
             </label>
@@ -156,6 +166,7 @@ export function Choosing({ view, onStarted }: Props) {
           free: formatBytes(view.freeDiskBytes),
         })}
       </p>
+      <p className={styles.lead}>{t("setup.needs.once")}</p>
       {chosen?.tier === "tiny" ? (
         <div className={styles.later}>
           <p>{t("setup.tiny.online")}</p>
@@ -178,15 +189,21 @@ export function Choosing({ view, onStarted }: Props) {
         </Button>
       </div>
       {why ? (
-        <p id="why" className={styles.why}>
-          {t("setup.why.body", {
-            ram: view.ramGib,
-            large: ram("large"),
-            standard: ram("standard"),
-            small: ram("small"),
-            tiny: ram("tiny"),
-          })}
-        </p>
+        <div id="why" className={styles.why}>
+          <p>{t("setup.why.lead")}</p>
+          <p>{t("setup.why.here", { ram: view.ramGib })}</p>
+          <table className={styles.sizes}>
+            <tbody>
+              {WHY_ORDER.map((tier) => (
+                <tr key={tier}>
+                  <th scope="row">{t(NAME[tier])}</th>
+                  <td>{t("setup.why.row", { ram: ram(tier) })}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p>{t("setup.why.close")}</p>
+        </div>
       ) : null}
     </section>
   );

@@ -77,7 +77,7 @@ describe("the online block of the advanced details", () => {
     );
     expect(rows.get("retention")).toBe("set by your provider · not known to Nocturne");
     expect(rows.get("last request")).toBe(
-      "09:14 · 200 · answered in 1.2 s · 1.4 kB up · 600 B down",
+      "09:14 · 200 · answered in 1.2 s · 1.4\u00a0kB up · 600\u00a0B down",
     );
     expect(rows.get("cost")).toBe("not reported by the provider · limit counts questions");
     expect(rows.get("sent log")).toBe("38 entries · kept 90 days");
