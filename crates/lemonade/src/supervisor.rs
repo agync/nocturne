@@ -1010,12 +1010,15 @@ impl Actor {
         key: &str,
     ) -> Result<String, Launch> {
         let probe = Client::new(port, key);
-        let deadline = Instant::now() + self.opts.start_timeout;
+        let begun = Instant::now();
+        let deadline = begun + self.opts.start_timeout;
+        let mut answered = false;
         loop {
             if let Ok(Some(status)) = running.child.try_wait() {
                 return Err(Launch::Retry(format!("exited early with {status}")));
             }
             if probe.live().await.is_ok() {
+                answered = true;
                 // The wrong key is tried first and the right one last. A busy or half-started
                 // engine can fail the first for other reasons, which only means try again.
                 let wrong = Client::new(port, "not-the-key");
@@ -1042,6 +1045,21 @@ impl Actor {
                 }
             }
             if Instant::now() >= deadline {
+                // Names the cause in the next report: an engine that works or one that waits,
+                // and on what.
+                let root = running.pgid;
+                let what = tokio::task::spawn_blocking(move || crate::children::describe(root))
+                    .await
+                    .unwrap_or_else(|_| crate::children::UNREADABLE.into());
+                tracing::warn!(
+                    "the engine did not answer in {} s ({}); {what}",
+                    begun.elapsed().as_secs(),
+                    if answered {
+                        "it was listening"
+                    } else {
+                        "it never listened"
+                    }
+                );
                 return Err(Launch::Fatal(RuntimeError::Start(
                     "the engine did not answer in time".into(),
                 )));
