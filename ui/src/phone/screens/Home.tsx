@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { tc } from "../../components/ControlChip/copy";
 import { formatDay, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { Connection, PairedDevice } from "../engine";
@@ -144,7 +145,7 @@ export function Home(p: HomeProps) {
                 <h2 id="new-address-title" className="ph-card-title">
                   {t("phone.asleep.address.title")}
                 </h2>
-                <p className="ph-hint ph-hint--ink2">{t("phone.address.where")}</p>
+                <p className="ph-hint ph-hint--ink2">{tc("phone.address.where")}</p>
                 <Button kind="quiet" onClick={() => p.onRelink("scan")}>
                   <Icon name="camera" size={20} />
                   {t("phone.address.scan")}

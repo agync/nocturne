@@ -1381,3 +1381,9 @@ body {
 .ph-kept-word {
   font-weight: 400;
 }
+
+.ph-scan-foot [data-chip] {
+  background: transparent;
+  border-color: #3a3f4a;
+  color: #ece8df;
+}

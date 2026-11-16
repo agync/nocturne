@@ -3,11 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PhoneKept } from "../engine/bindings";
 import { FakeAudioContext, installFakeAudio, speak } from "../test/fakeAudio";
+import { chipsIn, sentence } from "../test/sentence";
 import { App } from "./App";
 import { type PhoneEngine, PhoneRequestError } from "./engine";
 import { createMockPhoneEngine, type MockScript } from "./mock";
 import { memoryQueue } from "./queue";
 import { Ask, capQuestion, useAskSession } from "./screens/Ask";
+import { Scan, Welcome } from "./screens/Entry";
 import { browserRecorder, Keep } from "./screens/Keep";
 import { Original } from "./screens/Original";
 import { PageScreen } from "./screens/PageScreen";
@@ -84,6 +86,10 @@ describe("offline and removed", () => {
       screen.getByRole("heading", { name: "Has your computer got a new address?" }),
     ).toBeInTheDocument();
     expect(button("Scan the new code")).toBeInTheDocument();
+    const where = screen.getByText(
+      sentence("On your computer, open Nocturne and choose Your phones need the new address."),
+    );
+    expect(chipsIn(where)).toEqual(["Your phones need the new address"]);
     expect(button("Type the words instead")).toBeInTheDocument();
     expect(
       screen.queryByText("If you use Most private, check Tailscale is on."),
@@ -176,6 +182,37 @@ describe("the settings sheet", () => {
 });
 
 describe("pairing screens", () => {
+  it("welcome.names_the_way_in: Settings, Away from home, then Add a phone", () => {
+    render(<Welcome waiting={0} onScan={vi.fn()} onType={vi.fn()} onClear={vi.fn()} />);
+    const body = screen.getByText(
+      sentence(
+        "On your computer, open Nocturne and choose Settings, then Away from home, then Add a phone. Scan the code with this phone, or type it here.",
+      ),
+    );
+    expect(chipsIn(body)).toEqual(["Settings", "Away from home", "Add a phone"]);
+  });
+
+  it.each([
+    ["pair", "Point at the code on your computer’s screen, under Add a phone.", ["Add a phone"]],
+    [
+      "relink",
+      "Point at the code on your computer’s screen. It’s under Your phones need the new address.",
+      ["Your phones need the new address"],
+    ],
+  ] as const)("scan.hint_names_the_place: %s", (purpose, text, chips) => {
+    const env = { reader: vi.fn() } as never;
+    render(
+      <Scan
+        purpose={purpose}
+        env={env}
+        accept={() => false}
+        onSwitch={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(chipsIn(screen.getByText(sentence(text)))).toEqual(chips);
+  });
+
   it("pair.name_then_words_then_allowed", async () => {
     await open("s=pair");
     const heading = await screen.findByRole("heading", { name: "Name this phone" });
@@ -195,6 +232,13 @@ describe("pairing screens", () => {
     expect(
       screen.getByText(/this phone isn’t showing three words, someone else is trying to pair/),
     ).toBeInTheDocument();
+    const choose = screen.getByText(
+      sentence(
+        "If they match, choose Allow on your computer. If they don’t, choose Don’t allow there and start again.",
+      ),
+    );
+    expect(chipsIn(choose)).toEqual(["Allow", "Don’t allow"]);
+    expect(choose.querySelector("strong")).toBeNull();
     expect(
       await screen.findByRole("heading", { name: "Pixel can now use Nocturne." }),
     ).toBeInTheDocument();
@@ -263,7 +307,12 @@ describe("pairing screens", () => {
     expect(
       await screen.findByRole("heading", { name: "Open Nocturne from your home screen" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/choose “Scan the new code”/)).toBeInTheDocument();
+    const how = screen.getByText(
+      sentence(
+        "This page can’t reconnect a phone by itself. Open Nocturne from the home screen, choose Scan the new code, then point it at your computer.",
+      ),
+    );
+    expect(chipsIn(how)).toEqual(["Scan the new code"]);
   });
 
   it("support.old_browser_state", async () => {
@@ -602,9 +651,10 @@ describe("ask", () => {
     expect(
       await screen.findByText("Answered online by your provider (api.example.test)"),
     ).toBeInTheDocument();
-    expect(
-      screen.getByText("What was sent is listed on your computer, under Online answers."),
-    ).toBeInTheDocument();
+    const where = screen.getByText(
+      sentence("What was sent is listed on your computer. Choose Privacy, then See what was sent."),
+    );
+    expect(chipsIn(where)).toEqual(["Privacy", "See what was sent"]);
   });
 
   it("phone.ask.computer_mark", async () => {

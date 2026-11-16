@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chipsIn, sentence } from "../../test/sentence";
 import { Confirm } from "./parts";
 import { openAway } from "./testing";
 
@@ -47,9 +48,12 @@ describe("away", () => {
       }),
     ).toBeInTheDocument();
     expect(screen.getByText("river · copper · meadow · thistle")).toBeInTheDocument();
-    expect(
-      screen.getByText(/choose Scan the code, then point it at your computer/),
-    ).toBeInTheDocument();
+    const how = screen.getByText(
+      sentence(
+        "On each phone, open Nocturne and choose Scan the new code, then point it at your computer. Your phones are still paired, so there’s nothing to allow.",
+      ),
+    );
+    expect(chipsIn(how)).toEqual(["Scan the new code"]);
     const list = screen.getByRole("list", { name: "Phones and whether they have the new address" });
     expect(within(list).getByText(/^Reconnected at \d\d:\d\d$/)).toBeInTheDocument();
     expect(within(list).getByText("Not yet")).toBeInTheDocument();

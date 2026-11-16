@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { chipsIn, sentence } from "../../test/sentence";
 import { mayAskAboutFirewall, mostPrivateAvailable } from "./os";
 import { openAway, pretendComputer } from "./testing";
 
@@ -35,6 +36,12 @@ describe("setup", () => {
       }),
     ).toBeInTheDocument();
     expect(start).not.toHaveBeenCalled();
+    const body = screen.getByText(
+      sentence(
+        "It’s the piece that lets your phone reach this computer through Cloudflare. Nocturne checks it before it’s used, and the download shows in Privacy, like every other.",
+      ),
+    );
+    expect(chipsIn(body)).toEqual(["Privacy"]);
     expect(screen.getByText("Only while Away from home is on")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Download" }));
     expect(start).toHaveBeenCalledWith("simple", true);

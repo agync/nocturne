@@ -11,7 +11,7 @@
   "phone.tooOld.body": "Nocturne can’t keep this phone safe in this browser. Update it, or open this page in a newer one.",
 
   "phone.welcome.title": "Add this phone from your computer",
-  "phone.welcome.body": "On your computer, open Nocturne, choose Away from home, then Add a phone. Scan the code with this phone, or type it here.",
+  "phone.welcome.body": "On your computer, open Nocturne and choose {settings}, then {awayFromHome}, then {addAPhone}. Scan the code with this phone, or type it here.",
   "phone.welcome.scan": "Scan the code",
   "phone.welcome.type": "Type the code",
   "phone.welcome.unreached": "Your computer may still list this phone. Remove it there too.",
@@ -20,8 +20,8 @@
   "phone.scan.title.pair": "Scan the code",
   "phone.scan.title.relink": "Scan the new code",
   "phone.scan.looking": "Looking for the code…",
-  "phone.scan.hint.pair": "Point at the code on your computer’s screen, under “Add a phone”.",
-  "phone.scan.hint.relink": "Point at the code on your computer’s screen. It’s under “Your phones need the new address”.",
+  "phone.scan.hint.pair": "Point at the code on your computer’s screen, under {addAPhone}.",
+  "phone.scan.hint.relink": "Point at the code on your computer’s screen. It’s under {phonesNeedNewAddress}.",
   "phone.scan.words": "Type the words instead",
   "phone.scan.type": "Type the code instead",
   "phone.scan.privacy": "Nocturne uses the camera only while this is open, and keeps no pictures.",
@@ -66,7 +66,7 @@
   "phone.check.label": "Adding {name}",
   "phone.check.title": "Check your computer shows the same three words.",
   "phone.check.words": "Check words: {words}",
-  "phone.check.body": "If they match, choose **Allow** on your computer. If they don’t, choose Don’t allow there and start again.",
+  "phone.check.body": "If they match, choose {allow} on your computer. If they don’t, choose {dontAllow} there and start again.",
   "phone.check.warning": "If your computer asks to allow a phone and this phone isn’t showing three words, someone else is trying to pair. Refuse it.",
   "phone.check.waiting": "Waiting for your computer…",
 
@@ -116,7 +116,7 @@
   "phone.off.keep.hint": "You can still keep things. They wait on this phone until it’s back on.",
   "phone.off.keep": "Keep something",
 
-  "phone.address.where": "On your computer, open Nocturne and choose “Your phones need the new address”.",
+  "phone.address.where": "On your computer, open Nocturne and choose {phonesNeedNewAddress}.",
   "phone.address.scan": "Scan the new code",
   "phone.address.words": "Type the words instead",
 
@@ -132,7 +132,7 @@
   "phone.relink.failed": "That address didn’t answer. Check the words, and that your computer is awake.",
   "phone.relink.back": "Back",
   "phone.relink.here.title": "Open Nocturne from your home screen",
-  "phone.relink.here.body": "This page can’t reconnect a phone by itself. Open Nocturne from the home screen, choose “Scan the new code”, then point it at your computer.",
+  "phone.relink.here.body": "This page can’t reconnect a phone by itself. Open Nocturne from the home screen, choose {newCodeToScan}, then point it at your computer.",
 
   "phone.removed.title": "This phone was removed from Nocturne.",
   "phone.removed.body": "To use it again, pair it from your computer.",
@@ -225,7 +225,7 @@
   "phone.ask.from": "From {count, plural, one {# thing} other {# things}} you kept",
   "phone.ask.mark.online": "Answered online by your provider ({host})",
   "phone.ask.mark.computer": "Answered on your computer",
-  "phone.ask.mark.sent": "What was sent is listed on your computer, under Online answers.",
+  "phone.ask.mark.sent": "What was sent is listed on your computer. Choose {privacy}, then {seeWhatWasSent}.",
   "phone.ask.wrong": "Something wrong? Correct it on your computer.",
   "phone.ask.question": "“{question}”",
   "phone.ask.notSure.lead": "Not sure. {count, plural, one {This comes} other {These come}} close, and they can’t all be right.",

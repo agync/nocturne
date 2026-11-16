@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
 import { checkDeviceName, cleanDeviceName, Refusal } from "../crypto";
 import type { PairedDevice } from "../engine";
@@ -145,9 +146,7 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
               </li>
             ))}
           </ul>
-          <p className="ph-body">
-            <Rich id="phone.check.body" />
-          </p>
+          <p className="ph-body">{tc("phone.check.body")}</p>
           <p className="ph-hint ph-hint--ink2">{t("phone.check.warning")}</p>
           <p
             className="ph-status"

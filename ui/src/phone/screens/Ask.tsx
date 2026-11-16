@@ -1,4 +1,5 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { tc } from "../../components/ControlChip/copy";
 import { richText } from "../../components/PageLine/richText";
 import { t } from "../../copy/t";
 import type { AnsweredBy, AskDelta, AskPhase, NearMatch, Receipt } from "../../engine/bindings";
@@ -317,7 +318,7 @@ export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProp
               </p>
             )}
             {done && model.answeredBy?.type === "online" && (
-              <p className="ph-hint ph-hint--ink2">{t("phone.ask.mark.sent")}</p>
+              <p className="ph-hint ph-hint--ink2">{tc("phone.ask.mark.sent")}</p>
             )}
             {done && <p className="ph-hint ph-hint--ink2">{t("phone.ask.wrong")}</p>}
           </>
