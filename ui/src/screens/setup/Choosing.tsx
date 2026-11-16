@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Chevron } from "../../components/Disclosure/Chevron";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
@@ -156,16 +157,10 @@ export function Choosing({ view, onStarted }: Props) {
         })}
       </p>
       {chosen?.tier === "tiny" ? (
-        <p
-          className={styles.lead}
-          style={{
-            paddingTop: "var(--s-4)",
-            borderTop: "1px solid var(--rule)",
-            color: "var(--ink)",
-          }}
-        >
-          {t("setup.tiny.online")}
-        </p>
+        <div className={styles.later}>
+          <p>{t("setup.tiny.online")}</p>
+          <p className={styles.where}>{tc("setup.tiny.online.where")}</p>
+        </div>
       ) : null}
       <div className={styles.foot}>
         <Button
