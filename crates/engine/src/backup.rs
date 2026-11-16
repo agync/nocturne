@@ -25,7 +25,7 @@ use unicode_normalization::UnicodeNormalization;
 use crate::Engine;
 use crate::error::{Error, Result};
 use crate::fsutil;
-use crate::store;
+use crate::store::{self, lock_down};
 use crate::util::{fmt_ts, hex};
 
 /// The file extension of a passphrase backup.
@@ -254,15 +254,6 @@ fn connection_has_data(conn: &Connection) -> Result<bool> {
         }
     }
     Ok(false)
-}
-
-/// Stop a crafted database from running its own code while it is checked: views, triggers and
-/// defaults in it may not call functions that are not marked safe, and SQLite's defensive mode
-/// closes the ways a database file can be used to alter its own internals.
-fn lock_down(conn: &Connection) -> rusqlite::Result<()> {
-    conn.pragma_update(None, "trusted_schema", "OFF")?;
-    conn.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
-    Ok(())
 }
 
 /// Open an unpacked database for checking, already locked down.
@@ -667,33 +658,40 @@ fn schema_rows(conn: &Connection) -> Result<HashSet<(String, String, String)>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-/// The schema this build creates, read from a store made fresh from `schema.sql`.
-fn allowed_schema() -> Result<HashSet<(String, String, String)>> {
+/// The schema a store at `version` has, read from a store migrated to that version from nothing.
+fn allowed_schema(version: u32) -> Result<HashSet<(String, String, String)>> {
     let conn = Connection::open_in_memory()?;
-    for (_, sql) in store::migrations() {
-        conn.execute_batch(sql)?;
+    for (v, sql) in store::migrations() {
+        if v <= version {
+            conn.execute_batch(sql)?;
+        }
     }
     schema_rows(&conn)
 }
 
-/// Refuse a database carrying schema objects this build did not create. A trigger or view from
-/// elsewhere could undo the scrub or send what it reads somewhere.
-fn validate_schema(conn: &Connection) -> Result<()> {
-    let allowed = allowed_schema()?;
-    let names: HashSet<(String, String)> = allowed
-        .iter()
-        .map(|(kind, name, _)| (kind.clone(), name.clone()))
+/// Spacing is not part of a definition.
+fn squeeze(sql: &str) -> String {
+    sql.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// Refuse a database whose schema is not exactly the one this build would have made at the
+/// version it says it is. A table with another definition (an extra column, a check, a generated
+/// column), an index with an expression, or a trigger or view from elsewhere could undo the
+/// scrub or send what it reads somewhere.
+fn validate_schema(conn: &Connection, version: u32) -> Result<()> {
+    let allowed: HashSet<(String, String, String)> = allowed_schema(version)?
+        .into_iter()
+        .map(|(kind, name, sql)| (kind, name, squeeze(&sql)))
         .collect();
-    for row in schema_rows(conn)? {
-        let (kind, name, _) = &row;
-        if !names.contains(&(kind.clone(), name.clone())) {
-            return Err(Error::BackupDamaged);
-        }
-        if (kind == "trigger" || kind == "view") && !allowed.contains(&row) {
-            return Err(Error::BackupDamaged);
-        }
+    let found: HashSet<(String, String, String)> = schema_rows(conn)?
+        .into_iter()
+        .map(|(kind, name, sql)| (kind, name, squeeze(&sql)))
+        .collect();
+    if found == allowed {
+        Ok(())
+    } else {
+        Err(Error::BackupDamaged)
     }
-    Ok(())
 }
 
 /// Refuse item rows whose original cannot be placed safely under the originals folder.
@@ -1128,19 +1126,19 @@ fn read_backup(
         if version > store::latest_version() {
             return Err(Error::BackupTooNew);
         }
+        validate_schema(&conn, version).map_err(|_| Error::BackupDamaged)?;
         let check: String = conn
             .query_row("PRAGMA integrity_check", [], |r| r.get(0))
             .map_err(|_| Error::BackupDamaged)?;
         if check != "ok" {
             return Err(Error::BackupDamaged);
         }
-        validate_schema(&conn).map_err(|_| Error::BackupDamaged)?;
         validate_items(&conn).map_err(|_| Error::BackupDamaged)?;
     }
 
     // An older backup is brought up to date here, in the scratch or staging folder. A restore
     // is scrubbed too: a crafted or older file may carry what a backup would have removed.
-    let conn = store::open(&db).map_err(|_| Error::BackupDamaged)?;
+    let conn = store::open_untrusted(&db).map_err(|_| Error::BackupDamaged)?;
     if keep_originals {
         place_originals(&conn, &store_dir.join("originals")).map_err(|_| Error::BackupDamaged)?;
         scrub_database(&conn, &fmt_ts(jiff::Timestamp::now())).map_err(|_| Error::BackupDamaged)?;
@@ -1328,20 +1326,30 @@ mod tests {
         assert_eq!(n, 0, "defensive mode refuses writes to the schema table");
     }
 
+    fn is_locked_down(conn: &Connection) -> bool {
+        let trusted: i64 = conn
+            .query_row("PRAGMA trusted_schema", [], |r| r.get(0))
+            .unwrap();
+        trusted == 0
+            && conn
+                .db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE)
+                .unwrap()
+    }
+
     #[test]
     fn the_connection_that_checks_an_unpacked_database_is_locked_down() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("nocturne.db");
         Connection::open(&path).unwrap();
-        let conn = open_for_check(&path).unwrap();
-        let trusted: i64 = conn
-            .query_row("PRAGMA trusted_schema", [], |r| r.get(0))
-            .unwrap();
-        assert_eq!(trusted, 0);
-        assert!(
-            conn.db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE)
-                .unwrap()
-        );
+        assert!(is_locked_down(&open_for_check(&path).unwrap()));
+    }
+
+    #[test]
+    fn the_connection_that_migrates_and_scrubs_an_unpacked_database_is_locked_down() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("nocturne.db");
+        assert!(is_locked_down(&store::open_untrusted(&path).unwrap()));
+        assert!(!is_locked_down(&store::open(&path).unwrap()));
     }
 
     fn silent(_: BackupPhase, _: u64, _: u64) {}

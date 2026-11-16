@@ -62,12 +62,34 @@ fn configure(conn: &Connection) -> Result<()> {
 
 /// Open the single writer connection, creating and migrating the store.
 pub fn open(path: &Path) -> Result<Connection> {
+    open_with(path, false)
+}
+
+/// Open a database that came from outside, such as one unpacked from a backup: locked down
+/// before anything in it is read, migrated or changed.
+pub(crate) fn open_untrusted(path: &Path) -> Result<Connection> {
+    open_with(path, true)
+}
+
+/// Stop a crafted database from running its own code: views, triggers and defaults in it may not
+/// call functions that are not marked safe, and SQLite's defensive mode closes the ways a
+/// database file can be used to alter its own internals.
+pub(crate) fn lock_down(conn: &Connection) -> rusqlite::Result<()> {
+    conn.pragma_update(None, "trusted_schema", "OFF")?;
+    conn.set_db_config(rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE, true)?;
+    Ok(())
+}
+
+fn open_with(path: &Path, untrusted: bool) -> Result<Connection> {
     // Create the file first so it is private from the start; SQLite gives -wal and -shm the
     // same mode.
     if !path.exists() {
         crate::fsutil::create_private_file(path)?;
     }
     let mut conn = Connection::open(path)?;
+    if untrusted {
+        lock_down(&conn)?;
+    }
     configure(&conn)?;
     conn.pragma_update(None, "journal_mode", "WAL")?;
     // Do not let the -wal file linger at its high-water size.
