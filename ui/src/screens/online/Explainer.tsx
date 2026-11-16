@@ -56,7 +56,7 @@ export function Explainer({ onNext, onLeave }: { onNext: () => void; onLeave: ()
               type="button"
               className={styles.toggleLink}
               aria-expanded={open}
-              aria-controls={exampleId}
+              aria-controls={open ? exampleId : undefined}
               onClick={() => setOpen(!open)}
             >
               <Chevron size={14} />

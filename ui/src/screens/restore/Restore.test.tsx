@@ -97,8 +97,10 @@ describe("Restore from a backup: choosing a file", () => {
     const more = screen.getByRole("button", { name: "Advanced details" });
     expect(more).toHaveAttribute("aria-expanded", "false");
     expect(more.firstElementChild).toHaveAttribute("data-chevron");
+    expect(more).not.toHaveAttribute("aria-controls");
     await userEvent.click(more);
     expect(more).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(more.getAttribute("aria-controls") ?? "")).not.toBeNull();
     expect(screen.getAllByText("Nocturne backup 2026-11-15.nocturne").length).toBeGreaterThan(1);
     expect(screen.getAllByText("Read once the passphrase opens the file")).toHaveLength(2);
     expect(screen.getByText("Every part is checked before anything changes")).toBeInTheDocument();

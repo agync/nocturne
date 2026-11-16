@@ -134,8 +134,10 @@ describe("setup", () => {
     expect(screen.queryByText("when is my eye test?")).toBeNull();
     const toggle = screen.getByRole("button", { name: "What exactly is sent?" });
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).not.toHaveAttribute("aria-controls");
     await userEvent.click(toggle);
     expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")).not.toBeNull();
     expect(screen.getByText("when is my eye test?")).toBeInTheDocument();
     expect(screen.getByText(/Not sent: the clinic’s letter/)).toBeInTheDocument();
   });

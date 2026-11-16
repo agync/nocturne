@@ -854,7 +854,7 @@ function Advanced({
         type="button"
         className={`${layout.moreButton} hit`}
         aria-expanded={open}
-        aria-controls={id}
+        aria-controls={open ? id : undefined}
         onClick={onToggle}
       >
         <Chevron />

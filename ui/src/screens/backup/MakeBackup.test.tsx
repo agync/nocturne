@@ -90,8 +90,10 @@ describe("Make a backup: the form", () => {
     const more = screen.getByRole("button", { name: "Advanced details" });
     expect(more).toHaveAttribute("aria-expanded", "false");
     expect(more.firstElementChild).toHaveAttribute("data-chevron");
+    expect(more).not.toHaveAttribute("aria-controls");
     await userEvent.click(more);
     expect(more).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(more.getAttribute("aria-controls") ?? "")).not.toBeNull();
     expect(
       screen.getByText("A .nocturne file, written as a .partial file until complete"),
     ).toBeInTheDocument();
