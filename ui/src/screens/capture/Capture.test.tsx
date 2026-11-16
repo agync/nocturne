@@ -142,6 +142,58 @@ describe("keeping words", () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
+  it("draws only the card in a see-through window", async () => {
+    document.documentElement.dataset.surface = "floating";
+    try {
+      renderApp({
+        hash: "#/quick-capture",
+        engine: createMockEngine(),
+        platform: fakePlatform(null, { quickCapture: true }),
+      });
+      const floating = await screen.findByRole("main", { name: "Keep something" });
+      expect(floating).toHaveAttribute("data-floating", "true");
+      expect(floating).toHaveAttribute("data-fitted", "true");
+    } finally {
+      delete document.documentElement.dataset.surface;
+    }
+  });
+
+  it("fits its own window to the card", async () => {
+    const observed: Array<() => void> = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: () => void) {
+          observed.push(cb);
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    try {
+      const platform = fakePlatform(null, { quickCapture: true });
+      const fit = vi.fn(async () => undefined);
+      platform.fitQuickCapture = fit;
+      renderApp({ hash: "#/quick-capture", engine: createMockEngine(), platform });
+      const page = await screen.findByRole("main", { name: "Keep something" });
+      expect(page).not.toHaveAttribute("data-floating");
+      expect(page).toHaveAttribute("data-fitted", "true");
+      observed.forEach((cb) => {
+        cb();
+      });
+      expect(fit).toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("keeps its page in the main window", async () => {
+    renderApp({ hash: "#/quick-capture", engine: createMockEngine(), platform: fakePlatform() });
+    const page = await screen.findByRole("main", { name: "Keep something" });
+    expect(page).not.toHaveAttribute("data-floating");
+    expect(page).not.toHaveAttribute("data-fitted");
+  });
+
   it("decides to close by the window it is in, not by the route", async () => {
     const platform = fakePlatform();
     const close = vi.fn(async () => undefined);

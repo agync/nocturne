@@ -27,6 +27,7 @@ function fakePlatform(initial: SystemTheme | null) {
     inQuickCapture: () => false,
     originalSrc: (path) => `file:${path}`,
     closeQuickCapture: async () => undefined,
+    fitQuickCapture: async () => undefined,
     handOffAsk: async () => undefined,
     openInMain: async () => undefined,
     onOpenInMain: () => () => undefined,

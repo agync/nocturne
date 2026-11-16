@@ -31,6 +31,12 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* The quick capture window: only its card shows. */
+:root[data-surface="floating"],
+:root[data-surface="floating"] body {
+  background: transparent;
+}
+
 h1,
 h2,
 h3,

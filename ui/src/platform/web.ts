@@ -110,6 +110,8 @@ export class WebPlatform implements Platform {
     window.location.hash = "#/today";
   }
 
+  async fitQuickCapture(): Promise<void> {}
+
   async handOffAsk(question: string): Promise<void> {
     for (const cb of [...this.askListeners]) cb(question);
   }

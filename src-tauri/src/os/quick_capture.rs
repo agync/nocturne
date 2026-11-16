@@ -10,6 +10,8 @@ use tauri::{
 
 pub const LABEL: &str = "quick-capture";
 const ROUTE: &str = "index.html#/quick-capture";
+/// The same page when the window can be see-through: the interface then draws only the card.
+const ROUTE_SEE_THROUGH: &str = "index.html?see-through#/quick-capture";
 const WIDTH: f64 = 560.0;
 const HEIGHT: f64 = 240.0;
 /// The second-launch flag that opens this window (a desktop shortcut runs it).
@@ -55,16 +57,34 @@ fn make<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Option<WebviewWindow<R>
         show(&w)?;
         return Ok(None);
     }
-    let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(ROUTE.into()))
+    let see_through = can_see_through();
+    let route = if see_through {
+        ROUTE_SEE_THROUGH
+    } else {
+        ROUTE
+    };
+    let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::App(route.into()))
         .title("Nocturne")
         .inner_size(WIDTH, HEIGHT)
-        .resizable(false)
+        // Linux fits the window to the card as it grows and shrinks.
+        .resizable(cfg!(target_os = "linux"))
         .decorations(false)
         .always_on_top(true)
         .skip_taskbar(true)
+        // Only the card shows where the window can be see-through: the page around it is clear
+        // and the card draws its own shadow. Elsewhere the window is opaque and fitted.
+        .transparent(see_through)
+        .shadow(!see_through)
         .visible(false)
         .build()?;
     Ok(Some(window))
+}
+
+/// Whether a see-through window is drawn right here. WebKitGTK repaints only the damaged part of
+/// a transparent window, so once the text field is focused the rest of the card vanishes. Linux
+/// keeps an opaque window, which the page fits to its card instead.
+const fn can_see_through() -> bool {
+    !cfg!(target_os = "linux")
 }
 
 fn show<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
@@ -121,6 +141,12 @@ mod tests {
         ])));
         assert!(!wants_quick_capture(&args(&["--quick-capture"])));
         assert!(!wants_quick_capture(&args(&["nocturne", "--hidden"])));
+    }
+
+    #[test]
+    fn the_see_through_route_carries_the_flag_the_page_reads() {
+        assert!(ROUTE_SEE_THROUGH.contains("?see-through#"));
+        assert!(!ROUTE.contains("see-through"));
     }
 
     #[test]

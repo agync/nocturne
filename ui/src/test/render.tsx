@@ -46,6 +46,7 @@ export function fakePlatform(
     originalSrc: (path) => `file:${path}`,
     inQuickCapture: () => options.quickCapture ?? false,
     closeQuickCapture: async () => undefined,
+    fitQuickCapture: async () => undefined,
     handOffAsk: async () => undefined,
     onAskHandOff: (cb) => {
       onHandOff = cb;

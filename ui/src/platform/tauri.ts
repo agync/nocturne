@@ -1,7 +1,7 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
-import { getCurrentWindow, Window } from "@tauri-apps/api/window";
+import { getCurrentWindow, LogicalSize, Window } from "@tauri-apps/api/window";
 import type { Platform, SystemTheme, Unsubscribe } from "./types";
 
 /** Defers to a promise-returning subscription while handing back a synchronous unsubscribe. */
@@ -100,6 +100,10 @@ export class TauriPlatform implements Platform {
 
   async closeQuickCapture(): Promise<void> {
     await getCurrentWindow().close();
+  }
+
+  async fitQuickCapture(height: number): Promise<void> {
+    await getCurrentWindow().setSize(new LogicalSize(window.innerWidth, Math.ceil(height)));
   }
 
   async handOffAsk(question: string): Promise<void> {
