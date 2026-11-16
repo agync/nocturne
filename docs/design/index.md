@@ -9,4 +9,5 @@ screen follows, the data model, and how quality is measured.
 - [Back up and restore](backup-and-restore.md) - One file with everything, locked with a passphrase the person chooses, and the way back from it.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
+- [Landing page, trust and timing copy](landing-trust-copy.md) - The approved words that tell a first reader it works on any schedule, never edits what they kept, and needs no tidying.
 - [Advanced details](advanced-details.md) - The words the advanced details view uses where they have been designed and approved.
