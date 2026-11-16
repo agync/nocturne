@@ -1,4 +1,5 @@
 import { type ClipboardEvent, useEffect, useRef, useState } from "react";
+import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
 import { CODE_GROUP, CODE_LEN } from "../protocol";
 import { CameraError, type ScannerEnv, startScan } from "../scanner";
@@ -23,7 +24,7 @@ export function Welcome({
     <Page bar={<Bar />}>
       <main className="ph-main">
         <h1 className="ph-h1 ph-h1--big">{t("phone.welcome.title")}</h1>
-        <p className="ph-body">{t("phone.welcome.body")}</p>
+        <p className="ph-body">{tc("phone.welcome.body")}</p>
         {unreached && (
           <p className="ph-hint" role="status">
             {t("phone.welcome.unreached")}
@@ -311,7 +312,7 @@ export function Scan({
         </p>
       </div>
       <div className="ph-scan-foot">
-        <p>{t(looking)}</p>
+        <p>{tc(looking)}</p>
         <Button onClick={onSwitch}>
           {purpose === "pair" ? t("phone.scan.type") : t("phone.scan.words")}
         </Button>
@@ -415,7 +416,7 @@ export function RelinkHere() {
           <Icon name="pin" size={24} />
         </span>
         <h1 className="ph-h1">{t("phone.relink.here.title")}</h1>
-        <p className="ph-body">{t("phone.relink.here.body")}</p>
+        <p className="ph-body">{tc("phone.relink.here.body")}</p>
       </main>
     </Page>
   );

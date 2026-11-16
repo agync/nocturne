@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Progress } from "../../components/Progress/Progress";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
@@ -167,7 +168,7 @@ export function SetupFlow({ view }: { view: RemoteView }) {
         <h1 className="t-page-title">
           {t("away.ask.title", { company: companyOf(choice), size: formatBytes(ESTIMATE[choice]) })}
         </h1>
-        <p className={styles.body}>{t("away.ask.body", { company: companyOf(choice) })}</p>
+        <p className={styles.body}>{tc("away.ask.body", { company: companyOf(choice) })}</p>
         <dl className={styles.facts}>
           <div>
             <dt>{t("away.ask.from")}</dt>

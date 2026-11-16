@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Redirect } from "wouter";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { formatBytes, formatDayMonth, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -426,7 +427,7 @@ function RelinkPage({
         </div>
         <div className={styles.relinkText}>
           <h2 className={styles.statement}>{t("away.relink.title")}</h2>
-          <p className={styles.body}>{t("away.relink.how")}</p>
+          <p className={styles.body}>{tc("away.relink.how")}</p>
           <div className={styles.typed}>
             <span className={styles.sub}>{t("away.relink.cantScan")}</span>
             <span className={styles.mono}>{words.join(" · ")}</span>
