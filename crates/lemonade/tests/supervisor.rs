@@ -4,6 +4,7 @@ mod common;
 
 use std::time::{Duration, Instant};
 
+use nocturne_lemonade::supervisor::WINDOWS_BASICS;
 use nocturne_lemonade::{Dirs, RuntimeError, RuntimeState, Supervisor, SupervisorOptions};
 use serde_json::Value;
 
@@ -134,8 +135,12 @@ async fn the_child_environment_holds_only_what_we_allow() {
         .keys()
         .map(String::as_str)
         .filter(|k| !common::set_by_the_platform(k))
+        .filter(|k| !(cfg!(windows) && WINDOWS_BASICS.contains(k)))
         .collect();
     keys.sort_unstable();
+    if cfg!(windows) {
+        assert!(env.get("ComSpec").is_some(), "{env}");
+    }
     let mut allowed = vec![
         "HOME",
         "LANG",

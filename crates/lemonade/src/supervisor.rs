@@ -1146,13 +1146,17 @@ enum Launch {
 }
 
 /// The whole environment the engine starts with: a home, a path, its runtime folder, a locale
-/// and the launch's two keys, and on Windows its profile and temporary folders. Nothing else, no
-/// provider key and no proxy.
+/// and the launch's two keys, and on Windows its profile and temporary folders and the system's
+/// own settings ([`windows_basics`]). Nothing else, no provider key and no proxy.
 #[cfg_attr(not(windows), allow(unused_variables))]
 fn spawn_env(dirs: &Dirs, keys: &Keys, temp: &Path) -> Vec<(&'static str, std::ffi::OsString)> {
+    #[cfg(windows)]
+    let path = windows_path(&|name| std::env::var_os(name));
+    #[cfg(not(windows))]
+    let path = std::ffi::OsString::from("/usr/bin:/bin");
     let env: Vec<(&'static str, std::ffi::OsString)> = vec![
         ("HOME", dirs.root.clone().into_os_string()),
-        ("PATH", default_path().into()),
+        ("PATH", path),
         ("XDG_RUNTIME_DIR", dirs.run().into_os_string()),
         ("LANG", "C.UTF-8".into()),
         ("LEMONADE_API_KEY", keys.api.clone().into()),
@@ -1166,20 +1170,64 @@ fn spawn_env(dirs: &Dirs, keys: &Keys, temp: &Path) -> Vec<(&'static str, std::f
         env.push(("USERPROFILE", dirs.root.clone().into_os_string()));
         env.push(("TMP", temp.into()));
         env.push(("TEMP", temp.into()));
-        if let Some(root) = std::env::var_os("SystemRoot") {
-            env.push(("SystemRoot", root));
-        }
+        env.extend(windows_basics(&|name| std::env::var_os(name)));
         env
     };
     env
 }
 
-fn default_path() -> &'static str {
-    if cfg!(windows) {
-        "C:\\Windows\\System32"
-    } else {
-        "/usr/bin:/bin"
+/// What Windows itself sets for every program and the engine's probes need: `cmd` finds
+/// `COMSPEC` and `PATHEXT`, the system tools find their folders. None of it names the person.
+pub const WINDOWS_BASICS: &[&str] = &[
+    "SystemDrive",
+    "SystemRoot",
+    "windir",
+    "ComSpec",
+    "PATHEXT",
+    "ProgramData",
+    "ProgramFiles",
+    "ProgramFiles(x86)",
+    "ALLUSERSPROFILE",
+    "NUMBER_OF_PROCESSORS",
+    "PROCESSOR_ARCHITECTURE",
+    "OS",
+];
+
+/// The [`WINDOWS_BASICS`] the app has, from `parent`.
+#[cfg(any(windows, test))]
+fn windows_basics(
+    parent: &dyn Fn(&str) -> Option<std::ffi::OsString>,
+) -> Vec<(&'static str, std::ffi::OsString)> {
+    WINDOWS_BASICS
+        .iter()
+        .filter_map(|name| parent(name).map(|value| (*name, value)))
+        .collect()
+}
+
+/// The system's own program folders, under the Windows folder `parent` names.
+#[cfg(any(windows, test))]
+fn windows_path(parent: &dyn Fn(&str) -> Option<std::ffi::OsString>) -> std::ffi::OsString {
+    let root = ["SystemRoot", "windir"]
+        .into_iter()
+        .find_map(|name| parent(name).filter(|r| !r.is_empty()))
+        .unwrap_or_else(|| r"C:\Windows".into());
+    let mut path = std::ffi::OsString::new();
+    for (i, under) in [
+        r"\System32",
+        "",
+        r"\System32\Wbem",
+        r"\System32\WindowsPowerShell\v1.0",
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        if i > 0 {
+            path.push(";");
+        }
+        path.push(&root);
+        path.push(under);
     }
+    path
 }
 
 async fn wait_exit(running: &mut Running, within: Duration) -> Option<()> {
@@ -1353,6 +1401,94 @@ mod tests {
         );
         assert_eq!(given("TMP"), Some(dirs.run().into_os_string()));
         assert_eq!(given("TEMP"), Some(dirs.run().into_os_string()));
+        let mut names: Vec<String> = env.iter().map(|(n, _)| n.to_ascii_uppercase()).collect();
+        names.sort();
+        let count = names.len();
+        names.dedup();
+        assert_eq!(names.len(), count, "a name is given twice");
+        let path = given("PATH")
+            .unwrap()
+            .to_string_lossy()
+            .to_ascii_lowercase();
+        assert!(path.contains(r"\system32\wbem"), "{path}");
+        assert!(given("ComSpec").is_some());
+    }
+
+    fn parent_env(pairs: &[(&str, &str)]) -> impl Fn(&str) -> Option<std::ffi::OsString> {
+        let map: std::collections::HashMap<String, std::ffi::OsString> = pairs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.into()))
+            .collect();
+        move |name| map.get(name).cloned()
+    }
+
+    #[test]
+    fn the_windows_path_is_the_systems_own_folders() {
+        let parent = parent_env(&[("SystemRoot", r"D:\Win"), ("windir", r"E:\Other")]);
+        assert_eq!(
+            windows_path(&parent),
+            r"D:\Win\System32;D:\Win;D:\Win\System32\Wbem;D:\Win\System32\WindowsPowerShell\v1.0"
+        );
+        let parent = parent_env(&[("windir", r"E:\Other")]);
+        assert!(
+            windows_path(&parent)
+                .to_string_lossy()
+                .starts_with(r"E:\Other\System32;")
+        );
+        let parent = parent_env(&[("SystemRoot", ""), ("windir", r"E:\Other")]);
+        assert!(
+            windows_path(&parent)
+                .to_string_lossy()
+                .starts_with(r"E:\Other\System32;")
+        );
+        let parent = parent_env(&[("SystemRoot", "")]);
+        assert!(
+            windows_path(&parent)
+                .to_string_lossy()
+                .starts_with(r"C:\Windows\System32;")
+        );
+    }
+
+    #[test]
+    fn only_the_systems_own_settings_pass_through() {
+        let parent = parent_env(&[
+            ("ComSpec", r"C:\Windows\system32\cmd.exe"),
+            ("PATHEXT", ".COM;.EXE;.BAT;.CMD"),
+            ("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+            ("NUMBER_OF_PROCESSORS", "16"),
+            ("USERPROFILE", r"C:\Users\someone"),
+            ("USERNAME", "someone"),
+            ("HTTPS_PROXY", "http://proxy"),
+            ("PATH", r"C:\Users\someone\bin"),
+            ("NOCTURNE_ONLINE_KEY", "secret"),
+        ]);
+        let given = windows_basics(&parent);
+        let names: Vec<&str> = given.iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            [
+                "ComSpec",
+                "PATHEXT",
+                "ProgramFiles(x86)",
+                "NUMBER_OF_PROCESSORS"
+            ]
+        );
+        assert_eq!(given[0].1, r"C:\Windows\system32\cmd.exe");
+        for name in WINDOWS_BASICS {
+            let upper = name.to_ascii_uppercase();
+            assert!(!upper.contains("PROXY") && !upper.contains("KEY"), "{name}");
+            let personal = [
+                "PATH",
+                "HOME",
+                "USERPROFILE",
+                "USERNAME",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "TMP",
+                "TEMP",
+            ];
+            assert!(!personal.contains(&upper.as_str()), "{name}");
+        }
     }
 
     #[test]
