@@ -68,6 +68,21 @@ export default function Capture() {
     document.title = `${t("screen.capture.title")} · ${t("app.name")}`;
   }, []);
 
+  const floating = document.documentElement.dataset.surface === "floating";
+  // In its own window the page hugs the card, and the window follows the card's height.
+  const fitted = platform.inQuickCapture();
+  const stack = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const card = stack.current;
+    const frame = page.current;
+    if (!fitted || !card || !frame || typeof ResizeObserver === "undefined") return;
+    const fit = () => void platform.fitQuickCapture(frame.offsetHeight).catch(() => undefined);
+    const observer = new ResizeObserver(fit);
+    observer.observe(card);
+    return () => observer.disconnect();
+  }, [fitted, platform]);
+
   const close = useCallback(async () => {
     await platform.closeQuickCapture();
     // In a browser the window is the main one: leaving it goes to Today, so follow the request.
@@ -362,12 +377,14 @@ export default function Capture() {
     <main
       ref={page}
       className={styles.page}
+      data-floating={floating || undefined}
+      data-fitted={fitted || undefined}
       tabIndex={-1}
       aria-label={t("capture.region")}
       onKeyDown={onPageKeyDown}
     >
       <h1 className="sr-only">{t("screen.capture.title")}</h1>
-      <div className={styles.stack}>
+      <div ref={stack} className={styles.stack}>
         <div className={styles.live} role="status" aria-live="polite" aria-atomic="true">
           {announcement}
         </div>

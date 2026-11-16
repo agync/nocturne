@@ -30,6 +30,8 @@ export interface Platform {
   inQuickCapture(): boolean;
   /** Closes the floating quick-capture window (or leaves the screen, in a browser). */
   closeQuickCapture(): Promise<void>;
+  /** Sets the quick-capture window's height, in pixels, so it fits its card. A browser has none. */
+  fitQuickCapture(height: number): Promise<void>;
   /** Sends a question to the main window, which shows the answer. */
   handOffAsk(question: string): Promise<void>;
   /** Hears questions handed off from the quick-capture window. */

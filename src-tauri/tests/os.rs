@@ -70,6 +70,8 @@ fn quick_capture_capability_is_exact() {
         "core:window:allow-close",
         "core:window:allow-show",
         "core:window:allow-set-focus",
+        // The window follows its card's height, so it can set its own size and nothing more.
+        "core:window:allow-set-size",
         "core:window:allow-get-all-windows",
     ]
     .into();
@@ -107,6 +109,7 @@ fn quick_capture_capability_covers_what_the_adapter_calls_for_it() {
         ("Window.getByLabel(", "core:window:allow-get-all-windows"),
         (".show()", "core:window:allow-show"),
         (".setFocus()", "core:window:allow-set-focus"),
+        (".setSize(", "core:window:allow-set-size"),
         ("emitTo(", "core:event:allow-emit-to"),
     ] {
         assert!(src.contains(call), "the adapter no longer uses {call}");
