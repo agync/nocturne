@@ -19,6 +19,7 @@ mod error;
 mod export;
 mod forget;
 mod fsutil;
+pub mod guide;
 mod lifecycle;
 mod memory;
 mod mind;
@@ -47,6 +48,7 @@ pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_titl
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
+pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
 pub use mind::{
     AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
     Transcript, Understanding,

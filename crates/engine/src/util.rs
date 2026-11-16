@@ -115,7 +115,7 @@ pub(crate) fn opt_enum<T: DeserializeOwned>(s: Option<String>) -> Result<Option<
 }
 
 /// Words worth searching for: lowercase alphanumeric runs of two or more characters.
-fn fts_words(q: &str) -> Vec<String> {
+pub(crate) fn fts_words(q: &str) -> Vec<String> {
     q.to_lowercase()
         .split(|c: char| !c.is_alphanumeric())
         .filter(|w| w.chars().count() >= 2)

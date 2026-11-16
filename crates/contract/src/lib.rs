@@ -10,6 +10,7 @@
 
 mod ask;
 mod events;
+mod guide;
 mod item;
 mod memory;
 mod models;
@@ -20,6 +21,7 @@ mod system;
 
 pub use ask::*;
 pub use events::*;
+pub use guide::*;
 pub use item::*;
 pub use memory::*;
 pub use models::*;
