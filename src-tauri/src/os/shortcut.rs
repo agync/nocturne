@@ -113,7 +113,7 @@ pub struct PortalRegistrar {
 struct PortalShared {
     held: std::sync::Mutex<Vec<(Shortcut, zbus::zvariant::OwnedObjectPath)>>,
     /// Shortcuts the desktop was asked for and has not answered about.
-    asked: std::sync::Mutex<Vec<Shortcut>>,
+    asked: std::sync::Mutex<Vec<Asked>>,
     keys: std::sync::Mutex<Option<String>>,
     failed: std::sync::atomic::AtomicBool,
 }
@@ -124,9 +124,18 @@ impl PortalShared {
         self.held.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    fn asked(&self) -> std::sync::MutexGuard<'_, Vec<Shortcut>> {
+    fn asked(&self) -> std::sync::MutexGuard<'_, Vec<Asked>> {
         self.asked.lock().unwrap_or_else(|e| e.into_inner())
     }
+}
+
+/// A question to the desktop that is still open: what for, the session token its requests are
+/// named after, and how to stop waiting for it.
+#[cfg(target_os = "linux")]
+struct Asked {
+    shortcut: Shortcut,
+    token: String,
+    stop: tokio::sync::oneshot::Sender<()>,
 }
 
 #[cfg(target_os = "linux")]
@@ -139,17 +148,18 @@ impl PortalRegistrar {
     ) -> Option<PortalRegistrar> {
         let bus = bus.clone();
         // Listening starts before anything is bound, so no press is missed.
-        let (conn, version, mut presses) = run_bounded(CONNECT_LIMIT, async move {
+        let (conn, version, mut presses, portal) = run_bounded(CONNECT_LIMIT, async move {
             let conn = bus.connect().await.ok()?;
             let version = super::portal::global_shortcuts_version(&conn).await?;
             let presses = super::portal::activations(&conn).await.ok()?;
-            Some((conn, version, presses))
+            let portal = super::portal::owner(&conn).await.ok()?;
+            Some((conn, version, presses, portal))
         })
         .flatten()?;
         let shared = Arc::new(PortalShared::default());
         let sessions = shared.clone();
         tauri::async_runtime::spawn(async move {
-            while let Some(session) = super::portal::next_activation(&mut presses).await {
+            while let Some(session) = super::portal::next_activation(&mut presses, &portal).await {
                 if sessions.held().iter().any(|(_, s)| *s == session) {
                     on_press();
                 }
@@ -168,42 +178,61 @@ impl Registrar for PortalRegistrar {
     fn register(&self, shortcut: &Shortcut) -> Result<(), String> {
         use std::sync::atomic::Ordering;
         self.shared.failed.store(false, Ordering::SeqCst);
-        self.shared.asked().push(*shortcut);
+        let token = super::portal::token();
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        self.shared.asked().push(Asked {
+            shortcut: *shortcut,
+            token: token.clone(),
+            stop,
+        });
         let conn = self.conn.clone();
         let shared = self.shared.clone();
         let shortcut = *shortcut;
         let preferred = portal_trigger(&shortcut);
         tauri::async_runtime::spawn(async move {
-            let token = super::portal::token();
-            let answer = super::portal::bind_quick_keep(
+            let asking = super::portal::bind_quick_keep(
                 &conn,
                 PORTAL_DESCRIPTION,
                 preferred.as_deref(),
                 &token,
-            )
-            .await;
-            let still_wanted = {
-                let mut asked = shared.asked();
-                let wanted = asked.contains(&shortcut);
-                asked.retain(|s| *s != shortcut);
-                wanted
+            );
+            let answer = tokio::select! {
+                answer = asking => answer,
+                // Let go while the desktop was asking: the question is withdrawn.
+                _ = stopped => return,
             };
-            match answer {
-                Ok(bound) if still_wanted => {
-                    match &bound.trigger {
-                        Some(keys) => tracing::info!("the desktop bound the shortcut to {keys}"),
-                        None => tracing::info!("the desktop holds the shortcut"),
+            // The question leaves `asked` and the session enters `held` under one lock, so
+            // `unregister` finds the shortcut in one or the other.
+            let (still_wanted, late) = {
+                let mut asked = shared.asked();
+                let still_wanted = asked.iter().any(|a| a.token == token);
+                asked.retain(|a| a.token != token);
+                let mut late = None;
+                match &answer {
+                    Ok(bound) if still_wanted => {
+                        match &bound.trigger {
+                            Some(keys) => {
+                                tracing::info!("the desktop bound the shortcut to {keys}")
+                            }
+                            None => tracing::info!("the desktop holds the shortcut"),
+                        }
+                        *shared.keys.lock().unwrap_or_else(|e| e.into_inner()) =
+                            bound.trigger.clone();
+                        shared.held().push((shortcut, bound.session.clone()));
                     }
-                    *shared.keys.lock().unwrap_or_else(|e| e.into_inner()) = bound.trigger;
-                    shared.held().push((shortcut, bound.session));
+                    Ok(bound) => late = Some(bound.session.clone()),
+                    Err(_) => {}
                 }
-                // Let go while the desktop was deciding.
-                Ok(bound) => super::portal::close(&conn, &bound.session).await,
-                Err(e) => {
-                    tracing::warn!("global shortcut not registered: {e}");
-                    if still_wanted {
-                        shared.failed.store(true, Ordering::SeqCst);
-                    }
+                (still_wanted, late)
+            };
+            // Let go while the desktop was deciding.
+            if let Some(session) = late {
+                super::portal::close(&conn, &session).await;
+            }
+            if let Err(e) = answer {
+                tracing::warn!("global shortcut not registered: {e}");
+                if still_wanted {
+                    shared.failed.store(true, Ordering::SeqCst);
                 }
             }
         });
@@ -211,16 +240,43 @@ impl Registrar for PortalRegistrar {
     }
 
     fn unregister(&self, shortcut: &Shortcut) -> Result<(), String> {
-        self.shared.asked().retain(|s| s != shortcut);
+        let open: Vec<Asked> = {
+            let mut asked = self.shared.asked();
+            let (open, kept) = asked.drain(..).partition(|a| a.shortcut == *shortcut);
+            *asked = kept;
+            open
+        };
         let gone: Vec<_> = {
             let mut held = self.shared.held();
             let (gone, kept) = held.drain(..).partition(|(s, _)| s == shortcut);
             *held = kept;
             gone
         };
+        // Questions still open are withdrawn, so the desktop stops asking, and their sessions
+        // closed; held sessions are closed.
+        let mut sessions: Vec<_> = gone.into_iter().map(|(_, s)| s).collect();
+        let mut requests = Vec::new();
+        if let Some(me) = self.conn.unique_name().map(|n| n.to_string()) {
+            for a in &open {
+                for token in super::portal::bind_tokens(&a.token) {
+                    requests.push(super::portal::request_path(&me, &token));
+                }
+                if let Ok(path) = zbus::zvariant::OwnedObjectPath::try_from(
+                    super::portal::session_path(&me, &a.token),
+                ) {
+                    sessions.push(path);
+                }
+            }
+        }
+        for a in open {
+            let _ = a.stop.send(());
+        }
         let conn = self.conn.clone();
         run_bounded(std::time::Duration::from_secs(5), async move {
-            for (_, session) in gone {
+            for request in requests {
+                super::portal::cancel(&conn, &request).await;
+            }
+            for session in sessions {
                 super::portal::close(&conn, &session).await;
             }
         });
@@ -480,6 +536,7 @@ pub fn held_keys(state: &OsState) -> Option<String> {
 /// Ask the desktop again for a shortcut it did not add. Nothing to do where it is held, or where
 /// the app holds its own.
 pub fn retry(state: &OsState, spelling: &str) {
+    let writing = state.shortcut_writer();
     let (registrar, current) = {
         let slot = state.shortcut();
         (slot.registrar.clone(), slot.current)
@@ -494,7 +551,11 @@ pub fn retry(state: &OsState, spelling: &str) {
         Some(shortcut) => {
             let _ = registrar.register(&shortcut);
         }
-        None => install(state, spelling, true),
+        None => {
+            // `install` takes the writer itself.
+            drop(writing);
+            install(state, spelling, true);
+        }
     }
 }
 
@@ -733,7 +794,7 @@ mod tests {
         use std::sync::atomic::{AtomicUsize, Ordering};
         let pressed = Arc::new(AtomicUsize::new(0));
         let counter = pressed.clone();
-        let (_bus, fake, state, _dir) = portal_state(
+        let (bus, fake, state, _dir) = portal_state(
             0,
             std::time::Duration::ZERO,
             Arc::new(move || {
@@ -763,6 +824,12 @@ mod tests {
 
         let me = fake.client_of(&sessions[1].0);
         tauri::async_runtime::block_on(async {
+            // Someone else on the bus cannot press it for the portal.
+            let impostor = crate::os::portal::Bus::at(&bus.address)
+                .connect()
+                .await
+                .unwrap();
+            crate::os::portal::tests::press(&impostor, &me, &sessions[1].0).await;
             crate::os::portal::tests::press(&fake.server, &me, &sessions[0].0).await;
             crate::os::portal::tests::press(&fake.server, &me, &sessions[1].0).await;
         });
@@ -842,15 +909,24 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn a_shortcut_let_go_while_the_desktop_asks_is_closed_when_it_answers() {
+    fn a_shortcut_let_go_while_the_desktop_asks_withdraws_the_question() {
         let (_bus, fake, state, _dir) =
             portal_state(0, std::time::Duration::from_millis(500), Arc::new(|| {}));
         install(&state, DEFAULT, true);
+        eventually("a session made", || fake.created.lock().unwrap().len() == 1);
         release(&state);
-        eventually("the late session let go", || {
-            fake.closed.lock().unwrap().len() == 1
+        let session = fake.created.lock().unwrap()[0].clone();
+        eventually("the session let go", || {
+            *fake.closed.lock().unwrap() == vec![session.clone()]
         });
+        std::thread::sleep(std::time::Duration::from_millis(700));
         assert_eq!(held_keys(&state), None);
+        assert_eq!(
+            desktop_view(&state).map(|d| d.state),
+            Some(DesktopShortcutState::Asking),
+            "the late answer is not taken"
+        );
+        assert_eq!(fake.closed.lock().unwrap().len(), 1);
     }
 
     #[cfg(target_os = "linux")]

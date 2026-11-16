@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use zbus::export::futures_core::Stream;
+use zbus::names::OwnedUniqueName;
 use zbus::zvariant::{DynamicType, OwnedObjectPath, OwnedValue, Value};
 use zbus::{Connection, MatchRule, MessageStream};
 
@@ -106,6 +107,31 @@ pub fn request_path(unique: &str, token: &str) -> String {
     )
 }
 
+/// The unique bus name the portal answers from now.
+pub async fn owner(conn: &Connection) -> zbus::Result<OwnedUniqueName> {
+    let name = zbus::names::BusName::try_from(DESTINATION)?;
+    Ok(zbus::fdo::DBusProxy::new(conn)
+        .await?
+        .get_name_owner(name)
+        .await?)
+}
+
+/// Whether `message` came from `sender`. The match rules already ask the bus for the portal's
+/// messages only; this checks it again, so nothing else on the bus can answer for the portal.
+fn sent_by(message: &zbus::Message, sender: &OwnedUniqueName) -> bool {
+    message
+        .header()
+        .sender()
+        .is_some_and(|s| s.as_str() == sender.as_str())
+}
+
+/// Withdraw a request that is still open, so the desktop stops asking the person.
+pub async fn cancel(conn: &Connection, request: &str) {
+    let _ = conn
+        .call_method(Some(DESTINATION), request, Some(REQUEST), "Close", &())
+        .await;
+}
+
 /// The next message on a stream, or `None` when it ends.
 async fn next(stream: &mut MessageStream) -> Option<zbus::Result<zbus::Message>> {
     std::future::poll_fn(|cx| Pin::new(&mut *stream).poll_next(cx)).await
@@ -138,9 +164,12 @@ where
         .await
         .map_err(Failed::silent)?;
     let handle: OwnedObjectPath = reply.body().deserialize().map_err(Failed::silent)?;
+    let portal = owner(conn).await.map_err(Failed::silent)?;
     while let Some(message) = next(&mut answers).await {
         let Ok(message) = message else { continue };
-        if message.header().path().map(|p| p.as_str()) != Some(handle.as_str()) {
+        if message.header().path().map(|p| p.as_str()) != Some(handle.as_str())
+            || !sent_by(&message, &portal)
+        {
             continue;
         }
         let (code, results): (u32, Results) =
@@ -248,16 +277,16 @@ pub async fn bind_quick_keep(
     preferred: Option<&str>,
     session_token: &str,
 ) -> Result<Bound, String> {
-    let request_token = token();
+    let [create_token, bind_token] = bind_tokens(session_token);
     let mut options = Options::new();
-    options.insert("handle_token", Value::from(request_token.as_str()));
+    options.insert("handle_token", Value::from(create_token.as_str()));
     options.insert("session_handle_token", Value::from(session_token));
     let created = request(conn, GLOBAL_SHORTCUTS, "CreateSession", &(options,)).await?;
     let session = created
         .get("session_handle")
         .and_then(object_path)
         .ok_or("the portal made no session")?;
-    let bound = bind(conn, &session, description, preferred).await;
+    let bound = bind(conn, &session, description, preferred, &bind_token).await;
     if bound.is_err() {
         close(conn, &session).await;
     }
@@ -269,15 +298,15 @@ async fn bind(
     session: &OwnedObjectPath,
     description: &str,
     preferred: Option<&str>,
+    token: &str,
 ) -> Result<Option<String>, String> {
     let mut shortcut: HashMap<&str, Value> = HashMap::new();
     shortcut.insert("description", Value::from(description));
     if let Some(p) = preferred {
         shortcut.insert("preferred_trigger", Value::from(p));
     }
-    let token = token();
     let mut options = Options::new();
-    options.insert("handle_token", Value::from(token.as_str()));
+    options.insert("handle_token", Value::from(token));
     let body = (session, vec![(QUICK_KEEP, shortcut)], "", options);
     let results = request(conn, GLOBAL_SHORTCUTS, "BindShortcuts", &body).await?;
     let shortcuts: Vec<(String, Results)> = results
@@ -293,6 +322,12 @@ async fn bind(
         .get("trigger_description")
         .and_then(|v| String::try_from(v.try_clone().ok()?).ok())
         .filter(|t| !t.is_empty()))
+}
+
+/// The `handle_token`s of the two requests [`bind_quick_keep`] makes with `session_token`
+/// (`CreateSession`, then `BindShortcuts`), so a caller can withdraw them with [`cancel`].
+pub fn bind_tokens(session_token: &str) -> [String; 2] {
+    [format!("{session_token}_c"), format!("{session_token}_b")]
 }
 
 /// End a session, which lets its shortcut go.
@@ -322,10 +357,17 @@ pub async fn activations(conn: &Connection) -> Result<MessageStream, String> {
         .map_err(|e| e.to_string())
 }
 
-/// The session of the next press of the quick keep shortcut, or `None` when the stream ends.
-pub async fn next_activation(stream: &mut MessageStream) -> Option<OwnedObjectPath> {
+/// The session of the next press of the quick keep shortcut sent by `portal` (its [`owner`]),
+/// or `None` when the stream ends.
+pub async fn next_activation(
+    stream: &mut MessageStream,
+    portal: &OwnedUniqueName,
+) -> Option<OwnedObjectPath> {
     while let Some(message) = next(stream).await {
         let Ok(message) = message else { continue };
+        if !sent_by(&message, portal) {
+            continue;
+        }
         type Activated = (OwnedObjectPath, String, u64, Results);
         if let Ok((session, id, _, _)) = message.body().deserialize::<Activated>()
             && id == QUICK_KEEP
@@ -527,6 +569,7 @@ pub(crate) mod tests {
         pub binds: Binds,
         pub closed: Closed,
         pub configured: Closed,
+        pub created: Closed,
         /// Hold every bind this long before answering, as a person deciding does.
         pub delay: Duration,
     }
@@ -581,6 +624,7 @@ pub(crate) mod tests {
             let sender = header.sender().unwrap().to_string();
             let request = request_path(&sender, &text(&options, "handle_token").unwrap());
             let session = session_path(&sender, &text(&options, "session_handle_token").unwrap());
+            self.created.lock().unwrap().push(session.clone());
             server
                 .at(
                     session.as_str(),
@@ -637,6 +681,7 @@ pub(crate) mod tests {
         pub binds: Binds,
         pub closed: Closed,
         pub configured: Closed,
+        pub created: Closed,
     }
 
     impl Fake {
@@ -651,12 +696,14 @@ pub(crate) mod tests {
         let binds = Binds::default();
         let closed = Closed::default();
         let configured = Closed::default();
+        let created = Closed::default();
         let fake = FakeShortcuts {
             code,
             keys: "Ctrl+Shift+Space".into(),
             binds: binds.clone(),
             closed: closed.clone(),
             configured: configured.clone(),
+            created: created.clone(),
             delay,
         };
         let server = zbus::connection::Builder::address(bus.address.as_str())
@@ -673,6 +720,7 @@ pub(crate) mod tests {
             binds,
             closed,
             configured,
+            created,
         }
     }
 
@@ -704,6 +752,7 @@ pub(crate) mod tests {
             binds,
             closed,
             configured,
+            ..
         } = shortcuts_portal(&bus, 0, Duration::ZERO).await;
         let conn = Bus::at(&bus.address).connect().await.unwrap();
         assert_eq!(global_shortcuts_version(&conn).await, Some(2));
@@ -726,9 +775,10 @@ pub(crate) mod tests {
             *binds.lock().unwrap(),
             vec![(bound.session.to_string(), Some("CTRL+SHIFT+space".into()))]
         );
+        let portal = owner(&conn).await.unwrap();
         press(&server, conn.unique_name().unwrap(), bound.session.as_str()).await;
         assert_eq!(
-            next_activation(&mut presses).await,
+            next_activation(&mut presses, &portal).await,
             Some(bound.session.clone())
         );
         configure(&conn, &bound.session).await.unwrap();
