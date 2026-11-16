@@ -55,7 +55,8 @@ impl<R: Runtime> Dispatch for AppDispatch<R> {
             };
             let answer = call.run(req.call, upload).await;
             if had_upload {
-                core.incoming.cancel_call(&call.device.id, call.out.id);
+                core.incoming
+                    .cancel_call(&call.device.id, call.out.conv_id(), call.out.id);
             }
             if let Some(answer) = answer {
                 call.send(answer).await;
