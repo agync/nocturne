@@ -1,4 +1,5 @@
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Icon } from "../../components/Icon/Icon";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { t } from "../../copy/t";
@@ -23,7 +24,7 @@ export function WhatToSend({ draft, phonesAvailable, setDraft, onBack, onNext }:
       <h1 className={styles.stepTitle} tabIndex={-1}>
         {t("online.send.title")}
       </h1>
-      <p className={styles.body}>{t("online.send.lead")}</p>
+      <p className={styles.body}>{tc("online.send.lead")}</p>
       <ul className={styles.rows}>
         <li className={styles.row}>
           <span className={styles.textStack}>

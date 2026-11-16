@@ -1,5 +1,6 @@
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
 import styles from "./Online.module.css";
 import { Frame } from "./parts";
@@ -32,7 +33,7 @@ export function ServiceStep({
       <p className={styles.body}>
         {host ? t("online.service.ready", { host }) : t("online.service.lead")}
       </p>
-      <p className={styles.sub}>{t("online.service.where")}</p>
+      <p className={styles.sub}>{tc("online.service.where")}</p>
       <div className={styles.footer}>
         {host ? (
           <>

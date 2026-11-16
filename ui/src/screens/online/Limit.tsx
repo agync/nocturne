@@ -1,5 +1,6 @@
 import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
 import type { OnlineLimit } from "../../engine/bindings";
 import { type StepProps, withLimit } from "./draft";
@@ -152,7 +153,7 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
                 </p>
               ) : (
                 <p id={`${id}-hint`} className={styles.sub}>
-                  {t(edited ? "online.limit.changed" : "online.limit.hint")}
+                  {tc(edited ? "online.limit.changed" : "online.limit.hint")}
                 </p>
               )}
             </div>
