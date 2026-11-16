@@ -49,11 +49,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# A new push to a pull request cancels the run before it. Every run on main has a group of its own,
-# so none is cancelled or dropped while queued.
+# A newer push to the same pull request or branch cancels the run before it, on main as well: the
+# latest commit's run covers everything before it, and each of those was tested on its pull request.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
