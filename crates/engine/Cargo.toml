@@ -20,7 +20,7 @@ sha2.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
-getrandom = "0.3"
+getrandom = "0.4"
 unicode-normalization = "0.1"
 age = "0.12.1"
 dunce.workspace = true
