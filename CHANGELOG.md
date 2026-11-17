@@ -1,5 +1,48 @@
 # Changelog
 
+## [0.6.0](https://github.com/agync/nocturne/compare/v0.5.1...v0.6.0) (2026-11-17)
+
+
+### Features
+
+* **copy:** chip the places in backup and voice ([6665904](https://github.com/agync/nocturne/commit/6665904745b786430053cfb706b0e82a4c51bd93))
+* **copy:** chip the places in Online answers ([a8e4f5b](https://github.com/agync/nocturne/commit/a8e4f5be6ba26d96d7fd8e71b7ecc4c52a7321f7))
+* **copy:** draw the slash key as a key cap ([0274f6e](https://github.com/agync/nocturne/commit/0274f6ef2abf6f8beadc7f7e6a83ca0af6df9ce8))
+* **copy:** name places with chips for phones ([b779a91](https://github.com/agync/nocturne/commit/b779a91b1ef7227f922aa50ae8652f4091697515))
+* **engine:** match questions to the guide ([9d0dca6](https://github.com/agync/nocturne/commit/9d0dca6fc45a9b65b5df3a877bad2a505788b128))
+* **help:** add the guide reader to Settings ([142b993](https://github.com/agync/nocturne/commit/142b993cd2cc1f969ebe5f4f206da08c635c1326))
+* **help:** answer how-to questions in Ask ([15cb36a](https://github.com/agync/nocturne/commit/15cb36abc4a7f6a492138539f1f84f8d8a39b2a0))
+* **help:** draw guide controls as their chips ([ef61fae](https://github.com/agync/nocturne/commit/ef61fae2ccf3a89c0d78b616bf5ef39a2bca1a0b))
+* **mind:** write help answers from the guide ([1fc9628](https://github.com/agync/nocturne/commit/1fc9628b6d70c3aa3b42d47a910ed933bad430c8))
+* **rail:** add the gear beside Settings ([5c68016](https://github.com/agync/nocturne/commit/5c680160810d6d212ae951c3f10897f12866b72a))
+* **setup:** apply the reading rules to step 1 ([5f4ea91](https://github.com/agync/nocturne/commit/5f4ea9177173f05ffb24df8737de726a8f157cf0))
+* **setup:** shorten the Tiny box, add chips ([48cb7c4](https://github.com/agync/nocturne/commit/48cb7c4813c9354edd834b2405f34df722a702f0))
+* **ui:** add a pinned bar for a step's buttons ([904deae](https://github.com/agync/nocturne/commit/904deaead9c3abdd326b5663fce246e8dd9d10da))
+* **ui:** add control chip and key cap ([8e2473d](https://github.com/agync/nocturne/commit/8e2473ddeab4eac0dc0e6afcfffef9e18849e1fd))
+* **ui:** hide the keep bar in a narrow flow ([03d362b](https://github.com/agync/nocturne/commit/03d362bfdf95376b209314256ba678a3178b7f78))
+* **ui:** lighter Away from home, pinned bar ([40ad165](https://github.com/agync/nocturne/commit/40ad165df637f8fde4411a11256e8954c936ad56))
+* **ui:** lighter Online answers, pinned bar ([3c81dbf](https://github.com/agync/nocturne/commit/3c81dbfd173f0b781645e261c38c420640eceba7))
+* **ui:** one chevron for every disclosure ([f521106](https://github.com/agync/nocturne/commit/f521106e62239f1b8e40abe1178e1789c7425019))
+* **ui:** pin setup's bar, Get started first ([5dce3cd](https://github.com/agync/nocturne/commit/5dce3cd5c77a56b31a94d6965461c598988c2972))
+* **ui:** pin the backup and restore buttons ([36012d9](https://github.com/agync/nocturne/commit/36012d9d787876edad9605a6e388e0262231e436))
+
+
+### Bug Fixes
+
+* **app:** open nothing on the host under test ([e67c2bf](https://github.com/agync/nocturne/commit/e67c2bf86b45696e27c55b0b78cea61c779568f8))
+* **help:** go back to the answer from a screen ([b37e3da](https://github.com/agync/nocturne/commit/b37e3dacad89aaeb21e02ad3696ccc95b198b8c3))
+* **lemonade:** draw ports the system never lends ([c8213f4](https://github.com/agync/nocturne/commit/c8213f47161ff8b97a9c17b95be5bf7cc30bcb1a))
+* **lemonade:** skip ports a starting engine holds ([944ff0d](https://github.com/agync/nocturne/commit/944ff0d333cc594977309727b03e2a21bd5966be))
+* **remote:** keep a retry's upload from old calls ([a4ad39f](https://github.com/agync/nocturne/commit/a4ad39fcf420a17c579fa4b115c6cde86bf1ab35))
+* **server:** give the image build the chip words ([4e238e1](https://github.com/agync/nocturne/commit/4e238e1634cea5662ff9e4e8286e85d4e7a32438))
+* **ui:** end the fade and the keep bar on time ([c6682c4](https://github.com/agync/nocturne/commit/c6682c4bc25139911657b66c0bb891e2a03be1ad))
+* **ui:** point disclosures only at open panels ([6e0eee9](https://github.com/agync/nocturne/commit/6e0eee99dd17650e9934084f452c630157a74c56))
+
+
+### Performance Improvements
+
+* **help:** read the guide when the mind starts ([c39934b](https://github.com/agync/nocturne/commit/c39934b47385d4b4883e55d0162c982f5094f8ab))
+
 ## [0.5.1](https://github.com/agync/nocturne/compare/v0.5.0...v0.5.1) (2026-11-16)
 
 
