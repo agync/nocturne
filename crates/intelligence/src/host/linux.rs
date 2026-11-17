@@ -1,15 +1,17 @@
 //! Linux: UPower and `/sys/class/power_supply` for power, Mutter, the freedesktop ScreenSaver
-//! and logind for idle time, logind for sleep inhibition and resume. All through zbus' blocking
-//! API with a one second limit per call; every failure is `None`.
+//! and logind for idle time, logind for sleep inhibition and resume. All through zbus with a one
+//! second limit per call, each call run to completion on its own thread with `zbus::block_on`;
+//! every failure is `None`.
 
 use std::path::Path;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use zbus::blocking::Connection;
-use zbus::blocking::connection::Builder;
-use zbus::zvariant::{OwnedFd, OwnedValue};
+use zbus::connection::Builder;
+use zbus::export::futures_core::Stream;
+use zbus::{Connection, DynamicType, OwnedFd, OwnedVariant};
 
 use super::{SleepGuard, idle_from_hint};
 
@@ -57,10 +59,7 @@ impl Bus {
                 } else {
                     Builder::system()
                 };
-                let made = builder
-                    .ok()
-                    .map(|b| b.method_timeout(CALL_LIMIT))
-                    .and_then(|b| b.build().ok());
+                let made = zbus::block_on(builder.method_timeout(CALL_LIMIT).build()).ok();
                 let _ = tx.send(made);
             });
         let made = spawned
@@ -94,10 +93,10 @@ impl Bus {
         body: &B,
     ) -> Option<zbus::Message>
     where
-        B: zbus::export::serde::Serialize + zbus::zvariant::DynamicType,
+        B: zbus::export::serde::Serialize + DynamicType,
     {
         let conn = self.get()?;
-        match conn.call_method(Some(dest), path, Some(iface), method, body) {
+        match zbus::block_on(conn.call_method(Some(dest), path, Some(iface), method, body)) {
             Ok(reply) => Some(reply),
             Err(zbus::Error::InputOutput(_)) => {
                 self.reset();
@@ -108,7 +107,7 @@ impl Bus {
     }
 
     /// `org.freedesktop.DBus.Properties.Get`, decoded to `T`.
-    fn property<T: TryFrom<OwnedValue>>(
+    fn property<T: TryFrom<OwnedVariant>>(
         &self,
         dest: &str,
         path: &str,
@@ -122,7 +121,7 @@ impl Bus {
             "Get",
             &(iface, name),
         )?;
-        let value: OwnedValue = reply.body().deserialize().ok()?;
+        let value: OwnedVariant = reply.body().deserialize().ok()?;
         T::try_from(value).ok()
     }
 }
@@ -222,27 +221,33 @@ impl ResumeWatch {
         let _ = std::thread::Builder::new()
             .name("nocturne-resume-watch".into())
             .spawn(move || {
-                let Ok(conn) = Connection::system() else {
-                    return;
-                };
-                let Ok(proxy) = zbus::blocking::Proxy::new(
-                    &conn,
-                    "org.freedesktop.login1",
-                    "/org/freedesktop/login1",
-                    "org.freedesktop.login1.Manager",
-                ) else {
-                    return;
-                };
-                let Ok(signals) = proxy.receive_signal("PrepareForSleep") else {
-                    return;
-                };
-                for msg in signals {
-                    if let Ok(going_to_sleep) = msg.body().deserialize::<bool>()
-                        && !going_to_sleep
+                zbus::block_on(async move {
+                    let Ok(conn) = Connection::system().await else {
+                        return;
+                    };
+                    let Ok(proxy) = zbus::Proxy::new(
+                        &conn,
+                        "org.freedesktop.login1",
+                        "/org/freedesktop/login1",
+                        "org.freedesktop.login1.Manager",
+                    )
+                    .await
+                    else {
+                        return;
+                    };
+                    let Ok(mut signals) = proxy.receive_signal("PrepareForSleep").await else {
+                        return;
+                    };
+                    while let Some(msg) =
+                        std::future::poll_fn(|cx| Pin::new(&mut signals).poll_next(cx)).await
                     {
-                        count.fetch_add(1, Ordering::SeqCst);
+                        if let Ok(going_to_sleep) = msg.body().deserialize::<bool>()
+                            && !going_to_sleep
+                        {
+                            count.fetch_add(1, Ordering::SeqCst);
+                        }
                     }
-                }
+                });
             });
     }
 }

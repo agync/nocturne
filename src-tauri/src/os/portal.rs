@@ -12,8 +12,9 @@ use std::time::Duration;
 
 use zbus::export::futures_core::Stream;
 use zbus::names::OwnedUniqueName;
-use zbus::zvariant::{DynamicType, OwnedObjectPath, OwnedValue, Value};
-use zbus::{Connection, MatchRule, MessageStream};
+use zbus::{
+    Connection, DynamicType, MatchRule, MessageStream, OwnedObjectPath, OwnedVariant, Variant,
+};
 
 pub const DESTINATION: &str = "org.freedesktop.portal.Desktop";
 pub const PATH: &str = "/org/freedesktop/portal/desktop";
@@ -61,8 +62,8 @@ impl From<Failed> for String {
     }
 }
 
-pub type Options<'a> = HashMap<&'a str, Value<'a>>;
-pub type Results = HashMap<String, OwnedValue>;
+pub type Options<'a> = HashMap<&'a str, Variant<'a>>;
+pub type Results = HashMap<String, OwnedVariant>;
 
 /// Which session bus the portal is on: the person's, or one a test started.
 #[derive(Debug, Clone, Default)]
@@ -84,11 +85,7 @@ impl Bus {
     pub async fn connect(&self) -> zbus::Result<Connection> {
         match &self.address {
             None => Connection::session().await,
-            Some(a) => {
-                zbus::connection::Builder::address(a.as_str())?
-                    .build()
-                    .await
-            }
+            Some(a) => zbus::connection::Builder::address(a.as_str()).build().await,
         }
     }
 }
@@ -195,10 +192,10 @@ where
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .sender(DESTINATION)
-        .and_then(|r| r.interface(REQUEST))
-        .and_then(|r| r.member("Response"))
-        .map_err(Failed::silent)?
-        .build();
+        .interface(REQUEST)
+        .member("Response")
+        .build()
+        .map_err(Failed::silent)?;
     let mut answers = MessageStream::for_match_rule(rule, conn, None)
         .await
         .map_err(Failed::silent)?;
@@ -243,9 +240,9 @@ async fn autostart_within(
 ) -> Result<(), Failed> {
     let token = token();
     let mut options = Options::new();
-    options.insert("handle_token", Value::from(token.as_str()));
-    options.insert("autostart", Value::from(want));
-    options.insert("commandline", Value::from(commandline.to_vec()));
+    options.insert("handle_token", Variant::from(token.as_str()));
+    options.insert("autostart", Variant::from(want));
+    options.insert("commandline", Variant::from(commandline.to_vec()));
     let body = ("", options);
     let asked = request(conn, BACKGROUND, "RequestBackground", &body);
     let Ok(answer) = tokio::time::timeout(limit, asked).await else {
@@ -284,7 +281,7 @@ pub async fn global_shortcuts_version(conn: &Connection) -> Option<u32> {
         )
         .await
         .ok()?;
-    let value: OwnedValue = reply.body().deserialize().ok()?;
+    let value: OwnedVariant = reply.body().deserialize().ok()?;
     u32::try_from(value).ok()
 }
 
@@ -312,10 +309,10 @@ pub async fn configure(conn: &Connection, session: &OwnedObjectPath) -> Result<(
 }
 
 /// An object path the portal sent as a path or, as some versions do, as a string.
-fn object_path(value: &OwnedValue) -> Option<OwnedObjectPath> {
+fn object_path(value: &OwnedVariant) -> Option<OwnedObjectPath> {
     match &**value {
-        Value::ObjectPath(p) => Some(p.clone().into()),
-        Value::Str(s) => OwnedObjectPath::try_from(s.as_str()).ok(),
+        Variant::ObjectPath(p) => Some(p.clone().into()),
+        Variant::Str(s) => OwnedObjectPath::try_from(s.as_str()).ok(),
         _ => None,
     }
 }
@@ -355,8 +352,8 @@ pub async fn create_session(
 ) -> Result<OwnedObjectPath, String> {
     let [create_token, _] = bind_tokens(session_token);
     let mut options = Options::new();
-    options.insert("handle_token", Value::from(create_token.as_str()));
-    options.insert("session_handle_token", Value::from(session_token));
+    options.insert("handle_token", Variant::from(create_token.as_str()));
+    options.insert("session_handle_token", Variant::from(session_token));
     let created = request(conn, GLOBAL_SHORTCUTS, "CreateSession", &(options,)).await?;
     Ok(created
         .get("session_handle")
@@ -373,13 +370,13 @@ pub async fn bind(
     preferred: Option<&str>,
     token: &str,
 ) -> Result<Option<String>, String> {
-    let mut shortcut: HashMap<&str, Value> = HashMap::new();
-    shortcut.insert("description", Value::from(description));
+    let mut shortcut: HashMap<&str, Variant> = HashMap::new();
+    shortcut.insert("description", Variant::from(description));
     if let Some(p) = preferred {
-        shortcut.insert("preferred_trigger", Value::from(p));
+        shortcut.insert("preferred_trigger", Variant::from(p));
     }
     let mut options = Options::new();
-    options.insert("handle_token", Value::from(token));
+    options.insert("handle_token", Variant::from(token));
     let body = (session, vec![(QUICK_KEEP, shortcut)], "", options);
     let results = request(conn, GLOBAL_SHORTCUTS, "BindShortcuts", &body).await?;
     let shortcuts: Vec<(String, Results)> = results
@@ -422,10 +419,10 @@ pub async fn activations(conn: &Connection) -> Result<MessageStream, String> {
     let rule = MatchRule::builder()
         .msg_type(zbus::message::Type::Signal)
         .sender(DESTINATION)
-        .and_then(|r| r.interface(GLOBAL_SHORTCUTS))
-        .and_then(|r| r.member("Activated"))
-        .map_err(|e| e.to_string())?
-        .build();
+        .interface(GLOBAL_SHORTCUTS)
+        .member("Activated")
+        .build()
+        .map_err(|e| e.to_string())?;
     MessageStream::for_match_rule(rule, conn, None)
         .await
         .map_err(|e| e.to_string())
@@ -525,8 +522,8 @@ pub(crate) mod tests {
     use super::testbus::TestBus;
     use super::*;
     use std::sync::{Arc, Mutex};
+    use zbus::ObjectPath;
     use zbus::message::Header;
-    use zbus::zvariant::ObjectPath;
 
     #[test]
     fn the_request_path_follows_the_bus_name() {
@@ -569,7 +566,7 @@ pub(crate) mod tests {
             #[zbus(connection)] conn: &Connection,
             #[zbus(object_server)] server: &zbus::ObjectServer,
             _parent: &str,
-            options: HashMap<String, OwnedValue>,
+            options: HashMap<String, OwnedVariant>,
         ) -> zbus::fdo::Result<OwnedObjectPath> {
             let want = bool::try_from(&options["autostart"]).unwrap();
             let line: Vec<String> =
@@ -586,8 +583,8 @@ pub(crate) mod tests {
                 server.at(path.as_str(), request).await?;
                 return Ok(OwnedObjectPath::try_from(path).unwrap());
             }
-            let mut results: HashMap<&str, Value> = HashMap::new();
-            results.insert("autostart", Value::from(self.granted && want));
+            let mut results: HashMap<&str, Variant> = HashMap::new();
+            results.insert("autostart", Variant::from(self.granted && want));
             conn.emit_signal(
                 Some(sender.as_str()),
                 path.as_str(),
@@ -621,11 +618,8 @@ pub(crate) mod tests {
             withdrawn: withdrawn.clone(),
         };
         let server = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
             .name(DESTINATION)
-            .unwrap()
             .serve_at(PATH, fake)
-            .unwrap()
             .build()
             .await
             .unwrap();
@@ -741,7 +735,7 @@ pub(crate) mod tests {
             .unwrap();
     }
 
-    fn text(options: &HashMap<String, OwnedValue>, key: &str) -> Option<String> {
+    fn text(options: &HashMap<String, OwnedVariant>, key: &str) -> Option<String> {
         options
             .get(key)
             .and_then(|v| String::try_from(v.try_clone().unwrap()).ok())
@@ -758,7 +752,7 @@ pub(crate) mod tests {
             &self,
             session: OwnedObjectPath,
             _parent: &str,
-            _options: HashMap<String, OwnedValue>,
+            _options: HashMap<String, OwnedVariant>,
         ) {
             self.configured.lock().unwrap().push(session.to_string());
         }
@@ -768,7 +762,7 @@ pub(crate) mod tests {
             #[zbus(header)] header: Header<'_>,
             #[zbus(connection)] conn: &Connection,
             #[zbus(object_server)] server: &zbus::ObjectServer,
-            options: HashMap<String, OwnedValue>,
+            options: HashMap<String, OwnedVariant>,
         ) -> zbus::fdo::Result<OwnedObjectPath> {
             let sender = header.sender().unwrap().to_string();
             let request = request_path(&sender, &text(&options, "handle_token").unwrap());
@@ -785,7 +779,7 @@ pub(crate) mod tests {
                 .await?;
             let mut results = Options::new();
             // Sent as a string, as some portal versions do.
-            results.insert("session_handle", Value::from(session.clone()));
+            results.insert("session_handle", Variant::from(session.clone()));
             answer(conn, &sender, &request, 0, results).await;
             Ok(OwnedObjectPath::try_from(request).unwrap())
         }
@@ -797,9 +791,9 @@ pub(crate) mod tests {
             #[zbus(connection)] conn: &Connection,
             #[zbus(object_server)] server: &zbus::ObjectServer,
             session: OwnedObjectPath,
-            shortcuts: Vec<(String, HashMap<String, OwnedValue>)>,
+            shortcuts: Vec<(String, HashMap<String, OwnedVariant>)>,
             _parent: &str,
-            options: HashMap<String, OwnedValue>,
+            options: HashMap<String, OwnedVariant>,
         ) -> zbus::fdo::Result<OwnedObjectPath> {
             let sender = header.sender().unwrap().to_string();
             let request = request_path(&sender, &text(&options, "handle_token").unwrap());
@@ -829,16 +823,19 @@ pub(crate) mod tests {
                     .lock()
                     .unwrap()
                     .push((session.to_string(), text(props, "preferred_trigger")));
-                let mut out: HashMap<String, Value> = HashMap::new();
+                let mut out: HashMap<String, Variant> = HashMap::new();
                 out.insert(
                     "description".into(),
-                    Value::from(text(props, "description").unwrap()),
+                    Variant::from(text(props, "description").unwrap()),
                 );
-                out.insert("trigger_description".into(), Value::from(self.keys.clone()));
+                out.insert(
+                    "trigger_description".into(),
+                    Variant::from(self.keys.clone()),
+                );
                 bound.push((id.clone(), out));
             }
             let mut results = Options::new();
-            results.insert("shortcuts", Value::from(bound));
+            results.insert("shortcuts", Variant::from(bound));
             answer(conn, &sender, &request, self.code, results).await;
             self.answered.lock().unwrap().push(request.clone());
             Ok(OwnedObjectPath::try_from(request).unwrap())
@@ -887,13 +884,10 @@ pub(crate) mod tests {
         };
         // A second fake takes the name over, as a portal that restarts does.
         let server = zbus::connection::Builder::address(bus.address.as_str())
-            .unwrap()
             .allow_name_replacements(true)
             .replace_existing_names(true)
             .name(DESTINATION)
-            .unwrap()
             .serve_at(PATH, fake)
-            .unwrap()
             .build()
             .await
             .unwrap();
@@ -911,7 +905,7 @@ pub(crate) mod tests {
 
     /// Press the quick keep shortcut of `session`, as the desktop does.
     pub(crate) async fn press(server: &Connection, to: &str, session: &str) {
-        let options: HashMap<&str, Value> = HashMap::new();
+        let options: HashMap<&str, Variant> = HashMap::new();
         server
             .emit_signal(
                 Some(to),
@@ -983,9 +977,9 @@ pub(crate) mod tests {
         let rule = MatchRule::builder()
             .msg_type(zbus::message::Type::Signal)
             .interface(GLOBAL_SHORTCUTS)
-            .and_then(|r| r.member("Activated"))
-            .unwrap()
-            .build();
+            .member("Activated")
+            .build()
+            .unwrap();
         let mut presses = MessageStream::for_match_rule(rule, &conn, None)
             .await
             .unwrap();
