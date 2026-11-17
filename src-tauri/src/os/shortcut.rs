@@ -114,7 +114,7 @@ struct PortalShared {
     conn: zbus::Connection,
     /// The portal's unique bus name now; only its messages count.
     owner: std::sync::Mutex<zbus::names::OwnedUniqueName>,
-    held: std::sync::Mutex<Vec<(Shortcut, zbus::zvariant::OwnedObjectPath)>>,
+    held: std::sync::Mutex<Vec<(Shortcut, zbus::OwnedObjectPath)>>,
     /// Shortcuts the desktop was asked for and has not answered about.
     asked: std::sync::Mutex<Vec<Asked>>,
     keys: std::sync::Mutex<Option<String>>,
@@ -129,7 +129,7 @@ struct PortalShared {
 
 #[cfg(target_os = "linux")]
 impl PortalShared {
-    fn held(&self) -> std::sync::MutexGuard<'_, Vec<(Shortcut, zbus::zvariant::OwnedObjectPath)>> {
+    fn held(&self) -> std::sync::MutexGuard<'_, Vec<(Shortcut, zbus::OwnedObjectPath)>> {
         self.held.lock().unwrap_or_else(|e| e.into_inner())
     }
 
@@ -423,7 +423,7 @@ impl Registrar for PortalRegistrar {
 
 /// Run `work` on a thread of its own with its own runtime, for at most `limit`. The registrar
 /// is called from plain threads and from async commands alike, so it cannot borrow a runtime.
-/// The connection outlives that runtime because zbus runs on its own executor (its `tokio`
+/// The connection outlives that runtime because zbus runs it on its own runtime (its `tokio`
 /// feature is off).
 #[cfg(target_os = "linux")]
 fn run_bounded<T: Send + 'static>(

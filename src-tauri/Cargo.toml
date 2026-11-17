@@ -103,7 +103,7 @@ tower-http = { version = "0.6", optional = true, default-features = false, featu
 futures-util = { version = "0.3", optional = true, default-features = false }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-zbus = "5"
+zbus = "6"
 
 # Windows starts at login through the plugin; Linux and macOS write their own entry.
 [target.'cfg(windows)'.dependencies]
