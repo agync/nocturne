@@ -1,11 +1,4 @@
-import {
-  createContext,
-  type ReactNode,
-  useContext,
-  useEffect,
-  useLayoutEffect,
-  useState,
-} from "react";
+import { createContext, type ReactNode, useContext, useLayoutEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import styles from "./ActionBar.module.css";
 import { enterFlow } from "./flow";
@@ -46,7 +39,14 @@ function watch(bar: HTMLElement, host: HTMLElement | null, onMore: (more: boolea
   const measure = () => {
     const pinned = getComputedStyle(bar).position === "sticky";
     root.style.scrollPaddingBottom = pinned ? `${bar.offsetHeight}px` : "";
-    onMore(pinned && root.scrollTop + root.clientHeight < root.scrollHeight - 1);
+    // The words end where the spacer begins. The bar and the spacer are in the scroll height
+    // too, so measure from the end of the words to the top of the bar, not from the page's end.
+    const words = bar.previousElementSibling;
+    onMore(
+      pinned &&
+        words !== null &&
+        words.getBoundingClientRect().top > bar.getBoundingClientRect().top + 1,
+    );
   };
   measure();
   target.addEventListener("scroll", measure, { passive: true });
@@ -86,7 +86,8 @@ export function ActionBar({ children, line, lineId }: ActionBarProps) {
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
   const [more, setMore] = useState(false);
 
-  useEffect(() => enterFlow(), []);
+  // Before the first paint of the step, so the shell's own bar is gone in the same frame.
+  useLayoutEffect(() => enterFlow(), []);
   useLayoutEffect(() => {
     if (!bar) return;
     return watch(bar, slot ?? null, setMore);

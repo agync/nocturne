@@ -1,9 +1,10 @@
 import { act, render, renderHook, screen } from "@testing-library/react";
+import { StrictMode, useLayoutEffect } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button } from "../Button/Button";
 import { ScreenSheet } from "../ScreenSheet/ScreenSheet";
 import { ActionBar } from "./ActionBar";
-import { useFlowOpen } from "./flow";
+import { isFlowOpen, useFlowOpen } from "./flow";
 
 function pinBars(height: number) {
   const real = window.getComputedStyle.bind(window);
@@ -113,7 +114,7 @@ describe("ActionBar", () => {
     expect(screen.getByTestId("scroller").style.scrollPaddingBottom).toBe("");
   });
 
-  it("fades the last lines while there is more to read, and stops at the end", () => {
+  it("fades only while words are still hidden, not through the bar and the space before it", () => {
     pinBars(72);
     render(
       <div style={{ overflowY: "auto" }} data-testid="scroller">
@@ -126,16 +127,79 @@ describe("ActionBar", () => {
     );
     const scroller = screen.getByTestId("scroller");
     const bar = document.querySelector("[data-action-bar]") as HTMLElement;
-    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 300 });
+    const spacer = bar.previousElementSibling as HTMLElement;
+    const place = (wordsEnd: number) =>
+      vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(function (
+        this: Element,
+      ) {
+        const top = this === spacer ? wordsEnd : this === bar ? 528 : 0;
+        return {
+          top,
+          bottom: top,
+          left: 0,
+          right: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: top,
+        } as DOMRect;
+      });
+    // The scroll height still counts the bar and the space, as it does in the real window.
+    Object.defineProperty(scroller, "clientHeight", { configurable: true, value: 600 });
     Object.defineProperty(scroller, "scrollHeight", { configurable: true, value: 900 });
+
+    place(700);
     act(() => {
       scroller.dispatchEvent(new Event("scroll"));
     });
     expect(bar).toHaveAttribute("data-more", "true");
-    scroller.scrollTop = 600;
+
+    place(520);
     act(() => {
       scroller.dispatchEvent(new Event("scroll"));
     });
     expect(bar).toHaveAttribute("data-more", "false");
+  });
+
+  it("counts a flow in the layout phase, before anything is painted", () => {
+    const seen: boolean[] = [];
+    function Probe() {
+      useLayoutEffect(() => {
+        seen.push(isFlowOpen());
+      }, []);
+      return null;
+    }
+    render(
+      <>
+        <ActionBar>
+          <Button variant="primary">Continue</Button>
+        </ActionBar>
+        <Probe />
+      </>,
+    );
+    expect(seen).toEqual([true]);
+  });
+
+  it("keeps the count balanced under StrictMode, and clears it when the bar leaves", () => {
+    const view = render(
+      <StrictMode>
+        <ActionBar>
+          <Button variant="primary">Continue</Button>
+        </ActionBar>
+      </StrictMode>,
+    );
+    expect(isFlowOpen()).toBe(true);
+    view.rerender(
+      <StrictMode>
+        <ActionBar>
+          <Button variant="primary">Continue</Button>
+        </ActionBar>
+        <ActionBar>
+          <Button variant="primary">Again</Button>
+        </ActionBar>
+      </StrictMode>,
+    );
+    view.unmount();
+    expect(isFlowOpen()).toBe(false);
   });
 });
