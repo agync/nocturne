@@ -3,6 +3,7 @@
 }
 
 .sheet {
+  --bar-x: var(--s-6);
   display: flex;
   flex-direction: column;
   min-height: 36rem;
@@ -16,12 +17,25 @@
   padding: 0;
 }
 
+/* A step flow's bar closes the sheet, and the sheet fills the window so the bar has one place. */
+.frame:has([data-action-slot] > *) {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.frame:has([data-action-slot] > *) .sheet {
+  flex: 1;
+  padding-bottom: 0;
+}
+
 @media (max-width: 44.99em) {
   .frame {
     padding: 0;
   }
 
   .sheet {
+    --bar-x: var(--s-4);
     min-height: 0;
     padding: var(--s-5) var(--s-4) var(--s-6);
     border-radius: 0;

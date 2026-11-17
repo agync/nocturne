@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ActionBarHost } from "../ActionBar/ActionBar";
 import styles from "./ScreenSheet.module.css";
 
 interface ScreenSheetProps {
@@ -12,7 +13,7 @@ export function ScreenSheet({ children, flush = false, className }: ScreenSheetP
   return (
     <div className={styles.frame}>
       <div className={className ? `${styles.sheet} ${className}` : styles.sheet} data-flush={flush}>
-        {children}
+        <ActionBarHost>{children}</ActionBarHost>
       </div>
     </div>
   );

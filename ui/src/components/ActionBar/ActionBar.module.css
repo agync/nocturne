@@ -1,0 +1,75 @@
+.slot {
+  display: contents;
+}
+
+.spacer {
+  flex: none;
+  height: var(--bar-gap, var(--s-6));
+}
+
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3) var(--s-4);
+  margin: auto calc(-1 * var(--bar-x, var(--s-6))) 0;
+  padding: var(--s-4) var(--bar-x, var(--s-6));
+  border-top: 1px solid var(--rule);
+  border-radius: var(--bar-radius, 0);
+  background: var(--sheet);
+}
+
+/* The last lines above the bar fade into it while there is more to read. */
+.bar::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, var(--sheet));
+  opacity: 0;
+  transition: opacity 150ms;
+  pointer-events: none;
+}
+
+.bar[data-more="true"]::before {
+  opacity: 1;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-3);
+}
+
+.line {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+:global([data-size="narrow"]) .bar {
+  padding-block: var(--s-3);
+}
+
+/* A very short window has no room to give away: the bar sits after the words. */
+@media (max-height: 28em) {
+  .bar {
+    position: static;
+  }
+
+  .bar::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar::before {
+    transition: none;
+  }
+}
