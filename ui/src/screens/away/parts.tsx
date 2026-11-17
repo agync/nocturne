@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { tc } from "../../components/ControlChip/copy";
 import { Dialog } from "../../components/Dialog/Dialog";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { t } from "../../copy/t";
@@ -28,6 +29,36 @@ export function Frame({
         {aside ? <aside className={styles.aside}>{aside}</aside> : null}
       </div>
     </ScreenSheet>
+  );
+}
+
+/** What the company in the middle can see, in the same words wherever a connection is described. */
+export function SeesText({ connection }: { connection: RemoteConnection }) {
+  return (
+    <p className={styles.body}>
+      {tc(connection === "simple" ? "away.sees.simple" : "away.sees.mostPrivate")}
+    </p>
+  );
+}
+
+/** What a phone can and cannot do, as two short lists. */
+export function PhoneFacts() {
+  return (
+    <>
+      <h2 className={styles.label}>{t("away.can.heading")}</h2>
+      <ul className={styles.rules}>
+        <li>{t("away.can.ask")}</li>
+        <li>{t("away.can.keep")}</li>
+        <li>{t("away.can.read")}</li>
+      </ul>
+      <h2 className={styles.label}>{t("away.cant.heading")}</h2>
+      <ul className={styles.rules}>
+        <li>{t("away.cant.forget")}</li>
+        <li>{t("away.cant.export")}</li>
+        <li>{t("away.cant.settings")}</li>
+      </ul>
+      <p className={styles.sub}>{t("away.cant.here")}</p>
+    </>
   );
 }
 

@@ -474,6 +474,47 @@
   gap: var(--s-3);
 }
 
+.dl {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.dl > div {
+  display: flex;
+  gap: var(--s-4);
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink2);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+}
+
+.dl dt {
+  flex: none;
+  width: 8rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.dl dd {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 0;
+}
+
+.short dd {
+  color: var(--ink);
+}
+
+.sec {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
 .choices {
   display: flex;
   flex-direction: column;
@@ -761,13 +802,20 @@
   padding: var(--s-5) var(--s-4);
 }
 
+:global([data-size="medium"]) .columns,
 :global([data-size="narrow"]) .columns {
   flex-direction: column;
   gap: var(--s-5);
 }
 
+:global([data-size="medium"]) .aside,
 :global([data-size="narrow"]) .aside {
   width: 100%;
+}
+
+:global([data-size="narrow"]) .dl > div {
+  flex-direction: column;
+  gap: 4px;
 }
 
 :global([data-size="narrow"]) .detail {

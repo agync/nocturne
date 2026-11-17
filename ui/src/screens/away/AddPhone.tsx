@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { goTo, useQueryParam } from "../../app/query";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
 import { formatDuration } from "../../copy/format";
@@ -144,11 +145,11 @@ export function AddPhone({ view }: { view: RemoteView }) {
           {t("away.add.unavailable.title")}
         </h2>
         <p className={styles.body}>{t("away.add.unavailable.body")}</p>
-        <div className={styles.buttons}>
+        <ActionBar>
           <Button variant="primary" onClick={cancel}>
             {t("away.add.back")}
           </Button>
-        </div>
+        </ActionBar>
       </div>
     );
   } else if (!offer) {
@@ -164,12 +165,12 @@ export function AddPhone({ view }: { view: RemoteView }) {
           {t("away.add.added.title", { name: phase.deviceName })}
         </h2>
         <p className={styles.body}>{t("away.add.added.body", { name: phase.deviceName })}</p>
-        <div className={styles.buttons}>
+        <ActionBar>
           <Button variant="primary" onClick={() => goTo("/settings/away")}>
             {t("away.add.done")}
           </Button>
           <Button
-            variant="secondary"
+            variant="quiet"
             onClick={() => {
               added.current = false;
               void begin();
@@ -177,7 +178,7 @@ export function AddPhone({ view }: { view: RemoteView }) {
           >
             {t("away.add.another")}
           </Button>
-        </div>
+        </ActionBar>
       </div>
     );
   } else if (
@@ -193,14 +194,14 @@ export function AddPhone({ view }: { view: RemoteView }) {
           {t(title)}
         </h2>
         <p className={styles.body}>{t(text)}</p>
-        <div className={styles.buttons}>
+        <ActionBar>
           <Button variant="primary" onClick={() => void begin()}>
             {t("away.add.newCode")}
           </Button>
-          <Button variant="secondary" onClick={cancel}>
+          <Button variant="quiet" onClick={cancel}>
             {t("away.cancel")}
           </Button>
-        </div>
+        </ActionBar>
       </div>
     );
   } else {
@@ -259,11 +260,11 @@ export function AddPhone({ view }: { view: RemoteView }) {
               </Button>
             </div>
           </div>
-          <div className={styles.buttons}>
+          <ActionBar>
             <Button variant="secondary" onClick={cancel}>
               {t("away.cancel")}
             </Button>
-          </div>
+          </ActionBar>
         </div>
       </div>
     );
