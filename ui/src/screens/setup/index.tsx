@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { goTo, useQueryParam } from "../../app/query";
+import { ActionBarHost } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { t } from "../../copy/t";
 import type { RestoredView } from "../../engine/bindings";
@@ -33,17 +34,19 @@ export default function Setup() {
   if (restoring) {
     body = (
       <div className={styles.card}>
-        <RestoreFlow
-          mode="setup"
-          onExit={() => setRestoring(false)}
-          onContinue={(restoredView) => {
-            setRestored(restoredView);
-            setRestoring(false);
-            setBegun(true);
-            goTo("/setup");
-            void query.refetch();
-          }}
-        />
+        <ActionBarHost>
+          <RestoreFlow
+            mode="setup"
+            onExit={() => setRestoring(false)}
+            onContinue={(restoredView) => {
+              setRestored(restoredView);
+              setRestoring(false);
+              setBegun(true);
+              goTo("/setup");
+              void query.refetch();
+            }}
+          />
+        </ActionBarHost>
       </div>
     );
   } else if (query.isError) {
