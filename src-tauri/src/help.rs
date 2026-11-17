@@ -206,9 +206,9 @@ impl HelpStore {
         *self.writes.lock().unwrap_or_else(|e| e.into_inner())
     }
 
-    /// The guide's vectors for the finding model `model`. They are made once per model, the
-    /// first time a question needs them, and again after the person changes that model. A mind
-    /// that cannot make them leaves the guide to be found by its words.
+    /// The guide's vectors for the finding model `model`. They are made once per model, when
+    /// the mind is ready ([`warm`]) or else the first time a question needs them. A mind that
+    /// cannot make them leaves the guide to be found by its words, and they are tried again.
     async fn vectors(&self, mind: &dyn Mind, model: &str) -> Option<Vec<Vec<f32>>> {
         let mut held = self.vectors.lock().await;
         if let Some((m, v)) = held.as_ref()
@@ -228,6 +228,24 @@ impl HelpStore {
             }
         }
     }
+}
+
+/// Read the guide for meaning with the mind that is now in the slot and its finding model, so
+/// the first question does not wait for it. Called whenever a mind is ready, which is also after
+/// the person changes the finding model.
+pub fn warm<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = app.state::<AppState>();
+        let (Some(mind), Ok(engine)) = (state.mind.get(), state.engine()) else {
+            return;
+        };
+        state
+            .help
+            .vectors(mind.as_ref(), &engine.recall_model())
+            .await;
+    });
 }
 
 /// What the guide brings to one question.
