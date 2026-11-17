@@ -1,7 +1,9 @@
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { copyDeck, t } from "../../copy/t";
+import guide from "../../engine/mock/seed/guide.json";
 import { fakePlatform, renderApp, setViewport } from "../../test/render";
+import { ICON_NAMES } from "../Icon/Icon";
 import { CHIP_IDS, CHIPS, KEYS } from "./registry";
 
 const words = (id: keyof typeof CHIPS) => t(CHIPS[id].copy);
@@ -37,8 +39,21 @@ describe("the chip registry and the deck", () => {
   const named = (id: string) =>
     Object.values(copyDeck).some((text) => new RegExp(`\\{${id}\\}`).test(text));
 
-  it("has no chip that no sentence uses", () => {
-    expect(CHIP_IDS.filter((id) => !named(id))).toEqual([]);
+  it("has no chip that no sentence and no page of the guide uses", () => {
+    const inGuide = new Set(
+      JSON.stringify(guide)
+        .match(/"chip":\s*"[^"]+"/g)
+        ?.map((m) => m.split('"')[3]),
+    );
+    expect(CHIP_IDS.filter((id) => !named(id) && !inGuide.has(id))).toEqual([]);
+  });
+
+  it("names a control the deck has, and an icon the app draws", () => {
+    for (const id of CHIP_IDS) {
+      const { copy, icon } = CHIPS[id];
+      expect(copy in copyDeck, `${id}: ${copy}`).toBe(true);
+      if (icon) expect(ICON_NAMES, id).toContain(icon);
+    }
   });
 
   it("has no key that no sentence uses", () => {

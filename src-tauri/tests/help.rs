@@ -375,7 +375,7 @@ fn the_check_fails_an_answer_that_blends() {
     )]
     .into();
     let ids: HashMap<&'static str, String> = HashMap::new();
-    let controls = ["Add a phone"];
+    let controls = vec!["Add a phone".to_string()];
     let src = Sources {
         guide: &guide,
         kept: &kept,

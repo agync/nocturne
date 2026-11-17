@@ -1,3 +1,6 @@
+import type { ReactNode } from "react";
+import { ControlChip } from "../../components/ControlChip/ControlChip";
+import type { ChipId } from "../../components/ControlChip/registry";
 import { t } from "../../copy/t";
 import styles from "./Ask.module.css";
 
@@ -10,6 +13,25 @@ interface AnswerTextProps {
   /** Which memory the pointer or the keyboard is on, or null. */
   onActive: (memoryId: string | null) => void;
   onJump: (memoryId: string) => void;
+  /** Controls the answer may name, drawn as their chips where its plain words name them. */
+  chips?: ReadonlyArray<{ words: string; id: ChipId }>;
+}
+
+const literal = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Plain answer words, with each control they name drawn as its chip. */
+function withChips(
+  text: string,
+  chips: ReadonlyArray<{ words: string; id: ChipId }>,
+  at: number,
+): ReactNode {
+  if (chips.length === 0 || text === "") return text;
+  const longest = [...chips].sort((a, b) => b.words.length - a.words.length);
+  const pattern = new RegExp(`(${longest.map((c) => literal(c.words)).join("|")})`);
+  return text.split(pattern).map((part, i) => {
+    const chip = longest.find((c) => c.words === part);
+    return chip ? <ControlChip key={`${at}-${i}`} id={chip.id} /> : part;
+  });
 }
 
 /**
@@ -22,13 +44,14 @@ export function AnswerText({
   corrected = false,
   onActive,
   onJump,
+  chips = [],
 }: AnswerTextProps) {
   const only = memoryIds.length === 1 ? memoryIds[0] : undefined;
   return (
     <p className={styles.answer} data-corrected={corrected}>
       {text.split("**").map((part, index) => {
         const key = `${index}-${part}`;
-        if (index % 2 === 0) return part;
+        if (index % 2 === 0) return withChips(part, chips, index);
         const memoryId = memoryIds[(index - 1) / 2] ?? only;
         if (!memoryId || part === "") return <strong key={key}>{part}</strong>;
         return (

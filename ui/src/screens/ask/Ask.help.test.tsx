@@ -54,7 +54,8 @@ describe("help with Nocturne", () => {
     ).toBeInTheDocument();
     const receipt = screen.getByRole("link", { name: "Read “Turn it on” in the Nocturne guide" });
     expect(receipt).toHaveTextContent("Nocturne guide · Away from home");
-    expect(screen.getByRole("button", { name: "Open Away from home" })).toBeInTheDocument();
+    expect(receipt.closest("li")?.querySelector("[data-chip]")).toBeNull();
+    expect(document.querySelector("article [data-chip]")).not.toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Open the guide" }));
     expect(window.location.hash).toBe("#/guide?page=away-from-home&section=turn-it-on&from=ask");
   });

@@ -241,12 +241,12 @@ impl std::fmt::Debug for Guide {
 }
 
 impl Guide {
-    /// Parse the pages. `is_control` says whether words in bold name one of Nocturne's screens
+    /// Parse the pages. `chip_of` gives the control chip that words in bold name, if they name one of Nocturne's screens
     /// or controls; `names` are more words that make a question read as help. Pages whose
     /// `status` is not `stable` are left out, as are sections no `asked` list names.
     pub fn new(
         sources: &[GuideSource<'_>],
-        is_control: &dyn Fn(&str) -> bool,
+        chip_of: &dyn Fn(&str) -> Option<String>,
         names: &[&str],
     ) -> Result<Guide, String> {
         let mut pages = Vec::new();
@@ -270,7 +270,7 @@ impl Guide {
                     front.asked
                 }
             };
-            let mut page = parse_page(src.slug, body, is_control);
+            let mut page = parse_page(src.slug, body, chip_of);
             for (heading, _) in &asked {
                 if !page.sections.iter().any(|s| &s.heading == heading) {
                     return Err(format!("{}: no section \"{heading}\"", src.slug));
@@ -702,7 +702,11 @@ pub fn slug(heading: &str) -> String {
         .join("-")
 }
 
-fn parse_page(slug_of_page: &str, body: &str, is_control: &dyn Fn(&str) -> bool) -> GuidePage {
+fn parse_page(
+    slug_of_page: &str,
+    body: &str,
+    chip_of: &dyn Fn(&str) -> Option<String>,
+) -> GuidePage {
     let mut title = String::new();
     let mut preamble: Vec<&str> = Vec::new();
     let mut sections: Vec<(String, Vec<&str>)> = Vec::new();
@@ -726,7 +730,7 @@ fn parse_page(slug_of_page: &str, body: &str, is_control: &dyn Fn(&str) -> bool)
             preamble.push(line);
         }
     }
-    let opening = blocks(&preamble, is_control)
+    let opening = blocks(&preamble, chip_of)
         .into_iter()
         .find_map(|b| match b {
             GuideBlock::Paragraph { parts } => Some(parts),
@@ -741,7 +745,7 @@ fn parse_page(slug_of_page: &str, body: &str, is_control: &dyn Fn(&str) -> bool)
             .into_iter()
             .map(|(heading, lines)| GuideSection {
                 slug: slug(&heading),
-                blocks: blocks(&lines, is_control),
+                blocks: blocks(&lines, chip_of),
                 heading,
             })
             .collect(),
@@ -755,8 +759,8 @@ fn step_start(line: &str) -> Option<&str> {
         .flatten()
 }
 
-fn blocks(lines: &[&str], is_control: &dyn Fn(&str) -> bool) -> Vec<GuideBlock> {
-    let inline = |s: &str| inlines(s, is_control);
+fn blocks(lines: &[&str], chip_of: &dyn Fn(&str) -> Option<String>) -> Vec<GuideBlock> {
+    let inline = |s: &str| inlines(s, chip_of);
     let mut out = Vec::new();
     let mut i = 0;
     while i < lines.len() {
@@ -862,7 +866,7 @@ fn push_text(out: &mut Vec<GuideInline>, s: &str) {
 }
 
 /// Bold, code and links in a line; a link keeps its words only.
-fn inlines(s: &str, is_control: &dyn Fn(&str) -> bool) -> Vec<GuideInline> {
+fn inlines(s: &str, chip_of: &dyn Fn(&str) -> Option<String>) -> Vec<GuideInline> {
     let mut out = Vec::new();
     let mut rest = s;
     while !rest.is_empty() {
@@ -880,10 +884,9 @@ fn inlines(s: &str, is_control: &dyn Fn(&str) -> bool) -> Vec<GuideInline> {
             "**" => match after.find("**") {
                 Some(end) => {
                     let text = after[..end].to_string();
-                    out.push(if is_control(&text) {
-                        GuideInline::Control { text }
-                    } else {
-                        GuideInline::Strong { text }
+                    out.push(match chip_of(&text) {
+                        Some(chip) => GuideInline::Control { text, chip },
+                        None => GuideInline::Strong { text },
                     });
                     rest = &after[end + 2..];
                 }
@@ -909,7 +912,7 @@ fn inlines(s: &str, is_control: &dyn Fn(&str) -> bool) -> Vec<GuideInline> {
                 .and_then(|mid| after[mid..].find(')').map(|close| (mid, mid + close)))
             {
                 Some((mid, close)) => {
-                    for part in inlines(&after[..mid], is_control) {
+                    for part in inlines(&after[..mid], chip_of) {
                         match part {
                             GuideInline::Text { text } => push_text(&mut out, &text),
                             other => out.push(other),
@@ -934,7 +937,7 @@ pub fn plain(parts: &[GuideInline]) -> String {
         .map(|p| match p {
             GuideInline::Text { text }
             | GuideInline::Strong { text }
-            | GuideInline::Control { text }
+            | GuideInline::Control { text, .. }
             | GuideInline::Code { text } => text.as_str(),
         })
         .collect()
@@ -1043,8 +1046,13 @@ mod tests {
     const DRAFT: &str =
         "---\nstatus: draft\nasked:\n  One: [a b]\n---\n\n# Draft\n\nHello.\n\n## One\n\nWords.\n";
 
-    fn controls(s: &str) -> bool {
-        matches!(s, "Away from home" | "Set up…" | "Add a phone")
+    fn controls(s: &str) -> Option<String> {
+        match s {
+            "Away from home" => Some("awayFromHome".into()),
+            "Set up…" => Some("setUp".into()),
+            "Add a phone" => Some("addAPhone".into()),
+            _ => None,
+        }
     }
 
     fn guide() -> Guide {
@@ -1117,7 +1125,8 @@ mod tests {
         assert_eq!(
             items[0][1],
             GuideInline::Control {
-                text: "Add a phone".into()
+                text: "Add a phone".into(),
+                chip: "addAPhone".into(),
             }
         );
         assert_eq!(
@@ -1158,7 +1167,7 @@ mod tests {
     fn inline_marks_links_and_tables() {
         let parts = inlines(
             "See [Your data](your-data.md), the `store` folder and **Make a backup.** too",
-            &|_| false,
+            &|_| None,
         );
         assert_eq!(
             parts,
@@ -1180,7 +1189,7 @@ mod tests {
                 },
             ]
         );
-        let b = blocks(&["| A | B |", "|---|---|", "| `x` | y |"], &|_| false);
+        let b = blocks(&["| A | B |", "|---|---|", "| `x` | y |"], &|_| None);
         let GuideBlock::Table { rows } = &b[0] else {
             panic!("{b:?}")
         };
@@ -1322,7 +1331,7 @@ mod tests {
         let page = parse_page(
             "p",
             "# Title\n\nOpening.\n\n## One\n\n```\n## not a section\n# not a title\n```\n",
-            &|_| false,
+            &|_| None,
         );
         assert_eq!(page.title, "Title");
         assert_eq!(page.sections.len(), 1);

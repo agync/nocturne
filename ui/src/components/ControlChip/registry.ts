@@ -1,5 +1,6 @@
 import type { CopyId } from "../../copy/t";
 import type { IconName } from "../Icon/Icon";
+import chips from "./chips.json";
 
 interface ChipSpec {
   /** The copy key of the control itself, so a chip can never say a word the control does not. */
@@ -9,25 +10,12 @@ interface ChipSpec {
 }
 
 /**
- * Every place or control a sentence may name with a chip. A sentence names one by writing
- * `{id}` in its copy; the screen fills it with `tc()`.
+ * Every place or control a sentence or the Nocturne guide may name with a chip. A sentence names
+ * one by writing `{id}` in its copy; the screen fills it with `tc()`. The guide names one in bold,
+ * in its own words, and the app's guide bundle (`src-tauri/src/help.rs`) reads this same file, so
+ * one list holds every chip.
  */
-export const CHIPS = {
-  settings: { copy: "rail.settings", icon: "settings" },
-  privacy: { copy: "rail.privacy" },
-  onlineAnswers: { copy: "online.row.label" },
-  awayFromHome: { copy: "away.row.label" },
-  voice: { copy: "settings.voice.label" },
-  showAdvancedDetails: { copy: "settings.advanced.show" },
-  connectOnlineService: { copy: "advanced.online.connect.link" },
-  restoreFromBackup: { copy: "setup.welcome.restore" },
-  seeWhatWasSent: { copy: "ask.mark.seeSent" },
-  addAPhone: { copy: "away.phones.add" },
-  newCodeToScan: { copy: "phone.address.scan" },
-  phonesNeedNewAddress: { copy: "rail.away.relink" },
-  allow: { copy: "away.pair.allow" },
-  dontAllow: { copy: "away.pair.deny" },
-} as const satisfies Record<string, ChipSpec>;
+export const CHIPS = chips as Record<keyof typeof chips, ChipSpec>;
 
 export type ChipId = keyof typeof CHIPS;
 

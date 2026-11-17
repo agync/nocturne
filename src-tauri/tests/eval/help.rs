@@ -341,7 +341,7 @@ pub struct Sources<'a> {
     /// Seed key to memory id.
     pub ids: &'a HashMap<&'static str, String>,
     /// The names of Nocturne's controls and screens, as the guide spells them.
-    pub controls: &'a [&'a str],
+    pub controls: &'a [String],
 }
 
 /// Words of a memory that the guide never uses: its names, numbers, dates, places and things.
@@ -526,7 +526,7 @@ pub fn score(runs: &[HashMap<&'static str, HelpAnswer>], src: &Sources<'_>) -> V
 pub struct Known {
     pub guide: HashMap<String, String>,
     pub kept: HashMap<String, String>,
-    pub controls: Vec<&'static str>,
+    pub controls: Vec<String>,
 }
 
 impl Known {
@@ -545,10 +545,7 @@ impl Known {
                 .iter()
                 .filter_map(|s| Some((ids.get(s.key)?.clone(), s.sentence.to_string())))
                 .collect(),
-            controls: nocturne_app_lib::help::CONTROLS
-                .iter()
-                .map(|(w, _)| *w)
-                .collect(),
+            controls: nocturne_app_lib::help::control_words(),
         }
     }
 
