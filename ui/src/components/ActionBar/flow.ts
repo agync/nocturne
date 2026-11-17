@@ -7,6 +7,9 @@ const emit = () => {
   for (const listener of listeners) listener();
 };
 
+/** Whether a step flow is open right now, read without waiting for a render. */
+export const isFlowOpen = (): boolean => open > 0;
+
 /** A step flow is on screen while its action bar is. Returns the call that says it has left. */
 export function enterFlow(): () => void {
   open += 1;
@@ -26,9 +29,5 @@ const subscribe = (listener: () => void) => {
 
 /** True while any step flow is open, so the shell can give its bottom edge to the action bar. */
 export function useFlowOpen(): boolean {
-  return useSyncExternalStore(
-    subscribe,
-    () => open > 0,
-    () => false,
-  );
+  return useSyncExternalStore(subscribe, isFlowOpen, () => false);
 }
