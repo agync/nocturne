@@ -16,4 +16,11 @@ describe("BackLink", () => {
     expect(arrow).toHaveAttribute("aria-hidden", "true");
     expect(arrow).toHaveTextContent("←");
   });
+
+  it("goes back to the answer when an answer opened the screen", () => {
+    window.location.hash = "#/settings/away?from=ask";
+    render(<BackLink to="/settings" label="Settings" />);
+    expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("href", "#/ask");
+    window.location.hash = "";
+  });
 });
