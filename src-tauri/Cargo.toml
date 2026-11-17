@@ -85,14 +85,13 @@ getrandom = "0.4"
 notify = "8"
 sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 tokio-util = { version = "0.7", default-features = false }
-# Away from home: the phone listener and the sealed channel. `sha2_10` is the 0.10 line that
-# `hkdf` 0.12 needs; the workspace `sha2` is 0.11.
+# Away from home: the phone listener and the sealed channel.
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 p256 = { version = "0.14", features = ["ecdh", "pkcs8"] }
-hkdf = "0.12"
+hkdf = "0.13"
 aes-gcm = "0.10.3"
 subtle = "2"
-sha2_10 = { package = "sha2", version = "0.10" }
+sha2.workspace = true
 qrcode = { version = "0.14", default-features = false }
 base64.workspace = true
 zeroize = "1"

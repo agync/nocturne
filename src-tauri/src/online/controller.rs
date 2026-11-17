@@ -140,7 +140,7 @@ struct Fingerprint {
 
 impl Fingerprint {
     fn of(route: &CloudRoute) -> Self {
-        use sha2_10::{Digest, Sha256};
+        use sha2::{Digest, Sha256};
         Fingerprint {
             base_url: route.base_url().to_string(),
             model: route.model.clone(),
