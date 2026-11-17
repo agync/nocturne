@@ -586,11 +586,18 @@ fn port_is_free(port: u16) -> bool {
         .is_ok()
 }
 
+/// Where the engine's ports are drawn from: below the ports systems lend to outgoing connections
+/// by default (32768 and up on Linux, 49152 and up on Windows and macOS). The engine listens
+/// only once it has started, which can take minutes; a lent port can go to a connection on this
+/// computer in that time, and the engine would then have to start again on another.
+const ENGINE_PORTS: std::ops::Range<u16> = 20000..32768;
+
 /// A random loopback port nothing is listening on right now.
 fn free_port(avoid: &[Option<u16>]) -> Result<u16, RuntimeError> {
+    let span = ENGINE_PORTS.end - ENGINE_PORTS.start;
     for _ in 0..50 {
         let [a, b] = random_bytes::<2>()?;
-        let port = 20000 + u16::from_le_bytes([a, b]) % 40000;
+        let port = ENGINE_PORTS.start + u16::from_le_bytes([a, b]) % span;
         if avoid.contains(&Some(port)) {
             continue;
         }
@@ -1390,6 +1397,18 @@ mod tests {
         let port = free_port(&[]).unwrap();
         assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
         assert_ne!(free_port(&[Some(port)]).unwrap(), port);
+    }
+
+    /// The ports systems lend to outgoing connections by default: Linux's, and the range Windows
+    /// and macOS share. One of them can be lent out while the engine starts, before it listens.
+    const LENT: [std::ops::RangeInclusive<u16>; 2] = [32768..=60999, 49152..=65535];
+
+    #[test]
+    fn the_engine_port_is_never_one_the_system_lends_out() {
+        for _ in 0..500 {
+            let port = free_port(&[]).unwrap();
+            assert!(!LENT.iter().any(|lent| lent.contains(&port)), "{port}");
+        }
     }
 
     #[test]
