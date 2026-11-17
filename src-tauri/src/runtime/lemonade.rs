@@ -314,6 +314,7 @@ async fn fill<R: Runtime>(
         _ => super::mind_recovered(app).await,
     }
     crate::models::on_mind_ready(app);
+    crate::help::warm(app);
 }
 
 /// A mind for the models chosen for each job on `tier`, in the slot, with the finding model,
