@@ -815,14 +815,9 @@ mod tests {
         }
     }
 
-    #[test]
-    fn a_log_that_stays_closed_warns_once_per_outage() {
-        // write_lines runs on this thread and spawns none, so the scoped default sees every event.
-        let captured = Captured::default();
-        let subscriber = tracing_subscriber::fmt()
-            .with_writer(captured.clone())
-            .with_ansi(false)
-            .finish();
+    /// Six lines through a log whose opens 1 to 3 fail, 4 works and its file then fails on the
+    /// second line, and 5 and 6 fail.
+    fn outage() {
         let (tx, rx) = mpsc::channel::<String>(8);
         for l in ["a", "b", "c", "d", "e", "f"] {
             tx.blocking_send(l.into()).unwrap();
@@ -830,21 +825,38 @@ mod tests {
         drop(tx);
         let seen = Arc::new(Mutex::new(Vec::new()));
         let mut opens = 0;
-        // Opens 1 to 3 fail, 4 works and its file then fails on the second line, 5 and 6 fail.
+        write_lines(rx, Path::new("unused"), ROTATE_AT, Duration::ZERO, |_| {
+            opens += 1;
+            if opens == 4 {
+                Ok(Flaky {
+                    len_fails: false,
+                    lines: seen.clone(),
+                    fail_from: Some(1),
+                    written: 0,
+                })
+            } else {
+                Err(std::io::Error::other("busy"))
+            }
+        });
+    }
+
+    #[test]
+    fn a_log_that_stays_closed_warns_once_per_outage() {
+        let captured = Captured::default();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(captured.clone())
+            .with_ansi(false)
+            .finish();
+        // While one subscriber is the only one registered, tracing works out a callsite's
+        // interest from the default of whichever thread reaches it first. A thread with none
+        // marks the warning as never wanted, and the capture misses it for good. Other tests
+        // do this at any moment. A second registered subscriber makes tracing ask all of them,
+        // whatever thread it is on.
+        let _second = tracing::Dispatch::new(tracing::subscriber::NoSubscriber::default());
         tracing::subscriber::with_default(subscriber, || {
-            write_lines(rx, Path::new("unused"), ROTATE_AT, Duration::ZERO, |_| {
-                opens += 1;
-                if opens == 4 {
-                    Ok(Flaky {
-                        len_fails: false,
-                        lines: seen.clone(),
-                        fail_from: Some(1),
-                        written: 0,
-                    })
-                } else {
-                    Err(std::io::Error::other("busy"))
-                }
-            });
+            // What another test does, here on purpose and before the outage.
+            std::thread::spawn(outage).join().unwrap();
+            outage();
         });
         let text = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
         assert_eq!(text.matches("could not be opened").count(), 2, "{text}");
