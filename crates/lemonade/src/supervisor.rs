@@ -592,17 +592,31 @@ fn port_is_free(port: u16) -> bool {
 /// computer in that time, and the engine would then have to start again on another.
 const ENGINE_PORTS: std::ops::Range<u16> = 20000..32768;
 
-/// A random loopback port nothing is listening on right now.
-fn free_port(avoid: &[Option<u16>]) -> Result<u16, RuntimeError> {
+/// A random loopback port nothing is listening on right now, held for the engine.
+fn free_port(avoid: &[Option<u16>]) -> Result<online::OwnPort, RuntimeError> {
     let span = ENGINE_PORTS.end - ENGINE_PORTS.start;
-    for _ in 0..50 {
+    pick_port(avoid, || {
         let [a, b] = random_bytes::<2>()?;
-        let port = ENGINE_PORTS.start + u16::from_le_bytes([a, b]) % span;
+        Ok(ENGINE_PORTS.start + u16::from_le_bytes([a, b]) % span)
+    })
+}
+
+/// The first drawn port that is not avoided, not held by another engine of this app (which may
+/// not listen yet) and is free. It is held from the moment it is chosen.
+fn pick_port(
+    avoid: &[Option<u16>],
+    mut draw: impl FnMut() -> Result<u16, RuntimeError>,
+) -> Result<online::OwnPort, RuntimeError> {
+    for _ in 0..50 {
+        let port = draw()?;
         if avoid.contains(&Some(port)) {
             continue;
         }
+        let Some(held) = online::OwnPort::claim(port) else {
+            continue;
+        };
         if port_is_free(port) {
-            return Ok(port);
+            return Ok(held);
         }
     }
     Err(RuntimeError::NoPort(50))
@@ -826,8 +840,9 @@ impl Actor {
             };
             // The engine never takes the port of a provider on this computer.
             let provider = route.as_ref().and_then(CloudRoute::loopback_port);
-            let port = free_port(&[provider])?;
-            let ws_port = free_port(&[provider, Some(port)])?;
+            let held = free_port(&[provider])?;
+            let ws_held = free_port(&[provider, Some(held.port())])?;
+            let (port, ws_port) = (held.port(), ws_held.port());
             let keys = Keys::new(new_key()?, new_key()?)?;
             let (llama, whisper) = read_backends(&self.dirs.config());
             let installed = crate::record::read(&self.dirs.config()).and_then(|r| r.working_tier());
@@ -855,7 +870,7 @@ impl Actor {
             }
             self.client.set_saved_options(saved);
             let mut running = self.spawn(port, &keys, route.as_ref().map(|r| &r.key))?;
-            running._ports = vec![online::OwnPort::hold(port), online::OwnPort::hold(ws_port)];
+            running._ports = vec![held, ws_held];
             match self
                 .await_ready(&mut running, port, ws_port, &keys.api)
                 .await
@@ -1394,9 +1409,9 @@ mod tests {
 
     #[test]
     fn free_port_gives_a_port_that_can_be_listened_on() {
-        let port = free_port(&[]).unwrap();
+        let port = free_port(&[]).unwrap().port();
         assert!(std::net::TcpListener::bind(("127.0.0.1", port)).is_ok());
-        assert_ne!(free_port(&[Some(port)]).unwrap(), port);
+        assert_ne!(free_port(&[Some(port)]).unwrap().port(), port);
     }
 
     /// The ports systems lend to outgoing connections by default: Linux's, and the range Windows
@@ -1406,9 +1421,24 @@ mod tests {
     #[test]
     fn the_engine_port_is_never_one_the_system_lends_out() {
         for _ in 0..500 {
-            let port = free_port(&[]).unwrap();
+            let port = free_port(&[]).unwrap().port();
             assert!(!LENT.iter().any(|lent| lent.contains(&port)), "{port}");
         }
+    }
+
+    /// Another engine of this app holds its port from the moment it is started, though it
+    /// listens only once it has read the computer.
+    #[test]
+    fn a_port_held_by_an_engine_still_starting_is_not_chosen() {
+        let starting = free_port(&[]).unwrap();
+        let other = free_port(&[]).unwrap().port();
+        let mut draws = [starting.port(), other].into_iter();
+        let chosen = pick_port(&[], || Ok(draws.next().unwrap())).unwrap();
+        assert_eq!(chosen.port(), other);
+        assert!(
+            online::OwnPort::claim(other).is_none(),
+            "held from the moment it is chosen"
+        );
     }
 
     #[test]

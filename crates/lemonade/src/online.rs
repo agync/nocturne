@@ -114,7 +114,8 @@ pub const OWN_NAMES: &[&str] = &[
 static OWN_PORTS: Mutex<Vec<u16>> = Mutex::new(Vec::new());
 
 /// A loopback port Nocturne listens on (the engine, the preview, a listener of Away from
-/// home), held while it does: an address naming this computer at that port is refused.
+/// home), held while it does: an address naming this computer at that port is refused, and no
+/// other engine is given it.
 #[must_use]
 #[derive(Debug)]
 pub struct OwnPort(u16);
@@ -126,6 +127,21 @@ impl OwnPort {
             .unwrap_or_else(|e| e.into_inner())
             .push(port);
         OwnPort(port)
+    }
+
+    /// Holds `port` unless something of this app already holds it, in one step, so two engines
+    /// starting at once are never given the same port.
+    pub(crate) fn claim(port: u16) -> Option<Self> {
+        let mut ports = OWN_PORTS.lock().unwrap_or_else(|e| e.into_inner());
+        if ports.contains(&port) {
+            return None;
+        }
+        ports.push(port);
+        Some(OwnPort(port))
+    }
+
+    pub fn port(&self) -> u16 {
+        self.0
     }
 }
 
