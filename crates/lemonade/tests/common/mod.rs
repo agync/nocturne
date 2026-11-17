@@ -62,25 +62,28 @@ pub fn set_mode(dirs: &Dirs, mode: &str) {
     std::fs::write(path, v.to_string()).unwrap();
 }
 
-/// A port nothing nearby is using, never handed out twice in one test binary. It comes from
-/// below the range the system lends to outgoing connections, as the supervisor's do: a port
-/// the system chose (binding port 0) is one it may lend to another test's connection before
-/// the fake binds it.
-pub fn free_port() -> u16 {
-    static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
-    const PORTS: std::ops::Range<u16> = 20000..32768;
-    let span = u32::from(PORTS.end - PORTS.start);
-    let seed = std::process::id().wrapping_mul(2_654_435_761);
-    for draw in 0..u32::from(u16::MAX) {
-        let port = PORTS.start + ((seed.wrapping_add(draw.wrapping_mul(7919))) % span) as u16;
-        let mut given = GIVEN.lock().unwrap();
-        if given.contains(&port) || std::net::TcpListener::bind(("127.0.0.1", port)).is_err() {
-            continue;
+/// The port a fake started with `--port 0` bound, which it writes to its cache directory once it
+/// listens. The fake chooses and holds the port itself, so there is no moment between a test
+/// picking a port and the fake taking it for something else to take it in. Panics if the fake
+/// exits first or says nothing within `within`.
+pub fn bound_port(dirs: &Dirs, child: &mut std::process::Child, within: Duration) -> u16 {
+    let start = Instant::now();
+    loop {
+        if let Ok(text) = std::fs::read_to_string(dirs.cache().join("fake-port"))
+            && let Ok(port) = text.trim().parse()
+        {
+            return port;
         }
-        given.push(port);
-        return port;
+        if let Some(status) = child.try_wait().unwrap() {
+            panic!("fake-lemond exited before it listened ({status:?})");
+        }
+        if start.elapsed() >= within {
+            let _ = child.kill();
+            let _ = child.wait();
+            panic!("fake-lemond did not say which port it bound within {within:?}");
+        }
+        std::thread::sleep(Duration::from_millis(10));
     }
-    panic!("no free port below the lent range");
 }
 
 /// A port nothing listens on, for "no engine" tests: connecting is refused, always.
@@ -213,17 +216,17 @@ impl Fake {
         if let Some(m) = mode {
             set_mode(&dirs, m);
         }
-        let port = free_port();
-        let child = clear_env(&mut std::process::Command::new(FAKE))
+        let mut child = clear_env(&mut std::process::Command::new(FAKE))
             .arg(dirs.cache())
             .arg(dirs.config())
-            .args(["--port", &port.to_string(), "--host", "127.0.0.1"])
+            .args(["--port", "0", "--host", "127.0.0.1"])
             .args(["--no-broadcast", "--watchdog-fd", "0"])
             .env("LEMONADE_API_KEY", "k3y")
             .env("LEMONADE_ADMIN_API_KEY", "adm1n")
             .stdin(std::process::Stdio::piped())
             .spawn()
             .unwrap();
+        let port = bound_port(&dirs, &mut child, Duration::from_secs(20));
         Fake {
             child,
             port,
@@ -274,22 +277,11 @@ impl Fake {
         }
     }
 
-    /// Start a fake and wait for it. A free port is chosen, then released, then bound by the
-    /// child, and another process can still take it in between, so a fake that does not come
-    /// up is started again on a new port.
+    /// Start a fake and wait for it to answer.
     pub async fn started(mode: Option<&str>) -> Fake {
-        let limit = Duration::from_secs(3);
-        let mut last = String::new();
-        for _ in 0..3 {
-            let mut fake = Fake::start(mode);
-            if fake.live_within(limit).await {
-                return fake;
-            }
-            last = fake.not_live(limit);
-            let _ = fake.child.kill();
-            let _ = fake.child.wait();
-        }
-        panic!("three tries: {last}");
+        let mut fake = Fake::start(mode);
+        fake.wait_live().await;
+        fake
     }
 
     pub fn wait_exit(&mut self, within: Duration) -> Option<std::process::ExitStatus> {

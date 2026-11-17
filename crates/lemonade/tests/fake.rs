@@ -43,6 +43,28 @@ async fn exits_when_stdin_closes() {
     assert!(status.is_some_and(|s| s.success()), "{status:?}");
 }
 
+/// A fake asked for port 0 holds the port the system gave it and says which, so tests that run
+/// several at once never choose a port and release it before a fake binds it.
+#[tokio::test]
+async fn port_zero_binds_a_port_of_its_own_and_reports_it() {
+    let mut fakes: Vec<common::Fake> = std::thread::scope(|scope| {
+        let starting: Vec<_> = (0..8)
+            .map(|_| scope.spawn(|| common::Fake::start(None)))
+            .collect();
+        starting.into_iter().map(|t| t.join().unwrap()).collect()
+    });
+    for fake in &mut fakes {
+        fake.wait_live().await;
+        assert_ne!(fake.port, 0);
+        let stats = fake.peek("/fake/stats").await;
+        assert_eq!(stats["port"], fake.port);
+    }
+    let mut ports: Vec<u16> = fakes.iter().map(|f| f.port).collect();
+    ports.sort_unstable();
+    ports.dedup();
+    assert_eq!(ports.len(), fakes.len(), "two fakes shared a port");
+}
+
 #[tokio::test]
 async fn crash_mode_comes_from_config_and_exits_nonzero() {
     let mut fake = common::Fake::start(Some("crash-after-ms=200"));
