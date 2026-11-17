@@ -1309,19 +1309,19 @@ async fn a_key_in_the_environment_refuses_a_handed_over_one() {
         .to_string(),
     )
     .unwrap();
-    let port = common::free_port();
     let mut child = common::clear_env(&mut std::process::Command::new(env!(
         "CARGO_BIN_EXE_fake-lemond"
     )))
     .arg(dirs.cache())
     .arg(dirs.config())
-    .args(["--port", &port.to_string(), "--host", "127.0.0.1"])
+    .args(["--port", "0", "--host", "127.0.0.1"])
     .env("LEMONADE_API_KEY", "k3y")
     .env("LEMONADE_ADMIN_API_KEY", "adm1n")
     .env(KEY_ENV, "from-the-environment")
     .stdin(std::process::Stdio::null())
     .spawn()
     .unwrap();
+    let port = common::bound_port(&dirs, &mut child, Duration::from_secs(20));
     let admin = nocturne_lemonade::Admin::new(port, "adm1n").unwrap();
     let deadline = Instant::now() + Duration::from_secs(10);
     while admin.health().await.is_err() {

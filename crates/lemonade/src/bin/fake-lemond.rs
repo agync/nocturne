@@ -18,6 +18,10 @@
 //! `flm:npu` backend (its models listed once that is installed, as the real engine discovers
 //! them), an NPU without a driver, one the backend does not support, one whose loads fail as the
 //! real engine's `flm validate` check does, or one whose requests fail.
+//! `--port 0`, or no `--port`, binds a port the system picks and writes it to `fake-port` in the
+//! cache directory, so a test never has to choose a port and release it before the fake binds it.
+//! The real engine's contract is `--port N`, which the supervisor keeps; this is only for tests
+//! that run the fake directly.
 //! `POST /fake/crash` kills it on demand. `POST /v1/delete` removes a model's files, as the real
 //! engine does.
 //!
@@ -400,6 +404,12 @@ async fn main() {
             std::process::exit(2);
         }
     };
+    // A port left by an earlier launch in this directory must not be read as this launch's.
+    let ephemeral = port == 0;
+    if ephemeral {
+        let _ = std::fs::remove_file(cache.join("fake-port"));
+        let _ = std::fs::remove_file(cache.join("fake-port.tmp"));
+    }
     let config = read_config(&config_dir);
     let mode_str = std::env::var("FAKE_LEMOND_MODE")
         .ok()
@@ -456,6 +466,7 @@ async fn main() {
             std::process::exit(98);
         }
     };
+    let port = listener.local_addr().map_or(port, |a| a.port());
     let ws_port = config
         .get("websocket_port")
         .and_then(|v| v.as_u64())
@@ -463,6 +474,12 @@ async fn main() {
     let _ws_listener = tokio::net::TcpListener::bind(("127.0.0.1", ws_port))
         .await
         .ok();
+    if ephemeral {
+        let staged = cache.join("fake-port.tmp");
+        if std::fs::write(&staged, port.to_string()).is_ok() {
+            let _ = std::fs::rename(&staged, cache.join("fake-port"));
+        }
+    }
 
     let mut inner = Inner {
         config: config.clone(),
