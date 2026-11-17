@@ -335,7 +335,7 @@ mod tests {
     use aes_gcm::{Aes256Gcm, Nonce};
     use hkdf::Hkdf;
     use p256::{PublicKey, SecretKey, ecdh::diffie_hellman};
-    use sha2_10::{Digest, Sha256};
+    use sha2::{Digest, Sha256};
 
     use super::reference::{self, hex};
     use super::*;

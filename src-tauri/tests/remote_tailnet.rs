@@ -17,7 +17,7 @@ use nocturne_helpers::{
     TailnetOptions, TailnetTransport, Transport, TransportState,
 };
 use serde_json::Value;
-use sha2_10::{Digest, Sha256};
+use sha2::{Digest, Sha256};
 
 const KEY: &str = "k7f3a9c2e1b8d4f6a0c3e5b7d9f1a2c4e6b8d0f2a4c6e8b0d2f4a6c8e0b2d4f6";
 

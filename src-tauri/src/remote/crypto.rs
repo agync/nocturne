@@ -17,7 +17,7 @@ use hkdf::Hkdf;
 use p256::ecdh::diffie_hellman;
 use p256::{PublicKey, SecretKey};
 use serde::{Deserialize, Serialize};
-use sha2_10::{Digest, Sha256};
+use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use zeroize::Zeroizing;
 
