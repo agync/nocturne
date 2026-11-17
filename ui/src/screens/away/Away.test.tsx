@@ -171,6 +171,31 @@ describe("away", () => {
     );
   });
 
+  it("advanced_button_points_only_at_an_open_panel", async () => {
+    await openAway("/settings/away", "on");
+    const show = screen.getByRole("button", { name: "Show advanced details" });
+    expect(show).toHaveAttribute("aria-expanded", "false");
+    expect(show).not.toHaveAttribute("aria-controls");
+    await userEvent.click(show);
+    const hide = screen.getByRole("button", { name: "Hide advanced details" });
+    const panel = document.getElementById(hide.getAttribute("aria-controls") ?? "");
+    expect(panel).toBe(await screen.findByRole("region", { name: "Advanced details" }));
+    await userEvent.click(hide);
+    expect(screen.getByRole("button", { name: "Show advanced details" })).not.toHaveAttribute(
+      "aria-controls",
+    );
+  });
+
+  it("on_page_lead: names the company and no longer says nothing goes elsewhere", async () => {
+    await openAway("/settings/away", "on");
+    expect(
+      screen.getByText(
+        "While this is on, your phone can reach this computer over the internet, through Cloudflare.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing goes anywhere else/)).toBeNull();
+  });
+
   it("advanced_lists_what_is_not_hidden: says what the middle still sees and the one caveat", async () => {
     await openAway("/settings/away", "on");
     await userEvent.click(screen.getByRole("button", { name: "Show advanced details" }));

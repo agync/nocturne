@@ -306,7 +306,9 @@ function OnPage({
       }
     >
       <Title />
-      <p className={styles.lede}>{t("away.on.lead")}</p>
+      <p className={styles.lede}>
+        {t("away.turnOn.lead", { company: companyOf(view.connection) })}
+      </p>
       <div className={styles.switch}>
         <Toggle
           label={t("away.on.switch")}
@@ -391,7 +393,7 @@ function OnPage({
           type="button"
           className={`${styles.linkButton} hit`}
           aria-expanded={advanced}
-          aria-controls={advancedId}
+          aria-controls={advanced ? advancedId : undefined}
           onClick={() => setAdvanced(!advanced)}
         >
           {advanced ? t("away.advanced.hide") : t("away.advanced.show")}

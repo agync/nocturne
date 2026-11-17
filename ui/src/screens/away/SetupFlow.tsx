@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
+import { Disclosure } from "../../components/Disclosure/Disclosure";
 import { Progress } from "../../components/Progress/Progress";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
@@ -11,7 +13,7 @@ import { useEngine } from "../../engine/context";
 import styles from "./Away.module.css";
 import { AwayPage, SwitchDialog } from "./AwayPage";
 import { computerKind, mayAskAboutFirewall, mostPrivateAvailable } from "./os";
-import { companyOf, connectionName, Frame } from "./parts";
+import { companyOf, connectionName, Frame, PhoneFacts, SeesText } from "./parts";
 import { useBusyAct, useRemoteAct } from "./useRemote";
 
 /** Roughly what each part weighs; the real size is shown while it downloads. */
@@ -147,8 +149,6 @@ export function SetupFlow({ view }: { view: RemoteView }) {
         onContinue={() => {
           // Phones paired the other way stop working, so that is asked about first.
           if (view.devices.length > 0 && choice !== view.connection) setSwitching(true);
-          else if (view.installed.includes(choice))
-            void run(() => engine.startRemote(choice, false));
           else setAsking(true);
         }}
         onLeave={() => goTo("/settings/away")}
@@ -159,6 +159,8 @@ export function SetupFlow({ view }: { view: RemoteView }) {
     );
   }
   if (state.type === "off") {
+    const here = view.installed.includes(choice);
+    const company = companyOf(choice);
     return (
       <Frame
         back={{ to: "/settings", label: t("screen.settings.title") }}
@@ -166,36 +168,53 @@ export function SetupFlow({ view }: { view: RemoteView }) {
       >
         <StepLabel connection={choice} step="download" named />
         <h1 className="t-page-title">
-          {t("away.ask.title", { company: companyOf(choice), size: formatBytes(ESTIMATE[choice]) })}
+          {here
+            ? t("away.turnOn.title", { company })
+            : t("away.ask.title", { company, size: formatBytes(ESTIMATE[choice]) })}
         </h1>
-        <p className={styles.body}>{tc("away.ask.body", { company: companyOf(choice) })}</p>
-        <dl className={styles.facts}>
-          <div>
-            <dt>{t("away.ask.from")}</dt>
-            <dd>{companyOf(choice)}</dd>
-          </div>
-          <div>
-            <dt>{t("away.ask.size")}</dt>
-            <dd>{t("away.ask.about", { size: formatBytes(ESTIMATE[choice]) })}</dd>
-          </div>
-          <div>
-            <dt>{t("away.ask.runs")}</dt>
-            <dd>{t("away.ask.runsOnly")}</dd>
-          </div>
-        </dl>
+        <p className={styles.body}>{t("away.turnOn.lead", { company })}</p>
+        {here ? null : (
+          <>
+            <p className={styles.body}>{tc("away.ask.body", { company })}</p>
+            <dl className={styles.facts}>
+              <div>
+                <dt>{t("away.ask.from")}</dt>
+                <dd>{company}</dd>
+              </div>
+              <div>
+                <dt>{t("away.ask.size")}</dt>
+                <dd>{t("away.ask.about", { size: formatBytes(ESTIMATE[choice]) })}</dd>
+              </div>
+              <div>
+                <dt>{t("away.ask.runs")}</dt>
+                <dd>{t("away.ask.runsOnly")}</dd>
+              </div>
+            </dl>
+          </>
+        )}
+        <section className={styles.sec}>
+          <h2 className={styles.smallHeading}>{t("away.sees.heading")}</h2>
+          <SeesText connection={choice} />
+          <p className={styles.body}>{t("away.sees.either")}</p>
+        </section>
+        <section className={styles.sec}>
+          <h2 className={styles.smallHeading}>{t("away.phone.heading")}</h2>
+          <p className={styles.body}>{t("away.phone.body")}</p>
+          <p className={styles.body}>{t("away.lost")}</p>
+        </section>
         <Firewall connection={choice} />
-        <div className={styles.actions}>
+        <ActionBar>
           <Button
             variant="primary"
             disabled={busy}
-            onClick={() => void run(() => engine.startRemote(choice, true))}
+            onClick={() => void run(() => engine.startRemote(choice, !here))}
           >
-            {t("away.ask.download")}
+            {t(here ? "away.ask.turnOn" : "away.ask.download")}
           </Button>
-          <Button variant="secondary" onClick={() => goTo("/settings/away")}>
+          <Button variant="quiet" onClick={() => goTo("/settings/away")}>
             {t("away.notNow")}
           </Button>
-        </div>
+        </ActionBar>
       </Frame>
     );
   }
@@ -242,11 +261,11 @@ export function SetupFlow({ view }: { view: RemoteView }) {
             )}
           </div>
         </div>
-        <div className={styles.actions}>
+        <ActionBar>
           <Button variant="secondary" disabled={busy} onClick={() => void leave()}>
             {t("away.cancel")}
           </Button>
-        </div>
+        </ActionBar>
       </Frame>
     );
   }
@@ -264,11 +283,11 @@ export function SetupFlow({ view }: { view: RemoteView }) {
           {t("away.starting")}
         </p>
         <Firewall connection={connection} />
-        <div className={styles.actions}>
+        <ActionBar>
           <Button variant="secondary" disabled={busy} onClick={() => void leave()}>
             {t("away.cancel")}
           </Button>
-        </div>
+        </ActionBar>
       </Frame>
     );
   }
@@ -308,14 +327,14 @@ export function SetupFlow({ view }: { view: RemoteView }) {
           </li>
         </ul>
         <p className={styles.ok}>{t("away.phoneApp.signedIn")}</p>
-        <div className={styles.actions}>
+        <ActionBar>
           <Button variant="primary" onClick={() => setPhoneApp(true)}>
             {t("away.phoneApp.done")}
           </Button>
-          <Button variant="secondary" onClick={() => setPhoneApp(true)}>
+          <Button variant="quiet" onClick={() => setPhoneApp(true)}>
             {t("away.phoneApp.have")}
           </Button>
-        </div>
+        </ActionBar>
       </Frame>
     );
   }
@@ -356,23 +375,9 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
     { value: "simple", show: true },
     { value: "mostPrivate", show: mostPrivateAvailable() },
   ];
+  const canMostPrivate = mostPrivateAvailable();
   return (
-    <Frame
-      back={{ to: "/settings", label: t("screen.settings.title") }}
-      aside={
-        <>
-          <h2 className={styles.label}>{t("away.can.heading")}</h2>
-          <ul className={styles.rules}>
-            <li>{t("away.can.ask")}</li>
-            <li>{t("away.can.keep")}</li>
-            <li>{t("away.can.read")}</li>
-          </ul>
-          <h2 className={styles.label}>{t("away.cant.heading")}</h2>
-          <p className={styles.muted}>{t("away.cant.all")}</p>
-          <p className={styles.private}>{t("away.private.note")}</p>
-        </>
-      }
-    >
+    <Frame back={{ to: "/settings", label: t("screen.settings.title") }}>
       <StepLabel connection={choice} step="choice" named={false} />
       <h1 className="t-page-title">{t("away.off.lead")}</h1>
       <fieldset className={styles.choices}>
@@ -408,16 +413,50 @@ function Choice({ choice, onChoice, onContinue, onLeave, view, busy, switchDialo
             );
           })}
       </fieldset>
-      <p className={styles.body}>{t("away.on.lead")}</p>
-      <div className={styles.actions}>
+      <dl className={`${styles.dl} ${styles.short}`}>
+        <div>
+          <dt>{t("away.short.phone.label")}</dt>
+          <dd>{t("away.short.phone.body")}</dd>
+        </div>
+        <div>
+          <dt>{t("away.short.private.label")}</dt>
+          <dd>{t("away.short.private.body")}</dd>
+        </div>
+      </dl>
+      <Disclosure label={t("away.more")}>
+        <dl className={styles.dl}>
+          <div>
+            <dt>{connectionName("simple")}</dt>
+            <dd>
+              <SeesText connection="simple" />
+            </dd>
+          </div>
+          {canMostPrivate ? (
+            <div>
+              <dt>{connectionName("mostPrivate")}</dt>
+              <dd>
+                <SeesText connection="mostPrivate" />
+              </dd>
+            </div>
+          ) : null}
+          <div>
+            <dt>{t("away.sees.either.label")}</dt>
+            <dd>{t("away.sees.either")}</dd>
+          </div>
+        </dl>
+        <PhoneFacts />
+        <p className={styles.sub}>{t("away.lost")}</p>
+        <p className={styles.sub}>{t("away.switch.warns")}</p>
+        <p className={styles.sub}>{t("away.todo.leaving")}</p>
+      </Disclosure>
+      <ActionBar line={t("away.bar.first")}>
         <Button variant="primary" disabled={busy} onClick={onContinue}>
           {t("away.choice.continue")}
         </Button>
-        <Button variant="secondary" onClick={onLeave}>
+        <Button variant="quiet" onClick={onLeave}>
           {t("away.notNow")}
         </Button>
-        <span className={styles.muted}>{t("away.switch.warns")}</span>
-      </div>
+      </ActionBar>
       {switchDialog}
     </Frame>
   );
@@ -503,20 +542,20 @@ function SignIn({ connection, step, url, aside, onLeave }: SignInProps) {
         <span className={styles.pulse} aria-hidden="true" />
         {t(words.waiting)}
       </p>
-      <div className={styles.actions}>
-        <Button variant="secondary" onClick={() => void act(() => engine.openRemoteSignIn())}>
-          {t("away.signIn.again")}
-        </Button>
-        <Button variant="secondary" onClick={onLeave}>
-          {t("away.cancel")}
-        </Button>
-      </div>
       <p className={styles.muted}>
         {t("away.signIn.noBrowser")}{" "}
         <button type="button" className={`${styles.linkButton} hit`} onClick={() => void copy()}>
           {t("away.signIn.copy")}
         </button>
       </p>
+      <ActionBar>
+        <Button variant="secondary" onClick={() => void act(() => engine.openRemoteSignIn())}>
+          {t("away.signIn.again")}
+        </Button>
+        <Button variant="quiet" onClick={onLeave}>
+          {t("away.cancel")}
+        </Button>
+      </ActionBar>
     </Frame>
   );
 }
