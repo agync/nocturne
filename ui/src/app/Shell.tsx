@@ -1,5 +1,6 @@
 import { type ReactNode, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useFlowOpen } from "../components/ActionBar/flow";
 import { Dialog } from "../components/Dialog/Dialog";
 import { DropOverlay } from "../components/DropOverlay/DropOverlay";
 import { ErrorBoundary } from "../components/ErrorBoundary/ErrorBoundary";
@@ -38,6 +39,7 @@ export function Shell({ children }: ShellProps) {
   const main = useRef<HTMLElement>(null);
   const size = useShellSize(root);
   const narrow = size === "narrow";
+  const flowOpen = useFlowOpen();
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = useEngine();
   const toast = useToast();
@@ -311,7 +313,12 @@ export function Shell({ children }: ShellProps) {
             </div>
           ) : null}
         </div>
-        {narrow ? <div className={styles.bottomBar}>{bar}</div> : null}
+        {narrow ? (
+          // A step flow's own bar closes the window: two bars would leave no room for the words.
+          <div className={styles.bottomBar} hidden={flowOpen}>
+            {bar}
+          </div>
+        ) : null}
       </div>
       {menuOpen ? (
         <Dialog title={t("shell.menu.title")} edge="start" onClose={() => setMenuOpen(false)}>
