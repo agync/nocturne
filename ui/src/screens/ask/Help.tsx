@@ -1,3 +1,4 @@
+import { hashHref } from "../../app/query";
 import { findRoute } from "../../app/routes";
 import { Button } from "../../components/Button/Button";
 import { Icon } from "../../components/Icon/Icon";
@@ -109,7 +110,7 @@ export function HelpButtons({ help }: { help: HelpView }) {
         <Button
           variant="primary"
           onClick={() => {
-            window.location.hash = `#${screen.path}`;
+            window.location.hash = hashHref(screen.path, { from: "ask" });
           }}
         >
           {screen.label}

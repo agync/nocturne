@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
+import { BackToAnswer } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Progress } from "../../components/Progress/Progress";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
@@ -131,6 +132,7 @@ export default function Privacy() {
     <ScreenSheet flush className={styles.sheet}>
       <div className={styles.columns}>
         <div className={styles.proof}>
+          <BackToAnswer />
           <p className={`t-section ${styles.eyebrow}`}>{t("privacy.title")}</p>
           <p className={styles.sentLabel}>
             {measured ? t("privacy.sent.label") : t("privacy.sent.label.unmeasured")}

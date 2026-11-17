@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { BackToAnswer } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
@@ -243,6 +244,7 @@ export function Settings() {
 
   return (
     <ScreenSheet>
+      <BackToAnswer />
       <div className={styles.head}>
         <h1 className="t-page-title">{t("settings.title")}</h1>
         <p className={styles.saved} role="status">

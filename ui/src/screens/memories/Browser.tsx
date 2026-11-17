@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { hashHref, useQueryParam } from "../../app/query";
+import { BackToAnswer } from "../../components/BackLink/BackLink";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { t } from "../../copy/t";
 import type { EntityKind } from "../../engine/bindings";
@@ -35,6 +36,7 @@ export function Browser({ entityId }: { entityId: string | null }) {
       <div className={styles.card} data-entity={entityId !== null}>
         {entityId === null ? (
           <header className={styles.top}>
+            <BackToAnswer />
             <h1 className="t-page-title">{t("memories.title")}</h1>
             <p className={styles.dek}>{t("memories.dek")}</p>
           </header>

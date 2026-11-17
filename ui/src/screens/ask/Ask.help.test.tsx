@@ -56,7 +56,11 @@ describe("help with Nocturne", () => {
     expect(receipt).toHaveTextContent("Nocturne guide · Away from home");
     expect(receipt.closest("li")?.querySelector("[data-chip]")).toBeNull();
     expect(document.querySelector("article [data-chip]")).not.toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Open the guide" }));
+    await userEvent.click(screen.getByRole("button", { name: "Open Away from home" }));
+    expect(window.location.hash).toBe("#/settings/away?from=ask");
+    expect(await screen.findByRole("link", { name: "Ask" })).toHaveAttribute("href", "#/ask");
+    window.location.hash = "#/ask";
+    await userEvent.click(await screen.findByRole("button", { name: "Open the guide" }, LONG));
     expect(window.location.hash).toBe("#/guide?page=away-from-home&section=turn-it-on&from=ask");
   });
 

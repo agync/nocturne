@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQueryParam } from "../../app/query";
+import { BackToAnswer } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
@@ -187,6 +188,7 @@ export default function Fading() {
 
   return (
     <ScreenSheet>
+      <BackToAnswer />
       <h1 ref={title} tabIndex={-1} className={`t-page-title ${styles.title}`}>
         {t("fading.title")}
       </h1>
