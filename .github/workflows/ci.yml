@@ -63,7 +63,7 @@ env:
   # Smaller build outputs, so the cache holds one copy and not several.
   CARGO_INCREMENTAL: "0"
   CARGO_PROFILE_DEV_DEBUG: "0"
-  NODE_VERSION: "22"
+  NODE_VERSION: "26"
   # The system libraries the Tauri crates link against, as release.yml installs them.
   APT_PACKAGES: >-
     build-essential curl file libwebkit2gtk-4.1-dev libayatana-appindicator3-dev

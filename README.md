@@ -78,7 +78,7 @@ Both are off until you turn them on.
 
 ## Development
 
-Needs Rust 1.90 or newer, Node.js 22 or newer and [pre-commit](https://pre-commit.com). The
+Needs Rust 1.90 or newer, Node.js 26 or newer and [pre-commit](https://pre-commit.com). The
 `okf` tool validates the docs, and the Go version pinned in
 `helpers/tailnet/go.mod` runs that helper's tests.
 

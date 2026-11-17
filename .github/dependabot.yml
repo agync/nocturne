@@ -51,6 +51,10 @@ updates:
       prefix: "chore(deps)"
     cooldown:
       default-days: 7
+    ignore:
+      # Moves with the Node pin, see docs/contribution/pin-bumps.md.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
     groups:
       ui-packages:
         patterns: ["*"]
