@@ -62,21 +62,25 @@ pub fn set_mode(dirs: &Dirs, mode: &str) {
     std::fs::write(path, v.to_string()).unwrap();
 }
 
-/// A port nothing nearby is using, never handed out twice in one test binary.
+/// A port nothing nearby is using, never handed out twice in one test binary. It comes from
+/// below the range the system lends to outgoing connections, as the supervisor's do: a port
+/// the system chose (binding port 0) is one it may lend to another test's connection before
+/// the fake binds it.
 pub fn free_port() -> u16 {
     static GIVEN: std::sync::Mutex<Vec<u16>> = std::sync::Mutex::new(Vec::new());
-    loop {
-        let port = std::net::TcpListener::bind("127.0.0.1:0")
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
+    const PORTS: std::ops::Range<u16> = 20000..32768;
+    let span = u32::from(PORTS.end - PORTS.start);
+    let seed = std::process::id().wrapping_mul(2_654_435_761);
+    for draw in 0..u32::from(u16::MAX) {
+        let port = PORTS.start + ((seed.wrapping_add(draw.wrapping_mul(7919))) % span) as u16;
         let mut given = GIVEN.lock().unwrap();
-        if !given.contains(&port) {
-            given.push(port);
-            return port;
+        if given.contains(&port) || std::net::TcpListener::bind(("127.0.0.1", port)).is_err() {
+            continue;
         }
+        given.push(port);
+        return port;
     }
+    panic!("no free port below the lent range");
 }
 
 /// A port nothing listens on, for "no engine" tests: connecting is refused, always.
@@ -271,8 +275,8 @@ impl Fake {
     }
 
     /// Start a fake and wait for it. A free port is chosen, then released, then bound by the
-    /// child, and another test's connection can take it in between (a Mac hands out the same
-    /// range for both), so a fake that does not come up is started again on a new port.
+    /// child, and another process can still take it in between, so a fake that does not come
+    /// up is started again on a new port.
     pub async fn started(mode: Option<&str>) -> Fake {
         let limit = Duration::from_secs(3);
         let mut last = String::new();
