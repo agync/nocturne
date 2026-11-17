@@ -1183,6 +1183,57 @@ mod tests {
         );
     }
 
+    /// `PortalRegistrar::connect` builds its connection and its streams inside the temporary
+    /// runtime of `run_bounded`, which is gone when it returns. What it made must go on hearing
+    /// the portal from another runtime.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_connection_made_in_the_bounded_runtime_hears_the_portal_after_it_is_gone() {
+        use crate::os::portal::{self, Bus, testbus::TestBus, tests as fake};
+        let bus = TestBus::start();
+        let portal_fake = tauri::async_runtime::block_on(fake::shortcuts_portal(
+            &bus,
+            0,
+            std::time::Duration::ZERO,
+        ));
+        let address = Bus::at(&bus.address);
+        let (conn, mut presses, mut owners, owner) = run_bounded(CONNECT_LIMIT, async move {
+            let conn = address.connect().await.ok()?;
+            let presses = portal::activations(&conn).await.ok()?;
+            let owners = portal::owner_changes(&conn).await.ok()?;
+            let owner = portal::owner(&conn).await.ok()?;
+            Some((conn, presses, owners, owner))
+        })
+        .flatten()
+        .unwrap();
+
+        let me = conn.unique_name().unwrap().to_string();
+        let session = "/org/freedesktop/portal/desktop/session/test/t";
+        let is_portal = |sender: &str| sender == owner.as_str();
+        let heard = tauri::async_runtime::block_on(async {
+            let wait = std::time::Duration::from_secs(5);
+            fake::press(&portal_fake.server, &me, session).await;
+            let press =
+                tokio::time::timeout(wait, portal::next_activation(&mut presses, &is_portal)).await;
+            // The portal stops, and the owner stream says so.
+            drop(portal_fake);
+            let gone = tokio::time::timeout(wait, portal::next_of(&mut owners)).await;
+            (press, gone)
+        });
+        assert_eq!(
+            heard
+                .0
+                .expect("no press arrived after the runtime was gone"),
+            Some(zbus::OwnedObjectPath::try_from(session).unwrap())
+        );
+        assert_eq!(
+            heard
+                .1
+                .expect("no owner change arrived after the runtime was gone"),
+            Some(None)
+        );
+    }
+
     #[cfg(target_os = "linux")]
     #[test]
     fn without_the_portal_there_is_no_portal_registrar() {

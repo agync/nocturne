@@ -24,6 +24,9 @@ struct Bus {
     conn: Mutex<Option<Connection>>,
     retry_after: Mutex<Option<Instant>>,
     session: bool,
+    /// A private bus the tests start, instead of the person's own.
+    #[cfg(test)]
+    address: Option<String>,
 }
 
 static SYSTEM: Bus = Bus::new(false);
@@ -37,6 +40,8 @@ impl Bus {
             conn: Mutex::new(None),
             retry_after: Mutex::new(None),
             session,
+            #[cfg(test)]
+            address: None,
         }
     }
 
@@ -50,6 +55,8 @@ impl Bus {
             return None;
         }
         let session = self.session;
+        #[cfg(test)]
+        let address = self.address.clone();
         let (tx, rx) = mpsc::channel();
         let spawned = std::thread::Builder::new()
             .name("nocturne-dbus-connect".into())
@@ -58,6 +65,11 @@ impl Bus {
                     Builder::session()
                 } else {
                     Builder::system()
+                };
+                #[cfg(test)]
+                let builder = match address {
+                    Some(a) => Builder::address(a.as_str()),
+                    None => builder,
                 };
                 let made = zbus::block_on(builder.method_timeout(CALL_LIMIT).build()).ok();
                 let _ = tx.send(made);
@@ -398,5 +410,119 @@ mod tests {
     #[test]
     fn a_missing_directory_is_unknown() {
         assert_eq!(sysfs_ac(Path::new("/nonexistent/power_supply")), None);
+    }
+
+    /// A private session bus with nothing on it, never the person's own.
+    struct TestBus {
+        child: std::process::Child,
+        address: String,
+        _dir: tempfile::TempDir,
+    }
+
+    impl TestBus {
+        fn start() -> TestBus {
+            use std::io::{BufRead, BufReader};
+            use std::process::Stdio;
+            // A socket path is limited to 107 bytes, which a long TMPDIR can exceed.
+            let dir = tempfile::Builder::new()
+                .prefix("nbus")
+                .tempdir_in("/tmp")
+                .unwrap();
+            let config = dir.path().join("bus.conf");
+            std::fs::write(
+                &config,
+                format!(
+                    "<busconfig><type>session</type><listen>unix:dir={}</listen>\
+                     <auth>EXTERNAL</auth><policy context=\"default\">\
+                     <allow send_destination=\"*\" eavesdrop=\"true\"/>\
+                     <allow eavesdrop=\"true\"/><allow own=\"*\"/></policy></busconfig>",
+                    dir.path().display()
+                ),
+            )
+            .unwrap();
+            let mut child = nocturne_engine::process::command("dbus-daemon")
+                .arg(format!("--config-file={}", config.display()))
+                .args(["--nofork", "--nopidfile", "--print-address=1"])
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "could not start dbus-daemon ({e}): the host tests run a private bus \
+                         and need it on the PATH (the dbus or dbus-daemon package)"
+                    )
+                });
+            let mut line = String::new();
+            BufReader::new(child.stdout.take().unwrap())
+                .read_line(&mut line)
+                .unwrap();
+            TestBus {
+                child,
+                address: line.trim().to_string(),
+                _dir: dir,
+            }
+        }
+    }
+
+    impl Drop for TestBus {
+        fn drop(&mut self) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+        }
+    }
+
+    /// The housekeeping calls the probes from tasks of a multi-thread runtime. A probe there
+    /// must come back with an answer, not panic and not hang, and again after the runtime that
+    /// asked has gone.
+    #[test]
+    fn a_probe_made_from_a_runtime_task_answers() {
+        let bus = TestBus::start();
+        let mut session = Bus::new(true);
+        session.address = Some(bus.address.clone());
+        let session = Arc::new(session);
+        let ask = |bus: Arc<Bus>| {
+            bus.call(
+                "org.freedesktop.DBus",
+                "/org/freedesktop/DBus",
+                "org.freedesktop.DBus",
+                "GetId",
+                &(),
+            )
+            .is_some()
+        };
+
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_time()
+            .build()
+            .unwrap();
+        let answers = runtime.block_on(async {
+            let tasks: Vec<_> = (0..4)
+                .map(|_| {
+                    let bus = session.clone();
+                    tokio::spawn(async move { ask(bus) })
+                })
+                .collect();
+            let mut answers = Vec::new();
+            for task in tasks {
+                answers.push(
+                    tokio::time::timeout(Duration::from_secs(10), task)
+                        .await
+                        .expect("a probe from a task never came back")
+                        .expect("a probe from a task panicked"),
+                );
+            }
+            answers
+        });
+        assert!(answers.iter().all(|a| *a), "{answers:?}");
+        drop(runtime);
+        assert!(ask(session.clone()), "the connection died with the runtime");
+
+        // Nothing is on the private bus to answer, so a missing service is `None`.
+        assert!(
+            session
+                .call("org.nope.Missing", "/x", "org.nope.Missing", "M", &())
+                .is_none()
+        );
     }
 }
