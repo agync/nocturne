@@ -1,7 +1,8 @@
-import { useId, useState } from "react";
+import { useState } from "react";
+import { ActionBar, ActionBarHost } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
-import { Chevron } from "../../components/Disclosure/Chevron";
+import { Disclosure } from "../../components/Disclosure/Disclosure";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes } from "../../copy/format";
 import { type CopyId, t } from "../../copy/t";
@@ -61,42 +62,42 @@ export function Choosing({ view, onStarted }: Props) {
   const unsupported = view.detected === "unsupported" || fitting.length === 0;
   const first = view.detected && view.detected !== "unsupported" ? view.detected : fitting[0]?.tier;
   const [picked, setPicked] = useState<Tier | undefined>(first);
-  const [why, setWhy] = useState(false);
-  const whyId = useId();
   const [busy, setBusy] = useState(false);
 
   if (unsupported) {
     const lack = shortfall(view);
     return (
       <section className={styles.card} aria-labelledby="result">
-        <p className={`t-section ${styles.notYet}`}>{t("setup.step.one")}</p>
-        <h1 ref={heading} tabIndex={-1} id="result" className={`t-page-title ${styles.title}`}>
-          {t(
-            lack.kind === "memory"
-              ? "setup.result.unsupported.memory"
-              : "setup.result.unsupported.disk",
-          )}
-        </h1>
-        <p className={styles.lead}>
-          {lack.kind === "memory"
-            ? t("setup.unsupported.memory.detail", { ram: view.ramGib, min: lack.min })
-            : t("setup.unsupported.disk.detail", {
-                free: formatBytes(view.freeDiskBytes),
-                needed: formatBytes(lack.needed),
-              })}
-        </p>
-        <p className={styles.lead}>
-          {t(
-            lack.kind === "memory"
-              ? "setup.unsupported.memory.next"
-              : "setup.unsupported.disk.next",
-          )}
-        </p>
-        <div className={styles.foot}>
-          <Button variant="secondary" onClick={() => refresh("setup")}>
-            {t("setup.check.again")}
-          </Button>
-        </div>
+        <ActionBarHost>
+          <p className={`t-section ${styles.notYet}`}>{t("setup.step.one")}</p>
+          <h1 ref={heading} tabIndex={-1} id="result" className={`t-page-title ${styles.title}`}>
+            {t(
+              lack.kind === "memory"
+                ? "setup.result.unsupported.memory"
+                : "setup.result.unsupported.disk",
+            )}
+          </h1>
+          <p className={styles.lead}>
+            {lack.kind === "memory"
+              ? t("setup.unsupported.memory.detail", { ram: view.ramGib, min: lack.min })
+              : t("setup.unsupported.disk.detail", {
+                  free: formatBytes(view.freeDiskBytes),
+                  needed: formatBytes(lack.needed),
+                })}
+          </p>
+          <p className={styles.lead}>
+            {t(
+              lack.kind === "memory"
+                ? "setup.unsupported.memory.next"
+                : "setup.unsupported.disk.next",
+            )}
+          </p>
+          <ActionBar>
+            <Button variant="secondary" onClick={() => refresh("setup")}>
+              {t("setup.check.again")}
+            </Button>
+          </ActionBar>
+        </ActionBarHost>
       </section>
     );
   }
@@ -120,92 +121,88 @@ export function Choosing({ view, onStarted }: Props) {
 
   return (
     <section className={styles.card} aria-labelledby="result">
-      <p className={`t-section ${styles.eyebrow}`}>{t("setup.step.one")}</p>
-      <h1
-        ref={heading}
-        tabIndex={-1}
-        id="result"
-        className={`t-page-title ${styles.title}`}
-        aria-live="polite"
-      >
-        {t(headline)}
-      </h1>
-      <fieldset className={styles.tiers}>
-        <legend className="sr-only">{t("setup.tier.label")}</legend>
-        {view.options.map((o) => {
-          const tier = o.tier as Exclude<Tier, "unsupported">;
-          const here = o.tier === view.detected;
-          const tooBig = view.ramGib < o.minRamGib ? "setup.tier.toobig" : "setup.tier.toobig.disk";
-          return (
-            <label key={o.tier} className={styles.tier} data-disabled={!o.fits}>
-              <input
-                type="radio"
-                name="tier"
-                value={o.tier}
-                className={styles.radio}
-                checked={chosen?.tier === o.tier}
-                disabled={!o.fits}
-                onChange={() => setPicked(o.tier)}
-              />
-              <span className={styles.tierBody}>
-                <span className={styles.tierName}>
-                  {here ? t("setup.tier.here", { name: t(NAME[tier]) }) : t(NAME[tier])}
-                </span>
-                <span className={styles.tierDetail}>
-                  {t("setup.tier.detail", { ram: o.minRamGib, size: formatBytes(o.downloadBytes) })}
-                </span>
-                {NOTE[tier] ? <span className={styles.tierDetail}>{t(NOTE[tier])}</span> : null}
-                {!o.fits ? <span className={styles.tierDetail}>{t(tooBig)}</span> : null}
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
-      <p className={styles.lead}>
-        {t("setup.needs", {
-          size: formatBytes(chosen?.downloadBytes ?? 0),
-          free: formatBytes(view.freeDiskBytes),
-        })}
-      </p>
-      <p className={styles.lead}>{t("setup.needs.once")}</p>
-      {chosen?.tier === "tiny" ? (
-        <div className={styles.later}>
-          <p>{t("setup.tiny.online")}</p>
-          <p className={styles.where}>{tc("setup.tiny.online.where")}</p>
-        </div>
-      ) : null}
-      <div className={styles.foot}>
-        <Button
-          variant="quiet"
-          flush
-          aria-expanded={why}
-          aria-controls={why ? whyId : undefined}
-          onClick={() => setWhy(!why)}
+      <ActionBarHost>
+        <p className={`t-section ${styles.eyebrow}`}>{t("setup.step.one")}</p>
+        <h1
+          ref={heading}
+          tabIndex={-1}
+          id="result"
+          className={`t-page-title ${styles.title}`}
+          aria-live="polite"
         >
-          <Chevron />
-          {t("setup.why")}
-        </Button>
-        <Button variant="primary" disabled={busy || !chosen} onClick={() => void start()}>
-          {t("setup.start", { size: formatBytes(chosen?.downloadBytes ?? 0) })}
-        </Button>
-      </div>
-      {why ? (
-        <div id={whyId} className={styles.why}>
-          <p>{t("setup.why.lead")}</p>
-          <p>{t("setup.why.here", { ram: view.ramGib })}</p>
-          <table className={styles.sizes}>
-            <tbody>
-              {WHY_ORDER.map((tier) => (
-                <tr key={tier}>
-                  <th scope="row">{t(NAME[tier])}</th>
-                  <td>{t("setup.why.row", { ram: ram(tier) })}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p>{t("setup.why.close")}</p>
-        </div>
-      ) : null}
+          {t(headline)}
+        </h1>
+        <fieldset className={styles.tiers}>
+          <legend className="sr-only">{t("setup.tier.label")}</legend>
+          {view.options.map((o) => {
+            const tier = o.tier as Exclude<Tier, "unsupported">;
+            const here = o.tier === view.detected;
+            const tooBig =
+              view.ramGib < o.minRamGib ? "setup.tier.toobig" : "setup.tier.toobig.disk";
+            return (
+              <label key={o.tier} className={styles.tier} data-disabled={!o.fits}>
+                <input
+                  type="radio"
+                  name="tier"
+                  value={o.tier}
+                  className={styles.radio}
+                  checked={chosen?.tier === o.tier}
+                  disabled={!o.fits}
+                  onChange={() => setPicked(o.tier)}
+                />
+                <span className={styles.tierBody}>
+                  <span className={styles.tierName}>
+                    {here ? t("setup.tier.here", { name: t(NAME[tier]) }) : t(NAME[tier])}
+                  </span>
+                  <span className={styles.tierDetail}>
+                    {t("setup.tier.detail", {
+                      ram: o.minRamGib,
+                      size: formatBytes(o.downloadBytes),
+                    })}
+                  </span>
+                  {NOTE[tier] ? <span className={styles.tierDetail}>{t(NOTE[tier])}</span> : null}
+                  {!o.fits ? <span className={styles.tierDetail}>{t(tooBig)}</span> : null}
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+        <p className={styles.lead}>
+          {t("setup.needs", {
+            size: formatBytes(chosen?.downloadBytes ?? 0),
+            free: formatBytes(view.freeDiskBytes),
+          })}
+        </p>
+        <p className={styles.lead}>{t("setup.needs.once")}</p>
+        <Disclosure label={t("setup.why")}>
+          <div className={styles.why}>
+            <p>{t("setup.why.lead")}</p>
+            <p>{t("setup.why.here", { ram: view.ramGib })}</p>
+            <table className={styles.sizes}>
+              <tbody>
+                {WHY_ORDER.map((tier) => (
+                  <tr key={tier}>
+                    <th scope="row">{t(NAME[tier])}</th>
+                    <td>{t("setup.why.row", { ram: ram(tier) })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p>{t("setup.why.close")}</p>
+          </div>
+        </Disclosure>
+        {chosen?.tier === "tiny" ? (
+          <div className={styles.later}>
+            <p>{t("setup.tiny.online")}</p>
+            <p className={styles.where}>{tc("setup.tiny.online.where")}</p>
+          </div>
+        ) : null}
+        <ActionBar>
+          <Button variant="primary" disabled={busy || !chosen} onClick={() => void start()}>
+            {t("setup.start", { size: formatBytes(chosen?.downloadBytes ?? 0) })}
+          </Button>
+        </ActionBar>
+      </ActionBarHost>
     </section>
   );
 }

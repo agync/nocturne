@@ -157,6 +157,16 @@ describe("the welcome", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
+  it("puts Get started before Restore from a backup", async () => {
+    await open("notStarted");
+    await screen.findByRole("button", { name: "Get started" });
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent)
+      .filter((name) => name === "Get started" || name === "Restore from a backup");
+    expect(names).toEqual(["Get started", "Restore from a backup"]);
+  });
+
   it("can be opened again from a finished setup", async () => {
     await open("done", "#/setup?step=welcome");
     await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
@@ -343,6 +353,22 @@ describe("what this computer can run", () => {
   it("says the best mind for a powerful computer", async () => {
     await open("large", "#/setup?step=choosing");
     expect(await screen.findByRole("heading", { level: 1, name: /best mind/ })).toBeInTheDocument();
+  });
+
+  it("keeps only the Set up button in the bar, with Why this one? in the words above it", async () => {
+    await open("choosing", "#/setup?step=choosing");
+    const why = await screen.findByRole("button", { name: "Why this one?" });
+    const bar = document.querySelector("[data-action-bar]") as HTMLElement;
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual([nb("Set up · 8.4 GB")]);
+    expect(bar.contains(why)).toBe(false);
+    await userEvent.click(why);
+    const panel = document.getElementById(why.getAttribute("aria-controls") ?? "") as HTMLElement;
+    expect(bar.contains(panel)).toBe(false);
+    expect(why.compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("explains Why this one? in plain words from the tier table", async () => {

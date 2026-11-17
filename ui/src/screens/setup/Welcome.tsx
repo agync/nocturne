@@ -25,11 +25,11 @@ export function Welcome({ onStart, onRestore }: { onStart: () => void; onRestore
           <span className={styles.detail}>{t("setup.welcome.promise.detail")}</span>
         </p>
         <div className={styles.welcomeButtons}>
-          <Button variant="quiet" onClick={onRestore}>
-            {t("setup.welcome.restore")}
-          </Button>
           <Button variant="primary" onClick={onStart}>
             {t("setup.welcome.start")}
+          </Button>
+          <Button variant="quiet" onClick={onRestore}>
+            {t("setup.welcome.restore")}
           </Button>
         </div>
       </div>
