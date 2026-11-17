@@ -18,7 +18,7 @@ against focus.
 
 This page is the agreed design for two things: where a step's buttons live in every step flow, and
 lighter first steps for Online answers and Away from home that still show every fact a person needs
-before anything is turned on. Nothing on it is built yet.
+before anything is turned on. All of it is in the interface.
 
 ## Owner decisions
 
@@ -380,3 +380,18 @@ those. They meet here:
 - Whether an expander stays open when the person comes back to a step they opened it on.
 - Where the bar sits on very short steps: the mockups keep it at the bottom of the window for one
   fixed place, which leaves a gap below short words.
+
+## As built
+
+Where the page left a choice, the build reads it this way:
+
+- Connect, the unnumbered step of Online answers, shows Continue first, disabled with its reason
+  until the check passes, then Check, then Not now.
+- Restore's "Replace what's on this computer?" keeps "Keep what's here" first, as
+  [Backup and restore](backup-and-restore.md) agreed: the safe choice comes first in the tab order.
+- A button that is the only one on a step, such as Cancel while a part downloads, stays a secondary
+  button; Cancel and the quiet alternatives are quiet links when they follow a main button.
+- First-run setup's "Getting ready" has no bar: its Pause button belongs to the progress it
+  controls, and nothing there goes on to a next step.
+- The Away from home page's own Turn on, for a connection set up before, is not part of the step
+  flow and still turns it on in one press.
