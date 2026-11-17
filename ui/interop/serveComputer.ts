@@ -122,7 +122,7 @@ export async function serveComputer(computer: FakeComputer): Promise<Served> {
     socket.write(
       `HTTP/1.1 101 Switching Protocols\r\nupgrade: websocket\r\nconnection: Upgrade\r\nsec-websocket-accept: ${accept}\r\n\r\n`,
     );
-    socket.on("data", (data) => {
+    socket.on("data", (data: Buffer) => {
       pending = parseFrames(Buffer.concat([pending, data]), (opcode, payload) => {
         if (opcode === 2) {
           if (open) peer.send(new Uint8Array(payload));

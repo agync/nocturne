@@ -5,7 +5,7 @@ runtime-version: '51'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
-  - org.freedesktop.Sdk.Extension.node24
+  - org.freedesktop.Sdk.Extension.node26
 command: nocturne
 
 # Each line is explained in docs/contribution/flatpak.md. Keep the two in step.
@@ -50,7 +50,7 @@ modules:
   - name: nocturne
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node24/bin
+      append-path: /usr/lib/sdk/rust-stable/bin:/usr/lib/sdk/node26/bin
       env:
         CARGO_HOME: /run/build/nocturne/cargo
         CARGO_NET_OFFLINE: 'true'

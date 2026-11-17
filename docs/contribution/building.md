@@ -315,7 +315,7 @@ configuration.
 
 Prerequisites: Windows 10 or 11 x86_64, Git for Windows (the scripts run under Git Bash), Rust with
 the MSVC toolchain and the Visual Studio Build Tools "Desktop development with C++" workload,
-Node.js 22 or newer, and the WebView2 runtime to run the result (it ships with current Windows 11
+Node.js 26 or newer, and the WebView2 runtime to run the result (it ships with current Windows 11
 and Edge). The Tauri tool downloads NSIS and WiX into its own cache the first time.
 
 From Git Bash at the repository root:
