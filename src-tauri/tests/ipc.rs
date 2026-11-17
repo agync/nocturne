@@ -1549,7 +1549,7 @@ fn files_dropped_on_quick_capture_are_held_for_it_to_ask_for() {
 #[test]
 fn open_original_opens_only_the_kept_original() {
     let h = harness();
-    let opened = h.recording_opener();
+    let opened = h.recording_desktop();
     let kept = h
         .call_raw(
             "keep_bytes",
@@ -1562,7 +1562,7 @@ fn open_original_opens_only_the_kept_original() {
         .unwrap();
     h.ok("open_original", json!({"itemId": id_of(&kept)}));
     let item = h.ok("get_item", json!({"id": id_of(&kept)}));
-    let seen = opened.lock().unwrap().clone();
+    let seen = opened.paths();
     assert_eq!(seen.len(), 1);
     assert_eq!(
         dunce::canonicalize(&seen[0]).unwrap(),
@@ -1581,13 +1581,13 @@ fn open_original_opens_only_the_kept_original() {
         h.code("open_original", json!({"itemId": "itm_nope"})),
         "notFound"
     );
-    assert_eq!(opened.lock().unwrap().len(), 1);
+    assert_eq!(opened.paths().len(), 1);
 }
 
 #[test]
 fn open_export_opens_only_a_folder_an_export_made_in_this_session() {
     let h = harness();
-    let opened = h.recording_opener();
+    let opened = h.recording_desktop();
     h.learn("a note", "You like tea.", "Tea", "tea");
     let out = tempfile::tempdir().unwrap();
     // Nothing exported yet: even a real folder is refused.
@@ -1598,7 +1598,7 @@ fn open_export_opens_only_a_folder_an_export_made_in_this_session() {
     let report = h.ok("export_to", json!({"dir": out.path().to_str().unwrap()}));
     let made = report["path"].as_str().unwrap();
     h.ok("open_export", json!({"path": made}));
-    assert_eq!(opened.lock().unwrap().len(), 1);
+    assert_eq!(opened.paths().len(), 1);
     // Not the parent, not the data folder, not something with `..` in it.
     for bad in [
         out.path().to_string_lossy().into_owned(),
@@ -1612,25 +1612,22 @@ fn open_export_opens_only_a_folder_an_export_made_in_this_session() {
             "{bad}"
         );
     }
-    assert_eq!(opened.lock().unwrap().len(), 1);
+    assert_eq!(opened.paths().len(), 1);
 }
 
 #[test]
 fn open_logs_opens_the_log_folder_inside_the_data_folder() {
     let h = harness();
-    let opened = h.recording_opener();
+    let opened = h.recording_desktop();
     std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
     h.ok("open_logs", json!({}));
-    assert_eq!(
-        opened.lock().unwrap().as_slice(),
-        &[h.dir.path().join("logs")]
-    );
+    assert_eq!(opened.paths().as_slice(), &[h.dir.path().join("logs")]);
 }
 
 #[test]
 fn open_logs_still_opens_after_the_log_folder_is_deleted() {
     let h = harness();
-    let opened = h.recording_opener();
+    let opened = h.recording_desktop();
     let logs = h.dir.path().join("logs");
     assert!(!logs.exists());
     h.ok("open_logs", json!({}));
@@ -1638,18 +1635,79 @@ fn open_logs_still_opens_after_the_log_folder_is_deleted() {
     std::fs::remove_dir_all(&logs).unwrap();
     h.ok("open_logs", json!({}));
     assert!(logs.is_dir());
-    assert_eq!(opened.lock().unwrap().as_slice(), &[logs.clone(), logs]);
+    assert_eq!(opened.paths().as_slice(), &[logs.clone(), logs]);
 }
 
 #[test]
 fn open_data_folder_opens_the_data_folder() {
     let h = harness();
-    let opened = h.recording_opener();
+    let opened = h.recording_desktop();
     h.ok("open_data_folder", json!({}));
-    assert_eq!(
-        opened.lock().unwrap().as_slice(),
-        &[h.dir.path().to_path_buf()]
+    assert_eq!(opened.paths().as_slice(), &[h.dir.path().to_path_buf()]);
+}
+
+/// Every command that starts something on the person's desktop.
+const LAUNCHERS: &[&str] = &[
+    "open_sound_settings",
+    "open_original",
+    "open_export",
+    "open_logs",
+    "open_data_folder",
+    "open_remote_sign_in",
+];
+
+#[test]
+fn the_command_loop_launches_nothing_on_this_desktop() {
+    let h = harness();
+    for name in ROADMAP.iter().chain(COMMAND_NAMES) {
+        let _ = h.call(name, json!({}));
+    }
+    assert!(
+        nocturne_app_lib::desktop::get(h.app.handle()).is_none(),
+        "the harness must never hold the real desktop"
     );
+}
+
+#[test]
+fn every_launching_command_is_unavailable_without_the_desktop() {
+    let h = harness();
+    std::fs::create_dir_all(h.dir.path().join("logs")).unwrap();
+    assert_eq!(h.code("open_sound_settings", json!({})), "unavailable");
+    assert_eq!(h.code("open_logs", json!({})), "unavailable");
+    assert_eq!(h.code("open_data_folder", json!({})), "unavailable");
+    let kept = h
+        .call_raw(
+            "keep_bytes",
+            vec![7, 7, 7],
+            &[
+                ("x-nocturne-mime", "image/png"),
+                ("x-nocturne-source", "paste"),
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        h.code("open_original", json!({"itemId": id_of(&kept)})),
+        "unavailable"
+    );
+    h.learn("a note", "You like tea.", "Tea", "tea");
+    let out = tempfile::tempdir().unwrap();
+    let report = h.ok("export_to", json!({"dir": out.path().to_str().unwrap()}));
+    assert_eq!(
+        h.code("open_export", json!({"path": report["path"]})),
+        "unavailable"
+    );
+    for name in LAUNCHERS {
+        assert!(COMMAND_NAMES.contains(name), "{name} is not a command");
+    }
+}
+
+#[test]
+fn the_sound_settings_open_through_the_installed_desktop() {
+    use common::Launch;
+    let h = harness();
+    let desktop = h.recording_desktop();
+    h.ok("open_sound_settings", json!({}));
+    assert_eq!(desktop.launches(), [Launch::SoundSettings]);
 }
 
 #[test]

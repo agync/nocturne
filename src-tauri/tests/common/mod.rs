@@ -40,6 +40,54 @@ pub fn start(h: &Harness, opts: StartOptions) -> Arc<Services> {
     runtime::start(h.app.handle(), opts).expect("the runtime starts once")
 }
 
+/// What a test sees of the person's desktop: every launch is written down, none happens.
+#[derive(Default)]
+pub struct RecordingDesktop {
+    pub launched: Mutex<Vec<Launch>>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Launch {
+    Path(std::path::PathBuf),
+    Url(String),
+    SoundSettings,
+}
+
+impl RecordingDesktop {
+    pub fn launches(&self) -> Vec<Launch> {
+        self.launched.lock().unwrap().clone()
+    }
+
+    pub fn paths(&self) -> Vec<std::path::PathBuf> {
+        self.launches()
+            .into_iter()
+            .filter_map(|l| match l {
+                Launch::Path(p) => Some(p),
+                _ => None,
+            })
+            .collect()
+    }
+
+    fn note(&self, launch: Launch) -> Result<(), String> {
+        self.launched.lock().unwrap().push(launch);
+        Ok(())
+    }
+}
+
+impl nocturne_app_lib::desktop::Desktop for RecordingDesktop {
+    fn open_path(&self, path: &std::path::Path) -> Result<(), String> {
+        self.note(Launch::Path(path.to_path_buf()))
+    }
+
+    fn open_url(&self, url: &str) -> Result<(), String> {
+        self.note(Launch::Url(url.to_string()))
+    }
+
+    fn open_sound_settings(&self) -> Result<(), String> {
+        self.note(Launch::SoundSettings)
+    }
+}
+
 pub struct Harness {
     pub app: App<MockRuntime>,
     pub webview: WebviewWindow<MockRuntime>,
@@ -211,15 +259,11 @@ impl Harness {
         tauri::test::get_ipc_response(from, req).map(|b| b.deserialize::<Value>().unwrap())
     }
 
-    /// Install an opener that records what it was asked to open.
-    pub fn recording_opener(&self) -> Arc<Mutex<Vec<std::path::PathBuf>>> {
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let sink = seen.clone();
-        self.state().set_opener(Arc::new(move |p| {
-            sink.lock().unwrap().push(p.to_path_buf());
-            Ok(())
-        }));
-        seen
+    /// Install a desktop that records what it was asked to open and opens nothing.
+    pub fn recording_desktop(&self) -> Arc<RecordingDesktop> {
+        let desktop = Arc::new(RecordingDesktop::default());
+        nocturne_app_lib::desktop::install(self.app.handle(), desktop.clone());
+        desktop
     }
 
     /// Collect the payloads of an event.

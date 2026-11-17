@@ -6,7 +6,6 @@ use nocturne_contract::{
     DeviceView, PairingOffer, RemoteConnection, RemoteEvent, RemoteSettingsPatch, RemoteView,
 };
 use tauri::{AppHandle, Runtime};
-use tauri_plugin_opener::OpenerExt;
 
 use crate::error::CommandError;
 use crate::remote::controller::RemoteHub;
@@ -112,9 +111,11 @@ pub async fn open_remote_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), Co
     if !url.starts_with("https://") {
         return Err(CommandError::invalid("there is nothing to sign in to"));
     }
-    app.opener()
-        .open_url(url, None::<&str>)
-        .map_err(|_| CommandError::unavailable("the sign-in page could not be opened"))
+    let unavailable = || CommandError::unavailable("the sign-in page could not be opened");
+    crate::desktop::get(&app)
+        .ok_or_else(unavailable)?
+        .open_url(&url)
+        .map_err(|_| unavailable())
 }
 
 /// A new key for this computer; every phone has to be added again.

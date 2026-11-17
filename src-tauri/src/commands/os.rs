@@ -8,11 +8,13 @@ use crate::state::AppState;
 
 /// Open the system's sound settings. `unavailable` when this desktop has none to open.
 #[tauri::command]
-pub async fn open_sound_settings<R: Runtime>(_app: AppHandle<R>) -> Result<(), CommandError> {
-    blocking_cmd(|| {
-        crate::os::sound::open()
-            .map(|_| ())
-            .map_err(|_| CommandError::unavailable("no sound settings found"))
+pub async fn open_sound_settings<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    blocking_cmd(move || {
+        let unavailable = || CommandError::unavailable("no sound settings found");
+        crate::desktop::get(&app)
+            .ok_or_else(unavailable)?
+            .open_sound_settings()
+            .map_err(|_| unavailable())
     })
     .await
 }

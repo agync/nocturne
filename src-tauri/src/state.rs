@@ -131,7 +131,6 @@ pub struct AppState {
     backup: Mutex<BackupJob>,
     /// Passphrase work for new backups, as a test sets it. 0 is what Nocturne writes.
     backup_work: AtomicU8,
-    opener: Mutex<Option<OpenFn>>,
     /// Restarts the app after a restore has been scheduled (installed by `run`).
     restarter: Mutex<Option<RestartFn>>,
     /// Whether something has shown the main window yet.
@@ -146,8 +145,6 @@ pub struct AppState {
     services: OnceLock<Arc<Services>>,
 }
 
-/// Opens a path with the system's own app (installed by `run`).
-pub type OpenFn = Arc<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
 /// Restarts the app so a scheduled restore runs (installed by `run`).
 pub type RestartFn = Arc<dyn Fn() + Send + Sync>;
 
@@ -240,7 +237,6 @@ impl AppState {
             quick_drop: Mutex::new(Vec::new()),
             exports: Mutex::new(HashSet::new()),
             backup: Mutex::new(BackupJob::default()),
-            opener: Mutex::new(None),
             restarter: Mutex::new(None),
             window_shown: AtomicBool::new(false),
             start_hidden: AtomicBool::new(false),
@@ -488,17 +484,6 @@ impl AppState {
 
     pub fn restarter(&self) -> Option<RestartFn> {
         self.restarter
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
-    }
-
-    pub fn set_opener(&self, open: OpenFn) {
-        *self.opener.lock().unwrap_or_else(|e| e.into_inner()) = Some(open);
-    }
-
-    pub fn opener(&self) -> Option<OpenFn> {
-        self.opener
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
