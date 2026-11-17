@@ -3,6 +3,7 @@ import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import packageJson from "../../../package.json";
 import { goTo } from "../../app/query";
+import { ActionBar, ActionBarHost } from "../../components/ActionBar/ActionBar";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
@@ -378,14 +379,14 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
       {failure ? (
         failureBox
       ) : (
-        <div className={layout.footer}>
+        <ActionBar>
           <Button variant="primary" onClick={() => void chooseFile()}>
             {t("restore.choose")}
           </Button>
           <Button variant="quiet" onClick={leave}>
             {t(mode === "setup" ? "restore.back" : "dialog.cancel")}
           </Button>
-        </div>
+        </ActionBar>
       )}
     </>
   );
@@ -419,14 +420,14 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
       {failure ? (
         failureBox
       ) : (
-        <div className={layout.footer}>
+        <ActionBar>
           <Button variant="primary" onClick={checkBackup}>
             {t("restore.open")}
           </Button>
           <Button variant="quiet" onClick={leave}>
             {t(mode === "setup" ? "restore.back" : "dialog.cancel")}
           </Button>
-        </div>
+        </ActionBar>
       )}
     </>
   );
@@ -442,11 +443,11 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
         detail={progress ? progressDetail(progress, eta) : undefined}
       />
       <p className={layout.lead}>{t("restore.checking.body")}</p>
-      <div className={layout.footer}>
+      <ActionBar>
         <Button variant="secondary" onClick={stop}>
           {t("restore.stop")}
         </Button>
-      </div>
+      </ActionBar>
     </>
   );
 
@@ -486,14 +487,14 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
           </div>
         </dl>
       ) : null}
-      <div className={layout.footer}>
+      <ActionBar>
         <Button variant="primary" onClick={startRestore}>
           {t("restore.restore")}
         </Button>
         <Button variant="quiet" onClick={leave}>
           {t(mode === "setup" ? "restore.back" : "dialog.cancel")}
         </Button>
-      </div>
+      </ActionBar>
     </>
   );
 
@@ -572,14 +573,14 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
         </p>
       ) : null}
       {failure ? failureBox : null}
-      <div className={layout.footer}>
+      <ActionBar>
         <Button variant="secondary" onClick={leave}>
           {t("restore.confirm.keep")}
         </Button>
         <Button variant="primary" onClick={startRestore}>
           {t("restore.confirm.replace")}
         </Button>
-      </div>
+      </ActionBar>
     </>
   );
 
@@ -592,12 +593,11 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
         detail={progress ? progressDetail(progress, final ? null : eta) : undefined}
       />
       <p className={layout.lead}>{t("restore.restoring.body")}</p>
-      <div className={layout.footer}>
+      <ActionBar line={final ? t("restore.restoring.finalNote") : undefined}>
         <Button variant="secondary" disabled={final} onClick={stop}>
           {t("restore.stop")}
         </Button>
-        {final ? <span className={layout.small}>{t("restore.restoring.finalNote")}</span> : null}
-      </div>
+      </ActionBar>
     </>
   );
 
@@ -666,11 +666,11 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
           </div>
         ) : null}
       </dl>
-      <div className={layout.footer}>
+      <ActionBar>
         <Button variant="primary" onClick={openToday}>
           {t(mode === "setup" ? "restore.restored.continue" : "restore.restored.open")}
         </Button>
-      </div>
+      </ActionBar>
     </>
   ) : null;
 
@@ -702,10 +702,12 @@ export function RestoreFlow({ mode = "privacy", onExit, onContinue }: RestoreFlo
     return createPortal(
       <div className={styles.window}>
         <section className={styles.card} aria-busy={step === "restoring"}>
-          {live}
-          {heading(`${layout.stepTitle} ${styles.cardTitle}`)}
-          {step === "restoring" ? restoringStep : null}
-          {step === "restored" ? restoredStep : null}
+          <ActionBarHost>
+            {live}
+            {heading(`${layout.stepTitle} ${styles.cardTitle}`)}
+            {step === "restoring" ? restoringStep : null}
+            {step === "restored" ? restoredStep : null}
+          </ActionBarHost>
         </section>
       </div>,
       document.body,

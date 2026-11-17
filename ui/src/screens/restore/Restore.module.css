@@ -162,6 +162,9 @@
 }
 
 .card {
+  --bar-x: var(--s-7);
+  --bar-gap: 0px;
+  --bar-radius: 0 0 var(--r-lg) var(--r-lg);
   display: flex;
   flex-direction: column;
   gap: var(--s-4);
@@ -170,6 +173,10 @@
   border-radius: var(--r-lg);
   background: var(--sheet);
   box-shadow: var(--e2);
+}
+
+.card:has(> [data-action-slot] > *) {
+  padding-bottom: 0;
 }
 
 .cardTitle {

@@ -151,20 +151,6 @@
   font: 500 0.9375rem / 1.4 var(--font-sans);
 }
 
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-3);
-  padding-top: var(--s-2);
-}
-
-.footerHint {
-  flex-basis: 100%;
-  color: var(--ink2);
-  font-size: 0.8125rem;
-}
-
 .buttons {
   display: flex;
   flex-wrap: wrap;
@@ -311,14 +297,6 @@
 
 :global([data-size="narrow"]) .stepTitle {
   font-size: 1.875rem;
-}
-
-:global([data-size="narrow"]) .footer .button {
-  flex: 1 1 100%;
-}
-
-:global([data-size="narrow"]) .footer .button[data-variant="quiet"] {
-  flex: 0 1 auto;
 }
 
 :global([data-size="narrow"]) .receipt > div {

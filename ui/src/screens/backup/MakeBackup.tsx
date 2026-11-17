@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type RefObject, useEffect, useId, useRef, useState } from "react";
 import { goTo } from "../../app/query";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { Checkbox } from "../../components/Checkbox/Checkbox";
@@ -373,7 +374,7 @@ export default function MakeBackup() {
                   onChooseAnother={() => void chooseAnother()}
                 />
               ) : (
-                <div className={styles.footer}>
+                <ActionBar lineId={hintId} line={ready ? estimateText : t("backup.hint.notReady")}>
                   <Button
                     variant="primary"
                     disabled={!ready}
@@ -385,10 +386,7 @@ export default function MakeBackup() {
                   <Button variant="quiet" onClick={cancel}>
                     {t("dialog.cancel")}
                   </Button>
-                  <span id={hintId} className={styles.footerHint}>
-                    {ready ? (estimateText ?? "") : t("backup.hint.notReady")}
-                  </span>
-                </div>
+                </ActionBar>
               )}
 
               <Advanced
@@ -412,11 +410,11 @@ export default function MakeBackup() {
               {path ? <p className={styles.mono}>{t("backup.savingTo", { path })}</p> : null}
               <p className={styles.lead}>{t("backup.making.body")}</p>
               <p className={styles.small}>{t("backup.making.drive")}</p>
-              <div className={styles.footer}>
+              <ActionBar>
                 <Button variant="secondary" onClick={stop}>
                   {t("backup.stop")}
                 </Button>
-              </div>
+              </ActionBar>
             </>
           ) : null}
 
@@ -448,17 +446,17 @@ export default function MakeBackup() {
                 </div>
               </dl>
               <p className={styles.lead}>{tc("backup.saved.body")}</p>
-              <div className={styles.footer}>
+              <ActionBar>
+                <Button variant="primary" onClick={done}>
+                  {t("backup.saved.done")}
+                </Button>
                 <Button
-                  variant="secondary"
+                  variant="quiet"
                   onClick={() => void platform.openPath(folderOf(report.path))}
                 >
                   {t("backup.saved.show")}
                 </Button>
-                <Button variant="primary" onClick={done}>
-                  {t("backup.saved.done")}
-                </Button>
-              </div>
+              </ActionBar>
               <Advanced
                 id={advancedId}
                 open={advanced}
