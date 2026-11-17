@@ -360,6 +360,10 @@
   margin: 0;
 }
 
+.short dd {
+  color: var(--ink);
+}
+
 .example {
   display: flex;
   flex-direction: column;
@@ -538,19 +542,6 @@
   .dot {
     animation: none;
   }
-}
-
-.footer {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--s-3);
-  padding-top: var(--s-2);
-}
-
-.footerHint {
-  color: var(--ink2);
-  font-size: 0.8125rem;
 }
 
 .sw {
@@ -761,11 +752,13 @@
   font-weight: 500;
 }
 
+:global([data-size="medium"]) .columns,
 :global([data-size="narrow"]) .columns {
   flex-direction: column;
   gap: var(--s-5);
 }
 
+:global([data-size="medium"]) .aside,
 :global([data-size="narrow"]) .aside {
   width: 100%;
 }

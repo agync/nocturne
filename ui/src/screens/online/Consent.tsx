@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { goTo } from "../../app/query";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
 import { Icon } from "../../components/Icon/Icon";
@@ -188,6 +189,11 @@ export function Consent({
       </div>
 
       <div className={styles.sec}>
+        <h2>{t("online.consent.changes.heading")}</h2>
+        <p className={styles.body}>{t("online.consent.changes.body", { host: provider.host })}</p>
+      </div>
+
+      <div className={styles.sec}>
         <h2>{t("online.consent.mind.heading")}</h2>
         <p className={styles.body}>
           {mind} {tc("online.consent.mind.rest")}
@@ -200,7 +206,7 @@ export function Consent({
           {t(failed === "declined" ? "online.consent.declined" : "online.consent.failed")}
         </p>
       ) : null}
-      <div className={styles.footer}>
+      <ActionBar>
         {failed === "declined" ? (
           <Button
             variant="primary"
@@ -218,7 +224,7 @@ export function Consent({
         <Button variant="quiet" onClick={onLeave}>
           {t("online.notNow")}
         </Button>
-      </div>
+      </ActionBar>
     </Frame>
   );
 }

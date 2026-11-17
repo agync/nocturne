@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
@@ -168,14 +169,26 @@ export function LimitStep({ draft, provider, costReported, setDraft, onBack, onN
           </button>
         </>
       )}
-      <div className={styles.footer}>
-        <Button variant="primary" disabled={invalid} onClick={next}>
+      <ActionBar
+        lineId={`${id}-why`}
+        line={
+          invalid
+            ? t(mode === "usd" ? "online.limit.needs.amount" : "online.limit.needs.number")
+            : t("online.bar.line")
+        }
+      >
+        <Button
+          variant="primary"
+          disabled={invalid}
+          aria-describedby={invalid ? `${id}-why` : undefined}
+          onClick={next}
+        >
           {t("online.continue")}
         </Button>
         <Button variant="quiet" onClick={onBack}>
           {t("online.back")}
         </Button>
-      </div>
+      </ActionBar>
     </Frame>
   );
 }

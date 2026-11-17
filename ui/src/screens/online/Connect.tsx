@@ -1,4 +1,5 @@
 import { type FormEvent, useId, useRef, useState } from "react";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { type CopyId, t } from "../../copy/t";
 import type { CheckOutcome, OnlineForm } from "../../engine/bindings";
@@ -292,7 +293,10 @@ export function Connect({
         ) : null}
       </div>
 
-      <div className={styles.footer}>
+      <ActionBar
+        lineId={`${id}-why`}
+        line={works || checking ? undefined : t("advanced.online.connect.needsCheck")}
+      >
         {checking ? (
           <>
             <Button variant="secondary" disabled>
@@ -304,38 +308,32 @@ export function Connect({
           </>
         ) : (
           <>
-            {works ? null : (
-              <Button variant="secondary" disabled={!filled} onClick={() => void check()}>
-                {t(
-                  failure ? "advanced.online.connect.checkAgain" : "advanced.online.connect.check",
-                )}
-              </Button>
-            )}
             {works ? (
-              <>
-                <Button variant="quiet" disabled={!filled} onClick={() => void check()}>
-                  {t("advanced.online.connect.checkAgain")}
-                </Button>
-                <Button variant="primary" onClick={onNext}>
-                  {t("online.continue")}
-                </Button>
-              </>
+              <Button variant="primary" onClick={onNext}>
+                {t("online.continue")}
+              </Button>
             ) : (
               <Button variant="primary" disabled aria-describedby={`${id}-why`}>
                 {t("online.continue")}
               </Button>
             )}
+            <Button
+              variant={works ? "quiet" : "secondary"}
+              disabled={!filled}
+              onClick={() => void check()}
+            >
+              {t(
+                works || failure
+                  ? "advanced.online.connect.checkAgain"
+                  : "advanced.online.connect.check",
+              )}
+            </Button>
           </>
         )}
         <Button variant="quiet" onClick={onLeave}>
           {t("online.notNow")}
         </Button>
-        {works || checking ? null : (
-          <span id={`${id}-why`} className={styles.footerHint}>
-            {t("advanced.online.connect.needsCheck")}
-          </span>
-        )}
-      </div>
+      </ActionBar>
     </Frame>
   );
 }

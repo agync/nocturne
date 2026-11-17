@@ -1,3 +1,4 @@
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
 import { Icon } from "../../components/Icon/Icon";
@@ -61,14 +62,14 @@ export function WhatToSend({ draft, phonesAvailable, setDraft, onBack, onNext }:
           </span>
         </li>
       </ul>
-      <div className={styles.footer}>
+      <ActionBar line={t("online.bar.line")}>
         <Button variant="primary" onClick={onNext}>
           {t("online.continue")}
         </Button>
         <Button variant="quiet" onClick={onBack}>
           {t("online.back")}
         </Button>
-      </div>
+      </ActionBar>
     </Frame>
   );
 }
