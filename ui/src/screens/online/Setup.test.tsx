@@ -95,15 +95,82 @@ describe("setup", () => {
     ]);
   });
 
-  it("explainer: says what is needed without sending the person off, and where to turn it off", async () => {
+  it("explainer: gives three short lines and keeps the rest behind one expander", async () => {
     await openOnline(SETUP, "off", STEP1);
     expect(
       screen.getByText(
+        "Your question, with a few short lines from what you kept that help answer it.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your photos, recordings and documents themselves, and anything you marked private.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "An account with that service. Most charge a little for each question. Setting up means copying three details from its website.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nocturne still finds what you kept/)).toBeNull();
+    expect(screen.queryByText(/Everything else stays here/)).toBeNull();
+    expect(screen.queryByText("Stays on this computer")).toBeNull();
+    expect(screen.queryByText(/Most services charge a little/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "What exactly is sent?" })).toBeNull();
+  });
+
+  it("explainer: the expander holds every fact, the example and the side column", async () => {
+    await openOnline(SETUP, "off", STEP1);
+    expect(screen.queryByText("when is my eye test?")).toBeNull();
+    const toggle = screen.getByRole("button", {
+      name: "Everything that is sent, and what stays here",
+    });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(toggle).not.toHaveAttribute("aria-controls");
+    await userEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    const panel = document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    expect(panel).not.toBeNull();
+    const inside = within(panel as HTMLElement);
+    expect(inside.getByText("when is my eye test?")).toBeInTheDocument();
+    expect(inside.getByText(/Not sent: the clinic’s letter/)).toBeInTheDocument();
+    const labels = Array.from((panel as HTMLElement).querySelectorAll("dt")).map(
+      (dt) => dt.textContent,
+    );
+    expect(labels).toEqual([
+      "What is sent",
+      "Never sent",
+      "Who sees it",
+      "What changes",
+      "What it costs",
+      "What you need",
+    ]);
+    expect(
+      inside.getByText(/Nocturne also keeps back lines that look like health, money or ID details/),
+    ).toBeInTheDocument();
+    expect(
+      inside.getByText(
         "An account with an online service. You add its details in step 2, and Nocturne checks that they work.",
       ),
     ).toBeInTheDocument();
-    const off = screen.getByText(sentence("Turn it off at any time in Settings or Privacy."));
+    expect(inside.getByText("Stays on this computer")).toBeInTheDocument();
+    expect(inside.getByText("Checking where each answer came from")).toBeInTheDocument();
+    expect(
+      inside.getByText("If the service can’t be reached, this computer answers, and says so."),
+    ).toBeInTheDocument();
+    const off = inside.getByText(sentence("Turn it off at any time in Settings or Privacy."));
     expect(chipsIn(off)).toEqual(["Settings", "Privacy"]);
+  });
+
+  it("explainer: the bar holds Continue first, Not now after, and the step's line", async () => {
+    await openOnline(SETUP, "off", STEP1);
+    const bar = document.querySelector<HTMLElement>("[data-action-bar]");
+    expect(bar).not.toBeNull();
+    const buttons = within(bar as HTMLElement).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Continue", "Not now"]);
+    expect(
+      within(bar as HTMLElement).getByText("Nothing is turned on until the last step."),
+    ).toBeVisible();
   });
 
   it("service_step: without a passed check, going straight to a later step asks for one", async () => {
@@ -127,19 +194,6 @@ describe("setup", () => {
       screen.getByText(/Connected to api\.example\.com\. To use a different service/),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
-  });
-
-  it("explainer: shows exactly what is sent on request", async () => {
-    await openOnline(SETUP, "off", STEP1);
-    expect(screen.queryByText("when is my eye test?")).toBeNull();
-    const toggle = screen.getByRole("button", { name: "What exactly is sent?" });
-    expect(toggle).toHaveAttribute("aria-expanded", "false");
-    expect(toggle).not.toHaveAttribute("aria-controls");
-    await userEvent.click(toggle);
-    expect(toggle).toHaveAttribute("aria-expanded", "true");
-    expect(document.getElementById(toggle.getAttribute("aria-controls") ?? "")).not.toBeNull();
-    expect(screen.getByText("when is my eye test?")).toBeInTheDocument();
-    expect(screen.getByText(/Not sent: the clinic’s letter/)).toBeInTheDocument();
   });
 
   it("check_required: Continue stays disabled until the check passes, and the key is hidden", async () => {
@@ -357,6 +411,26 @@ describe("setup", () => {
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
+  it("disabled_reason: a limit that is not a whole number says so in the bar, tied to Continue", async () => {
+    await toLimit();
+    await click("Set a limit");
+    const input = screen.getByLabelText(/Stop online answers after/);
+    const line = () => document.querySelector<HTMLElement>("[data-action-bar] span");
+    expect(line()).toHaveTextContent("Nothing is turned on until the last step.");
+    await userEvent.clear(input);
+    await userEvent.type(input, "2.5");
+    const next = screen.getByRole("button", { name: "Continue" });
+    expect(next).toBeDisabled();
+    expect(line()).toHaveTextContent("Continue works once the limit is a whole number, like 200.");
+    expect(next).toHaveAccessibleDescription(
+      "Continue works once the limit is a whole number, like 200.",
+    );
+    await userEvent.clear(input);
+    await userEvent.type(input, "7");
+    expect(line()).toHaveTextContent("Nothing is turned on until the last step.");
+    expect(next).not.toHaveAttribute("aria-describedby");
+  });
+
   it("no_limit_direct: going back to no limit needs no confirmation", async () => {
     await toLimit();
     await click("Set a limit");
@@ -399,6 +473,34 @@ describe("setup", () => {
     expect(chipsIn(receipts)).toEqual(["See what was sent"]);
     await userEvent.click(within(choices).getByRole("button", { name: "Change: Monthly limit" }));
     await heading(STEP4);
+  });
+
+  it("consent_what_changes: says what changes, naming the service, before changing your mind", async () => {
+    await toLimit();
+    await click("Continue");
+    await heading(STEP5);
+    expect(
+      screen.getByText(
+        "While this is on, each question and the few lines that answer it leave this computer. Everything else you kept stays here.",
+      ),
+    ).toBeInTheDocument();
+    const section = screen.getByRole("heading", { name: "What changes" })
+      .parentElement as HTMLElement;
+    expect(section).toHaveTextContent(
+      "Your questions are answered by api.example.com, on your account with them, so it may charge for each one. Answers may take a few seconds longer. If it can’t be reached, this computer answers, and says so.",
+    );
+    const headings = screen
+      .getAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent)
+      .filter((text) => ["Never sent", "What changes", "Changing your mind"].includes(text ?? ""));
+    expect(headings).toEqual(["Never sent", "What changes", "Changing your mind"]);
+    const bar = document.querySelector<HTMLElement>("[data-action-bar]") as HTMLElement;
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Turn on online answers", "Not now"]);
+    expect(bar.querySelector("span")).toBeNull();
   });
 
   it("turns on at the last step with the choices made, then shows the page on", async () => {

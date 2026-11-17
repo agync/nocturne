@@ -1,4 +1,5 @@
 import { goTo } from "../../app/query";
+import { ActionBar } from "../../components/ActionBar/ActionBar";
 import { Button } from "../../components/Button/Button";
 import { tc } from "../../components/ControlChip/copy";
 import { t } from "../../copy/t";
@@ -34,7 +35,7 @@ export function ServiceStep({
         {host ? t("online.service.ready", { host }) : t("online.service.lead")}
       </p>
       <p className={styles.sub}>{tc("online.service.where")}</p>
-      <div className={styles.footer}>
+      <ActionBar line={t("online.bar.line")}>
         {host ? (
           <>
             <Button variant="primary" onClick={onNext}>
@@ -58,7 +59,7 @@ export function ServiceStep({
         <Button variant="quiet" onClick={onLeave}>
           {t("online.notNow")}
         </Button>
-      </div>
+      </ActionBar>
     </Frame>
   );
 }
