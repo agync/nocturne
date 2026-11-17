@@ -28,6 +28,9 @@ COPY crates/ crates/
 COPY src-tauri/ src-tauri/
 # The guide ships inside the app (help with Nocturne).
 COPY docs/guide/ docs/guide/
+# Help names controls with the interface's own words, read when the app is built.
+COPY ui/src/components/ControlChip/chips.json ui/src/components/ControlChip/
+COPY ui/src/copy/en-GB/ ui/src/copy/en-GB/
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
     cargo build --locked --release -p nocturne-app --features server --bin nocturne-server \
