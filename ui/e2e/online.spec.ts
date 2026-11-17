@@ -209,7 +209,7 @@ test.describe("O2 to O6, setting up", () => {
 
   test("keyboard only: the whole way to turned on", async ({ page }) => {
     await open(page, "/settings/online/setup");
-    await press(page, "button", "What exactly is sent?");
+    await press(page, "button", "Everything that is sent, and what stays here");
     await expect(page.getByText("when is my eye test?")).toBeVisible();
     await press(page, "button", "Continue");
     await connectAndCheck(page);
