@@ -3637,7 +3637,7 @@ dependencies = [
  "dunce",
  "futures-util",
  "getrandom 0.4.3",
- "hkdf 0.12.4",
+ "hkdf 0.13.0",
  "http-body-util",
  "jiff",
  "keyring",
