@@ -70,6 +70,25 @@ describe("Make a backup: the form", () => {
     expect(disabled).toHaveAttribute("aria-describedby", hint.id);
   });
 
+  it("keeps Save, Cancel and the reason in the bar, with Save first", async () => {
+    await open();
+    const bar = document.querySelector("[data-action-bar]") as HTMLElement;
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["Save backup…", "Cancel"]);
+    const hint = within(bar).getByText(
+      "Choose a passphrase, type it again and tick the box to go on.",
+    );
+    expect(within(bar).getByRole("button", { name: "Save backup…" })).toHaveAccessibleDescription(
+      hint.textContent ?? "",
+    );
+    await fill();
+    expect(within(bar).getByRole("button", { name: "Save backup…" })).toBeEnabled();
+    expect(within(bar).queryByText(/Choose a passphrase, type it again/)).toBeNull();
+  });
+
   it("names the online key and the phones only when there is one to leave out", async () => {
     const engine = createMockEngine({
       remote: { scenario: "on", auto: false },
