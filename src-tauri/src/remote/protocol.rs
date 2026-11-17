@@ -438,7 +438,7 @@ mod tests {
         let sealed = Aes256Gcm::new_from_slice(&key)
             .unwrap()
             .encrypt(
-                Nonce::from_slice(&d.intermediate_hex("nonce")),
+                &Nonce::try_from(d.intermediate_hex("nonce").as_slice()).unwrap(),
                 Payload {
                     msg: &d.intermediate_hex("envelope"),
                     aad: &aad,

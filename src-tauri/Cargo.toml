@@ -89,7 +89,7 @@ tokio-util = { version = "0.7", default-features = false }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "ws"] }
 p256 = { version = "0.14", features = ["ecdh", "pkcs8"] }
 hkdf = "0.13"
-aes-gcm = "0.10.3"
+aes-gcm = "0.11"
 subtle = "2"
 sha2.workspace = true
 qrcode = { version = "0.14", default-features = false }

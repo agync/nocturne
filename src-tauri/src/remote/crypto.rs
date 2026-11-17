@@ -126,14 +126,18 @@ fn split64(ikm: &[u8], salt: &[u8], info: &str) -> (Key32, Key32) {
 fn seal(key: &[u8; 32], nonce: &[u8], aad: &[u8], msg: &[u8]) -> Vec<u8> {
     Aes256Gcm::new_from_slice(key)
         .expect("a 32-byte key")
-        .encrypt(Nonce::from_slice(nonce), Payload { msg, aad })
+        .encrypt(
+            &Nonce::try_from(nonce).expect("a 12-byte nonce"),
+            Payload { msg, aad },
+        )
         .expect("sealing in memory does not fail")
 }
 
 fn open(key: &[u8; 32], nonce: &[u8], aad: &[u8], msg: &[u8]) -> Checked<Zeroizing<Vec<u8>>> {
+    let nonce = Nonce::try_from(nonce).map_err(|_| Refusal::BadTag)?;
     Aes256Gcm::new_from_slice(key)
         .expect("a 32-byte key")
-        .decrypt(Nonce::from_slice(nonce), Payload { msg, aad })
+        .decrypt(&nonce, Payload { msg, aad })
         .map(Zeroizing::new)
         .map_err(|_| Refusal::BadTag)
 }
