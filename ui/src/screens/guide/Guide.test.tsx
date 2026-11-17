@@ -32,8 +32,8 @@ describe("the guide reader", () => {
     const heading = await screen.findByRole("heading", { level: 2, name: "Add a phone" });
     expect(heading.closest("section")).toHaveAttribute("data-marked", "true");
     expect(screen.getByRole("link", { name: "Ask" })).toHaveAttribute("href", "#/ask");
-    const step = screen.getByText("Add a phone", { selector: "strong" });
-    expect(step).toBeInTheDocument();
+    const chip = heading.closest("section")?.querySelector('[data-chip="addAPhone"]');
+    expect(chip).toHaveTextContent("Add a phone");
     expect(screen.getByRole("link", { name: "Away from home" })).toHaveAttribute(
       "aria-current",
       "page",

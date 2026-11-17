@@ -1,0 +1,180 @@
+{
+  "settings": {
+    "copy": "rail.settings",
+    "icon": "settings"
+  },
+  "privacy": {
+    "copy": "rail.privacy"
+  },
+  "onlineAnswers": {
+    "copy": "online.row.label"
+  },
+  "awayFromHome": {
+    "copy": "away.row.label"
+  },
+  "voice": {
+    "copy": "settings.voice.label"
+  },
+  "showAdvancedDetails": {
+    "copy": "settings.advanced.show"
+  },
+  "connectOnlineService": {
+    "copy": "advanced.online.connect.link"
+  },
+  "restoreFromBackup": {
+    "copy": "setup.welcome.restore"
+  },
+  "seeWhatWasSent": {
+    "copy": "ask.mark.seeSent"
+  },
+  "addAPhone": {
+    "copy": "away.phones.add"
+  },
+  "newCodeToScan": {
+    "copy": "phone.address.scan"
+  },
+  "phonesNeedNewAddress": {
+    "copy": "rail.away.relink"
+  },
+  "allow": {
+    "copy": "away.pair.allow"
+  },
+  "dontAllow": {
+    "copy": "away.pair.deny"
+  },
+  "advancedDetails": {
+    "copy": "screen.advanced.title"
+  },
+  "setUp": {
+    "copy": "away.off.setUp"
+  },
+  "turnOn": {
+    "copy": "away.off.turnOn"
+  },
+  "seePhones": {
+    "copy": "away.phones.see"
+  },
+  "remove": {
+    "copy": "away.phones.remove"
+  },
+  "turnOffByItself": {
+    "copy": "away.autoOff.label"
+  },
+  "sentToYourPhones": {
+    "copy": "privacy.phones.label"
+  },
+  "openAdvancedDetails": {
+    "copy": "online.service.open"
+  },
+  "check": {
+    "copy": "advanced.online.connect.check"
+  },
+  "questionsFromYourPhones": {
+    "copy": "online.row.phones.label"
+  },
+  "turnOnOnlineAnswers": {
+    "copy": "online.consent.turnOn"
+  },
+  "chooseWhatRunsEachJob": {
+    "copy": "models.row.label"
+  },
+  "answerHereInstead": {
+    "copy": "ask.online.waiting.button"
+  },
+  "thisComputer": {
+    "copy": "ask.where.computer"
+  },
+  "tryAgain": {
+    "copy": "online.problem.action"
+  },
+  "turnOff": {
+    "copy": "online.turnOff"
+  },
+  "turnOffAndForgetKey": {
+    "copy": "online.turnOffForget"
+  },
+  "forgetKey": {
+    "copy": "online.forgetKey"
+  },
+  "openFolder": {
+    "copy": "privacy.here.open"
+  },
+  "today": {
+    "copy": "rail.today"
+  },
+  "pastPages": {
+    "copy": "rail.pages"
+  },
+  "whatNocturneRemembers": {
+    "copy": "rail.memories"
+  },
+  "recentlyKept": {
+    "copy": "rail.recent"
+  },
+  "exportToFolder": {
+    "copy": "privacy.export.button"
+  },
+  "makeBackup": {
+    "copy": "privacy.backup.make"
+  },
+  "restoreFromBackupHere": {
+    "copy": "privacy.backup.restore"
+  },
+  "replaceWithBackup": {
+    "copy": "restore.confirm.replace"
+  },
+  "keepWhatsHere": {
+    "copy": "restore.confirm.keep"
+  },
+  "bringItBack": {
+    "copy": "privacy.backup.putAside.bringBack"
+  },
+  "deleteIt": {
+    "copy": "privacy.backup.putAside.delete"
+  },
+  "lettingGo": {
+    "copy": "settings.letting.label"
+  },
+  "fadingAndLetGo": {
+    "copy": "rail.fading"
+  },
+  "bringBack": {
+    "copy": "button.bringBack"
+  },
+  "delete": {
+    "copy": "memory.action.forget"
+  },
+  "deleteThis": {
+    "copy": "ask.forget"
+  },
+  "deleteEverything": {
+    "copy": "privacy.delete.button"
+  },
+  "startWithThisComputer": {
+    "copy": "settings.login.label"
+  },
+  "quickKeepShortcut": {
+    "copy": "settings.shortcut.label"
+  },
+  "setItToRun": {
+    "copy": "settings.shortcut.command"
+  },
+  "morningPage": {
+    "copy": "settings.page.label"
+  },
+  "tellMeWhenReady": {
+    "copy": "settings.delivery.notify"
+  },
+  "dontInterruptMe": {
+    "copy": "settings.delivery.quiet"
+  },
+  "inboxFolder": {
+    "copy": "settings.inbox.label"
+  },
+  "chooseInboxFolder": {
+    "copy": "settings.inbox.choose"
+  },
+  "openSoundSettings": {
+    "copy": "notice.micDenied.action"
+  }
+}

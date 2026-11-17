@@ -5,6 +5,7 @@ import { askRequests, useAskRequest } from "../../app/ask-request";
 import { hashHref } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import type { ChipId } from "../../components/ControlChip/registry";
 import { AnswerWhere } from "../../components/KeepAskBar/AnswerWhere";
 import { askPlace } from "../../components/KeepAskBar/askPlace";
 import { PlaceIcon } from "../../components/KeepAskBar/PlaceIcon";
@@ -13,7 +14,7 @@ import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
-import type { AskPhase, AskPlace, MemoryView, Receipt } from "../../engine/bindings";
+import type { AskPhase, AskPlace, HelpView, MemoryView, Receipt } from "../../engine/bindings";
 import { useAsk, useEngine, useStatus } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { useOnline } from "../online/useOnline";
@@ -61,6 +62,19 @@ const scrubbed = (turn: Turn, gone: Set<string>): Turn => {
     summary: forgetNote(hit, turn.memoryIds.length),
   };
 };
+
+/** The controls the cited sections' steps name, for the written answer to draw as chips. */
+function chipsOf(help: HelpView): Array<{ words: string; id: ChipId }> {
+  const seen = new Map<string, ChipId>();
+  for (const cite of help.sections) {
+    for (const step of cite.steps) {
+      for (const part of step) {
+        if (part.type === "control") seen.set(part.text, part.chip as ChipId);
+      }
+    }
+  }
+  return [...seen].map(([words, id]) => ({ words, id }));
+}
 
 export default function Ask() {
   const engine = useEngine();
@@ -653,6 +667,7 @@ export default function Ask() {
                 <AnswerText
                   text={text}
                   memoryIds={written ? written.cited : memoryIds}
+                  chips={written ? chipsOf(written) : undefined}
                   corrected={extras.corrected.length > 0}
                   onActive={setActive}
                   onJump={jump}

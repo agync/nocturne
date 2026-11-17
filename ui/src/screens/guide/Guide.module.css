@@ -98,10 +98,6 @@
   overflow-wrap: anywhere;
 }
 
-.control {
-  font-weight: 600;
-}
-
 .contents {
   display: flex;
   flex-direction: column;

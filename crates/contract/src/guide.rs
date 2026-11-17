@@ -16,9 +16,10 @@ pub enum GuideInline {
     Strong {
         text: String,
     },
-    /// A screen or control of Nocturne, in its own words.
+    /// A screen or control of Nocturne, in its own words, and the control chip that names it.
     Control {
         text: String,
+        chip: String,
     },
     /// A file name, a folder or a command, as typed.
     Code {

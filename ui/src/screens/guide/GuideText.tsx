@@ -1,7 +1,8 @@
+import { ControlChip } from "../../components/ControlChip/ControlChip";
+import type { ChipId } from "../../components/ControlChip/registry";
 import type { GuideInline } from "../../engine/bindings";
-import { ControlName } from "./ControlName";
 
-/** A run of guide text: its stressed words, controls and file names kept apart. */
+/** A run of guide text: its stressed words, control chips and file names kept apart. */
 export function GuideText({ parts }: { parts: GuideInline[] }) {
   return (
     <>
@@ -13,7 +14,7 @@ export function GuideText({ parts }: { parts: GuideInline[] }) {
           case "strong":
             return <strong key={key}>{part.text}</strong>;
           case "control":
-            return <ControlName key={key}>{part.text}</ControlName>;
+            return <ControlChip key={key} id={part.chip as ChipId} />;
           default:
             return <code key={key}>{part.text}</code>;
         }

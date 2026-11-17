@@ -5,6 +5,7 @@
 //! installed. It is never fetched, kept as a memory, exported or backed up, and which help was
 //! shown is not counted or logged. See `docs/design/in-app-help.md`.
 
+use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 
 use nocturne_contract::{ComponentRole, GuideView, HelpKind, HelpView, Tier};
@@ -61,69 +62,57 @@ const INDEX_ASKED: &[(&str, &[&str])] = &[
     ),
 ];
 
-/// Nocturne's screens and controls as the guide names them in bold, each with the copy key of
-/// the words it shows. Bold words not listed here stay plain bold: a run-in heading, or another
-/// app's control. A test holds the words to the copy deck, so a renamed control fails the build.
-pub const CONTROLS: &[(&str, &str)] = &[
-    ("Settings", "screen.settings.title"),
-    ("Privacy", "screen.privacy.title"),
-    ("Advanced details", "screen.advanced.title"),
-    ("Away from home", "away.row.label"),
-    ("Online answers", "online.row.label"),
-    ("Set up…", "away.off.setUp"),
-    ("Turn on", "away.off.turnOn"),
-    ("Add a phone", "away.phones.add"),
-    ("Allow", "away.pair.allow"),
-    ("Don’t allow", "away.pair.deny"),
-    ("Scan the new code", "phone.address.scan"),
-    ("See phones", "away.phones.see"),
-    ("Remove", "away.phones.remove"),
-    ("Turn off by itself", "away.autoOff.label"),
-    ("Sent to your phones", "privacy.phones.label"),
-    ("Open Advanced details", "online.service.open"),
-    ("Check", "advanced.online.connect.check"),
-    ("Questions from your phones", "online.row.phones.label"),
-    ("Turn on online answers", "online.consent.turnOn"),
-    ("Choose what runs each job", "models.row.label"),
-    (
-        "Answer on this computer instead",
-        "ask.online.waiting.button",
-    ),
-    ("This computer", "ask.where.computer"),
-    ("Try again", "online.problem.action"),
-    ("See what was sent", "ask.mark.seeSent"),
-    ("Turn off", "online.turnOff"),
-    ("Turn off and forget the key…", "online.turnOffForget"),
-    ("Forget the key…", "online.forgetKey"),
-    ("Open folder", "privacy.here.open"),
-    ("Today", "rail.today"),
-    ("Past pages", "rail.pages"),
-    ("What Nocturne remembers", "rail.memories"),
-    ("Recently kept", "rail.recent"),
-    ("Export to a folder…", "privacy.export.button"),
-    ("Make a backup…", "privacy.backup.make"),
-    ("Restore from a backup", "setup.welcome.restore"),
-    ("Restore from a backup…", "privacy.backup.restore"),
-    ("Replace with the backup", "restore.confirm.replace"),
-    ("Keep what’s here", "restore.confirm.keep"),
-    ("Bring it back…", "privacy.backup.putAside.bringBack"),
-    ("Delete it…", "privacy.backup.putAside.delete"),
-    ("Letting go", "settings.letting.label"),
-    ("Fading & let go", "rail.fading"),
-    ("Bring back", "button.bringBack"),
-    ("Delete…", "memory.action.forget"),
-    ("Delete this…", "ask.forget"),
-    ("Delete everything…", "privacy.delete.button"),
-    ("Start with this computer", "settings.login.label"),
-    ("Quick keep shortcut", "settings.shortcut.label"),
-    ("Set it to run:", "settings.shortcut.command"),
-    ("Morning page", "settings.page.label"),
-    ("Tell me when it’s ready", "settings.delivery.notify"),
-    ("Don’t interrupt me", "settings.delivery.quiet"),
-    ("Nocturne inbox folder", "settings.inbox.label"),
-    ("Choose inbox folder…", "settings.inbox.choose"),
-    ("Open sound settings", "notice.micDenied.action"),
+/// The control chips the interface draws, by id, each with the copy key of its control's words.
+/// One list for both: a screen or control the guide names in bold is drawn as the chip whose
+/// control shows exactly those words. Bold words that name no chip stay plain bold: a run-in
+/// heading, or another app's control.
+const CHIPS: &str = include_str!("../../ui/src/components/ControlChip/chips.json");
+
+/// The interface's copy deck, for the words of each chip's control.
+const DECK: [&str; 22] = [
+    include_str!("../../ui/src/copy/en-GB/advanced.json"),
+    include_str!("../../ui/src/copy/en-GB/ask.json"),
+    include_str!("../../ui/src/copy/en-GB/away.json"),
+    include_str!("../../ui/src/copy/en-GB/backup.json"),
+    include_str!("../../ui/src/copy/en-GB/capture.json"),
+    include_str!("../../ui/src/copy/en-GB/common.json"),
+    include_str!("../../ui/src/copy/en-GB/editions.json"),
+    include_str!("../../ui/src/copy/en-GB/fading.json"),
+    include_str!("../../ui/src/copy/en-GB/guide.json"),
+    include_str!("../../ui/src/copy/en-GB/memories.json"),
+    include_str!("../../ui/src/copy/en-GB/models.json"),
+    include_str!("../../ui/src/copy/en-GB/needs-you.json"),
+    include_str!("../../ui/src/copy/en-GB/notice.json"),
+    include_str!("../../ui/src/copy/en-GB/online.json"),
+    include_str!("../../ui/src/copy/en-GB/page.json"),
+    include_str!("../../ui/src/copy/en-GB/phone.json"),
+    include_str!("../../ui/src/copy/en-GB/privacy.json"),
+    include_str!("../../ui/src/copy/en-GB/recent.json"),
+    include_str!("../../ui/src/copy/en-GB/sent.json"),
+    include_str!("../../ui/src/copy/en-GB/settings.json"),
+    include_str!("../../ui/src/copy/en-GB/setup.json"),
+    include_str!("../../ui/src/copy/en-GB/shell.json"),
 ];
+
+/// Each chip with the words its control shows.
+static CHIP_WORDS: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+    let mut deck: HashMap<String, String> = HashMap::new();
+    for file in DECK {
+        deck.extend(
+            serde_json::from_str::<HashMap<String, String>>(file)
+                .expect("the copy deck reads; a test checks it"),
+        );
+    }
+    let chips: serde_json::Map<String, serde_json::Value> =
+        serde_json::from_str(CHIPS).expect("the chip list reads; a test checks it");
+    chips
+        .into_iter()
+        .filter_map(|(id, spec)| {
+            let words = deck.get(spec["copy"].as_str()?)?.clone();
+            Some((id, words))
+        })
+        .collect()
+});
 
 /// Names that make a question read as being about Nocturne.
 const NAMES: &[&str] = &[
@@ -154,9 +143,17 @@ fn same_words(a: &str, b: &str) -> bool {
     a.replace('\'', "’") == b.replace('\'', "’")
 }
 
-/// Whether bold words in the guide name one of Nocturne's controls.
-pub fn is_control(words: &str) -> bool {
-    CONTROLS.iter().any(|(w, _)| same_words(w, words))
+/// The chip that bold words in the guide name, if they name one of Nocturne's controls.
+pub fn chip_of(words: &str) -> Option<String> {
+    CHIP_WORDS
+        .iter()
+        .find(|(_, w)| same_words(w, words))
+        .map(|(id, _)| id.clone())
+}
+
+/// The words of every control a chip names.
+pub fn control_words() -> Vec<String> {
+    CHIP_WORDS.iter().map(|(_, w)| w.clone()).collect()
 }
 
 static GUIDE: LazyLock<Guide> = LazyLock::new(|| {
@@ -168,7 +165,7 @@ static GUIDE: LazyLock<Guide> = LazyLock::new(|| {
             asked: (*slug == "index").then_some(INDEX_ASKED),
         })
         .collect();
-    Guide::new(&sources, &is_control, NAMES).expect("the bundled guide reads; a test checks it")
+    Guide::new(&sources, &chip_of, NAMES).expect("the bundled guide reads; a test checks it")
 });
 
 /// The guide as it ships with this version.
@@ -302,55 +299,33 @@ pub fn help_view(found: &Found, online_on: bool) -> HelpView {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
     use nocturne_contract::{GuideBlock, GuideInline};
 
     use super::*;
 
-    fn deck() -> HashMap<String, String> {
-        let mut out = HashMap::new();
-        for file in [
-            include_str!("../../ui/src/copy/en-GB/advanced.json"),
-            include_str!("../../ui/src/copy/en-GB/ask.json"),
-            include_str!("../../ui/src/copy/en-GB/away.json"),
-            include_str!("../../ui/src/copy/en-GB/backup.json"),
-            include_str!("../../ui/src/copy/en-GB/capture.json"),
-            include_str!("../../ui/src/copy/en-GB/common.json"),
-            include_str!("../../ui/src/copy/en-GB/editions.json"),
-            include_str!("../../ui/src/copy/en-GB/fading.json"),
-            include_str!("../../ui/src/copy/en-GB/memories.json"),
-            include_str!("../../ui/src/copy/en-GB/models.json"),
-            include_str!("../../ui/src/copy/en-GB/needs-you.json"),
-            include_str!("../../ui/src/copy/en-GB/notice.json"),
-            include_str!("../../ui/src/copy/en-GB/online.json"),
-            include_str!("../../ui/src/copy/en-GB/page.json"),
-            include_str!("../../ui/src/copy/en-GB/phone.json"),
-            include_str!("../../ui/src/copy/en-GB/privacy.json"),
-            include_str!("../../ui/src/copy/en-GB/recent.json"),
-            include_str!("../../ui/src/copy/en-GB/sent.json"),
-            include_str!("../../ui/src/copy/en-GB/settings.json"),
-            include_str!("../../ui/src/copy/en-GB/setup.json"),
-            include_str!("../../ui/src/copy/en-GB/shell.json"),
-        ] {
-            let map: HashMap<String, String> = serde_json::from_str(file).unwrap();
-            out.extend(map);
-        }
-        out
-    }
-
+    /// Every chip names a control the copy deck has, and the deck the app reads is the whole
+    /// of `ui/src/copy/en-GB`.
     #[test]
-    fn every_control_the_guide_names_is_spelled_as_the_control_says() {
-        let deck = deck();
-        for (words, key) in CONTROLS {
-            let said = deck
-                .get(*key)
-                .unwrap_or_else(|| panic!("{key} is not in the copy deck"));
-            assert!(
-                same_words(words, said),
-                "{key}: \"{words}\" but the app says \"{said}\""
-            );
-        }
+    fn every_chip_names_a_control_of_the_deck() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../ui/src/copy/en-GB");
+        let files = std::fs::read_dir(dir)
+            .unwrap()
+            .filter(|e| {
+                e.as_ref()
+                    .is_ok_and(|e| e.path().extension().is_some_and(|x| x == "json"))
+            })
+            .count();
+        assert_eq!(files, DECK.len(), "a copy file is missing from DECK");
+        let chips: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(CHIPS).unwrap();
+        assert_eq!(
+            CHIP_WORDS.len(),
+            chips.len(),
+            "a chip names a key the deck lacks"
+        );
+        assert_eq!(chip_of("Add a phone").as_deref(), Some("addAPhone"));
+        assert_eq!(chip_of("Don't allow").as_deref(), Some("dontAllow"));
+        assert_eq!(chip_of("Make a backup."), None);
     }
 
     /// Bold words in a section are a control from the list, a run-in heading or stress (they end

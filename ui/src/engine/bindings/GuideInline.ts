@@ -3,4 +3,4 @@
 /**
  * A run of text in a guide sentence.
  */
-export type GuideInline = { "type": "text", text: string, } | { "type": "strong", text: string, } | { "type": "control", text: string, } | { "type": "code", text: string, };
+export type GuideInline = { "type": "text", text: string, } | { "type": "strong", text: string, } | { "type": "control", text: string, chip: string, } | { "type": "code", text: string, };
