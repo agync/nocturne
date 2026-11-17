@@ -434,6 +434,25 @@ fn switching_connection_unpairs_phones() {
 }
 
 #[test]
+fn the_sign_in_page_opens_only_through_the_installed_desktop() {
+    let a = away();
+    a.helpers.install_now(HelperKind::Tailnet);
+    *a.helpers.transport.on_start.lock().unwrap() = Some(TransportState::NeedsSignIn {
+        url: "https://login.tailscale.com/a/abc".into(),
+        allow_links: false,
+    });
+    a.start("mostPrivate", false).unwrap();
+    wait_for("sign in", || a.hub.sign_in_url().is_some());
+    assert_eq!(a.h.code("open_remote_sign_in", json!({})), "unavailable");
+    let desktop = a.h.recording_desktop();
+    a.h.ok("open_remote_sign_in", json!({}));
+    assert_eq!(
+        desktop.launches(),
+        [Launch::Url("https://login.tailscale.com/a/abc".into())]
+    );
+}
+
+#[test]
 fn sign_in_then_allow_links_then_approve_then_on() {
     let a = away();
     a.helpers.install_now(HelperKind::Tailnet);

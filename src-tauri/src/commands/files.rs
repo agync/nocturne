@@ -98,10 +98,10 @@ pub async fn pick_backup_save<R: Runtime>(
     .await
 }
 
-/// Open a path with the system's own app, through the hook the app installed.
-fn open(state: &AppState, path: &Path) -> Result<(), CommandError> {
-    match state.opener() {
-        Some(open) => open(path).map_err(|e| {
+/// Open a path with the system's own app, through the desktop the app installed.
+fn open<R: Runtime>(app: &AppHandle<R>, path: &Path) -> Result<(), CommandError> {
+    match crate::desktop::get(app) {
+        Some(desktop) => desktop.open_path(path).map_err(|e| {
             tracing::warn!("a path could not be opened");
             CommandError::unavailable(e)
         }),
@@ -129,7 +129,7 @@ pub async fn open_original<R: Runtime>(
         })
         .await?
         .ok_or_else(|| CommandError::not_found("the original is not there"))?;
-        open(&state, &inside)
+        open(&app, &inside)
     })
     .await
 }
@@ -145,7 +145,7 @@ pub async fn open_export<R: Runtime>(app: AppHandle<R>, path: String) -> Result<
                 "that folder was not made by an export",
             ));
         }
-        open(&state, &folder)
+        open(&app, &folder)
     })
     .await
 }
@@ -159,7 +159,7 @@ pub async fn open_logs<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError
         let made = dir.clone();
         blocking_cmd(move || std::fs::create_dir_all(&made).map_err(CommandError::internal))
             .await?;
-        open(&state, &dir)
+        open(&app, &dir)
     })
     .await
 }
@@ -174,7 +174,7 @@ pub async fn open_data_folder<R: Runtime>(app: AppHandle<R>) -> Result<(), Comma
         if !exists {
             return Err(CommandError::not_found("there is no data folder yet"));
         }
-        open(&state, &state.data_dir)
+        open(&app, &state.data_dir)
     })
     .await
 }
