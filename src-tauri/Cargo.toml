@@ -81,7 +81,7 @@ tracing-subscriber.workspace = true
 tracing-appender.workspace = true
 jiff.workspace = true
 thiserror.workspace = true
-getrandom = "0.3"
+getrandom = "0.4"
 notify = "8"
 sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 tokio-util = { version = "0.7", default-features = false }
