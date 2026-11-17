@@ -110,7 +110,7 @@ test.describe("turning it on, by keyboard", () => {
     await press(page, "button", "Continue");
     await expect(page.getByRole("heading", { name: /Download it now\?/ })).toBeVisible();
     expect(await axe(page)).toEqual([]);
-    await press(page, "button", "Download");
+    await press(page, "button", "Download and turn on");
     await expect(page.getByRole("progressbar")).toBeVisible();
     expect(await axe(page)).toEqual([]);
 
