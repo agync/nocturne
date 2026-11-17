@@ -153,6 +153,10 @@
   background: var(--bg);
 }
 
+.bottomBar[hidden] {
+  display: none;
+}
+
 .bottomBar .bar {
   max-width: none;
 }

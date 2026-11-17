@@ -228,6 +228,23 @@ describe("narrow window", () => {
     expect(container.querySelector('[data-placement="top"]')).toBeNull();
   });
 
+  it("hides the keep or ask bar while a step flow is open, and brings it back after", async () => {
+    renderApp({ hash: "#/settings/online/setup" });
+    await screen.findByRole("heading", { level: 1, name: /Have your answers written/ });
+    const bar = screen.getByRole("textbox", { name: "Keep something, or ask", hidden: true });
+    expect(bar).not.toBeVisible();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeVisible();
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    await screen.findByRole("heading", { level: 1, name: "Online answers" });
+    expect(screen.getByRole("textbox", { name: "Keep something, or ask" })).toBeVisible();
+  });
+
+  it("keeps the keep or ask bar on a screen that is not a step flow", async () => {
+    renderApp({ hash: "#/settings" });
+    await screen.findByRole("heading", { level: 1, name: "Settings" });
+    expect(screen.getByRole("textbox", { name: "Keep something, or ask" })).toBeVisible();
+  });
+
   it("names the rail section in the menu button, not the screen", async () => {
     renderApp({ hash: "#/items/item-letter" });
     expect(
