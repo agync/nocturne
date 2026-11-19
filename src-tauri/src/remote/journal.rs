@@ -251,6 +251,40 @@ pub fn scrub_day(day: JournalDay, w: &Withheld) -> JournalDay {
     }
 }
 
+/// What each person the day's "Which {name} is this?" questions offer rests on: for each
+/// memory filed under them, its id and the items it came from.
+pub type Rests = std::collections::HashMap<String, Vec<Vec<String>>>;
+
+/// Every id the offered people rest on, for the withheld check.
+pub fn same_name_ids(day: &JournalDay, rests: &Rests, add: &mut dyn FnMut(&str)) {
+    for o in day.same_name.iter().flat_map(|q| &q.options) {
+        rests
+            .get(&o.entity_id)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .for_each(|i| add(i));
+    }
+}
+
+/// Takes out a choice that rests only on what stays home, and a question left with fewer than
+/// two choices. A person nothing is known about stays: nothing of theirs is withheld.
+pub fn scrub_same_name(mut day: JournalDay, rests: &Rests, w: &Withheld) -> JournalDay {
+    let seen = |entity: &str| {
+        rests.get(entity).is_none_or(|memories| {
+            memories.is_empty()
+                || memories
+                    .iter()
+                    .any(|ids| ids.iter().all(|i| !w.contains(i)))
+        })
+    };
+    for q in &mut day.same_name {
+        q.options.retain(|o| seen(&o.entity_id));
+    }
+    day.same_name.retain(|q| q.options.len() >= 2);
+    day
+}
+
 fn the_day(lines: Vec<ReflectionLine>, w: &Withheld) -> Vec<ReflectionLine> {
     lines
         .into_iter()

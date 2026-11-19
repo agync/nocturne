@@ -935,15 +935,32 @@ impl<R: Runtime> Call<R> {
                 Some(_) => e.saved_reflection(&e.period_of(PeriodKind::Day, day)?)?,
                 None => None,
             };
-            Ok((journal, saved))
+            let mut rests = journal_view::Rests::new();
+            for o in journal.same_name.iter().flat_map(|q| &q.options) {
+                if rests.contains_key(&o.entity_id) {
+                    continue;
+                }
+                let (_, memories) = e.entity(&o.entity_id)?;
+                let ids = memories
+                    .into_iter()
+                    .map(|m| {
+                        std::iter::once(m.id)
+                            .chain(m.receipts.into_iter().map(|r| r.item_id))
+                            .collect()
+                    })
+                    .collect();
+                rests.insert(o.entity_id.clone(), ids);
+            }
+            Ok((journal, saved, rests))
         })
         .await;
-        let (journal, saved) = match read {
+        let (journal, saved, rests) = match read {
             Ok(r) => r,
             Err(e) => return err(phone_code(&e)),
         };
         let mut ids = Vec::new();
         journal_view::day_ids(&journal, &mut |i| ids.push(i.to_string()));
+        journal_view::same_name_ids(&journal, &rests, &mut |i| ids.push(i.to_string()));
         if let Some(v) = &saved {
             journal_view::view_ids(v, &mut |i| ids.push(i.to_string()));
         }
@@ -951,7 +968,8 @@ impl<R: Runtime> Call<R> {
             Ok(h) => h,
             Err(code) => return err(code),
         };
-        let mut day = journal_view::scrub_day(journal, &held);
+        let mut day =
+            journal_view::scrub_same_name(journal_view::scrub_day(journal, &held), &rests, &held);
         if let Some(summary) = day.reflection.as_mut() {
             // The line it opens with is read again from what remains, never kept as it was.
             summary.first_sentence = saved

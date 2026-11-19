@@ -2820,6 +2820,63 @@ fn a_phone_answers_which_sam_and_files_one_item() {
 }
 
 #[test]
+fn which_sam_leaves_out_a_person_known_only_from_a_private_note() {
+    let p = on();
+    let e = p.h.engine();
+    let learn = |full: &str| {
+        let mut c = Candidate::new(
+            full,
+            Predicate::Knows,
+            "you",
+            &format!("{full} is someone you know."),
+            0.9,
+        );
+        c.subject_kind = Some(EntityKind::Person);
+        let (item, made) =
+            p.h.learn_candidate(&format!("{full} is someone you know."), c);
+        (item, p.h.memory(&made[0]).entity_id.unwrap())
+    };
+    let (_, jones) = learn("Sam Jones");
+    let (patel_note, patel) = learn("Sam Patel");
+    let (secret, lee) = learn("Sam Lee");
+    e.set_item_private(&secret, true).unwrap();
+    let entry = e
+        .save_entry_text(today(&p), None, 0, "Sam came round to fix the sink.")
+        .unwrap()
+        .unwrap();
+    let lease = e
+        .lease_item(&entry.item.id, Duration::from_secs(60))
+        .unwrap();
+    let mut claim = Candidate::new(
+        "Sam",
+        Predicate::Promised,
+        "the sink",
+        "Sam will fix the sink.",
+        0.9,
+    );
+    claim.subject_kind = Some(EntityKind::Person);
+    e.apply_candidates(&entry.item.id, &lease.lease, vec![claim])
+        .unwrap();
+    let ours = e.same_name_questions(None).unwrap();
+    assert_eq!(ours[0].options.len(), 3);
+
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    assert_eq!(seen.same_name.len(), 1);
+    let offered: Vec<&str> = seen.same_name[0]
+        .options
+        .iter()
+        .map(|o| o.entity_id.as_str())
+        .collect();
+    assert_eq!(offered.len(), 2, "{offered:?}");
+    assert!(offered.contains(&jones.as_str()) && offered.contains(&patel.as_str()));
+    assert!(!serde_json::to_string(&seen).unwrap().contains(&lee));
+
+    e.set_item_private(&patel_note, true).unwrap();
+    assert!(day_on_phone(&mut c, None).same_name.is_empty());
+}
+
+#[test]
 fn the_activity_list_has_what_a_phone_did_in_the_journal() {
     let p = on();
     let (_, mut c) = p.session("Pixel");
