@@ -5,7 +5,6 @@ import { t } from "../../copy/t";
 import { useEngine } from "../../engine/context";
 import styles from "./Checkin.module.css";
 
-/** The ideas are fixed and ship with Nocturne. Each idea's copy id is the id the engine stores. */
 /** Ideas are kept by their short id, "slow.name", which the recap words again. */
 const IDEA = "journal.help.idea.";
 
