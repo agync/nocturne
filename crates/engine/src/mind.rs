@@ -267,7 +267,8 @@ mod fake {
     use tokio::sync::{Notify, mpsc, watch};
 
     use super::{
-        AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, Transcript, Understanding,
+        AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, ReflectInput, Transcript,
+        Understanding, WrittenSentence,
     };
     use crate::types::Candidate;
 
@@ -317,6 +318,7 @@ mod fake {
         always: HashMap<String, MindError>,
         gates: HashMap<String, Arc<Gate>>,
         headline: Option<(String, String)>,
+        reflections: VecDeque<Vec<WrittenSentence>>,
         extract: HashMap<String, Vec<Candidate>>,
         embed: HashMap<String, Vec<f32>>,
         transcripts: HashMap<String, Transcript>,
@@ -432,6 +434,13 @@ mod fake {
         /// The headline and dek `write_headline` returns (otherwise the page's own).
         pub fn with_headline(self, headline: &str, dek: &str) -> Self {
             self.script().headline = Some((headline.to_string(), dek.to_string()));
+            self
+        }
+
+        /// The sentences the next `reflect` returns. Queue several for several calls; once they
+        /// are used, `reflect` writes one sentence per item kept on its own.
+        pub fn with_reflection(self, sentences: Vec<WrittenSentence>) -> Self {
+            self.script().reflections.push_back(sentences);
             self
         }
 
@@ -594,6 +603,32 @@ mod fake {
             })
         }
 
+        fn reflect<'a>(
+            &'a self,
+            input: &'a ReflectInput,
+        ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+            Box::pin(async move {
+                self.check("reflect").await?;
+                if let Some(scripted) = self.script().reflections.pop_front() {
+                    return Ok(scripted);
+                }
+                Ok(input
+                    .items
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, item)| !item.background)
+                    .take(6)
+                    .map(|(i, item)| {
+                        let words: Vec<&str> = item.text.split_whitespace().take(6).collect();
+                        WrittenSentence {
+                            text: format!("You kept **{}**.", words.join(" ")),
+                            cites: vec![i],
+                        }
+                    })
+                    .collect())
+            })
+        }
+
         fn speak<'a>(
             &'a self,
             text: &'a str,
@@ -604,5 +639,69 @@ mod fake {
                 Ok(text.as_bytes().to_vec())
             })
         }
+    }
+}
+
+#[cfg(test)]
+mod reflect_tests {
+    use super::*;
+
+    fn input() -> ReflectInput {
+        let item = |text: &str, background: bool| ReflectItem {
+            id: "x".into(),
+            at: "7:52 am".into(),
+            label: "note".into(),
+            text: text.into(),
+            background,
+        };
+        ReflectInput {
+            day: "2026-11-14".parse().unwrap(),
+            so_far: false,
+            items: vec![
+                item("one two three four five six seven eight", false),
+                item("kept from elsewhere", true),
+                item("short note", false),
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn an_unscripted_reflection_cites_each_item_that_is_not_background() {
+        let mind = FakeMind::new();
+        let got = mind.reflect(&input()).await.unwrap();
+        assert_eq!(
+            got,
+            vec![
+                WrittenSentence {
+                    text: "You kept **one two three four five six**.".into(),
+                    cites: vec![0]
+                },
+                WrittenSentence {
+                    text: "You kept **short note**.".into(),
+                    cites: vec![2]
+                },
+            ]
+        );
+        assert_eq!(mind.call_count("reflect"), 1);
+    }
+
+    #[tokio::test]
+    async fn a_scripted_reflection_is_used_once_and_failures_and_gates_apply() {
+        let scripted = vec![WrittenSentence {
+            text: "You **rested**.".into(),
+            cites: vec![2],
+        }];
+        let mind = FakeMind::new().with_reflection(scripted.clone());
+        assert_eq!(mind.reflect(&input()).await.unwrap(), scripted);
+        assert_eq!(mind.reflect(&input()).await.unwrap().len(), 2);
+        mind.fail_next("reflect", MindError::Unavailable);
+        assert_eq!(
+            mind.reflect(&input()).await.unwrap_err(),
+            MindError::Unavailable
+        );
+        let gate = mind.gate("reflect");
+        gate.open();
+        assert!(mind.reflect(&input()).await.is_ok());
+        assert_eq!(mind.call_count("reflect"), 4);
     }
 }
