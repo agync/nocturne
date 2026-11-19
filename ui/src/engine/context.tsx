@@ -15,13 +15,22 @@ import {
   useRef,
   useState,
 } from "react";
-import type { AskDelta, AskPhase, AskPlace, ItemFilter, NearMatch, Receipt } from "./bindings";
+import type {
+  AskDelta,
+  AskPhase,
+  AskPlace,
+  ItemFilter,
+  NearMatch,
+  Period,
+  PeriodKind,
+  Receipt,
+} from "./bindings";
 import type { EngineClient, EngineEventName, EngineEvents } from "./client";
 
 /** Which cached queries an engine event makes stale. */
 export const EVENT_INVALIDATIONS: Readonly<Partial<Record<EngineEventName, QueryKey[]>>> = {
-  "status-changed": [["status"]],
-  "item-changed": [["items"], ["page"], ["needsYou"]],
+  "status-changed": [["status"], ["journal"]],
+  "item-changed": [["items"], ["page"], ["needsYou"], ["journal"]],
   "page-ready": [["page"], ["pages"]],
   "needs-you-changed": [["needsYou"], ["status"]],
   "setup-progress": [["setup"]],
@@ -130,6 +139,43 @@ export function useNeedsYou() {
 export function useSettings() {
   const engine = useEngine();
   return useQuery({ queryKey: ["settings"], queryFn: () => engine.getSettings() });
+}
+
+/** One journal day; today when `day` is absent. */
+export function useJournalDay(day?: string) {
+  const engine = useEngine();
+  return useQuery({
+    queryKey: ["journal", "day", day ?? "today"],
+    queryFn: () => engine.getJournalDay(day),
+  });
+}
+
+/** Every day with anything in the journal, oldest first. */
+export function useJournalDays() {
+  const engine = useEngine();
+  return useQuery({ queryKey: ["journal", "days"], queryFn: () => engine.listJournalDays() });
+}
+
+/** Weeks, months or years with anything kept, newest first. */
+export function usePeriods(kind: PeriodKind) {
+  const engine = useEngine();
+  return useQuery({
+    queryKey: ["journal", "periods", kind],
+    queryFn: () => engine.listPeriods(kind),
+  });
+}
+
+/** The reflection or recap for a period, or nothing while no period is chosen. */
+export function useReflection(period: Period | null) {
+  const engine = useEngine();
+  return useQuery({
+    queryKey: ["journal", "reflection", period?.kind, period?.start, period?.end],
+    queryFn: () => {
+      if (!period) throw new Error("No period");
+      return engine.getReflection(period);
+    },
+    enabled: period !== null,
+  });
 }
 
 /** Re-read the named queries after a change the engine does not announce itself. */

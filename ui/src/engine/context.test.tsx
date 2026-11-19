@@ -26,8 +26,8 @@ function wrapper(engine: ReturnType<typeof createMockEngine>, client?: QueryClie
 describe("event to query invalidation", () => {
   it("maps each event to the queries it makes stale (B3)", () => {
     expect(EVENT_INVALIDATIONS).toEqual({
-      "status-changed": [["status"]],
-      "item-changed": [["items"], ["page"], ["needsYou"]],
+      "status-changed": [["status"], ["journal"]],
+      "item-changed": [["items"], ["page"], ["needsYou"], ["journal"]],
       "page-ready": [["page"], ["pages"]],
       "needs-you-changed": [["needsYou"], ["status"]],
       "setup-progress": [["setup"]],
