@@ -985,3 +985,79 @@ fn a_reflection_is_not_written_from_what_is_still_being_read() {
     assert_eq!(ids, vec![read.as_str()]);
     assert!(!ids.contains(&held.item.id.as_str()) && !ids.contains(&waiting.as_str()));
 }
+
+fn photo_good_thing(f: &Fixture) -> (String, String) {
+    let Kept::New { item: photo } = f
+        .engine
+        .keep_bytes(b"jpeg-of-the-gate", "jpg", Source::Phone)
+        .unwrap()
+    else {
+        panic!("new")
+    };
+    let good = f
+        .engine
+        .keep_good_thing(
+            f.engine.journal_today().unwrap(),
+            "",
+            Some(&photo.id),
+            Source::Phone,
+        )
+        .unwrap();
+    (photo.id, good.id)
+}
+
+#[test]
+fn a_highlight_in_a_photos_own_words_cites_the_photo() {
+    let f = fixture();
+    let (photo, good) = photo_good_thing(&f);
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let p = f
+        .engine
+        .period_of(PeriodKind::Week, date("2026-11-13"))
+        .unwrap();
+    let recap = f.engine.compose_recap(&p, WrittenWhen::Overnight).unwrap();
+    let h = recap
+        .highlights
+        .iter()
+        .find(|h| h.photo.is_some())
+        .expect("the good thing is a highlight");
+    let cited: Vec<&str> = h.receipts.iter().map(|r| r.item_id.as_str()).collect();
+    assert!(cited.contains(&good.as_str()) && cited.contains(&photo.as_str()));
+}
+
+#[test]
+fn a_recap_saved_after_its_item_was_deleted_does_not_bring_it_back() {
+    let f = fixture();
+    let (_, good) = photo_good_thing(&f);
+    let p = f
+        .engine
+        .period_of(PeriodKind::Week, date("2026-11-13"))
+        .unwrap();
+    let recap = f.engine.compose_recap(&p, WrittenWhen::OnDemand).unwrap();
+    assert!(
+        recap
+            .highlights
+            .iter()
+            .any(|h| h.receipts.iter().any(|r| r.item_id == good))
+    );
+    f.engine.unkeep(&good).unwrap();
+    f.engine.save_recap(&recap).unwrap();
+    let Some(ReflectionView::Recap { recap: back }) = f.engine.saved_reflection(&p).unwrap() else {
+        panic!("a week is a Recap")
+    };
+    assert!(
+        back.highlights
+            .iter()
+            .all(|h| h.receipts.iter().all(|r| r.item_id != good))
+    );
+    assert!(back.good.iter().all(|g| g.id != good));
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    let cites: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM reflection_cites WHERE item_id = ?1",
+            [&good],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(cites, 0);
+}

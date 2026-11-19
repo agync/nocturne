@@ -401,7 +401,10 @@ fn highlights(
             Some(JournalRole::Good) => {
                 let thing = good_view(conn, originals, item, &g.mentions)?;
                 if let Some(photo) = thing.photo.clone() {
+                    let mut receipts = vec![item.receipt()];
                     let text = if thing.text.is_empty() {
+                        // Words taken from the photo cite the photo too.
+                        receipts.push(load_item(conn, originals, &photo.id)?.receipt());
                         photo.summary.clone().unwrap_or_else(|| photo.title.clone())
                     } else {
                         thing.text.clone()
@@ -413,7 +416,7 @@ fn highlights(
                             day: ds.clone(),
                             text,
                             quoted: !thing.text.is_empty(),
-                            receipts: vec![item.receipt()],
+                            receipts,
                             photo: Some(photo),
                             feeling: None,
                         },
@@ -943,6 +946,20 @@ impl Engine {
             if stopped() {
                 return Err(Error::Cancelled);
             }
+            // What was deleted after the recap was composed is not brought back by saving it.
+            let mut recap = recap.clone();
+            let mut live = HashSet::new();
+            for id in store::item_ids_in(&serde_json::to_value(&recap)?) {
+                let exists: bool = tx.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM items WHERE id = ?1)",
+                    [&id],
+                    |r| r.get(0),
+                )?;
+                if exists && !crate::capture::in_forget_job(tx, &id)? {
+                    live.insert(id);
+                }
+            }
+            recap.lines_removed += store::retain_recap(&mut recap, &|id| live.contains(id));
             store::upsert(
                 tx,
                 &NewRow {
@@ -953,7 +970,7 @@ impl Engine {
                     so_far: recap.so_far,
                     from_count: recap.days,
                     lines_removed: recap.lines_removed,
-                    body: &serde_json::to_value(recap)?,
+                    body: &serde_json::to_value(&recap)?,
                 },
             )
         })
