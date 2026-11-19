@@ -1,7 +1,9 @@
 //! Settings, stored as JSON values by key. Defaults come from here; the person's choices
 //! overlay them.
 
-use nocturne_contract::{Delivery, LettingGo, SettingsPatch, SettingsView, Theme, TidyReport};
+use nocturne_contract::{
+    Delivery, EveningReminder, LettingGo, SettingsPatch, SettingsView, Theme, TidyReport,
+};
 use rusqlite::{Connection, params};
 use serde_json::{Map, Value};
 
@@ -43,7 +45,31 @@ pub(crate) fn read_settings(conn: &Connection) -> Result<SettingsView> {
             map.insert(k, v);
         }
     }
-    Ok(serde_json::from_value(Value::Object(map)).unwrap_or_else(|_| defaults()))
+    let mut view: SettingsView =
+        serde_json::from_value(Value::Object(map)).unwrap_or_else(|_| defaults());
+    view.evening_reminder = Some(read_evening_reminder(conn)?);
+    Ok(view)
+}
+
+const EVENING_REMINDER: &str = "evening_reminder";
+const EVENING_TIME: &str = "evening_time";
+const DEFAULT_EVENING_TIME: &str = "21:00";
+
+fn read_evening_reminder(conn: &Connection) -> Result<EveningReminder> {
+    let get = |key: &str| -> Result<Option<String>> {
+        let v: Option<String> = rusqlite::OptionalExtension::optional(conn.query_row(
+            "SELECT value FROM settings WHERE key = ?1",
+            [key],
+            |r| r.get(0),
+        ))?;
+        Ok(v.and_then(|v| serde_json::from_str::<String>(&v).ok()))
+    };
+    Ok(EveningReminder {
+        on: get(EVENING_REMINDER)?.as_deref() == Some("on"),
+        time: get(EVENING_TIME)?
+            .filter(|t| parse_page_time(t).is_ok())
+            .unwrap_or_else(|| DEFAULT_EVENING_TIME.to_string()),
+    })
 }
 
 /// Parse `HH:MM`.
@@ -106,6 +132,11 @@ impl Engine {
         })
     }
 
+    /// The optional evening reminder: off unless the person turned it on.
+    pub fn evening_reminder(&self) -> Result<EveningReminder> {
+        self.read(read_evening_reminder)
+    }
+
     pub fn settings(&self) -> Result<SettingsView> {
         self.read(read_settings)
     }
@@ -115,11 +146,18 @@ impl Engine {
         if let Some(t) = &patch.page_time {
             parse_page_time(t)?;
         }
+        if let Some(r) = &patch.evening_reminder {
+            parse_page_time(&r.time)
+                .map_err(|_| Error::invalid("the evening reminder time is HH:MM"))?;
+        }
         if let Some(s) = patch.voice_speed
             && !(0.25..=4.0).contains(&s)
         {
             return Err(Error::invalid("voice speed is out of range"));
         }
+        let reminder = patch.evening_reminder.clone();
+        let mut patch = patch;
+        patch.evening_reminder = None;
         let Value::Object(fields) = serde_json::to_value(&patch)? else {
             unreachable!("a patch serialises to an object")
         };
@@ -132,6 +170,20 @@ impl Engine {
                     "INSERT OR REPLACE INTO settings(key, value) VALUES (?1, ?2)",
                     params![key, value.to_string()],
                 )?;
+            }
+            if let Some(r) = reminder {
+                for (key, value) in [
+                    (
+                        EVENING_REMINDER,
+                        if r.on { "on" } else { "off" }.to_string(),
+                    ),
+                    (EVENING_TIME, r.time),
+                ] {
+                    tx.execute(
+                        "INSERT OR REPLACE INTO settings(key, value) VALUES (?1, ?2)",
+                        params![key, serde_json::to_string(&value)?],
+                    )?;
+                }
             }
             read_settings(tx)
         })
