@@ -84,6 +84,8 @@ test.describe("at 200% zoom of the smallest window (WCAG 1.4.10)", () => {
 
 for (const scheme of ["light", "dark"] as const) {
   test(`axe passes on every state of setup in ${scheme}`, async ({ browser }) => {
+    // Every setup screen is checked in turn; under a full parallel run that outlasts the default.
+    test.setTimeout(90_000);
     const context = await browser.newContext({
       colorScheme: scheme,
       locale: "en-GB",
