@@ -11,7 +11,10 @@
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-use nocturne_contract::{ForgetOriginal, ForgetPreview, ForgetReport, ForgetRow, PageView};
+use jiff::civil::Date;
+use nocturne_contract::{
+    ForgetOriginal, ForgetPreview, ForgetReport, ForgetRow, PageView, Period, PeriodKind,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 
 use crate::Engine;
@@ -19,10 +22,11 @@ use crate::audio::{drop_audio_rows, pages_citing, shred_all};
 use crate::capture::original_path;
 use crate::error::{Error, Result};
 use crate::fsutil;
+use crate::journal::Ctx;
 use crate::memory::restore_replaced;
 use crate::page::{template_dek, template_headline};
 use crate::types::ForgetOutcome;
-use crate::util::{claim_hash, fmt_ts, new_id_hex, parse_enum, parse_ts};
+use crate::util::{claim_hash, fmt_ts, new_id_hex, parse_date, parse_enum, parse_ts};
 
 /// A preview is good for ten minutes.
 const TOKEN_MINUTES: i64 = 10;
@@ -254,7 +258,8 @@ impl Engine {
                 doomed.push(item.clone());
                 doomed.extend(crate::journal::keep::earlier_versions(tx, item)?);
             }
-            let reflection_lines = crate::journal::store::count_lines(tx, &doomed)?;
+            let (reflection_lines, recap_lines) =
+                crate::journal::store::count_lines(tx, &doomed)?;
             let token = new_id_hex();
             tx.execute(
                 "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at, items) \
@@ -270,7 +275,7 @@ impl Engine {
             )?;
             Ok(ForgetPreview {
                 reflection_lines: (reflection_lines > 0).then_some(reflection_lines),
-                recap_lines: None,
+                recap_lines: (recap_lines > 0).then_some(recap_lines),
                 token,
                 memories: memories
                     .into_iter()
@@ -527,8 +532,11 @@ impl Engine {
             // The item's own row (text, summary and search rows with it) goes now, with its
             // original recorded for shredding in the same transaction.
             crate::journal::store::scrub_items(tx, &[item_id.to_string()])?;
+            let ctx = Ctx::load(tx, self.clock())?;
+            let days = BTreeSet::from_iter(journal_day_of(tx, &ctx, item_id)?);
             delete_earlier_versions(tx, &dir, job, item_id)?;
             tx.execute("DELETE FROM items WHERE id = ?1", [item_id])?;
+            drop_emptied_days(tx, &ctx, &days)?;
             let pending = matches!(status.as_str(), "kept" | "reading");
             forget_in_pages(tx, &kept_at, pending)?;
             let mut files = drop_audio_rows(tx, &pages)?;
@@ -605,6 +613,8 @@ impl Engine {
             for chunk in items.chunks(200) {
                 let doomed = self.write(|tx| {
                     let mut doomed = Vec::new();
+                    let ctx = Ctx::load(tx, self.clock())?;
+                    let mut days = BTreeSet::new();
                     for item in chunk {
                         let left: u32 = tx.query_row(
                             "SELECT COUNT(*) FROM memory_sources WHERE item_id = ?1",
@@ -623,6 +633,7 @@ impl Engine {
                             .optional()?;
                         if let Some((sha, ext, file_name)) = row {
                             crate::journal::store::scrub_items(tx, std::slice::from_ref(item))?;
+                            days.extend(journal_day_of(tx, &ctx, item)?);
                             delete_earlier_versions(tx, &dir, job, item)?;
                             tx.execute("DELETE FROM items WHERE id = ?1", [item])?;
                             if file_name.is_some() {
@@ -631,6 +642,7 @@ impl Engine {
                             originals_removed += 1;
                         }
                     }
+                    drop_emptied_days(tx, &ctx, &days)?;
                     append_job_files(tx, job, &doomed)?;
                     Ok(doomed)
                 })?;
@@ -689,6 +701,45 @@ impl Engine {
             fully_scrubbed,
         })
     }
+}
+
+/// The journal day an item belongs to, as the journal reads it.
+fn journal_day_of(tx: &Transaction<'_>, ctx: &Ctx, item: &str) -> Result<Option<Date>> {
+    let row: Option<(Option<String>, String)> = tx
+        .query_row(
+            "SELECT json_extract(metadata, '$.journal_day'), kept_at FROM items WHERE id = ?1",
+            [item],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    Ok(match row {
+        Some((Some(day), _)) => Some(parse_date(&day)?),
+        Some((None, kept_at)) => Some(ctx.day_of(parse_ts(&kept_at)?)?),
+        None => None,
+    })
+}
+
+/// A day left with no item at all keeps no reflection: it was written from what is gone. The
+/// reflection is dropped, not declined, so a day that is kept on again can be reflected on.
+fn drop_emptied_days(tx: &Transaction<'_>, ctx: &Ctx, days: &BTreeSet<Date>) -> Result<()> {
+    for day in days {
+        let (from, to) = ctx.bounds(*day)?;
+        let left: u32 = tx.query_row(
+            "SELECT COUNT(*) FROM items WHERE json_extract(metadata, '$.journal_day') = ?1 \
+             OR (json_extract(metadata, '$.journal_day') IS NULL AND kept_at >= ?2 AND kept_at < ?3)",
+            params![day.to_string(), fmt_ts(from), fmt_ts(to)],
+            |r| r.get(0),
+        )?;
+        if left == 0 {
+            let period = Period {
+                kind: PeriodKind::Day,
+                start: day.to_string(),
+                end: day.to_string(),
+            };
+            crate::journal::store::delete(tx, &period)?;
+        }
+    }
+    Ok(())
 }
 
 /// An item that is gone no longer counts in the pages whose window held it: their counts and

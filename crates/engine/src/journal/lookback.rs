@@ -772,6 +772,8 @@ fn compose(
         open_memories(conn, &ids)?
     };
 
+    let still_reading = g.usable().filter(|i| i.pending()).count() as u32;
+
     Ok(Recap {
         id: new_id("rcp"),
         period: period.clone(),
@@ -791,7 +793,7 @@ fn compose(
         changed,
         still_open,
         lines_removed: 0,
-        still_reading: None,
+        still_reading: (still_reading > 0).then_some(still_reading),
     })
 }
 
@@ -997,9 +999,26 @@ impl Engine {
         })
     }
 
-    /// Delete the writing for a period. Nothing the person kept is touched.
+    /// The person deletes the writing for a period. Nothing they kept is touched, and the
+    /// period is not put together again overnight; only asking for it again clears that.
     pub fn delete_reflection(&self, period: &Period) -> Result<()> {
+        let now = fmt_ts(self.clock_now());
+        self.write(|tx| {
+            store::delete(tx, period)?;
+            store::decline(tx, period, &now)
+        })
+    }
+
+    /// Drop the writing for a period because the engine itself found it empty or void. The
+    /// period is not declined: it may be written again.
+    pub fn discard_reflection(&self, period: &Period) -> Result<()> {
         self.write(|tx| store::delete(tx, period))
+    }
+
+    /// The person asks for a period they deleted to be put together again: it is no longer
+    /// declined.
+    pub fn clear_declined_reflection(&self, period: &Period) -> Result<()> {
+        self.write(|tx| store::allow(tx, period))
     }
 
     /// Periods that ended up to `back_days` ago and have not been looked back on, newest
@@ -1027,6 +1046,7 @@ impl Engine {
                         || i64::from(today.since(end)?.get_days()) > i64::from(back_days)
                         || !seen.insert(period.clone())
                         || store::is_final(conn, &period)?
+                        || store::is_declined(conn, &period)?
                     {
                         continue;
                     }

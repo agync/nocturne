@@ -71,6 +71,32 @@ pub(crate) fn is_final(conn: &Connection, period: &Period) -> Result<bool> {
     )?)
 }
 
+/// The person deleted this period's writing: it is not written again until they ask.
+pub(crate) fn decline(tx: &Transaction<'_>, period: &Period, at: &str) -> Result<()> {
+    tx.execute(
+        "INSERT OR REPLACE INTO reflections_declined(kind, start, declined_at) VALUES (?1, ?2, ?3)",
+        params![enum_str(&period.kind), period.start, at],
+    )?;
+    Ok(())
+}
+
+/// The person asked for this period again.
+pub(crate) fn allow(tx: &Transaction<'_>, period: &Period) -> Result<()> {
+    tx.execute(
+        "DELETE FROM reflections_declined WHERE kind = ?1 AND start = ?2",
+        params![enum_str(&period.kind), period.start],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn is_declined(conn: &Connection, period: &Period) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM reflections_declined WHERE kind = ?1 AND start = ?2)",
+        params![enum_str(&period.kind), period.start],
+        |r| r.get(0),
+    )?)
+}
+
 /// Every item id a stored body names, wherever it appears.
 pub(crate) fn item_ids_in(value: &Value) -> BTreeSet<String> {
     fn walk(v: &Value, out: &mut BTreeSet<String>) {
@@ -234,14 +260,19 @@ fn scrubbed(kind: PeriodKind, body: &str, gone: &BTreeSet<&str>) -> Result<(Stri
     }
 }
 
-/// How many lines in stored reflections and recaps cite these items and would be taken out.
-pub(crate) fn count_lines(conn: &Connection, items: &[String]) -> Result<u32> {
+/// How many lines in stored reflections and recaps cite these items and would be taken out,
+/// and how many of those are in week, month and year recaps.
+pub(crate) fn count_lines(conn: &Connection, items: &[String]) -> Result<(u32, u32)> {
     let gone: BTreeSet<&str> = items.iter().map(String::as_str).collect();
-    let mut total = 0;
+    let (mut total, mut recaps) = (0, 0);
     for (_, kind, body, _) in citing(conn, items)? {
-        total += scrubbed(kind, &body, &gone)?.1;
+        let n = scrubbed(kind, &body, &gone)?.1;
+        total += n;
+        if kind != PeriodKind::Day {
+            recaps += n;
+        }
     }
-    Ok(total)
+    Ok((total, recaps))
 }
 
 /// The items are being deleted: take every line that cites them out of every stored reflection

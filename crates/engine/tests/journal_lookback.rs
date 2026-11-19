@@ -472,13 +472,15 @@ fn deleting_an_entry_block_deletes_its_earlier_versions_and_the_lines_that_cite_
     )
     .unwrap();
 
+    // The day holds something else, so its reflection stays and only the lines go.
+    keep(&f.engine, "Posted the parcel");
     f.engine.unkeep(&second.item.id).unwrap();
     assert!(f.engine.get_item(&second.item.id).is_err());
     assert!(
         f.engine.get_item(&first.item.id).is_err(),
         "earlier versions go with it"
     );
-    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM items"), 0);
+    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM items"), 1);
     let Some(ReflectionView::Written { reflection }) = f.engine.saved_reflection(&period).unwrap()
     else {
         panic!("still there")
@@ -1129,4 +1131,367 @@ fn deleting_a_day_takes_its_own_items_and_spares_what_was_unticked() {
     f.engine.forget(&preview.token).unwrap();
     assert!(!exists(&f, &wednesday) && !exists(&f, &feeling));
     assert!(exists(&f, &tuesday), "unticked, so it stays");
+}
+
+fn week_of(f: &Fixture, day: &str) -> Period {
+    f.engine.period_of(PeriodKind::Week, date(day)).unwrap()
+}
+
+fn save_week(f: &Fixture, week: &Period) {
+    let recap = f
+        .engine
+        .compose_recap(week, WrittenWhen::Overnight)
+        .unwrap();
+    f.engine.save_recap(&recap).unwrap();
+}
+
+fn declined(f: &Fixture) -> i64 {
+    sql_count(f.dir.path(), "SELECT COUNT(*) FROM reflections_declined")
+}
+
+#[test]
+fn a_recap_counts_the_things_of_its_period_that_are_still_being_read() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    let waiting = keep(&f.engine, "Posted the parcel");
+    f.clock.set_str("2026-11-11T09:00:00Z");
+    let reading = keep(&f.engine, "Tea with Gran");
+    let lease = f
+        .engine
+        .lease_item(&reading, std::time::Duration::from_secs(60))
+        .unwrap();
+    let done = keep(&f.engine, "Dentist at four");
+    f.engine.apply(&done, vec![]).unwrap();
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let week = week_of(&f, "2026-11-10");
+
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::OnDemand)
+        .unwrap();
+    assert_eq!(recap.still_reading, Some(2), "kept and being read");
+
+    f.engine.set_left_out(&waiting, true).unwrap();
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::OnDemand)
+        .unwrap();
+    assert_eq!(
+        recap.still_reading,
+        Some(1),
+        "what is left out is not in the recap, so it is not waited for"
+    );
+
+    f.engine
+        .apply_candidates(&reading, &lease.lease, vec![])
+        .unwrap();
+    read_all(&f);
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::OnDemand)
+        .unwrap();
+    assert_eq!(recap.still_reading, None);
+}
+
+#[test]
+fn a_recap_is_composed_on_any_period_with_no_mind_and_nothing_still_reading() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let recap = f
+        .engine
+        .compose_recap(&week_of(&f, "2026-11-10"), WrittenWhen::OnDemand)
+        .unwrap();
+    assert_eq!(recap.days, 1);
+    assert_eq!(recap.still_reading, None);
+}
+
+#[test]
+fn a_deleted_recap_is_not_due_again_until_the_person_asks() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let week = week_of(&f, "2026-11-10");
+    assert!(f.engine.reflections_due(7).unwrap().contains(&week));
+    save_week(&f, &week);
+    assert!(!f.engine.reflections_due(7).unwrap().contains(&week));
+
+    f.engine.delete_reflection(&week).unwrap();
+    assert!(f.engine.saved_reflection(&week).unwrap().is_none());
+    assert_eq!(declined(&f), 1);
+    assert!(
+        !f.engine.reflections_due(7).unwrap().contains(&week),
+        "not put together again overnight"
+    );
+    let month = f
+        .engine
+        .period_of(PeriodKind::Month, date("2026-11-10"))
+        .unwrap();
+    f.clock.set_str("2026-12-01T09:00:00Z");
+    assert!(
+        f.engine.reflections_due(30).unwrap().contains(&month),
+        "the month is its own recap"
+    );
+
+    f.engine.clear_declined_reflection(&week).unwrap();
+    assert_eq!(declined(&f), 0);
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    assert!(f.engine.reflections_due(7).unwrap().contains(&week));
+}
+
+#[test]
+fn a_recap_deleted_while_it_was_still_going_is_not_put_together_when_the_period_ends() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    let week = week_of(&f, "2026-11-10");
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::OnDemand)
+        .unwrap();
+    assert!(recap.so_far);
+    f.engine.save_recap(&recap).unwrap();
+    f.engine.delete_reflection(&week).unwrap();
+
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    assert!(!f.engine.reflections_due(7).unwrap().contains(&week));
+}
+
+#[test]
+fn a_deleted_day_reflection_is_not_written_again_overnight() {
+    let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
+    let note = keep(&f.engine, "A day with something in it");
+    let (period, input) = written(&f, "2026-11-12");
+    let at = input.items.iter().position(|i| i.id == note).unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **kept something**.", &[at])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    f.engine.delete_reflection(&period).unwrap();
+    f.clock.set_str("2026-11-13T08:00:00Z");
+    assert!(!f.engine.reflections_due(7).unwrap().contains(&period));
+    f.engine.clear_declined_reflection(&period).unwrap();
+    assert!(f.engine.reflections_due(7).unwrap().contains(&period));
+}
+
+#[test]
+fn discarding_a_reflection_the_engine_itself_dropped_does_not_decline_it() {
+    let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
+    let note = keep(&f.engine, "A day with something in it");
+    let (period, input) = written(&f, "2026-11-12");
+    let at = input.items.iter().position(|i| i.id == note).unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **kept something**.", &[at])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    f.engine.discard_reflection(&period).unwrap();
+    assert!(f.engine.saved_reflection(&period).unwrap().is_none());
+    assert_eq!(declined(&f), 0);
+    f.clock.set_str("2026-11-13T08:00:00Z");
+    assert!(f.engine.reflections_due(7).unwrap().contains(&period));
+}
+
+#[test]
+fn the_morning_pages_looked_back_on_line_goes_when_the_recap_is_deleted() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let week = week_of(&f, "2026-11-10");
+    save_week(&f, &week);
+    let page = f
+        .engine
+        .compose_page(date("2026-11-16"), nocturne_contract::Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+    let line = |f: &Fixture| {
+        f.engine
+            .page_for(Some(date("2026-11-16")), nocturne_contract::Edition::Screen)
+            .unwrap()
+            .unwrap()
+            .journal_line
+    };
+    assert_eq!(line(&f), Some(week.clone()));
+    f.engine.delete_reflection(&week).unwrap();
+    assert_eq!(line(&f), None);
+}
+
+#[test]
+fn deleting_everything_clears_what_was_declined() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T09:00:00Z");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    let week = week_of(&f, "2026-11-10");
+    f.engine.delete_reflection(&week).unwrap();
+    assert_eq!(declined(&f), 1);
+    f.engine
+        .delete_everything(nocturne_engine::DELETE_PHRASE)
+        .unwrap();
+    assert_eq!(declined(&f), 0);
+}
+
+#[test]
+fn the_preview_counts_the_recap_lines_among_the_reflection_lines() {
+    let f = fixture();
+    f.clock.set_str("2026-11-10T20:00:00Z");
+    let entry = f
+        .engine
+        .save_entry_text(date("2026-11-10"), None, 0, "Long walk with Gran, then tea")
+        .unwrap()
+        .unwrap();
+    f.engine.apply(&entry.item.id, vec![]).unwrap();
+    f.clock.set_str("2026-11-10T21:00:00Z");
+    let (period, input) = written(&f, "2026-11-10");
+    let at = input
+        .items
+        .iter()
+        .position(|i| i.id == entry.item.id)
+        .unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **walked with Gran**.", &[at])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    f.clock.set_str("2026-11-16T09:00:00Z");
+    let week = week_of(&f, "2026-11-10");
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::Overnight)
+        .unwrap();
+    let recap_lines = (recap.highlights.len() + recap.together.len() + recap.changed.len()) as u32;
+    assert!(recap_lines > 0, "the entry is a highlight");
+    f.engine.save_recap(&recap).unwrap();
+
+    let preview = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&entry.item.id), true)
+        .unwrap();
+    assert_eq!(preview.recap_lines, Some(recap_lines));
+    assert_eq!(
+        preview.reflection_lines,
+        Some(recap_lines + 1),
+        "the day's own line and the recap's"
+    );
+}
+
+#[test]
+fn a_preview_with_no_recap_citing_it_has_no_recap_lines() {
+    let f = fixture();
+    let note = keep(&f.engine, "Tea with Gran");
+    let (period, input) = written(&f, "2026-11-13");
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You had **tea**.", &[0])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    let preview = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&note), true)
+        .unwrap();
+    assert_eq!(preview.reflection_lines, Some(1));
+    assert_eq!(preview.recap_lines, None);
+}
+
+#[test]
+fn a_day_left_with_no_items_loses_its_reflection_without_declining_it() {
+    let f = fixture();
+    let a = keep(&f.engine, "Tea with Gran");
+    let b = keep(&f.engine, "Posted the parcel");
+    let (period, input) = written(&f, "2026-11-13");
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[
+                sentence("You had **tea**.", &[0]),
+                sentence("You **posted** it.", &[1]),
+            ],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+
+    let first = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&a), true)
+        .unwrap();
+    f.engine.forget(&first.token).unwrap();
+    let Some(ReflectionView::Written { reflection }) = f.engine.saved_reflection(&period).unwrap()
+    else {
+        panic!("one item is left on the day")
+    };
+    assert_eq!(reflection.the_day.len(), 1);
+
+    let second = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&b), true)
+        .unwrap();
+    f.engine.forget(&second.token).unwrap();
+    assert!(
+        f.engine.saved_reflection(&period).unwrap().is_none(),
+        "nothing is left on the day"
+    );
+    assert_eq!(declined(&f), 0);
+}
+
+#[test]
+fn undoing_the_only_item_of_a_day_takes_its_reflection_with_it() {
+    let f = fixture();
+    keep(&f.engine, "Tea with Gran");
+    let (period, input) = written(&f, "2026-11-13");
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You had **tea**.", &[0])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    let id = input.items[0].id.clone();
+    f.engine.unkeep(&id).unwrap();
+    assert!(f.engine.saved_reflection(&period).unwrap().is_none());
+}
+
+#[test]
+fn a_day_still_holding_something_not_deleted_keeps_its_reflection() {
+    let f = fixture();
+    let a = keep(&f.engine, "Tea with Gran");
+    keep(&f.engine, "Posted the parcel");
+    checkin(&f, FeelingPart::Settled, &["calm"]);
+    let (period, input) = written(&f, "2026-11-13");
+    let at = input.items.iter().position(|i| i.id == a).unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You had **tea**.", &[at])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    let preview = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&a), true)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    let Some(ReflectionView::Written { reflection }) = f.engine.saved_reflection(&period).unwrap()
+    else {
+        panic!("the day still holds a note and a check-in")
+    };
+    assert!(reflection.the_day.is_empty(), "the line citing it is out");
 }
