@@ -218,6 +218,10 @@ export function Settings() {
   const times = (slots.includes(view.pageTime) ? slots : [...slots, view.pageTime].sort()).map(
     (v) => ({ value: v, label: v }),
   );
+  const reminder = view.eveningReminder ?? { on: false, time: "21:00" };
+  const reminderTimes = (
+    slots.includes(reminder.time) ? slots : [...slots, reminder.time].sort()
+  ).map((v) => ({ value: v, label: v }));
   const deliveries: Array<{ value: Delivery; label: string }> = [
     { value: "notify", label: t("settings.delivery.notify") },
     { value: "quiet", label: t("settings.delivery.quiet") },
@@ -345,6 +349,25 @@ export function Settings() {
             checked={view.startAtLogin}
             onChange={(startAtLogin) => void save({ startAtLogin })}
           />
+        </li>
+
+        <li className={styles.toggleRow}>
+          <Toggle
+            label={t("journal.reminder.label")}
+            hint={t("journal.reminder.hint")}
+            checked={reminder.on}
+            onChange={(on) => void save({ eveningReminder: { on, time: reminder.time } })}
+          />
+          {reminder.on ? (
+            <div className={styles.reminderTime}>
+              <Select
+                label={t("journal.reminder.label")}
+                value={reminder.time}
+                options={reminderTimes}
+                onChange={(time) => void save({ eveningReminder: { on: true, time } })}
+              />
+            </div>
+          ) : null}
         </li>
 
         <Row label={t("settings.letting.label")} hint={t("settings.letting.hint")}>

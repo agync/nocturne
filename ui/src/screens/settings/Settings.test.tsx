@@ -123,7 +123,7 @@ describe("Settings", () => {
     await open();
     expect(screen.queryByRole("switch", { name: "Print the page" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "Reminders" })).toBeNull();
-    expect(screen.queryByText(/remind/i)).toBeNull();
+    expect(screen.queryByText(/^Reminders$/i)).toBeNull();
   });
 
   it("saves a change at once and says Saved.", async () => {
@@ -530,5 +530,46 @@ describe("settings", () => {
     expect(
       await screen.findByRole("link", { name: "Open Away from home, Phones need the new address" }),
     ).toBeInTheDocument();
+  });
+});
+
+describe("the evening reminder", () => {
+  it("is off by default, with its hint and no time field", async () => {
+    await open();
+    const row = screen.getByRole("switch", { name: "Evening reminder" });
+    expect(row).not.toBeChecked();
+    expect(row).toHaveAccessibleDescription(
+      "A quiet nudge at a time you choose. It says nothing about your journal.",
+    );
+    expect(screen.queryByRole("combobox", { name: "Evening reminder" })).toBeNull();
+  });
+
+  it("turns on with a time field named after the row, and saves both", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "updateSettings");
+    await userEvent.click(screen.getByRole("switch", { name: "Evening reminder" }));
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eveningReminder: { on: true, time: "21:00" } }),
+    );
+    const time = await screen.findByRole("combobox", { name: "Evening reminder" });
+    expect(time).toHaveDisplayValue("21:00");
+    await userEvent.selectOptions(time, "20:30");
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eveningReminder: { on: true, time: "20:30" } }),
+    );
+  });
+
+  it("turns off again and hides the time", async () => {
+    const { engine } = await open();
+    const spy = vi.spyOn(engine, "updateSettings");
+    await userEvent.click(screen.getByRole("switch", { name: "Evening reminder" }));
+    await screen.findByRole("combobox", { name: "Evening reminder" });
+    await userEvent.click(screen.getByRole("switch", { name: "Evening reminder" }));
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ eveningReminder: { on: false, time: "21:00" } }),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("combobox", { name: "Evening reminder" })).toBeNull(),
+    );
   });
 });
