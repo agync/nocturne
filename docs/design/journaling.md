@@ -45,6 +45,7 @@ beside them. A dashed outline marks what is new in the app frame; it is not part
 | Phone: your week | `phone-recap.html`: `week` | `phone-recap-light.png`, `phone-recap-dark.png` |
 | Phone: which Sam is this? | `phone-which.html`: `which`, `done` | `phone-which-light.png`, `phone-which-dark.png` |
 | Online answers, said openly | `online-step1.html` (`?open=1` opens the expander), `online-step5.html`, `online-settings.html` | `online-step1-light.png`, `online-step1-dark.png`, `online-step1-open-light.png`, `online-step5-light.png`, `online-step5-dark.png` (full length), `online-settings-light.png`, `online-settings-dark.png` |
+| Delete this day, a check-in's own page, deleting a recap, the page question from the journal | `delete-day.html`, `checkin-item.html`, `delete-lookback.html`, `page-question.html`; see [Journaling follow-ups](journaling-follow-ups.md) | Listed in [Journaling follow-ups](journaling-follow-ups.md) |
 
 The mockups use made-up people (Gran, Sam, Leo, Priya) and places, the same household the guide
 and the other designs use.
@@ -335,7 +336,8 @@ mixed. "More words" shows the longer list for that part. "Show all words as a li
 field for a plain list grouped by part, for anyone who finds the field hard to use; there the
 words can come from different parts, and the check-in takes the part of the first word chosen.
 
-**Step 3: optional.** "What’s going on?" A line of text or a voice note. People and places in it
+**Step 3: optional.** "What’s going on?" A line of text. (Changed: a voice note here is out of scope
+until designed; see [Journaling follow-ups](journaling-follow-ups.md).) People and places in it
 are found by reading and shown as mentions, but nothing in a check-in becomes a memory: its
 lines, the urge line included, yield mentions only, so nothing from a check-in can reach Ask or
 go online. A second optional line, from How We Feel's feelings and
@@ -451,7 +453,7 @@ Settled, less energy and pleasant:
 | Words hint | "Choose up to three." |
 | More words | "More words" / "Fewer words" |
 | List toggle | "Show all words as a list" / "Show the field" |
-| What's going on | "What’s going on? (optional)" with placeholder "A line, or hold Space to talk." |
+| What's going on | "What’s going on? (optional)" with placeholder "A line, if you like." |
 | Urge | "Did you feel like doing anything? (optional)" |
 | Save | "Save" |
 | Saved | "Saved. {words}." |
@@ -606,7 +608,7 @@ recording at the second it was said; a photo's opens the part of the photo.
 | Footer, on demand | "Written on this computer at {time} from {count, plural, one {# thing} other {# things}} you kept that day." |
 | Footer, overnight | "Written overnight on this computer, from {count, plural, one {# thing} other {# things}} you kept that day." |
 | Write again | "Write it again" |
-| Delete | "Delete this reflection" / done: "Deleted. Your entries are untouched. You can write it again." |
+| Delete | "Delete this reflection", confirmed first (see [Journaling follow-ups](journaling-follow-ups.md)) / done: "Deleted. Your entries are untouched. You can write it again." |
 | Print | Reuses "Print" from the page. There is no Listen: the journal is never read aloud |
 
 #### Reflection states
@@ -645,15 +647,18 @@ page when it is new.
 
 **When.** The week runs Monday to Sunday (or as the computer's first day of the week says), and
 is written the night after it ends. A month is written the night after its last day, a year the
-night after 31 December, and may take two nights on a small computer. Each can also be asked for
-on demand while it is still going: "Look back on this week so far".
+night after 31 December. Each can also be asked for on demand while it is still going: "Look back
+on this week so far". A recap is put together from what is already stored, with no sentence written
+for it, so it shows on every computer (proposed, awaiting the owner's approval; see
+[Journaling follow-ups](journaling-follow-ups.md)). A deleted recap is not put together again unless the person
+asks.
 
 **Sections.**
 
 | Section | Week | Month | Year | What it shows |
 |---|---|---|---|---|
 | Highlights | 3 to 5 | 5 to 8 | 12, one from each month, plus up to 3 more | Moments chosen from entries: good things, strong check-ins, firsts, decisions, days the person wrote the most about. Each is a card with its day, a line in the person's own words and its photo if it has one |
-| How it felt | A strip of 7 days with each check-in as a dot in its part | A month calendar with dots | 12 small fields, one per month | Dots are placed where the person put them. Under it, the words used most, with counts. Then, only when it holds at least three times, what tended to go together: "On 3 of the 4 days you saw Gran, you checked in as settled." Never a cause, never a score |
+| How it felt | A strip of 7 days with each check-in as a dot in its part | A month calendar with dots | 12 small fields, one per month | Dots are placed where the person put them. Under it, the words used most, with counts. Then, only when it holds at least three times, what tended to go together: "On 3 of the 4 days with Gran in your journal, you checked in as settled." Never a cause, never a score |
 | Good things | All of them | All, as a row of photos and lines | One from each month | Each opens its entry |
 | People and places | Who and where, by days | Same, with "most days" first | The year's most frequent, then "Firsts" | "Gran · 4 days". Counts are days, not mentions |
 | New this period | New names | New names | "Firsts": the first time a person or place appeared | Each with its card |
@@ -676,17 +681,21 @@ October"), never in judgements ("better", "worse").
 | Sections | "Highlights", "How it felt", "Good things", "People and places", "What you tried", "What changed", "Still open" |
 | New names | "New this week" (week), "New this month" (month), "Firsts" (year) |
 | Felt words | "Words you used most" |
-| Together line | "On {count} of the {total} days you {did}, you checked in as {part or word}." |
+| Together line | "On {count} of the {total} days with {name} in your journal, you checked in as {part or word}." |
 | Compare | "{count} check-ins, {difference} more than {period}" / "fewer than" / "the same as" |
 | No check-ins | "No check-ins this week." |
 | Footer | "Written on this computer {when}, from {count} days in your journal." |
 | Being written | "Your year is being written. It will be ready by tomorrow morning." |
+| Picker, empty | "No weeks to look back on yet." / "No months to look back on yet." / "No years to look back on yet." |
+| Delete | "Delete this recap", confirmed first (see [Journaling follow-ups](journaling-follow-ups.md)) |
+| After deleting | "Look back on this week" / "this month" / "this year" |
 | Page line | "Last week, looked back on ›" / "{month}, looked back on ›" / "{year}, looked back on ›" |
 | Text alternative | "Show as a table" under each chart |
 
 **States.** Empty period: "Nothing was kept this week." and nothing else. A period with only
-things kept from elsewhere: the recap is "At a glance" only. Not ready: "At a glance" for the
-period, the same rule as a day. A recap that cites a deleted entry: the line is taken out, as for
+things kept from elsewhere: the recap is "At a glance" only. Not ready: the recap from what has
+been read, with a line saying what is still being read (proposed, awaiting approval; this was
+"At a glance" for the period). A recap that cites a deleted entry: the line is taken out, as for
 a reflection.
 
 ### 10. The morning page
@@ -695,9 +704,10 @@ The page keeps its four parts and its one question. Two small changes, both deci
 
 - One quiet line under the page's last section on the morning a reflection or recap is new:
   "Yesterday, looked back on ›" (only when the night wrote it) or "Last week, looked back on ›".
-- At most once a week, the one question may come from the journal: "Yesterday you wrote you were
-  dreading the dentist. How did it go?" with "Fine", "Not great", "Not yet" and a line to add
-  more, kept as an entry on today's journal.
+- At most once a week, the one question may come from the journal: "Yesterday you wrote:
+  “Parents’ evening at six. Not looking forward to it.” How did it go?" with "Fine", "Not great",
+  "Not yet" and a line to add more, kept on today's journal. The rule that picks it and its
+  templates are in [Journaling follow-ups](journaling-follow-ups.md).
 
 Both are journal content, so neither is read aloud. When the page is read aloud, the quiet line is
 skipped, and on a morning whose question comes from the journal the reading ends after "Let go"
@@ -757,7 +767,8 @@ journal. Your computer reads it shortly." When the computer cannot be reached, t
 under it. Tapping or dragging places the point, with a light tap of vibration when it crosses into
 another part. Once a point is placed, the field shrinks to the top and a sheet rises with "Words
 for {part}", "Up to three", eight word buttons nearest the point, "More words", the meaning of the
-last word tapped (there is no hover on a phone), "What’s going on? (optional)" with a mic, and
+last word tapped (there is no hover on a phone), "What’s going on? (optional)" as a line of text,
+and
 "Save", which stays in view. "Show all words as a list" gives one list grouped by part, each word a
 52px row with a checkbox and its meaning under it once chosen. Saved: "Saved. {words}." and "It’s
 on today’s journal."
@@ -840,8 +851,8 @@ question a day". Journal apps lean on all three. Nocturne does not.
 - No streaks, no counts of days written, no "you missed a day", no badges.
 - No reminders by default. One optional evening reminder in Settings, off unless turned on:
   "Evening reminder", "A quiet nudge at a time you choose. It says nothing about your journal."
-  Its text is always the same and never contains anything from the journal: "Anything about today
-  you want to keep?"
+  Its title is "Evening reminder" and its text is always the same and never contains anything from
+  the journal: "Anything about today you want to keep?"
 - No daily prompt. The placeholder is the only invitation.
 - A reflection or recap is never pushed. The page gets at most one line.
 - Gaps are silent. A week with one entry gets a short recap, not a comment on the gaps.
@@ -898,8 +909,8 @@ came back clear" stays here unless the person chose to send such lines.
 
 **What never goes online.** Reflections, recaps and check-ins, including the words, points and
 lines of a check-in and any summary of them. They are written on this computer, even when Online answers is
-on and even on a computer that cannot write them itself: such a computer shows "At a glance"
-instead.
+on. A computer that cannot write a reflection itself shows "At a glance" instead; recaps need no
+writing (proposed, see [Journaling follow-ups](journaling-follow-ups.md)).
 
 **Someone else at the computer.** Nocturne has no lock of its own; the computer's own sign-in is
 the lock. A setting "Hide the journal from the rail" is out of scope for now.
@@ -1000,9 +1011,12 @@ is unchanged.
 **Delete this day…** On the day's menu. Lists everything kept that day, with the same rules. The
 person can untick things kept from elsewhere (a school letter) to keep them. Something from another
 day that shares a memory with this one is listed unticked, and goes only if the person ticks it.
+The dialog's layout, rows and copy, and a check-in's own page, are in
+[Journaling follow-ups](journaling-follow-ups.md).
 
-**Deleting a reflection or recap** removes only the writing, never an entry. It can be written
-again.
+**Deleting a reflection or recap** removes only the writing, never an entry, after a short
+confirmation. It is not written again overnight; the person can ask for it again. Where the action
+lives and its words are in [Journaling follow-ups](journaling-follow-ups.md).
 
 **Delete everything** removes the journal with everything else. **Export** includes the journal:
 one file per day in plain text with its voice notes and photos beside it, and check-ins as part,
@@ -1077,8 +1091,8 @@ A short record to add under `docs/adr/` with the build.
 | At a glance | Always, instantly | Not needed | No |
 | Reflection on today so far | "Reflect on today" | Not written | Yes |
 | Reflection on the day that ended | "Reflect on this day" | Written in the tidy, before the page | Yes |
-| Week, month, year recap so far | "Look back on this week so far" | Not written | Yes |
-| Week, month, year recap when the period ends | Not needed | Written in the tidy after the day's reflection; a year may take two nights | Yes |
+| Week, month, year recap so far | "Look back on this week so far" | Not written | No (proposed; was yes) |
+| Week, month, year recap when the period ends | Not needed | Put together in the tidy after the day's reflection | No (proposed; was yes) |
 | The journal's line on the page | Not needed | Written with the page | No |
 
 **The day's end and the night's work.** A day ends at the boundary in [What a day is](#what-a-day-is).
@@ -1095,8 +1109,9 @@ this computer." Overnight writing follows the tidy's rules for power. A laptop t
 missed reflections in the catch-up, newest first, and stops at seven days back; older days without
 one keep "Reflect on this day".
 
-**A gate for each size of computer.** As for help: before a size of computer writes reflections,
-an evaluation set of journal days must pass: every sentence carries a receipt, no feeling is
+**A gate for each size of computer.** As for help: before a size of computer writes reflections
+(and only reflections: recaps need no writing, proposed in
+[Journaling follow-ups](journaling-follow-ups.md)), an evaluation set of journal days must pass: every sentence carries a receipt, no feeling is
 written that no check-in or quote supports, no advice, no invented people. A size that fails shows
 "At a glance" and the line "On this computer, Nocturne lists the day rather than writing about
 it." The evaluation set is added to [Evaluation](evaluation.md) with the build.
@@ -1156,8 +1171,8 @@ The owner answered every open question on 2026-11-19.
 | 4 | A line about safety | B: one fixed line, always present |
 | 5 | An evening reminder | B: optional, off by default, with no journal content in it |
 | 6 | The morning page link | B: one quiet line when a reflection or recap is new |
-| 7 | The one question from the journal | B: at most once a week, and never read aloud |
-| 8 | Recaps on a computer that cannot write them | A: "At a glance" only, never written online |
+| 7 | The one question from the journal | B: at most once a week, and never read aloud. The rule and templates are in [Journaling follow-ups](journaling-follow-ups.md) |
+| 8 | Recaps on a computer that cannot write them | A: "At a glance" only, never written online. Proposed change, awaiting the owner: recaps on every computer, never online (see [Journaling follow-ups](journaling-follow-ups.md)) |
 | 9 | The phone and the journal | Dropped: the phone reads the whole journal, and answers the name question but not which-is-right |
 | | Online answers | Ask may send the journal sentences a question needs; reflections, recaps and check-ins never go; said openly in setup and settings, with no per-entry exception |
 
