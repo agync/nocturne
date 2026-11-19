@@ -173,6 +173,11 @@ function RowMenu({
           {t("journal.timeline.change")}
         </a>
       ) : null}
+      {row.answer?.sentence ? (
+        <a role="menuitem" className={styles.menuItem} href={`#/items/${row.answer.about}`}>
+          {t("journal.timeline.openAbout")}
+        </a>
+      ) : null}
       <button
         type="button"
         role="menuitemcheckbox"
@@ -369,9 +374,9 @@ function Row({
           openCard={openCard}
         />
       ) : null}
-      {row.item.fromDevice || mentions.length > 0 || row.answer ? (
+      {row.item.fromDevice || mentions.length > 0 || row.answer?.sentence ? (
         <div className={styles.sub}>
-          {row.answer ? (
+          {row.answer?.sentence ? (
             <a className={styles.about} href={`#/items/${row.answer.about}`} tabIndex={-1}>
               {t("journal.timeline.about", { sentence: row.answer.sentence })}
             </a>
