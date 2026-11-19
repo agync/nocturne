@@ -143,6 +143,13 @@ export type RecordingState = "available" | "not-secure" | "no-devices" | "no-rec
  * Everything the interface may ask of the engine. One async method per contract command; the
  * Tauri implementation invokes the snake_case command of the same name.
  */
+/** Items a delete names besides the memories: deleted even with no memories, or kept. */
+export interface ForgetItems {
+  also: string[];
+  /** Only `also` are deleted; every other original listed stays. */
+  pick: boolean;
+}
+
 /** Where a photo or voice note goes in the journal when it is kept straight into an entry. */
 export interface EntryAt {
   day: string;
@@ -227,7 +234,15 @@ export interface EngineClient {
   setKeepForever(id: string, keepForever: boolean): Promise<void>;
   setPrivate(id: string, isPrivate: boolean): Promise<void>;
   restore(ids: string[]): Promise<void>;
-  previewForget(ids: string[], includeOriginals: boolean): Promise<ForgetPreview>;
+  /**
+   * `items.also` are deleted with the originals even when no memory came from them (a check-in);
+   * with `items.pick`, only they are deleted.
+   */
+  previewForget(
+    ids: string[],
+    includeOriginals: boolean,
+    items?: ForgetItems,
+  ): Promise<ForgetPreview>;
   forget(previewToken: string): Promise<ForgetReport>;
   listNeedsYou(): Promise<NeedsYouEntry[]>;
   listFading(): Promise<MemoryView[]>;

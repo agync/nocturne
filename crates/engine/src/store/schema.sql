@@ -312,3 +312,7 @@ CREATE TABLE name_questions(
   id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   name TEXT NOT NULL, quote TEXT NOT NULL, options TEXT NOT NULL, candidates TEXT NOT NULL,
   created_at TEXT NOT NULL, answered_at TEXT, answer TEXT);
+
+-- migration 13
+-- The originals a forget deletes, as its preview listed them, so nothing else goes with them.
+ALTER TABLE forget_tokens ADD COLUMN items TEXT;

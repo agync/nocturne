@@ -8,13 +8,25 @@ use crate::state::AppState;
 use super::{change, read};
 use crate::error::CommandError;
 
+/// `also` are items deleted with the originals even when no memory came from them; with `pick`,
+/// only they are deleted, and every other original listed stays.
 #[tauri::command]
 pub async fn preview_forget<R: Runtime>(
     app: AppHandle<R>,
     ids: Vec<String>,
     include_originals: bool,
+    also: Option<Vec<String>>,
+    pick: Option<bool>,
 ) -> Result<ForgetPreview, CommandError> {
-    read(app, move |e| e.preview_forget(&ids, include_originals)).await
+    read(app, move |e| {
+        e.preview_delete(
+            &ids,
+            include_originals,
+            &also.unwrap_or_default(),
+            pick.unwrap_or(false),
+        )
+    })
+    .await
 }
 
 /// Carry out a previewed forget. The engine hides the memories everywhere in one step and

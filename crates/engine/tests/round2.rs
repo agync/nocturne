@@ -1719,10 +1719,10 @@ fn stale_page_after_forget(include_originals: bool) -> String {
 }
 
 #[test]
-fn a_stale_page_cannot_cite_an_item_a_forget_will_delete_but_may_cite_a_kept_one() {
-    // The forget deletes originals: the line naming the item is redacted.
-    assert_eq!(stale_page_after_forget(true), "[true,0]");
-    // The forget keeps originals: the item stays and so does the line.
+fn a_stale_page_may_cite_an_item_the_forget_keeps() {
+    // The item also says the shared memory, so even a forget with originals keeps it, and the
+    // line for the shared memory stays with both receipts.
+    assert_eq!(stale_page_after_forget(true), "[false,2]");
     assert_eq!(stale_page_after_forget(false), "[false,2]");
 }
 

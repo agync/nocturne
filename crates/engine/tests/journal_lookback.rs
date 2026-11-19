@@ -1061,3 +1061,72 @@ fn a_recap_saved_after_its_item_was_deleted_does_not_bring_it_back() {
         .unwrap();
     assert_eq!(cites, 0);
 }
+
+fn exists(f: &Fixture, id: &str) -> bool {
+    sql_count(
+        f.dir.path(),
+        &format!("SELECT COUNT(*) FROM items WHERE id = '{id}'"),
+    ) == 1
+}
+
+#[test]
+fn a_check_in_alone_can_be_deleted() {
+    let f = fixture();
+    let c = checkin(&f, FeelingPart::Low, &["tired"]);
+    let preview = f
+        .engine
+        .preview_delete(&[], true, std::slice::from_ref(&c), false)
+        .unwrap();
+    assert!(preview.memories.is_empty());
+    assert_eq!(preview.originals.len(), 1);
+    assert!(preview.originals[0].removable);
+    let report = f.engine.forget(&preview.token).unwrap().report;
+    assert_eq!(report.originals_removed, 1);
+    assert!(!exists(&f, &c));
+}
+
+#[test]
+fn deleting_a_day_takes_its_own_items_and_spares_what_was_unticked() {
+    let f = fixture();
+    let promise = || {
+        vec![cand(
+            "me",
+            nocturne_engine::Predicate::Promised,
+            "Priya the book",
+            "You promised Priya the book.",
+        )]
+    };
+    f.clock.set_str("2026-11-12T09:00:00Z");
+    let tuesday = keep(&f.engine, "Promised Priya the book.");
+    f.engine.apply(&tuesday, promise()).unwrap();
+    f.clock.set_str("2026-11-13T09:00:00Z");
+    let wednesday = keep(&f.engine, "Still owe Priya the book.");
+    f.engine.apply(&wednesday, promise()).unwrap();
+    let feeling = checkin(&f, FeelingPart::Low, &["tired"]);
+    let shared: Vec<String> = f
+        .engine
+        .memories(nocturne_contract::MemoryFilter {
+            item_id: Some(wednesday.clone()),
+            ..Default::default()
+        })
+        .unwrap()
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
+    assert_eq!(shared.len(), 1);
+
+    let day = [wednesday.clone(), feeling.clone()];
+    let preview = f.engine.preview_delete(&shared, true, &day, true).unwrap();
+    let listed: Vec<&str> = preview
+        .originals
+        .iter()
+        .map(|o| o.item_id.as_str())
+        .collect();
+    assert!(
+        listed.contains(&tuesday.as_str()),
+        "shown, so it can be ticked"
+    );
+    f.engine.forget(&preview.token).unwrap();
+    assert!(!exists(&f, &wednesday) && !exists(&f, &feeling));
+    assert!(exists(&f, &tuesday), "unticked, so it stays");
+}

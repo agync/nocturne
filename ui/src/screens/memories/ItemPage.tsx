@@ -223,7 +223,7 @@ export function ItemPage({ id }: { id: string }) {
             ) : null}
             <Button
               variant="forget"
-              disabled={list.length === 0}
+              disabled={list.length === 0 && it.kind !== "checkin"}
               onClick={() => forget.open(list.map((m) => m.id))}
             >
               {t("item.action.forget")}

@@ -63,8 +63,25 @@ fn closure(conn: &Connection, ids: &[String]) -> Result<Vec<String>> {
     Ok(set.into_iter().collect())
 }
 
-/// Changes if anything the preview covers is used, corrected, resolved or re-sourced.
-fn stamp(conn: &Connection, ids: &[String]) -> Result<String> {
+/// Changes if anything the preview covers is used, corrected, resolved or re-sourced, or an item
+/// it deletes is gone or changed.
+fn stamp(conn: &Connection, ids: &[String], items: &[String]) -> Result<String> {
+    let mut seen = Vec::new();
+    for item in items {
+        let row: Option<(String, Option<String>)> = conn
+            .query_row(
+                "SELECT status, (SELECT id FROM items r WHERE json_extract(r.metadata, '$.replaces') = items.id) \
+                 FROM items WHERE id = ?1",
+                [item],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()?;
+        seen.push(format!("{row:?}"));
+    }
+    Ok(format!("{}|{}", memory_stamp(conn, ids)?, seen.join(",")))
+}
+
+fn memory_stamp(conn: &Connection, ids: &[String]) -> Result<String> {
     let mut latest = String::new();
     let mut sources = 0i64;
     for id in ids {
@@ -159,6 +176,21 @@ impl Engine {
     /// still cited), its transcript, summary and search row stay with it: they are the person's
     /// own item, not something derived from the forgotten memory.
     pub fn preview_forget(&self, ids: &[String], include_originals: bool) -> Result<ForgetPreview> {
+        self.preview_delete(ids, include_originals, &[], false)
+    }
+
+    /// [`Engine::preview_forget`] for deleting items. `also` are listed and deleted with the
+    /// originals even when no memory came from them (a check-in, something not read yet). With
+    /// `only_also`, the other originals are listed and never deleted: only what the person ticked
+    /// goes. Only what the preview says is removable is deleted, however the store changes before
+    /// `forget`.
+    pub fn preview_delete(
+        &self,
+        ids: &[String],
+        include_originals: bool,
+        also: &[String],
+        only_also: bool,
+    ) -> Result<ForgetPreview> {
         let now = self.clock().now();
         let expires = now
             .checked_add(jiff::SignedDuration::from_mins(TOKEN_MINUTES))
@@ -169,7 +201,7 @@ impl Engine {
                 [fmt_ts(now)],
             )?;
             let all = closure(tx, ids)?;
-            if all.is_empty() {
+            if all.is_empty() && also.is_empty() {
                 return Err(Error::not_found("those memories"));
             }
             let mut memories = Vec::new();
@@ -183,7 +215,13 @@ impl Engine {
             }
             memories.sort();
             let mut originals = Vec::new();
-            for item in source_items(tx, &all)? {
+            let mut listed = source_items(tx, &all)?;
+            for item in also {
+                if !listed.contains(item) {
+                    listed.push(item.clone());
+                }
+            }
+            for item in listed {
                 let (title, kind, kept_at, duration_ms): (String, String, String, Option<u32>) = tx
                     .query_row(
                         "SELECT title, kind, kept_at, duration_ms FROM items WHERE id = ?1",
@@ -192,35 +230,42 @@ impl Engine {
                     )?;
                 let others = other_memories(tx, &item, &all)?;
                 originals.push(ForgetOriginal {
+                    removable: others == 0,
                     item_id: item,
                     label: title,
                     kind: parse_enum(&kind)?,
                     kept_at,
                     duration_ms,
-                    removable: others == 0,
                     other_memories: others,
                 });
             }
             let pages_affected = pages_citing(tx, &all)?.len() as u32;
-            // Lines in reflections and recaps that cite what will be deleted come out with it.
+            // What will be deleted, and the lines in reflections and recaps that cite it and
+            // come out with it.
+            let gone: Vec<String> = originals
+                .iter()
+                .filter(|o| {
+                    include_originals && o.removable && (!only_also || also.contains(&o.item_id))
+                })
+                .map(|o| o.item_id.clone())
+                .collect();
             let mut doomed: Vec<String> = Vec::new();
-            if include_originals {
-                for o in originals.iter().filter(|o| o.removable) {
-                    doomed.push(o.item_id.clone());
-                    doomed.extend(crate::journal::keep::earlier_versions(tx, &o.item_id)?);
-                }
+            for item in &gone {
+                doomed.push(item.clone());
+                doomed.extend(crate::journal::keep::earlier_versions(tx, item)?);
             }
             let reflection_lines = crate::journal::store::count_lines(tx, &doomed)?;
             let token = new_id_hex();
             tx.execute(
-                "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at, items) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     token,
                     serde_json::to_string(ids)?,
                     include_originals,
-                    stamp(tx, &all)?,
+                    stamp(tx, &all, &gone)?,
                     fmt_ts(expires),
+                    serde_json::to_string(&gone)?,
                 ],
             )?;
             Ok(ForgetPreview {
@@ -270,14 +315,16 @@ impl Engine {
         let now = self.clock().now();
         let stamp_now = fmt_ts(now);
         let (job, pages_redacted, files) = self.write(|tx| {
-            let row: Option<(String, bool, String, String)> = tx
+            type TokenRow = (String, bool, String, String, Option<String>);
+            let row: Option<TokenRow> = tx
                 .query_row(
-                    "SELECT ids, include_originals, stamp, expires_at FROM forget_tokens WHERE token = ?1",
+                    "SELECT ids, include_originals, stamp, expires_at, items FROM forget_tokens \
+                     WHERE token = ?1",
                     [token],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
                 )
                 .optional()?;
-            let Some((ids, include_originals, saved_stamp, expires)) = row else {
+            let Some((ids, include_originals, saved_stamp, expires, gone)) = row else {
                 return Err(Error::StaleToken);
             };
             if parse_ts(&expires)? <= now {
@@ -285,12 +332,23 @@ impl Engine {
                 return Err(Error::StaleToken);
             }
             let ids: Vec<String> = serde_json::from_str(&ids)?;
+            let gone: Vec<String> = match gone {
+                Some(g) => serde_json::from_str(&g)?,
+                None => Vec::new(),
+            };
             let all = closure(tx, &ids)?;
-            if all.is_empty() || stamp(tx, &all)? != saved_stamp {
+            if (all.is_empty() && gone.is_empty()) || stamp(tx, &all, &gone)? != saved_stamp {
                 return Err(Error::StaleToken);
             }
             tx.execute("DELETE FROM forget_tokens WHERE token = ?1", [token])?;
-            let items = source_items(tx, &all)?;
+            let sources = source_items(tx, &all)?;
+            // With originals, exactly those the preview listed as going; otherwise the sources,
+            // as before.
+            let items = if include_originals {
+                gone.clone()
+            } else {
+                sources.clone()
+            };
             let pages = pages_citing(tx, &all)?;
             tx.execute(
                 "INSERT INTO forget_jobs(ids, items, include_originals) VALUES (?1, ?2, ?3)",
@@ -303,7 +361,13 @@ impl Engine {
             let job = tx.last_insert_rowid();
             self.bump_audio();
             self.bump_forget();
-            stamp_sources(tx, &all, &items)?;
+            let mut touched = sources;
+            for g in &gone {
+                if !touched.contains(g) {
+                    touched.push(g.clone());
+                }
+            }
+            stamp_sources(tx, &all, &touched)?;
             for id in &all {
                 tx.execute(
                     "UPDATE memories SET forgetting = 1, superseded_at = COALESCE(superseded_at, ?2) \

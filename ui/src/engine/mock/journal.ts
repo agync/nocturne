@@ -199,6 +199,14 @@ export class MockJournal {
     return true;
   }
 
+  /** Deletes one item the journal holds, and nothing beside it. False when it does not hold it. */
+  delete(id: string): boolean {
+    if (!this.data.items.has(id)) return false;
+    this.data.recs = this.data.recs.filter((rec) => this.recItemId(rec) !== id);
+    this.data.items.delete(id);
+    return true;
+  }
+
   /** Items this journal holds, for receipts and item pages. */
   findItem(id: string): ItemView | undefined {
     const found = this.data.items.get(id);

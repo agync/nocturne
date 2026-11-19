@@ -642,4 +642,24 @@ describe("the day menu", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: "Delete this day…" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
+
+  it("deletes the day's own check-ins and keeps what was unticked", async () => {
+    const { engine } = await open();
+    await userEvent.click(screen.getByRole("button", { name: "About this day" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Delete this day…" }));
+    const dialog = await screen.findByRole("dialog");
+    const checkIns = await within(dialog).findAllByRole("checkbox", { name: /\(check-in\)/ });
+    expect(checkIns.length).toBeGreaterThan(0);
+    for (const box of checkIns) expect(box).toBeChecked();
+    const form = within(dialog).getByRole("checkbox", { name: /Year 4 trip form/ });
+    await userEvent.click(form);
+    await waitFor(() => expect(form).not.toBeChecked());
+    const button = within(dialog).getByRole("button", { name: /^Delete/ });
+    await waitFor(() => expect(button).toBeEnabled());
+    await userEvent.click(button);
+    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
+    const day = await engine.getJournalDay();
+    expect(day.checkins).toHaveLength(0);
+    expect(day.rows.map((r) => r.item.id)).toEqual(["j-form"]);
+  });
 });

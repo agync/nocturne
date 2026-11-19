@@ -37,7 +37,8 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
   const days = useJournalDays();
   const status = useStatus();
   const [picking, setPicking] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  /** The day's items as they were when "Delete this day…" was chosen. */
+  const [deleting, setDeleting] = useState<string[] | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [card, setCard] = useState<{ mention: Mention; anchor: HTMLElement } | null>(null);
@@ -100,6 +101,8 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
     ...new Set([
       ...data.entry.flatMap((b) => [b.item.id, ...b.earlier.map((e) => e.itemId)]),
       ...data.rows.map((r) => r.item.id),
+      ...data.checkins.map((c) => c.id),
+      ...data.good.map((g) => g.id),
     ]),
   ];
 
@@ -141,7 +144,7 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
                     }}
                     onClick={() => {
                       setMenuOpen(false);
-                      setDeleting(true);
+                      setDeleting(itemIds);
                     }}
                   >
                     {t("journal.day.deleteDay")}
@@ -219,10 +222,11 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
       {deleting ? (
         <ForgetDialog
           memoryIds={[]}
-          itemIds={itemIds}
+          itemIds={deleting}
+          pick
           defaultIncludeOriginals
           onDone={() => refresh("journal", "items", "memories", "entities", "page", "status")}
-          onClose={() => setDeleting(false)}
+          onClose={() => setDeleting(null)}
         />
       ) : null}
       {card ? (

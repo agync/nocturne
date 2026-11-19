@@ -147,8 +147,13 @@ export class TauriEngine implements EngineClient {
   setPrivate: EngineClient["setPrivate"] = (id, isPrivate) =>
     this.call("set_private", { id, private: isPrivate });
   restore: EngineClient["restore"] = (ids) => this.call("restore", { ids });
-  previewForget: EngineClient["previewForget"] = (ids, includeOriginals) =>
-    this.call("preview_forget", { ids, includeOriginals });
+  previewForget: EngineClient["previewForget"] = (ids, includeOriginals, items) =>
+    this.call("preview_forget", {
+      ids,
+      includeOriginals,
+      also: items?.also,
+      pick: items?.pick,
+    });
   forget: EngineClient["forget"] = (previewToken) => this.call("forget", { previewToken });
   listNeedsYou: EngineClient["listNeedsYou"] = () => this.call("list_needs_you");
   listFading: EngineClient["listFading"] = () => this.call("list_fading");

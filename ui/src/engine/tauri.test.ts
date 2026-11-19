@@ -101,7 +101,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["setKeepForever", ["m1", true], "set_keep_forever", ["id", "keepForever"]],
   ["setPrivate", ["m1", true], "set_private", ["id", "private"]],
   ["restore", [["m1"]], "restore", ["ids"]],
-  ["previewForget", [["m1"], true], "preview_forget", ["ids", "includeOriginals"]],
+  ["previewForget", [["m1"], true], "preview_forget", ["ids", "includeOriginals", "also", "pick"]],
   ["forget", ["tok"], "forget", ["previewToken"]],
   ["listNeedsYou", [], "list_needs_you", []],
   ["listFading", [], "list_fading", []],

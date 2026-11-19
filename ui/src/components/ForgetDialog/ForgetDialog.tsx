@@ -11,7 +11,13 @@ import styles from "./ForgetDialog.module.css";
 
 export interface ForgetDialogProps {
   memoryIds: string[];
+  /** Items deleted with their originals, even those nothing was read from (a check-in). */
   itemIds?: string[];
+  /**
+   * Each original gets its own box: the items named start ticked, anything else listed starts
+   * unticked, and only what is ticked is deleted ("Delete this day").
+   */
+  pick?: boolean;
   defaultIncludeOriginals?: boolean;
   onClose: () => void;
   /**
@@ -27,6 +33,8 @@ type Phase = "loading" | "ready" | "working" | "done" | "failedPreview";
 interface Prepared {
   token: string;
   includeOriginals: boolean;
+  /** With `pick`, the items the token deletes. */
+  picked: string[];
   /** Lines in reflections and recaps that cite what goes, and will be taken out. */
   reflectionLines: number;
 }
@@ -60,6 +68,7 @@ function originalText(original: ForgetOriginal): string {
 export function ForgetDialog({
   memoryIds,
   itemIds = [],
+  pick = false,
   defaultIncludeOriginals = false,
   onClose,
   onDone,
@@ -74,8 +83,10 @@ export function ForgetDialog({
   const [refreshed, setRefreshed] = useState(false);
   const [failed, setFailed] = useState(false);
   const [report, setReport] = useState<ForgetReport | null>(null);
-  const ids = useRef<string[]>(memoryIds);
   const alive = useRef(true);
+  /** With `pick`, every original listed so far, so an unticked one stays on screen. */
+  const known = useRef(new Map<string, ForgetOriginal>());
+  const [picked, setPicked] = useState<string[]>(itemIds);
   /** Only the newest request may change what is on screen. */
   const latest = useRef(0);
   const doneRef = useRef(onDone);
@@ -94,13 +105,15 @@ export function ForgetDialog({
    * Everything is locked while it runs, so the choice cannot change underneath it.
    */
   const prepare = useCallback(
-    async (include: boolean) => {
+    async (include: boolean, chosen: string[] = itemIds) => {
       const mine = ++latest.current;
       setPhase("loading");
       setWanted(include);
+      if (pick) setPicked(chosen);
+      const items = pick ? chosen : itemIds;
       try {
-        const all = new Set(ids.current);
-        for (const itemId of itemIds) {
+        const all = new Set(memoryIds);
+        for (const itemId of items) {
           const found = await engine.listMemories({
             entityId: null,
             itemId,
@@ -111,21 +124,27 @@ export function ForgetDialog({
           for (const m of found) all.add(m.id);
         }
         const list = [...all];
-        ids.current = list;
-        if (list.length === 0) {
+        if (list.length === 0 && items.length === 0) {
           if (mine !== latest.current || !alive.current) return;
           setListing(null);
           setPrepared(null);
           setPhase("ready");
           return;
         }
-        const full = await engine.previewForget(list, true);
-        const own = include ? full : await engine.previewForget(list, false);
+        const ask = (originals: boolean) =>
+          items.length > 0 || pick
+            ? engine.previewForget(list, originals, { also: items, pick })
+            : engine.previewForget(list, originals);
+        // With `pick`, the one list shown is the one the token deletes from.
+        const full = await ask(true);
+        const own = pick || include ? full : await ask(false);
         if (mine !== latest.current || !alive.current) return;
+        for (const o of full.originals) known.current.set(o.itemId, o);
         setListing(full);
         setPrepared({
           token: own.token,
-          includeOriginals: include,
+          includeOriginals: pick || include,
+          picked: items,
           reflectionLines: own.reflectionLines ?? 0,
         });
         setPhase("ready");
@@ -133,8 +152,8 @@ export function ForgetDialog({
         if (mine === latest.current && alive.current) setPhase("failedPreview");
       }
     },
-    // itemIds is read through idsKey so a new array with the same ids does not reload.
-    [engine, idsKey],
+    // The ids are read through idsKey so a new array with the same ids does not reload.
+    [engine, idsKey, pick],
   );
 
   useEffect(() => {
@@ -160,11 +179,15 @@ export function ForgetDialog({
         setFailed(true);
       }
       // Either way the list is read again, so what is shown is what a new press would do.
-      await prepare(prepared.includeOriginals);
+      await prepare(prepared.includeOriginals, prepared.picked);
     }
   };
 
-  const removable = listing?.originals.filter((o) => o.removable).length ?? 0;
+  const removable =
+    listing?.originals.filter(
+      (o) => o.removable && (!pick || (prepared?.picked ?? picked).includes(o.itemId)),
+    ).length ?? 0;
+  const rows = pick ? [...known.current.values()] : (listing?.originals ?? []);
   const includes = prepared?.includeOriginals ?? wanted;
   const memoryCount = listing?.memories.length ?? memoryIds.length;
   const things = memoryCount + (includes ? removable : 0);
@@ -172,7 +195,9 @@ export function ForgetDialog({
   const buttonText = withThings
     ? t("forget.button.things", { count: things })
     : t("forget.button.memories", { count: memoryCount });
-  const hasOriginals = (listing?.originals.length ?? 0) > 0;
+  const hasOriginals = rows.length > 0;
+  /** What "it" or "them" refers to: the memories, or the things when there are none. */
+  const spoken = memoryCount > 0 ? memoryCount : things;
   const idle = phase === "ready";
 
   return (
@@ -193,7 +218,9 @@ export function ForgetDialog({
               <p className={styles.gone}>{t("forget.done.lead")}</p>
               <p className={styles.summary}>
                 {[
-                  t("forget.done.memories", { count: report.memoriesRemoved }),
+                  report.memoriesRemoved > 0
+                    ? t("forget.done.memories", { count: report.memoriesRemoved })
+                    : "",
                   report.originalsRemoved > 0
                     ? t("forget.done.originalGone", { count: report.originalsRemoved })
                     : hasOriginals
@@ -213,7 +240,7 @@ export function ForgetDialog({
           </>
         ) : (
           <>
-            <p className={styles.lead}>{t("forget.body", { count: memoryCount })}</p>
+            <p className={styles.lead}>{t("forget.body", { count: spoken })}</p>
             {phase === "loading" && !listing ? (
               <p className={styles.note} role="status">
                 {t("forget.loading")}
@@ -244,19 +271,34 @@ export function ForgetDialog({
                       <span className={styles.sentence}>{row.sentence}</span>
                     </li>
                   ))}
-                  {listing.originals.map((original) => (
+                  {rows.map((original) => (
                     <li key={original.itemId} className={styles.row}>
                       <span className={`t-section ${styles.kind}`}>{t("forget.row.original")}</span>
-                      <span>
-                        <span className={styles.sentence}>{originalText(original)}</span>
-                        {original.removable ? null : (
-                          <span className={styles.note}>{` ${t("forget.original.blocked")}`}</span>
-                        )}
-                      </span>
+                      {pick && original.removable ? (
+                        <Checkbox
+                          label={originalText(original)}
+                          checked={picked.includes(original.itemId)}
+                          disabled={!idle}
+                          onChange={(next) => {
+                            setRefreshed(false);
+                            const rest = picked.filter((id) => id !== original.itemId);
+                            void prepare(true, next ? [...rest, original.itemId] : rest);
+                          }}
+                        />
+                      ) : (
+                        <span>
+                          <span className={styles.sentence}>{originalText(original)}</span>
+                          {original.removable ? null : (
+                            <span
+                              className={styles.note}
+                            >{` ${t("forget.original.blocked")}`}</span>
+                          )}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
-                {removable > 0 ? (
+                {removable > 0 && !pick && memoryCount > 0 ? (
                   <Checkbox
                     label={t("forget.originals.also", { count: removable })}
                     checked={wanted}
@@ -291,10 +333,10 @@ export function ForgetDialog({
             }}
           >
             <Button variant="secondary" disabled={phase === "working"} onClick={onClose}>
-              {t("forget.keep", { count: memoryCount })}
+              {t("forget.keep", { count: spoken })}
             </Button>
             {phase === "failedPreview" ? (
-              <Button variant="secondary" onClick={() => void prepare(wanted)}>
+              <Button variant="secondary" onClick={() => void prepare(wanted, picked)}>
                 {t("button.tryAgain")}
               </Button>
             ) : listing ? (

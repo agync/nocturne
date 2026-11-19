@@ -65,6 +65,7 @@ import type {
   EngineEventName,
   EngineEvents,
   EntryAt,
+  ForgetItems,
   RecordingState,
   Unsubscribe,
 } from "../client";
@@ -336,7 +337,10 @@ export class MockEngine implements EngineClient {
   private status: EngineStatus;
   private setup: SetupView;
   private readonly listeners = new Map<EngineEventName, Set<(payload: never) => void>>();
-  private readonly previews = new Map<string, { ids: string[]; includeOriginals: boolean }>();
+  private readonly previews = new Map<
+    string,
+    { ids: string[]; includeOriginals: boolean; gone: string[] }
+  >();
   private counter = 0;
   /** How many times the sound settings were asked for, for tests. */
   soundSettingsOpened = 0;
@@ -1382,19 +1386,23 @@ export class MockEngine implements EngineClient {
     }
   }
 
-  async previewForget(ids: string[], includeOriginals: boolean): Promise<ForgetPreview> {
+  async previewForget(
+    ids: string[],
+    includeOriginals: boolean,
+    items?: ForgetItems,
+  ): Promise<ForgetPreview> {
     this.counter += 1;
     const token = `forget-${this.counter}`;
-    this.previews.set(token, { ids, includeOriginals });
     const rows = ids.map((id) => ({ memoryId: id, sentence: this.memory(id).sentence }));
     const itemIds = new Set(
       this.memories
         .filter((m) => ids.includes(m.id))
         .flatMap((m) => m.receipts.map((r) => r.itemId)),
     );
+    for (const also of items?.also ?? []) itemIds.add(also);
     const originals = includeOriginals
       ? [...itemIds].flatMap((itemId) => {
-          const item = this.items.find((i) => i.id === itemId);
+          const item = this.items.find((i) => i.id === itemId) ?? this.journal.findItem(itemId);
           if (!item) return [];
           const others = this.memories.filter(
             (m) => !ids.includes(m.id) && m.receipts.some((r) => r.itemId === itemId),
@@ -1412,6 +1420,10 @@ export class MockEngine implements EngineClient {
           ];
         })
       : [];
+    const gone = originals
+      .filter((o) => o.removable && (!items?.pick || items.also.includes(o.itemId)))
+      .map((o) => o.itemId);
+    this.previews.set(token, { ids, includeOriginals, gone });
     const pagesAffected = this.pages.filter((p) =>
       [...p.needsYou, ...p.changed, ...p.letGo].some((l) =>
         l.memoryIds.some((m) => ids.includes(m)),
@@ -1451,21 +1463,16 @@ export class MockEngine implements EngineClient {
     const preview = this.previews.get(previewToken);
     if (!preview) throw new Error("That preview has expired");
     this.previews.delete(previewToken);
-    const itemIds = new Set(
-      this.memories
-        .filter((m) => preview.ids.includes(m.id))
-        .flatMap((m) => m.receipts.map((r) => r.itemId)),
-    );
     const { pages } = this.removeMemories(preview.ids, true);
     let originals = 0;
     if (preview.includeOriginals) {
-      for (const itemId of itemIds) {
+      for (const itemId of preview.gone) {
         const stillUsed = this.memories.some((m) => m.receipts.some((r) => r.itemId === itemId));
-        if (!stillUsed) {
-          for (const gone of this.items.filter((i) => i.id === itemId)) release(gone);
-          this.items = this.items.filter((i) => i.id !== itemId);
-          originals += 1;
-        }
+        if (stillUsed) continue;
+        for (const gone of this.items.filter((i) => i.id === itemId)) release(gone);
+        const before = this.items.length;
+        this.items = this.items.filter((i) => i.id !== itemId);
+        if (this.items.length < before || this.journal.delete(itemId)) originals += 1;
       }
     }
     this.needsChanged();
