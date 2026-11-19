@@ -276,6 +276,27 @@ fn a_quick_note_with_a_feeling_shows_the_feeling_on_its_row_and_no_separate_chec
 }
 
 #[test]
+fn taking_back_a_note_takes_back_the_feeling_kept_with_it() {
+    let f = fixture();
+    let Kept::New { item } = f
+        .engine
+        .keep_note(
+            "Lunch with Priya",
+            Source::QuickCapture,
+            Some(feeling(FeelingPart::Settled, &["calm"])),
+            false,
+        )
+        .unwrap()
+    else {
+        panic!("a new note")
+    };
+    f.engine.unkeep(&item.id).unwrap();
+    let day = f.engine.journal_day(date("2026-11-13")).unwrap();
+    assert!(day.rows.is_empty());
+    assert!(day.checkins.is_empty());
+}
+
+#[test]
 fn good_things_are_a_note_marked_good_and_a_fourth_is_refused() {
     let f = fixture();
     let day = date("2026-11-13");

@@ -335,6 +335,24 @@ impl Engine {
     /// next open. The first phase already removes the item row and lists its original for
     /// shredding, so nothing readable is left once it commits.
     pub fn unkeep(&self, item_id: &str) -> Result<ForgetOutcome> {
+        // A feeling tapped with a note was kept with it, so taking the note back takes it too.
+        let feelings: Vec<String> = self.read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM items WHERE json_extract(metadata, '$.journal') = 'checkin' \
+                 AND json_extract(metadata, '$.about') = ?1",
+            )?;
+            Ok(stmt
+                .query_map([item_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
+        })?;
+        let outcome = self.unkeep_one(item_id)?;
+        for feeling in feelings {
+            self.unkeep_one(&feeling)?;
+        }
+        Ok(outcome)
+    }
+
+    fn unkeep_one(&self, item_id: &str) -> Result<ForgetOutcome> {
         let (job, pages_redacted, had_original) = self.unkeep_begin(item_id)?;
         let mut outcome = self.finish_forget(job)?;
         outcome.report.pages_redacted = pages_redacted;
