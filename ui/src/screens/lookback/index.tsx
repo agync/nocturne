@@ -14,11 +14,13 @@ import type {
   Period,
   ReflectionView,
 } from "../../engine/bindings";
+import type { EngineClient } from "../../engine/client";
 import { useEngine, useJournalDay, useReflection, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { DeleteDialog } from "./DeleteDialog";
 import { GlanceView } from "./Glance";
 import styles from "./Lookback.module.css";
-import { lookbackPath, periodFor } from "./period";
+import { lookbackPath, periodFor, putTogetherId } from "./period";
 import { periodText, RecapView, recapEyebrow, recapTitle } from "./Recap";
 import { clock } from "./text";
 import { dayEyebrow, dayTitle, WrittenView } from "./Written";
@@ -45,12 +47,19 @@ const beingRead = (day: JournalDay) =>
     (item) => item.status === "kept" || item.status === "reading",
   );
 
-const onDemandId = (kind: Period["kind"]) =>
-  kind === "week"
-    ? "journal.recap.onDemand.week"
-    : kind === "month"
-      ? "journal.recap.onDemand.month"
-      : "journal.recap.onDemand.year";
+/** Whether anything in the period is still being read, or null when that cannot be told. */
+async function stillBeingRead(engine: EngineClient, period: Period): Promise<boolean | null> {
+  const days =
+    period.kind === "day"
+      ? [period.start]
+      : (await engine.listJournalDays().catch(() => null))?.filter(
+          (day) => day >= period.start && day <= period.end,
+        );
+  if (!days) return null;
+  const loaded = await Promise.all(days.map((day) => engine.getJournalDay(day).catch(() => null)));
+  if (loaded.some((day) => day === null)) return null;
+  return loaded.some((day) => day !== null && beingRead(day));
+}
 
 function Header({ eyebrow, title }: { eyebrow: string; title: string }) {
   return (
@@ -105,11 +114,20 @@ function Body(props: ViewProps) {
         />
       );
     case "recap":
-      return <RecapView recap={view.recap} onWriteAgain={props.onWrite} onPrint={props.onPrint} />;
+      return (
+        <RecapView
+          recap={view.recap}
+          onWriteAgain={props.onWrite}
+          onWriteWhenRead={props.onWriteWhenRead}
+          waiting={props.waiting}
+          onPrint={props.onPrint}
+          onDelete={props.onDelete}
+        />
+      );
     case "writing":
       return <Writing glance={view.glance} onStop={props.onStop} />;
     case "glance": {
-      const lead = glanceLead(view.reason);
+      const lead = isDay ? glanceLead(view.reason) : null;
       return (
         <>
           {lead ? <p className={styles.lead}>{lead}</p> : null}
@@ -125,7 +143,12 @@ function Body(props: ViewProps) {
             <Button variant="primary" onClick={props.onWrite}>
               {isDay
                 ? t(period.start === today ? "journal.day.reflect" : "journal.day.reflectPast")
-                : t(onDemandId(period.kind))}
+                : t(
+                    putTogetherId(
+                      period.kind as "week" | "month" | "year",
+                      today !== undefined && period.end < today,
+                    ),
+                  )}
             </Button>
           </div>
         </>
@@ -180,6 +203,7 @@ function Loaded({ period }: { period: Period }) {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [waiting, setWaiting] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const started = useRef(false);
   const mounted = useRef(true);
   const wake = useRef<(() => void) | null>(null);
@@ -217,8 +241,8 @@ function Loaded({ period }: { period: Period }) {
     setWaiting(true);
     try {
       while (mounted.current) {
-        const day = await engine.getJournalDay(period.start).catch(() => null);
-        if (day && !beingRead(day)) break;
+        const reading = await stillBeingRead(engine, period);
+        if (reading === false) break;
         await new Promise<void>((resolve) => {
           const timer = window.setTimeout(resolve, READ_POLL_MS);
           wake.current = () => {
@@ -258,6 +282,7 @@ function Loaded({ period }: { period: Period }) {
   };
 
   const remove = async () => {
+    setConfirming(false);
     try {
       await engine.deleteReflection(period);
     } catch {
@@ -265,7 +290,12 @@ function Loaded({ period }: { period: Period }) {
       return;
     }
     await client.invalidateQueries({ queryKey: ["journal"] });
-    toast.show({ message: t("journal.reflection.deleted") });
+    toast.show({
+      message:
+        period.kind === "day"
+          ? t("journal.reflection.deleted")
+          : t("journal.lookback.delete.recap.done", { kind: period.kind }),
+    });
   };
 
   const today = todayQuery.data?.day;
@@ -299,12 +329,19 @@ function Loaded({ period }: { period: Period }) {
                 waiting={waiting}
                 onStop={() => void stop()}
                 onPrint={() => void platform.print()}
-                onDelete={() => void remove()}
+                onDelete={() => setConfirming(true)}
               />
             </>
           ) : null}
         </article>
       </div>
+      {confirming ? (
+        <DeleteDialog
+          period={period}
+          onConfirm={() => void remove()}
+          onClose={() => setConfirming(false)}
+        />
+      ) : null}
     </ScreenSheet>
   );
 }

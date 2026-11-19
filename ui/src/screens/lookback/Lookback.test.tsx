@@ -4,6 +4,7 @@ import type { Period, ReflectionView } from "../../engine/bindings";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
 import type { JournalMode } from "../../engine/mock/seed/journal";
 import { renderApp } from "../../test/render";
+import { recapPeriodText } from "./DeleteDialog";
 
 const NOW = new Date("2026-11-19T21:20:00Z");
 
@@ -49,7 +50,7 @@ describe("a day's reflection", () => {
     open("#/journal/look-back/day/2026-11-19");
     expect(await screen.findByText("Today so far · at 3:15 pm")).toBeTruthy();
     expect(
-      screen.getByText(/^Written on this computer at 3:15 pm from 6 things you kept that day\.$/),
+      screen.getByText(/^Written on this computer at 3:15 pm, from 6 things you kept\.$/),
     ).toBeTruthy();
   });
 
@@ -232,6 +233,8 @@ describe("a day's reflection", () => {
     const remove = vi.spyOn(engine, "deleteReflection");
     open("#/journal/look-back/day/2026-11-19", engine);
     fireEvent.click(await screen.findByRole("button", { name: "Delete this reflection" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete this reflection?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete reflection" }));
     await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
     expect(
       await screen.findByText("Deleted. Your entries are untouched. You can write it again."),
@@ -239,11 +242,32 @@ describe("a day's reflection", () => {
     expect(await screen.findByRole("button", { name: "Reflect on today" })).toBeTruthy();
   });
 
+  it("confirms first, with focus on Keep it, and deletes nothing when kept", async () => {
+    const engine = engineIn();
+    const remove = vi.spyOn(engine, "deleteReflection");
+    open("#/journal/look-back/day/2026-11-19", engine);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this reflection" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete this reflection?" });
+    expect(
+      within(dialog).getByText(
+        "Only the writing goes. Everything you kept on Thursday 19 November stays: your entry, check-ins, good things, notes and photos.",
+      ),
+    ).toBeTruthy();
+    expect(within(dialog).getByText("Nocturne won’t write it again unless you ask.")).toBeTruthy();
+    expect(within(dialog).getByRole("button", { name: "Keep it" })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Keep it" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(remove).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Delete this reflection" })).toBeTruthy();
+  });
+
   it("says so and keeps the reflection when it cannot be deleted", async () => {
     const engine = engineIn();
     vi.spyOn(engine, "deleteReflection").mockRejectedValue(new Error("no"));
     open("#/journal/look-back/day/2026-11-19", engine);
     fireEvent.click(await screen.findByRole("button", { name: "Delete this reflection" }));
+    const dialog = await screen.findByRole("dialog", { name: "Delete this reflection?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete reflection" }));
     expect(await screen.findByText("That didn’t work. Nothing was changed.")).toBeTruthy();
     expect(screen.queryByText(/^Deleted\./)).toBeNull();
     expect(screen.getByRole("button", { name: "Delete this reflection" })).toBeTruthy();
@@ -365,7 +389,9 @@ describe("a week, month or year", () => {
       expect(found, name).toBeGreaterThan(at);
       at = found;
     }
-    expect(screen.getByText("On 3 of the 7 days you saw Leo, you checked in as low.")).toBeTruthy();
+    expect(
+      screen.getByText("On 3 of the 7 days with Leo in your journal, you checked in as low."),
+    ).toBeTruthy();
     const words = screen.getByRole("button", { name: /^tired, / });
     expect(words.closest("li")?.textContent).toMatch(/tired\d+$/);
     expect(
@@ -375,6 +401,128 @@ describe("a week, month or year", () => {
     ).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Show as a table" }).length).toBe(2);
     expect(screen.getByText("Gran · 4 days")).toBeTruthy();
+  });
+
+  describe("deleting a recap", () => {
+    const week: Period = { kind: "week", start: "2026-11-09", end: "2026-11-15" };
+
+    it("confirms first, with focus on Keep it, and says what stays", async () => {
+      const engine = engineIn();
+      const remove = vi.spyOn(engine, "deleteReflection");
+      open("#/journal/look-back/week/2026-11-09", engine);
+      const footer = (await screen.findByRole("button", { name: "Print" })).closest(
+        "footer",
+      ) as HTMLElement;
+      expect(within(footer).getByRole("button", { name: "Delete this recap" })).toBeTruthy();
+      fireEvent.click(within(footer).getByRole("button", { name: "Delete this recap" }));
+      const dialog = await screen.findByRole("dialog", { name: "Delete this recap?" });
+      expect(
+        within(dialog).getByText(
+          "Only the recap goes. Everything you kept from 9 to 15 November stays: entries, check-ins, good things, notes and photos.",
+        ),
+      ).toBeTruthy();
+      expect(
+        within(dialog).getByText(
+          "Nocturne won’t put this week together again unless you ask. To keep one thing out of recaps for good, choose “Leave out of reflections” on it.",
+        ),
+      ).toBeTruthy();
+      expect(within(dialog).getByRole("button", { name: "Keep it" })).toHaveFocus();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Keep it" }));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(remove).not.toHaveBeenCalled();
+    });
+
+    it("deletes, says what is still here, and shows the week at a glance with one button", async () => {
+      const engine = engineIn();
+      const remove = vi.spyOn(engine, "deleteReflection");
+      const reflect = vi.spyOn(engine, "reflect");
+      open("#/journal/look-back/week/2026-11-09", engine);
+      fireEvent.click(await screen.findByRole("button", { name: "Delete this recap" }));
+      const dialog = await screen.findByRole("dialog", { name: "Delete this recap?" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Delete recap" }));
+      await waitFor(() => expect(remove).toHaveBeenCalledWith(week));
+      expect(
+        await screen.findByText("Deleted. Everything you kept from that week is still here."),
+      ).toBeTruthy();
+      expect(await screen.findByRole("heading", { name: "At a glance" })).toBeTruthy();
+      expect(screen.queryByRole("heading", { name: "Highlights" })).toBeNull();
+      const again = screen.getByRole("button", { name: "Look back on this week" });
+      fireEvent.click(again);
+      await waitFor(() => expect(reflect).toHaveBeenCalledWith(week));
+      expect(await screen.findByRole("heading", { name: "Highlights" })).toBeTruthy();
+    });
+
+    it("names a month and a year by their own words", () => {
+      expect(recapPeriodText({ kind: "month", start: "2026-11-01", end: "2026-11-30" })).toBe(
+        "in November",
+      );
+      expect(recapPeriodText({ kind: "year", start: "2025-01-01", end: "2025-12-31" })).toBe(
+        "in 2025",
+      );
+    });
+
+    it("names a week across two months with both months", () => {
+      expect(recapPeriodText({ kind: "week", start: "2026-10-26", end: "2026-11-01" })).toBe(
+        "from 26 October to 1 November",
+      );
+    });
+
+    it("has no delete of its own for a month that is still going before it is put together", async () => {
+      const engine = engineIn();
+      await engine.deleteReflection({ kind: "month", start: "2026-11-01", end: "2026-11-30" });
+      open("#/journal/look-back/month/2026-11-01", engine);
+      expect(
+        await screen.findByRole("button", { name: "Look back on this month so far" }),
+      ).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Delete this recap" })).toBeNull();
+    });
+  });
+
+  describe("on any computer", () => {
+    it.each(["notready", "glance"] as const)(
+      "shows the week as a recap, not a glance, when %s",
+      async (mode) => {
+        open("#/journal/look-back/week/2026-11-09", engineIn(mode));
+        expect(await screen.findByRole("heading", { name: "Highlights" })).toBeTruthy();
+        expect(screen.queryByRole("heading", { name: "At a glance" })).toBeNull();
+        expect(screen.queryByText(/once it is ready/)).toBeNull();
+      },
+    );
+
+    it("says how much is still being read, and puts it together again when it is read", async () => {
+      const engine = engineIn("notready");
+      serve(engine, (view) =>
+        view.type === "recap" ? { ...view, recap: { ...view.recap, stillReading: 2 } } : view,
+      );
+      const reflect = vi.spyOn(engine, "reflect");
+      open("#/journal/look-back/week/2026-11-09", engine);
+      expect(
+        await screen.findByText(
+          "2 things from this week are still being read, so they aren’t in this yet.",
+        ),
+      ).toBeTruthy();
+      expect(screen.getByRole("heading", { name: "Highlights" })).toBeTruthy();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Put it together again when they’re read" }),
+      );
+      await waitFor(() => expect(reflect).toHaveBeenCalledTimes(1), { timeout: 4000 });
+    });
+
+    it("says it for one thing, in a month, with the month's own word", async () => {
+      const engine = engineIn();
+      serve(engine, (view) =>
+        view.type === "recap" ? { ...view, recap: { ...view.recap, stillReading: 1 } } : view,
+      );
+      open("#/journal/look-back/month/2026-11-01", engine);
+      expect(
+        await screen.findByText(
+          "1 thing from this month is still being read, so it isn’t in this yet.",
+        ),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Put it together again when it’s read" }),
+      ).toBeTruthy();
+    });
   });
 
   it("lists the week's check-ins under Show as a table", async () => {

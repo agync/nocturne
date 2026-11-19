@@ -135,6 +135,7 @@ export class MockJournal {
   /** The first sentence shown on the day for a reflection, by period. */
   private readonly headlines = new Map<string, string>();
   private readonly stopped = new Set<string>();
+  private readonly declined = new Set<string>();
   private readonly left = new Set<string>();
   private readonly delayMs: number;
   private counter = 0;
@@ -1208,6 +1209,9 @@ export class MockJournal {
             ],
       stillOpen: p.kind === "year" ? [] : this.openIn(p),
       linesRemoved: 0,
+      stillReading: recs.filter((r) =>
+        ["kept", "reading"].includes(this.item(this.recItemId(r)).status),
+      ).length,
     };
     return { type: "recap", recap: clone(recap) };
   }
@@ -1219,6 +1223,7 @@ export class MockJournal {
     if (glance.kept.length === 0 && glance.felt.length === 0 && glance.good.length === 0) {
       return { type: "nothing", period: p };
     }
+    if (p.kind !== "day") return null;
     if (this.data.mode === "notready") return { type: "glance", glance, reason: "notReady" };
     if (this.data.mode === "glance") return { type: "glance", glance, reason: "notOnThisComputer" };
     return null;
@@ -1268,6 +1273,12 @@ export class MockJournal {
     const saved = this.saved.get(keyOf(period));
     const writing = this.data.mode === "writing" && !this.writingStopped;
     if (saved && !writing) return this.visible(saved);
+    if (this.declined.has(keyOf(period)) && !writing) {
+      const glance = this.glance(period);
+      return glance.kept.length === 0 && glance.felt.length === 0 && glance.good.length === 0
+        ? { type: "nothing", period }
+        : { type: "notYet", glance };
+    }
     const gate = this.blocked(period);
     if (gate) return gate;
     return { type: "notYet", glance: this.glance(period) };
@@ -1276,6 +1287,7 @@ export class MockJournal {
   async reflect(period: Period): Promise<ReflectionView> {
     const key = keyOf(period);
     this.stopped.delete(key);
+    this.declined.delete(key);
     const gate = this.blocked(period);
     if (gate) return gate;
     if (this.delayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.delayMs));
@@ -1299,6 +1311,7 @@ export class MockJournal {
   }
 
   async deleteReflection(period: Period): Promise<void> {
+    this.declined.add(keyOf(period));
     this.saved.delete(keyOf(period));
     this.headlines.delete(keyOf(period));
   }

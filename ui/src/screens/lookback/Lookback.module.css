@@ -871,3 +871,21 @@ a.count {
     break-inside: avoid;
   }
 }
+
+.dialogBody {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+}
+
+.dialogNote {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.38 var(--font-sans);
+}
+
+.dialogActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}

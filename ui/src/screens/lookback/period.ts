@@ -25,6 +25,22 @@ export function periodFor(kind: string | undefined, start: string | undefined): 
   }
 }
 
+/** The button that puts a period together: "so far" only while the period goes on. */
+export function putTogetherId(kind: "week" | "month" | "year", over: boolean) {
+  if (over) {
+    return kind === "week"
+      ? "journal.lookback.recap.after.week"
+      : kind === "month"
+        ? "journal.lookback.recap.after.month"
+        : "journal.lookback.recap.after.year";
+  }
+  return kind === "week"
+    ? "journal.recap.onDemand.week"
+    : kind === "month"
+      ? "journal.recap.onDemand.month"
+      : "journal.recap.onDemand.year";
+}
+
 /** The path of a look-back screen. */
 export function lookbackPath(period: Period): string {
   return `/journal/look-back/${period.kind}/${period.start}`;

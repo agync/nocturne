@@ -8,7 +8,7 @@ import { PageLine } from "../../components/PageLine/PageLine";
 import { richText } from "../../components/PageLine/richText";
 import { Thumb } from "../../components/Thumb/Thumb";
 import { formatDayMonth } from "../../copy/format";
-import { type CopyId, hasCopy, t } from "../../copy/t";
+import { hasCopy, t } from "../../copy/t";
 import type {
   CheckIn,
   DayCount,
@@ -234,12 +234,11 @@ function WordsTable({ words }: { words: readonly WordCount[] }) {
 }
 
 function togetherLine(item: Together): string {
-  const did = t(`journal.lookback.did.${item.with.kind}` as CopyId, { name: item.with.name });
   const what = item.word ?? (item.part ? partName(item.part).toLowerCase() : "");
-  return t("journal.recap.together", {
+  return t("journal.lookback.together", {
     count: item.count,
     total: item.total,
-    did,
+    name: item.with.name,
     what: listWords(what ? [what] : []),
   });
 }
@@ -480,13 +479,37 @@ function whenWritten(recap: Recap): string {
 interface RecapViewProps {
   recap: Recap;
   onWriteAgain: () => void;
+  onWriteWhenRead: () => void;
+  waiting: boolean;
   onPrint: () => void;
+  onDelete: () => void;
 }
 
 /** A week, month or year looked back on. */
-export function RecapView({ recap, onWriteAgain, onPrint }: RecapViewProps) {
+export function RecapView({
+  recap,
+  onWriteAgain,
+  onWriteWhenRead,
+  waiting,
+  onPrint,
+  onDelete,
+}: RecapViewProps) {
+  const reading = recap.stillReading ?? 0;
   return (
     <>
+      {reading > 0 ? (
+        <div className={styles.notice}>
+          <span>
+            {t("journal.lookback.recap.partial", {
+              count: reading,
+              kind: recap.period.kind as "week" | "month" | "year",
+            })}
+          </span>
+          <Button variant="secondary" disabled={waiting} onClick={onWriteWhenRead}>
+            {t("journal.lookback.recap.partialAction", { count: reading })}
+          </Button>
+        </div>
+      ) : null}
       {recap.linesRemoved > 0 ? (
         <div className={styles.notice}>
           <span>{t("journal.reflection.removed")}</span>
@@ -571,6 +594,11 @@ export function RecapView({ recap, onWriteAgain, onPrint }: RecapViewProps) {
             <Icon name="printer" size={16} />
             {t("edition.print")}
           </Button>
+          <span className={styles.end}>
+            <Button variant="quiet" onClick={onDelete}>
+              {t("journal.lookback.recap.delete")}
+            </Button>
+          </span>
         </div>
       </footer>
     </>
