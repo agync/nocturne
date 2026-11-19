@@ -1481,6 +1481,7 @@ pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract
         let_go: page.let_go,
         upcoming: page.upcoming,
         learned: page.learned,
-        question: page.question,
+        // A journal question quotes the person's own sentence; the phone never shows it.
+        question: page.question.filter(|q| q.journal.is_none()),
     })
 }
