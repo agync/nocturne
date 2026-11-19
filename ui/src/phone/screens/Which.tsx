@@ -119,16 +119,32 @@ export function Which({ engine, question, questionId, day, today, onBack, onDone
     );
   }
 
-  if (load.name !== "ready") {
-    const message: CopyId =
-      load.name === "loading" ? "phone.journal.loading" : "phone.journal.which.gone";
+  if (load.name === "loading") {
     return (
       <Page bar={bar}>
         <main className="ph-main">
           <p className="ph-status" role="status" style={{ fontSize: "1rem" }}>
-            {t(message)}
+            {t("phone.journal.loadingQuestion")}
           </p>
         </main>
+      </Page>
+    );
+  }
+
+  if (load.name !== "ready") {
+    return (
+      <Page bar={bar}>
+        <main className="ph-main" style={{ paddingTop: 40, gap: 12 }}>
+          <h1 className="ph-h1 ph-h1--small" tabIndex={-1} ref={heading}>
+            {t("phone.journal.which.gone.title")}
+          </h1>
+          <p className="ph-body">{t("phone.journal.which.gone.body")}</p>
+        </main>
+        <footer className="ph-foot">
+          <Button kind="primary" onClick={onDone}>
+            {t("phone.journal.which.back")}
+          </Button>
+        </footer>
       </Page>
     );
   }

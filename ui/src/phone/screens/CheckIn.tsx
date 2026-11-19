@@ -209,7 +209,7 @@ function Sheet({
           className="ph-input ph-input--note"
           value={line}
           aria-label={t("journal.checkin.going")}
-          placeholder={t("journal.checkin.going")}
+          placeholder={t("journal.checkin.goingPlaceholder")}
           autoComplete="off"
           onChange={(e) => onLine(e.target.value)}
         />
@@ -397,7 +397,7 @@ export function CheckIn({
           <h1 className="ph-h1 ph-h1--small" tabIndex={-1} ref={heading}>
             {kept.length > 0
               ? t("journal.checkin.saved", { words: sentence(kept) })
-              : t("journal.checkin.savedBare")}
+              : t("journal.checkin.savedBare", { part: t(PARTS[part].name).toLowerCase() })}
           </h1>
           <p>
             <span className="ph-feelchip" data-part={part}>
@@ -525,7 +525,7 @@ export function CheckIn({
               className="ph-input ph-input--note"
               value={line}
               aria-label={t("journal.checkin.going")}
-              placeholder={t("journal.checkin.going")}
+              placeholder={t("journal.checkin.goingPlaceholder")}
               autoComplete="off"
               onChange={(e) => setLine(e.target.value)}
             />

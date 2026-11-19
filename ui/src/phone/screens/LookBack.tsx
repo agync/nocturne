@@ -21,6 +21,7 @@ import type {
 import { FeelingMap } from "../../journal/FeelingMap";
 import { FeelingMark } from "../../journal/FeelingMark";
 import { dayWords } from "../../screens/journal/time";
+import { putTogetherId } from "../../screens/lookback/period";
 import {
   checkinLabel,
   listWords,
@@ -307,12 +308,11 @@ function Written({
 }
 
 function togetherLine(item: Together): string {
-  const did = t(`journal.lookback.did.${item.with.kind}` as CopyId, { name: item.with.name });
   const what = item.word ?? (item.part ? partName(item.part).toLowerCase() : "");
-  return t("journal.recap.together", {
+  return t("journal.lookback.together", {
     count: item.count,
     total: item.total,
-    did,
+    name: item.with.name,
     what: listWords(what ? [what] : []),
   });
 }
@@ -425,6 +425,11 @@ function RecapBody({ recap, onReceipt }: { recap: Recap; onReceipt(r: Receipt): 
   const kind = recap.period.kind as "week" | "month" | "year";
   return (
     <>
+      {recap.stillReading ? (
+        <p className="ph-hint ph-hint--ink2" role="status">
+          {t("journal.lookback.recap.partial", { count: recap.stillReading, kind })}
+        </p>
+      ) : null}
       {recap.highlights.length > 0 ? (
         <Section id="sec-highlights" title={t("journal.recap.section.highlights")}>
           <ul className="ph-hls">
@@ -682,6 +687,7 @@ export function LookBack(p: LookBackProps) {
 
   const isDay = period.kind === "day";
   const isToday = isDay && p.today === period.start;
+  const over = p.today !== null && period.end < p.today;
   const written = view?.type === "written" ? view.reflection : null;
   const recap = view?.type === "recap" ? view.recap : null;
   const day = isDay ? dayWords(period.start) : null;
@@ -741,7 +747,7 @@ export function LookBack(p: LookBackProps) {
         <Button kind="primary" onClick={ask}>
           {isDay
             ? t(isToday ? "journal.day.reflect" : "journal.day.reflectPast")
-            : t(`journal.recap.onDemand.${period.kind as "week" | "month" | "year"}`)}
+            : t(putTogetherId(period.kind as "week" | "month" | "year", over))}
         </Button>
       </>
     );

@@ -41,6 +41,7 @@ const SCENARIOS = [
   "lookBackDay",
   "lookBackWeek",
   "lookBackToday",
+  "whichGone",
 ] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
@@ -70,6 +71,8 @@ function startView(scenario: Scenario): object | null {
         write: false,
         today: TODAY,
       };
+    case "whichGone":
+      return { name: "which", id: "snq-gone", day: TODAY, today: TODAY };
     case "lookBackToday":
       return { name: "lookback", kind: "day", start: TODAY, end: TODAY, write: true, today: TODAY };
     default:

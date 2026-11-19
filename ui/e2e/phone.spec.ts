@@ -122,6 +122,7 @@ const SCENARIOS: Array<[string, string]> = [
   ["lookBackDay", "Wednesday 18 November · Looked back on"],
   ["lookBackWeek", "9 to 15 November"],
   ["lookBackToday", "Thursday 19 November"],
+  ["whichGone", "Nothing to answer here now."],
 ];
 
 async function axeClean(page: Page) {
@@ -136,7 +137,7 @@ for (const scheme of ["light", "dark"] as const) {
     page,
     phoneUrl,
   }) => {
-    // Twenty-one screens, each with an accessibility scan: slow on a shared machine.
+    // Twenty-two screens, each with an accessibility scan: slow on a shared machine.
     test.setTimeout(150_000);
     const seen = await watch(page, new URL(phoneUrl).origin);
     await page.emulateMedia({ colorScheme: scheme });

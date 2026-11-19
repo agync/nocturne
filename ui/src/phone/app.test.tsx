@@ -1266,7 +1266,7 @@ describe("journal on the phone, hardening", () => {
     expect(
       await screen.findByText("Nocturne couldn’t get this day. What you kept is safe."),
     ).toBeInTheDocument();
-    expect(screen.queryByText("This one has already been answered.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Nothing to answer here now.")).not.toBeInTheDocument();
     await userEvent.click(button("Try again"));
     expect(await screen.findByText("Which Sam is this?")).toBeInTheDocument();
   });
@@ -1288,7 +1288,11 @@ describe("journal on the phone, hardening", () => {
         onDone={() => {}}
       />,
     );
-    expect(await screen.findByText("This one has already been answered.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing to answer here now.")).toBeInTheDocument();
+    expect(
+      screen.getByText("It was answered on your computer, or what it was about is gone."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back to today" })).toBeInTheDocument();
   });
 
   it("lookback.retry_read: Try again after a failed read reads, it does not ask to write", async () => {
@@ -1418,5 +1422,120 @@ describe("journal on the phone, hardening", () => {
     sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
     window.history.back();
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+});
+
+describe("journal on the phone, follow-up copy", () => {
+  const yesterday = { kind: "day", start: "2026-11-18", end: "2026-11-18" } as const;
+  const week = { kind: "week", start: "2026-11-09", end: "2026-11-15" } as const;
+  const lookProps = (engine: PhoneEngine, period: typeof yesterday | typeof week = yesterday) => ({
+    engine,
+    period,
+    write: false,
+    today: "2026-11-19",
+    now: () => Date.now(),
+    onStarted: () => {},
+    onBack: () => {},
+    onToday: () => {},
+    onItem: () => {},
+    onReceipt: () => {},
+  });
+
+  it("opens your journal while looking back loads", () => {
+    const getLookBack = vi.fn(() => new Promise<never>(() => {}));
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack }))} />);
+    expect(screen.getByText("Opening your journal…")).toBeInTheDocument();
+  });
+
+  it("opens the question while a name question loads", () => {
+    const getJournalDay = vi.fn(() => new Promise<never>(() => {}));
+    render(
+      <Which
+        engine={engineWith({}, { getJournalDay })}
+        question={null}
+        questionId="snq-0001"
+        day="2026-11-19"
+        today
+        onBack={() => {}}
+        onDone={() => {}}
+      />,
+    );
+    expect(screen.getByText("Opening the question…")).toBeInTheDocument();
+  });
+
+  it("writes the overnight footer with the computer first", async () => {
+    render(<LookBack {...lookProps(engineWith())} />);
+    expect(
+      await screen.findByText(
+        "Written overnight on your computer, from 7 things you kept that day.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("writes the on-demand footer without 'that day'", async () => {
+    const base = createMockPhoneEngine({});
+    const getLookBack = vi.fn(async (p: typeof yesterday) => {
+      const view = await base.getLookBack(p);
+      return view.type === "written"
+        ? {
+            ...view,
+            reflection: { ...view.reflection, written: "onDemand" as const, fromCount: 1 },
+          }
+        : view;
+    });
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack }))} />);
+    expect(
+      await screen.findByText(/^Written on your computer at .+, from 1 thing you kept\.$/),
+    ).toBeInTheDocument();
+  });
+
+  it("says which days a name came up in, without guessing what was done", async () => {
+    render(<LookBack {...lookProps(engineWith(), week)} />);
+    expect(
+      await screen.findByText(
+        "On 3 of the 4 days with Gran in your journal, you checked in as settled.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a recap with the partial line while things are still being read", async () => {
+    const base = createMockPhoneEngine({});
+    const getLookBack = vi.fn(async (p: typeof week) => {
+      const view = await base.getLookBack(p);
+      return view.type === "recap" ? { ...view, recap: { ...view.recap, stillReading: 1 } } : view;
+    });
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack }), week)} />);
+    expect(
+      await screen.findByText(
+        "1 thing from this week is still being read, so it isn’t in this yet.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Highlights" })).toBeInTheDocument();
+  });
+
+  it("offers Look back on this week, without so far, for a week that is over", async () => {
+    const getLookBack = vi.fn(async (p: typeof week) => ({
+      type: "notYet" as const,
+      glance: {
+        period: p,
+        kept: [],
+        felt: [],
+        good: [],
+        with: [],
+        entryLines: [],
+        entryItemId: null,
+      },
+    }));
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack }), week)} />);
+    expect(
+      await screen.findByRole("button", { name: "Look back on this week" }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks for a line without promising to talk, and has no microphone", async () => {
+    await open("s=checkIn");
+    await userEvent.click(await screen.findByRole("button", { name: "Show all words as a list" }));
+    expect(await screen.findByPlaceholderText("A line, if you like.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /microphone|voice|talk|record/i })).toBeNull();
   });
 });
