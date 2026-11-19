@@ -117,6 +117,13 @@ const partOfHour = (iso: string): DayPart => {
   return "evening";
 };
 
+/** A thing is "together" with a part of the field after this many days. */
+const TOGETHER_DAYS = 3;
+const FELT_PARTS: FeelingPart[] = ["woundUp", "litUp", "low", "settled"];
+
+/** Things kept from elsewhere (documents, web pages) are not about the day, so they name no one. */
+const isBackground = (rec: Rec) => rec.t === "note" && rec.row === "elsewhere";
+
 const GLANCE_ORDER: GlanceKind[] = ["note", "voice", "photo", "document", "web"];
 
 /** The mock journal: state and every journal method of the engine. */
@@ -208,7 +215,8 @@ export class MockJournal {
   private seedSaved(): void {
     const { today } = this.data;
     const hasToday = this.recsOf(today).length > 0;
-    if (hasToday) {
+    const unwritten = this.data.mode === "notready" || this.data.mode === "glance";
+    if (hasToday && !unwritten) {
       const p = periodOf("day", today);
       const view = this.composeDay(p, "onDemand", this.at(today, 15, 15), 6);
       this.saved.set(keyOf(p), view);
@@ -315,9 +323,11 @@ export class MockJournal {
 
   private namesOf(recs: Rec[]): NameRef[] {
     const out = new Map<string, NameRef>();
-    const ordered = [...recs].sort((a, b) =>
-      this.item(this.recItemId(a)).keptAt.localeCompare(this.item(this.recItemId(b)).keptAt),
-    );
+    const ordered = recs
+      .filter((r) => !isBackground(r))
+      .sort((a, b) =>
+        this.item(this.recItemId(a)).keptAt.localeCompare(this.item(this.recItemId(b)).keptAt),
+      );
     for (const rec of ordered) {
       for (const m of this.mentionsOfRec(rec)) {
         if (m.state === "removed") continue;
@@ -1036,6 +1046,7 @@ export class MockJournal {
         days: [
           ...new Set(
             recs
+              .filter((r) => !isBackground(r))
               .filter((r) =>
                 this.mentionsOfRec(r).some(
                   (m) => m.entityId === n.entityId && m.state !== "removed",
@@ -1046,20 +1057,41 @@ export class MockJournal {
         ].sort(),
       }))
       .sort((a, b) => b.days.length - a.days.length || a.with.name.localeCompare(b.with.name));
-    const gran = people.find((x) => x.with.entityId === "ent-gran");
-    const together: Together[] = [];
-    if (gran && p.kind !== "day" && gran.days.length >= 3) {
-      const total = gran.days.length;
-      const settled = checkins.filter((c) => c.feeling.part === "settled").slice(0, 3);
-      together.push({
-        count: Math.max(3, Math.round((total * 3) / 4)),
-        total,
-        with: gran.with,
-        part: "settled",
-        word: null,
-        receipts: settled.map((c) => this.receipt(c.id)),
-      });
+    const feltOn = new Map<string, CheckIn>();
+    for (const c of checkins) {
+      const key = `${c.day}|${c.feeling.part}`;
+      if (!feltOn.has(key)) feltOn.set(key, c);
     }
+    const together: Together[] = [];
+    if (p.kind !== "day") {
+      for (const person of people) {
+        if (person.days.length < TOGETHER_DAYS) continue;
+        let best: { part: FeelingPart; hits: CheckIn[] } | null = null;
+        for (const part of FELT_PARTS) {
+          const hits = person.days.flatMap((d) => feltOn.get(`${d}|${part}`) ?? []);
+          if (hits.length >= TOGETHER_DAYS && (!best || hits.length > best.hits.length)) {
+            best = { part, hits };
+          }
+        }
+        if (best) {
+          together.push({
+            count: best.hits.length,
+            total: person.days.length,
+            with: person.with,
+            part: best.part,
+            word: null,
+            receipts: best.hits.map((c) => this.receipt(c.id)),
+          });
+        }
+      }
+      together.sort((a, b) => b.count - a.count || a.with.name.localeCompare(b.with.name));
+      together.length = Math.min(together.length, 3);
+    }
+    const clinicItem = recs
+      .filter((r) => !isBackground(r))
+      .filter((r) => this.mentionsOfRec(r).some((m) => m.entityId === "ent-gran"))
+      .map((r) => this.item(this.recItemId(r)))
+      .sort((a, b) => b.keptAt.localeCompare(a.keptAt))[0];
     const highlightsAll = [...this.data.highlights.entries()]
       .filter(([day]) => within(day, p))
       .sort(([a], [b]) => a.localeCompare(b))
@@ -1102,7 +1134,7 @@ export class MockJournal {
         c.tried.map((idea) => ({ idea, day: c.day, checkinId: c.id })),
       ),
       changed:
-        p.kind === "year"
+        p.kind === "year" || !clinicItem
           ? []
           : [
               {
@@ -1110,7 +1142,7 @@ export class MockJournal {
                 kind: "changed",
                 text: "Gran’s clinic visit moved to **Thursday**.",
                 memoryIds: [],
-                receipts: [],
+                receipts: [this.receipt(clinicItem.id)],
                 choices: [],
                 conflictId: null,
                 subject: "Gran’s clinic visit",
@@ -1126,34 +1158,65 @@ export class MockJournal {
     return { type: "recap", recap: clone(recap) };
   }
 
+  /** Why nothing is written for `p`, in the engine's order, or null when it can be written. */
   private blocked(p: Period): ReflectionView | null {
     const glance = this.glance(p);
+    if (this.data.mode === "writing" && !this.writingStopped) return { type: "writing", glance };
+    if (glance.kept.length === 0 && glance.felt.length === 0 && glance.good.length === 0) {
+      return { type: "nothing", period: p };
+    }
     if (this.data.mode === "notready") return { type: "glance", glance, reason: "notReady" };
     if (this.data.mode === "glance") return { type: "glance", glance, reason: "notOnThisComputer" };
-    if (this.data.mode === "writing" && !this.writingStopped) return { type: "writing", glance };
     return null;
   }
 
   /** A saved reflection with lines that cite anything left out hidden at once. */
   private visible(view: ReflectionView): ReflectionView {
-    if (view.type !== "written" || this.left.size === 0) return clone(view);
-    const r = clone(view.reflection);
-    r.theDay = r.theDay.filter((line) => !line.receipts.some((x) => this.left.has(x.itemId)));
-    r.felt = r.felt.filter((c) => !this.left.has(c.id));
-    r.good = r.good.filter((g) => !this.left.has(g.id));
-    return { type: "written", reflection: r };
+    if (this.left.size === 0) return clone(view);
+    const keep = (id: string) => !this.left.has(id);
+    const cites = (receipts: Receipt[]) => receipts.every((x) => keep(x.itemId));
+    if (view.type === "written") {
+      const r = clone(view.reflection);
+      r.theDay = r.theDay.filter((line) => cites(line.receipts));
+      r.felt = r.felt.filter((c) => keep(c.id));
+      r.good = r.good.filter((g) => keep(g.id));
+      for (const n of r.people) n.itemIds = n.itemIds.filter(keep);
+      r.people = r.people.filter((n) => n.itemIds.length > 0);
+      r.stillOpen = r.stillOpen.filter((m) => cites(m.receipts));
+      return { type: "written", reflection: r };
+    }
+    if (view.type === "recap") {
+      const r = clone(view.recap);
+      r.highlights = r.highlights.filter(
+        (h) => cites(h.receipts) && (!h.photo || keep(h.photo.id)),
+      );
+      r.together = r.together.filter((x) => cites(x.receipts));
+      for (const x of r.together) x.with.itemIds = x.with.itemIds.filter(keep);
+      r.changed = r.changed.filter((l) => cites(l.receipts));
+      r.checkins = r.checkins.filter((c) => keep(c.id));
+      for (const w of r.words) w.checkinIds = w.checkinIds.filter(keep);
+      r.words = r.words.filter((w) => w.checkinIds.length > 0);
+      r.good = r.good.filter((g) => keep(g.id));
+      for (const g of r.good) if (g.photo && !keep(g.photo.id)) g.photo = null;
+      for (const d of r.people) d.with.itemIds = d.with.itemIds.filter(keep);
+      r.people = r.people.filter((d) => d.with.itemIds.length > 0);
+      for (const n of r.newNames) n.itemIds = n.itemIds.filter(keep);
+      r.newNames = r.newNames.filter((n) => n.itemIds.length > 0);
+      r.tried = r.tried.filter((x) => keep(x.checkinId));
+      r.stillOpen = r.stillOpen.filter((m) => cites(m.receipts));
+      if (r.compare) r.compare.count = r.checkins.length;
+      return { type: "recap", recap: r };
+    }
+    return clone(view);
   }
 
   async getReflection(period: Period): Promise<ReflectionView> {
+    const saved = this.saved.get(keyOf(period));
+    const writing = this.data.mode === "writing" && !this.writingStopped;
+    if (saved && !writing) return this.visible(saved);
     const gate = this.blocked(period);
     if (gate) return gate;
-    const saved = this.saved.get(keyOf(period));
-    if (saved) return this.visible(saved);
-    const glance = this.glance(period);
-    if (glance.kept.length === 0 && glance.felt.length === 0 && glance.good.length === 0) {
-      return { type: "nothing", period };
-    }
-    return { type: "notYet", glance };
+    return { type: "notYet", glance: this.glance(period) };
   }
 
   async reflect(period: Period): Promise<ReflectionView> {
@@ -1165,10 +1228,6 @@ export class MockJournal {
     if (this.stopped.has(key)) {
       this.stopped.delete(key);
       return this.getReflection(period);
-    }
-    const glance = this.glance(period);
-    if (glance.kept.length === 0 && glance.felt.length === 0 && glance.good.length === 0) {
-      return { type: "nothing", period };
     }
     const now = this.host.now().toISOString();
     const view =

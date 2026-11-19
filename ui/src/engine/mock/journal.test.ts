@@ -444,6 +444,99 @@ describe("looking back", () => {
   });
 });
 
+describe("what the mock answers as the engine does", () => {
+  const today = (engine: MockEngine) => dayPeriod(dayOf(engine));
+  const WEEK: Period = { kind: "week", start: "2026-11-09", end: "2026-11-15" };
+
+  it("gives a saved reflection before any blocked state", async () => {
+    const engine = engineIn("glance");
+    expect((await engine.getReflection(today(engine))).type).toBe("glance");
+    expect((await engine.getReflection(dayPeriod("2026-11-18"))).type).toBe("written");
+    expect((await engine.getReflection(WEEK)).type).toBe("recap");
+  });
+
+  it("says nothing was kept before it says it is not ready", async () => {
+    const engine = engineIn("notready");
+    expect((await engine.getReflection(dayPeriod("2026-10-01"))).type).toBe("nothing");
+    expect((await engine.getReflection(today(engine))).type).toBe("glance");
+  });
+
+  it("leaves things kept from elsewhere out of the names", async () => {
+    const engine = engineIn();
+    const data = (
+      engine.journal as unknown as {
+        data: { recs: Array<{ t: string; row?: string; mentions?: unknown[] }> };
+      }
+    ).data;
+    const made = (await engine.getJournalDay()).people.find((p) => p.name === "Sam");
+    const mention = (await engine.getJournalDay()).entry
+      .flatMap((b) => b.mentions)
+      .find((m) => m.name === "Sam");
+    if (!made || !mention) throw new Error("expected Sam");
+    const form = data.recs.find((r) => r.row === "elsewhere");
+    form?.mentions?.push({
+      ...mention,
+      id: "men-form",
+      entityId: "ent-form-only",
+      name: "The Head Teacher",
+      itemId: "j-form",
+    });
+    const day = await engine.getJournalDay();
+    expect(day.people.map((p) => p.name)).not.toContain("The Head Teacher");
+    const view = await engine.reflect(today(engine));
+    if (view.type !== "written") throw new Error("expected a written day");
+    expect(view.reflection.people.map((p) => p.name)).not.toContain("The Head Teacher");
+  });
+
+  it("hides recap lines that cite what is left out", async () => {
+    const engine = engineIn();
+    const before = await engine.getReflection(WEEK);
+    if (before.type !== "recap") throw new Error("expected a recap");
+    const cited = before.recap.highlights[0]?.receipts[0]?.itemId;
+    if (!cited) throw new Error("expected a highlight with a receipt");
+    await engine.setLeftOut(cited, true);
+    const after = await engine.getReflection(WEEK);
+    if (after.type !== "recap") throw new Error("expected a recap");
+    const cites = (r: { receipts: Array<{ itemId: string }> }) =>
+      r.receipts.some((x) => x.itemId === cited);
+    expect(after.recap.highlights.some(cites)).toBe(false);
+    expect(after.recap.together.some(cites)).toBe(false);
+    expect(after.recap.changed.some(cites)).toBe(false);
+    expect(after.recap.highlights.length).toBeLessThan(before.recap.highlights.length);
+    await engine.setLeftOut(cited, false);
+    const back = await engine.getReflection(WEEK);
+    if (back.type !== "recap") throw new Error("expected a recap");
+    expect(back.recap.highlights).toHaveLength(before.recap.highlights.length);
+  });
+
+  it("cites something for what changed", async () => {
+    const engine = engineIn();
+    const view = await engine.getReflection(WEEK);
+    if (view.type !== "recap") throw new Error("expected a recap");
+    expect(view.recap.changed.length).toBeGreaterThan(0);
+    for (const line of view.recap.changed) expect(line.receipts.length).toBeGreaterThan(0);
+  });
+
+  it("works out who a part of the field went with from the days", async () => {
+    const engine = engineIn();
+    const view = await engine.getReflection(WEEK);
+    if (view.type !== "recap") throw new Error("expected a recap");
+    const { recap } = view;
+    expect(recap.together.length).toBeGreaterThan(0);
+    for (const line of recap.together) {
+      const days = recap.people.find((p) => p.with.entityId === line.with.entityId)?.days ?? [];
+      expect(line.total).toBe(days.length);
+      expect(line.count).toBe(line.receipts.length);
+      expect(line.count).toBeGreaterThanOrEqual(3);
+      for (const r of line.receipts) {
+        const c = recap.checkins.find((x) => x.id === r.itemId);
+        expect(c?.feeling.part).toBe(line.part);
+        expect(days).toContain(c?.day);
+      }
+    }
+  });
+});
+
 describe("the other states of looking back", () => {
   const today = (engine: MockEngine) => dayPeriod(dayOf(engine));
 

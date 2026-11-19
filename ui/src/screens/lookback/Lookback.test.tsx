@@ -365,9 +365,7 @@ describe("a week, month or year", () => {
       expect(found, name).toBeGreaterThan(at);
       at = found;
     }
-    expect(
-      screen.getByText("On 3 of the 4 days you saw Gran, you checked in as settled."),
-    ).toBeTruthy();
+    expect(screen.getByText("On 3 of the 7 days you saw Leo, you checked in as low.")).toBeTruthy();
     const words = screen.getByRole("button", { name: /^tired, / });
     expect(words.closest("li")?.textContent).toMatch(/tired\d+$/);
     expect(
