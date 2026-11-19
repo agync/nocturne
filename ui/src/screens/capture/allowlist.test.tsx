@@ -58,7 +58,7 @@ function recording() {
 }
 
 describe("what the quick capture window asks of the engine", () => {
-  // Seven windows are opened one after another and typed into, so this one is given room.
+  // Eight windows are opened one after another and typed into, so this one is given room.
   it("is only what the shell allows it to call", { timeout: 30_000 }, async () => {
     const allowed = allowedCommands();
     expect(allowed).toContain("keep_text");
@@ -94,6 +94,14 @@ describe("what the quick capture window asks of the engine", () => {
     await userEvent.type(box, "When is the dentist?{Enter}");
 
     box = await fresh();
+    await userEvent.type(box, "Lunch with Priya, finally");
+    await userEvent.click(screen.getByRole("button", { name: "Lit up" }));
+    await userEvent.click(await screen.findByRole("button", { name: "pleased" }));
+    await userEvent.click(screen.getByRole("button", { name: "More words…" }));
+    await userEvent.type(box, "{Enter}");
+    await screen.findByText("Kept, with pleased.");
+
+    box = await fresh();
     const start = 1_700_000_000_000;
     const now = vi.spyOn(Date, "now").mockReturnValue(start);
     box.focus();
@@ -113,6 +121,8 @@ describe("what the quick capture window asks of the engine", () => {
 
     for (const method of [
       "keepText",
+      "keepNote",
+      "topFeelingWords",
       "unkeep",
       "keepFiles",
       "keepBytes",

@@ -344,3 +344,80 @@
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+.feelings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  padding: 0 18px 12px;
+}
+
+.feelRow {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.feelLabel {
+  margin-right: 2px;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.3 var(--font-sans);
+}
+
+.feelBtn {
+  --tone: var(--ink);
+  --tone-soft: var(--raised);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-full);
+  background: var(--raised);
+  color: var(--ink);
+  font: 400 0.8125rem / 1.3 var(--font-sans);
+  cursor: pointer;
+}
+
+.feelBtn[data-word="true"] {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 0.875rem;
+}
+
+.feelBtn[data-part="woundUp"] {
+  --tone: var(--part-wound-ink);
+  --tone-soft: var(--part-wound);
+}
+
+.feelBtn[data-part="litUp"] {
+  --tone: var(--part-lit-ink);
+  --tone-soft: var(--part-lit);
+}
+
+.feelBtn[data-part="low"] {
+  --tone: var(--part-low-ink);
+  --tone-soft: var(--part-low);
+}
+
+.feelBtn[data-part="settled"] {
+  --tone: var(--part-settled-ink);
+  --tone-soft: var(--part-settled);
+}
+
+.feelBtn:hover {
+  border-color: var(--tone);
+}
+
+.feelBtn[aria-pressed="true"] {
+  border-color: var(--tone);
+  background: var(--tone-soft);
+  box-shadow: inset 0 0 0 1px var(--tone);
+  font-weight: 500;
+}

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { askRequests } from "../../app/ask-request";
@@ -78,8 +78,8 @@ describe("keeping words", () => {
     await userEvent.type(box(), "Buy milk{Enter}");
     expect(spy).toHaveBeenCalledWith("Buy milk", "quickCapture");
     expect(await screen.findByText("Kept.", { selector: "strong" })).toBeInTheDocument();
-    expect(screen.getByText("Nocturne will read it tonight.")).toBeInTheDocument();
-    expect(live()).toHaveTextContent("Kept. Nocturne will read it tonight.");
+    expect(screen.getByText("It’s on today’s journal.")).toBeInTheDocument();
+    expect(live()).toHaveTextContent("Kept. It’s on today’s journal.");
     expect(close).not.toHaveBeenCalled();
     await waitFor(() => expect(close).toHaveBeenCalledOnce(), { timeout: CLOSE_AFTER_MS + 1500 });
   });
@@ -664,5 +664,161 @@ describe("when things go wrong", () => {
     act(() => platform.drop(["/tmp/a.jpg"]));
     expect(spy).not.toHaveBeenCalled();
     await act(async () => finish());
+  });
+});
+
+describe("keeping with a feeling", () => {
+  const feelingGroup = () => screen.getByRole("group", { name: "How does it feel? (optional)" });
+  const wordGroup = () => screen.getByRole("group", { name: "A word for it" });
+
+  it("offers the four parts only once there is something to keep", async () => {
+    await open();
+    expect(screen.queryByRole("group", { name: "How does it feel? (optional)" })).toBeNull();
+    await userEvent.type(box(), "Lunch with Priya, finally");
+    const names = within(feelingGroup())
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(names).toEqual(["Wound up", "Lit up", "Low", "Settled"]);
+    expect(screen.queryByRole("group", { name: "A word for it" })).toBeNull();
+  });
+
+  it("a part opens four words and More words", async () => {
+    const { engine } = await open();
+    await userEvent.type(box(), "Lunch with Priya, finally");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Lit up" }));
+    expect(within(feelingGroup()).getByRole("button", { name: "Lit up" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await screen.findByRole("group", { name: "A word for it" });
+    const shown = within(wordGroup())
+      .getAllByRole("button")
+      .map((b) => b.textContent);
+    expect(shown.slice(0, 4)).toEqual(await engine.topFeelingWords("litUp"));
+    expect(shown[4]).toBe("More words…");
+  });
+
+  it("falls back to the first four words of the part", async () => {
+    const { engine } = await open();
+    vi.spyOn(engine, "topFeelingWords").mockResolvedValue([]);
+    await userEvent.type(box(), "Quiet afternoon");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Settled" }));
+    await screen.findByRole("group", { name: "A word for it" });
+    expect(
+      within(wordGroup())
+        .getAllByRole("button")
+        .map((b) => b.textContent),
+    ).toEqual(["calm", "relaxed", "content", "comfortable", "More words…"]);
+  });
+
+  it("Enter keeps the note with the part and the word", async () => {
+    const { engine } = await open();
+    const note = vi.spyOn(engine, "keepNote");
+    const text = vi.spyOn(engine, "keepText");
+    await userEvent.type(box(), "Lunch with Priya, finally");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Lit up" }));
+    await userEvent.click(await within(wordGroup()).findByRole("button", { name: "pleased" }));
+    expect(within(wordGroup()).getByRole("button", { name: "pleased" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent.type(box(), "{Enter}");
+    await waitFor(() =>
+      expect(note).toHaveBeenCalledWith(
+        "Lunch with Priya, finally",
+        "quickCapture",
+        { part: "litUp", point: { pleasant: 0.5, energy: 0.5 }, words: ["pleased"] },
+        false,
+      ),
+    );
+    expect(text).not.toHaveBeenCalled();
+    expect(await screen.findByText("Kept, with pleased.", { selector: "strong" })).toBeVisible();
+    expect(screen.getByText("It’s on today’s journal.")).toBeInTheDocument();
+    expect(live()).toHaveTextContent("Kept, with pleased. It’s on today’s journal.");
+    expect(screen.getByRole("button", { name: "Undo" })).toBeInTheDocument();
+  });
+
+  it("a part with no word is kept with the part alone", async () => {
+    const { engine } = await open();
+    const note = vi.spyOn(engine, "keepNote");
+    await userEvent.type(box(), "Long day");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Low" }));
+    await userEvent.type(box(), "{Enter}");
+    await waitFor(() =>
+      expect(note).toHaveBeenCalledWith(
+        "Long day",
+        "quickCapture",
+        { part: "low", point: { pleasant: -0.5, energy: -0.5 }, words: [] },
+        false,
+      ),
+    );
+    expect(await screen.findByText("Kept.", { selector: "strong" })).toBeVisible();
+    expect(screen.getByText("It’s on today’s journal.")).toBeInTheDocument();
+  });
+
+  it("choosing the part again takes the feeling back, and another part drops the word", async () => {
+    const { engine } = await open();
+    const note = vi.spyOn(engine, "keepNote");
+    const text = vi.spyOn(engine, "keepText");
+    await userEvent.type(box(), "Walk");
+    const parts = feelingGroup();
+    await userEvent.click(within(parts).getByRole("button", { name: "Lit up" }));
+    await userEvent.click(await within(wordGroup()).findByRole("button", { name: "pleased" }));
+    await userEvent.click(within(parts).getByRole("button", { name: "Settled" }));
+    expect(await within(wordGroup()).findByRole("button", { name: "calm" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    expect(within(wordGroup()).queryByRole("button", { name: "pleased" })).toBeNull();
+    await userEvent.click(within(parts).getByRole("button", { name: "Settled" }));
+    expect(screen.queryByRole("group", { name: "A word for it" })).toBeNull();
+    await userEvent.type(box(), "{Enter}");
+    await waitFor(() => expect(text).toHaveBeenCalledWith("Walk", "quickCapture"));
+    expect(note).not.toHaveBeenCalled();
+  });
+
+  it("without a feeling it keeps exactly as before", async () => {
+    const { engine } = await open();
+    const note = vi.spyOn(engine, "keepNote");
+    const text = vi.spyOn(engine, "keepText");
+    await userEvent.type(box(), "Buy milk{Enter}");
+    await waitFor(() => expect(text).toHaveBeenCalledWith("Buy milk", "quickCapture"));
+    expect(note).not.toHaveBeenCalled();
+    expect(await screen.findByText("Kept.", { selector: "strong" })).toBeVisible();
+  });
+
+  it("Undo takes back the note that was kept with a feeling", async () => {
+    // The mock keeps journal notes apart from other items, so it cannot take one back itself.
+    const { engine } = await open();
+    const unkeep = vi.spyOn(engine, "unkeep").mockResolvedValue(undefined);
+    const note = vi.spyOn(engine, "keepNote");
+    await userEvent.type(box(), "Lunch with Priya");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Lit up" }));
+    await userEvent.type(box(), "{Enter}");
+    await userEvent.click(await screen.findByRole("button", { name: "Undo" }));
+    const kept = await note.mock.results[0]?.value;
+    expect(unkeep).toHaveBeenCalledWith(kept.item.id);
+    await waitFor(() => expect(live()).toHaveTextContent("Taken back. Nothing was kept."));
+  });
+
+  it("More words opens the check-in on that part in the main window", async () => {
+    const { platform, close } = await open();
+    await userEvent.type(box(), "Lunch with Priya, finally");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Lit up" }));
+    await userEvent.click(await screen.findByRole("button", { name: "More words…" }));
+    expect(platform.opened()).toBe("/journal/check-in?part=litUp");
+    // What was typed is not lost: the window stays.
+    expect(close).not.toHaveBeenCalled();
+    expect(box()).toHaveValue("Lunch with Priya, finally");
+  });
+
+  it("a question still goes to Ask, and the feeling is not sent", async () => {
+    const { engine, handOff } = await open();
+    const note = vi.spyOn(engine, "keepNote");
+    await userEvent.type(box(), "When is the dentist?");
+    await userEvent.click(within(feelingGroup()).getByRole("button", { name: "Low" }));
+    await userEvent.type(box(), "{Enter}");
+    await waitFor(() => expect(handOff).toHaveBeenCalledWith("When is the dentist?"));
+    expect(note).not.toHaveBeenCalled();
   });
 });

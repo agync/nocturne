@@ -9,14 +9,25 @@ import {
 import { askRequests } from "../../app/ask-request";
 import { goTo } from "../../app/query";
 import { failureCopy, type RecorderFailure } from "../../app/useRecorder";
+import { middleOf } from "../../components/FeelingField/FeelingField";
 import { Icon } from "../../components/Icon/Icon";
 import { defaultVerb } from "../../components/KeepAskBar/KeepAskBar";
 import { Notices } from "../../components/Notices/Notices";
 import { Thumb } from "../../components/Thumb/Thumb";
 import { formatDay, formatDuration, formatDurationSpoken } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { ItemKind, ItemView, Kept, Notice, Source } from "../../engine/bindings";
+import type {
+  Feeling,
+  FeelingPart,
+  ItemKind,
+  ItemView,
+  Kept,
+  Notice,
+  Source,
+} from "../../engine/bindings";
 import { useEngine, useStatus } from "../../engine/context";
+import { FeelingMark } from "../../journal/FeelingMark";
+import { PART_ORDER, PARTS, WORDS } from "../../journal/feelings";
 import { usePlatform } from "../../platform/context";
 import styles from "./Capture.module.css";
 import { MIN_HOLD_MS, useQuickRecorder } from "./useQuickRecorder";
@@ -26,7 +37,7 @@ export const CLOSE_AFTER_MS = 1600;
 
 type View =
   | { name: "compose" }
-  | { name: "kept"; message: string; itemIds: string[] }
+  | { name: "kept"; lead: string; message: string; itemIds: string[] }
   | { name: "duplicate"; item: ItemView };
 
 const MIC_DENIED: Notice = {
@@ -36,6 +47,9 @@ const MIC_DENIED: Notice = {
   etaSeconds: null,
   bytes: null,
 };
+
+/** The four words shown before there is any history for a part. */
+const firstFour = (part: FeelingPart) => WORDS[part].slice(0, 4).map((entry) => entry.word);
 
 const spokenKind = (kind: ItemKind) => t(`kind.${kind}.spoken`);
 
@@ -56,6 +70,9 @@ export default function Capture() {
   const [micDenied, setMicDenied] = useState(false);
   const [dropping, setDropping] = useState(false);
   const [pausedClose, setPausedClose] = useState(false);
+  const [feelPart, setFeelPart] = useState<FeelingPart | null>(null);
+  const [feelWord, setFeelWord] = useState<string | null>(null);
+  const [suggested, setSuggested] = useState<string[] | null>(null);
   const { data: status } = useStatus();
   const input = useRef<HTMLTextAreaElement>(null);
   const page = useRef<HTMLElement>(null);
@@ -89,20 +106,39 @@ export default function Capture() {
     return platform.inQuickCapture();
   }, [platform]);
 
-  const finishKept = useCallback((kept: Kept[], message: string, spoken: string) => {
-    const first = kept[0];
-    if (!first) return;
-    // Only what is new can be taken back: a duplicate is an older thing that must stay.
-    const itemIds = kept.flatMap((k) => (k.type === "new" ? [k.item.id] : []));
-    if (itemIds.length === 0) {
-      setView({ name: "duplicate", item: first.item });
-      return;
-    }
-    setView({ name: "kept", message, itemIds });
-    setAnnouncement(spoken);
-  }, []);
+  const finishKept = useCallback(
+    (kept: Kept[], message: string, spoken: string, lead = t("capture.kept.lead")) => {
+      const first = kept[0];
+      if (!first) return;
+      // Only what is new can be taken back: a duplicate is an older thing that must stay.
+      const itemIds = kept.flatMap((k) => (k.type === "new" ? [k.item.id] : []));
+      if (itemIds.length === 0) {
+        setView({ name: "duplicate", item: first.item });
+        return;
+      }
+      setView({ name: "kept", lead, message, itemIds });
+      setAnnouncement(spoken);
+    },
+    [],
+  );
 
   const failed = useCallback(() => setError(t("bar.kept.error")), []);
+
+  // The words this person uses most in the chosen part, or the first four of its list.
+  useEffect(() => {
+    setSuggested(null);
+    if (!feelPart) return;
+    let current = true;
+    engine
+      .topFeelingWords(feelPart)
+      .catch(() => [] as string[])
+      .then((words) => {
+        if (current) setSuggested(words.length > 0 ? words : firstFour(feelPart));
+      });
+    return () => {
+      current = false;
+    };
+  }, [engine, feelPart]);
 
   const onFailed = useCallback((reason: RecorderFailure) => {
     if (reason === "denied") setMicDenied(true);
@@ -164,22 +200,38 @@ export default function Capture() {
       if (working.current) return;
       working.current = true;
       const source: Source = fromWeb ? "pastedWeb" : "quickCapture";
+      const feeling: Feeling | null = feelPart
+        ? { part: feelPart, point: middleOf(feelPart), words: feelWord ? [feelWord] : [] }
+        : null;
       try {
-        const kept = await engine.keepText(value, source);
+        const kept = feeling
+          ? await engine.keepNote(value, source, feeling, false)
+          : await engine.keepText(value, source);
         setText("");
         setFromWeb(false);
-        finishKept(
-          [kept],
-          t(fromWeb ? "capture.kept.web" : "capture.kept.later"),
-          t("capture.kept.text"),
-        );
+        setFeelPart(null);
+        setFeelWord(null);
+        if (feelWord) {
+          finishKept(
+            [kept],
+            t("journal.quick.keptMessage"),
+            t("journal.quick.keptWith", { word: feelWord }),
+            t("journal.quick.keptWithLead", { word: feelWord }),
+          );
+        } else {
+          finishKept(
+            [kept],
+            fromWeb && !feeling ? t("capture.kept.web") : t("journal.quick.keptMessage"),
+            fromWeb && !feeling ? t("capture.kept.text") : t("journal.quick.kept"),
+          );
+        }
       } catch {
         failed();
       } finally {
         working.current = false;
       }
     },
-    [engine, fromWeb, finishKept, failed],
+    [engine, fromWeb, feelPart, feelWord, finishKept, failed],
   );
 
   const ask = useCallback(
@@ -367,6 +419,27 @@ export default function Capture() {
     }
   };
 
+  const choosePart = (part: FeelingPart, event: { detail: number }) => {
+    setFeelWord(null);
+    setFeelPart((now) => (now === part ? null : part));
+    // After a click the window is ready for Enter again; from the keyboard the place is kept.
+    if (event.detail > 0) input.current?.focus();
+  };
+
+  const chooseWord = (word: string, event: { detail: number }) => {
+    setFeelWord((now) => (now === word ? null : word));
+    if (event.detail > 0) input.current?.focus();
+  };
+
+  const moreWords = async () => {
+    if (!feelPart) return;
+    try {
+      await platform.openInMain(`/journal/check-in?part=${feelPart}`);
+    } catch {
+      failed();
+    }
+  };
+
   const openItem = async (id: string) => {
     await platform.openInMain(`/items/${id}`);
     // A browser has one window: opening the item already left this screen.
@@ -398,7 +471,7 @@ export default function Capture() {
             onMouseLeave={() => setPausedClose(false)}
           >
             <span className={styles.pillMark} aria-hidden="true" />
-            <strong className={styles.pillLead}>{t("capture.kept.lead")}</strong>
+            <strong className={styles.pillLead}>{view.lead}</strong>
             <span className={styles.pillMessage}>{view.message}</span>
             {view.itemIds.length > 0 ? (
               <button
@@ -496,6 +569,53 @@ export default function Capture() {
               <p className={styles.error} role="alert">
                 {error}
               </p>
+            ) : null}
+            {hasText && !recorder.recording ? (
+              <div className={styles.feelings}>
+                <fieldset className={styles.feelRow}>
+                  <legend className="sr-only">{t("journal.quick.label")}</legend>
+                  <span className={styles.feelLabel} aria-hidden="true">
+                    {t("journal.quick.label")}
+                  </span>
+                  {PART_ORDER.map((part) => (
+                    <button
+                      key={part}
+                      type="button"
+                      className={styles.feelBtn}
+                      data-part={part}
+                      aria-pressed={feelPart === part}
+                      onClick={(event) => choosePart(part, event)}
+                    >
+                      <FeelingMark mark={part} size={16} />
+                      {t(PARTS[part].name)}
+                    </button>
+                  ))}
+                </fieldset>
+                {feelPart && suggested ? (
+                  <fieldset className={styles.feelRow}>
+                    <legend className="sr-only">{t("journal.quick.words")}</legend>
+                    <span className={styles.feelLabel} aria-hidden="true">
+                      {t("journal.quick.words")}
+                    </span>
+                    {suggested.map((word) => (
+                      <button
+                        key={word}
+                        type="button"
+                        className={styles.feelBtn}
+                        data-part={feelPart}
+                        data-word="true"
+                        aria-pressed={feelWord === word}
+                        onClick={(event) => chooseWord(word, event)}
+                      >
+                        {word}
+                      </button>
+                    ))}
+                    <button type="button" className={styles.link} onClick={() => void moreWords()}>
+                      {t("journal.quick.more")}
+                    </button>
+                  </fieldset>
+                ) : null}
+              </div>
             ) : null}
             <div className={styles.footer}>
               {recorder.recording ? (
