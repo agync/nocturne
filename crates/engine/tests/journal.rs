@@ -786,3 +786,22 @@ fn the_evening_reminder_is_off_until_turned_on_and_takes_a_time_of_day() {
     );
     assert_eq!(f.engine.evening_reminder().unwrap(), on);
 }
+
+#[test]
+fn a_private_photo_cannot_be_placed_in_the_journal() {
+    let f = fixture();
+    let day = date("2026-11-13");
+    let Kept::New { item: photo } = f
+        .engine
+        .keep_bytes(b"jpeg-bytes", "jpg", Source::Journal)
+        .unwrap()
+    else {
+        panic!("new")
+    };
+    f.engine.set_item_private(&photo.id, true).unwrap();
+    assert!(matches!(
+        f.engine.place_in_entry(&photo.id, day, 1),
+        Err(Error::Invalid(_))
+    ));
+    assert_eq!(f.engine.get_item(&photo.id).unwrap().journal, None);
+}

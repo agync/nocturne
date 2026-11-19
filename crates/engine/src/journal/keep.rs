@@ -292,6 +292,9 @@ impl Engine {
             {
                 return Err(Error::invalid("only a photo or a voice note can be placed"));
             }
+            if item.view.private {
+                return Err(Error::invalid("a private item cannot go in the journal"));
+            }
             tx.execute(
                 "UPDATE items SET metadata = json_patch(metadata, ?2), hold_until = ?3 WHERE id = ?1",
                 params![
