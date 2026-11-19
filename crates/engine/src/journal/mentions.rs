@@ -745,6 +745,41 @@ fn memories_of(conn: &Connection, item_id: &str, entity_id: &str) -> Result<Vec<
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// A memory this item shares with others is split first: this item's link moves to a copy, so
+/// moving the copy leaves what the other items said where it was. Returns the memory to move.
+fn split_off(tx: &Transaction<'_>, memory: &str, item_id: &str) -> Result<String> {
+    let others: u32 = tx.query_row(
+        "SELECT COUNT(*) FROM memory_sources WHERE memory_id = ?1 AND item_id != ?2",
+        params![memory, item_id],
+        |r| r.get(0),
+    )?;
+    if others == 0 {
+        return Ok(memory.to_string());
+    }
+    let cols: Vec<String> = {
+        let mut stmt =
+            tx.prepare("SELECT name FROM pragma_table_info('memories') WHERE name != 'id'")?;
+        stmt.query_map([], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let cols = cols.join(", ");
+    let copy = new_id("mem");
+    tx.execute(
+        &format!("INSERT INTO memories(id, {cols}) SELECT ?1, {cols} FROM memories WHERE id = ?2"),
+        params![copy, memory],
+    )?;
+    tx.execute(
+        "INSERT INTO embeddings(memory_id, dim, vec) SELECT ?1, dim, vec FROM embeddings \
+         WHERE memory_id = ?2",
+        params![copy, memory],
+    )?;
+    tx.execute(
+        "UPDATE memory_sources SET memory_id = ?1 WHERE memory_id = ?2 AND item_id = ?3",
+        params![copy, memory, item_id],
+    )?;
+    Ok(copy)
+}
+
 /// What removing a mention let go, and what the mention was, so that Undo brings back exactly that.
 #[derive(Serialize, Deserialize)]
 struct LetGo {
@@ -907,6 +942,12 @@ impl Engine {
             RefileTarget::Existing { entity_id } => Some(entity_id.clone()),
             RefileTarget::New { .. } => None,
         };
+        let memories: Vec<String> = self.write(|tx| {
+            memories
+                .iter()
+                .map(|m| split_off(tx, m, &row.item_id))
+                .collect()
+        })?;
         for memory in &memories {
             let refiled = self.refile_memory(memory, target.clone())?;
             dest = Some(refiled.entity.id);

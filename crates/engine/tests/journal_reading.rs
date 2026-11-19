@@ -1031,6 +1031,51 @@ fn refiling_a_mention_moves_only_this_items_memories_and_the_link() {
     assert_eq!(under("Sam likes tea."), "Sam");
 }
 
+#[test]
+fn refiling_one_notes_mention_leaves_a_memory_another_note_shares() {
+    let f = fixture();
+    let gate = || {
+        vec![person(
+            "Sam",
+            Predicate::Knows,
+            "the gate",
+            "Sam fixed the gate.",
+        )]
+    };
+    let first = journal_item(&f, "Sam fixed the gate.", "entry");
+    f.engine.apply(&first, gate()).unwrap();
+    let second = journal_item(&f, "Sam fixed the gate at last.", "entry");
+    f.engine.apply(&second, gate()).unwrap();
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM memories"),
+        1,
+        "one shared memory"
+    );
+
+    f.engine
+        .refile_mention(
+            &mention_id(&f, &second, "Sam"),
+            RefileTarget::New {
+                name: "Sam Lee".into(),
+                kind: EntityKind::Person,
+            },
+        )
+        .unwrap();
+    let filed_under = |item: &str| -> String {
+        conn(&f)
+            .query_row(
+                "SELECT e.name FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+                 JOIN entities e ON e.id = m.entity_id WHERE s.item_id = ?1",
+                [item],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(filed_under(&first), "Sam");
+    assert_eq!(filed_under(&second), "Sam Lee");
+    assert_eq!(mentions(&f, &first)[0].0, "Sam");
+}
+
 fn save_page(f: &Fixture, day: &str) {
     let page = f
         .engine
