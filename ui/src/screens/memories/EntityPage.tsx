@@ -4,7 +4,7 @@ import { useLocation } from "wouter";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
-import { formatDay } from "../../copy/format";
+import { formatLongDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import { useEngine, useRefresh } from "../../engine/context";
 import styles from "./Memories.module.css";
@@ -170,7 +170,7 @@ export function EntityPage({ id }: { id: string }) {
             {journalDays.data.map((day) => (
               <li key={day}>
                 <a className={styles.journalDay} href={`#/journal/${day}`}>
-                  {formatDay(day)}
+                  {formatLongDay(day)}
                 </a>
               </li>
             ))}

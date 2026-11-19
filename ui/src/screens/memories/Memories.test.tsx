@@ -447,7 +447,7 @@ describe("In your journal", () => {
     const section = await screen.findByRole("region", { name: "In your journal" });
     const links = within(section).getAllByRole("link");
     expect(links.map((a) => a.getAttribute("href"))).toEqual(days.map((d) => `#/journal/${d}`));
-    expect(links[0]?.textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/);
+    expect(links[0]?.textContent).toMatch(/^[A-Z][a-z]+day \d{1,2} [A-Z][a-z]+$/);
     expect(days).toEqual([...days].sort().reverse());
   });
 
