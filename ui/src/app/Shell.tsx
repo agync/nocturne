@@ -102,7 +102,7 @@ export function Shell({ children }: ShellProps) {
             }),
           });
         } else {
-          toast.show({ lead: t("capture.kept.lead"), message: t("capture.kept.later") });
+          toast.show({ lead: t("capture.kept.lead"), message: t("journal.quick.keptMessage") });
         }
         refresh("items", "status", "page");
       } catch (error) {

@@ -417,7 +417,7 @@ describe("keeping and asking from the bar", () => {
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await userEvent.type(bar, "Ask Sam about Saturday{Enter}");
     expect(await screen.findByText("Kept.")).toBeInTheDocument();
-    expect(screen.getByText("Nocturne will read it tonight.")).toBeInTheDocument();
+    expect(screen.getByText("It’s on today’s journal.")).toBeInTheDocument();
     const items = await engine.listItems({ since: null, status: null, limit: 1 });
     expect(items[0]?.title).toBe("Ask Sam about Saturday");
     expect(bar).toHaveValue("");
