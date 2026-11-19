@@ -430,3 +430,20 @@ The owner answered every open question on 2026-11-19.
 | 2 | Confirming "Delete this reflection" | A: confirmed, with the same small dialog as deleting a recap |
 | 3 | A way to stop journal questions | A: none. At most one a week, and it can be ignored |
 | 4 | The together line's wording | A: "days with {name} in your journal" |
+| 5 | The Today headline and the rail (item 6) | Keep: they agree |
+| 6 | An undated plan written on the event's day (journal question, condition 2) | Keep: it counts as dated that day |
+| 7 | "Open what it was about" in the row menu | Keep |
+| 8 | The check-in page's back link | Accept: "← Journal" by default |
+| 9 | "Look back again" that fails or is stopped | Accept: it still clears the decline |
+| 10 | The journal question on the phone | Built: the phone's page never carries it, so its sentence never leaves the computer |
+
+## Follow-ups
+
+Small, agreed, and not built yet:
+
+1. **A generic back link.** A `from` route parameter, so a check-in's page goes back to the screen
+   it was opened from. Until then the back link reads "← Journal".
+2. **A check-in's page in the rail.** On a check-in's page the rail highlights "What Nocturne
+   remembers", not Journal, and the small field there has no part labels.
+3. **The spoken page.** The mock's spoken-page `.ogg` still says "Two things need you today."
+   beside the rail's three. Re-record it with the counted headline.
