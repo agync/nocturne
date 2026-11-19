@@ -1271,3 +1271,122 @@ fn the_journal_day_carries_its_open_same_name_question() {
             .is_empty()
     );
 }
+
+#[test]
+fn an_edited_block_keeps_the_answer_given_to_its_earlier_version() {
+    let f = fixture();
+    let (jones, patel) = two_sams(&f);
+    let v1 = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&v1, vec![sam_claim()]).unwrap();
+    let q = f.engine.same_name_questions(None).unwrap().remove(0);
+    f.engine
+        .answer_same_name(
+            &q.id,
+            SameNameAnswer::Entity {
+                entity_id: jones.clone(),
+            },
+        )
+        .unwrap();
+
+    let v2 = journal_item(&f, "Priya made tea. Sam came to fix the sink.", "entry");
+    replaces(&f, &v2, &v1);
+    f.engine.apply(&v2, vec![sam_claim()]).unwrap();
+    assert!(
+        f.engine.same_name_questions(None).unwrap().is_empty(),
+        "the answer carries over"
+    );
+    assert_eq!(about(&f, &patel), 1);
+    assert_eq!(mentions(&f, &v2)[0].0, "Sam Jones");
+}
+
+#[test]
+fn a_mention_removed_on_an_earlier_version_stays_removed_on_the_next() {
+    let f = fixture();
+    let v1 = journal_item(&f, "Priya likes tea.", "entry");
+    f.engine
+        .apply(
+            &v1,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    f.engine
+        .remove_mention(&mention_id(&f, &v1, "Priya"))
+        .unwrap();
+
+    let v2 = journal_item(&f, "Priya likes tea a lot.", "entry");
+    replaces(&f, &v2, &v1);
+    f.engine
+        .apply(
+            &v2,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(mentions(&f, &v2)[0].4, "removed");
+    assert_eq!(status_of(&f, "Priya likes tea."), "letGo");
+}
+
+#[test]
+fn a_mention_confirmed_on_an_earlier_version_stays_confirmed_on_the_next() {
+    let f = fixture();
+    let v1 = journal_item(&f, "Priya likes tea.", "entry");
+    f.engine
+        .apply(
+            &v1,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    f.engine
+        .confirm_mention(&mention_id(&f, &v1, "Priya"), None)
+        .unwrap();
+
+    let v2 = journal_item(&f, "Priya likes tea a lot.", "entry");
+    replaces(&f, &v2, &v1);
+    f.engine
+        .apply(
+            &v2,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(mentions(&f, &v2)[0].4, "confirmed");
+}
+
+#[test]
+fn an_earlier_versions_open_question_closes_once_the_new_version_is_read() {
+    let f = fixture();
+    let (_jones, _patel) = two_sams(&f);
+    let v1 = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&v1, vec![sam_claim()]).unwrap();
+    assert_eq!(f.engine.same_name_questions(None).unwrap().len(), 1);
+
+    let v2 = journal_item(&f, "Priya made tea. Sam came to fix the sink.", "entry");
+    replaces(&f, &v2, &v1);
+    f.engine.apply(&v2, vec![sam_claim()]).unwrap();
+    let open = f.engine.same_name_questions(None).unwrap();
+    assert_eq!(open.len(), 1, "one question for the block, not two");
+    assert_eq!(open[0].receipt.item_id, v2);
+
+    let v3 = journal_item(&f, "Priya made tea.", "entry");
+    replaces(&f, &v3, &v2);
+    f.engine.apply(&v3, vec![]).unwrap();
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+}

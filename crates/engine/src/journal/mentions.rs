@@ -115,6 +115,31 @@ fn renumber(tx: &Transaction<'_>, item_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// The item and the versions it replaced, newest first.
+fn versions_of(tx: &Transaction<'_>, item_id: &str) -> Result<Vec<String>> {
+    let mut out = vec![item_id.to_string()];
+    out.extend(super::keep::earlier_versions(tx, item_id)?);
+    Ok(out)
+}
+
+/// What the person did with a name on the closest earlier version that has them do something.
+fn earlier_state(tx: &Transaction<'_>, item_id: &str, entity_id: &str) -> Result<Option<String>> {
+    for earlier in super::keep::earlier_versions(tx, item_id)? {
+        let state: Option<String> = tx
+            .query_row(
+                "SELECT state FROM mentions WHERE item_id = ?1 AND entity_id = ?2 \
+                 AND state != 'found'",
+                params![earlier, entity_id],
+                |r| r.get(0),
+            )
+            .optional()?;
+        if state.is_some() {
+            return Ok(state);
+        }
+    }
+    Ok(None)
+}
+
 /// Write what an item names. A thing the item already named keeps what the person did with it
 /// (confirmed, removed) and is never written twice. With `prune`, names a reading no longer
 /// finds, and the person has not touched, are dropped.
@@ -142,6 +167,11 @@ pub(crate) fn write_mentions(
             |r| r.get(0),
         )?;
         let at = text.as_deref().and_then(|t| locate(t, f, &name));
+        let existed: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM mentions WHERE item_id = ?1 AND entity_id = ?2)",
+            params![item_id, f.entity_id],
+            |r| r.get(0),
+        )?;
         tx.execute(
             "INSERT INTO mentions(id, item_id, entity_id, name, start, end, ord, new, created_at) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, ?8) \
@@ -158,6 +188,12 @@ pub(crate) fn write_mentions(
                 now
             ],
         )?;
+        if !existed && let Some(state) = earlier_state(tx, item_id, &f.entity_id)? {
+            tx.execute(
+                "UPDATE mentions SET state = ?3 WHERE item_id = ?1 AND entity_id = ?2",
+                params![item_id, f.entity_id, state],
+            )?;
+        }
     }
     if prune {
         let mut stmt = tx
@@ -349,17 +385,30 @@ pub(crate) fn route(
         })
         .optional()?
         .flatten();
+    let versions = versions_of(tx, item_id)?;
     let answered: Vec<(String, SameNameAnswer)> = {
         let mut stmt = tx.prepare(
-            "SELECT name, answer FROM name_questions WHERE item_id = ?1 AND answered_at IS NOT NULL",
+            "SELECT name, answer FROM name_questions WHERE item_id = ?1 AND answered_at IS NOT NULL \
+             ORDER BY answered_at DESC, id DESC",
         )?;
-        let rows: Vec<(String, Option<String>)> = stmt
-            .query_map([item_id], |r| Ok((r.get(0)?, r.get(1)?)))?
-            .collect::<rusqlite::Result<_>>()?;
-        rows.into_iter()
-            .filter_map(|(name, a)| Some((key_of(&name), serde_json::from_str(&a?).ok()?)))
-            .collect()
+        let mut all = Vec::new();
+        for version in &versions {
+            let rows: Vec<(String, Option<String>)> = stmt
+                .query_map([version], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            all.extend(
+                rows.into_iter()
+                    .filter_map(|(name, a)| Some((key_of(&name), serde_json::from_str(&a?).ok()?))),
+            );
+        }
+        all
     };
+    for earlier in &versions[1..] {
+        tx.execute(
+            "DELETE FROM name_questions WHERE item_id = ?1 AND answered_at IS NULL",
+            [earlier],
+        )?;
+    }
     let mut out: Vec<Routed> = Vec::new();
     let mut held: Vec<(String, String, Vec<SameNameOption>, Vec<Held>)> = Vec::new();
     for c in cands {
