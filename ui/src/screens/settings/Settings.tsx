@@ -60,19 +60,22 @@ function Select<V extends string | number>({
   options,
   onChange,
   describedBy,
+  labelledBy,
 }: {
   label: string;
   value: V;
   options: ReadonlyArray<{ value: V; label: string }>;
   onChange: (value: V) => void;
   describedBy?: string;
+  labelledBy?: string;
 }) {
   const id = useId();
   return (
     <select
       id={id}
       className={styles.select}
-      aria-label={label}
+      aria-label={labelledBy ? undefined : label}
+      aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       value={String(value)}
       onChange={(event) => {
@@ -86,6 +89,38 @@ function Select<V extends string | number>({
         </option>
       ))}
     </select>
+  );
+}
+
+/** The time of the evening reminder, named apart from its switch and described by its hint. */
+function ReminderTime({
+  value,
+  options,
+  onChange,
+}: {
+  value: string;
+  options: ReadonlyArray<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  const labelId = useId();
+  const hintId = useId();
+  return (
+    <div className={styles.reminderTime}>
+      <span id={labelId} hidden>
+        {t("journal.reminder.label")}
+      </span>
+      <span id={hintId} hidden>
+        {t("journal.reminder.hint")}
+      </span>
+      <Select
+        label={t("journal.reminder.label")}
+        labelledBy={`${labelId} ${hintId}`}
+        describedBy={hintId}
+        value={value}
+        options={options}
+        onChange={onChange}
+      />
+    </div>
   );
 }
 
@@ -359,14 +394,11 @@ export function Settings() {
             onChange={(on) => void save({ eveningReminder: { on, time: reminder.time } })}
           />
           {reminder.on ? (
-            <div className={styles.reminderTime}>
-              <Select
-                label={t("journal.reminder.label")}
-                value={reminder.time}
-                options={reminderTimes}
-                onChange={(time) => void save({ eveningReminder: { on: true, time } })}
-              />
-            </div>
+            <ReminderTime
+              value={reminder.time}
+              options={reminderTimes}
+              onChange={(time) => void save({ eveningReminder: { on: true, time } })}
+            />
           ) : null}
         </li>
 

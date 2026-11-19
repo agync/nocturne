@@ -541,7 +541,18 @@ describe("the evening reminder", () => {
     expect(row).toHaveAccessibleDescription(
       "A quiet nudge at a time you choose. It says nothing about your journal.",
     );
-    expect(screen.queryByRole("combobox", { name: "Evening reminder" })).toBeNull();
+    expect(screen.queryByRole("combobox", { name: /^Evening reminder/ })).toBeNull();
+  });
+
+  it("names the time apart from the switch and describes it with the hint", async () => {
+    await open();
+    const on = screen.getByRole("switch", { name: "Evening reminder" });
+    await userEvent.click(on);
+    const time = await screen.findByRole("combobox", { name: /^Evening reminder/ });
+    const hint = "A quiet nudge at a time you choose. It says nothing about your journal.";
+    expect(time).toHaveAccessibleName(`Evening reminder ${hint}`);
+    expect(time).toHaveAccessibleDescription(hint);
+    expect(time).not.toHaveAccessibleName(on.getAttribute("aria-label") ?? "Evening reminder");
   });
 
   it("turns on with a time field named after the row, and saves both", async () => {
@@ -551,7 +562,7 @@ describe("the evening reminder", () => {
     expect(spy).toHaveBeenLastCalledWith(
       expect.objectContaining({ eveningReminder: { on: true, time: "21:00" } }),
     );
-    const time = await screen.findByRole("combobox", { name: "Evening reminder" });
+    const time = await screen.findByRole("combobox", { name: /^Evening reminder/ });
     expect(time).toHaveDisplayValue("21:00");
     await userEvent.selectOptions(time, "20:30");
     expect(spy).toHaveBeenLastCalledWith(
@@ -563,13 +574,13 @@ describe("the evening reminder", () => {
     const { engine } = await open();
     const spy = vi.spyOn(engine, "updateSettings");
     await userEvent.click(screen.getByRole("switch", { name: "Evening reminder" }));
-    await screen.findByRole("combobox", { name: "Evening reminder" });
+    await screen.findByRole("combobox", { name: /^Evening reminder/ });
     await userEvent.click(screen.getByRole("switch", { name: "Evening reminder" }));
     expect(spy).toHaveBeenLastCalledWith(
       expect.objectContaining({ eveningReminder: { on: false, time: "21:00" } }),
     );
     await waitFor(() =>
-      expect(screen.queryByRole("combobox", { name: "Evening reminder" })).toBeNull(),
+      expect(screen.queryByRole("combobox", { name: /^Evening reminder/ })).toBeNull(),
     );
   });
 });
