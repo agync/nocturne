@@ -1,0 +1,340 @@
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { Period, ReflectionView } from "../../engine/bindings";
+import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
+import type { JournalMode } from "../../engine/mock/seed/journal";
+import { renderApp } from "../../test/render";
+
+const NOW = new Date("2026-11-19T21:20:00Z");
+
+function engineIn(mode: JournalMode = "day"): MockEngine {
+  return createMockEngine({ now: NOW, journal: { mode, delayMs: 0 } });
+}
+
+/** The same engine, with one view served in place of what it holds. */
+function serve(engine: MockEngine, change: (view: ReflectionView) => ReflectionView) {
+  const real = engine.getReflection.bind(engine);
+  engine.getReflection = async (period: Period) => change(await real(period));
+}
+
+const open = (hash: string, engine: MockEngine = engineIn()) => renderApp({ hash, engine });
+
+afterEach(() => {
+  window.location.hash = "";
+});
+
+describe("a day's reflection", () => {
+  it("says it was looked back on, and that it was written overnight", async () => {
+    open("#/journal/look-back/day/2026-11-18");
+    expect(await screen.findByText("Wednesday 18 November · Looked back on")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Wednesday 18 November" })).toBeTruthy();
+    expect(
+      screen.getByText(
+        /^Written overnight on this computer, from \d+ things? you kept that day\.$/,
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText(/so far/i)).toBeNull();
+  });
+
+  it("labels today's reflection so far, with the time it was written", async () => {
+    open("#/journal/look-back/day/2026-11-19");
+    expect(await screen.findByText("Today so far · at 3:15 pm")).toBeTruthy();
+    expect(
+      screen.getByText(/^Written on this computer at 3:15 pm from 6 things you kept that day\.$/),
+    ).toBeTruthy();
+  });
+
+  it("shows the sections in order, with a link back to the journal day", async () => {
+    open("#/journal/look-back/day/2026-11-19");
+    await screen.findByRole("heading", { level: 2, name: "The day" });
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+    expect(headings).toEqual([
+      "The day",
+      "How it felt",
+      "Good things",
+      "People and places",
+      "Still open",
+    ]);
+    const back = screen
+      .getAllByRole("link", { name: "Journal" })
+      .map((a) => a.getAttribute("href"));
+    expect(back).toContain("#/journal/2026-11-19");
+    expect(screen.getByRole("link", { name: "In Needs you ›" }).getAttribute("href")).toBe(
+      "#/needs-you",
+    );
+  });
+
+  it("makes each bold span a control that outlines its receipt chip", async () => {
+    open("#/journal/look-back/day/2026-11-19");
+    const span = await screen.findByRole("button", { name: "saw Priya" });
+    const chips = screen.getByRole("list", { name: "Where this came from" });
+    expect(within(chips).getAllByRole("link").length).toBeGreaterThan(0);
+    expect(chips.querySelector('[data-on="true"]')).toBeNull();
+    fireEvent.focus(span);
+    expect(chips.querySelector('[data-on="true"]')).not.toBeNull();
+    fireEvent.blur(span);
+    expect(chips.querySelector('[data-on="true"]')).toBeNull();
+  });
+
+  it("writes one sentence for each check-in, and lists them under Show as a table", async () => {
+    open("#/journal/look-back/day/2026-11-19");
+    await screen.findByText(/you checked in as/);
+    expect(screen.getByRole("link", { name: "tired" }).getAttribute("href")).toMatch(/^#\/items\//);
+    expect(document.body.textContent).toContain("At 8:05 am you checked in as tired: “Bad night.”");
+    fireEvent.click(screen.getByRole("button", { name: "Show as a table" }));
+    const table = await screen.findByRole("table");
+    const rows = within(table).getAllByRole("row");
+    expect(rows).toHaveLength(4);
+    expect(within(rows[1] as HTMLElement).getByText("8:05 am")).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).getByText("Low")).toBeTruthy();
+    expect(within(rows[1] as HTMLElement).getByText("tired")).toBeTruthy();
+  });
+
+  it("says only that the day was not described when there are no check-ins", async () => {
+    const engine = engineIn();
+    serve(engine, (view) =>
+      view.type === "written" ? { ...view, reflection: { ...view.reflection, felt: [] } } : view,
+    );
+    open("#/journal/look-back/day/2026-11-19", engine);
+    expect(await screen.findByText("You didn’t say how today felt.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show as a table" })).toBeNull();
+  });
+
+  it("says how many things are still being read, and offers to write it again when they are", async () => {
+    const engine = engineIn();
+    serve(engine, (view) =>
+      view.type === "written"
+        ? { ...view, reflection: { ...view.reflection, stillReading: 2 } }
+        : view,
+    );
+    const reflect = vi.spyOn(engine, "reflect");
+    open("#/journal/look-back/day/2026-11-19", engine);
+    expect(
+      await screen.findByText(
+        "2 things from today are still being read, so they aren’t in this yet.",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Write it again when they’re read" }));
+    await waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
+  });
+
+  it("says a line was taken out when what it came from was deleted", async () => {
+    const engine = engineIn();
+    serve(engine, (view) =>
+      view.type === "written"
+        ? { ...view, reflection: { ...view.reflection, linesRemoved: 1 } }
+        : view,
+    );
+    open("#/journal/look-back/day/2026-11-19", engine);
+    expect(
+      await screen.findByText("One line was taken out because what it came from was deleted."),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Write it again" }).length).toBeGreaterThan(1);
+  });
+
+  it("prints through the platform and offers no Listen", async () => {
+    const { platform } = open("#/journal/look-back/day/2026-11-19");
+    fireEvent.click(await screen.findByRole("button", { name: "Print" }));
+    await waitFor(() => expect((platform as unknown as { printed(): number }).printed()).toBe(1));
+    expect(screen.queryByText(/listen/i)).toBeNull();
+  });
+
+  it("deletes only the writing and says the entries are untouched", async () => {
+    const engine = engineIn();
+    const remove = vi.spyOn(engine, "deleteReflection");
+    open("#/journal/look-back/day/2026-11-19", engine);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this reflection" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(1));
+    expect(
+      await screen.findByText("Deleted. Your entries are untouched. You can write it again."),
+    ).toBeTruthy();
+    expect(await screen.findByRole("button", { name: "Reflect on today" })).toBeTruthy();
+  });
+});
+
+describe("writing it", () => {
+  it("writes once on arrival with write=1, then drops the parameter", async () => {
+    const engine = engineIn();
+    const reflect = vi.spyOn(engine, "reflect");
+    open("#/journal/look-back/day/2026-11-18?write=1", engine);
+    await screen.findByText(/Looked back on/);
+    await waitFor(() => expect(window.location.hash).toBe("#/journal/look-back/day/2026-11-18"));
+    expect(reflect).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows that it is writing, and stops when asked", async () => {
+    const engine = engineIn("writing");
+    const stop = vi.spyOn(engine, "stopReflecting");
+    open("#/journal/look-back/day/2026-11-19", engine);
+    expect(await screen.findByText("Looking back on your day…")).toBeTruthy();
+    expect(screen.getByText("This can take a minute on this computer.")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "At a glance" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await waitFor(() => expect(stop).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByText("Looking back on your day…")).toBeNull());
+  });
+
+  it("offers Reflect on this day when a day has no reflection yet", async () => {
+    const engine = engineIn();
+    await engine.deleteReflection({ kind: "day", start: "2026-11-18", end: "2026-11-18" });
+    open("#/journal/look-back/day/2026-11-18", engine);
+    expect(await screen.findByRole("button", { name: "Reflect on this day" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "At a glance" })).toBeTruthy();
+  });
+
+  it("says there is nothing to look back on, and says so for a period", async () => {
+    open("#/journal/look-back/day/2026-10-01");
+    expect(
+      await screen.findByText(
+        "Nothing to look back on yet. Keep something about today, and come back.",
+      ),
+    ).toBeTruthy();
+    window.location.hash = "#/journal/look-back/week/2026-10-05";
+    expect(await screen.findByText("Nothing was kept this week.")).toBeTruthy();
+  });
+
+  it("says it could not write, and tries again", async () => {
+    const engine = engineIn();
+    engine.reflect = async () => {
+      throw new Error("no");
+    };
+    open("#/journal/look-back/day/2026-11-18?write=1", engine);
+    expect(
+      await screen.findByText("Nocturne couldn’t write this just now. Your entries are safe."),
+    ).toBeTruthy();
+    const again = vi.spyOn(engine, "reflect");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(again).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe("at a glance", () => {
+  it("leads with the line for a day that is not ready", async () => {
+    open("#/journal/look-back/day/2026-11-19", engineIn("notready"));
+    expect(
+      await screen.findByText(
+        "Nocturne can write about this day once it is ready. Until then, here is the day at a glance.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "At a glance" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Reflect on today" })).toBeNull();
+  });
+
+  it("leads with the line for a computer that lists rather than writes", async () => {
+    open("#/journal/look-back/day/2026-11-19", engineIn("glance"));
+    expect(
+      await screen.findByText(
+        "On this computer, Nocturne lists the day rather than writing about it.",
+      ),
+    ).toBeTruthy();
+  });
+
+  it("lists what was kept, how it felt, who and where, and the entry, each one opening what it counts", async () => {
+    open("#/journal/look-back/day/2026-11-19", engineIn("glance"));
+    await screen.findByRole("heading", { name: "At a glance" });
+    expect(document.body.textContent).toMatch(/\d+ things kept: .*notes?/);
+    expect(document.body.textContent).toContain("Felt: tired (8:05 am)");
+    expect(document.body.textContent).toMatch(/With: .*Priya \(new\)/);
+    const priya = screen.getByRole("link", { name: "Priya" });
+    expect(priya.getAttribute("href")).toMatch(/^#\/memories\//);
+    const notes = screen.getByRole("button", { name: /notes$/ });
+    expect(notes.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(notes);
+    expect(await screen.findByRole("list", { name: "Items kept" })).toBeTruthy();
+  });
+});
+
+describe("a week, month or year", () => {
+  it("shows every section of the week in the design's order", async () => {
+    open("#/journal/look-back/week/2026-11-09");
+    expect(await screen.findByRole("heading", { level: 1, name: "Your week" })).toBeTruthy();
+    expect(screen.getByText("9 to 15 November")).toBeTruthy();
+    const headings = screen.getAllByRole("heading").map((h) => h.textContent);
+    const order = [
+      "Highlights",
+      "How it felt",
+      "Words you used most",
+      "What tended to go together",
+      "Good things",
+      "People and places",
+      "New this week",
+      "What changed",
+      "Still open",
+    ];
+    let at = -1;
+    for (const name of order) {
+      const found = headings.indexOf(name);
+      expect(found, name).toBeGreaterThan(at);
+      at = found;
+    }
+    expect(
+      screen.getByText("On 3 of the 4 days you saw Gran, you checked in as settled."),
+    ).toBeTruthy();
+    const words = screen.getByRole("button", { name: /^tired, / });
+    expect(words.closest("li")?.textContent).toMatch(/tired\d+$/);
+    expect(
+      screen.getByText(
+        /^Written on this computer overnight on Sunday, from \d+ days in your journal\.$/,
+      ),
+    ).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "Show as a table" }).length).toBe(2);
+    expect(screen.getByText("Gran · 4 days")).toBeTruthy();
+  });
+
+  it("lists the week's check-ins under Show as a table", async () => {
+    open("#/journal/look-back/week/2026-11-09");
+    await screen.findByRole("heading", { name: "How it felt" });
+    fireEvent.click(screen.getAllByRole("button", { name: "Show as a table" })[0] as HTMLElement);
+    const table = await screen.findByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Day" })).toBeTruthy();
+    expect(within(table).getAllByRole("row").length).toBeGreaterThan(1);
+  });
+
+  it("says there were no check-ins, and nothing else about feelings", async () => {
+    const engine = engineIn();
+    serve(engine, (view) =>
+      view.type === "recap"
+        ? { ...view, recap: { ...view.recap, checkins: [], words: [], together: [] } }
+        : view,
+    );
+    open("#/journal/look-back/week/2026-11-09", engine);
+    expect(await screen.findByText("No check-ins this week.")).toBeTruthy();
+    expect(screen.queryByText("Words you used most")).toBeNull();
+  });
+
+  it("compares a month with the one before in counts only", async () => {
+    open("#/journal/look-back/month/2026-11-01");
+    expect(await screen.findByRole("heading", { level: 1, name: "Your month" })).toBeTruthy();
+    expect(screen.getByText(/^November 2026 · So far, at 9:40 pm$/)).toBeTruthy();
+    expect(screen.queryByText(/better|worse/)).toBeNull();
+  });
+
+  it("shows a year's Firsts and leaves out Still open", async () => {
+    const engine = engineIn();
+    const real = engine.getReflection.bind(engine);
+    engine.getReflection = async (period: Period) => {
+      if (period.kind !== "year") return real(period);
+      const month = await real({ kind: "month", start: "2026-11-01", end: "2026-11-30" });
+      if (month.type !== "recap") throw new Error("seed has no month");
+      return {
+        type: "recap",
+        recap: { ...month.recap, period, soFar: false, stillOpen: [], changed: [] },
+      };
+    };
+    open("#/journal/look-back/year/2026-01-01", engine);
+    expect(await screen.findByRole("heading", { level: 1, name: "Your year" })).toBeTruthy();
+    expect(screen.getByText("2026")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Firsts" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Still open" })).toBeNull();
+    expect(screen.getByRole("list", { name: "Check-ins for each month of the year" })).toBeTruthy();
+  });
+
+  it("offers to look back on a period that is still going", async () => {
+    const engine = engineIn();
+    await engine.deleteReflection({ kind: "month", start: "2026-11-01", end: "2026-11-30" });
+    open("#/journal/look-back/month/2026-11-01", engine);
+    expect(
+      await screen.findByRole("button", { name: "Look back on this month so far" }),
+    ).toBeTruthy();
+  });
+});
