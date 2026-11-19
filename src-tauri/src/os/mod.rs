@@ -40,6 +40,8 @@ const QUICK_CAPTURE_COMMANDS: &[&str] = &[
     "get_status",
     "get_settings",
     "keep_text",
+    "keep_note",
+    "top_feeling_words",
     "keep_files",
     "take_quick_drop",
     "keep_bytes",
