@@ -6,6 +6,7 @@
 #![allow(dead_code)]
 
 pub mod help;
+pub mod journal;
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
