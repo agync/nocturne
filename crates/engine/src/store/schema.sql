@@ -278,3 +278,37 @@ CREATE TRIGGER memories_stem_au AFTER UPDATE OF sentence, subject, object ON mem
   INSERT INTO memories_stem(rowid, sentence, subject, object)
   VALUES (new.rowid, new.sentence, new.subject, new.object);
 END;
+
+-- migration 12
+-- The journal (docs/design/journaling.md). Journal roles, days, blocks and versions live in
+-- items.metadata (`journal`, `journal_day`, `block`, `replaces`, `about`, `feeling`, `line`,
+-- `urge`, `tried`, `photo`, `alt`).
+ALTER TABLE items ADD COLUMN left_out INTEGER NOT NULL DEFAULT 0;
+-- An entry block is read once the person has stopped writing for a while.
+ALTER TABLE items ADD COLUMN hold_until TEXT;
+CREATE INDEX items_journal_day ON items(json_extract(metadata, '$.journal_day'))
+  WHERE json_extract(metadata, '$.journal_day') IS NOT NULL;
+-- The third sensitivity: read from an entry or a good thing. Kept out of audio, notifications,
+-- the tray and a phone's lock screen.
+ALTER TABLE memories ADD COLUMN journal INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE mentions(
+  id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  entity_id TEXT NOT NULL REFERENCES entities(id) ON DELETE CASCADE, name TEXT NOT NULL,
+  start INTEGER, end INTEGER, ord INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'found',
+  new INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, UNIQUE(item_id, entity_id));
+CREATE INDEX mentions_entity ON mentions(entity_id);
+-- Reflections and recaps: derived, one per period, deleted with Delete everything.
+CREATE TABLE reflections(
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, start TEXT NOT NULL, end TEXT NOT NULL,
+  written_at TEXT NOT NULL, written TEXT NOT NULL, so_far INTEGER NOT NULL,
+  from_count INTEGER NOT NULL, lines_removed INTEGER NOT NULL DEFAULT 0, body TEXT NOT NULL,
+  UNIQUE(kind, start));
+CREATE TABLE reflection_cites(
+  reflection_id TEXT NOT NULL REFERENCES reflections(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL, PRIMARY KEY(reflection_id, item_id));
+CREATE INDEX reflection_cites_item ON reflection_cites(item_id);
+-- "Which {name} is this?": the reading held back until the person answers.
+CREATE TABLE name_questions(
+  id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  name TEXT NOT NULL, quote TEXT NOT NULL, options TEXT NOT NULL, candidates TEXT NOT NULL,
+  created_at TEXT NOT NULL, answered_at TEXT, answer TEXT);

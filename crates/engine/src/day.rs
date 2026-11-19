@@ -76,6 +76,40 @@ pub fn window(
     }
 }
 
+/// Minutes after midnight, on the morning after a journal day, at which that day ends: 4:00 am,
+/// or half an hour before a page time earlier than 4:30 am, so the page always comes after the
+/// day it looks back on. Negative when that is before midnight.
+pub fn journal_cutoff(page_hm: (i8, i8)) -> i64 {
+    let page = i64::from(page_hm.0) * 60 + i64::from(page_hm.1);
+    if page < 4 * 60 + 30 {
+        page - 30
+    } else {
+        4 * 60
+    }
+}
+
+/// The journal day an instant belongs to: a note kept at 12:40 am belongs to the evening before.
+pub fn journal_day_of(t: Timestamp, page_hm: (i8, i8), tz: &TimeZone) -> Result<Date> {
+    let local = t.to_zoned(tz.clone()).datetime();
+    let shifted = local.checked_sub(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?;
+    Ok(shifted.date())
+}
+
+/// The instants a journal day runs between: `[start, end)`. On a DST night a day is 23 or 25
+/// hours; a cutoff inside a spring-forward gap resolves to the instant just after the gap.
+pub fn journal_day_bounds(
+    day: Date,
+    page_hm: (i8, i8),
+    tz: &TimeZone,
+) -> Result<(Timestamp, Timestamp)> {
+    let edge = |d: Date| -> Result<Timestamp> {
+        let midnight = d.tomorrow()?.at(0, 0, 0, 0);
+        let at = midnight.checked_add(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?;
+        Ok(tz.to_ambiguous_zoned(at).compatible()?.timestamp())
+    };
+    Ok((edge(day.yesterday()?)?, edge(day)?))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,5 +272,41 @@ mod tests {
         assert_eq!(w.start, ts("2026-11-01T10:00:00Z"));
         let bare = window(d("2026-11-13"), (7, 0), &london, None, None).unwrap();
         assert_eq!(bare.end.duration_since(bare.start).as_hours(), 24);
+    }
+
+    #[test]
+    fn a_note_after_midnight_belongs_to_the_evening_before() {
+        let london = tz("Europe/London");
+        // 00:40 GMT on Friday 20 November is Thursday's journal.
+        let day = journal_day_of(ts("2026-11-20T00:40:00Z"), (7, 0), &london).unwrap();
+        assert_eq!(day, d("2026-11-19"));
+        let day = journal_day_of(ts("2026-11-20T04:00:00Z"), (7, 0), &london).unwrap();
+        assert_eq!(day, d("2026-11-20"));
+        let (start, end) = journal_day_bounds(d("2026-11-19"), (7, 0), &london).unwrap();
+        assert_eq!(start, ts("2026-11-19T04:00:00Z"));
+        assert_eq!(end, ts("2026-11-20T04:00:00Z"));
+    }
+
+    #[test]
+    fn an_early_page_ends_the_day_half_an_hour_before_it() {
+        let london = tz("Europe/London");
+        assert_eq!(journal_cutoff((2, 0)), 90);
+        assert_eq!(journal_cutoff((4, 30)), 240);
+        assert_eq!(journal_cutoff((0, 10)), -20);
+        // A page at 00:10 ends the day at 23:40 the same evening.
+        let (_, end) = journal_day_bounds(d("2026-11-19"), (0, 10), &london).unwrap();
+        assert_eq!(end, ts("2026-11-19T23:40:00Z"));
+        let day = journal_day_of(ts("2026-11-19T23:50:00Z"), (0, 10), &london).unwrap();
+        assert_eq!(day, d("2026-11-20"));
+    }
+
+    #[test]
+    fn journal_days_meet_end_to_end_across_the_clock_change() {
+        let london = tz("Europe/London");
+        // The clocks go back at 2:00 am on 25 October, inside the journal day of the 24th.
+        let (start, end) = journal_day_bounds(d("2026-10-24"), (7, 0), &london).unwrap();
+        let (next_start, _) = journal_day_bounds(d("2026-10-25"), (7, 0), &london).unwrap();
+        assert_eq!(end, next_start);
+        assert_eq!(end.duration_since(start).as_hours(), 25);
     }
 }
