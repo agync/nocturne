@@ -202,6 +202,15 @@ impl Engine {
                 });
             }
             let pages_affected = pages_citing(tx, &all)?.len() as u32;
+            // Lines in reflections and recaps that cite what will be deleted come out with it.
+            let mut doomed: Vec<String> = Vec::new();
+            if include_originals {
+                for o in originals.iter().filter(|o| o.removable) {
+                    doomed.push(o.item_id.clone());
+                    doomed.extend(crate::journal::keep::earlier_versions(tx, &o.item_id)?);
+                }
+            }
+            let reflection_lines = crate::journal::store::count_lines(tx, &doomed)?;
             let token = new_id_hex();
             tx.execute(
                 "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at) \
@@ -215,7 +224,7 @@ impl Engine {
                 ],
             )?;
             Ok(ForgetPreview {
-                reflection_lines: None,
+                reflection_lines: (reflection_lines > 0).then_some(reflection_lines),
                 token,
                 memories: memories
                     .into_iter()
@@ -434,6 +443,8 @@ impl Engine {
             redact_pages(tx, &sole, &pages, Some(item_id))?;
             // The item's own row (text, summary and search rows with it) goes now, with its
             // original recorded for shredding in the same transaction.
+            crate::journal::store::scrub_items(tx, &[item_id.to_string()])?;
+            delete_earlier_versions(tx, &dir, job, item_id)?;
             tx.execute("DELETE FROM items WHERE id = ?1", [item_id])?;
             let pending = matches!(status.as_str(), "kept" | "reading");
             forget_in_pages(tx, &kept_at, pending)?;
@@ -528,6 +539,8 @@ impl Engine {
                             )
                             .optional()?;
                         if let Some((sha, ext, file_name)) = row {
+                            crate::journal::store::scrub_items(tx, std::slice::from_ref(item))?;
+                            delete_earlier_versions(tx, &dir, job, item)?;
                             tx.execute("DELETE FROM items WHERE id = ?1", [item])?;
                             if file_name.is_some() {
                                 doomed.push(original_path(&dir, &sha, ext.as_deref()));
@@ -643,6 +656,61 @@ fn shred_in(dir: &Path, files: &[PathBuf]) {
             fsutil::shred(file);
         }
     }
+}
+
+/// Deleting an entry block deletes its earlier versions with it: their rows, the memories only
+/// they support, their reflection lines, and their files (recorded on the job for shredding).
+fn delete_earlier_versions(tx: &Transaction<'_>, dir: &Path, job: i64, item: &str) -> Result<()> {
+    let earlier = crate::journal::keep::earlier_versions(tx, item)?;
+    if earlier.is_empty() {
+        return Ok(());
+    }
+    let mut sole: BTreeSet<String> = BTreeSet::new();
+    for e in &earlier {
+        let mut stmt =
+            tx.prepare_cached("SELECT memory_id FROM memory_sources WHERE item_id = ?1")?;
+        let mems: Vec<String> = stmt
+            .query_map([e], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?;
+        for m in mems {
+            let others: u32 = tx.query_row(
+                "SELECT COUNT(*) FROM memory_sources WHERE memory_id = ?1 AND item_id NOT IN \
+                 (SELECT value FROM json_each(?2))",
+                params![m, serde_json::to_string(&earlier)?],
+                |r| r.get(0),
+            )?;
+            if others == 0 {
+                sole.insert(m);
+            }
+        }
+    }
+    let sole: Vec<String> = sole.into_iter().collect();
+    let mut files = Vec::new();
+    if !sole.is_empty() {
+        let pages = pages_citing(tx, &sole)?;
+        redact_pages(tx, &sole, &pages, None)?;
+        files.extend(drop_audio_rows(tx, &pages)?);
+        for m in &sole {
+            purge_memory(tx, m)?;
+        }
+    }
+    crate::journal::store::scrub_items(tx, &earlier)?;
+    for e in &earlier {
+        let row: Option<(String, Option<String>, Option<String>)> = tx
+            .query_row(
+                "SELECT sha256, ext, file_name FROM items WHERE id = ?1",
+                [e],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+            )
+            .optional()?;
+        if let Some((sha, ext, file_name)) = row {
+            tx.execute("DELETE FROM items WHERE id = ?1", [e])?;
+            if file_name.is_some() {
+                files.push(original_path(dir, &sha, ext.as_deref()));
+            }
+        }
+    }
+    append_job_files(tx, job, &files)
 }
 
 /// Remember files a forget must shred, in the same transaction that makes them unreachable.
