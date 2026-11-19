@@ -8,7 +8,11 @@ import {
   EngineProvider,
   EVENT_INVALIDATIONS,
   useAsk,
+  useJournalDay,
+  useJournalDays,
   usePage,
+  usePeriods,
+  useReflection,
   useStatus,
 } from "./context";
 import { createMockEngine } from "./mock/engine";
@@ -288,5 +292,40 @@ describe("shell hand-offs", () => {
       await result.current.ask("dentist");
     });
     expect(cancel).toHaveBeenCalledWith(first);
+  });
+});
+
+describe("journal queries", () => {
+  const JOURNAL_NOW = new Date("2026-11-19T21:20:00Z");
+
+  it("reads a day, the days, the periods and a reflection under the journal key", async () => {
+    const engine = createMockEngine({ now: JOURNAL_NOW });
+    const client = createQueryClient();
+    const { result } = renderHook(
+      () => ({
+        day: useJournalDay(),
+        days: useJournalDays(),
+        weeks: usePeriods("week"),
+        reflection: useReflection({ kind: "day", start: "2026-11-19", end: "2026-11-19" }),
+        none: useReflection(null),
+      }),
+      { wrapper: wrapper(engine, client) },
+    );
+    await waitFor(() => expect(result.current.reflection.data?.type).toBe("written"));
+    expect(result.current.day.data?.day).toBe("2026-11-19");
+    expect(result.current.days.data?.at(-1)).toBe("2026-11-19");
+    expect(result.current.weeks.data?.[0]?.period.kind).toBe("week");
+    expect(result.current.none.fetchStatus).toBe("idle");
+    expect(client.getQueryCache().findAll({ queryKey: ["journal"] })).toHaveLength(5);
+  });
+
+  it("reads the day again when an item changes", async () => {
+    const engine = createMockEngine({ now: JOURNAL_NOW });
+    const { result } = renderHook(() => useJournalDay(), { wrapper: wrapper(engine) });
+    await waitFor(() => expect(result.current.data?.entry).toHaveLength(4));
+    await act(async () => {
+      await engine.saveEntryText("2026-11-19", null, 4, "One more line.");
+    });
+    await waitFor(() => expect(result.current.data?.entry).toHaveLength(5));
   });
 });
