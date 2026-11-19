@@ -826,6 +826,51 @@ struct ItemInfo {
     /// store keeps only the UTC instant, so a keep made just before midnight in another zone
     /// may count as the next or previous day.
     kept_on: String,
+    /// What the item is in the journal (`entry`, `good` or `checkin`), when it is a journal item.
+    journal: Option<String>,
+}
+
+impl ItemInfo {
+    /// Memories read from this item carry the journal mark.
+    fn marks_memories(&self) -> bool {
+        matches!(self.journal.as_deref(), Some("entry" | "good"))
+    }
+}
+
+/// What reading needs to know about an item.
+fn load_item_info(
+    tx: &Transaction<'_>,
+    item_id: &str,
+    today: &str,
+    tz: &jiff::tz::TimeZone,
+) -> Result<ItemInfo> {
+    let (trust, origin, private, kept_at, journal): (
+        String,
+        Option<String>,
+        bool,
+        String,
+        Option<String>,
+    ) = tx
+        .query_row(
+            "SELECT trust, origin, private, kept_at, json_extract(metadata, '$.journal') \
+             FROM items WHERE id = ?1",
+            [item_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+        )
+        .optional()?
+        .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
+    let kept_on = kept_at
+        .parse::<jiff::Timestamp>()
+        .map(|t| t.to_zoned(tz.clone()).date().to_string())
+        .unwrap_or_else(|_| today.to_string());
+    Ok(ItemInfo {
+        trusted: trust == "trusted",
+        private,
+        origin,
+        kept_at,
+        kept_on,
+        journal,
+    })
 }
 
 /// The thing a subject is filed under: the live one with that name key, whatever its kind
@@ -1022,6 +1067,22 @@ pub(crate) fn is_private_chain(conn: &rusqlite::Connection, id: &str) -> Result<
     Ok(false)
 }
 
+/// Whether a memory, or any version of it, was read from an entry or a good thing. Private is
+/// checked first by every caller: a memory with a private source is private whatever else it
+/// is. An unknown id is no journal memory (it already counts as private).
+pub(crate) fn is_journal_chain(conn: &rusqlite::Connection, id: &str) -> Result<bool> {
+    for v in chain(conn, id)? {
+        let marked: bool =
+            conn.query_row("SELECT journal FROM memories WHERE id = ?1", [&v], |r| {
+                r.get(0)
+            })?;
+        if marked {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn span_json(c: &Candidate) -> Option<String> {
     c.span.as_ref().and_then(|s| serde_json::to_string(s).ok())
 }
@@ -1066,25 +1127,7 @@ fn apply(
             ))
         })
         .collect();
-    let (trust, origin, private, kept_at): (String, Option<String>, bool, String) = tx
-        .query_row(
-            "SELECT trust, origin, private, kept_at FROM items WHERE id = ?1",
-            [item_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .optional()?
-        .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
-    let kept_on = kept_at
-        .parse::<jiff::Timestamp>()
-        .map(|t| t.to_zoned(tz.clone()).date().to_string())
-        .unwrap_or_else(|_| today.to_string());
-    let item = ItemInfo {
-        trusted: trust == "trusted",
-        private,
-        origin,
-        kept_at,
-        kept_on,
-    };
+    let item = load_item_info(tx, item_id, today, tz)?;
     let mut report = ApplyReport::default();
 
     // Applying is idempotent per item: detach what this item said before, apply again, then
@@ -1192,23 +1235,7 @@ fn apply(
     }
     report.conflicts = open_conflicts;
 
-    // What a private item says is private: every memory now linked to it, whether it made the
-    // memory, agreed with it, or kept a tombstone link. (Early returns in `apply_one` skip the
-    // report lists, so the links are the truth.)
-    let mut files = Vec::new();
-    if item.private {
-        let linked: Vec<String> = {
-            let mut stmt = tx.prepare(
-                "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-                 WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
-            )?;
-            stmt.query_map([item_id], |r| r.get(0))?
-                .collect::<rusqlite::Result<_>>()?
-        };
-        for id in &linked {
-            files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
-        }
-    }
+    let files = settle_links(tx, item_id, &item)?;
 
     let status = if !item.trusted {
         "unconfirmed"
@@ -1228,6 +1255,37 @@ fn apply(
         ],
     )?;
     Ok((report, files))
+}
+
+/// What an item says takes its sensitivity: every memory now linked to it, whether it made the
+/// memory, agreed with it, or kept a tombstone link, is private when the item is, and carries
+/// the journal mark when the item is an entry or a good thing. (Early returns in `apply_one`
+/// skip the report lists, so the links are the truth.) Returns the files a private memory
+/// let go of.
+fn settle_links(tx: &Transaction<'_>, item_id: &str, item: &ItemInfo) -> Result<Vec<PathBuf>> {
+    let mut files = Vec::new();
+    if !item.private && !item.marks_memories() {
+        return Ok(files);
+    }
+    let linked: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+             WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
+        )?;
+        stmt.query_map([item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    for id in &linked {
+        if item.private {
+            files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
+        }
+        if item.marks_memories() {
+            for v in chain(tx, id)? {
+                tx.execute("UPDATE memories SET journal = 1 WHERE id = ?1", [&v])?;
+            }
+        }
+    }
+    Ok(files)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -2096,8 +2154,8 @@ impl Engine {
         })
     }
 
-    /// The same entries as `needs_you`, without anything private, for places that must never
-    /// show private content: notifications, the tray, a locked window.
+    /// The same entries as `needs_you`, without anything private or from the journal, for places
+    /// that must never show it: notifications, the tray, a locked window.
     pub fn needs_you_public(&self) -> Result<Vec<NeedsYouEntry>> {
         let tz = self.clock().tz();
         let today = self.clock().now().to_zoned(tz).date();
@@ -2108,12 +2166,13 @@ impl Engine {
                     NeedsYouEntry::Due { memory, .. }
                     | NeedsYouEntry::Promise { memory, .. }
                     | NeedsYouEntry::Unconfirmed { memory, .. } => {
-                        is_private_chain(conn, &memory.id)?
+                        is_private_chain(conn, &memory.id)? || is_journal_chain(conn, &memory.id)?
                     }
                     NeedsYouEntry::Which { options, .. } => {
                         let mut any = false;
                         for o in options {
-                            any |= is_private_chain(conn, &o.memory_id)?;
+                            any |= is_private_chain(conn, &o.memory_id)?
+                                || is_journal_chain(conn, &o.memory_id)?;
                         }
                         any
                     }
