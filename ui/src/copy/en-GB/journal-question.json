@@ -19,6 +19,5 @@
   "journal.question.add.button": "Add",
   "journal.question.added": "“{line}” Added.",
   "journal.question.open": "Open today’s journal ›",
-  "journal.timeline.about": "About: “{sentence}”",
-  "journal.timeline.emptyPast": "Nothing was kept on this day."
+  "journal.timeline.about": "About: “{sentence}”"
 }

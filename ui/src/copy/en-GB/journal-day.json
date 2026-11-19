@@ -4,6 +4,7 @@
   "journal.entry.paragraph": "Your entry, paragraph {number}",
   "journal.entry.photoAlt": "Photo in your entry",
   "journal.timeline.fromDevice": "from {phone}",
+  "journal.timeline.emptyPast": "Nothing was kept on this day.",
   "journal.timeline.rowMenu": "More about this",
   "journal.timeline.openAbout": "Open what it was about",
   "journal.good.photoChosen": "Photo from today: {name}"
