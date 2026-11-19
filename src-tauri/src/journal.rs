@@ -60,8 +60,8 @@ pub struct Reflecting {
 }
 
 impl Reflecting {
-    /// Set whether reflections are written regardless of the size of computer: for tests, the
-    /// mock and the journal check itself. `None` goes back to [`WRITES_REFLECTIONS`].
+    /// Set whether reflections are written regardless of the size of computer: for tests and
+    /// the journal check itself. `None` goes back to [`WRITES_REFLECTIONS`].
     pub fn set_writes(&self, writes: Option<bool>) {
         *self.writes.lock().unwrap_or_else(|e| e.into_inner()) = writes;
     }
