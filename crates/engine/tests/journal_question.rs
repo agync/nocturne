@@ -473,13 +473,35 @@ fn condition_6_a_memory_that_is_not_active_is_not_asked() {
 
 #[test]
 fn condition_6_a_safety_memory_is_not_asked() {
+    for tag in ["health", "Allergy", "medication"] {
+        let w = world();
+        sql(
+            &w.f,
+            "UPDATE memories SET tags = ?2 WHERE id = ?1",
+            params![w.memory, format!("[\"{tag}\"]")],
+        );
+        no_journal_question(&w);
+    }
+}
+
+#[test]
+fn never_a_memory_labelled_health_money_or_id() {
+    for tag in ["money", "passport", "insurance"] {
+        let w = world();
+        sql(
+            &w.f,
+            "UPDATE memories SET tags = ?2 WHERE id = ?1",
+            params![w.memory, format!("[\"{tag}\"]")],
+        );
+        no_journal_question(&w);
+    }
     let w = world();
     sql(
         &w.f,
-        "UPDATE memories SET tags = '[\"health\"]' WHERE id = ?1",
+        "UPDATE memories SET tags = '[\"appointment\"]' WHERE id = ?1",
         [&w.memory],
     );
-    no_journal_question(&w);
+    assert!(asks_from_the_journal(&w), "a plain label is fine");
 }
 
 #[test]
