@@ -1,3 +1,4 @@
+import { choiceText } from "../../components/PageSheet/journalQuestion";
 import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
@@ -158,6 +159,17 @@ export function timelineRow(row: TimelineRow): DeleteRow | null {
       tag: t("journal.delete.goodThing"),
       feel: null,
       text: row.good?.text ?? item.title,
+      tail: null,
+      changed: null,
+    };
+  }
+  if (row.kind === "answer" && row.answer) {
+    return {
+      ...base,
+      icon: iconOf(item),
+      tag: null,
+      feel: choiceText(row.answer.choice),
+      text: quoted(row.answer.line),
       tail: null,
       changed: null,
     };

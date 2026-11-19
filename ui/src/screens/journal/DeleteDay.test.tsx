@@ -158,6 +158,37 @@ describe("Delete this day", () => {
     expect(within(dialog).getByText(/cite these and will be taken out\.$/)).toBeInTheDocument();
   });
 
+  it("names an answer by its choice, with its line in quotes when there is one", async () => {
+    const engine = createMockEngine({
+      now: NOW,
+      journalQuestion: true,
+      journal: { mode: "day", delayMs: 0 },
+    });
+    await engine.answerQuestion((await engine.getPage()).date, "notGreat");
+    const { dialog } = await open(engine);
+    const kept = within(dialog).getByRole("region", { name: "Kept on this day" });
+    expect(within(kept).getByRole("checkbox", { name: "Not great" })).toBeInTheDocument();
+    expect(within(kept).getByText("Not great")).toBeInTheDocument();
+    for (const row of within(kept).getAllByRole("checkbox")) {
+      expect(row.closest("label")?.getAttribute("title")).not.toBe("");
+    }
+  });
+
+  it("names an answer with a line by the choice then the line", async () => {
+    const engine = createMockEngine({
+      now: NOW,
+      journalQuestion: true,
+      journal: { mode: "day", delayMs: 0 },
+    });
+    const date = (await engine.getPage()).date;
+    await engine.answerQuestion(date, "fine");
+    await engine.addAnswerLine(date, "Better than I feared.");
+    const { dialog } = await open(engine);
+    expect(
+      within(dialog).getByRole("checkbox", { name: "Fine “Better than I feared.”" }),
+    ).toBeInTheDocument();
+  });
+
   it("says what else goes: the memories, the reflection and what is out of reach", async () => {
     const { dialog } = await open();
     expect(
