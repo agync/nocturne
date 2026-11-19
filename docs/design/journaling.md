@@ -649,7 +649,7 @@ page when it is new.
 is written the night after it ends. A month is written the night after its last day, a year the
 night after 31 December. Each can also be asked for on demand while it is still going: "Look back
 on this week so far". A recap is put together from what is already stored, with no sentence written
-for it, so it shows on every computer (proposed, awaiting the owner's approval; see
+for it, so it shows on every computer (see
 [Journaling follow-ups](journaling-follow-ups.md)). A deleted recap is not put together again unless the person
 asks.
 
@@ -694,8 +694,7 @@ October"), never in judgements ("better", "worse").
 
 **States.** Empty period: "Nothing was kept this week." and nothing else. A period with only
 things kept from elsewhere: the recap is "At a glance" only. Not ready: the recap from what has
-been read, with a line saying what is still being read (proposed, awaiting approval; this was
-"At a glance" for the period). A recap that cites a deleted entry: the line is taken out, as for
+been read, with a line saying what is still being read (this was "At a glance" for the period). A recap that cites a deleted entry: the line is taken out, as for
 a reflection.
 
 ### 10. The morning page
@@ -910,7 +909,7 @@ came back clear" stays here unless the person chose to send such lines.
 **What never goes online.** Reflections, recaps and check-ins, including the words, points and
 lines of a check-in and any summary of them. They are written on this computer, even when Online answers is
 on. A computer that cannot write a reflection itself shows "At a glance" instead; recaps need no
-writing (proposed, see [Journaling follow-ups](journaling-follow-ups.md)).
+writing (see [Journaling follow-ups](journaling-follow-ups.md)).
 
 **Someone else at the computer.** Nocturne has no lock of its own; the computer's own sign-in is
 the lock. A setting "Hide the journal from the rail" is out of scope for now.
@@ -1091,8 +1090,8 @@ A short record to add under `docs/adr/` with the build.
 | At a glance | Always, instantly | Not needed | No |
 | Reflection on today so far | "Reflect on today" | Not written | Yes |
 | Reflection on the day that ended | "Reflect on this day" | Written in the tidy, before the page | Yes |
-| Week, month, year recap so far | "Look back on this week so far" | Not written | No (proposed; was yes) |
-| Week, month, year recap when the period ends | Not needed | Put together in the tidy after the day's reflection | No (proposed; was yes) |
+| Week, month, year recap so far | "Look back on this week so far" | Not written | No (was yes) |
+| Week, month, year recap when the period ends | Not needed | Put together in the tidy after the day's reflection | No (was yes) |
 | The journal's line on the page | Not needed | Written with the page | No |
 
 **The day's end and the night's work.** A day ends at the boundary in [What a day is](#what-a-day-is).
@@ -1110,7 +1109,7 @@ missed reflections in the catch-up, newest first, and stops at seven days back; 
 one keep "Reflect on this day".
 
 **A gate for each size of computer.** As for help: before a size of computer writes reflections
-(and only reflections: recaps need no writing, proposed in
+(and only reflections: recaps need no writing, decided in
 [Journaling follow-ups](journaling-follow-ups.md)), an evaluation set of journal days must pass: every sentence carries a receipt, no feeling is
 written that no check-in or quote supports, no advice, no invented people. A size that fails shows
 "At a glance" and the line "On this computer, Nocturne lists the day rather than writing about
@@ -1172,7 +1171,7 @@ The owner answered every open question on 2026-11-19.
 | 5 | An evening reminder | B: optional, off by default, with no journal content in it |
 | 6 | The morning page link | B: one quiet line when a reflection or recap is new |
 | 7 | The one question from the journal | B: at most once a week, and never read aloud. The rule and templates are in [Journaling follow-ups](journaling-follow-ups.md) |
-| 8 | Recaps on a computer that cannot write them | A: "At a glance" only, never written online. Proposed change, awaiting the owner: recaps on every computer, never online (see [Journaling follow-ups](journaling-follow-ups.md)) |
+| 8 | Recaps on a computer that cannot write them | Changed on 2026-11-19: recaps show on every computer and never go online; only reflections fall back to "At a glance" (see [Journaling follow-ups](journaling-follow-ups.md)) |
 | 9 | The phone and the journal | Dropped: the phone reads the whole journal, and answers the name question but not which-is-right |
 | | Online answers | Ask may send the journal sentences a question needs; reflections, recaps and check-ins never go; said openly in setup and settings, with no per-entry exception |
 

@@ -1,9 +1,9 @@
 ---
 type: Design
 title: Journaling follow-ups
-description: Proposal for what the journal still needs before its next release, with screens, copy and behaviour for deleting a day, a check-in's own page, deleting a recap, the page question from the journal, recaps on every computer, and the words the build added without design.
-status: draft
-tags: [proposal, ux, journal, copy, forgetting]
+description: What the journal still needed before its next release, with screens, copy and behaviour for deleting a day, a check-in's own page, deleting a recap, the page question from the journal, recaps on every computer, and the words the build added without design.
+status: stable
+tags: [ux, journal, copy, forgetting]
 ---
 
 # Journaling follow-ups
@@ -12,10 +12,9 @@ The [journal](journaling.md) is built. Building it turned up five things the des
 a dialog built without design, an action the design promised but never drew, a decision with no
 rule behind it, a gate that does not fit what recaps are, and words that never went through
 design. This page settles each, with screens, copy and behaviour, in the style of the journaling
-design. Where it changes that page, the change is made there too and marked.
+design. Where it changes that page, the change is made there too.
 
-Status: proposal. Item 4 changes an owner decision and needs the owner's approval. Nothing here is
-in the interface yet.
+Status: approved. The owner answered every open question on 2026-11-19 (see [Decisions](#decisions)).
 
 ## Mockups
 
@@ -342,7 +341,7 @@ condition and expects no question.
 
 ## 4. Recaps on every computer
 
-**Needs owner approval.** This reverses decision 8 for recaps. Reflections are unchanged.
+**Approved by the owner.** This reverses decision 8 for recaps. Reflections are unchanged.
 
 **What is built.** A recap is put together from what is already stored: check-ins with their
 points and words, good things as written, names already found, highlights chosen by rule from
@@ -370,7 +369,7 @@ is ready, the week shows "At a glance" only.
 | Online | Never | Never. Unchanged |
 | A period with only things kept from elsewhere | "At a glance" only | Unchanged |
 
-The journaling design is updated to match, with each change marked as awaiting approval.
+The journaling design is updated to match.
 
 ## 5. Copy that never went through design
 
@@ -401,20 +400,22 @@ Made on [Journaling](journaling.md) in the same change, so the two pages agree:
 | Mockups | The new mockups listed, pointing here |
 | 5. The feelings check-in | Step 3 is a line of text; the placeholder is "A line, if you like." |
 | 8. The day's reflection | "Delete this reflection" is confirmed |
-| 9. Recaps | Shown on every computer (awaiting approval); a year takes one night; "Delete this recap"; the together line; the picker's empty words |
+| 9. Recaps | Shown on every computer; a year takes one night; "Delete this recap"; the together line; the picker's empty words |
 | 10. The morning page | The question's example and a link to its rule |
 | 12. The phone | The check-in's line has no microphone |
 | Calm | The evening reminder's title |
 | Privacy | Only reflections fall back to "At a glance" on a computer that cannot write them |
 | Forgetting and deletion | Delete this day, a check-in's page and deleting a recap point here |
 | Overnight and on demand | Recaps need no mind; the gate covers reflections |
-| Decisions | Decision 7 points to its rule; decision 8 carries the proposed change |
+| Decisions | Decision 7 points to its rule; decision 8 records the change |
 
-## Open questions
+## Decisions
 
-| # | Question | Options | Recommendation |
-|---|---|---|---|
-| 1 | Recaps on every computer (item 4) | A: recaps everywhere, as above. B: keep decision 8, "At a glance" only on computers that have not passed the gate | A |
-| 2 | Confirming "Delete this reflection" | A: confirm it, as every other deletion. B: keep one step with the toast, as built | A |
-| 3 | A way to stop journal questions | A: none; at most one a week, and it can be ignored. B: a quiet "Don’t ask from my journal" under the question, undone in Settings | A |
-| 4 | The together line's wording | A: "days with {name} in your journal". B: "days you mentioned {name}" | A |
+The owner answered every open question on 2026-11-19.
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Recaps on every computer (item 4) | A: recaps show everywhere. The gate covers reflections only. Recaps never go online |
+| 2 | Confirming "Delete this reflection" | A: confirmed, with the same small dialog as deleting a recap |
+| 3 | A way to stop journal questions | A: none. At most one a week, and it can be ignored |
+| 4 | The together line's wording | A: "days with {name} in your journal" |
