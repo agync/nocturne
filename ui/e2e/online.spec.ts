@@ -220,7 +220,7 @@ test.describe("O2 to O6, setting up", () => {
     await press(page, "button", "Continue");
     await press(page, "button", "Turn on online answers");
     await expect(page.getByRole("switch", { name: "Online answers are on" })).toBeChecked();
-    await expect(page.getByText("Health, money and ID details")).toBeVisible();
+    await expect(page.getByText("Health, money and ID details", { exact: true })).toBeVisible();
   });
 
   test("Tab alone: through the form, the check and on to Continue", async ({ page }) => {
