@@ -52,7 +52,7 @@ pub use export::DELETE_PHRASE;
 pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
 pub use mind::{
     AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
-    Transcript, Understanding,
+    ReflectInput, ReflectItem, Transcript, Understanding, WrittenSentence,
 };
 #[cfg(any(test, feature = "fake"))]
 pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};

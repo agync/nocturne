@@ -208,6 +208,49 @@ pub trait Mind: Send + Sync {
     fn ready_to_speak(&self) -> BoxFuture<'_, ()> {
         Box::pin(async {})
     }
+    /// Writes "The day" of a day's reflection: three to six sentences, each citing the items it
+    /// comes from. A mind that cannot write reflections says so.
+    fn reflect<'a>(
+        &'a self,
+        input: &'a ReflectInput,
+    ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+        let _ = input;
+        Box::pin(async { Err(MindError::Unsupported("reflect".into())) })
+    }
+}
+
+/// One thing kept on the day a reflection looks back on, as the mind is shown it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReflectItem {
+    pub id: crate::ItemId,
+    /// Local time of day, for example "7:52 am".
+    pub at: String,
+    /// What it is, in plain words: "note", "voice note", "photo", "today's entry",
+    /// "good thing", "document", "web page".
+    pub label: String,
+    /// The person's words, a transcript, or what a photo or document shows.
+    pub text: String,
+    /// Kept from elsewhere: the reflection treats it as background.
+    pub background: bool,
+}
+
+/// What a day's reflection is written from. Check-ins and items left out of reflections are
+/// never in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReflectInput {
+    pub day: Date,
+    /// The day is still going: "Today so far".
+    pub so_far: bool,
+    pub items: Vec<ReflectItem>,
+}
+
+/// A sentence of a reflection. `text` marks with `**double asterisks**` the words drawn from an
+/// item; `cites` holds, for each span in order, the index of its item in `ReflectInput::items`.
+/// A sentence with no cite is never returned.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WrittenSentence {
+    pub text: String,
+    pub cites: Vec<usize>,
 }
 
 #[cfg(any(test, feature = "fake"))]
