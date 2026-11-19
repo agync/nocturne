@@ -1,9 +1,9 @@
 ---
 type: Design
 title: The journal and the other capabilities on the site
-description: Proposal for folding the journal and the capabilities designed since the site was written into the landing page, with one new band beside the morning page, an honest line about Online answers, and the words each language must translate.
-status: draft
-tags: [proposal, site, landing, copy, journal, privacy, localisation]
+description: How the journal and the capabilities designed since the site was written fold into the landing page, with one new band beside the morning page, an honest line about Online answers, and the words each language translates.
+status: stable
+tags: [approved, built, site, landing, copy, journal, privacy, localisation]
 ---
 
 # The journal and the other capabilities on the site
@@ -14,13 +14,14 @@ the journal have been designed. This page decides which of them the site should 
 in which words, so the site keeps its calm and its one promise: one page a morning, on your own
 computer.
 
-Status: proposal. Nothing here is on the site.
+Status: approved by the owner on 2026-11-19, with the answers under [Decisions](#decisions), and
+built in the same pull request (see [Built](#built)).
 
 **It depends on the journal shipping first.** The journal's design is `docs/design/journaling.md`
 on the `design/journaling` branch (pull request #107), built on `feat/journaling` (#108), with the
 follow-ups that put recaps on every computer. The site must not describe the journal before the
-release that carries it. The implementation of this page is a pull request stacked on this design,
-merged with or after #107 and #108.
+release that carries it. The site deploys from `main`, so this page and its implementation, built
+in the same pull request at the owner's choice, merge only with the release that ships the journal.
 
 ## Mockups
 
@@ -40,7 +41,7 @@ built from `main`; each "after" is `landing.html`.
 | The whole page, bands marked | `overview-1440-light.png` and `overview-390-light.png` show both side by side | |
 | From the end of How it works to the top of Privacy | `before-journal-1440-light.png`, `before-journal-1440-dark.png`, `before-journal-390-light.png`, `before-journal-390-dark.png` | `after-journal-1440-light.png`, `after-journal-1440-dark.png`, `after-journal-390-light.png`, `after-journal-390-dark.png` |
 | Privacy | `before-privacy-1440-light.png`, `before-privacy-1440-dark.png`, `before-privacy-390-light.png`, `before-privacy-390-dark.png` | `after-privacy-1440-light.png`, `after-privacy-1440-dark.png`, `after-privacy-390-light.png`, `after-privacy-390-dark.png` |
-| The German header at 1024 px with a fifth section link (see [open question 1](#open-questions)) | | `nav-de-1024-with-journal.png` |
+| The German header at 1024 px with a fifth section link (not chosen, see [decision 1](#decisions)) | | `nav-de-1024-with-journal.png` |
 
 The demo household is the one the app, the guide and the other designs use: Gran, Leo, Sam and
 Priya. No real names or data.
@@ -96,7 +97,7 @@ demo data. There is one daily ritual, and the page is it.
 | One page each morning | A journal app usually adds a second daily ritual, and a site that sells two rituals stops being calm | The journal is the evening side of the same day, "when you want to". The page stays the one page. It gains a quiet line when a reflection or recap is new, and at most once a week its one question may come from the journal (`journaling.md` §10). The band names the quiet line, leaves the question to the app and "one page" to the hero |
 | Two extras, off until you ask | "Online answers sends ... Never anything marked private" reads as if a journal were safe from it. Journal entries and good things cannot be marked private, so with Online answers on, a line from one can go with a question | Say it on the site in as many words, in the privacy promise and in the journal band. This is the honest line |
 | No cloud copy | A journal raises the cost of a lost computer. A reader who writes their life into one laptop will ask what happens if it dies | One sentence: back it all up to one file, locked with a passphrase you choose |
-| Clearer answers on bigger computers | A size of computer that fails the reflection gate lists the day rather than writing about it | Settled after the gate runs (see [open question 4](#open-questions)) |
+| Clearer answers on bigger computers | A size of computer that fails the reflection gate lists the day rather than writing about it | Settled after the gate runs (see [decision 4](#decisions)) |
 | AI that writes your diary for you | The fear a non-technical reader brings to "a journal in an AI app" | The heading is about the person's own words, and the first promise says a reflection quotes, never guesses, scores or advises |
 
 ### What is not added
@@ -128,7 +129,7 @@ How it works Keep · Ask · The page        How it works unchanged
                                           The journal  NEW: the evening side of the same day
 Privacy      6 promises, phone            Privacy      6 promises, 2 reworded, new phone picture
 Engine       Built on Lemonade            Engine       unchanged
-Requirements 8 GB, four sizes             Requirements unchanged (open question 4)
+Requirements 8 GB, four sizes             Requirements unchanged (decision 4)
 Get Nocturne                              Get Nocturne unchanged
 ```
 
@@ -187,8 +188,8 @@ mat like the tour's.
 | `journal.calm.detail` | Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line. |
 | `journal.quiet.term` | It stays quiet |
 | `journal.quiet.detail` | Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do. |
-| `journal.day.alt` | Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo of tomatoes on a windowsill. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content), three good things, and the people and places named today. |
-| `journal.look.alt` | The day, looked back on: a short paragraph about a slow start, lunch with Priya and a call from Gran, with the check-in, note, entry and voice note it came from listed underneath. |
+| `journal.day.alt` | Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content). |
+| `journal.look.alt` | The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath. |
 | `journal.caption` | Today’s journal, and the day looked back on. From the app, with demo data. |
 
 Why these words:
@@ -218,7 +219,7 @@ phone picture changes.
 |---|---|---|
 | `promise.signin.detail` | No account, no analytics, no crash reports, no cloud copy. | No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose. |
 | `promise.extras.detail` | Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private. | Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private. |
-| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer. | Nocturne on a paired phone: connected to the home computer, with Keep, Ask, today’s page and the journal, and a note that things marked private stay on the computer. |
+| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer. | Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer. |
 
 **The honest line about Online answers.** Today the promise ends "Never anything marked private."
 That was complete when everything could be marked private. Journal entries and good things cannot
@@ -242,7 +243,7 @@ the promise already allows.
 | Hero | Its promise is the product. The journal is a second act, met on the first scroll |
 | How it works | The tour is one loop and its pictures are the app as it is. The morning page step already says it asks instead of guessing; the quiet journal line on the page is too small to show |
 | Engine | Unaffected |
-| Requirements | Unaffected, unless a size fails the reflection gate ([open question 4](#open-questions)) |
+| Requirements | Unaffected until the reflection gate's evaluation runs ([decision 4](#decisions)) |
 | Get Nocturne, footer, install page | Unaffected |
 
 ### Pictures
@@ -251,20 +252,21 @@ the promise already allows.
 |---|---|---|---|
 | The journal day | `journal-{light,dark}-{768,1536}.webp`, `journal-narrow-{light,dark}-{390,780}.webp` | New | The journal at a 768 px content width, as `recent` and `ask` are, and at 390 px for the narrow window |
 | The day looked back on | `look-{light,dark}-{560,1120}.webp` | New | The reflection's "The day" section alone, about 548 px wide, on the sheet colour |
-| The paired phone | `phone-{light,dark}-{390,780}.webp` | Recaptured | The phone's home with the Journal tile, as today at 390 by 620 |
+| The paired phone | `phone-{light,dark}-{390,780}.webp` | Recaptured | The phone's home with the Journal tile, at 390 by 704 so the note about things marked private stays in the picture |
 | Morning page, keep box, recently kept, ask, today | as today | Unchanged | |
 | Link preview card (`og.png`) | as today | Unchanged | |
 
 - **One day across the site.** The hero's page is Friday 13 November. The journal day is recaptured
   as **Thursday 12 November**, the evening that page looks back on, so the site tells one day. The
-  stand-ins in the mockup still say 19 November, from the journal's own mockups.
+  stand-ins in the mockup still say 19 November, from the journal's own mockups; the site's pictures
+  are the app's own.
 - **Demo data only.** The same household as every other picture.
 - `site/scripts/shots.mjs` gains the three captures, from the mock interface with the journal's demo
   day. The "new" outlines in the journal mockups are never in a site picture.
 
 ### Building it
 
-For the implementation pull request, stacked on this design:
+For the implementation, in the same pull request as this design:
 
 - `site/index.html`: the band between `#how` and `#privacy`, the reworded strings, the new phone
   picture. `landing.html` in the mockup shows the exact markup with the strings filled in.
@@ -278,22 +280,22 @@ For the implementation pull request, stacked on this design:
 
 ## Translations
 
-The English above is final once approved. The five languages are translated from it, through the
+The English above is final. The five languages are translated from it, through the
 copy pages in [site copy](site-copy/index.md), as the [site in five languages](site-localisation.md)
-sets out. Nothing is translated here.
+sets out. The words are in each copy page under The journal and What it promises.
 
 | | Keys | Count |
 |---|---|---|
 | New | `journal.eyebrow`, `journal.title`, `journal.body`, `journal.felt.term`, `journal.felt.detail`, `journal.good.term`, `journal.good.detail`, `journal.calm.term`, `journal.calm.detail`, `journal.quiet.term`, `journal.quiet.detail`, `journal.day.alt`, `journal.look.alt`, `journal.caption` | 14 |
-| Changed | `promise.signin.detail`, `promise.extras.detail`, `phone.alt` | 3 |
-| **Each language** | | **17** |
-| **All five** | | **85 strings** |
-| Only if an open question is answered that way | `nav.journal` (new, question 1), `head.description` (changed, question 2), `promise.phone.*` and `promise.online.*` in place of `promise.extras.*` (question 3), `tier.*.text` (changed, question 4) | up to 10 more |
+| Changed | `promise.signin.detail`, `promise.extras.detail`, `phone.alt`, `head.description` ([decision 2](#decisions)) | 4 |
+| **Each language** | | **18** |
+| **All five** | | **90 strings** |
+| Later, once the reflection gate has run | `tier.*.text` ([decision 4](#decisions)) | up to 4 more |
 
 For the translators:
 
 - **App words in brackets.** The app is English, so the rule for running text applies: the four
-  parts are written in the language with the English after them, for example „Aufgedreht“ (Wound
+  parts are written in the language with the English after them, for example „Angespannt“ (Wound
   up), as Online answers and Away from home already are. Each glossary decides the four words once.
 - **New glossary rows** in each copy page: journal, entry, check in, the four parts, good thing,
   reflection, recap, streak. "Reflection" and "recap" must stay apart from the morning page's own
@@ -312,15 +314,39 @@ For the translators:
 | A promise row in Privacy for the journal's rule | Repeats the band a scroll away. The honest Online answers line is the one thing worth saying twice |
 | A recap picture with the week's feelings | Charts of feelings on a landing page read as tracking, against "no streaks, no scores" |
 
-## Open questions
+## Decisions
 
-| # | Question | Context | Options | Recommendation |
-|---|---|---|---|---|
-| 1 | A Journal link in the header? | From 1024 px the header shows four section links in one row, laid out for German and French. With a fifth, the German header at 1024 px runs into the brand (`nav-de-1024-with-journal.png`); French still fits | **A.** No link. The band sits right after How it works, so "See how it works" leads into it. **B.** Journal in place of Engine; the Engine band and the footer credit stay. **C.** A fifth link, with the section links moved to a wider breakpoint, tested in every language | **A.** Nothing to retest, and Engine keeps its place beside Lemonade's credit |
-| 2 | Name the journal in the meta description? | `head.description` is what search engines and some link previews show; it is not on the page | **A.** Unchanged. **B.** Add "Keep a journal too, if you like." at the end; the title and the link preview card stay | **B.** People look for a private journal, and the line costs one string per language |
-| 3 | One promise row for the two extras, or two? | The reworded row is the longest on the page, about 60 words | **A.** One row, "Two extras, off until you ask", as proposed. **B.** Two rows, "Your phone, off until you ask" and "Online answers, off until you ask", so the honest line has its own row | **A.** "Two" is itself a promise: there are only two ways anything leaves |
-| 4 | Say on Requirements which sizes list the day rather than write about it? | A size that fails the reflection gate shows the day at a glance. Which sizes pass is known only when the evaluation runs | **A.** After the gate runs, add "Lists each day rather than writing about it." to each failing size's line. **B.** One line under the sizes. **C.** Say nothing | **A.** The tier lines already say what a smaller size gives up; this is one more such line |
+The owner answered the questions this design raised on 2026-11-19.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | A Journal link in the header? | **No link.** The band sits right after How it works, so "See how it works" leads into it, and the header is unchanged in every language. `nav-de-1024-with-journal.png` shows why a fifth link was not chosen |
+| 2 | Name the journal in the meta description? | **Yes.** `head.description` ends "Keep a journal too, if you like." The title and the link preview card stay |
+| 3 | One promise row for the two extras, or two? | **One row**, "Two extras, off until you ask". "Two" is itself a promise: there are only two ways anything leaves |
+| 4 | Say on Requirements which sizes list the day rather than write about it? | **Not yet.** Nothing changes on Requirements until the reflection gate's evaluation runs. Then a size that fails it gains "Lists each day rather than writing about it." on its line, translated in all five languages. A noted follow-up |
+
+## Built
+
+The site carries the band, the two reworded Privacy details, the new phone picture and the longer
+meta description in all six languages. Where the build differs from the mockup:
+
+| What | Mockup | Built | Why |
+|---|---|---|---|
+| The journal pictures | Stand-ins of 19 November, cropped in the page with `object-fit` | The app in mock mode on Thursday 12 November, cut in the file on the blank line (1536 by 1404, and 780 by 950 for the narrow window) | Files hold only what shows, and the card covers no words |
+| `journal.day.alt` | Named the tomatoes, the good things and the people and places | Only what the wide picture shows | The good things and the names are below the cut. One alt serves both windows, and the narrow one shows only the entry's words |
+| `journal.look.alt` | A slow start, lunch with Priya, a call from Gran | Leo's PE kit, a tired morning, lunch with Priya | The mock interface's own reflection of the day says that |
+| `phone.alt` | Keep, Ask, today's page and the journal | Ask, Keep, today's page and the journal | The order of the tiles in the app |
+| The phone picture | 390 by 620 | 390 by 704 | At 620 the Journal tile pushes the note about things marked private out of the picture |
+| The card from 641 to 823 px | Hangs 28 px left of the mat, at the screen's edge | Sits 12 px inside the mat, as on narrow screens | One column leaves no gap for it to hang into |
+
+The built renders are in `built/`, each a pair from the site as built from `main` and from this
+branch, in both themes: `before-journal-*` and `after-journal-*` from the end of How it works to
+the top of Privacy, `before-privacy-*` and `after-privacy-*` for Privacy, at 1440 px wide at 1x
+and 390 px wide at 2x, and `after-journal-de-1440-light.png` for the German band. The band was
+checked in all six languages at 320, 360, 390, 500, 640, 641, 700, 823, 824, 900, 1024, 1119,
+1280 and 1440 px, in both themes: no sideways scrolling, no console errors, and the header's
+markup and layout unchanged at 320, 390, 640, 1024 and 1440 px.
 
 ## Approval
 
-Not yet approved.
+The owner approved this design on 2026-11-19, with the answers under [Decisions](#decisions).
