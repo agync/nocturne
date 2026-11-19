@@ -72,6 +72,7 @@ export type { Job } from "./Job";
 export type { JobView } from "./JobView";
 export type { JournalDay } from "./JournalDay";
 export type { JournalRole } from "./JournalRole";
+export type { JournalSent } from "./JournalSent";
 export type { Kept } from "./Kept";
 export type { KeptCount } from "./KeptCount";
 export type { KeyStorage } from "./KeyStorage";

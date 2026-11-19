@@ -315,6 +315,20 @@ pub struct OnlineSend {
     /// and a status came back. False when there was no internet, the address could not be
     /// reached, or the question was cut off or never left.
     pub reached: bool,
+    /// The memory lines that came from the journal, by their `[mN]` number, with the journal
+    /// day they were kept on: "from your journal, {day}".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub journal: Option<Vec<JournalSent>>,
+}
+
+/// A sent line read from a journal entry or a good thing.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JournalSent {
+    pub n: u32,
+    pub day: String,
 }
 
 /// Online answers in the advanced details view. Never carries the key.

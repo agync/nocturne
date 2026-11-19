@@ -406,7 +406,36 @@ fn send_view(conn: &Connection, raw: SendRaw) -> Result<OnlineSend> {
             reason: LocalReason::Problem,
         }),
         reached: template["reached"].as_bool().unwrap_or(false),
+        journal: Some(journal_sent(conn, &memory_lines)?).filter(|j| !j.is_empty()),
     })
+}
+
+/// The sent memory lines read from a journal entry or a good thing, with the day it was kept on.
+fn journal_sent(
+    conn: &Connection,
+    memory_lines: &[(String, String)],
+) -> Result<Vec<nocturne_contract::JournalSent>> {
+    let mut out = Vec::new();
+    for (i, (id, _)) in memory_lines.iter().enumerate() {
+        let day: Option<String> = conn
+            .query_row(
+                "SELECT json_extract(i.metadata, '$.journal_day') FROM memory_sources s \
+                 JOIN items i ON i.id = s.item_id WHERE s.memory_id = ?1 \
+                 AND json_extract(i.metadata, '$.journal') IN ('entry', 'good') \
+                 ORDER BY i.kept_at LIMIT 1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
+        if let Some(day) = day {
+            out.push(nocturne_contract::JournalSent {
+                n: i as u32 + 1,
+                day,
+            });
+        }
+    }
+    Ok(out)
 }
 
 impl Engine {

@@ -599,3 +599,32 @@ fn sent_bytes_add_up() {
     f.engine.add_sent_online(100).unwrap();
     assert_eq!(f.engine.online_state().unwrap().sent_bytes, 1000.0);
 }
+
+#[test]
+fn the_sent_log_says_which_lines_came_from_the_journal() {
+    let f = fixture();
+    let a = memory(&f, "Bins go out on Tuesday");
+    let b = memory(&f, "Priya climbs on Saturday");
+    let item: String = {
+        let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+        conn.query_row(
+            "SELECT item_id FROM memory_sources WHERE memory_id = ?1",
+            [&b],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    exec(
+        f.dir.path(),
+        "UPDATE items SET metadata = json_object('journal', 'entry', 'journal_day', '2026-11-12') \
+         WHERE id = ?1",
+        &item,
+    );
+    f.engine
+        .log_online_send(send_of(&f, &[a, b], answered(), true))
+        .unwrap();
+    let sent = f.engine.online_sends(10, None).unwrap().remove(0);
+    let journal = sent.journal.expect("one line came from the journal");
+    assert_eq!(journal.len(), 1);
+    assert_eq!((journal[0].n, journal[0].day.as_str()), (2, "2026-11-12"));
+}
