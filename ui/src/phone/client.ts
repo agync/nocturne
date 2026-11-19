@@ -1,8 +1,7 @@
 // The phone's engine over the sealed channel: the allowed calls, the journal calls and the two
-// phone verbs, a
-// session opened when one is needed and renewed before it lapses, and a connection state the
-// screens read. Calls are retried once on a new session after a transport error; a keep carries
-// its client id, so the computer keeps it once.
+// phone verbs, a session opened when one is needed and renewed before it lapses, and a
+// connection state the screens read. Calls are retried once on a new session after a transport
+// error; a keep carries its client id, so the computer keeps it once.
 
 import type {
   AskDelta,
