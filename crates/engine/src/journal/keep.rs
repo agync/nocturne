@@ -20,6 +20,34 @@ use crate::capture::{in_forget_job, text_title, trust_for};
 use crate::error::{Error, Result};
 use crate::util::{enum_str, fmt_ts, new_id, sha256_hex};
 
+/// Where a keep from a phone comes from: the phone's id and the client id it sent. What the
+/// keep makes beside its item carries that name, so a retry finds what is already made and
+/// taking the keep back takes only that.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct KeepPlace<'a> {
+    pub phone: Option<(&'a str, &'a str)>,
+}
+
+impl KeepPlace<'_> {
+    fn key(&self) -> Option<String> {
+        self.phone.map(|(device, client)| keep_key(device, client))
+    }
+}
+
+fn keep_key(device: &str, client: &str) -> String {
+    format!("{device}/{client}")
+}
+
+/// The journal item of `role` that the keep named `key` already made.
+fn made_by(tx: &Connection, role: &str, key: &str) -> Result<Option<String>> {
+    Ok(rusqlite::OptionalExtension::optional(tx.query_row(
+        "SELECT id FROM items WHERE json_extract(metadata, '$.journal') = ?1 \
+         AND json_extract(metadata, '$.keep') = ?2",
+        params![role, key],
+        |r| r.get(0),
+    ))?)
+}
+
 struct NewJournal<'a> {
     kind: ItemKind,
     source: Source,
@@ -400,34 +428,65 @@ impl Engine {
         if let Some(f) = &feeling {
             validate_feeling(f)?;
         }
+        let place = KeepPlace::default();
+        let kept = self.keep_note_item(text, source, good, &place)?;
+        if let Some(f) = feeling {
+            self.feel_kept(&kept, f, source, &place)?;
+        }
+        Ok(kept)
+    }
+
+    /// The first half of [`Engine::keep_note`]: the note itself, or a good thing of today. A
+    /// new note from a phone is linked to its keep at once, so that a failure afterwards leaves
+    /// it owned and a retry finds it.
+    pub fn keep_note_item(
+        &self,
+        text: &str,
+        source: Source,
+        good: bool,
+        place: &KeepPlace<'_>,
+    ) -> Result<Kept> {
         let kept = if good {
             let day = self.journal_today()?;
-            let thing = self.keep_good_thing(day, text, None, source)?;
+            let thing = self.keep_good_thing_at(day, text, None, source, place)?;
             Kept::New {
                 item: self.get_item(&thing.id)?,
             }
         } else {
             self.keep_text(text, source)?
         };
-        if let Some(f) = feeling {
-            // The note may be an old one kept again; the feeling is new, so it is today's.
-            let (item, on_today) = match &kept {
-                Kept::New { item } => (item, false),
-                Kept::Duplicate { item } => (item, true),
-            };
-            self.insert_checkin(
-                CheckInInput {
-                    feeling: f,
-                    line: None,
-                    urge: None,
-                    replaces: None,
-                },
-                source,
-                Some(&item.id),
-                on_today,
-            )?;
+        if let (Some((device, client)), Kept::New { item }) = (place.phone, &kept) {
+            self.link_remote_keep(&item.id, device, client)?;
         }
         Ok(kept)
+    }
+
+    /// The second half of [`Engine::keep_note`]: the feeling about what was kept, a note or
+    /// a file from a phone.
+    pub fn feel_kept(
+        &self,
+        kept: &Kept,
+        feeling: Feeling,
+        source: Source,
+        place: &KeepPlace<'_>,
+    ) -> Result<CheckIn> {
+        // The note may be an old one kept again; the feeling is new, so it is today's.
+        let (item, on_today) = match kept {
+            Kept::New { item } => (item, false),
+            Kept::Duplicate { item } => (item, true),
+        };
+        self.insert_checkin(
+            CheckInInput {
+                feeling,
+                line: None,
+                urge: None,
+                replaces: None,
+            },
+            source,
+            Some(&item.id),
+            on_today,
+            place,
+        )
     }
 
     /// A feeling about something already kept, such as a photo or a voice note from a phone.
@@ -447,13 +506,14 @@ impl Engine {
             source,
             Some(item_id),
             false,
+            &KeepPlace::default(),
         )
     }
 
     /// Keep a check-in. With no line and no urge there is nothing to read, so it is understood
     /// at once; otherwise it is read for names only.
     pub fn keep_checkin(&self, input: CheckInInput, source: Source) -> Result<CheckIn> {
-        self.insert_checkin(input, source, None, false)
+        self.insert_checkin(input, source, None, false, &KeepPlace::default())
     }
 
     fn insert_checkin(
@@ -462,6 +522,7 @@ impl Engine {
         source: Source,
         about: Option<&str>,
         on_today: bool,
+        place: &KeepPlace<'_>,
     ) -> Result<CheckIn> {
         validate_feeling(&input.feeling)?;
         let line = clean(&input.line);
@@ -479,7 +540,16 @@ impl Engine {
         };
         let stamp = fmt_ts(self.clock_now());
         let originals = self.originals_dir();
+        let keep = place.key();
         let id = self.write(|tx| {
+            if let Some(id) = keep
+                .as_deref()
+                .map(|k| made_by(tx, "checkin", k))
+                .transpose()?
+                .flatten()
+            {
+                return Ok(id);
+            }
             let ctx = Ctx::load(tx, self.clock())?;
             let mut about = about.map(str::to_string);
             let day = if let Some(prev) = &input.replaces {
@@ -511,6 +581,9 @@ impl Engine {
             }
             if let Some(a) = &about {
                 meta["about"] = json!(a);
+            }
+            if let Some(k) = &keep {
+                meta["keep"] = json!(k);
             }
             let status = if text.is_none() {
                 meta["read_at"] = json!(stamp);
@@ -571,13 +644,34 @@ impl Engine {
         photo: Option<&str>,
         source: Source,
     ) -> Result<GoodThing> {
+        self.keep_good_thing_at(day, text, photo, source, &KeepPlace::default())
+    }
+
+    /// [`Engine::keep_good_thing`] for a keep from a phone: kept once however often it is sent.
+    pub fn keep_good_thing_at(
+        &self,
+        day: Date,
+        text: &str,
+        photo: Option<&str>,
+        source: Source,
+        place: &KeepPlace<'_>,
+    ) -> Result<GoodThing> {
         let text = text.trim();
         if text.is_empty() && photo.is_none() {
             return Err(Error::invalid("a good thing needs words or a photo"));
         }
         let stamp = fmt_ts(self.clock_now());
         let originals = self.originals_dir();
+        let keep = place.key();
         let (id, files) = self.write(|tx| {
+            if let Some(id) = keep
+                .as_deref()
+                .map(|k| made_by(tx, "good", k))
+                .transpose()?
+                .flatten()
+            {
+                return Ok((id, Vec::new()));
+            }
             let ctx = Ctx::load(tx, self.clock())?;
             not_future(&ctx, day)?;
             let count: u32 = tx.query_row(
@@ -590,6 +684,9 @@ impl Engine {
                 return Err(Error::invalid("a day holds three good things"));
             }
             let mut meta = json!({"journal": "good", "journal_day": day.to_string()});
+            if let Some(k) = &keep {
+                meta["keep"] = json!(k);
+            }
             let mut title = text_title(text);
             if let Some(p) = photo {
                 let photo = load_item(tx, &originals, p)?;
@@ -633,6 +730,53 @@ impl Engine {
             let item = load_item(conn, &originals, &id)?;
             let mentions = super::day::mentions_of(conn, std::slice::from_ref(&id))?;
             good_view(conn, &originals, &item, &mentions)
+        })
+    }
+
+    /// Whether `day` can take the good thing a phone's keep makes: three a day, and a keep
+    /// that already made its own is not counted against itself.
+    pub fn good_room(&self, day: Date, place: &KeepPlace<'_>) -> Result<bool> {
+        let keep = place.key();
+        self.read(|conn| {
+            if let Some(k) = &keep
+                && made_by(conn, "good", k)?.is_some()
+            {
+                return Ok(true);
+            }
+            let count: u32 = conn.query_row(
+                "SELECT COUNT(*) FROM items WHERE json_extract(metadata, '$.journal') = 'good' \
+                 AND json_extract(metadata, '$.journal_day') = ?1",
+                [day.to_string()],
+                |r| r.get(0),
+            )?;
+            Ok(count < MAX_GOOD_THINGS)
+        })
+    }
+
+    /// Whether a phone's keep has already made the feeling and the good thing it asked for.
+    pub fn keep_is_marked(&self, place: &KeepPlace<'_>, feeling: bool, good: bool) -> Result<bool> {
+        let Some(key) = place.key() else {
+            return Ok(false);
+        };
+        self.read(|conn| {
+            let has = |role: &str| made_by(conn, role, &key).map(|id| id.is_some());
+            Ok((!feeling || has("checkin")?) && (!good || has("good")?))
+        })
+    }
+
+    /// The journal items a phone's keep made beside its item: its feeling and its good thing.
+    pub fn keep_records(&self, place: &KeepPlace<'_>) -> Result<Vec<String>> {
+        let Some(key) = place.key() else {
+            return Ok(Vec::new());
+        };
+        self.read(|conn| {
+            let mut stmt = conn.prepare(
+                "SELECT id FROM items WHERE json_extract(metadata, '$.journal') IN ('checkin', 'good') \
+                 AND json_extract(metadata, '$.keep') = ?1 ORDER BY rowid",
+            )?;
+            Ok(stmt
+                .query_map([key], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?)
         })
     }
 

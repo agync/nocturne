@@ -16,7 +16,7 @@ use nocturne_contract::{
     PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, ReflectionView, RemoteAction,
     RemoteAnswer, RemoteCall, RemoteResult, SameNameAnswer, Source,
 };
-use nocturne_engine::{DeviceRow, Engine};
+use nocturne_engine::{DeviceRow, Engine, KeepPlace};
 use tauri::{AppHandle, Manager, Runtime};
 use tokio::sync::mpsc;
 
@@ -256,7 +256,8 @@ impl<R: Runtime> Call<R> {
                 if text.len() > MAX_TEXT {
                     return err(PhoneError::TooLarge);
                 }
-                if let Some(dup) = self.duplicate(&client_id).await {
+                let good = good.unwrap_or(false);
+                if let Some(dup) = self.duplicate(&client_id, feeling.is_some(), good).await {
                     return Some(dup);
                 }
                 if !self.core.limits.take(Bucket::Keeps, me) {
@@ -269,10 +270,21 @@ impl<R: Runtime> Call<R> {
                 }
                 let e = self.engine()?;
                 let sent = Sent::Text(text.clone());
-                let good = good.unwrap_or(false);
-                let kept = blocking(move || e.keep_note(&text, Source::Phone, feeling, good)).await;
+                let (device, client) = (me.clone(), client_id.clone());
+                let made = blocking(move || {
+                    let place = KeepPlace {
+                        phone: Some((&device, &client)),
+                    };
+                    let kept = e.keep_note_item(&text, Source::Phone, good, &place)?;
+                    let marks = match feeling {
+                        Some(f) => e.feel_kept(&kept, f, Source::Phone, &place).map(drop),
+                        None => Ok(()),
+                    };
+                    Ok((kept, marks))
+                })
+                .await;
                 let answer = self
-                    .kept(kept.ok(), &client_id, RemoteAction::KeptText, 0.0, sent)
+                    .kept_with_marks(made, &client_id, RemoteAction::KeptText, 0.0, sent)
                     .await;
                 if matches!(answer, Some(RemoteAnswer::Error { .. })) {
                     self.core.incoming.refund_day(&self.core, me, size);
@@ -388,14 +400,21 @@ impl<R: Runtime> Call<R> {
         }
     }
 
-    /// A keep with this client id already made: the first item again.
-    async fn duplicate(&self, client_id: &str) -> Option<RemoteAnswer> {
+    /// A keep with this client id already made: the first item again. Not while the feeling or
+    /// the good thing it asked for is still to make: that retry goes on to make it.
+    async fn duplicate(&self, client_id: &str, feeling: bool, good: bool) -> Option<RemoteAnswer> {
         let e = self.engine()?;
         let (me, cid) = (self.device.id.clone(), client_id.to_string());
         let item = blocking(move || {
             let Some(id) = e.remote_keep(&me, &cid)? else {
                 return Ok(None);
             };
+            let place = KeepPlace {
+                phone: Some((&me, &cid)),
+            };
+            if !e.keep_is_marked(&place, feeling, good)? {
+                return Ok(None);
+            }
             e.get_item(&id).map(Some)
         })
         .await
@@ -558,10 +577,13 @@ impl<R: Runtime> Call<R> {
         {
             return err(PhoneError::Invalid);
         }
-        if let Some(dup) = self.duplicate(client_id).await {
+        if let Some(dup) = self
+            .duplicate(client_id, opts.feeling.is_some(), opts.good)
+            .await
+        {
             return Some(dup);
         }
-        if opts.good && !self.good_room().await {
+        if opts.good && !self.good_room(client_id).await {
             return err(PhoneError::Invalid);
         }
         if !self.core.limits.take(Bucket::Keeps, &me) {
@@ -580,14 +602,20 @@ impl<R: Runtime> Call<R> {
         answer
     }
 
-    /// Whether today can take another good thing (three a day).
-    async fn good_room(&self) -> bool {
+    /// Whether today can take the good thing of this keep (three a day).
+    async fn good_room(&self, client_id: &str) -> bool {
         let Some(e) = self.engine() else {
             return false;
         };
-        blocking(move || Ok(e.journal_day(e.journal_today()?)?.good.len() < 3))
-            .await
-            .unwrap_or(false)
+        let (me, cid) = (self.device.id.clone(), client_id.to_string());
+        blocking(move || {
+            let place = KeepPlace {
+                phone: Some((&me, &cid)),
+            };
+            e.good_room(e.journal_today()?, &place)
+        })
+        .await
+        .unwrap_or(false)
     }
 
     async fn receive_upload(
@@ -639,34 +667,75 @@ impl<R: Runtime> Call<R> {
             .map(str::trim)
             .unwrap_or_default()
             .to_string();
-        let kept = blocking(move || {
+        let (device, client) = (self.device.id.clone(), client_id.to_string());
+        let made = blocking(move || {
+            let place = KeepPlace {
+                phone: Some((&device, &client)),
+            };
             let kept = e.keep_file(&file, Source::Phone)?;
-            if let Kept::New { item } = &kept {
-                // The item is kept either way; a feeling or a mark that cannot be added is
-                // logged, not allowed to undo the keep.
-                if let Some(f) = feeling
-                    && let Err(error) = e.attach_feeling(&item.id, f, Source::Phone)
-                {
-                    tracing::warn!("a phone's feeling was not kept: {error}");
+            let (Kept::New { item } | Kept::Duplicate { item }) = &kept;
+            if matches!(kept, Kept::New { .. }) {
+                e.link_remote_keep(&item.id, &device, &client)?;
+            }
+            // The item is kept either way; a feeling or a mark that cannot be made is
+            // answered, so the phone sends the keep again and makes it then.
+            let marks = (|| {
+                if let Some(f) = feeling {
+                    e.feel_kept(&kept, f, Source::Phone, &place)?;
                 }
                 if good {
-                    let made = e.journal_today().and_then(|today| {
-                        e.keep_good_thing(today, &words, Some(&item.id), Source::Phone)
-                    });
-                    if let Err(error) = made {
-                        tracing::warn!("a phone's good thing was not kept: {error}");
+                    // A private item is not shown beside a good thing; its words stand alone.
+                    let photo = (!item.private).then_some(item.id.as_str());
+                    if photo.is_some() || !words.is_empty() {
+                        e.keep_good_thing_at(
+                            e.journal_today()?,
+                            &words,
+                            photo,
+                            Source::Phone,
+                            &place,
+                        )?;
                     }
                 }
-            }
-            Ok(kept)
+                Ok(())
+            })();
+            Ok((kept, marks))
         })
         .await;
         if let Some(dir) = named.parent() {
             let _ = std::fs::remove_dir_all(dir);
         }
         let sent = Sent::File(format!("{name}.{ext}"));
-        self.kept(kept.ok(), client_id, action, bytes as f64, sent)
+        self.kept_with_marks(made, client_id, action, bytes as f64, sent)
             .await
+    }
+
+    /// [`Call::kept`] for a keep that also made a feeling or a good thing: when that failed the
+    /// item stays kept, and the phone is told so it can send the keep again.
+    async fn kept_with_marks(
+        &self,
+        made: Result<(Kept, nocturne_engine::Result<()>), CommandError>,
+        client_id: &str,
+        action: RemoteAction,
+        bytes: f64,
+        sent: Sent,
+    ) -> Option<RemoteAnswer> {
+        let (kept, marks) = match made {
+            Ok(m) => m,
+            Err(e) => {
+                tracing::warn!("a phone's keep was not made: {e:?}");
+                return self.kept(None, client_id, action, bytes, sent).await;
+            }
+        };
+        let Err(error) = marks else {
+            return self.kept(Some(kept), client_id, action, bytes, sent).await;
+        };
+        tracing::warn!("a phone's feeling or good thing was not kept: {error}");
+        crate::commands::capture::announce(&self.app, std::slice::from_ref(&kept)).await;
+        self.audit(action, RemoteResult::Failed, bytes);
+        err(match error {
+            nocturne_engine::Error::Invalid(_) => PhoneError::Invalid,
+            _ => PhoneError::Busy,
+        })
     }
 
     async fn unkeep(&self, id: String) -> Option<RemoteAnswer> {

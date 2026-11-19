@@ -50,6 +50,7 @@ pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
 pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
+pub use journal::keep::KeepPlace;
 pub use mind::{
     AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, OnlineFailure, OnlineReceipt,
     ReflectInput, ReflectItem, Reflected, Transcript, Understanding, WrittenSentence,

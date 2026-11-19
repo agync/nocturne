@@ -4,9 +4,9 @@ use common::*;
 use jiff::SignedDuration;
 use nocturne_contract::{
     CheckInInput, DayPart, EntityKind, Feeling, FeelingPart, FeelingPoint, ItemKind, ItemStatus,
-    JournalRole, Kept, PeriodKind, RowKind, SettingsPatch, Source,
+    JournalRole, Kept, PeriodKind, RemoteConnection, RowKind, SettingsPatch, Source,
 };
-use nocturne_engine::Error;
+use nocturne_engine::{Error, KeepPlace};
 
 fn feeling(part: FeelingPart, words: &[&str]) -> Feeling {
     Feeling {
@@ -356,6 +356,94 @@ fn good_things_are_a_note_marked_good_and_a_fourth_is_refused() {
     f.engine
         .keep_good_thing(date("2026-11-12"), "Dry socks", None, Source::Journal)
         .unwrap();
+}
+
+#[test]
+fn what_a_phones_keep_makes_beside_its_item_is_made_once_and_found_by_the_keep() {
+    let f = fixture();
+    let device = f
+        .engine
+        .add_device(
+            "Pixel",
+            &[7, 1, 9],
+            "https://home.example",
+            RemoteConnection::Simple,
+            "a",
+        )
+        .unwrap()
+        .id;
+    let place = KeepPlace {
+        phone: Some((&device, "c-1")),
+    };
+    let other = KeepPlace {
+        phone: Some((&device, "c-2")),
+    };
+    let day = date("2026-11-13");
+    let kept = f
+        .engine
+        .keep_note_item("Sam fixed the gate", Source::Phone, false, &place)
+        .unwrap();
+    let Kept::New { item } = &kept else {
+        panic!("a new note")
+    };
+    assert_eq!(
+        f.engine.remote_keep(&device, "c-1").unwrap().as_deref(),
+        Some(item.id.as_str()),
+        "the note is the phone's as soon as it is kept"
+    );
+    assert!(!f.engine.keep_is_marked(&place, true, true).unwrap());
+    let first = f
+        .engine
+        .feel_kept(
+            &kept,
+            feeling(FeelingPart::LitUp, &["glad"]),
+            Source::Phone,
+            &place,
+        )
+        .unwrap();
+    let again = f
+        .engine
+        .feel_kept(
+            &kept,
+            feeling(FeelingPart::Low, &["flat"]),
+            Source::Phone,
+            &place,
+        )
+        .unwrap();
+    assert_eq!(first.id, again.id, "sent twice, felt once");
+    let thing = f
+        .engine
+        .keep_good_thing_at(day, "Sam fixed the gate", None, Source::Phone, &place)
+        .unwrap();
+    let thing_again = f
+        .engine
+        .keep_good_thing_at(day, "Sam fixed the gate", None, Source::Phone, &place)
+        .unwrap();
+    assert_eq!(thing.id, thing_again.id);
+    let view = f.engine.journal_day(day).unwrap();
+    assert_eq!((view.checkins.len(), view.good.len()), (1, 1));
+    assert!(f.engine.keep_is_marked(&place, true, true).unwrap());
+    assert!(!f.engine.keep_is_marked(&other, true, false).unwrap());
+    assert_eq!(
+        f.engine.keep_records(&place).unwrap(),
+        vec![first.id.clone(), thing.id.clone()]
+    );
+    assert!(f.engine.keep_records(&other).unwrap().is_empty());
+    assert!(
+        f.engine
+            .keep_records(&KeepPlace::default())
+            .unwrap()
+            .is_empty()
+    );
+
+    // A keep that already made its good thing does not count against the day's three.
+    for text in ["One", "Two"] {
+        f.engine
+            .keep_good_thing(day, text, None, Source::Journal)
+            .unwrap();
+    }
+    assert!(f.engine.good_room(day, &place).unwrap());
+    assert!(!f.engine.good_room(day, &other).unwrap());
 }
 
 #[test]

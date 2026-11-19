@@ -2428,6 +2428,95 @@ fn a_photo_kept_as_a_good_thing() {
     assert!(day.good.is_empty() && day.checkins.is_empty() && day.rows.is_empty());
 }
 
+fn desk_photo(p: &Phone, bytes: &[u8], ext: &str) -> String {
+    match p
+        .h
+        .engine()
+        .keep_bytes(bytes, ext, Source::QuickCapture)
+        .unwrap()
+    {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    }
+}
+
+#[test]
+fn a_photo_the_computer_already_has_still_gets_its_feeling_and_good_thing_once() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let photo = jpeg(300);
+    let desk = desk_photo(&p, &photo, "jpg");
+    for _ in 0..2 {
+        let a = keep_bytes_marked(
+            &mut c,
+            &photo,
+            "image/jpeg",
+            "c-dup-marks",
+            Some("Sun on the balcony"),
+            100,
+            Marks {
+                feeling: Some(glad()),
+                good: Some(true),
+            },
+        );
+        assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
+        let day = p.h.engine().journal_day(today(&p)).unwrap();
+        assert_eq!(day.good.len(), 1, "one good thing however often it is sent");
+        assert_eq!(
+            day.good[0].photo.as_ref().map(|v| v.id.clone()),
+            Some(desk.clone())
+        );
+        assert_eq!(day.checkins.len(), 1);
+        assert_eq!(day.checkins[0].about.as_deref(), Some(desk.as_str()));
+    }
+}
+
+#[test]
+fn a_note_the_computer_already_has_still_gets_its_feeling_once() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let desk = desk_keep(&p, "Tea with Priya");
+    for _ in 0..2 {
+        let a = call(
+            &mut c,
+            RemoteCall::KeepText {
+                text: "Tea with Priya".into(),
+                client_id: "c-dup-note".into(),
+                feeling: Some(glad()),
+                good: None,
+            },
+        );
+        assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
+        let day = p.h.engine().journal_day(today(&p)).unwrap();
+        assert_eq!(day.checkins.len(), 1);
+        assert_eq!(day.checkins[0].about.as_deref(), Some(desk.as_str()));
+    }
+}
+
+#[test]
+fn a_keep_whose_good_thing_cannot_be_recorded_is_not_answered_as_kept() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let photo = jpeg(300);
+    // The same bytes are on the computer as a document, which cannot be a good thing's photo.
+    desk_photo(&p, &photo, "txt");
+    let a = keep_bytes_marked(
+        &mut c,
+        &photo,
+        "image/jpeg",
+        "c-no-good",
+        None,
+        100,
+        Marks {
+            feeling: None,
+            good: Some(true),
+        },
+    );
+    assert_eq!(error_of(&a), Some(PhoneError::Invalid), "{a:?}");
+    assert!(p.h.engine().journal_day(today(&p)).unwrap().good.is_empty());
+}
+
 #[test]
 fn a_check_in_from_the_phone_is_kept_once() {
     let p = on();
