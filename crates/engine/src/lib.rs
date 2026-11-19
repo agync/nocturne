@@ -20,6 +20,7 @@ mod export;
 mod forget;
 mod fsutil;
 pub mod guide;
+mod journal;
 mod lifecycle;
 mod memory;
 mod mind;
