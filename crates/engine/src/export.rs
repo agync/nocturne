@@ -173,7 +173,13 @@ fn page_md(conn: &Connection, p: &PageView) -> Result<String> {
         out.push('\n');
     }
     if let Some(q) = &p.question {
-        let _ = writeln!(out, "## Question\n\n- {}\n", q.text);
+        let text = match (&q.journal, q.kind) {
+            (Some(ask), nocturne_contract::QuestionKind::Journal) => {
+                crate::journal::question::question_words(ask, &q.text)
+            }
+            _ => q.text.clone(),
+        };
+        let _ = writeln!(out, "## Question\n\n- {text}\n");
     }
     Ok(out)
 }

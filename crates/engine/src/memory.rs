@@ -834,7 +834,8 @@ struct ItemInfo {
     /// store keeps only the UTC instant, so a keep made just before midnight in another zone
     /// may count as the next or previous day.
     kept_on: String,
-    /// What the item is in the journal (`entry`, `good` or `checkin`), when it is a journal item.
+    /// What the item is in the journal (`entry`, `good`, `checkin` or `answer`), when it is a
+    /// journal item.
     journal: Option<String>,
     /// A feelings check-in: it names people and places, and says nothing that becomes a memory.
     checkin: bool,
@@ -845,7 +846,7 @@ struct ItemInfo {
 impl ItemInfo {
     /// Memories read from this item carry the journal mark.
     fn marks_memories(&self) -> bool {
-        self.good_photo || matches!(self.journal.as_deref(), Some("entry" | "good"))
+        self.good_photo || matches!(self.journal.as_deref(), Some("entry" | "good" | "answer"))
     }
 }
 
@@ -1420,7 +1421,7 @@ pub(crate) fn file_held(
 
 /// What an item says takes its sensitivity: every memory now linked to it, whether it made the
 /// memory, agreed with it, or kept a tombstone link, is private when the item is, and carries
-/// the journal mark when the item is an entry, a good thing or a good thing's photo. (Early
+/// the journal mark when the item is an entry, an answer, a good thing or a good thing's photo. (Early
 /// returns in `apply_one` skip the report lists, so the links are the truth.) Returns the cached
 /// audio files a private or newly marked memory let go of.
 fn settle_links(tx: &Transaction<'_>, item_id: &str, item: &ItemInfo) -> Result<Vec<PathBuf>> {

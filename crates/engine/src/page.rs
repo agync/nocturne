@@ -11,8 +11,8 @@ use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
 use nocturne_contract::{
-    Choice, Edition, LineKind, MemoryView, NeedsYouEntry, PageLine, PageSummary, PageVariant,
-    Period, PeriodKind, Question, QuestionChoice, QuestionKind, Receipt,
+    Choice, Edition, JournalAsk, LineKind, MemoryView, NeedsYouEntry, PageLine, PageSummary,
+    PageVariant, Period, PeriodKind, Question, QuestionChoice, QuestionKind, Receipt,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -20,6 +20,8 @@ use crate::Engine;
 use crate::audio::{drop_audio_rows, shred_all};
 use crate::day::{PrevPage, Window, window};
 use crate::error::{Error, Result};
+use crate::journal::Ctx;
+use crate::journal::question as journal_question;
 use crate::lifecycle::mark_used_tx;
 use crate::memory::{confirm_tx, is_journal_chain, is_private_chain, needs_you_on};
 use crate::rows::{MemRow, mem_view, query_mems};
@@ -158,15 +160,10 @@ fn question_for(
     number: u32,
     edition: Edition,
     now: Timestamp,
+    tz: &TimeZone,
     page_time: &str,
 ) -> Result<Option<Question>> {
-    let saved: Option<(Option<String>, String, String, Option<String>)> = conn
-        .query_row(
-            "SELECT memory_id, kind, text, answer FROM questions WHERE page_date = ?1",
-            [day.to_string()],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
-        )
-        .optional()?;
+    let saved = saved_question(conn, &day.to_string())?;
     let last_asked = |id: &str| -> Result<Option<String>> {
         Ok(conn.query_row(
             "SELECT MAX(asked_at) FROM questions WHERE memory_id = ?1 AND page_date != ?2",
@@ -174,7 +171,14 @@ fn question_for(
             |r| r.get(0),
         )?)
     };
-    if let Some((memory_id, kind, text, answer)) = saved {
+    if let Some(QuestionRow {
+        memory_id,
+        kind,
+        text,
+        answer,
+        journal,
+    }) = saved
+    {
         let answered: Option<QuestionChoice> = opt_enum(answer)?;
         let kind: QuestionKind = parse_enum(&kind)?;
         return Ok(match memory_id {
@@ -195,14 +199,25 @@ fn question_for(
                 if edition != Edition::Screen && view.private {
                     return Ok(None);
                 }
+                let journal =
+                    journal_question::read_ask(conn, &day.to_string(), journal.as_deref())?;
+                let receipt = match &journal {
+                    Some(ask) => view
+                        .receipts
+                        .iter()
+                        .find(|r| r.item_id == ask.item_id)
+                        .cloned()
+                        .or_else(|| first_receipt(&view)),
+                    None => first_receipt(&view),
+                };
                 Some(Question {
                     kind,
                     text,
                     memory_id: Some(id.clone()),
-                    receipt: first_receipt(&view),
+                    receipt,
                     last_asked: last_asked(&id)?,
                     answered,
-                    journal: None,
+                    journal,
                 })
             }
         });
@@ -218,7 +233,31 @@ fn question_for(
             journal: None,
         }));
     }
-    // Eligible: active, not a safety memory, not keep-forever, not asked in the last 14 days.
+    // A day the rule finds a thing to ask about, and the week allows it, takes the one slot.
+    let ctx = Ctx {
+        tz: tz.clone(),
+        page_hm: parse_page_time(page_time)?,
+        now,
+    };
+    if let Some(chosen) = journal_question::pick(conn, &ctx, day)? {
+        let view = mem_view(conn, &chosen.memory)?;
+        let receipt = view
+            .receipts
+            .iter()
+            .find(|r| r.item_id == chosen.ask.item_id)
+            .cloned();
+        return Ok(Some(Question {
+            kind: QuestionKind::Journal,
+            text: chosen.sentence,
+            memory_id: Some(view.id),
+            receipt,
+            last_asked: None,
+            answered: None,
+            journal: Some(chosen.ask),
+        }));
+    }
+    // Eligible: active, not a safety memory, not keep-forever, not asked in the last 14 days,
+    // and never one the journal asked about.
     let cutoff = now
         .checked_sub(SignedDuration::from_hours(24 * QUESTION_GAP_DAYS))
         .map_err(Error::from)?;
@@ -226,7 +265,9 @@ fn question_for(
         conn,
         "m.superseded_at IS NULL AND m.status = 'active' AND m.keep_forever = 0 \
          AND m.id NOT IN (SELECT memory_id FROM questions \
-                          WHERE memory_id IS NOT NULL AND asked_at > ?1 AND page_date != ?2)",
+                          WHERE memory_id IS NOT NULL AND asked_at > ?1 AND page_date != ?2) \
+         AND m.id NOT IN (SELECT memory_id FROM questions \
+                          WHERE memory_id IS NOT NULL AND kind = 'journal')",
         params![fmt_ts(cutoff), day.to_string()],
     )?;
     rows.retain(|m| !m.is_safety() && (edition == Edition::Screen || !m.private));
@@ -468,7 +509,7 @@ fn compose(
         }
     }
 
-    let question = question_for(conn, day, number, edition, now, &settings.page_time)?;
+    let question = question_for(conn, day, number, edition, now, tz, &settings.page_time)?;
 
     // A page composed up to an explicit end is the one to be saved: it never claims to be
     // still being written (what is unread is counted in `pending`).
@@ -705,9 +746,16 @@ impl Engine {
             }
             if let Some(q) = &page.question {
                 tx.execute(
-                    "INSERT OR IGNORE INTO questions(page_date, memory_id, kind, text, asked_at) \
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                    params![page.date, q.memory_id, enum_str(&q.kind), q.text, now],
+                    "INSERT OR IGNORE INTO questions(page_date, memory_id, kind, text, asked_at, \
+                     journal) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    params![
+                        page.date,
+                        q.memory_id,
+                        enum_str(&q.kind),
+                        q.text,
+                        now,
+                        q.journal.as_ref().map(journal_question::ask_json)
+                    ],
                 )?;
             }
             if resave {
@@ -807,30 +855,26 @@ impl Engine {
 
     /// The person answers the day's question. Yes confirms and counts as use; No makes the memory
     /// unconfirmed and asks for the right value; Not sure only records. On page one, Earlier and
-    /// Later move the page time by half an hour.
+    /// Later move the page time by half an hour. A question from the journal takes Fine, Not
+    /// great or Not yet: each keeps an answer on today's journal, and Fine and Not great count
+    /// as use of the memory, as a yes does.
     pub fn answer_question(&self, day: Date, choice: QuestionChoice) -> Result<()> {
         let now = fmt_ts(self.clock().now());
         let today = self.today();
         let date = day.to_string();
         self.write(|tx| {
-            let row: Option<QuestionRow> = tx
-                .query_row(
-                    "SELECT memory_id, kind, answer FROM questions WHERE page_date = ?1",
-                    [&date],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
-                )
-                .optional()?;
+            let ctx = Ctx::load(tx, self.clock())?;
+            let row = saved_question(tx, &date)?;
             let row = match row {
                 Some(row) => Some(row),
-                None => first_page_time_question(tx, day, &today, &now)?,
+                None => unsaved_question(tx, &ctx, day, &today, &now)?,
             };
-            let (memory_id, kind, answer) =
-                row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
-            if answer.is_some() {
+            let row = row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
+            if row.answer.is_some() {
                 return Err(Error::invalid("that question has already been answered"));
             }
-            let kind: QuestionKind = parse_enum(&kind)?;
-            match (kind, choice, &memory_id) {
+            let kind: QuestionKind = parse_enum(&row.kind)?;
+            match (kind, choice, &row.memory_id) {
                 (QuestionKind::YesNo, QuestionChoice::Yes, Some(id)) => {
                     confirm_tx(tx, id, true, &now, &today)?
                 }
@@ -854,6 +898,21 @@ impl Engine {
                     let shifted = shifted.clamp(0, 23 * 60 + 30);
                     set_page_time(tx, (shifted / 60) as i8, (shifted % 60) as i8)?;
                 }
+                (
+                    QuestionKind::Journal,
+                    c @ (QuestionChoice::Fine | QuestionChoice::NotGreat | QuestionChoice::NotYet),
+                    Some(id),
+                ) => {
+                    let ask: JournalAsk = serde_json::from_str(
+                        row.journal
+                            .as_deref()
+                            .ok_or_else(|| Error::invalid("that question has no block"))?,
+                    )?;
+                    journal_question::keep_answer_tx(tx, &ctx, &date, &ask, &row.text, c)?;
+                    if c != QuestionChoice::NotYet {
+                        mark_used_tx(tx, id, &now)?;
+                    }
+                }
                 _ => return Err(Error::invalid("that answer does not fit this question")),
             }
             tx.execute(
@@ -867,15 +926,42 @@ impl Engine {
     }
 }
 
-/// A saved question: its memory, kind and answer.
-type QuestionRow = (Option<String>, String, Option<String>);
+/// A saved question: its memory, kind, words, answer and, from the journal, where it came from.
+struct QuestionRow {
+    memory_id: Option<String>,
+    kind: String,
+    answer: Option<String>,
+    journal: Option<String>,
+    text: String,
+}
 
-/// The page-time question of the first page, recorded when it is answered before the page is
-/// saved. That page is composed on the spot until the tidy saves it, so its question has no row
-/// yet. The row is the one `save_page` would write (and that write leaves it alone), so the
-/// answer survives the save. Any other day without a saved question has nothing to answer.
-fn first_page_time_question(
+fn saved_question(conn: &Connection, date: &str) -> Result<Option<QuestionRow>> {
+    Ok(conn
+        .query_row(
+            "SELECT memory_id, kind, answer, journal, text FROM questions WHERE page_date = ?1",
+            [date],
+            |r| {
+                Ok(QuestionRow {
+                    memory_id: r.get(0)?,
+                    kind: r.get(1)?,
+                    answer: r.get(2)?,
+                    journal: r.get(3)?,
+                    text: r.get(4)?,
+                })
+            },
+        )
+        .optional()?)
+}
+
+/// The question of the next page, recorded when it is answered before the page is saved. That
+/// page is composed on the spot until the tidy saves it, so its question has no row yet. The
+/// row is the one `save_page` would write (and that write leaves it alone), so the answer
+/// survives the save. Only the page-time question of the first page and a question from the
+/// journal can be answered this way; any other day without a saved question has nothing to
+/// answer.
+fn unsaved_question(
     tx: &Connection,
+    ctx: &Ctx,
     day: Date,
     today: &str,
     now: &str,
@@ -892,20 +978,51 @@ fn first_page_time_question(
     } else {
         today.parse::<Date>()?
     };
-    if day != next || page_number(tx, day)? != 1 {
+    if day != next {
         return Ok(None);
     }
+    if page_number(tx, day)? == 1 {
+        tx.execute(
+            "INSERT INTO questions(page_date, memory_id, kind, text, asked_at) \
+             VALUES (?1, NULL, ?2, ?3, ?4)",
+            params![
+                day.to_string(),
+                enum_str(&QuestionKind::PageTime),
+                read_settings(tx)?.page_time,
+                now
+            ],
+        )?;
+        return Ok(Some(QuestionRow {
+            memory_id: None,
+            kind: enum_str(&QuestionKind::PageTime),
+            answer: None,
+            journal: None,
+            text: String::new(),
+        }));
+    }
+    let Some(chosen) = journal_question::pick(tx, ctx, day)? else {
+        return Ok(None);
+    };
+    let journal = journal_question::ask_json(&chosen.ask);
     tx.execute(
-        "INSERT INTO questions(page_date, memory_id, kind, text, asked_at) \
-         VALUES (?1, NULL, ?2, ?3, ?4)",
+        "INSERT INTO questions(page_date, memory_id, kind, text, asked_at, journal) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![
             day.to_string(),
-            enum_str(&QuestionKind::PageTime),
-            read_settings(tx)?.page_time,
-            now
+            chosen.memory.id,
+            enum_str(&QuestionKind::Journal),
+            chosen.sentence,
+            now,
+            journal
         ],
     )?;
-    Ok(Some((None, enum_str(&QuestionKind::PageTime), None)))
+    Ok(Some(QuestionRow {
+        memory_id: Some(chosen.memory.id),
+        kind: enum_str(&QuestionKind::Journal),
+        answer: None,
+        journal: Some(journal),
+        text: chosen.sentence,
+    }))
 }
 
 /// Redact lines and the question that cite memories which no longer exist or are being
@@ -1078,6 +1195,14 @@ pub(crate) fn load_page(
             .optional()?
             .flatten();
         q.answered = opt_enum(answer)?;
+        if q.kind == QuestionKind::Journal
+            && let Some(ask) = q.journal.as_mut()
+        {
+            match journal_question::answer_of(conn, &date)? {
+                Some((id, line)) => (ask.answer_item_id, ask.line) = (Some(id), line),
+                None => (ask.answer_item_id, ask.line) = (None, None),
+            }
+        }
     }
     Ok(Some(page))
 }
@@ -1140,16 +1265,31 @@ fn edition_page(
         }
         *list = kept;
     }
-    if let Some(q) = &page.question
-        && let Some(m) = &q.memory_id
-    {
-        if is_private(conn, m)? {
-            page.question = None;
-            skipped += 1;
-        } else if spoken && is_journal_chain(conn, m)? {
-            page.question = None;
-            journal_skipped += 1;
-        }
+    if let Some(q) = page.question.take() {
+        let memory = q.memory_id.clone();
+        page.question = match memory {
+            None => Some(q),
+            Some(m) if is_private(conn, &m)? => {
+                skipped += 1;
+                None
+            }
+            // Never read aloud, and not counted as a line left out: the reading says the
+            // question is on the page. It keeps only its kind, for that.
+            Some(_) if spoken && q.kind == QuestionKind::Journal => Some(Question {
+                kind: QuestionKind::Journal,
+                text: String::new(),
+                memory_id: None,
+                receipt: None,
+                last_asked: None,
+                answered: q.answered,
+                journal: None,
+            }),
+            Some(m) if spoken && is_journal_chain(conn, &m)? => {
+                journal_skipped += 1;
+                None
+            }
+            Some(_) => Some(q),
+        };
     }
     page.private_skipped += skipped;
     if spoken {

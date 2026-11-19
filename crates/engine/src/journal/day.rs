@@ -5,9 +5,9 @@ use std::path::Path;
 
 use jiff::civil::Date;
 use nocturne_contract::{
-    CheckIn, DayPart, EarlierVersion, EntryBlock, GoodThing, ItemKind, ItemView, JournalDay,
-    JournalRole, Mention, MentionState, NameRef, Period, PeriodKind, PeriodSummary, RowKind,
-    Source, TimelineRow,
+    CheckIn, DayPart, EarlierVersion, EntryBlock, GoodThing, ItemKind, ItemView, JournalAnswer,
+    JournalDay, JournalRole, Mention, MentionState, NameRef, Period, PeriodKind, PeriodSummary,
+    RowKind, Source, TimelineRow,
 };
 use rusqlite::Connection;
 
@@ -117,6 +117,24 @@ pub(crate) fn is_background(item: &JItem) -> bool {
     item.role().is_none()
         && (matches!(item.view.kind, ItemKind::Document | ItemKind::Web)
             || matches!(item.view.source, Source::Screenshot | Source::WatchedFolder))
+}
+
+/// What an answer to the page's question from the journal says: the choice, the line once added
+/// and the block and sentence it was about.
+fn answer_view(item: &JItem) -> Option<JournalAnswer> {
+    let choice = serde_json::from_value(item.meta.get("choice")?.clone()).ok()?;
+    Some(JournalAnswer {
+        choice,
+        line: item
+            .view
+            .text
+            .as_deref()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+            .map(str::to_string),
+        about: item.about()?.to_string(),
+        sentence: item.meta_str("sentence")?.to_string(),
+    })
 }
 
 fn row_kind(item: &JItem) -> RowKind {
@@ -291,6 +309,9 @@ pub(crate) fn build_day(
             .find(|c| c.about() == Some(item.id()))
             .map(|c| checkin_view(c, &mentions))
             .transpose()?;
+        let answer = (kind == RowKind::Answer)
+            .then(|| answer_view(item))
+            .flatten();
         let move_to = (kind == RowKind::Note && item.view.kind == ItemKind::Text)
             .then(|| -> Result<String> {
                 Ok(match item.day_text() {
@@ -312,7 +333,7 @@ pub(crate) fn build_day(
                 mentions: mentions.get(item.id()).cloned().unwrap_or_default(),
                 left_out: item.left_out,
                 move_to,
-                answer: None,
+                answer,
             },
         ));
     }

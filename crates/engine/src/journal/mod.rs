@@ -9,6 +9,7 @@ pub(crate) mod day;
 pub(crate) mod keep;
 pub(crate) mod lookback;
 pub(crate) mod mentions;
+pub(crate) mod question;
 pub(crate) mod store;
 
 use std::collections::HashSet;

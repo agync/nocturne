@@ -50,19 +50,19 @@ fn made_by(tx: &Connection, role: &str, key: &str) -> Result<Option<String>> {
     ))?)
 }
 
-struct NewJournal<'a> {
-    kind: ItemKind,
-    source: Source,
-    title: &'a str,
-    text: Option<&'a str>,
-    status: &'a str,
-    meta: Value,
-    hold_until: Option<String>,
+pub(super) struct NewJournal<'a> {
+    pub kind: ItemKind,
+    pub source: Source,
+    pub title: &'a str,
+    pub text: Option<&'a str>,
+    pub status: &'a str,
+    pub meta: Value,
+    pub hold_until: Option<String>,
 }
 
 /// Insert a journal item. Its hash includes its own id, so identical words never collapse into
 /// one item.
-fn insert(tx: &Transaction<'_>, now: &str, n: &NewJournal<'_>) -> Result<String> {
+pub(super) fn insert(tx: &Transaction<'_>, now: &str, n: &NewJournal<'_>) -> Result<String> {
     let id = new_id("itm");
     let sha = sha256_hex(format!("{}\0{id}", n.text.unwrap_or("")).as_bytes());
     tx.execute(
@@ -125,7 +125,7 @@ fn clean(s: &Option<String>) -> Option<String> {
         .map(str::to_string)
 }
 
-fn is_replaced(conn: &Connection, id: &str) -> Result<bool> {
+pub(super) fn is_replaced(conn: &Connection, id: &str) -> Result<bool> {
     Ok(conn.query_row(
         "SELECT EXISTS(SELECT 1 FROM items WHERE json_extract(metadata, '$.replaces') = ?1)",
         [id],
