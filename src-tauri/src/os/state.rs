@@ -24,6 +24,8 @@ pub const FILE: &str = "os-state.json";
 pub struct OsFile {
     /// The page date a notification was sent for.
     pub notified: Option<String>,
+    /// The day the evening reminder was sent for.
+    pub evening_notified: Option<String>,
     /// The last day the spoken page was used.
     pub audio_used: Option<String>,
     /// The page date the person opened.

@@ -367,6 +367,87 @@ fn page_ready_with_a_saved_page_sends_one_private_free_notification() {
     );
 }
 
+fn run_evening(h: &common::Harness) -> bool {
+    let app = h.app.handle().clone();
+    tauri::async_runtime::block_on(async move { notify::check_evening(&app).await })
+}
+
+#[test]
+fn the_evening_reminder_is_off_by_default_and_sends_nothing() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    assert_eq!(
+        h.ok("get_settings", json!({}))["eveningReminder"],
+        json!({"on": false, "time": "21:00"})
+    );
+    h.clock.set("2026-11-13T21:00:00Z".parse().unwrap());
+    assert!(!run_evening(&h));
+    assert!(sent.0.lock().unwrap().is_empty());
+}
+
+#[test]
+fn the_evening_reminder_sends_once_at_its_time_with_fixed_words() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    h.ok(
+        "update_settings",
+        json!({"patch": {"eveningReminder": {"on": true, "time": "20:30"}}}),
+    );
+    h.ok(
+        "keep_note",
+        json!({"text": "A secret about Gran", "source": "quickCapture", "feeling": null, "good": false}),
+    );
+    h.clock.set("2026-11-13T20:29:00Z".parse().unwrap());
+    assert!(!run_evening(&h), "not before its time");
+    h.clock.set("2026-11-13T20:30:00Z".parse().unwrap());
+    assert!(run_evening(&h));
+    assert!(!run_evening(&h), "once a day");
+    h.clock.set("2026-11-13T20:45:00Z".parse().unwrap());
+    assert!(!run_evening(&h), "still once");
+    {
+        let sent = sent.0.lock().unwrap();
+        assert_eq!(sent.len(), 1);
+        assert_eq!(
+            sent[0],
+            (
+                "Nocturne".to_string(),
+                "Anything about today you want to keep?".to_string()
+            )
+        );
+    }
+    h.clock.set("2026-11-14T20:30:00Z".parse().unwrap());
+    assert!(run_evening(&h), "the next day it is due again");
+    let sent = sent.0.lock().unwrap();
+    assert_eq!(sent.len(), 2);
+    assert_eq!(sent[0], sent[1], "the same words every day");
+}
+
+#[test]
+fn checks_that_arrive_together_send_one_evening_reminder() {
+    let h = harness();
+    let sent = with_notifier(&h);
+    h.ok(
+        "update_settings",
+        json!({"patch": {"eveningReminder": {"on": true, "time": "21:00"}}}),
+    );
+    h.clock.set("2026-11-13T21:00:00Z".parse().unwrap());
+    let handles: Vec<_> = (0..8)
+        .map(|_| {
+            let app = h.app.handle().clone();
+            tauri::async_runtime::spawn(async move { notify::check_evening(&app).await })
+        })
+        .collect();
+    let shown = tauri::async_runtime::block_on(async {
+        let mut n = 0;
+        for handle in handles {
+            n += usize::from(handle.await.unwrap());
+        }
+        n
+    });
+    assert_eq!(shown, 1);
+    assert_eq!(sent.0.lock().unwrap().len(), 1);
+}
+
 // Windows starts at login through the autostart plugin, not an entry file.
 #[cfg(not(windows))]
 #[test]

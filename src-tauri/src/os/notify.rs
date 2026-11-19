@@ -1,8 +1,10 @@
-//! The one quiet notification: the page is ready.
+//! The quiet notifications: the page is ready, and the optional evening reminder.
 //!
 //! It is sent at most once per page date, only in the hours after the page time, only when the
 //! person has not opened the page, and never says anything private: the title is fixed and the
 //! body is built from the public needs-you count alone, never from the headline or any memory.
+//! The evening reminder is off unless turned on, sent once a day at its time, with words that
+//! never change.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -10,7 +12,7 @@ use std::time::Duration;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
-use nocturne_contract::{Delivery, EVENT_PAGE, SettingsView};
+use nocturne_contract::{Delivery, EVENT_PAGE, EveningReminder, SettingsView};
 use tauri::{AppHandle, Listener, Manager, Runtime};
 use tauri_plugin_notification::NotificationExt;
 
@@ -23,6 +25,8 @@ use crate::state::AppState;
 const CATCH_UP: SignedDuration = SignedDuration::from_hours(6);
 /// Nothing is sent from here on in the evening, whatever the page time.
 const LAST_HOUR: i8 = 21;
+/// How long after its time the evening reminder is still worth sending.
+const EVENING_CATCH_UP: SignedDuration = SignedDuration::from_hours(1);
 const CHECK_EVERY: Duration = Duration::from_secs(60);
 
 /// What shows a notification. A fake stands in for it in tests.
@@ -77,6 +81,30 @@ pub fn decide(
     let start = local(tz, today, h.parse().ok()?, m.parse().ok()?)?;
     let evening = local(tz, today, LAST_HOUR, 0)?;
     let end = start.checked_add(CATCH_UP).ok()?.min(evening);
+    (now >= start && now < end).then_some(today)
+}
+
+/// The day to remind for, if the evening reminder is due now. Pure: every input is passed in.
+///
+/// Due when the person turned it on, nothing is paused, nothing was sent today, and now is from
+/// its time until an hour later. Off, or a time that cannot be read, is never due.
+pub fn decide_evening(
+    now: Timestamp,
+    tz: &TimeZone,
+    reminder: &EveningReminder,
+    paused: bool,
+    notified: Option<Date>,
+) -> Option<Date> {
+    if !reminder.on || paused {
+        return None;
+    }
+    let today = now.to_zoned(tz.clone()).date();
+    if notified == Some(today) {
+        return None;
+    }
+    let (h, m) = reminder.time.split_once(':')?;
+    let start = local(tz, today, h.parse().ok()?, m.parse().ok()?)?;
+    let end = start.checked_add(EVENING_CATCH_UP).ok()?;
     (now >= start && now < end).then_some(today)
 }
 
@@ -145,6 +173,54 @@ pub async fn check<R: Runtime>(app: &AppHandle<R>) -> bool {
     }
 }
 
+/// Send the evening reminder if it is due. Returns whether one was shown. It says the same
+/// words every time and reads nothing the person kept.
+pub async fn check_evening<R: Runtime>(app: &AppHandle<R>) -> bool {
+    let (Some(shell), Some(os)) = (app.try_state::<AppState>(), app.try_state::<OsState>()) else {
+        return false;
+    };
+    let Some(notifier) = os.notifier() else {
+        return false;
+    };
+    let Ok(engine) = shell.engine() else {
+        return false;
+    };
+    let now = shell.now();
+    let tz = shell.clock.tz();
+    let paused = shell.status.is_paused(now);
+    let notified = os
+        .file()
+        .evening_notified
+        .as_deref()
+        .and_then(|d| d.parse().ok());
+    let Ok(reminder) = blocking(move || engine.evening_reminder()).await else {
+        return false;
+    };
+    let Some(date) = decide_evening(now, &tz, &reminder, paused, notified) else {
+        return false;
+    };
+    let claimed = os.update(|f| {
+        if f.evening_notified.as_deref() == Some(date.to_string().as_str()) {
+            return false;
+        }
+        f.evening_notified = Some(date.to_string());
+        true
+    });
+    if !claimed {
+        return false;
+    }
+    match notifier.notify(copy::EVENING_TITLE, copy::EVENING_BODY) {
+        Ok(()) => {
+            tracing::info!("evening reminder sent");
+            true
+        }
+        Err(e) => {
+            tracing::info!("evening reminder not shown: {e}");
+            false
+        }
+    }
+}
+
 /// Check whenever `page-ready` fires. The event is a trigger only: any page in a window can emit
 /// it with any payload, so the payload is never read and [`check`] asks the engine whether
 /// today's page is really saved. `listen_any` because the app broadcasts its events.
@@ -158,7 +234,7 @@ pub fn listen<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-/// Check when a page is saved and once a minute.
+/// Check when a page is saved and once a minute (the page notification and the evening reminder).
 pub fn install<R: Runtime>(app: &AppHandle<R>, os: &OsState) {
     os.set_notifier(Arc::new(PluginNotifier(app.clone())));
     listen(app);
@@ -166,6 +242,7 @@ pub fn install<R: Runtime>(app: &AppHandle<R>, os: &OsState) {
     tauri::async_runtime::spawn(async move {
         loop {
             check(&handle).await;
+            check_evening(&handle).await;
             tokio::time::sleep(CHECK_EVERY).await;
         }
     });
@@ -306,6 +383,69 @@ mod tests {
         assert_eq!(sent, 1, "fires once");
     }
 
+    fn reminder(on: bool, time: &str) -> EveningReminder {
+        EveningReminder {
+            on,
+            time: time.into(),
+        }
+    }
+
+    fn evening(now: &str, r: &EveningReminder, notified: Option<&str>) -> Option<Date> {
+        decide_evening(
+            at(now),
+            &london(),
+            r,
+            false,
+            notified.map(|d| d.parse().unwrap()),
+        )
+    }
+
+    #[test]
+    fn the_evening_reminder_is_due_at_its_time_once_a_day() {
+        let on = reminder(true, "21:00");
+        assert_eq!(evening("2026-11-13T20:59:00Z", &on, None), None);
+        assert_eq!(
+            evening("2026-11-13T21:00:00Z", &on, None),
+            date("2026-11-13")
+        );
+        assert_eq!(
+            evening("2026-11-13T21:40:00Z", &on, None),
+            date("2026-11-13"),
+            "a late start still sends it"
+        );
+        assert_eq!(evening("2026-11-13T22:00:00Z", &on, None), None, "too late");
+        assert_eq!(
+            evening("2026-11-13T21:01:00Z", &on, Some("2026-11-13")),
+            None
+        );
+        assert_eq!(
+            evening("2026-11-14T21:00:00Z", &on, Some("2026-11-13")),
+            date("2026-11-14")
+        );
+    }
+
+    #[test]
+    fn the_evening_reminder_is_off_or_paused_never_due() {
+        assert_eq!(
+            evening("2026-11-13T21:00:00Z", &reminder(false, "21:00"), None),
+            None
+        );
+        assert_eq!(
+            evening("2026-11-13T21:00:00Z", &reminder(true, "late"), None),
+            None
+        );
+        assert_eq!(
+            decide_evening(
+                at("2026-11-13T21:00:00Z"),
+                &london(),
+                &reminder(true, "21:00"),
+                true,
+                None
+            ),
+            None
+        );
+    }
+
     #[test]
     fn body_counts_words() {
         let sentences: Vec<_> = [0, 1, 2, 9, 10].map(copy::count_sentence).into();
@@ -323,6 +463,14 @@ mod tests {
             body(2),
             "Two things need you today. It\u{2019}s there when you open Nocturne."
         );
+    }
+
+    #[test]
+    fn the_evening_words_are_fixed_and_plain() {
+        assert_eq!(copy::EVENING_TITLE, "Nocturne");
+        assert_eq!(copy::EVENING_BODY, "Anything about today you want to keep?");
+        let text = format!("{} {}", copy::EVENING_TITLE, copy::EVENING_BODY);
+        assert!(!text.contains('\u{2014}') && copy::has_jargon(&text).is_none());
     }
 
     #[test]

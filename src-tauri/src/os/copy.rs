@@ -27,6 +27,9 @@ pub const MENU_RESUME: &str = "Resume now";
 pub const MENU_QUIT: &str = "Quit Nocturne";
 
 pub const NOTICE_TITLE: &str = "Your page is ready";
+/// The evening reminder: the app's name, and words that never change and carry nothing kept.
+pub const EVENING_TITLE: &str = "Nocturne";
+pub const EVENING_BODY: &str = "Anything about today you want to keep?";
 pub const NOTICE_TAIL: &str = "It\u{2019}s there when you open Nocturne.";
 
 /// "1 thing needs you", "3 things need you".
@@ -87,6 +90,8 @@ pub fn all() -> Vec<String> {
         MENU_QUIT,
         NOTICE_TITLE,
         NOTICE_TAIL,
+        EVENING_TITLE,
+        EVENING_BODY,
     ]
     .iter()
     .map(|s| s.to_string())
