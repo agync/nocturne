@@ -6,16 +6,11 @@ import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { MemoryView, NeedsYouEntry, Receipt } from "../../engine/bindings";
 import { useEngine, useNeedsYou, usePage, useRefresh } from "../../engine/context";
-import { DueEntry, dueBadge, UnconfirmedEntry, WhichEntry } from "./Entries";
+import { DueEntry, dueBadge, SameNameEntry, UnconfirmedEntry, WhichEntry } from "./Entries";
 import styles from "./NeedsYou.module.css";
 
-/** The entries this screen renders; a "Which name is this?" entry is not drawn here yet. */
-type HandledEntry = Exclude<NeedsYouEntry, { type: "sameName" }>;
-
-const isHandled = (entry: NeedsYouEntry): entry is HandledEntry => entry.type !== "sameName";
-
 /** One stable key per entry, so a settled entry stays settled whatever the engine says next. */
-export function entryKey(entry: HandledEntry): string {
+export function entryKey(entry: NeedsYouEntry): string {
   switch (entry.type) {
     case "which":
       return `which:${entry.conflictId}`;
@@ -25,19 +20,25 @@ export function entryKey(entry: HandledEntry): string {
       return `due:${entry.memory.id}`;
     case "promise":
       return `promise:${entry.memory.id}`;
+    case "sameName":
+      return `sameName:${entry.question.id}`;
   }
 }
 
 /** Decisions first, then things to confirm, then things to tick off, as the design lists them. */
-const RANK: Record<HandledEntry["type"], number> = {
+const RANK: Record<NeedsYouEntry["type"], number> = {
   which: 0,
-  unconfirmed: 1,
-  due: 2,
-  promise: 3,
+  sameName: 1,
+  unconfirmed: 2,
+  due: 3,
+  promise: 4,
 };
 
-const isOpen = (entry: HandledEntry) =>
-  entry.type === "which" || entry.type === "unconfirmed" || !entry.done;
+const isOpen = (entry: NeedsYouEntry) =>
+  entry.type === "which" ||
+  entry.type === "unconfirmed" ||
+  entry.type === "sameName" ||
+  !entry.done;
 
 /** What is waiting for the person: decide, confirm or tick off. One at a time, from the keyboard if they like. */
 export default function NeedsYou() {
@@ -58,7 +59,6 @@ export default function NeedsYou() {
   const afterForget = useRef<number | null>(null);
 
   const entries = (needs.data ?? [])
-    .filter(isHandled)
     .filter((e) => isOpen(e) && !settled.has(entryKey(e)))
     .sort((a, b) => RANK[a.type] - RANK[b.type]);
 
@@ -242,6 +242,22 @@ export default function NeedsYou() {
                               subject: done.subject,
                               chosen: done.chosen,
                             });
+                          })
+                        }
+                      />
+                    ) : entry.type === "sameName" ? (
+                      <SameNameEntry
+                        index={index}
+                        busy={working}
+                        question={entry.question}
+                        onOpen={openReceipt}
+                        onAnswer={(answer) =>
+                          void settle(key, index, async () => {
+                            const done = await engine.answerSameName(entry.question.id, answer);
+                            refresh("journal");
+                            return answer.type !== "leave" && done.role
+                              ? t("journal.people.filed", { name: done.name, role: done.role })
+                              : "";
                           })
                         }
                       />

@@ -9,10 +9,11 @@ import { renderApp, setViewport } from "../../test/render";
 class Waiting extends MockEngine {
   extra: Array<(memories: MemoryView[]) => NeedsYouEntry> = [];
   failList = false;
+  sameName = false;
 
   override async listNeedsYou(): Promise<NeedsYouEntry[]> {
     if (this.failList) throw new Error("no");
-    const base = await super.listNeedsYou();
+    const base = (await super.listNeedsYou()).filter((e) => this.sameName || e.type !== "sameName");
     const memories = await this.listMemories({
       entityId: null,
       itemId: null,
@@ -333,5 +334,50 @@ describe("when the list cannot be read", () => {
     expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent(
       "2 things are waiting",
     );
+  });
+});
+
+describe("a name that fits two people", () => {
+  const sameName = async () => {
+    const engine = new Waiting();
+    engine.sameName = true;
+    await open(engine);
+    return engine;
+  };
+
+  it("asks which Sam, with the quoted line, its receipt and every way to answer", async () => {
+    await sameName();
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Which Sam is this?" }),
+    ).toBeVisible();
+    expect(screen.getByText("Same name")).toBeVisible();
+    expect(screen.getByText(/I think I’ll go with her and Sam on Saturday/)).toBeVisible();
+    const group = screen.getByRole("group", { name: "Which Sam is this?" });
+    const names = within(group)
+      .getAllByRole("radio")
+      .map((r) => r.getAttribute("aria-label"));
+    expect(names).toEqual(["Sam, your partner", "Sam, from work", "Someone new"]);
+    expect(screen.getByRole("button", { name: "Leave it" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "This one" })).toBeDisabled();
+  });
+
+  it("files under the one picked, says where, and refreshes needs-you and the journal", async () => {
+    const engine = await sameName();
+    const spy = vi.spyOn(engine, "answerSameName");
+    await userEvent.click(await screen.findByRole("radio", { name: "Sam, from work" }));
+    await userEvent.click(screen.getByRole("button", { name: "This one" }));
+    expect(spy).toHaveBeenCalledWith("sn-sam", { type: "entity", entityId: "ent-sam-work" });
+    expect(await screen.findByText("Filed under Sam, from work.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Which Sam is this?" })).toBeNull();
+    expect((await engine.getJournalDay()).sameName).toEqual([]);
+  });
+
+  it("answers Someone new and Leave it without a filing message", async () => {
+    const engine = await sameName();
+    const spy = vi.spyOn(engine, "answerSameName");
+    await userEvent.click(await screen.findByRole("button", { name: "Leave it" }));
+    expect(spy).toHaveBeenCalledWith("sn-sam", { type: "leave" });
+    await waitFor(() => expect(screen.queryByText("Which Sam is this?")).toBeNull());
+    expect(screen.queryByText(/Filed under/)).toBeNull();
   });
 });

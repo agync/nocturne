@@ -1,10 +1,16 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import { Button } from "../../components/Button/Button";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { Thumb } from "../../components/Thumb/Thumb";
 import { formatDay } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { MemoryView, Receipt, WhichOption } from "../../engine/bindings";
+import type {
+  MemoryView,
+  Receipt,
+  SameNameAnswer,
+  SameNameQuestion,
+  WhichOption,
+} from "../../engine/bindings";
 import styles from "./NeedsYou.module.css";
 
 const weekdayLong = (iso: string) =>
@@ -196,6 +202,98 @@ export function DueEntry({ memory, badge, onDone, onOpen, busy }: DueProps) {
       >
         {t("button.markDone")}
       </Button>
+    </section>
+  );
+}
+
+interface SameNameProps extends EntryProps {
+  question: SameNameQuestion;
+  onAnswer: (answer: SameNameAnswer) => void;
+  onOpen: (receipt: Receipt) => void;
+}
+
+const NEW = "new";
+
+/** A name that fits two people Nocturne knows: the person says which, or that it is someone new. */
+export function SameNameEntry({ question, onAnswer, onOpen, busy }: SameNameProps) {
+  const heading = useId();
+  const group = useId();
+  const [picked, setPicked] = useState<string | null>(null);
+  const choose = () => {
+    if (picked === null) return;
+    onAnswer(picked === NEW ? { type: "new" } : { type: "entity", entityId: picked });
+  };
+  const choices = [
+    ...question.options.map((o) => ({
+      id: o.entityId,
+      label: o.role ? t("journal.people.choice", { name: o.name, role: o.role }) : o.name,
+      name: o.name,
+      role: o.role,
+    })),
+    { id: NEW, label: t("journal.people.someoneNew"), name: null, role: null },
+  ];
+  return (
+    <section className={styles.entry} aria-labelledby={heading}>
+      <div className={styles.entryHead}>
+        <span className={styles.badge} data-tone="marker">
+          {t("journal.people.badge")}
+        </span>
+        <h2 id={heading} className={styles.entryTitle}>
+          {t("journal.people.which", { name: question.name })}
+        </h2>
+      </div>
+      <div className={styles.evidence}>
+        <p className={styles.quote}>{`“${question.quote.replace(/^“|”$/g, "")}”`}</p>
+        <ReceiptChip receipt={question.receipt} onOpen={onOpen} />
+      </div>
+      <fieldset className={styles.choices}>
+        <legend className="sr-only">{t("journal.people.which", { name: question.name })}</legend>
+        {choices.map((c) => (
+          <label key={c.id} className={styles.choice} data-on={picked === c.id || undefined}>
+            <input
+              type="radio"
+              name={group}
+              value={c.id}
+              checked={picked === c.id}
+              disabled={busy}
+              onChange={() => setPicked(c.id)}
+              aria-label={c.label}
+            />
+            <span className={styles.radio} aria-hidden="true" />
+            {c.name ? (
+              <span className={styles.choiceText} aria-hidden="true">
+                {c.name}
+                {c.role ? <small>{c.role}</small> : null}
+              </span>
+            ) : (
+              <span className={styles.choiceText} aria-hidden="true">
+                {c.label}
+              </span>
+            )}
+          </label>
+        ))}
+      </fieldset>
+      <div className={styles.buttons}>
+        <Button
+          variant="primary"
+          data-choice
+          disabled={busy || picked === null}
+          aria-keyshortcuts="1"
+          onClick={choose}
+        >
+          {t("journal.people.thisOne")}
+        </Button>
+        <button
+          type="button"
+          className={styles.leave}
+          data-choice
+          disabled={busy}
+          aria-keyshortcuts="2"
+          onClick={() => onAnswer({ type: "leave" })}
+        >
+          {t("journal.people.leave")}
+        </button>
+      </div>
     </section>
   );
 }
