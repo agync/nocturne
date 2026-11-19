@@ -929,7 +929,7 @@ fn the_audio_edition_keeps_the_kind_and_none_of_the_words() {
 }
 
 #[test]
-fn the_phone_page_carries_no_journal_question_sentence() {
+fn the_phone_page_keeps_what_it_always_did() {
     let w = world();
     save_day(&w.f, PAGE);
     let page =
@@ -937,9 +937,7 @@ fn the_phone_page_carries_no_journal_question_sentence() {
             .page_for(Some(date(PAGE)), Edition::Phone)
             .unwrap()
             .unwrap();
-    assert!(page.question.is_none());
-    let computer = compose(&w.f, PAGE);
-    assert_eq!(computer.question.unwrap().kind, QuestionKind::Journal);
+    assert_eq!(page.question.unwrap().kind, QuestionKind::Journal);
 }
 
 #[test]
