@@ -1,0 +1,78 @@
+# Keeps the repository's caches under GitHub's 10 GB limit: every job and platform
+# keeps its newest cache on `main`, older generations are deleted.
+#
+# Every `Cargo.lock` change starts a new generation of the Rust jobs' caches, and
+# a `main` push runs every job, so 7 to 9 caches of 0.4 to 1.4 GB are saved at
+# once. Without this the total passes 10 GB, GitHub evicts the least recently
+# used entry in the middle of some later run, and that job rebuilds the whole
+# dependency graph (444 to 454 crates, 3 to 9 minutes on macOS and Windows).
+#
+# Runs after a push to `main` finishes, and once a day in case a run was
+# cancelled and skipped a save. The `workflow_run` trigger runs the workflow
+# from the default branch and never a pull request's version of it, so this job
+# alone holds the write permission it needs.
+name: cache-prune
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: cache-prune
+  cancel-in-progress: false
+
+jobs:
+  prune:
+    name: prune
+    # A failed run still leaves caches worth pruning; a cancelled one was
+    # superseded by a later push whose own run prunes after it. A pull request
+    # never prunes, even when its head branch is called main.
+    if: >-
+      github.event_name != 'workflow_run'
+      || (github.event.workflow_run.event == 'push'
+      && github.event.workflow_run.conclusion != 'cancelled')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Delete every cache but the newest for each job and platform
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api --paginate -H 'Accept: application/vnd.github+json' \
+            "repos/$GITHUB_REPOSITORY/actions/caches?per_page=100" \
+            --jq '.actions_caches[] | [.id, .ref, .key, .created_at, .last_accessed_at] | @tsv' \
+            > "$RUNNER_TEMP/caches.tsv"
+          python3 -I scripts/prune_caches.py < "$RUNNER_TEMP/caches.tsv" \
+            > "$RUNNER_TEMP/delete.tsv"
+          {
+            echo "### Caches deleted"
+            echo
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ ! -s "$RUNNER_TEMP/delete.tsv" ]; then
+            echo "Nothing to prune." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          while IFS=$'\t' read -r id key; do
+            # A cache can be evicted between the listing and the delete.
+            if answer=$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/actions/caches/$id" 2>&1); then
+              echo "- \`$key\`" >> "$GITHUB_STEP_SUMMARY"
+            elif [[ "$answer" == *"HTTP 404"* ]]; then
+              echo "- \`$key\` (already gone)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "$answer" >&2
+              exit 1
+            fi
+          done < "$RUNNER_TEMP/delete.tsv"

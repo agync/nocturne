@@ -11,7 +11,7 @@ set -euo pipefail
 export LC_ALL=C
 
 # A change here runs every job.
-everything='^(\.github/workflows/|Makefile$|rust-toolchain\.toml$|scripts/ci-areas\.sh$)'
+everything='^(\.github/(workflows|actions)/|Makefile$|rust-toolchain\.toml$|scripts/ci-areas\.sh$)'
 lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
 rust_side="crates/|src-tauri/|docs/guide/|\.cargo/|clippy\.toml$|$lockfiles"
 # What the packages are built from. The Rust sources are not here: the rust and rust-platforms

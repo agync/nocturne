@@ -69,8 +69,8 @@ The `changed paths` job compares a pull request with its merge base, and its run
 which jobs it chose. The table of areas is `scripts/ci-areas.sh`; `scripts/test_ci_areas.py`
 checks one changed path for each of its patterns, that each job's `if:` reads the flag of its
 area and it needs only `changes`, that none continues on error, and that `gate` needs every job.
-A change to a workflow, the `Makefile`, `rust-toolchain.toml` or that script, a push to `main`
-and a hand run run every job. Without a merge queue, the run on `main` is the first test of
+A change to a workflow, an action, the `Makefile`, `rust-toolchain.toml` or that script, a push to
+`main` and a hand run run every job. Without a merge queue, the run on `main` is the first test of
 the merged code and the first build of the code compiled only for a release. The areas include what one side's tests read from the other: the Rust tests read files in
 `ui/` and write the bindings there, and the interface's tests read files in `src-tauri/`, so on
 x86_64 Linux both sides run when either changes, while the other platforms run only their own
@@ -86,7 +86,14 @@ on a platform is tested there. The jobs are split because one runner would run t
 browser tests and the Go tests one after another, and the split gives each its own cache and its
 own verdict. Each Rust job restores the registry and its dependencies' build output with
 `Swatinem/rust-cache`, one cache per job and platform that only `main` saves. The workspace's own
-crates are left out of it, which keeps every cache small enough for the repository's 10 GB.
+crates are left out of it, which keeps every cache small enough for the repository's 10 GB. The
+job installs the toolchain `rust-toolchain.toml` pins and removes the image's other toolchains
+before the cache step: the action hashes every installed toolchain into its key, and the image's
+extra one comes and goes between runner instances, which would save the same job under two keys.
+`.github/workflows/cache-prune.yml` deletes every cache but the newest for each job and platform
+on `main`, so a new `Cargo.lock` starts a new generation and the previous one stays to restore from
+until the new one is saved. A cache accessed in the last hour is kept, so a prune does not take
+one from under a restore already running.
 
 CI does not run what needs more than a hosted runner has, and the run summary of the `gate` job
 says so each time:
