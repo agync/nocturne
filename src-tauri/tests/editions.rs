@@ -459,3 +459,63 @@ fn a_voice_that_ran_and_failed_is_internal_and_one_that_is_absent_is_unavailable
         "unavailable"
     );
 }
+
+#[test]
+fn a_journal_line_is_never_read_and_the_reading_says_how_many_it_left_out() {
+    let voice = Voice::new();
+    let h = harness_with_mind(voice.clone());
+    let e = h.engine();
+    let mut rent = Candidate::new(
+        "Rent",
+        Predicate::Due,
+        "rent",
+        "Rent is due on Saturday.",
+        0.9,
+    );
+    rent.due = Some("2026-11-14".parse().unwrap());
+    h.learn_candidate("rent note", rent);
+
+    let entry = h.ok(
+        "save_entry_text",
+        json!({"day": "2026-11-13", "itemId": null, "block": 0, "text": "Gran is unwell"}),
+    );
+    let item = entry["item"]["id"].as_str().unwrap().to_string();
+    h.ok("read_entry_now", json!({"day": "2026-11-13"}));
+    let mut secret = Candidate::new(
+        "Gran",
+        Predicate::Due,
+        "visit",
+        "Visit Gran on Sunday.",
+        0.9,
+    );
+    secret.due = Some("2026-11-15".parse().unwrap());
+    let leased = e
+        .lease_item(&item, Duration::from_secs(60))
+        .expect("the entry can be read");
+    e.apply_candidates(&item, &leased.lease, vec![secret])
+        .unwrap();
+    h.save_todays_page();
+
+    let page = speak(&h);
+    assert_eq!(page["journalSkipped"], 1, "{page}");
+    assert_eq!(page["privateSkipped"], 0);
+    let said = voice.said();
+    let all = said.join(" ");
+    assert!(all.contains("Rent is due on Saturday."), "{all}");
+    assert!(!all.to_lowercase().contains("gran"), "{all}");
+    assert_eq!(
+        said.last().unwrap(),
+        "1 line from your journal is on the page, not read aloud."
+    );
+    let kinds: Vec<_> = page["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["kind"].as_str().unwrap().to_string())
+        .collect();
+    assert!(!kinds.is_empty());
+
+    let again = speak(&h);
+    assert_eq!(again["path"], page["path"], "kept, not made again");
+    assert_eq!(again["journalSkipped"], 1, "the kept reading says it too");
+}

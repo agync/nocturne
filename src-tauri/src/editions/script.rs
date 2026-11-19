@@ -63,6 +63,15 @@ fn spoken_line(line: &PageLine) -> String {
     }
 }
 
+/// The closing words when lines that cite the journal were left out of the reading.
+pub fn journal_note(count: u32) -> String {
+    if count == 1 {
+        "1 line from your journal is on the page, not read aloud.".to_string()
+    } else {
+        format!("{count} lines from your journal are on the page, not read aloud.")
+    }
+}
+
 fn section(kind: SpokenKind, lines: impl IntoIterator<Item = String>) -> Option<Section> {
     let parts: Vec<String> = lines.into_iter().filter(|l| !l.trim().is_empty()).collect();
     let text = parts.join(" ");
@@ -70,7 +79,8 @@ fn section(kind: SpokenKind, lines: impl IntoIterator<Item = String>) -> Option<
 }
 
 /// The script for a page: the opening, what needs the person, what changed (the top few),
-/// what is coming up, what was let go (one sentence), and the question.
+/// what is coming up, what was let go (one sentence), and the question. When lines from the
+/// journal were left out, the last section ends by saying how many.
 pub fn audio_script(page: &PageView) -> Vec<Section> {
     let mut out = Vec::new();
     out.extend(section(
@@ -113,6 +123,13 @@ pub fn audio_script(page: &PageView) -> Vec<Section> {
                 "You can answer it on today\u{2019}s page.".to_string(),
             ],
         ));
+    }
+    if let Some(count) = page.journal_skipped.filter(|n| *n > 0)
+        && let Some(last) = out.last_mut()
+    {
+        let note = journal_note(count);
+        last.text = format!("{} {note}", last.text);
+        last.parts.push(note);
     }
     out
 }
@@ -229,6 +246,36 @@ mod tests {
         let all: String = script.iter().map(|s| s.text.as_str()).collect();
         assert!(!all.contains("Gone."));
         assert!(!all.contains("**"));
+    }
+
+    #[test]
+    fn lines_left_out_for_the_journal_are_counted_at_the_end() {
+        assert_eq!(
+            journal_note(1),
+            "1 line from your journal is on the page, not read aloud."
+        );
+        assert_eq!(
+            journal_note(3),
+            "3 lines from your journal are on the page, not read aloud."
+        );
+        let mut p = page();
+        p.journal_skipped = Some(0);
+        assert_eq!(audio_script(&p)[0].text, "Good morning. One thing today.");
+        p.journal_skipped = Some(2);
+        p.let_go = vec![line(LineKind::LetGo, "Old coupon")];
+        let script = audio_script(&p);
+        let last = script.last().unwrap();
+        assert_eq!(last.kind, SpokenKind::LetGo);
+        assert_eq!(
+            last.parts.last().unwrap(),
+            "2 lines from your journal are on the page, not read aloud."
+        );
+        assert!(
+            script.iter().all(|s| s.parts.join(" ") == s.text),
+            "the pieces say what the section says, in order"
+        );
+        let words: String = script.iter().map(|s| s.text.as_str()).collect();
+        assert!(!words.contains('\u{2014}'));
     }
 
     #[test]

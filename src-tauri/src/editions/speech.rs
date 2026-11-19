@@ -105,6 +105,7 @@ async fn make<R: Runtime>(
         })
         .await?;
         let skipped = page.as_ref().map_or(0, |p| p.private_skipped);
+        let journal_skipped = page.as_ref().and_then(|p| p.journal_skipped);
         if let Some(path) = cached
             && let Some((path, sections, duration_ms)) = read_kept(path).await
         {
@@ -113,7 +114,7 @@ async fn make<R: Runtime>(
                 sections,
                 duration_ms,
                 private_skipped: skipped,
-                journal_skipped: None,
+                journal_skipped,
             });
         }
         let page = page.ok_or_else(|| CommandError::not_found(format!("page {day}")))?;
