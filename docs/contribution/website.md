@@ -113,6 +113,12 @@ make -C site shots PHONE=http://127.0.0.1:4174   # writes site/assets/img/*.webp
 `make shots` prints where the highlighted part of each tour picture sits. When a recapture moves
 it, copy the numbers into that step's `data-mark` in `site/index.html`; the translated pages share it.
 
+`SHOTS=journal,look make -C site shots` takes only the shots it names. The journal pictures need a
+mock interface that has the journal. They set the mock clock to Thursday 12 November, the evening
+before the hero's Friday page, and are cut on a blank line so the card laid over the window's foot
+covers no words. A capture that moves that line
+needs a new `height` in `site/scripts/shots.mjs` and new picture sizes in `site/index.html`.
+
 On wide screens, when the reader has not asked for reduced motion, `assets/js/tour.js` turns the
 Keep, Ask and morning page steps into one still frame beside the text: as each step reaches the
 middle of the screen only the page in the frame cross-fades, and a short highlighter pass shows

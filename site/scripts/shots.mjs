@@ -4,6 +4,9 @@
 //   cd ui && npx vite --mode mock --port 4173     # in another terminal
 //   node site/scripts/shots.mjs http://127.0.0.1:4173 [phone origin]
 //
+// SHOTS names the shots to take, separated by commas (SHOTS=journal,look); without it, every
+// shot is taken.
+//
 // The phone shot needs the phone app's scripted build, served on its own. Without it the phone
 // shot is skipped:
 //
@@ -16,6 +19,13 @@
 // picture at the top of the page, so the page hides it. A shot with `mark` prints where that
 // element sits, in percent of the picture; the page's tour uses those numbers to show where to
 // look.
+//
+// The journal shots set the mock clock to Thursday 12 November in the evening, the day the hero's
+// Friday page looks back on. The journal window is cut on a blank line, below the check-ins on wide
+// screens and below the entry's words on narrow ones, so the card of the day looked back on, which
+// the page lays over the window's foot, covers no words. That card is the reflection's first
+// section alone, on the sheet colour. The phone shot is tall enough to show the note under the
+// tiles that things marked private stay on the computer.
 //
 // Needs the UI dependencies (Playwright) and ImageMagick (`magick`) with WebP. UI_DIR names another
 // checkout's ui/ when this one has no node_modules. CHROME_PATH points at a Chromium build when
@@ -41,8 +51,10 @@ const desktop = { width: 1280, height: 800 };
 const column = { width: 1000, height: 900 };
 const phone = { width: 390, height: 760 };
 const ASK = "What does Leo need for his trip?";
+const THURSDAY = "2026-11-12T21:40:00Z";
 
-// Each shot is captured in both themes. `widths` are the WebP widths written, in pixels.
+// Each shot is captured in both themes. `widths` are the WebP widths written, in pixels. `height`
+// cuts a shot that many pixels from its top; `pad` frames a clipped element.
 const shots = [
   { name: "page", route: "/#/today", viewport: desktop, clip: "main article", height: 625, widths: [560, 1120] },
   { name: "page-narrow", route: "/#/today", viewport: phone, widths: [390, 780] },
@@ -52,7 +64,10 @@ const shots = [
   { name: "ask", route: "/#/ask", viewport: column, clip: "column", ask: ASK, mark: "[class*=_receipts_]", widths: [768, 1536] },
   { name: "ask-narrow", route: "/#/ask", viewport: phone, clip: "main", ask: ASK, widths: [390, 780] },
   { name: "today", route: "/#/today", viewport: column, clip: "column", mark: "[class*=_line_]:has(fieldset)", widths: [768, 1536] },
-  { name: "phone", phone: true, route: "/", viewport: { width: 390, height: 620 }, widths: [390, 780] },
+  { name: "journal", route: "/#/journal", now: THURSDAY, viewport: column, clip: "column", height: 702, widths: [768, 1536] },
+  { name: "journal-narrow", route: "/#/journal", now: THURSDAY, viewport: phone, clip: "main", height: 475, widths: [390, 780] },
+  { name: "look", route: "/#/journal/look-back/day/2026-11-12", now: THURSDAY, viewport: { width: 880, height: 900 }, clip: "main article section", pad: 16, widths: [560, 1120] },
+  { name: "phone", phone: true, route: "/", viewport: { width: 390, height: 704 }, widths: [390, 780] },
 ];
 
 async function settle(page) {
@@ -64,12 +79,15 @@ async function settle(page) {
   await page.waitForTimeout(500);
 }
 
+const only = process.env.SHOTS ? new Set(process.env.SHOTS.split(",")) : null;
+
 const browser = await chromium.launch(
   process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {},
 );
 try {
   for (const theme of ["light", "dark"]) {
     for (const shot of shots) {
+      if (only && !only.has(shot.name)) continue;
       if (shot.phone && !phoneOrigin) {
         console.log(`skipped ${shot.name}: no phone origin`);
         continue;
@@ -79,9 +97,11 @@ try {
         deviceScaleFactor: 2,
         colorScheme: theme,
         reducedMotion: "reduce",
+        ...(shot.now ? { timezoneId: "Europe/London" } : {}),
       });
       const page = await context.newPage();
-      await page.goto((shot.phone ? phoneOrigin : origin) + shot.route);
+      const route = shot.now ? shot.route.replace("/#", `/?mockNow=${shot.now}#`) : shot.route;
+      await page.goto((shot.phone ? phoneOrigin : origin) + route);
       await settle(page);
       if (shot.ask) {
         const box = page.getByRole("textbox").first();
@@ -105,6 +125,7 @@ try {
           shot.clip === "column"
             ? { x: r.x, y: 0, width: shot.viewport.width - r.x, height: shot.viewport.height }
             : r;
+        if (shot.height) area.height = shot.height;
       }
       if (shot.mark && area && theme === "light") {
         const m = await page.locator(shot.mark).first().boundingBox();
@@ -117,6 +138,13 @@ try {
       const png = path.join(work, `${shot.name}-${theme}.png`);
       if (area) {
         await page.screenshot({ path: png, clip: area });
+      } else if (shot.pad) {
+        // The section's hairline sits on its top edge; its own padding stands in for the top pad.
+        const r = await page.locator(shot.clip).first().boundingBox();
+        await page.screenshot({
+          path: png,
+          clip: { x: r.x - shot.pad, y: r.y + 1, width: r.width + shot.pad * 2, height: r.height - 1 + shot.pad },
+        });
       } else if (shot.clip) {
         const r = await page.locator(shot.clip).first().boundingBox();
         await page.screenshot({
