@@ -1,1 +1,24 @@
-{}
+{
+  "journal.question.label": "One question · from your journal",
+  "journal.question.opening.sameDay.wrote": "Yesterday you wrote:",
+  "journal.question.opening.sameDay.said": "Yesterday you said:",
+  "journal.question.opening.weekday.wrote": "On {weekday} you wrote:",
+  "journal.question.opening.weekday.said": "On {weekday} you said:",
+  "journal.question.opening.date.wrote": "On {day} {month} you wrote:",
+  "journal.question.opening.date.said": "On {day} {month} you said:",
+  "journal.question.howDidItGo": "How did it go?",
+  "journal.question.quote": "“{sentence}”",
+  "journal.question.chip.entry": "Entry · {day} · {time}",
+  "journal.question.chip.voice": "Voice note · {duration}",
+  "journal.question.fine": "Fine",
+  "journal.question.notGreat": "Not great",
+  "journal.question.notYet": "Not yet",
+  "journal.question.answered": "{choice}. Kept on today’s journal.",
+  "journal.question.add.label": "Anything to add? (optional)",
+  "journal.question.add.placeholder": "A line, if you like.",
+  "journal.question.add.button": "Add",
+  "journal.question.added": "“{line}” Added.",
+  "journal.question.open": "Open today’s journal ›",
+  "journal.timeline.about": "About: “{sentence}”",
+  "journal.timeline.emptyPast": "Nothing was kept on this day."
+}

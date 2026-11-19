@@ -9,6 +9,8 @@ export interface Overrides {
   /** Lines whose memory has just been forgotten for good. */
   forgotten: string[];
   answer: QuestionChoice | null;
+  /** The line just added to a journal question's answer. */
+  line: string | null;
 }
 
 export const NO_OVERRIDES: Overrides = {
@@ -17,6 +19,7 @@ export const NO_OVERRIDES: Overrides = {
   restored: [],
   forgotten: [],
   answer: null,
+  line: null,
 };
 
 function patchLine(line: PageLine, o: Overrides): PageLine {
@@ -29,12 +32,19 @@ function patchLine(line: PageLine, o: Overrides): PageLine {
   return line;
 }
 
+function patchQuestion(question: PageView["question"], o: Overrides): PageView["question"] {
+  if (!question) return question;
+  const answered = o.answer ?? question.answered;
+  if (!question.journal || o.line === null) return o.answer ? { ...question, answered } : question;
+  return { ...question, answered, journal: { ...question.journal, line: o.line } };
+}
+
 export function applyOverrides(page: PageView, o: Overrides): PageView {
   return {
     ...page,
     needsYou: page.needsYou.map((l) => patchLine(l, o)),
     changed: page.changed.map((l) => patchLine(l, o)),
     letGo: page.letGo.map((l) => patchLine(l, o)),
-    question: page.question && o.answer ? { ...page.question, answered: o.answer } : page.question,
+    question: patchQuestion(page.question, o),
   };
 }

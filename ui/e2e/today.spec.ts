@@ -47,16 +47,16 @@ test.describe("screenshots of #/today", () => {
 test.describe("the page works", () => {
   test("choosing a dentist time resolves it and announces it politely", async ({ page }) => {
     await ready(page);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two things need you today.");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things need you today.");
     await page.getByRole("button", { name: /Thursday 19 Nov, 10:00/ }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("One thing needs you today.");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two things need you today.");
     const status = page.getByRole("status").filter({ hasText: "set to" });
     await expect(status).toHaveText("Dentist set to Thursday 19 Nov, 10:00.");
     await expect(status).toHaveAttribute("aria-live", "polite");
     await expect(
       page.getByText(/it is\. The other is kept as history, not deleted\./),
     ).toBeVisible();
-    // The rail also counts the journal's "Which Sam is this?" question, which the page does not.
+    // The page's headline counts what the rail counts, the "Which Sam is this?" question included.
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
     ).toContainText("2");
@@ -266,5 +266,28 @@ test.describe("which-is-right cards on a narrow window", () => {
         () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
       ),
     ).toBeLessThanOrEqual(0);
+  });
+});
+
+test.describe("the page's question from the journal", () => {
+  const open = (page: Page) =>
+    ready(page, "?mockNow=2026-11-20T09:00:00&mockQuestion=journal#/today");
+
+  test("asks, keeps the answer at once and takes a line", async ({ page }) => {
+    await open(page);
+    await expect(page.getByText("One question · from your journal")).toBeVisible();
+    await expect(page.getByText(/^Yesterday you wrote:/)).toBeVisible();
+    await page.getByRole("button", { name: "Not great" }).click();
+    await expect(page.getByText("Not great. Kept on today’s journal.")).toBeVisible();
+    await page
+      .getByLabel("Anything to add? (optional)")
+      .fill("Mrs Okafor is worried about his reading");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
+    await expect(page.getByText("“Mrs Okafor is worried about his reading” Added.")).toBeVisible();
+    await page.getByRole("link", { name: "Open today’s journal ›" }).click();
+    await expect(page).toHaveURL(/#\/journal$/);
+    await expect(
+      page.getByText("About: “Parents’ evening at six. Not looking forward to it.”"),
+    ).toBeVisible();
   });
 });

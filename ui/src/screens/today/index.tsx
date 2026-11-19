@@ -217,8 +217,15 @@ function TodayPage({ date }: { date: string | undefined }) {
             () => set((o) => ({ ...o, answer: null })),
             async () => {
               await engine.answerQuestion(page.date, action.choice);
-              refresh("settings");
+              refresh("settings", "journal");
             },
+          );
+          break;
+        case "addLine":
+          void run(
+            () => set((o) => ({ ...o, line: action.line })),
+            () => set((o) => ({ ...o, line: null })),
+            () => engine.addAnswerLine(page.date, action.line),
           );
           break;
         case "open":

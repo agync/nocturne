@@ -19,7 +19,7 @@ const toastEnds = () =>
 
 const open = async (engine = createMockEngine()) => {
   const view = renderApp({ hash: "#/today", engine });
-  await screen.findByRole("heading", { level: 1, name: "Two things need you today." });
+  await screen.findByRole("heading", { level: 1, name: "3 things need you today." });
   return { ...view, engine };
 };
 
@@ -45,7 +45,7 @@ describe("the morning page on Today", () => {
     );
     expect(status).toHaveTextContent(`Dentist set to ${thursday}.`);
     expect(
-      await screen.findByRole("heading", { level: 1, name: "One thing needs you today." }),
+      await screen.findByRole("heading", { level: 1, name: "Two things need you today." }),
     ).toBeInTheDocument();
     const rail = screen.getByRole("navigation", { name: "Main" });
     await waitFor(() =>
@@ -91,7 +91,7 @@ describe("the morning page on Today", () => {
     expect(spy).toHaveBeenCalledWith("mem-trip");
   });
 
-  it("says Nothing needs you once both are done and the press is committed", async () => {
+  it("counts the name question until the page's two are done and the press is committed", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { engine } = await open();
     const page = await engine.getPage();
@@ -100,8 +100,9 @@ describe("the morning page on Today", () => {
     await userEvent.click(screen.getByRole("button", { name: new RegExp(thursday) }));
     await toastEnds();
     expect(
-      await screen.findByRole("heading", { level: 1, name: "Nothing needs you today." }),
+      await screen.findByRole("heading", { level: 1, name: "One thing needs you today." }),
     ).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "1 more this week in Needs you" })).toBeInTheDocument();
   });
 
   it("brings back a let-go line by asking the engine to restore it", async () => {

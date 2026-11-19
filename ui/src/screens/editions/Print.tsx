@@ -4,6 +4,7 @@ import { useRoute } from "wouter";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
+import { opening } from "../../components/PageSheet/journalQuestion";
 import { receiptText } from "../../components/ReceiptChip/ReceiptChip";
 import { useToast } from "../../components/Toast/Toast";
 import { formatLongDay, formatTime } from "../../copy/format";
@@ -125,18 +126,28 @@ function Part({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+function questionText(question: Question): string {
+  if (question.kind === "pageTime") return t("page.question.pageTime", { time: question.text });
+  if (question.kind === "journal" && question.journal) {
+    return [
+      opening(question.journal),
+      t("journal.question.quote", { sentence: question.text }),
+      t("journal.question.howDidItGo"),
+    ].join(" ");
+  }
+  return question.text;
+}
+
 function QuestionPart({ question }: { question: Question }) {
   const answers =
     question.kind === "pageTime"
       ? [t("page.question.earlier"), t("page.question.later")]
-      : [t("page.question.yes"), t("page.question.no"), t("page.question.notSure")];
+      : question.kind === "journal"
+        ? [t("journal.question.fine"), t("journal.question.notGreat"), t("journal.question.notYet")]
+        : [t("page.question.yes"), t("page.question.no"), t("page.question.notSure")];
   return (
     <Part title={t("print.question")}>
-      <p className={styles.lineText}>
-        {question.kind === "pageTime"
-          ? t("page.question.pageTime", { time: question.text })
-          : question.text}
-      </p>
+      <p className={styles.lineText}>{questionText(question)}</p>
       <ul className={styles.answers}>
         {answers.map((a) => (
           <li key={a} className={styles.choice}>

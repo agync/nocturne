@@ -10,6 +10,8 @@ interface ReceiptChipProps {
   playing?: boolean;
   /** Opens the original in context; voice chips play inline. Without it the chip is plain text. */
   onOpen?: (receipt: Receipt) => void;
+  /** The words on the chip, for a screen that words it its own way (the journal's "Entry · …"). */
+  text?: string;
 }
 
 function page(receipt: Receipt): number | null {
@@ -59,8 +61,8 @@ export function receiptLabel(receipt: Receipt): string {
 }
 
 /** The signature component: every claim points at where it came from. */
-export function ReceiptChip({ receipt, playing = false, onOpen }: ReceiptChipProps) {
-  const text = receiptText(receipt);
+export function ReceiptChip({ receipt, playing = false, onOpen, text: given }: ReceiptChipProps) {
+  const text = given ?? receiptText(receipt);
   const common = {
     className: `${styles.chip} hit ${receipt.unconfirmed ? styles.unconfirmed : ""}`.trim(),
     "data-kind": receipt.kind,
@@ -75,7 +77,7 @@ export function ReceiptChip({ receipt, playing = false, onOpen }: ReceiptChipPro
   );
   if (!onOpen) {
     return (
-      <span {...common} role="img" aria-label={receiptLabel(receipt)}>
+      <span {...common} role="img" aria-label={t("receipt.aria", { visible: text })}>
         {inner}
       </span>
     );
@@ -84,7 +86,7 @@ export function ReceiptChip({ receipt, playing = false, onOpen }: ReceiptChipPro
     <button
       type="button"
       {...common}
-      aria-label={receiptLabel(receipt)}
+      aria-label={t("receipt.aria", { visible: text })}
       onClick={() => onOpen(receipt)}
     >
       {inner}

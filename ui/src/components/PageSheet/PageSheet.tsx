@@ -13,11 +13,14 @@ import { EditionTabs } from "../EditionTabs/EditionTabs";
 import { type LineAction, PageLine } from "../PageLine/PageLine";
 import { Progress } from "../Progress/Progress";
 import { ReceiptChip } from "../ReceiptChip/ReceiptChip";
+import { JournalQuestion } from "./JournalQuestion";
+import { choiceText } from "./journalQuestion";
 import styles from "./PageSheet.module.css";
 
 export type SheetAction =
   | LineAction
   | { type: "answer"; choice: QuestionChoice }
+  | { type: "addLine"; line: string }
   | { type: "edition"; edition: Edition };
 
 export interface WritingProgress {
@@ -126,7 +129,7 @@ export function PageSheet({
     if (choice === "earlier") return { title: t("page.question.answered.earlier"), body: "" };
     if (choice === "later") return { title: t("page.question.answered.later"), body: "" };
     if (choice === "fine" || choice === "notGreat" || choice === "notYet")
-      return { title: "", body: "" };
+      return { title: t("journal.question.answered", { choice: choiceText(choice) }), body: "" };
     const [title, body] = ANSWERS[choice];
     return { title: t(title), body: t(body) };
   };
@@ -306,7 +309,15 @@ export function PageSheet({
             </Section>
           ) : null}
 
-          {question ? (
+          {question?.kind === "journal" ? (
+            <JournalQuestion
+              id={base}
+              question={question}
+              onChoose={choose}
+              onAddLine={(line) => onAction({ type: "addLine", line })}
+              onOpenReceipt={(r) => onAction({ type: "open", receipt: r })}
+            />
+          ) : question ? (
             <section className={styles.question} aria-labelledby={`${base}-q`}>
               <h2 id={`${base}-q`} className={`t-section ${styles.sectionTitle}`}>
                 {t("page.section.question")}

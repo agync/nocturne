@@ -124,6 +124,29 @@ describe("the printed sheet", () => {
       expect(screen.getByText(answer)).toBeInTheDocument();
   });
 
+  it("prints a journal question with its template and three things to tick", async () => {
+    const page = await createMockEngine({
+      now: new Date("2026-11-20T09:00:00"),
+      journalQuestion: true,
+    }).getPage();
+    render(
+      <Sheet
+        page={page}
+        size="a4"
+        fitted={fit(page, "a4")}
+        printedAt="07:00"
+        sentNothing={false}
+      />,
+    );
+    expect(
+      screen.getByText(
+        "Yesterday you wrote: “Parents’ evening at six. Not looking forward to it.” How did it go?",
+      ),
+    ).toBeInTheDocument();
+    for (const answer of ["Fine", "Not great", "Not yet"])
+      expect(screen.getByText(answer)).toBeInTheDocument();
+  });
+
   it("footer_lines", async () => {
     const page = await stress();
     const draw = (privateSkipped: number, sentNothing: boolean) => {
