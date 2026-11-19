@@ -435,7 +435,7 @@ The owner answered every open question on 2026-11-19.
 | 7 | "Open what it was about" in the row menu | Keep |
 | 8 | The check-in page's back link | Accept: "← Journal" by default |
 | 9 | "Look back again" that fails or is stopped | Accept: it still clears the decline |
-| 10 | The journal question on the phone | Built: the phone's page never carries it, so its sentence never leaves the computer |
+| 10 | The journal question on the phone | The phone reads the whole journal, so its page data keeps the question. Showing it on the phone is a follow-up ([#113](https://github.com/agync/nocturne/issues/113)) |
 
 ## Follow-ups
 
@@ -447,3 +447,6 @@ Small, agreed, and not built yet:
    remembers", not Journal, and the small field there has no part labels.
 3. **The spoken page.** The mock's spoken-page `.ogg` still says "Two things need you today."
    beside the rail's three. Re-record it with the counted headline.
+4. **The journal question on the phone.** The phone reads the whole journal and its page data
+   already carries the question; the phone's page shows it once it is designed there
+   ([#113](https://github.com/agync/nocturne/issues/113)).
