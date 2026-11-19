@@ -23,6 +23,12 @@ const rows = (page: Page) =>
 
 const said = (page: Page) => page.locator("p[class*=said]");
 
+/** The mock opens with the journal's "Which Sam is this?" question waiting beside the others. */
+const leaveSameName = async (page: Page) => {
+  await page.getByRole("button", { name: "Leave it" }).click();
+  await expect(page.getByText("Which Sam is this?")).toHaveCount(0);
+};
+
 /**
  * Keeps a pasted web page from the quick-keep window, waits for it to be read, and leaves the app
  * on Needs you. The page stays loaded, so the mock engine remembers it.
@@ -53,7 +59,7 @@ test.describe("an unconfirmed web page", () => {
     page,
   }) => {
     await withWebPage(page);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("4 things are waiting");
     await expect(page.getByText("Unconfirmed", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Web page you pasted/ })).toBeVisible();
     for (const name of ["It’s true", "Not true, delete it", "Leave unconfirmed"]) {
@@ -61,11 +67,11 @@ test.describe("an unconfirmed web page", () => {
     }
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
-    ).toContainText("3");
+    ).toContainText("4");
     await page.screenshot({ path: `${SHOTS}/needs-you-unconfirmed-light.png` });
     await page.getByRole("button", { name: "It’s true" }).click();
     await expect(said(page)).toContainText("Marked as sure because you said so.");
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
   });
 
   test("Leave unconfirmed removes it and the rail count follows", async ({ page }) => {
@@ -74,7 +80,7 @@ test.describe("an unconfirmed web page", () => {
     await expect(said(page)).toContainText("Left unconfirmed.");
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
-    ).toContainText("2");
+    ).toContainText("3");
   });
 
   test("Not true, delete it deletes through the shared dialog and focus moves on when it closes", async ({
@@ -87,11 +93,11 @@ test.describe("an unconfirmed web page", () => {
     await dialog.getByRole("button", { name: /^Delete 1 memory$/ }).click();
     await expect(dialog.getByText("Deleted.", { exact: true })).toBeVisible();
     // Behind the dialog the entry has already gone.
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
     await dialog.getByRole("button", { name: "OK" }).click();
     await expect(dialog).toHaveCount(0);
     await expect(said(page)).toContainText("Deleted.");
-    await expect(rows(page).nth(1)).toBeFocused();
+    await expect(rows(page).nth(2)).toBeFocused();
   });
 
   test("Recently kept shows it as Unconfirmed and Confirm leads here", async ({ page }) => {
@@ -132,10 +138,10 @@ test.describe("an unconfirmed web page", () => {
 test.describe("Needs you", () => {
   test("says how many are waiting and how to move", async ({ page }) => {
     await ready(page);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
-    await expect(page.getByText("Needs you · 2")).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things are waiting");
+    await expect(page.getByText("Needs you · 3")).toBeVisible();
     await expect(page.getByText("J / K to move · 1 2 3 to choose")).toBeVisible();
-    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page)).toHaveCount(3);
     await page.screenshot({ path: `${SHOTS}/needs-you-light.png` });
   });
 
@@ -147,10 +153,10 @@ test.describe("Needs you", () => {
     await expect(said(page)).toContainText(
       /^Dentist set to Thursday .* The other is kept as history\.$/,
     );
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("One thing is waiting");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("2 things are waiting");
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
-    ).toContainText("1");
+    ).toContainText("2");
     await expect(said(page)).toHaveAttribute("aria-live", "polite");
   });
 
@@ -165,6 +171,9 @@ test.describe("Needs you", () => {
     await expect(rows(page).nth(0)).toBeFocused();
     await page.keyboard.press("2");
     await expect(said(page)).toContainText("Dentist set to Thursday");
+    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page).nth(0)).toBeFocused();
+    await page.keyboard.press("2");
     await expect(rows(page)).toHaveCount(1);
     await expect(rows(page).nth(0)).toBeFocused();
     await page.keyboard.press("1");
@@ -181,14 +190,14 @@ test.describe("Needs you", () => {
     await page.getByRole("main").focus();
     await page.keyboard.press("2");
     await page.keyboard.press("j");
-    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page)).toHaveCount(3);
   });
 
   test("everything can be reached and used with Tab and Enter", async ({ page }) => {
     await ready(page);
     await page.getByRole("main").focus();
     const reached: string[] = [];
-    for (let i = 0; i < 6; i += 1) {
+    for (let i = 0; i < 12; i += 1) {
       await page.keyboard.press("Tab");
       reached.push(
         await page.evaluate(() =>
@@ -211,16 +220,16 @@ test.describe("Needs you", () => {
     await page.getByRole("button", { name: /^Mark as done:/ }).focus();
     await page.keyboard.press("Enter");
     await expect(said(page)).toContainText("done.");
-    await expect(rows(page)).toHaveCount(1);
+    await expect(rows(page)).toHaveCount(2);
   });
 
   test("Mark as done can be undone while its toast is up", async ({ page }) => {
     await ready(page);
     await page.getByRole("button", { name: /^Mark as done:/ }).click();
-    await expect(rows(page)).toHaveCount(1);
+    await expect(rows(page)).toHaveCount(2);
     await expect(page.getByText("Marked as done.")).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(rows(page)).toHaveCount(2);
+    await expect(rows(page)).toHaveCount(3);
     await expect(page.getByRole("button", { name: /^Mark as done:/ })).toBeVisible();
   });
 
@@ -281,7 +290,8 @@ for (const scheme of ["light", "dark"] as const) {
     if (scheme === "dark") await page.screenshot({ path: `${SHOTS}/needs-you-dark.png` });
     await page.getByRole("button", { name: /^This one: Tuesday/ }).click();
     await expect(said(page)).toContainText("Dentist set to");
-    expect(await axe(page), "one left").toEqual([]);
+    expect(await axe(page), "two left").toEqual([]);
+    await leaveSameName(page);
     await page.getByRole("button", { name: /^Mark as done:/ }).click();
     await expect(page.getByText("Nothing needs you.")).toBeVisible();
     expect(await axe(page), "all clear").toEqual([]);

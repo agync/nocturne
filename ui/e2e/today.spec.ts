@@ -56,9 +56,10 @@ test.describe("the page works", () => {
     await expect(
       page.getByText(/it is\. The other is kept as history, not deleted\./),
     ).toBeVisible();
+    // The rail also counts the journal's "Which Sam is this?" question, which the page does not.
     await expect(
       page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: /Needs you/ }),
-    ).toContainText("1");
+    ).toContainText("2");
   });
 
   test("marking the form done strikes it through", async ({ page }) => {
