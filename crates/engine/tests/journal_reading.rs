@@ -6,7 +6,7 @@ mod common;
 
 use common::{EngineExt, Fixture, cand, fixture, keep};
 use nocturne_contract::ItemStatus;
-use nocturne_contract::{EntityKind, Span};
+use nocturne_contract::{EntityKind, SameNameAnswer, Span};
 use nocturne_engine::{Candidate, Predicate};
 
 fn conn(f: &Fixture) -> rusqlite::Connection {
@@ -544,4 +544,259 @@ fn what_the_earlier_version_said_stays_when_the_person_confirmed_it() {
         1,
         "its receipt is still the earlier words"
     );
+}
+
+/// Two people called Sam, each known by something already kept. Returns their entity ids.
+fn two_sams(f: &Fixture) -> (String, String) {
+    let learn_sam = |full: &str, role: &str| {
+        let item = keep(&f.engine, &format!("{full} is {role}."));
+        let report = f
+            .engine
+            .apply(
+                &item,
+                vec![person(
+                    full,
+                    Predicate::Knows,
+                    "you",
+                    &format!("{full} is {role}."),
+                )],
+            )
+            .unwrap();
+        let entity: String = conn(f)
+            .query_row(
+                "SELECT entity_id FROM memories WHERE id = ?1",
+                [&report.created[0]],
+                |r| r.get(0),
+            )
+            .unwrap();
+        conn(f)
+            .execute(
+                "UPDATE entities SET role = ?2 WHERE id = ?1",
+                rusqlite::params![entity, role],
+            )
+            .unwrap();
+        entity
+    };
+    (
+        learn_sam("Sam Jones", "your neighbour"),
+        learn_sam("Sam Patel", "Leo\u{2019}s teacher"),
+    )
+}
+
+const SAM_ENTRY: &str = "Priya made tea. Sam came round to fix the sink.";
+
+fn sam_claim() -> Candidate {
+    person(
+        "Sam",
+        Predicate::Promised,
+        "the sink",
+        "Sam will fix the sink.",
+    )
+}
+
+fn about(f: &Fixture, entity: &str) -> i64 {
+    count(
+        f,
+        &format!("SELECT COUNT(*) FROM memories WHERE entity_id = '{entity}'"),
+    )
+}
+
+#[test]
+fn two_sams_make_a_same_name_question_and_file_nothing() {
+    let f = fixture();
+    let (jones, patel) = two_sams(&f);
+    let entry = journal_item(&f, SAM_ENTRY, "entry");
+    let report = f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    assert!(report.created.is_empty());
+    assert_eq!(about(&f, &jones), 1);
+    assert_eq!(about(&f, &patel), 1);
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 2);
+    assert!(mentions(&f, &entry).is_empty());
+
+    let questions = f.engine.same_name_questions(None).unwrap();
+    assert_eq!(questions.len(), 1);
+    let q = &questions[0];
+    assert_eq!(q.name, "Sam");
+    assert_eq!(q.quote, "Sam came round to fix the sink.");
+    assert_eq!(q.receipt.item_id, entry);
+    assert_eq!(
+        q.receipt.span,
+        Some(Span::Quote {
+            text: q.quote.clone()
+        })
+    );
+    assert_eq!(
+        q.options
+            .iter()
+            .map(|o| (o.name.as_str(), o.role.as_deref()))
+            .collect::<Vec<_>>(),
+        vec![
+            ("Sam Jones", Some("your neighbour")),
+            ("Sam Patel", Some("Leo\u{2019}s teacher"))
+        ]
+    );
+    assert!(
+        f.engine
+            .same_name_questions(Some(&["other".to_string()]))
+            .unwrap()
+            .is_empty()
+    );
+    let needs = f.engine.needs_you().unwrap();
+    assert!(matches!(
+        needs.as_slice(),
+        [nocturne_contract::NeedsYouEntry::SameName { .. }]
+    ));
+
+    f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    assert_eq!(
+        f.engine.same_name_questions(None).unwrap().len(),
+        1,
+        "reading again asks once"
+    );
+}
+
+#[test]
+fn a_name_that_is_a_whole_name_or_fits_one_person_is_not_asked_about() {
+    let f = fixture();
+    let (_jones, _patel) = two_sams(&f);
+    let entry = journal_item(&f, "Sam Jones came. Priya came.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![
+                person(
+                    "Sam Jones",
+                    Predicate::Knows,
+                    "Priya",
+                    "Sam Jones knows Priya.",
+                ),
+                person(
+                    "Priya",
+                    Predicate::Knows,
+                    "Sam Jones",
+                    "Priya knows Sam Jones.",
+                ),
+            ],
+        )
+        .unwrap();
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+}
+
+#[test]
+fn answering_with_a_person_files_it_under_that_sam_only() {
+    let f = fixture();
+    let (jones, patel) = two_sams(&f);
+    let entry = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    let q = f.engine.same_name_questions(None).unwrap().remove(0);
+    let answered = f
+        .engine
+        .answer_same_name(
+            &q.id,
+            SameNameAnswer::Entity {
+                entity_id: jones.clone(),
+            },
+        )
+        .unwrap();
+    assert_eq!(answered.name, "Sam Jones");
+    assert_eq!(answered.role.as_deref(), Some("your neighbour"));
+    assert_eq!(about(&f, &jones), 2);
+    assert_eq!(about(&f, &patel), 1);
+    assert!(journal_flag(
+        &f,
+        &count_text(
+            &f,
+            &format!("SELECT id FROM memories WHERE entity_id = '{jones}' AND journal = 1")
+        )
+    ));
+    let rows = mentions(&f, &entry);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].0, "Sam Jones");
+    assert_eq!(rows[0].1, Some(16), "where Sam stands in the words");
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+    assert!(
+        !f.engine
+            .needs_you()
+            .unwrap()
+            .iter()
+            .any(|e| matches!(e, nocturne_contract::NeedsYouEntry::SameName { .. }))
+    );
+    assert!(
+        f.engine
+            .answer_same_name(&q.id, SameNameAnswer::New)
+            .is_err()
+    );
+
+    f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    assert_eq!(about(&f, &jones), 2, "a re-read keeps the answer");
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+}
+
+fn count_text(f: &Fixture, sql: &str) -> String {
+    conn(f).query_row(sql, [], |r| r.get(0)).unwrap()
+}
+
+#[test]
+fn leave_it_files_nothing_and_someone_new_files_under_a_new_person() {
+    let f = fixture();
+    let (jones, patel) = two_sams(&f);
+    let leave = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&leave, vec![sam_claim()]).unwrap();
+    let q = f.engine.same_name_questions(None).unwrap().remove(0);
+    f.engine
+        .answer_same_name(&q.id, SameNameAnswer::Leave)
+        .unwrap();
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 2);
+    assert!(mentions(&f, &leave).is_empty());
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+    f.engine.apply(&leave, vec![sam_claim()]).unwrap();
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM memories"),
+        2,
+        "left means left"
+    );
+
+    let other = journal_item(&f, "Sam waved from the car. Then Sam drove off.", "entry");
+    f.engine.apply(&other, vec![sam_claim()]).unwrap();
+    let q = f.engine.same_name_questions(None).unwrap().remove(0);
+    let answered = f
+        .engine
+        .answer_same_name(&q.id, SameNameAnswer::New)
+        .unwrap();
+    assert_eq!(answered.name, "Sam");
+    let sam: String = conn(&f)
+        .query_row(
+            "SELECT id FROM entities WHERE name = 'Sam' AND kind = 'person'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_ne!(sam, jones);
+    assert_ne!(sam, patel);
+    assert_eq!(about(&f, &sam), 1);
+    assert_eq!(mentions(&f, &other)[0].0, "Sam");
+}
+
+#[test]
+fn a_checkin_naming_a_sam_asks_too_and_answering_records_the_mention_only() {
+    let f = fixture();
+    let (jones, _patel) = two_sams(&f);
+    let checkin = journal_item(&f, "Tense. Sam is coming round again.", "checkin");
+    f.engine
+        .apply(
+            &checkin,
+            vec![person(
+                "Sam",
+                Predicate::Knows,
+                "you",
+                "Sam is coming round.",
+            )],
+        )
+        .unwrap();
+    let q = f.engine.same_name_questions(None).unwrap().remove(0);
+    f.engine
+        .answer_same_name(&q.id, SameNameAnswer::Entity { entity_id: jones })
+        .unwrap();
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 2);
+    assert_eq!(mentions(&f, &checkin)[0].0, "Sam Jones");
 }

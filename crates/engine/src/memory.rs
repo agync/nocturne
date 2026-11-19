@@ -16,7 +16,7 @@ use crate::entity::{Alias, entity_views, find_by_key, note_rewrite, replace_name
 use std::path::PathBuf;
 
 use crate::error::{Error, Result};
-use crate::journal::mentions::{Found, write_mentions};
+use crate::journal::mentions::{Found, Routed, route, write_mentions};
 use crate::rows::{MEM_COLS, MemRow, load_mem, mem_row, mem_view, query_mems, receipts_for};
 use crate::types::{ApplyReport, Candidate, CorrectPatch, Predicate};
 use crate::util::{claim_hash, enum_str, fmt_ts, fts_and, key_of, new_id, overlaps};
@@ -1150,8 +1150,9 @@ fn apply(
         })
         .collect();
     let item = load_item_info(tx, item_id, today, tz)?;
+    let routed = route(tx, now, item_id, cands)?;
     if item.checkin {
-        mention_only(tx, now, item_id, &cands)?;
+        mention_only(tx, now, item_id, &routed, true)?;
         finish_item(tx, item_id, "understood", took)?;
         return Ok((ApplyReport::default(), Vec::new()));
     }
@@ -1184,7 +1185,7 @@ fn apply(
     let mut touched: HashSet<String> = HashSet::new();
 
     let mut found: Vec<Found> = Vec::new();
-    for c in &cands {
+    for r in &routed {
         if let Some(filed) = apply_one(
             tx,
             now,
@@ -1194,9 +1195,9 @@ fn apply(
             &relinked,
             &mut touched,
             &mut report,
-            c,
+            &r.cand,
         )? {
-            found.push(Found::of(c, filed.entity_id, filed.created));
+            found.push(Found::of(r, filed.entity_id, filed.created));
         }
     }
     write_mentions(tx, item_id, now, &found, true)?;
@@ -1315,9 +1316,16 @@ fn finish_item(
 
 /// A check-in's reading: the names it says, as mentions, and nothing else. No memory is made,
 /// linked or asked about, so what a check-in says never reaches Ask or goes online.
-fn mention_only(tx: &Transaction<'_>, now: &str, item_id: &str, cands: &[Candidate]) -> Result<()> {
+fn mention_only(
+    tx: &Transaction<'_>,
+    now: &str,
+    item_id: &str,
+    routed: &[Routed],
+    prune: bool,
+) -> Result<()> {
     let mut found: Vec<Found> = Vec::new();
-    for c in cands {
+    for r in routed {
+        let c = &r.cand;
         let name = match resolve_alias(tx, &key_of(&c.subject))? {
             Some(alias) => alias.name,
             None => c.subject.trim().to_string(),
@@ -1328,10 +1336,48 @@ fn mention_only(tx: &Transaction<'_>, now: &str, item_id: &str, cands: &[Candida
         if let Some((entity_id, created)) =
             upsert_entity(tx, &name, &key_of(&name), c.subject_kind)?
         {
-            found.push(Found::of(c, entity_id, created));
+            found.push(Found::of(r, entity_id, created));
         }
     }
-    write_mentions(tx, item_id, now, &found, true)
+    write_mentions(tx, item_id, now, &found, prune)
+}
+
+/// File what was held back for a name that fit two people, now that the person has said who it
+/// is. The item's other memories are not touched. Returns the files a private memory let go of.
+pub(crate) fn file_held(
+    tx: &Transaction<'_>,
+    now: &str,
+    today: &str,
+    tz: &jiff::tz::TimeZone,
+    item_id: &str,
+    routed: Vec<Routed>,
+) -> Result<Vec<PathBuf>> {
+    let item = load_item_info(tx, item_id, today, tz)?;
+    if item.checkin {
+        mention_only(tx, now, item_id, &routed, false)?;
+        return Ok(Vec::new());
+    }
+    let relinked = HashSet::new();
+    let mut touched = HashSet::new();
+    let mut report = ApplyReport::default();
+    let mut found = Vec::new();
+    for r in &routed {
+        if let Some(filed) = apply_one(
+            tx,
+            now,
+            today,
+            item_id,
+            &item,
+            &relinked,
+            &mut touched,
+            &mut report,
+            &r.cand,
+        )? {
+            found.push(Found::of(r, filed.entity_id, filed.created));
+        }
+    }
+    write_mentions(tx, item_id, now, &found, false)?;
+    settle_links(tx, item_id, &item)
 }
 
 /// What an item says takes its sensitivity: every memory now linked to it, whether it made the
@@ -1796,6 +1842,10 @@ pub(crate) fn needs_you_on(
                 options,
             });
         }
+    }
+
+    for question in crate::journal::mentions::open_questions(conn, None)? {
+        out.push(NeedsYouEntry::SameName { question });
     }
 
     let unconfirmed = query_mems(

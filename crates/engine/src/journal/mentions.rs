@@ -2,12 +2,19 @@
 
 use std::collections::{HashMap, HashSet};
 
-use nocturne_contract::{EntityKind, Mention, MentionState, Span};
+use nocturne_contract::{
+    EntityKind, Mention, MentionState, Receipt, SameNameAnswer, SameNameAnswered, SameNameOption,
+    SameNameQuestion, Span,
+};
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 
-use crate::error::Result;
-use crate::types::Candidate;
-use crate::util::{new_id, parse_enum};
+use serde::{Deserialize, Serialize};
+
+use crate::Engine;
+use crate::entity::{find_by_key, resolve_alias};
+use crate::error::{Error, Result};
+use crate::types::{Candidate, Predicate};
+use crate::util::{fmt_ts, key_of, new_id, parse_enum};
 
 /// A name an item says, and the person, place or thing it was filed under.
 pub(crate) struct Found {
@@ -21,11 +28,11 @@ pub(crate) struct Found {
 }
 
 impl Found {
-    pub(crate) fn of(c: &Candidate, entity_id: String, created: bool) -> Found {
+    pub(crate) fn of(c: &Routed, entity_id: String, created: bool) -> Found {
         Found {
             entity_id,
-            said_as: c.subject.trim().to_string(),
-            quote: match &c.span {
+            said_as: c.said_as.clone(),
+            quote: match &c.cand.span {
                 Some(Span::Quote { text }) => Some(text.clone()),
                 _ => None,
             },
@@ -220,4 +227,426 @@ pub(crate) fn mentions_for_items(
         });
     }
     Ok(out)
+}
+
+/// A claim on its way to being filed, with the name as the item says it (which a held claim,
+/// once answered, no longer carries as its subject).
+pub(crate) struct Routed {
+    pub cand: Candidate,
+    pub said_as: String,
+}
+
+/// A claim held back until the person says which of two people it is about.
+#[derive(Serialize, Deserialize)]
+struct Held {
+    subject: String,
+    kind: Option<EntityKind>,
+    predicate: String,
+    object: String,
+    sentence: String,
+    valid_from: Option<String>,
+    valid_to: Option<String>,
+    due: Option<String>,
+    confidence: f32,
+    span: Option<Span>,
+    tags: Vec<String>,
+    moved: bool,
+}
+
+impl Held {
+    fn of(c: &Candidate) -> Held {
+        let date = |d: Option<jiff::civil::Date>| d.map(|d| d.to_string());
+        Held {
+            subject: c.subject.clone(),
+            kind: c.subject_kind,
+            predicate: c.predicate.as_str().to_string(),
+            object: c.object.clone(),
+            sentence: c.sentence.clone(),
+            valid_from: date(c.valid_from),
+            valid_to: date(c.valid_to),
+            due: date(c.due),
+            confidence: c.confidence,
+            span: c.span.clone(),
+            tags: c.tags.clone(),
+            moved: c.moved,
+        }
+    }
+
+    fn into_candidate(self) -> Candidate {
+        let date = |d: Option<String>| d.and_then(|d| d.parse().ok());
+        Candidate {
+            subject: self.subject,
+            subject_kind: self.kind,
+            predicate: Predicate::parse(&self.predicate),
+            object: self.object,
+            sentence: self.sentence,
+            valid_from: date(self.valid_from),
+            valid_to: date(self.valid_to),
+            due: date(self.due),
+            confidence: self.confidence,
+            span: self.span,
+            tags: self.tags,
+            moved: self.moved,
+        }
+    }
+}
+
+fn first_word(name: &str) -> String {
+    key_of(name)
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
+/// The people whose name starts with this word, when the word is no name of anyone. Only people
+/// Nocturne knows something about count.
+fn people_called(tx: &Transaction<'_>, word: &str) -> Result<Vec<SameNameOption>> {
+    let mut stmt = tx.prepare(
+        "SELECT e.id, e.name, e.role FROM entities e WHERE e.kind = 'person' \
+         AND e.merged_into IS NULL AND (EXISTS (SELECT 1 FROM memories m WHERE m.entity_id = e.id \
+         AND m.forgetting = 0) OR EXISTS (SELECT 1 FROM mentions n WHERE n.entity_id = e.id)) \
+         ORDER BY e.name, e.id",
+    )?;
+    let rows: Vec<(String, String, Option<String>)> = stmt
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(rows
+        .into_iter()
+        .filter(|(_, name, _)| first_word(name) == word)
+        .map(|(entity_id, name, role)| SameNameOption {
+            entity_id,
+            name,
+            role,
+        })
+        .collect())
+}
+
+/// The sentence of the item that holds the name, as written.
+fn quote_of(text: Option<&str>, name: &str, fallback: &str) -> String {
+    text.and_then(|t| {
+        t.split_inclusive(['.', '!', '?', '\n'])
+            .map(str::trim)
+            .find(|s| find_span(s, name, true).is_some())
+    })
+    .unwrap_or(fallback)
+    .trim()
+    .to_string()
+}
+
+/// Sort an item's claims before they are filed. A claim about a bare first name that fits two or
+/// more people Nocturne knows is held, with a question for the person; one already answered is
+/// filed the way it was answered. Everything else goes on as it was.
+pub(crate) fn route(
+    tx: &Transaction<'_>,
+    now: &str,
+    item_id: &str,
+    cands: Vec<Candidate>,
+) -> Result<Vec<Routed>> {
+    let text: Option<String> = tx
+        .query_row("SELECT text FROM items WHERE id = ?1", [item_id], |r| {
+            r.get(0)
+        })
+        .optional()?
+        .flatten();
+    let answered: Vec<(String, SameNameAnswer)> = {
+        let mut stmt = tx.prepare(
+            "SELECT name, answer FROM name_questions WHERE item_id = ?1 AND answered_at IS NOT NULL",
+        )?;
+        let rows: Vec<(String, Option<String>)> = stmt
+            .query_map([item_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        rows.into_iter()
+            .filter_map(|(name, a)| Some((key_of(&name), serde_json::from_str(&a?).ok()?)))
+            .collect()
+    };
+    let mut out: Vec<Routed> = Vec::new();
+    let mut held: Vec<(String, String, Vec<SameNameOption>, Vec<Held>)> = Vec::new();
+    for c in cands {
+        let said_as = c.subject.trim().to_string();
+        let key = key_of(&c.subject);
+        let person = matches!(c.subject_kind, None | Some(EntityKind::Person));
+        if !person || key.is_empty() || key.split_whitespace().count() != 1 {
+            out.push(Routed { cand: c, said_as });
+            continue;
+        }
+        if let Some((_, answer)) = answered.iter().find(|(k, _)| *k == key) {
+            match answer {
+                SameNameAnswer::Leave => {}
+                SameNameAnswer::New => {
+                    let mut c = c;
+                    c.subject_kind = Some(EntityKind::Person);
+                    out.push(Routed { cand: c, said_as });
+                }
+                SameNameAnswer::Entity { entity_id } => {
+                    let named: Option<(String, String)> = tx
+                        .query_row(
+                            "SELECT name, kind FROM entities WHERE id = ?1 AND merged_into IS NULL",
+                            [entity_id],
+                            |r| Ok((r.get(0)?, r.get(1)?)),
+                        )
+                        .optional()?;
+                    let Some((name, kind)) = named else {
+                        continue;
+                    };
+                    let mut c = c;
+                    c.subject = name;
+                    c.subject_kind = Some(parse_enum::<EntityKind>(&kind)?);
+                    out.push(Routed { cand: c, said_as });
+                }
+            }
+            continue;
+        }
+        if find_by_key(tx, &key, None)?.is_some() || resolve_alias(tx, &key)?.is_some() {
+            out.push(Routed { cand: c, said_as });
+            continue;
+        }
+        let options = people_called(tx, &key)?;
+        if options.len() < 2 {
+            out.push(Routed { cand: c, said_as });
+            continue;
+        }
+        match held.iter_mut().find(|h| h.0 == key) {
+            Some(h) => h.3.push(Held::of(&c)),
+            None => held.push((key, said_as, options, vec![Held::of(&c)])),
+        }
+    }
+    let mut keep_open: Vec<String> = Vec::new();
+    for (key, name, options, claims) in held {
+        let quote = quote_of(
+            text.as_deref(),
+            &name,
+            claims.first().map_or("", |h| h.sentence.as_str()),
+        );
+        let open: Option<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT id, name FROM name_questions WHERE item_id = ?1 AND answered_at IS NULL",
+            )?;
+            let rows: Vec<(String, String)> = stmt
+                .query_map([item_id], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?;
+            rows.into_iter()
+                .find(|(_, n)| key_of(n) == key)
+                .map(|r| r.0)
+        };
+        let id = match open {
+            Some(id) => {
+                tx.execute(
+                    "UPDATE name_questions SET quote = ?2, options = ?3, candidates = ?4 \
+                     WHERE id = ?1",
+                    params![
+                        id,
+                        quote,
+                        serde_json::to_string(&options)?,
+                        serde_json::to_string(&claims)?
+                    ],
+                )?;
+                id
+            }
+            None => {
+                let id = new_id("snq");
+                tx.execute(
+                    "INSERT INTO name_questions(id, item_id, name, quote, options, candidates, \
+                     created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    params![
+                        id,
+                        item_id,
+                        name,
+                        quote,
+                        serde_json::to_string(&options)?,
+                        serde_json::to_string(&claims)?,
+                        now
+                    ],
+                )?;
+                id
+            }
+        };
+        keep_open.push(id);
+    }
+    let stale: Vec<String> = {
+        let mut stmt =
+            tx.prepare("SELECT id FROM name_questions WHERE item_id = ?1 AND answered_at IS NULL")?;
+        stmt.query_map([item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<Vec<String>>>()?
+            .into_iter()
+            .filter(|id| !keep_open.contains(id))
+            .collect()
+    };
+    for id in stale {
+        tx.execute("DELETE FROM name_questions WHERE id = ?1", [id])?;
+    }
+    Ok(out)
+}
+
+/// The open "Which {name} is this?" questions, oldest first; only those of `item_ids` when given.
+pub(crate) fn open_questions(
+    conn: &Connection,
+    item_ids: Option<&[String]>,
+) -> Result<Vec<SameNameQuestion>> {
+    let mut stmt = conn.prepare(
+        "SELECT q.id, q.item_id, q.name, q.quote, q.options, \
+                i.kind, i.source, i.title, i.kept_at, i.duration_ms, i.trust, \
+                (SELECT rd.name FROM remote_keeps rk JOIN remote_devices rd \
+                 ON rd.id = rk.device_id WHERE rk.item_id = i.id) \
+         FROM name_questions q JOIN items i ON i.id = q.item_id \
+         WHERE q.answered_at IS NULL ORDER BY q.created_at, q.id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, String>(2)?,
+            r.get::<_, String>(3)?,
+            r.get::<_, String>(4)?,
+            r.get::<_, String>(5)?,
+            r.get::<_, String>(6)?,
+            r.get::<_, String>(7)?,
+            r.get::<_, String>(8)?,
+            r.get::<_, Option<u32>>(9)?,
+            r.get::<_, String>(10)?,
+            r.get::<_, Option<String>>(11)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, item_id, name, quote, options, kind, source, title, kept_at, duration, trust, dev) =
+            row?;
+        if item_ids.is_some_and(|ids| !ids.contains(&item_id)) {
+            continue;
+        }
+        let stored: Vec<SameNameOption> = serde_json::from_str(&options)?;
+        let mut live = Vec::new();
+        for o in stored {
+            let now: Option<(String, Option<String>)> = conn
+                .query_row(
+                    "SELECT name, role FROM entities WHERE id = ?1 AND merged_into IS NULL",
+                    [&o.entity_id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            if let Some((name, role)) = now {
+                live.push(SameNameOption {
+                    entity_id: o.entity_id,
+                    name,
+                    role,
+                });
+            }
+        }
+        if live.is_empty() {
+            continue;
+        }
+        out.push(SameNameQuestion {
+            id,
+            name,
+            quote: quote.clone(),
+            receipt: Receipt {
+                item_id,
+                kind: parse_enum(&kind)?,
+                source: parse_enum(&source)?,
+                label: title,
+                kept_at,
+                duration_ms: duration,
+                span: Some(Span::Quote { text: quote }),
+                unconfirmed: trust == "untrusted",
+                from_device: dev,
+            },
+            options: live,
+        });
+    }
+    Ok(out)
+}
+
+impl Engine {
+    /// The open "Which {name} is this?" questions, those of `item_ids` only when given.
+    pub fn same_name_questions(
+        &self,
+        item_ids: Option<&[String]>,
+    ) -> Result<Vec<SameNameQuestion>> {
+        self.read(|conn| open_questions(conn, item_ids))
+    }
+
+    /// Answer a "Which {name} is this?" question. Choosing a person files what was held back
+    /// under them; "Someone new" files it under a new person with the name; "Leave it" drops it.
+    /// Either way the question is closed and the item keeps one mention of whom it was about.
+    pub fn answer_same_name(
+        &self,
+        question_id: &str,
+        answer: SameNameAnswer,
+    ) -> Result<SameNameAnswered> {
+        let now = fmt_ts(self.clock().now());
+        let tz = self.clock().tz();
+        let today = self.clock().now().to_zoned(tz.clone()).date().to_string();
+        let (answered, files) = self.write(|tx| {
+            let row: Option<(String, String, String, Option<String>)> = tx
+                .query_row(
+                    "SELECT item_id, name, candidates, answered_at FROM name_questions \
+                     WHERE id = ?1",
+                    [question_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                )
+                .optional()?;
+            let (item_id, name, candidates, done) =
+                row.ok_or_else(|| Error::not_found(format!("question {question_id}")))?;
+            if done.is_some() {
+                return Err(Error::invalid("that question has been answered"));
+            }
+            let held: Vec<Held> = serde_json::from_str(&candidates)?;
+            let (filed_as, role, files): (Option<(String, EntityKind)>, Option<String>, _) =
+                match &answer {
+                    SameNameAnswer::Leave => (None, None, Vec::new()),
+                    SameNameAnswer::New => {
+                        (Some((name.clone(), EntityKind::Person)), None, Vec::new())
+                    }
+                    SameNameAnswer::Entity { entity_id } => {
+                        let found: Option<(String, String, Option<String>)> = tx
+                            .query_row(
+                                "SELECT name, kind, role FROM entities \
+                                 WHERE id = ?1 AND merged_into IS NULL",
+                                [entity_id],
+                                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                            )
+                            .optional()?;
+                        let (ename, kind, role) =
+                            found.ok_or_else(|| Error::not_found(format!("entity {entity_id}")))?;
+                        (
+                            Some((ename, parse_enum::<EntityKind>(&kind)?)),
+                            role,
+                            Vec::new(),
+                        )
+                    }
+                };
+            let mut files = files;
+            let result_name = filed_as.as_ref().map_or(name.clone(), |f| f.0.clone());
+            if let Some((target, kind)) = &filed_as {
+                let routed: Vec<Routed> = held
+                    .into_iter()
+                    .map(|h| {
+                        let mut c = h.into_candidate();
+                        let said_as = c.subject.trim().to_string();
+                        c.subject = target.clone();
+                        c.subject_kind = Some(*kind);
+                        Routed { cand: c, said_as }
+                    })
+                    .collect();
+                files.extend(crate::memory::file_held(
+                    tx, &now, &today, &tz, &item_id, routed,
+                )?);
+            }
+            tx.execute(
+                "UPDATE name_questions SET answered_at = ?2, answer = ?3 WHERE id = ?1",
+                params![question_id, now, serde_json::to_string(&answer)?],
+            )?;
+            Ok((
+                SameNameAnswered {
+                    name: result_name,
+                    role,
+                },
+                files,
+            ))
+        })?;
+        crate::audio::shred_all(files);
+        self.invalidate_vectors();
+        self.bump_audio();
+        Ok(answered)
+    }
 }
