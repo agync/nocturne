@@ -1,0 +1,10 @@
+{
+  "journal.quick.keptMessage": "It’s on today’s journal.",
+  "journal.quick.keptWithLead": "Kept, with {word}.",
+  "journal.checkin.pick": "Pick a spot in the field, or show all words as a list.",
+  "journal.checkin.listHint": "Choose up to three, from any part.",
+  "journal.checkin.meaning": ": {meaning}",
+  "journal.checkin.feel": "{part} · {words}",
+  "journal.checkin.savedBare": "Saved.",
+  "journal.checkin.doneAt": "at {time}. It’s on today’s journal."
+}

@@ -9,6 +9,7 @@ import fading from "./en-GB/fading.json";
 import feelings from "./en-GB/feelings.json";
 import guide from "./en-GB/guide.json";
 import journal from "./en-GB/journal.json";
+import journalCheckin from "./en-GB/journal-checkin.json";
 import journalLookback from "./en-GB/journal-lookback.json";
 import memories from "./en-GB/memories.json";
 import models from "./en-GB/models.json";
@@ -54,5 +55,6 @@ export const enGB = {
   ...guide,
   ...journal,
   ...journalLookback,
+  ...journalCheckin,
   ...feelings,
 };

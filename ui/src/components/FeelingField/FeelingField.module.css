@@ -1,0 +1,151 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.axis,
+.axisRow {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.3 var(--font-mono);
+}
+
+.axis {
+  text-align: center;
+}
+
+.axisRow {
+  display: flex;
+  justify-content: space-between;
+}
+
+.field {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  aspect-ratio: 1;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  box-shadow: 0 0 0 1px var(--rule);
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+
+.field::before,
+.field::after {
+  content: "";
+  position: absolute;
+  z-index: 1;
+  background: var(--sheet);
+  pointer-events: none;
+}
+
+.field::before {
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 1px);
+  width: 2px;
+}
+
+.field::after {
+  top: calc(50% - 1px);
+  left: 0;
+  right: 0;
+  height: 2px;
+}
+
+.part {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  border-radius: 0;
+  background: var(--tone-soft);
+  color: var(--ink);
+  font: 500 0.8125rem / 1.2 var(--font-sans);
+  cursor: inherit;
+}
+
+.part svg {
+  flex: none;
+}
+
+.part[data-part="woundUp"] {
+  --tone: var(--part-wound-ink);
+  --tone-soft: var(--part-wound);
+}
+
+.part[data-part="litUp"] {
+  --tone: var(--part-lit-ink);
+  --tone-soft: var(--part-lit);
+}
+
+.part[data-part="low"] {
+  --tone: var(--part-low-ink);
+  --tone-soft: var(--part-low);
+}
+
+.part[data-part="settled"] {
+  --tone: var(--part-settled-ink);
+  --tone-soft: var(--part-settled);
+}
+
+.part[data-part="low"],
+.part[data-part="settled"] {
+  align-items: flex-end;
+}
+
+.part[data-part="litUp"],
+.part[data-part="settled"] {
+  justify-content: flex-end;
+}
+
+.part[aria-checked="true"] {
+  box-shadow: inset 0 0 0 2px var(--tone);
+}
+
+.part:focus-visible {
+  z-index: 3;
+  outline: 2px solid var(--focus);
+  outline-offset: -4px;
+}
+
+.dot {
+  position: absolute;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  background: var(--sheet);
+  box-shadow:
+    0 0 0 3px var(--tone),
+    0 0 0 7px color-mix(in srgb, var(--tone) 25%, transparent);
+  pointer-events: none;
+}
+
+.dot[data-part="woundUp"] {
+  --tone: var(--part-wound-ink);
+}
+
+.dot[data-part="litUp"] {
+  --tone: var(--part-lit-ink);
+}
+
+.dot[data-part="low"] {
+  --tone: var(--part-low-ink);
+}
+
+.dot[data-part="settled"] {
+  --tone: var(--part-settled-ink);
+}
