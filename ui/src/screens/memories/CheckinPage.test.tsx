@@ -40,6 +40,14 @@ describe("a check-in's own page", () => {
     expect(screen.getByRole("img", { name: "Low · tired, 8:05 am" })).toBeInTheDocument();
   });
 
+  it("goes back to the answer when an answer opened it, as an item page does", async () => {
+    const { title } = await open("j-ci-tired?from=ask");
+    expect(title).toHaveTextContent("Low · tired");
+    const main = within(screen.getByRole("main"));
+    expect(main.getByRole("link", { name: /Ask/ })).toHaveAttribute("href", "#/ask");
+    expect(main.queryByRole("link", { name: /Journal/ })).toBeNull();
+  });
+
   it("leaves out what a memory has and a check-in does not", async () => {
     await open("j-ci-tired");
     for (const name of ["Mark private", "Keep forever", "Read it again"]) {
