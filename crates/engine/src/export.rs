@@ -709,6 +709,7 @@ impl Engine {
                 "remote_state",
                 "reflection_cites",
                 "reflections",
+                "reflections_declined",
                 "mentions",
                 "name_questions",
                 "page_line_memories",

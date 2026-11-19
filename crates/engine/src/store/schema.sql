@@ -316,3 +316,10 @@ CREATE TABLE name_questions(
 -- migration 13
 -- The originals a forget deletes, as its preview listed them, so nothing else goes with them.
 ALTER TABLE forget_tokens ADD COLUMN items TEXT;
+
+-- migration 14
+-- The page's question from the journal: the block its sentence came from, as JSON.
+ALTER TABLE questions ADD COLUMN journal TEXT;
+-- A reflection or recap the person deleted: not written again until they ask for it.
+CREATE TABLE reflections_declined(
+  kind TEXT NOT NULL, start TEXT NOT NULL, declined_at TEXT NOT NULL, PRIMARY KEY(kind, start));
