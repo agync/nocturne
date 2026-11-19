@@ -5,7 +5,9 @@
 mod common;
 
 use common::{EngineExt, Fixture, cand, fixture, keep};
-use nocturne_engine::Predicate;
+use nocturne_contract::ItemStatus;
+use nocturne_contract::{EntityKind, Span};
+use nocturne_engine::{Candidate, Predicate};
 
 fn conn(f: &Fixture) -> rusqlite::Connection {
     let c = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
@@ -30,6 +32,37 @@ fn journal_item(f: &Fixture, text: &str, role: &str) -> String {
     let id = keep(&f.engine, text);
     mark(f, &id, role, "2026-11-12");
     id
+}
+
+fn person(subject: &str, predicate: Predicate, object: &str, sentence: &str) -> Candidate {
+    let mut c = cand(subject, predicate, object, sentence);
+    c.subject_kind = Some(EntityKind::Person);
+    c
+}
+
+fn place(subject: &str, predicate: Predicate, object: &str, sentence: &str) -> Candidate {
+    let mut c = cand(subject, predicate, object, sentence);
+    c.subject_kind = Some(EntityKind::Place);
+    c
+}
+
+/// What an item names, in order: name, start, end, new, state.
+type Row = (String, Option<u32>, Option<u32>, bool, String);
+
+fn mentions(f: &Fixture, item: &str) -> Vec<Row> {
+    let c = conn(f);
+    let mut stmt = c
+        .prepare(
+            "SELECT e.name, n.start, n.end, n.new, n.state FROM mentions n \
+             JOIN entities e ON e.id = n.entity_id WHERE n.item_id = ?1 ORDER BY n.ord",
+        )
+        .unwrap();
+    stmt.query_map([item], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+    })
+    .unwrap()
+    .map(Result::unwrap)
+    .collect()
 }
 
 fn count(f: &Fixture, sql: &str) -> i64 {
@@ -138,4 +171,272 @@ fn what_a_journal_memory_asks_never_reaches_the_tray() {
         .unwrap();
     assert_eq!(f.engine.needs_you().unwrap().len(), 1);
     assert!(f.engine.needs_you_public().unwrap().is_empty());
+}
+
+#[test]
+fn mentions_are_written_in_order_with_utf16_offsets_and_new_on_first_sight() {
+    let f = fixture();
+    let entry = journal_item(&f, "Ana \u{1F389} met Priya at Caf\u{e9} Rose.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![
+                person("Priya", Predicate::Knows, "Ana", "Priya knows Ana."),
+                place(
+                    "Caf\u{e9} Rose",
+                    Predicate::Happened,
+                    "a meeting",
+                    "Ana met Priya at Caf\u{e9} Rose.",
+                ),
+                person("Ana", Predicate::Knows, "Priya", "Ana knows Priya."),
+            ],
+        )
+        .unwrap();
+    assert_eq!(
+        mentions(&f, &entry),
+        vec![
+            ("Ana".into(), Some(0), Some(3), true, "found".into()),
+            ("Priya".into(), Some(11), Some(16), true, "found".into()),
+            (
+                "Caf\u{e9} Rose".into(),
+                Some(20),
+                Some(29),
+                true,
+                "found".into()
+            ),
+        ]
+    );
+
+    let next = keep(&f.engine, "Ana called.");
+    f.engine
+        .apply(
+            &next,
+            vec![person("Ana", Predicate::Knows, "Leo", "Ana knows Leo.")],
+        )
+        .unwrap();
+    let rows = mentions(&f, &next);
+    assert_eq!(rows.len(), 1);
+    assert!(!rows[0].3, "Ana was met before");
+}
+
+#[test]
+fn a_name_that_is_not_in_the_words_is_found_by_its_quote_or_left_without_a_place() {
+    let f = fixture();
+    let entry = journal_item(
+        &f,
+        "Today my mother\u{2019}s scan came back clear.",
+        "entry",
+    );
+    let mut mum = person("Mum", Predicate::Happened, "a scan", "Mum had a scan.");
+    mum.span = Some(Span::Quote {
+        text: "mother\u{2019}s scan".into(),
+    });
+    let unplaced = person("Gran", Predicate::Knows, "Mum", "Gran knows Mum.");
+    f.engine.apply(&entry, vec![unplaced, mum]).unwrap();
+    assert_eq!(
+        mentions(&f, &entry),
+        vec![
+            ("Mum".into(), Some(9), Some(22), true, "found".into()),
+            ("Gran".into(), None, None, true, "found".into()),
+        ]
+    );
+}
+
+#[test]
+fn a_name_inside_a_longer_word_is_not_a_mention_place() {
+    let f = fixture();
+    let entry = journal_item(&f, "Sampson came. Then Sam left.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![person("Sam", Predicate::Knows, "Leo", "Sam knows Leo.")],
+        )
+        .unwrap();
+    assert_eq!(mentions(&f, &entry)[0].1, Some(19));
+}
+
+#[test]
+fn reading_again_keeps_what_the_person_did_and_writes_no_second_row() {
+    let f = fixture();
+    let entry = journal_item(&f, "Priya came round.", "entry");
+    let claim = || person("Priya", Predicate::Knows, "Leo", "Priya knows Leo.");
+    f.engine.apply(&entry, vec![claim()]).unwrap();
+    conn(&f)
+        .execute("UPDATE mentions SET state = 'confirmed'", [])
+        .unwrap();
+    f.engine.apply(&entry, vec![claim()]).unwrap();
+    let rows = mentions(&f, &entry);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].4, "confirmed");
+    assert!(rows[0].3, "still the item that first met her");
+
+    conn(&f)
+        .execute("UPDATE mentions SET state = 'removed'", [])
+        .unwrap();
+    f.engine.apply(&entry, vec![claim()]).unwrap();
+    assert_eq!(mentions(&f, &entry)[0].4, "removed");
+}
+
+const CHECKIN: &str = "Low today. Gran\u{2019}s scan is on my mind and the dentist is on Friday.";
+
+/// A check-in saying what a note would turn into several memories from.
+fn checkin_claims() -> Vec<Candidate> {
+    vec![
+        person(
+            "Gran",
+            Predicate::Happened,
+            "a scan",
+            "Gran has a scan on her mind.",
+        ),
+        cand(
+            "the dentist",
+            Predicate::Due,
+            "Friday",
+            "The dentist is on Friday.",
+        ),
+        person("Gran", Predicate::Prefers, "tea", "Gran likes tea."),
+    ]
+}
+
+#[test]
+fn a_checkin_names_gran_and_yields_a_mention_and_no_memory() {
+    let f = fixture();
+    let checkin = journal_item(&f, CHECKIN, "checkin");
+    let report = f.engine.apply(&checkin, checkin_claims()).unwrap();
+    assert!(report.created.is_empty() && report.conflicts.is_empty());
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 0);
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memory_sources"), 0);
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM conflicts"), 0);
+    assert_eq!(
+        mentions(&f, &checkin)
+            .into_iter()
+            .map(|m| (m.0, m.1))
+            .collect::<Vec<_>>(),
+        vec![("Gran".to_string(), Some(11))],
+        "the dentist has no kind, so nothing is made of it"
+    );
+    assert_eq!(
+        f.engine.get_item(&checkin).unwrap().status,
+        ItemStatus::Understood
+    );
+    assert!(f.engine.needs_you().unwrap().is_empty());
+}
+
+#[test]
+fn a_checkin_is_known_by_its_metadata_as_well_as_its_kind() {
+    let f = fixture();
+    let checkin = keep(&f.engine, CHECKIN);
+    conn(&f)
+        .execute(
+            "UPDATE items SET metadata = json_set(metadata, '$.journal', 'checkin') WHERE id = ?1",
+            [&checkin],
+        )
+        .unwrap();
+    f.engine.apply(&checkin, checkin_claims()).unwrap();
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 0);
+    assert_eq!(mentions(&f, &checkin).len(), 1);
+}
+
+#[test]
+fn reading_a_checkin_again_adds_no_second_mention() {
+    let f = fixture();
+    let checkin = journal_item(&f, CHECKIN, "checkin");
+    f.engine.apply(&checkin, checkin_claims()).unwrap();
+    f.engine.apply(&checkin, checkin_claims()).unwrap();
+    assert_eq!(mentions(&f, &checkin).len(), 1);
+    assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 0);
+}
+
+#[test]
+fn nothing_a_checkin_says_reaches_ask_or_the_online_path() {
+    let f = fixture();
+    let checkin = journal_item(&f, CHECKIN, "checkin");
+    f.engine.apply(&checkin, checkin_claims()).unwrap();
+    let ordinary = keep(&f.engine, "Gran likes to knit by the window.");
+    f.engine
+        .apply(
+            &ordinary,
+            vec![person(
+                "Gran",
+                Predicate::Prefers,
+                "knitting",
+                "Gran likes to knit.",
+            )],
+        )
+        .unwrap();
+
+    let hits = f.engine.retrieve("Gran scan dentist", None, 12).unwrap();
+    assert!(
+        hits.iter()
+            .all(|h| h.memory.receipts.iter().all(|r| r.item_id != checkin))
+    );
+    let hits = f
+        .engine
+        .with_source_lines("Gran scan on her mind", hits, 12)
+        .unwrap();
+    assert!(
+        hits.iter()
+            .all(|h| h.memory.receipts.iter().all(|r| r.item_id != checkin)),
+        "no line of a check-in is offered as a source line"
+    );
+    let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
+    let sendable = f.engine.sendable(&ids, true).unwrap();
+    for (h, ok) in hits.iter().zip(sendable) {
+        if ok {
+            assert!(h.memory.receipts.iter().all(|r| r.item_id != checkin));
+        }
+    }
+    assert_eq!(
+        f.engine
+            .sendable(&["mem_nothing".to_string()], true)
+            .unwrap(),
+        vec![false]
+    );
+}
+
+#[test]
+fn a_line_of_an_entry_is_still_offered_but_not_one_of_a_checkin() {
+    let f = fixture();
+    let entry = journal_item(&f, "Walked the long way home past the old mill.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![person("Leo", Predicate::Knows, "Ana", "Leo knows Ana.")],
+        )
+        .unwrap();
+    let checkin = journal_item(&f, "Walked the long way home past the mill.", "checkin");
+    f.engine.apply(&checkin, Vec::new()).unwrap();
+    let hits = f.engine.retrieve("long way home mill", None, 12).unwrap();
+    let hits = f
+        .engine
+        .with_source_lines("long way home mill", hits, 12)
+        .unwrap();
+    let from: Vec<&str> = hits
+        .iter()
+        .flat_map(|h| h.memory.receipts.iter().map(|r| r.item_id.as_str()))
+        .collect();
+    assert!(from.contains(&entry.as_str()));
+    assert!(!from.contains(&checkin.as_str()));
+}
+
+#[test]
+fn a_journal_memory_may_go_online_like_any_other() {
+    let f = fixture();
+    let entry = journal_item(&f, "Priya is moving to York in the spring.", "entry");
+    let id = f
+        .engine
+        .apply(
+            &entry,
+            vec![cand(
+                "Priya",
+                Predicate::LivesIn,
+                "York",
+                "Priya is moving to York.",
+            )],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    assert!(journal_flag(&f, &id));
+    assert_eq!(f.engine.sendable(&[id], false).unwrap(), vec![true]);
 }

@@ -16,6 +16,7 @@ use crate::entity::{Alias, entity_views, find_by_key, note_rewrite, replace_name
 use std::path::PathBuf;
 
 use crate::error::{Error, Result};
+use crate::journal::mentions::{Found, write_mentions};
 use crate::rows::{MEM_COLS, MemRow, load_mem, mem_row, mem_view, query_mems, receipts_for};
 use crate::types::{ApplyReport, Candidate, CorrectPatch, Predicate};
 use crate::util::{claim_hash, enum_str, fmt_ts, fts_and, key_of, new_id, overlaps};
@@ -817,6 +818,13 @@ fn independent(a: &Option<String>, b: &Option<String>) -> bool {
     }
 }
 
+/// Where a candidate was filed.
+pub(crate) struct Filed {
+    pub entity_id: String,
+    /// The person, place or thing was made by this reading.
+    pub created: bool,
+}
+
 struct ItemInfo {
     trusted: bool,
     private: bool,
@@ -828,6 +836,8 @@ struct ItemInfo {
     kept_on: String,
     /// What the item is in the journal (`entry`, `good` or `checkin`), when it is a journal item.
     journal: Option<String>,
+    /// A feelings check-in: it names people and places, and says nothing that becomes a memory.
+    checkin: bool,
 }
 
 impl ItemInfo {
@@ -844,18 +854,28 @@ fn load_item_info(
     today: &str,
     tz: &jiff::tz::TimeZone,
 ) -> Result<ItemInfo> {
-    let (trust, origin, private, kept_at, journal): (
+    let (trust, origin, private, kept_at, journal, kind): (
         String,
         Option<String>,
         bool,
         String,
         Option<String>,
+        String,
     ) = tx
         .query_row(
-            "SELECT trust, origin, private, kept_at, json_extract(metadata, '$.journal') \
+            "SELECT trust, origin, private, kept_at, json_extract(metadata, '$.journal'), kind \
              FROM items WHERE id = ?1",
             [item_id],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                ))
+            },
         )
         .optional()?
         .ok_or_else(|| Error::not_found(format!("item {item_id}")))?;
@@ -869,21 +889,23 @@ fn load_item_info(
         origin,
         kept_at,
         kept_on,
+        checkin: kind == "checkin" || journal.as_deref() == Some("checkin"),
         journal,
     })
 }
 
 /// The thing a subject is filed under: the live one with that name key, whatever its kind
 /// (memories match their subject by key alone). With several, the one of the requested kind
-/// wins, then by id. A subject nothing carries yet gets a new one when its kind is known.
-fn upsert_entity(
+/// wins, then by id. A subject nothing carries yet gets a new one when its kind is known; the
+/// flag says it was made now.
+pub(crate) fn upsert_entity(
     tx: &Transaction<'_>,
     subject: &str,
     subject_key: &str,
     kind: Option<EntityKind>,
-) -> Result<Option<String>> {
+) -> Result<Option<(String, bool)>> {
     if let Some(id) = find_by_key(tx, subject_key, kind)? {
-        return Ok(Some(id));
+        return Ok(Some((id, false)));
     }
     let Some(k) = kind else {
         return Ok(None);
@@ -898,7 +920,7 @@ fn upsert_entity(
             format!("{}:{subject_key}", enum_str(&k))
         ],
     )?;
-    Ok(Some(id))
+    Ok(Some((id, true)))
 }
 
 /// Rows this memory closed or superseded come back: the change that ended them is gone. Rows it
@@ -1128,6 +1150,11 @@ fn apply(
         })
         .collect();
     let item = load_item_info(tx, item_id, today, tz)?;
+    if item.checkin {
+        mention_only(tx, now, item_id, &cands)?;
+        finish_item(tx, item_id, "understood", took)?;
+        return Ok((ApplyReport::default(), Vec::new()));
+    }
     let mut report = ApplyReport::default();
 
     // Applying is idempotent per item: detach what this item said before, apply again, then
@@ -1142,8 +1169,9 @@ fn apply(
     let relinked: HashSet<&str> = prev.iter().map(|p| p.0.as_str()).collect();
     let mut touched: HashSet<String> = HashSet::new();
 
+    let mut found: Vec<Found> = Vec::new();
     for c in &cands {
-        apply_one(
+        if let Some(filed) = apply_one(
             tx,
             now,
             today,
@@ -1153,8 +1181,11 @@ fn apply(
             &mut touched,
             &mut report,
             c,
-        )?;
+        )? {
+            found.push(Found::of(c, filed.entity_id, filed.created));
+        }
     }
+    write_mentions(tx, item_id, now, &found, true)?;
 
     for (mid, span) in &prev {
         if touched.contains(mid) {
@@ -1244,6 +1275,17 @@ fn apply(
     } else {
         "understood"
     };
+    finish_item(tx, item_id, status, took)?;
+    Ok((report, files))
+}
+
+/// The item is read: its status, and no lease.
+fn finish_item(
+    tx: &Transaction<'_>,
+    item_id: &str,
+    status: &str,
+    took: Option<std::time::Duration>,
+) -> Result<()> {
     tx.execute(
         "UPDATE items SET status = ?2, lease_until = NULL, lease_token = NULL, \
          status_before = NULL, reread = 0, failures = 0, \
@@ -1254,7 +1296,28 @@ fn apply(
             took.map(|t| u32::try_from(t.as_millis()).unwrap_or(u32::MAX))
         ],
     )?;
-    Ok((report, files))
+    Ok(())
+}
+
+/// A check-in's reading: the names it says, as mentions, and nothing else. No memory is made,
+/// linked or asked about, so what a check-in says never reaches Ask or goes online.
+fn mention_only(tx: &Transaction<'_>, now: &str, item_id: &str, cands: &[Candidate]) -> Result<()> {
+    let mut found: Vec<Found> = Vec::new();
+    for c in cands {
+        let name = match resolve_alias(tx, &key_of(&c.subject))? {
+            Some(alias) => alias.name,
+            None => c.subject.trim().to_string(),
+        };
+        if name.is_empty() {
+            continue;
+        }
+        if let Some((entity_id, created)) =
+            upsert_entity(tx, &name, &key_of(&name), c.subject_kind)?
+        {
+            found.push(Found::of(c, entity_id, created));
+        }
+    }
+    write_mentions(tx, item_id, now, &found, true)
 }
 
 /// What an item says takes its sensitivity: every memory now linked to it, whether it made the
@@ -1299,7 +1362,7 @@ fn apply_one(
     touched: &mut HashSet<String>,
     report: &mut ApplyReport,
     c: &Candidate,
-) -> Result<()> {
+) -> Result<Option<Filed>> {
     if c.subject.trim().is_empty() || c.object.trim().is_empty() || c.sentence.trim().is_empty() {
         return Err(Error::invalid(
             "a candidate needs a subject, an object and a sentence",
@@ -1351,7 +1414,7 @@ fn apply_one(
             .any(|(id, direct)| *direct || relinked.contains(id.as_str()))
     };
     if known_wrong {
-        return Ok(());
+        return Ok(None);
     }
 
     // Memories filed under this subject. One the person moved elsewhere still answers to the
@@ -1382,6 +1445,10 @@ fn apply_one(
     });
 
     if let Some(m) = matched {
+        let filed = m.entity_id.clone().map(|entity_id| Filed {
+            entity_id,
+            created: false,
+        });
         tx.execute(
             "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
             params![m.id, item_id, span],
@@ -1407,10 +1474,10 @@ fn apply_one(
                     note_rewrite(tx, alias_change.as_deref(), &m.id)?;
                 }
             }
-            return Ok(());
+            return Ok(filed);
         }
         if !item.trusted {
-            return Ok(());
+            return Ok(filed);
         }
         let others: Vec<Option<String>> = {
             let mut stmt = tx.prepare(
@@ -1440,7 +1507,7 @@ fn apply_one(
             report.conflicts.extend(made);
         }
         report.reinforced.push(m.id.clone());
-        return Ok(());
+        return Ok(filed);
     }
 
     // The same item read again, saying what a later item has since replaced: the old row is
@@ -1467,8 +1534,19 @@ fn apply_one(
             "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
             params![old, item_id, span],
         )?;
+        let entity_id: Option<String> = tx
+            .query_row(
+                "SELECT entity_id FROM memories WHERE id = ?1",
+                [&old],
+                |r| r.get(0),
+            )
+            .optional()?
+            .flatten();
         touched.insert(old);
-        return Ok(());
+        return Ok(entity_id.map(|entity_id| Filed {
+            entity_id,
+            created: false,
+        }));
     }
 
     // A new memory.
@@ -1546,7 +1624,10 @@ fn apply_one(
                 "health" | "allergy" | "medication"
             )
         });
-    let entity_id = upsert_entity(tx, &c.subject, &subject_key, c.subject_kind)?;
+    let (entity_id, created) = match upsert_entity(tx, &c.subject, &subject_key, c.subject_kind)? {
+        Some((id, created)) => (Some(id), created),
+        None => (None, false),
+    };
     tx.execute(
         "INSERT INTO memories(id, subject, subject_key, entity_id, predicate, object, object_key, \
          sentence, valid_from, valid_to, due, recorded_at, confidence, status, keep_forever, \
@@ -1611,7 +1692,7 @@ fn apply_one(
         report.unconfirmed.push(id.clone());
     }
     report.created.push(id);
-    Ok(())
+    Ok(entity_id.map(|entity_id| Filed { entity_id, created }))
 }
 
 /// The entries waiting on the person, as of `today` (local).
