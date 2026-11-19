@@ -122,6 +122,47 @@ fn restrict_acl(path: &Path) -> io::Result<()> {
     }
 }
 
+/// What `icacls` said, from its two streams, as one trimmed line. Bytes outside UTF-8 become
+/// replacement characters; `icacls` writes in the console's own code page.
+#[cfg(any(windows, test))]
+fn icacls_said(stdout: &[u8], stderr: &[u8]) -> String {
+    [stdout, stderr]
+        .into_iter()
+        .map(|bytes| String::from_utf8_lossy(bytes).trim().to_string())
+        .filter(|text| !text.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(test)]
+mod said_tests {
+    use super::icacls_said;
+
+    #[test]
+    fn what_icacls_said_reads_both_streams_and_skips_the_empty_ones() {
+        assert_eq!(icacls_said(b"", b""), "");
+        assert_eq!(icacls_said(b" \r\n", b"\t\n"), "");
+        assert_eq!(
+            icacls_said(b"processed file: x\r\n", b""),
+            "processed file: x"
+        );
+        assert_eq!(
+            icacls_said(b"", b"Access is denied.\n"),
+            "Access is denied."
+        );
+        assert_eq!(
+            icacls_said(b"processed file: x\n", b"Access is denied.\n"),
+            "processed file: x Access is denied."
+        );
+    }
+
+    #[test]
+    fn text_outside_utf8_is_reported_with_replacement_characters() {
+        let said = icacls_said(b"", &[0xff, b'x']);
+        assert!(said.ends_with('x') && said.contains('\u{fffd}'), "{said}");
+    }
+}
+
 /// Leave an existing folder readable by its owner alone.
 pub fn restrict_dir(path: &Path) -> io::Result<()> {
     #[cfg(unix)]
@@ -195,6 +236,7 @@ mod windows {
     use std::path::Path;
     use std::sync::OnceLock;
 
+    use super::icacls_said;
     use crate::process::command;
 
     /// The current user's security identifier, from `whoami /user`. Only a success is kept, so a
@@ -269,15 +311,23 @@ mod windows {
     /// Everyone, Authenticated Users and Users: broad groups a folder may hold for itself.
     const BROAD: [&str; 3] = ["*S-1-1-0", "*S-1-5-11", "*S-1-5-32-545"];
 
+    /// Output is captured rather than inherited: every call otherwise writes its summary to the
+    /// terminal, which lands in the output of every test that makes a folder private.
     fn icacls(path: &Path, args: &[&str]) -> io::Result<()> {
-        let status = command("icacls").arg(path).args(args).arg("/q").status()?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(io::Error::other(format!(
-                "the folder could not be made private: icacls {status}"
-            )))
+        let out = command("icacls").arg(path).args(args).arg("/q").output()?;
+        if out.status.success() {
+            return Ok(());
         }
+        let said = icacls_said(&out.stdout, &out.stderr);
+        let detail = if said.is_empty() {
+            String::new()
+        } else {
+            format!("; it said: {said}")
+        };
+        Err(io::Error::other(format!(
+            "the folder could not be made private: icacls {}{detail}",
+            out.status
+        )))
     }
 
     #[cfg(test)]
