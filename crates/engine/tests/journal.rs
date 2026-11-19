@@ -516,6 +516,47 @@ fn changing_a_checkin_keeps_its_day_and_hides_the_old_one() {
 }
 
 #[test]
+fn a_new_version_of_a_left_out_block_or_checkin_stays_left_out() {
+    let f = fixture();
+    let day = date("2026-11-13");
+    let block = f
+        .engine
+        .save_entry_text(day, None, 0, "First words")
+        .unwrap()
+        .unwrap();
+    read(&f, &block.item.id);
+    f.engine.set_left_out(&block.item.id, true).unwrap();
+    let edited = f
+        .engine
+        .save_entry_text(day, Some(&block.item.id), 0, "Second words")
+        .unwrap()
+        .unwrap();
+    assert_ne!(edited.item.id, block.item.id);
+    let left_out = |id: &str| -> bool {
+        rusqlite::Connection::open(f.dir.path().join("nocturne.db"))
+            .unwrap()
+            .query_row("SELECT left_out FROM items WHERE id = ?1", [id], |r| {
+                r.get(0)
+            })
+            .unwrap()
+    };
+    assert!(left_out(&edited.item.id));
+
+    let first = f
+        .engine
+        .keep_checkin(
+            input(feeling(FeelingPart::Low, &["tired"]), None),
+            Source::Journal,
+        )
+        .unwrap();
+    f.engine.set_left_out(&first.id, true).unwrap();
+    let mut change = input(feeling(FeelingPart::Settled, &["calm"]), None);
+    change.replaces = Some(first.id.clone());
+    let second = f.engine.keep_checkin(change, Source::Journal).unwrap();
+    assert!(second.left_out);
+}
+
+#[test]
 fn a_feeling_takes_up_to_three_words_inside_the_field() {
     let f = fixture();
     let many = feeling(FeelingPart::Low, &["a", "b", "c", "d"]);

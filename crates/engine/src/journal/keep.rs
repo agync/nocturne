@@ -159,6 +159,15 @@ fn delete_unread(tx: &Transaction<'_>, id: &str) -> Result<()> {
     Ok(())
 }
 
+/// A new version is left out of reflections when the one it replaces was.
+fn inherit_left_out(tx: &Transaction<'_>, new: &str, old: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE items SET left_out = (SELECT left_out FROM items WHERE id = ?2) WHERE id = ?1",
+        params![new, old],
+    )?;
+    Ok(())
+}
+
 fn set_meta(tx: &Transaction<'_>, id: &str, key: &str, value: &Value) -> Result<()> {
     tx.execute(
         &format!(
@@ -263,6 +272,7 @@ impl Engine {
                     hold_until: Some(hold.clone()),
                 },
             )?;
+            inherit_left_out(tx, &new, id)?;
             Ok(Some(new))
         })?;
         match saved {
@@ -509,6 +519,9 @@ impl Engine {
                     hold_until: None,
                 },
             )?;
+            if let Some(prev) = &input.replaces {
+                inherit_left_out(tx, &id, prev)?;
+            }
             Ok(id)
         })?;
         self.read(|conn| {
