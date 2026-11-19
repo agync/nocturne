@@ -144,7 +144,7 @@ const JITEM_COLS: &str = "i.metadata, i.left_out, (i.trust = 'trusted')";
 
 fn jitem_sql(where_sql: &str) -> String {
     format!(
-        "SELECT {ITEM_COLS}, {JITEM_COLS} FROM items i WHERE {where_sql} ORDER BY i.kept_at, i.id"
+        "SELECT {ITEM_COLS}, {JITEM_COLS} FROM items i WHERE {where_sql} ORDER BY i.kept_at, i.rowid"
     )
 }
 
