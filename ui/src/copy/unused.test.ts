@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { MarkState } from "../components/Mark/Mark";
-import type { CouldntReadReason, EngineState, ItemKind, SpokenKind } from "../engine/bindings";
+import type {
+  CouldntReadReason,
+  EngineState,
+  EntityKind,
+  ItemKind,
+  PeriodKind,
+  SpokenKind,
+} from "../engine/bindings";
+import type { Strength } from "../journal/feelings";
+import { WORDS } from "../journal/feelings";
 import type { PaperSize } from "../screens/editions/fit";
 import { copyDeck } from "./t";
 
@@ -59,6 +68,9 @@ const SPOKEN: Record<SpokenKind, true> = {
   question: true,
 };
 const PAPER: Record<PaperSize, true> = { a4: true, letter: true, receipt: true };
+const PERIODS: PeriodKind[] = ["week", "month", "year"];
+const STEPS: Strength[] = ["little", "quite", "strongly"];
+const ENTITY_KINDS: EntityKind[] = ["person", "place", "thing"];
 
 const each = (record: Record<string, true>, build: (member: string) => string[]) =>
   Object.keys(record).flatMap(build);
@@ -75,14 +87,28 @@ const BUILT_AT_RUN_TIME: Array<{ prefix: string; why: string; producible: string
     producible: each(ITEM_KINDS, (k) => [`kind.${k}`, `kind.${k}.spoken`]),
   },
   {
-    prefix: "journal.",
-    why: "the journal screens, built by the lanes that follow the foundation; tighten this to named keys as each screen lands",
-    producible: Object.keys(copyDeck).filter((key) => key.startsWith("journal.")),
+    prefix: "journal.recap.",
+    why: "t(`journal.recap.title.${kind}`) and its new, noCheckins and nothing lines, for a period",
+    producible: ["title", "new", "noCheckins", "nothing"].flatMap((line) =>
+      PERIODS.map((p) => `journal.recap.${line}.${p}`),
+    ),
   },
   {
-    prefix: "feeling.",
-    why: "the check-in builds part, word and meaning ids from the word lists in ui/src/journal/feelings.ts",
-    producible: Object.keys(copyDeck).filter((key) => key.startsWith("feeling.")),
+    prefix: "journal.a11y.step.",
+    why: "t(`journal.a11y.step.${strengthStep(point)}`)",
+    producible: STEPS.map((s) => `journal.a11y.step.${s}`),
+  },
+  {
+    prefix: "journal.lookback.did.",
+    why: "t(`journal.lookback.did.${kind}`) for a person, place or thing",
+    producible: ENTITY_KINDS.map((k) => `journal.lookback.did.${k}`),
+  },
+  {
+    prefix: "feeling.word.",
+    why: "t(`feeling.word.${id}`) and its meaning, from the word lists in ui/src/journal/feelings.ts",
+    producible: Object.values(WORDS).flatMap((words) =>
+      words.flatMap((w) => [`feeling.word.${w.id}`, `feeling.meaning.${w.id}`]),
+    ),
   },
   {
     prefix: "mark.",
