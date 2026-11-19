@@ -946,11 +946,8 @@ fn the_markdown_export_renders_the_question_in_words() {
     save_day(&w.f, PAGE);
     let out = tempfile::tempdir().unwrap();
     let root = std::path::PathBuf::from(w.f.engine.export_to(out.path()).unwrap().path);
-    let page = std::fs::read_dir(root.join("pages"))
-        .unwrap()
-        .map(|e| std::fs::read_to_string(e.unwrap().path()).unwrap())
-        .find(|t| t.contains("## Question"))
-        .expect("a page with its question");
+    let page = std::fs::read_to_string(root.join("pages").join(format!("{PAGE}.md"))).unwrap();
+    assert!(page.contains("## Question"), "{page}");
     assert!(
         page.contains(&format!(
             "Yesterday you wrote: \u{201c}{ENTRY}\u{201d} How did it go?"
