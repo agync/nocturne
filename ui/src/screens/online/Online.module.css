@@ -767,3 +767,9 @@
   flex-direction: column;
   gap: 4px;
 }
+
+.stays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}

@@ -162,6 +162,11 @@
   display: block;
 }
 
+.from {
+  color: var(--ink2);
+  font-style: italic;
+}
+
 .link {
   align-self: flex-start;
   padding: 0;

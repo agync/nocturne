@@ -93,14 +93,21 @@ function dayLabel(day: string, today: string): string {
 }
 
 /** One line of what was sent, with a memory that is gone or changed said in words, never shown. */
-function Line({ line }: { line: SentLine }) {
+function Line({ line, journalDay }: { line: SentLine; journalDay?: string }) {
   if (line.type === "text") return <span className={styles.line}>{line.text}</span>;
   const prefix = `[m${line.n}] `;
+  const from = journalDay ? (
+    <span className={styles.from}>
+      {" "}
+      {t("journal.online.sentFrom", { day: formatLongDay(journalDay) })}
+    </span>
+  ) : null;
   if (line.state === "same" && line.text !== null) {
     return (
       <span className={styles.line}>
         {prefix}
         {line.text}
+        {from}
       </span>
     );
   }
@@ -108,6 +115,7 @@ function Line({ line }: { line: SentLine }) {
     <span className={styles.line}>
       {prefix}
       <i>{t(line.state === "deleted" ? "sent.memory.deleted" : "sent.memory.changed")}</i>
+      {from}
     </span>
   );
 }
@@ -163,7 +171,15 @@ function Entry({ send, today }: { send: OnlineSend; today: string }) {
           <p className={styles.sent}>
             {send.lines.map((line, i) => (
               // The log is append-only text: a line has no id of its own.
-              <Line key={i} line={line} />
+              <Line
+                key={i}
+                line={line}
+                journalDay={
+                  line.type === "memory"
+                    ? send.journal?.find((j) => j.n === line.n)?.day
+                    : undefined
+                }
+              />
             ))}
           </p>
           {gone ? <p className={styles.note}>{t("sent.memory.note")}</p> : null}

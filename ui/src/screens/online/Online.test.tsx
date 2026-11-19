@@ -231,3 +231,22 @@ describe("online, when the computer cannot be read", () => {
     expect(alert).toHaveTextContent("What went wrong: the store is locked");
   });
 });
+
+describe("the journal on the Online answers page", () => {
+  it("has the Your journal row and both Always stays here additions", async () => {
+    await openOnline(PAGE, "on");
+    const row = screen.getByText("Your journal").closest("li") as HTMLElement;
+    expect(within(row).getByText("Entries and good things, when they help")).toBeInTheDocument();
+    expect(
+      within(row).getByText(
+        "A line from an entry or a good thing may go with a question it helps answer. They can’t be marked private. Check-ins, reflections and recaps never go.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Your check-ins, reflections and recaps")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
+      ),
+    ).toBeInTheDocument();
+  });
+});

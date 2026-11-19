@@ -26,6 +26,7 @@ export function Explainer({ onNext, onLeave }: { onNext: () => void; onLeave: ()
     t("online.explain.aside.keeping"),
     t("online.explain.aside.tidy"),
     t("online.explain.aside.receipts"),
+    t("journal.online.step1.more.staysHere"),
   ];
   return (
     <Frame back={{ to: "/settings/online", label: t("screen.online.title") }}>

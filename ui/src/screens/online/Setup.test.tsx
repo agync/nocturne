@@ -99,12 +99,12 @@ describe("setup", () => {
     await openOnline(SETUP, "off", STEP1);
     expect(
       screen.getByText(
-        "Your question, with a few short lines from what you kept that help answer it.",
+        "Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included.",
       ),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "Your photos, recordings and documents themselves, and anything you marked private.",
+        "Your photos, recordings and documents themselves, your check-ins, reflections and recaps, and anything you marked private.",
       ),
     ).toBeInTheDocument();
     expect(
@@ -690,5 +690,55 @@ describe("setup", () => {
     expect(screen.getByLabelText(/^Address/)).toHaveValue("https://api.example.com/v1");
     expect(screen.getByLabelText(/^Which one to use/)).toHaveValue("llama-3.3-70b-instruct");
     expect(screen.getByLabelText(/^Key/)).toHaveValue("");
+  });
+});
+
+describe("the journal, said openly", () => {
+  it("step 1 says journal lines can go and check-ins, reflections and recaps never do", async () => {
+    await openOnline(SETUP, "off", STEP1);
+    await click("Everything that is sent, and what stays here");
+    for (const line of [
+      "Your question, and the few things you kept that answer it, as short sentences. A line from a journal entry or a good thing can go too, when it helps answer the question.",
+      "Writing your reflections and recaps",
+    ]) {
+      expect(screen.getByText(line)).toBeInTheDocument();
+    }
+    expect(
+      screen.getByText(
+        /Your check-ins, reflections and recaps are never sent: they are written and kept on this computer\./,
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Journal entries and good things can’t be marked private, so while this is on/,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("step 5 lists what is sent, never sent and the two new choices", async () => {
+    await toLimit();
+    await click("Continue");
+    await heading(STEP5);
+    expect(
+      screen.getByText(/lines from your journal entries and good things included\. At most 12/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Your check-ins, reflections and recaps. They are written on this computer and stay here.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.",
+      ),
+    ).toBeInTheDocument();
+    const choices = screen.getByRole("complementary");
+    const row = (label: string) => within(choices).getByText(label).closest("div") as HTMLElement;
+    expect(
+      within(row("Journal entries and good things")).getByText("May be sent"),
+    ).toBeInTheDocument();
+    expect(
+      within(row("Check-ins, reflections, recaps")).getByText("Never sent"),
+    ).toBeInTheDocument();
   });
 });

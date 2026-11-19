@@ -268,3 +268,13 @@ describe("what was sent", () => {
     expect(screen.getByRole("button", { name: "Try again" })).toBeVisible();
   });
 });
+
+describe("a line from the journal", () => {
+  it("says so beside the line, with the day, and only beside that line", async () => {
+    await open([send({ id: 1, journal: [{ n: 2, day: "2026-11-17" }] })]);
+    const exact = await screen.findByText(/Results come by 27 November\./);
+    expect(exact).toHaveTextContent("from your journal, Tuesday 17 November");
+    const other = screen.getByText(/The eye test is on Friday at 11:20\./);
+    expect(other).not.toHaveTextContent("from your journal");
+  });
+});

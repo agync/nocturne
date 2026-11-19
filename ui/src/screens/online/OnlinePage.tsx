@@ -78,29 +78,33 @@ function CheckingPage({ back }: { back: Back }) {
   );
 }
 
-function NeverSetUp({ view, back }: { view: OnlineView; back: Back }) {
-  const features = [{ title: t("online.off.view.title"), body: t("online.off.view.body") }];
+/** What never leaves this computer, and the one thing that can: journal lines, which cannot be marked private. */
+function StaysHere() {
   const stays = [
     t("online.stays.photos"),
     t("online.stays.private"),
+    t("journal.online.settings.staysHere"),
     t("online.stays.keeping"),
     t("online.stays.page"),
   ];
   return (
-    <Frame
-      back={back}
-      aside={
-        <>
-          <h2 className={styles.label}>{t("online.stays.heading")}</h2>
-          <ul className={styles.rules}>
-            {stays.map((line) => (
-              <li key={line}>{line}</li>
-            ))}
-          </ul>
-          <LockNote>{t("online.stays.sensitive")}</LockNote>
-        </>
-      }
-    >
+    <>
+      <h2 className={styles.label}>{t("online.stays.heading")}</h2>
+      <ul className={styles.rules}>
+        {stays.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      <LockNote>{t("online.stays.sensitive")}</LockNote>
+      <LockNote>{t("journal.online.settings.privateNote")}</LockNote>
+    </>
+  );
+}
+
+function NeverSetUp({ view, back }: { view: OnlineView; back: Back }) {
+  const features = [{ title: t("online.off.view.title"), body: t("online.off.view.body") }];
+  return (
+    <Frame back={back} aside={<StaysHere />}>
       <Title tag={t("online.tag.off")} />
       <p className={styles.lede}>{t("online.off.lead")}</p>
       <ul className={styles.features}>
@@ -401,6 +405,9 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
         <Row title={t("online.row.private.label")} hint={t("online.row.private.hint")}>
           <span className={styles.value}>{t("online.row.private.value")}</span>
         </Row>
+        <Row title={t("journal.online.settings.label")} hint={t("journal.online.settings.hint")}>
+          <span className={styles.value}>{t("journal.online.settings.value")}</span>
+        </Row>
         <li className={styles.row}>
           <span className={styles.textStack}>
             <label className={styles.name} htmlFor={limitId}>
@@ -424,6 +431,9 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
           </select>
         </li>
       </ul>
+      <div className={styles.stays}>
+        <StaysHere />
+      </div>
       <div className={styles.links}>
         <a className="hit" href="#/settings/online/sent">
           {t("online.link.sent")}
