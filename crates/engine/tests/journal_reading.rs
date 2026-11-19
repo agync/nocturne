@@ -34,6 +34,15 @@ fn journal_item(f: &Fixture, text: &str, role: &str) -> String {
     id
 }
 
+fn replaces(f: &Fixture, item: &str, earlier: &str) {
+    conn(f)
+        .execute(
+            "UPDATE items SET metadata = json_set(metadata, '$.replaces', ?2) WHERE id = ?1",
+            rusqlite::params![item, earlier],
+        )
+        .unwrap();
+}
+
 fn person(subject: &str, predicate: Predicate, object: &str, sentence: &str) -> Candidate {
     let mut c = cand(subject, predicate, object, sentence);
     c.subject_kind = Some(EntityKind::Person);
@@ -439,4 +448,100 @@ fn a_journal_memory_may_go_online_like_any_other() {
         .clone();
     assert!(journal_flag(&f, &id));
     assert_eq!(f.engine.sendable(&[id], false).unwrap(), vec![true]);
+}
+
+fn memory_ids(f: &Fixture) -> Vec<String> {
+    let c = conn(f);
+    let mut stmt = c
+        .prepare("SELECT sentence FROM memories ORDER BY sentence")
+        .unwrap();
+    stmt.query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect()
+}
+
+#[test]
+fn a_replaced_blocks_sole_memory_goes_when_the_new_version_no_longer_says_it() {
+    let f = fixture();
+    let old = journal_item(&f, "Priya likes tea. Leo likes coffee.", "entry");
+    f.engine
+        .apply(
+            &old,
+            vec![
+                person("Priya", Predicate::Prefers, "tea", "Priya likes tea."),
+                person("Leo", Predicate::Prefers, "coffee", "Leo likes coffee."),
+            ],
+        )
+        .unwrap();
+    assert_eq!(memory_ids(&f).len(), 2);
+
+    let new = journal_item(&f, "Priya likes tea. Leo likes cake.", "entry");
+    replaces(&f, &new, &old);
+    let report = f
+        .engine
+        .apply(
+            &new,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    assert_eq!(report.removed.len(), 1);
+    assert_eq!(memory_ids(&f), vec!["Priya likes tea."]);
+    assert!(
+        report.created.is_empty(),
+        "tea is the same claim, not a second one"
+    );
+    assert_eq!(
+        count(
+            &f,
+            &format!("SELECT COUNT(*) FROM memory_sources WHERE item_id = '{old}'")
+        ),
+        0,
+        "the earlier version no longer stands behind anything"
+    );
+    assert_eq!(
+        mentions(&f, &old).len(),
+        2,
+        "the earlier version keeps its mentions"
+    );
+    assert_eq!(mentions(&f, &new).len(), 1);
+}
+
+#[test]
+fn what_the_earlier_version_said_stays_when_the_person_confirmed_it() {
+    let f = fixture();
+    let old = journal_item(&f, "Leo likes coffee.", "entry");
+    let id = f
+        .engine
+        .apply(
+            &old,
+            vec![person(
+                "Leo",
+                Predicate::Prefers,
+                "coffee",
+                "Leo likes coffee.",
+            )],
+        )
+        .unwrap()
+        .created[0]
+        .clone();
+    f.engine.confirm(&id, true).unwrap();
+    let new = journal_item(&f, "Leo likes cake.", "entry");
+    replaces(&f, &new, &old);
+    let report = f.engine.apply(&new, Vec::new()).unwrap();
+    assert!(report.removed.is_empty());
+    assert_eq!(memory_ids(&f), vec!["Leo likes coffee."]);
+    assert_eq!(
+        count(
+            &f,
+            &format!("SELECT COUNT(*) FROM memory_sources WHERE item_id = '{old}'")
+        ),
+        1,
+        "its receipt is still the earlier words"
+    );
 }

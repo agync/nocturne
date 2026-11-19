@@ -1159,13 +1159,27 @@ fn apply(
 
     // Applying is idempotent per item: detach what this item said before, apply again, then
     // drop what nothing supports any more.
-    let prev: Vec<(String, Option<String>)> = {
+    // An item that replaces an earlier version is read as that version read again: what only
+    // the earlier words supported goes the way a re-read lets it go, and the earlier item keeps
+    // its mentions as history.
+    let replaces: Option<String> = tx.query_row(
+        "SELECT json_extract(metadata, '$.replaces') FROM items WHERE id = ?1",
+        [item_id],
+        |r| r.get(0),
+    )?;
+    let earlier: Vec<String> = std::iter::once(item_id.to_string())
+        .chain(replaces.filter(|r| r != item_id))
+        .collect();
+    let mut prev: Vec<(String, Option<String>, String)> = Vec::new();
+    for from in &earlier {
         let mut stmt =
             tx.prepare("SELECT memory_id, span FROM memory_sources WHERE item_id = ?1")?;
-        let rows = stmt.query_map([item_id], |r| Ok((r.get(0)?, r.get(1)?)))?;
-        rows.collect::<rusqlite::Result<_>>()?
-    };
-    tx.execute("DELETE FROM memory_sources WHERE item_id = ?1", [item_id])?;
+        let rows = stmt.query_map([from], |r| Ok((r.get(0)?, r.get(1)?, from.clone())))?;
+        for row in rows {
+            prev.push(row?);
+        }
+        tx.execute("DELETE FROM memory_sources WHERE item_id = ?1", [from])?;
+    }
     let relinked: HashSet<&str> = prev.iter().map(|p| p.0.as_str()).collect();
     let mut touched: HashSet<String> = HashSet::new();
 
@@ -1187,7 +1201,7 @@ fn apply(
     }
     write_mentions(tx, item_id, now, &found, true)?;
 
-    for (mid, span) in &prev {
+    for (mid, span, from) in &prev {
         if touched.contains(mid) {
             continue;
         }
@@ -1241,7 +1255,7 @@ fn apply(
             // the person confirmed it, goes back to unconfirmed: nothing supports it now.
             tx.execute(
                 "INSERT OR IGNORE INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
-                params![mid, item_id, span],
+                params![mid, from, span],
             )?;
             if row.superseded_at.is_none() && !row.confirmed {
                 tx.execute(
