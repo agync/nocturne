@@ -796,3 +796,183 @@ async fn the_morning_run_never_marks_a_memory_used() {
     assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
     assert_eq!(used(), before, "looking back is not use");
 }
+
+// ---- recaps on every computer ----
+
+use nocturne_intelligence::reflect::write_recap;
+
+#[tokio::test]
+async fn a_recap_is_put_together_with_no_mind_at_all() {
+    let (w, _) = world_after_a_day(FakeMind::new());
+    let week = w.engine.period_of(PeriodKind::Week, date(DAY)).unwrap();
+    let Wrote::Recap(recap) = write_recap(
+        &w.engine,
+        &week,
+        nocturne_contract::WrittenWhen::OnDemand,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap() else {
+        panic!("a recap")
+    };
+    assert_eq!(recap.period, week);
+    assert!(w.engine.saved_reflection(&week).unwrap().is_some());
+    assert_eq!(w.mind.calls().len(), 0, "the mind was never asked");
+
+    let day = day(&w);
+    let err = write_recap(
+        &w.engine,
+        &day,
+        nocturne_contract::WrittenWhen::OnDemand,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await;
+    assert!(err.is_err(), "a day is reflected on, not recapped");
+}
+
+#[tokio::test]
+async fn a_recap_composed_while_things_are_unread_says_how_many() {
+    let w = world_at("2026-11-12T10:00:00Z", FakeMind::new());
+    let first = common::keep(&w, "Dropped Leo at school");
+    read(&w, &first);
+    common::keep(&w, "Made soup");
+    w.clock.set_str("2026-11-16T09:00:00Z");
+    let week = w.engine.period_of(PeriodKind::Week, date(DAY)).unwrap();
+    let Wrote::Recap(recap) = write_recap(
+        &w.engine,
+        &week,
+        nocturne_contract::WrittenWhen::OnDemand,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    .unwrap() else {
+        panic!("a recap")
+    };
+    assert_eq!(recap.still_reading, Some(1));
+}
+
+/// The last evening of 2028 (a Sunday) with a note kept, the night tidy done at 01:30 on New
+/// Year's Day, and the clock at the next morning's boundary: a day, a week, a month and a year
+/// have ended.
+async fn new_years_morning() -> World {
+    let w = world_at(
+        "2028-12-31T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, "New Year's Eve at Gran's");
+    w.clock.set_str("2029-01-01T01:30:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    w.clock.set_str("2029-01-01T04:10:00Z");
+    w
+}
+
+fn ended(w: &World) -> [nocturne_contract::Period; 3] {
+    [
+        period(w, PeriodKind::Week, "2028-12-31"),
+        period(w, PeriodKind::Month, "2028-12-31"),
+        period(w, PeriodKind::Year, "2028-12-31"),
+    ]
+}
+
+#[tokio::test]
+async fn recaps_are_put_together_overnight_with_the_gate_closed_and_a_year_takes_one_night() {
+    let w = new_years_morning().await;
+    let gate = open_gate(&w);
+    gate.store(false, Ordering::SeqCst);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(ended(&w).to_vec())
+    );
+    for p in ended(&w) {
+        assert!(matches!(
+            w.engine.saved_reflection(&p).unwrap(),
+            Some(ReflectionView::Recap { .. })
+        ));
+    }
+    assert_eq!(w.mind.call_count("reflect"), 0);
+    assert!(saved(&w, PeriodKind::Day, "2028-12-31").is_none());
+
+    // Looked at again, nothing more is due: the day waits for the gate.
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    gate.store(true, Ordering::SeqCst);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, "2028-12-31")])
+    );
+}
+
+#[tokio::test]
+async fn recaps_are_put_together_overnight_with_no_mind_and_the_day_waits_for_it() {
+    let w = new_years_morning().await;
+    open_gate(&w);
+    w.mind_away();
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(ended(&w).to_vec())
+    );
+    assert!(saved(&w, PeriodKind::Day, "2028-12-31").is_none());
+    assert!(w.events.notices().is_empty());
+    w.mind_back();
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, "2028-12-31")])
+    );
+}
+
+#[tokio::test]
+async fn a_scheduler_with_no_gate_set_composes_no_recaps_either() {
+    let w = new_years_morning().await;
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+}
+
+#[tokio::test]
+async fn a_deleted_recap_is_not_put_together_overnight_but_the_others_are() {
+    let w = new_years_morning().await;
+    let gate = open_gate(&w);
+    gate.store(false, Ordering::SeqCst);
+    let [week, month, year] = ended(&w);
+    w.engine.delete_reflection(&week).unwrap();
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(vec![month, year])
+    );
+    assert!(w.engine.saved_reflection(&week).unwrap().is_none());
+    w.engine.clear_declined_reflection(&week).unwrap();
+}
+
+#[tokio::test]
+async fn a_tidy_that_starts_after_the_boundary_puts_recaps_together_before_its_page_with_the_gate_closed()
+ {
+    let w = world_at(
+        "2026-11-08T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, "Sunday lunch at Gran's");
+    w.clock.set_str("2026-11-09T05:00:00Z");
+    let gate = open_gate(&w);
+    gate.store(false, Ordering::SeqCst);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    assert!(saved(&w, PeriodKind::Week, "2026-11-08").is_some());
+    assert!(saved(&w, PeriodKind::Day, "2026-11-08").is_none());
+    assert_eq!(w.mind.call_count("reflect"), 0);
+}
+
+#[tokio::test]
+async fn a_mind_that_cannot_answer_costs_the_night_its_day_and_not_its_recaps() {
+    let w = new_years_morning().await;
+    open_gate(&w);
+    w.mind.fail_next("reflect", MindError::Unavailable);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(ended(&w).to_vec())
+    );
+    assert!(saved(&w, PeriodKind::Day, "2028-12-31").is_none());
+}

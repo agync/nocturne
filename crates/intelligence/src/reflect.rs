@@ -3,7 +3,9 @@
 //! A day's reflection is the one place the mind writes for the journal. It writes "The day" from
 //! the items kept that day, each sentence citing what it came from; the engine drops a sentence
 //! that cites nothing the day had. Everything else in a reflection, and every recap, is composed
-//! from what was kept. Nothing here counts as use of a memory.
+//! from what was kept: a recap needs no mind, so [`write_recap`] runs on any computer, before
+//! the engine is ready too. Nothing here counts as use of a memory, and nothing here goes
+//! online.
 
 use std::fmt;
 use std::sync::Arc;
@@ -66,7 +68,7 @@ where
 }
 
 /// Write the reflection or recap for `period` and store it, replacing the one stored. A day
-/// is written by `mind`; a week, month or year is composed and needs none.
+/// is written by `mind`; a week, month or year is composed and needs none ([`write_recap`]).
 pub async fn write(
     engine: &Engine,
     mind: &dyn Mind,
@@ -94,21 +96,7 @@ pub async fn write_stoppable(
     stop: Arc<AtomicBool>,
 ) -> Result<Wrote, ReflectError> {
     if period.kind != PeriodKind::Day {
-        let p = period.clone();
-        let stopped = stop.clone();
-        let recap = on_engine(engine, move |e| {
-            let recap = e.compose_recap(&p, written)?;
-            if recap.days > 0 {
-                e.save_recap_unless(&recap, &|| stopped.load(Ordering::SeqCst))?;
-            }
-            Ok(recap)
-        })
-        .await?;
-        return Ok(if recap.days == 0 {
-            Wrote::Listed
-        } else {
-            Wrote::Recap(recap)
-        });
+        return write_recap(engine, period, written, stop).await;
     }
     let p = period.clone();
     let input = on_engine(engine, move |e| e.reflection_input(&p)).await?;
@@ -138,7 +126,7 @@ pub async fn write_stoppable(
             stop.load(Ordering::SeqCst)
         })?;
         if reflection.the_day.is_empty() {
-            e.delete_reflection(&p)?;
+            e.discard_reflection(&p)?;
         }
         Ok(reflection)
     })
@@ -147,5 +135,31 @@ pub async fn write_stoppable(
         Wrote::Listed
     } else {
         Wrote::Day(reflection)
+    })
+}
+
+/// Put the recap for a week, month or year together from what was kept and store it, replacing
+/// the one stored. It needs no mind, and stores nothing once `stop` is set, checked inside the
+/// store's own transaction. A period with nothing of its own in it is [`Wrote::Listed`]. A day
+/// is refused: it is reflected on, not recapped.
+pub async fn write_recap(
+    engine: &Engine,
+    period: &Period,
+    written: WrittenWhen,
+    stop: Arc<AtomicBool>,
+) -> Result<Wrote, ReflectError> {
+    let p = period.clone();
+    let recap = on_engine(engine, move |e| {
+        let recap = e.compose_recap(&p, written)?;
+        if recap.days > 0 {
+            e.save_recap_unless(&recap, &|| stop.load(Ordering::SeqCst))?;
+        }
+        Ok(recap)
+    })
+    .await?;
+    Ok(if recap.days == 0 {
+        Wrote::Listed
+    } else {
+        Wrote::Recap(recap)
     })
 }

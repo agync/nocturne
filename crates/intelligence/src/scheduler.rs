@@ -6,15 +6,17 @@
 //!
 //! It also runs the journal's looking back, once the app gives it a gate and the mind slot
 //! ([`Scheduler::set_reflecting`]): the reflection for the day that ended, then any recap due,
-//! under the night tidy's rules for idle time and power. A tidy that is about to write its page
-//! writes what is due first, so the page can carry a line about it.
+//! under the night tidy's rules for idle time and power. The gate and the mind cover the day's
+//! reflection only: a recap is put together from what was kept, so it is due on every computer,
+//! with the gate closed and with no mind. A tidy that is about to write its page writes what is
+//! due first, so the page can carry a line about it.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 
 use jiff::{SignedDuration, Timestamp};
-use nocturne_contract::{ItemFilter, NoticeCode, Period};
+use nocturne_contract::{ItemFilter, NoticeCode, Period, PeriodKind};
 use nocturne_engine::{Clock, Engine, Mind, MindError};
 use tokio_util::sync::CancellationToken;
 
@@ -99,6 +101,9 @@ struct State {
     started: bool,
     /// Launch and resume ask for the journal's due writing to be looked for at the next tick.
     reflect_due: bool,
+    /// Whether the mind that writes a day's reflection was there at the last look: its coming
+    /// back is looked at once, not at the next five-minute check.
+    reflect_mind_there: bool,
     last_reflect_check: Option<Timestamp>,
     /// Periods not to try again until the time.
     reflect_wait: HashMap<Period, Timestamp>,
@@ -416,7 +421,17 @@ impl Scheduler {
         }
     }
 
-    /// The mind that writes reflections, when this computer may and the mind is there.
+    /// Whether the app has given the scheduler a gate and the mind slot.
+    fn reflecting_set(&self) -> bool {
+        self.inner
+            .reflecting
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+    }
+
+    /// The mind that writes a day's reflection, when this computer may and the mind is there.
+    /// A recap needs neither.
     fn reflect_mind(&self) -> Option<Arc<dyn Mind>> {
         let cfg = self
             .inner
@@ -432,8 +447,9 @@ impl Scheduler {
         self.state().paused_until.is_some()
     }
 
-    /// What is due and not waiting, newest first.
-    async fn reflections_due(&self, now: Timestamp) -> Vec<Period> {
+    /// What is due and not waiting, newest first. Without a mind, only recaps: a day waits for
+    /// one.
+    async fn reflections_due(&self, now: Timestamp, with_mind: bool) -> Vec<Period> {
         let due = self
             .eng(|e| e.reflections_due(REFLECT_BACK_DAYS))
             .await
@@ -441,7 +457,9 @@ impl Scheduler {
         let mut st = self.state();
         st.reflect_wait.retain(|_, until| *until > now);
         due.into_iter()
-            .filter(|p| !st.reflect_wait.contains_key(p))
+            .filter(|p| {
+                (with_mind || p.kind != PeriodKind::Day) && !st.reflect_wait.contains_key(p)
+            })
             .collect()
     }
 
@@ -449,10 +467,17 @@ impl Scheduler {
     /// night tidy's rules in its window (the small hours, on mains, with nobody about), and after
     /// it, as in the catch-up, with nobody about and a battery above the tidy's limit.
     async fn consider_reflect(&self, now: Timestamp, anyway: bool) -> Option<SchedStep> {
-        let mind = self.reflect_mind()?;
+        if !self.reflecting_set() {
+            return None;
+        }
+        let mind = self.reflect_mind();
         {
             let mut st = self.state();
-            let flagged = std::mem::take(&mut st.reflect_due);
+            let came_back = mind.is_some() && !std::mem::replace(&mut st.reflect_mind_there, true);
+            if mind.is_none() {
+                st.reflect_mind_there = false;
+            }
+            let flagged = std::mem::take(&mut st.reflect_due) || came_back;
             let stale = st
                 .last_reflect_check
                 .is_none_or(|t| now.duration_since(t) >= REFLECT_CHECK_EVERY);
@@ -475,7 +500,7 @@ impl Scheduler {
             self.state().reflect_due = true;
             return None;
         }
-        let due = self.reflections_due(now).await;
+        let due = self.reflections_due(now, mind.is_some()).await;
         self.state().last_reflect_check = Some(now);
         if due.is_empty() {
             return None;
@@ -490,15 +515,16 @@ impl Scheduler {
         } else {
             now + SignedDuration::try_from(CATCH_UP_LIMIT).unwrap_or_default()
         };
-        let written = self.write_due(&mind, due, Some(until), rules).await;
+        let written = self.write_due(mind.as_ref(), due, Some(until), rules).await;
         (!written.is_empty()).then_some(SchedStep::Reflected(written))
     }
 
     /// The tidy has read its backlog and is about to write the page: write what is due first.
     async fn reflect_before_page(&self) {
-        let Some(mind) = self.reflect_mind() else {
+        if !self.reflecting_set() {
             return;
-        };
+        }
+        let mind = self.reflect_mind();
         let rules = Rules {
             in_window: false,
             anyway: false,
@@ -508,12 +534,12 @@ impl Scheduler {
             return;
         }
         let now = self.inner.clock.now();
-        let due = self.reflections_due(now).await;
+        let due = self.reflections_due(now, mind.is_some()).await;
         if due.is_empty() {
             return;
         }
         let until = now + SignedDuration::try_from(BEFORE_PAGE_LIMIT).unwrap_or_default();
-        self.write_due(&mind, due, Some(until), rules).await;
+        self.write_due(mind.as_ref(), due, Some(until), rules).await;
     }
 
     /// Whether the battery and, when `rules` ask for it, the idle time allow writing.
@@ -537,18 +563,22 @@ impl Scheduler {
                 .is_none_or(|d| d >= IDLE_NEEDED)
     }
 
-    /// Write each period in turn, stopping when the person pauses, the app quits, the mind is
-    /// not there, `until` has passed, or `rules` no longer hold. Returns what was written.
+    /// Write each period in turn, stopping when the person pauses, the app quits, `until` has
+    /// passed, or `rules` no longer hold. Returns what was written. A day needs `mind`; when it
+    /// is not there, or fails to answer, the days left wait and the recaps are still put
+    /// together.
     async fn write_due(
         &self,
-        mind: &Arc<dyn Mind>,
+        mind: Option<&Arc<dyn Mind>>,
         due: Vec<Period>,
         until: Option<Timestamp>,
         rules: Rules,
     ) -> Vec<Period> {
         // The reader reads nothing while the mind writes: it serves one request at a time.
-        let _reader_waits = self.inner.reader.ask_begin();
+        let _reader_waits = (mind.is_some() && due.iter().any(|p| p.kind == PeriodKind::Day))
+            .then(|| self.inner.reader.ask_begin());
         let shutdown = self.state().shutdown.clone();
+        let mut mind = mind.cloned();
         let mut written = Vec::new();
         for (n, period) in due.into_iter().enumerate() {
             if self.paused()
@@ -558,17 +588,24 @@ impl Scheduler {
             {
                 break;
             }
+            let day = period.kind == PeriodKind::Day;
+            if day && mind.is_none() {
+                continue;
+            }
             self.state().writing = Some(period.clone());
             let outcome = {
-                let write = tokio::time::timeout(
-                    WRITE_LIMIT,
-                    reflect::write(
-                        &self.inner.engine,
-                        mind.as_ref(),
-                        &period,
-                        nocturne_contract::WrittenWhen::Overnight,
-                    ),
-                );
+                let write = tokio::time::timeout(WRITE_LIMIT, async {
+                    let when = nocturne_contract::WrittenWhen::Overnight;
+                    match (&mind, day) {
+                        (Some(m), true) => {
+                            reflect::write(&self.inner.engine, m.as_ref(), &period, when).await
+                        }
+                        _ => {
+                            let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                            reflect::write_recap(&self.inner.engine, &period, when, stop).await
+                        }
+                    }
+                });
                 match &shutdown {
                     Some(t) => tokio::select! {
                         r = write => Some(r),
@@ -589,11 +626,11 @@ impl Scheduler {
                 Some(Ok(Ok(Wrote::Day(_) | Wrote::Recap(_)))) => written.push(period.clone()),
                 Some(Ok(Ok(Wrote::Listed))) => wait(self, RETRY_LISTED),
                 Some(Ok(Err(ReflectError::Mind(MindError::Unavailable | MindError::Busy)))) => {
-                    break;
+                    mind = None;
                 }
                 Some(Ok(Err(ReflectError::Mind(MindError::Unsupported(_))))) => {
                     wait(self, RETRY_LISTED);
-                    break;
+                    mind = None;
                 }
                 Some(Ok(Err(e))) => {
                     tracing::warn!("could not look back on a period: {e}");
