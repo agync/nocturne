@@ -51,8 +51,15 @@ fn scheduled(subject: &str, on: &str, quote: &str) -> Candidate {
         &format!("{subject} is at six."),
     );
     c.subject_kind = Some(EntityKind::Thing);
-    c.valid_from = Some(date(on));
+    c.due = Some(date(on));
     c.span = Some(Span::Quote { text: quote.into() });
+    c
+}
+
+/// A scheduled memory the reader gave no day to.
+fn undated(subject: &str, quote: &str) -> Candidate {
+    let mut c = scheduled(subject, EVENT, quote);
+    c.due = None;
     c
 }
 
@@ -187,11 +194,98 @@ fn condition_2_a_date_other_than_the_day_looked_back_on_is_not_asked() {
         let w = world();
         sql(
             &w.f,
-            "UPDATE memories SET valid_from = ?2 WHERE id = ?1",
+            "UPDATE memories SET due = ?2 WHERE id = ?1",
             params![w.memory, on],
         );
         no_journal_question(&w);
     }
+}
+
+#[test]
+fn condition_2_a_scheduled_memory_stored_the_way_the_reader_stores_it_is_asked() {
+    let w = world();
+    let (due, from): (Option<String>, Option<String>) = conn(&w.f)
+        .query_row(
+            "SELECT due, valid_from FROM memories WHERE id = ?1",
+            [&w.memory],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((due.as_deref(), from), (Some(EVENT), None));
+    assert!(asks_from_the_journal(&w));
+}
+
+#[test]
+fn condition_2_a_day_in_valid_from_alone_is_the_day_too() {
+    let w = world();
+    sql(
+        &w.f,
+        "UPDATE memories SET due = NULL, valid_from = ?2 WHERE id = ?1",
+        params![w.memory, EVENT],
+    );
+    assert!(asks_from_the_journal(&w));
+    sql(
+        &w.f,
+        "UPDATE memories SET valid_from = '2026-11-12' WHERE id = ?1",
+        [&w.memory],
+    );
+    no_journal_question(&w);
+}
+
+fn undated_world(day: &str) -> World {
+    let f = fixture();
+    save_day(&f, "2026-11-10");
+    f.clock.set_str(&format!("{day}T19:00:00Z"));
+    let block = f
+        .engine
+        .save_entry_text(date(day), None, 0, ENTRY)
+        .unwrap()
+        .unwrap()
+        .item
+        .id;
+    f.engine.release_entry_holds().unwrap();
+    let report = f
+        .engine
+        .apply(&block, vec![undated(SUBJECT, ENTRY)])
+        .unwrap();
+    let memory = report.created[0].clone();
+    f.clock.set_str("2026-11-14T07:00:00Z");
+    World { f, block, memory }
+}
+
+#[test]
+fn condition_2_a_scheduled_memory_with_no_day_is_dated_by_the_day_its_block_was_kept() {
+    let w = undated_world(EVENT);
+    let (due, from): (Option<String>, Option<String>) = conn(&w.f)
+        .query_row(
+            "SELECT due, valid_from FROM memories WHERE id = ?1",
+            [&w.memory],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((due, from), (None, None));
+    let q = compose(&w.f, PAGE).question.expect("a question");
+    assert_eq!(q.kind, QuestionKind::Journal);
+    assert_eq!(q.text, ENTRY);
+    let ask = q.journal.unwrap();
+    assert_eq!(
+        (ask.written_on.as_str(), ask.event_day.as_str()),
+        (EVENT, EVENT)
+    );
+}
+
+#[test]
+fn condition_2_a_scheduled_memory_with_no_day_is_not_asked_from_another_days_block() {
+    let w = undated_world("2026-11-12");
+    no_journal_question(&w);
+    let w = undated_world(EVENT);
+    sql(
+        &w.f,
+        "UPDATE items SET metadata = json_set(metadata, '$.journal_day', '2026-11-12') \
+         WHERE id = ?1",
+        [&w.block],
+    );
+    no_journal_question(&w);
 }
 
 #[test]
@@ -457,21 +551,16 @@ fn never_a_memory_or_sentence_the_health_money_and_id_check_flags() {
 }
 
 #[test]
-fn never_a_promise_or_a_memory_with_a_due_date() {
-    let w = world();
-    sql(
-        &w.f,
-        "UPDATE memories SET due = ?2 WHERE id = ?1",
-        params![w.memory, EVENT],
-    );
-    no_journal_question(&w);
-    let w = world();
-    sql(
-        &w.f,
-        "UPDATE memories SET predicate = 'promised' WHERE id = ?1",
-        [&w.memory],
-    );
-    no_journal_question(&w);
+fn never_a_promise_or_a_due_date() {
+    for predicate in ["promised", "due"] {
+        let w = world();
+        sql(
+            &w.f,
+            "UPDATE memories SET predicate = ?2 WHERE id = ?1",
+            params![w.memory, predicate],
+        );
+        no_journal_question(&w);
+    }
 }
 
 #[test]
@@ -716,7 +805,7 @@ fn a_memory_is_asked_once_whatever_came_of_it() {
     );
     sql(
         &w.f,
-        "UPDATE memories SET valid_from = '2026-11-23' WHERE id = ?1",
+        "UPDATE memories SET due = '2026-11-23' WHERE id = ?1",
         [&w.memory],
     );
     w.f.clock.set_str("2026-11-23T19:00:00Z");

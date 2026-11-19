@@ -47,17 +47,20 @@ pub(crate) fn pick(conn: &Connection, ctx: &Ctx, page_day: Date) -> Result<Optio
     }
     let event = page_day.yesterday()?;
     let event_end = ctx.bounds(event)?.1;
-    // A promise or a due date is followed up in Needs you, never here. The date is the day the
-    // person said, which is `valid_from`: a scheduled memory carries no time of day of its own.
+    // Promises and deadlines (`promised`, `due`) are other predicates, followed up in Needs you.
+    // The reader puts the day a scheduled thing happens in `due`, and a day it only gave as a
+    // start in `valid_from`. A thing with no day at all is dated by the day its block was kept.
     let rows = query_mems(
         conn,
         "m.predicate = 'scheduled' AND m.superseded_at IS NULL AND m.status = 'active' \
-         AND m.forgetting = 0 AND m.due IS NULL AND m.valid_from = ?1 AND m.private = 0",
+         AND m.forgetting = 0 AND m.private = 0 \
+         AND (COALESCE(m.due, m.valid_from) = ?1 OR COALESCE(m.due, m.valid_from) IS NULL)",
         [event.to_string()],
     )?;
     let mut found: Vec<(Reverse<String>, u32, String, Chosen)> = Vec::new();
     for m in rows {
-        if let Some((kept_at, chosen)) = qualify(conn, ctx, &m, event, event_end)? {
+        let undated = m.due.is_none() && m.valid_from.is_none();
+        if let Some((kept_at, chosen)) = qualify(conn, ctx, &m, event, event_end, undated)? {
             let at = minutes_in(&chosen.sentence)
                 .or_else(|| minutes_in(&m.object))
                 .or_else(|| minutes_in(&m.sentence))
@@ -169,13 +172,15 @@ fn asked_before(conn: &Connection, id: &str) -> Result<bool> {
 }
 
 /// The memory with the block it was read from and the sentences to quote, when every line of
-/// the rule holds. The block's `kept_at` comes back for the pick.
+/// the rule holds. The block's `kept_at` comes back for the pick. A memory with no day of its own
+/// (`undated`) qualifies only through a block kept on the event's day.
 fn qualify(
     conn: &Connection,
     ctx: &Ctx,
     m: &MemRow,
     event: Date,
     event_end: Timestamp,
+    undated: bool,
 ) -> Result<Option<(String, Chosen)>> {
     if m.is_safety() || m.suggest_private || flagged(conn, &m.id)? {
         return Ok(None);
@@ -200,7 +205,8 @@ fn qualify(
             None => ctx.day_of(crate::util::parse_ts(&s.kept_at)?)?,
         };
         let back = i64::from(event.since(written)?.get_days());
-        if !(0..=BLOCK_DAYS).contains(&back) {
+        let latest = if undated { 0 } else { BLOCK_DAYS };
+        if !(0..=latest).contains(&back) {
             continue;
         }
         let (Some(text), Some(quote)) = (&s.text, &s.quote) else {
