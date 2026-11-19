@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nocturne · Keep everything, ask about it, get one page each morning</title>
+<meta name="description" content="Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#EEEBE4" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1014" media="(prefers-color-scheme: dark)">
+<link rel="canonical" href="https://nocturne.is/">
+<link rel="alternate" hreflang="de" href="https://nocturne.is/de/">
+<link rel="alternate" hreflang="en" href="https://nocturne.is/">
+<link rel="alternate" hreflang="es" href="https://nocturne.is/es/">
+<link rel="alternate" hreflang="fr" href="https://nocturne.is/fr/">
+<link rel="alternate" hreflang="it" href="https://nocturne.is/it/">
+<link rel="alternate" hreflang="nl" href="https://nocturne.is/nl/">
+<link rel="alternate" hreflang="x-default" href="https://nocturne.is/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Nocturne">
+<meta property="og:locale" content="en_GB">
+<meta property="og:locale:alternate" content="de_DE">
+<meta property="og:locale:alternate" content="es_ES">
+<meta property="og:locale:alternate" content="fr_FR">
+<meta property="og:locale:alternate" content="it_IT">
+<meta property="og:locale:alternate" content="nl_NL">
+<meta property="og:title" content="Nocturne · Keep everything, ask about it, get one page each morning">
+<meta property="og:description" content="Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer.">
+<meta property="og:url" content="https://nocturne.is/">
+<meta property="og:image" content="https://nocturne.is/assets/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://nocturne.is/assets/img/og.png">
+<link rel="icon" type="image/png" sizes="32x32" href="../../../../site/favicon-32.png">
+<link rel="icon" type="image/svg+xml" href="../../../../site/favicon.svg">
+<link rel="apple-touch-icon" href="../../../../site/apple-touch-icon.png">
+<!--
+  Mockup for docs/design/site-capabilities.md: the English landing page with the journal band
+  and the privacy changes. It reuses the site's stylesheet, fonts and pictures. Serve the
+  repository root over HTTP and open this file; the theme switch in the header works. Pictures in
+  img/ stand in for screenshots the build recaptures from the app.
+-->
+<link rel="stylesheet" href="../../../../site/assets/css/site.css">
+<link rel="stylesheet" href="site-capabilities.css">
+<script src="../../../../site/assets/js/theme.js"></script>
+<script src="../../../../site/assets/js/tour.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<div class="wrap">
+
+<header class="top">
+  <a class="brand" href="/" aria-label="Nocturne, home">
+    <svg class="mark" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    <span>Nocturne</span>
+  </a>
+  <nav class="nav" aria-label="Main">
+    <a class="nav-section" href="#how">How it works</a>
+    <a class="nav-section" href="#privacy">Privacy</a>
+    <a class="nav-section" href="#engine">Engine</a>
+    <a class="nav-section" href="#requirements">Requirements</a>
+    <a href="/install">Download</a>
+    <a href="/docs/">Docs</a>
+  </nav>
+  <div class="prefs">
+    <div class="theme" role="group" aria-label="Colour theme">
+      <button type="button" data-theme-choice="system" aria-pressed="true" title="System"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.75" y="2.75" width="12.5" height="8.5" rx="1.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M5.5 13.75h5M8 11.25v2.5" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">System</span></button>
+      <button type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="2.75" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M8 1.5v1.5M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4l1.06 1.06M11.54 11.54l1.06 1.06M3.4 12.6l1.06-1.06M11.54 4.46l1.06-1.06" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/></svg><span class="visually-hidden">Light</span></button>
+      <button type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M13.6 10.1A5.9 5.9 0 0 1 5.9 2.4a5.9 5.9 0 1 0 7.7 7.7z" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linejoin="round"/></svg><span class="visually-hidden">Dark</span></button>
+    </div>
+    <details class="lang">
+      <summary>
+        <svg class="lang-globe" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.25"/><path d="M1.75 8h12.5M8 1.75c-1.9 1.8-2.75 3.9-2.75 6.25S6.1 12.45 8 14.25M8 1.75c1.9 1.8 2.75 3.9 2.75 6.25S9.9 12.45 8 14.25" fill="none" stroke="currentColor" stroke-width="1.25"/></svg>
+        <span class="visually-hidden">Language: </span><span class="lang-name">English</span><span class="lang-code" aria-hidden="true">EN</span>
+      </summary>
+      <ul>
+        <li><a href="/de/" lang="de" hreflang="de">Deutsch</a></li>
+        <li><a href="/" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+        <li><a href="/es/" lang="es" hreflang="es">Español</a></li>
+        <li><a href="/fr/" lang="fr" hreflang="fr">Français</a></li>
+        <li><a href="/it/" lang="it" hreflang="it">Italiano</a></li>
+        <li><a href="/nl/" lang="nl" hreflang="nl">Nederlands</a></li>
+      </ul>
+    </details>
+  </div>
+</header>
+
+<main id="main">
+
+<section class="hero" aria-labelledby="hero-title">
+  <div class="hero-text">
+    <h1 id="hero-title">Keep everything. <em>Nocturne remembers it for you.</em></h1>
+    <p class="lede">Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer.</p>
+    <div class="actions">
+      <a class="button primary" href="/install">Download free</a>
+      <a class="button" href="#how">See how it works</a>
+    </div>
+    <ul class="facts" aria-label="At a glance">
+      <li>Mac, Windows, Linux</li>
+      <li>Offline after setup</li>
+      <li>Free and open source</li>
+    </ul>
+  </div>
+  <figure class="hero-shot">
+    <picture class="only-light">
+      <source media="(max-width: 640px)" srcset="../../../../site/assets/img/page-narrow-light-390.webp 390w, ../../../../site/assets/img/page-narrow-light-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1520">
+      <img src="../../../../site/assets/img/page-light-560.webp" srcset="../../../../site/assets/img/page-light-560.webp 560w, ../../../../site/assets/img/page-light-1120.webp 1120w" sizes="(min-width: 1120px) 520px, (min-width: 960px) 45vw, calc(100vw - 56px)" width="1120" height="1029" alt="The morning page in Nocturne: Friday 13 November, two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the card and the voice note." fetchpriority="high">
+    </picture>
+    <picture class="only-dark">
+      <source media="(max-width: 640px)" srcset="../../../../site/assets/img/page-narrow-dark-390.webp 390w, ../../../../site/assets/img/page-narrow-dark-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1520">
+      <img src="../../../../site/assets/img/page-dark-560.webp" srcset="../../../../site/assets/img/page-dark-560.webp 560w, ../../../../site/assets/img/page-dark-1120.webp 1120w" sizes="(min-width: 1120px) 520px, (min-width: 960px) 45vw, calc(100vw - 56px)" width="1120" height="1029" alt="The morning page in Nocturne: Friday 13 November, two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the card and the voice note." loading="lazy">
+    </picture>
+    <div class="hero-keep">
+      <picture class="only-light"><img src="../../../../site/assets/img/keep-light-560.webp" srcset="../../../../site/assets/img/keep-light-560.webp 518w, ../../../../site/assets/img/keep-light-1120.webp 1036w" sizes="(min-width: 640px) 400px, calc(100vw - 48px)" width="1036" height="202" alt="The keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons."></picture>
+      <picture class="only-dark"><img src="../../../../site/assets/img/keep-dark-560.webp" srcset="../../../../site/assets/img/keep-dark-560.webp 518w, ../../../../site/assets/img/keep-dark-1120.webp 1036w" sizes="(min-width: 640px) 400px, calc(100vw - 48px)" width="1036" height="202" alt="The keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons." loading="lazy"></picture>
+    </div>
+    <figcaption>Keep it in one box, read it on the morning page. From the app, with demo data.</figcaption>
+  </figure>
+</section>
+
+<section id="how" class="band" aria-labelledby="how-title">
+  <div class="intro">
+    <p class="eyebrow">How it works</p>
+    <h2 id="how-title">Keep it now. Read it once.</h2>
+  </div>
+
+  <div class="tour" data-tour>
+  <article class="feature" aria-labelledby="keep-title" data-mark="7.8 27.5 84.4 8.1">
+    <div class="feature-text">
+      <p class="eyebrow">Keep · any time</p>
+      <h3 id="keep-title">Keep anything, file nothing.</h3>
+      <p>Press <kbd>Ctrl Shift Space</kbd>, or <kbd>Cmd Shift Space</kbd> on a Mac, then type, talk, paste or drop a photo or a PDF. Nocturne says “Kept.” and you get back to your day. No folders or tags to keep up: you ask, and it finds it. If it cannot read something, it tells you what to do.</p>
+      <div class="feature-box">
+        <picture class="only-light box">
+          <img src="../../../../site/assets/img/keep-light-560.webp" srcset="../../../../site/assets/img/keep-light-560.webp 518w, ../../../../site/assets/img/keep-light-1120.webp 1036w" sizes="(min-width: 640px) 420px, calc(100vw - 32px)" width="1036" height="202" alt="The quick keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons." loading="lazy">
+        </picture>
+        <picture class="only-dark box">
+          <img src="../../../../site/assets/img/keep-dark-560.webp" srcset="../../../../site/assets/img/keep-dark-560.webp 518w, ../../../../site/assets/img/keep-dark-1120.webp 1036w" sizes="(min-width: 640px) 420px, calc(100vw - 32px)" width="1036" height="202" alt="The quick keep box with “Gran’s new number ends 4471” typed in, and Keep and Ask buttons." loading="lazy">
+        </picture>
+      </div>
+    </div>
+    <figure class="feature-shot">
+      <picture class="only-light window">
+        <source media="(max-width: 640px)" srcset="../../../../site/assets/img/recent-narrow-light-390.webp 390w, ../../../../site/assets/img/recent-narrow-light-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="../../../../site/assets/img/recent-light-768.webp" srcset="../../../../site/assets/img/recent-light-768.webp 768w, ../../../../site/assets/img/recent-light-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="Recently kept: a photo still being read, voice notes and pasted messages marked understood, a password-locked PDF Nocturne could not read with what to do about it, and a voice note that needs you." loading="lazy">
+      </picture>
+      <picture class="only-dark window">
+        <source media="(max-width: 640px)" srcset="../../../../site/assets/img/recent-narrow-dark-390.webp 390w, ../../../../site/assets/img/recent-narrow-dark-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="../../../../site/assets/img/recent-dark-768.webp" srcset="../../../../site/assets/img/recent-dark-768.webp 768w, ../../../../site/assets/img/recent-dark-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="Recently kept: a photo still being read, voice notes and pasted messages marked understood, a password-locked PDF Nocturne could not read with what to do about it, and a voice note that needs you." loading="lazy">
+      </picture>
+    </figure>
+  </article>
+
+  <article class="feature" aria-labelledby="ask-title" data-mark="7.8 52.7 84.4 20.4">
+    <div class="feature-text">
+      <p class="eyebrow">Ask · any time</p>
+      <h3 id="ask-title">Answers with receipts.</h3>
+      <p>Ask in plain words. Nocturne answers only from what it can show you, with the originals underneath so you can check. When it does not know, it says so. If it gets something wrong, tell it what is right and it remembers.</p>
+    </div>
+    <figure class="feature-shot">
+      <picture class="only-light window">
+        <source media="(max-width: 640px)" srcset="../../../../site/assets/img/ask-narrow-light-390.webp 390w, ../../../../site/assets/img/ask-narrow-light-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="../../../../site/assets/img/ask-light-768.webp" srcset="../../../../site/assets/img/ask-light-768.webp 768w, ../../../../site/assets/img/ask-light-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="An answer to “What does Leo need for his trip?”: a packed lunch, and the trip form is due next Friday with a signature and £12. Below it, the two photographed letters it came from." loading="lazy">
+      </picture>
+      <picture class="only-dark window">
+        <source media="(max-width: 640px)" srcset="../../../../site/assets/img/ask-narrow-dark-390.webp 390w, ../../../../site/assets/img/ask-narrow-dark-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="../../../../site/assets/img/ask-dark-768.webp" srcset="../../../../site/assets/img/ask-dark-768.webp 768w, ../../../../site/assets/img/ask-dark-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="An answer to “What does Leo need for his trip?”: a packed lunch, and the trip form is due next Friday with a signature and £12. Below it, the two photographed letters it came from." loading="lazy">
+      </picture>
+    </figure>
+  </article>
+
+  <article class="feature" aria-labelledby="page-title" data-mark="11.3 60.3 77.4 19.3">
+    <div class="feature-text">
+      <p class="eyebrow">The morning page · at your time</p>
+      <h3 id="page-title">Wake to what needs you.</h3>
+      <p>Whenever the computer is plugged in and idle, by night or by day, Nocturne reads what you kept and notices what changed. At the time you choose, you get a short list to read, hear or print. When two things disagree, it asks instead of guessing.</p>
+    </div>
+    <figure class="feature-shot repeat">
+      <picture class="only-light window">
+        <img src="../../../../site/assets/img/today-light-768.webp" srcset="../../../../site/assets/img/today-light-768.webp 768w, ../../../../site/assets/img/today-light-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note." loading="lazy">
+      </picture>
+      <picture class="only-dark window">
+        <img src="../../../../site/assets/img/today-dark-768.webp" srcset="../../../../site/assets/img/today-dark-768.webp 768w, ../../../../site/assets/img/today-dark-1536.webp 1536w" sizes="(min-width: 1120px) 600px, (min-width: 960px) 56vw, (min-width: 700px) 640px, calc(100vw - 56px)" width="1536" height="1800" alt="The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note." loading="lazy">
+      </picture>
+    </figure>
+  </article>
+  </div>
+</section>
+
+<section id="journal" class="band split" aria-labelledby="journal-title">
+  <div class="intro">
+    <p class="eyebrow">The journal · when you want to</p>
+    <h2 id="journal-title">Your day, in your own words.</h2>
+    <p>Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from.</p>
+  </div>
+  <figure class="journal-shot">
+    <div class="feature-shot">
+      <picture class="only-light window">
+        <source media="(max-width: 640px)" srcset="img/journal-narrow-light.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="img/journal-light.webp" width="1536" height="1800" alt="Today in the journal, Thursday 19 November: an entry about lunch with Priya, with a voice note and a photo of tomatoes on a windowsill. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content), three good things, and the people and places named today." loading="lazy">
+      </picture>
+      <picture class="only-dark window">
+        <source media="(max-width: 640px)" srcset="img/journal-narrow-dark.webp 780w" sizes="calc(100vw - 32px)" width="780" height="1258">
+        <img src="img/journal-dark.webp" width="1536" height="1800" alt="Today in the journal, Thursday 19 November: an entry about lunch with Priya, with a voice note and a photo of tomatoes on a windowsill. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content), three good things, and the people and places named today." loading="lazy">
+      </picture>
+    </div>
+    <div class="journal-look">
+      <picture class="only-light"><img src="img/look-light.webp" width="1096" height="614" alt="The day, looked back on: a short paragraph about a slow start, lunch with Priya and a call from Gran, with the check-in, note, entry and voice note it came from listed underneath." loading="lazy"></picture>
+      <picture class="only-dark"><img src="img/look-dark.webp" width="1096" height="614" alt="The day, looked back on: a short paragraph about a slow start, lunch with Priya and a call from Gran, with the check-in, note, entry and voice note it came from listed underneath." loading="lazy"></picture>
+    </div>
+    <figcaption>Today’s journal, and the day looked back on. From the app, with demo data.</figcaption>
+  </figure>
+  <dl class="promises">
+    <div><dt>How you felt, never guessed</dt><dd>Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice.</dd></div>
+    <div><dt>Good things</dt><dd>Up to three a day, with a photo if you like. Your recaps bring them back.</dd></div>
+    <div><dt>No streaks, no nagging</dt><dd>Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line.</dd></div>
+    <div><dt>It stays quiet</dt><dd>Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do.</dd></div>
+  </dl>
+</section>
+
+<section id="privacy" class="band split" aria-labelledby="privacy-title">
+  <div class="intro">
+    <p class="eyebrow">What it promises</p>
+    <h2 id="privacy-title">Your life stays on your computer.</h2>
+    <p>Out of the box, Nocturne goes online only for downloads you agree to: its mind at setup and any update you allow. Privacy in the app lists each one with the day and the size.</p>
+  </div>
+  <dl class="promises">
+    <div><dt>Nothing to sign in to</dt><dd>No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose.</dd></div>
+    <div><dt>Checked, not just claimed</dt><dd>Before a release, Nocturne is run with its network cut off from everything but this computer, and any attempt to reach further fails the check.</dd></div>
+    <div><dt>It never edits what you kept</dt><dd>Your notes, photos and files are never changed. Every answer shows them underneath. If one is wrong, tell it what is right; the old version is kept, not overwritten.</dd></div>
+    <div><dt>It forgets on purpose</dt><dd>Things you no longer use fade, and the page says when one is let go. Bring any back; forgetting for good always asks first.</dd></div>
+    <div><dt>One quiet note a day</dt><dd>When the page is ready, one note says so and how many things need you. Never what you kept.</dd></div>
+    <div><dt>Two extras, off until you ask</dt><dd>Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private.</dd></div>
+  </dl>
+  <figure class="phone">
+    <div class="phone-frame">
+      <picture class="only-light">
+        <img src="img/phone-light.webp" sizes="240px" width="780" height="1240" alt="Nocturne on a paired phone: connected to the home computer, with Keep, Ask, today’s page and the journal, and a note that things marked private stay on the computer." loading="lazy">
+      </picture>
+      <picture class="only-dark">
+        <img src="img/phone-dark.webp" sizes="240px" width="780" height="1240" alt="Nocturne on a paired phone: connected to the home computer, with Keep, Ask, today’s page and the journal, and a note that things marked private stay on the computer." loading="lazy">
+      </picture>
+    </div>
+    <figcaption>Away from home on a paired phone, with demo data.</figcaption>
+  </figure>
+</section>
+
+<section id="engine" class="band split" aria-labelledby="engine-title">
+  <div class="intro">
+    <p class="eyebrow">The engine</p>
+    <h2 id="engine-title" class="built-on">
+      <span>Built on</span>
+      <img class="only-light" src="../../../../site/assets/img/lemonade-light.webp" width="525" height="128" alt="Lemonade">
+      <img class="only-dark" src="../../../../site/assets/img/lemonade-dark.webp" width="525" height="128" alt="Lemonade" loading="lazy">
+    </h2>
+  </div>
+  <div class="engine-text">
+    <p>Nocturne’s thinking runs on <strong>Embeddable Lemonade</strong>, the portable build of <a href="https://lemonade-server.ai/">Lemonade</a>, the open-source local AI server. Nocturne ships its own copy, Lemonade 2026.46.2, that only this computer can reach.</p>
+    <p>Lemonade is free under the Apache 2.0 licence and built by its community, with optimisations by AMD engineers. Nocturne would not exist without it.</p>
+    <p class="links"><a href="https://lemonade-server.ai/">lemonade-server.ai</a> <a href="https://github.com/lemonade-sdk/lemonade">github.com/lemonade-sdk/lemonade</a></p>
+  </div>
+</section>
+
+<section id="requirements" class="band" aria-labelledby="req-title">
+  <div class="intro">
+    <p class="eyebrow">Requirements</p>
+    <h2 id="req-title">Will it run on my computer?</h2>
+    <p>Almost certainly, if it has 8&nbsp;GB of memory: an 8&nbsp;GB MacBook Air, or a typical 8&nbsp;GB Windows or Linux laptop.</p>
+  </div>
+  <dl class="promises needs">
+    <div><dt>Memory</dt><dd>8&nbsp;GB is enough. On an 8&nbsp;GB computer Nocturne uses about 5&nbsp;GB at its busiest and gives it back when it has nothing to do. With more memory it offers a larger setup with clearer answers.</dd></div>
+    <div><dt>A graphics card</dt><dd>No graphics card needed. Macs with Apple silicon, and computers with AMD or Intel graphics built in, run Nocturne on the chip and share the computer’s memory. An AMD or NVIDIA graphics card works too, best with 6 GB or more. Other computers run it on the processor.</dd></div>
+    <div><dt>An AI chip</dt><dd>Helpful, never needed. On some AMD computers with an AI chip and 16 GB or more, the AI chip reads your voice notes, so answers and the daily tidy do not wait for them.</dd></div>
+    <div><dt>The system</dt><dd>macOS 26 or later on an Apple chip, Windows 10 or 11 (64-bit), or 64-bit Linux on Intel, AMD or Arm.</dd></div>
+  </dl>
+  <div class="tiers" role="list">
+    <div role="listitem"><h3>Large</h3><p class="spec-line">60 GB+ memory · 28 GB space</p><p>Clearer answers to harder questions.</p></div>
+    <div role="listitem"><h3>Standard</h3><p class="spec-line">28 GB+ memory · 11 GB space</p><p>Many recent laptops with 32 GB.</p></div>
+    <div role="listitem"><h3>Small</h3><p class="spec-line">14 GB+ memory · 7 GB space</p><p>Same page. The daily tidy takes longer.</p></div>
+    <div role="listitem"><h3>Tiny</h3><p class="spec-line">6 GB+ memory · 5.2 GB space</p><p>Made for 8 GB computers. Simpler answers that may miss details.</p></div>
+  </div>
+  <p class="small">Downloads at setup are between about 3 GB and 26 GB, depending on the setup. After that, Nocturne works with no internet at all.</p>
+</section>
+
+<section id="download" class="band closing" aria-labelledby="download-title">
+  <div>
+    <h2 id="download-title">Get Nocturne.</h2>
+    <p>Free and open source, for Mac, Windows and Linux. Download it, open it, and it sets itself up for the computer it is on.</p>
+  </div>
+  <div class="actions">
+    <a class="button primary" href="/install">Download</a>
+    <a class="button" href="/docs/contribution/building.html">Build it from source</a>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <p class="foot-brand">
+    <svg class="mark" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="12" cy="12" r="11.25" fill="none" stroke="currentColor" stroke-width="2"/><path d="M.75 12a11.25 11.25 0 0 0 22.5 0z" fill="currentColor"/></svg>
+    Nocturne · engine by Lemonade · Apache 2.0
+  </p>
+  <nav aria-label="Footer">
+    <a href="/docs/">Docs</a>
+    <a href="/docs/guide/your-data.html">Your data</a>
+    <a href="/install">Download</a>
+    <a href="../../../../site/assets/fonts/OFL.txt">Font licence</a>
+  </nav>
+  <ul class="foot-langs" aria-label="Language">
+    <li><a href="/de/" lang="de" hreflang="de">Deutsch</a></li>
+    <li><a href="/" lang="en-GB" hreflang="en" aria-current="true">English</a></li>
+    <li><a href="/es/" lang="es" hreflang="es">Español</a></li>
+    <li><a href="/fr/" lang="fr" hreflang="fr">Français</a></li>
+    <li><a href="/it/" lang="it" hreflang="it">Italiano</a></li>
+    <li><a href="/nl/" lang="nl" hreflang="nl">Nederlands</a></li>
+  </ul>
+</footer>
+
+</div>
+</body>
+</html>
