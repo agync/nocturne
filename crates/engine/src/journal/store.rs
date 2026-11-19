@@ -62,6 +62,15 @@ pub(crate) fn exists(conn: &Connection, period: &Period) -> Result<bool> {
     )?)
 }
 
+/// A finished writing is stored for the period; a so-far one does not count.
+pub(crate) fn is_final(conn: &Connection, period: &Period) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM reflections WHERE kind = ?1 AND start = ?2 AND so_far = 0)",
+        params![enum_str(&period.kind), period.start],
+        |r| r.get(0),
+    )?)
+}
+
 /// Every item id a stored body names, wherever it appears.
 pub(crate) fn item_ids_in(value: &Value) -> BTreeSet<String> {
     fn walk(v: &Value, out: &mut BTreeSet<String>) {

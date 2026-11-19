@@ -642,6 +642,42 @@ fn reflections_due_lists_an_ended_day_once_and_not_a_written_one() {
 }
 
 #[test]
+fn a_so_far_reflection_is_still_due_once_its_day_has_ended() {
+    let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
+    let note = keep(&f.engine, "A day with something in it");
+    let (period, input) = written(&f, "2026-11-12");
+    assert!(input.so_far);
+    let at = input.items.iter().position(|i| i.id == note).unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **kept something**.", &[at])],
+            WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    assert!(f.engine.reflections_due(7).unwrap().is_empty());
+
+    f.clock.set_str("2026-11-13T08:00:00Z");
+    assert_eq!(
+        f.engine.reflections_due(7).unwrap(),
+        std::slice::from_ref(&period)
+    );
+
+    let (_, input) = written(&f, "2026-11-12");
+    assert!(!input.so_far);
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **kept something**.", &[at])],
+            WrittenWhen::Overnight,
+        )
+        .unwrap();
+    assert!(f.engine.reflections_due(7).unwrap().is_empty());
+}
+
+#[test]
 fn reflections_due_lists_ended_weeks_months_and_years_after_the_days_newest_first() {
     let f = fixture_at("2028-12-31T10:00:00Z", "Europe/London");
     keep(&f.engine, "Last day of the year");

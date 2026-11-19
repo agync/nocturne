@@ -956,7 +956,7 @@ impl Engine {
                     if !ctx.ended(end)?
                         || i64::from(today.since(end)?.get_days()) > i64::from(back_days)
                         || !seen.insert(period.clone())
-                        || store::exists(conn, &period)?
+                        || store::is_final(conn, &period)?
                     {
                         continue;
                     }
