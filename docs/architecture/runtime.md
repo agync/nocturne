@@ -246,13 +246,15 @@ setup:
 
 | Part | Behaviour |
 |---|---|
-| Tray | Shown only when the desktop has a notification area (a status notifier host is registered). It shows the state (resting, reading, tidying, needs you, paused), keeps, asks, opens the page, pauses and quits. Without it, closing the window quits the app and a start at login opens the window |
+| Tray | Shown only when the desktop has a notification area (a status notifier host is registered). It shows the state (resting, reading, tidying, needs you, paused), keeps, asks, offers "Check in…", opens the page, pauses and quits. Without it, closing the window quits the app and a start at login opens the window |
 | Quick keep shortcut | `CommandOrControl+Shift+Space` by default. Not grabbed on a Wayland session, where a grab only fires with an X11 window focused: there the desktop's GlobalShortcuts portal holds it, in a session per shortcut, and may ask the person first and bind other keys. Settings then shows the keys the desktop bound and opens the desktop's own shortcut settings (portal version 2) to change them, or offers Try again when the desktop did not add it. Without that portal Settings offers a command for a desktop shortcut instead. A change registers the new one before dropping the old |
 | Quick capture | A small always-on-top window, made when asked and destroyed when closed. It may call only a short list of commands |
 | Notification | One quiet note when the page is ready, at most once per page date, never carrying anything the person kept |
+| Notification, evening reminder | A second note, off by default, at the time the person picks, with always the same words and never anything kept, so no journal content is ever in a notification |
 | Start with this computer | On Linux the app writes its own autostart entry (the plugin would start the running executable, which is a temporary mount in an AppImage); it passes `--hidden`. In a Flatpak the Background portal writes it |
 | Watched folder | Files that appear in a chosen folder are kept once, after they stop changing. The folder is only read. Links are never followed |
-| Editions | The spoken page (`src-tauri/src/editions`) and the print view of the page |
+| Scheduler | The morning page run starts after the day boundary, separate from the overnight tidy. Its first step writes the reflection for the day that ended, then any recap that is due. A missed night runs in the catch-up, newest first, up to seven days back |
+| Editions | The spoken page (`src-tauri/src/editions`) and the print view of the page. The spoken page skips any line with `journal` sensitivity and the journal's quiet line and question, and ends with the count of lines left unread |
 
 ## Device placement
 
