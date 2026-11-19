@@ -4,8 +4,8 @@
     "from": "Nocturne · Keep everything, ask about it, get one page each morning"
   },
   "head.description": {
-    "text": "Nocturne est une application gratuite et privée pour votre ordinateur. Gardez notes, photos, notes vocales et fichiers sans les trier, ni maintenant ni plus tard. Plus tard, posez vos questions sur tout cela, et recevez chaque matin une page de ce qui vous attend, avec l’original derrière chaque ligne.",
-    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line."
+    "text": "Nocturne est une application gratuite et privée pour votre ordinateur. Gardez notes, photos, notes vocales et fichiers sans les trier, ni maintenant ni plus tard. Plus tard, posez vos questions sur tout cela, et recevez chaque matin une page de ce qui vous attend, avec l’original derrière chaque ligne. Tenez aussi un journal, si vous le souhaitez.",
+    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. Keep a journal too, if you like."
   },
   "head.og.description": {
     "text": "Gardez notes, photos, notes vocales et fichiers sans les trier, ni maintenant ni plus tard. Plus tard, posez vos questions sur tout cela, et recevez chaque matin une page de ce qui vous attend, le tout sur votre propre ordinateur.",
@@ -171,6 +171,62 @@
     "text": "La page du matin : deux choses vous attendent aujourd’hui. Le formulaire de la sortie scolaire est à rendre vendredi prochain, avec la lettre d’où il vient. Le rendez-vous chez le dentiste a changé, avec un choix entre la carte de rendez-vous et la note vocale.",
     "from": "The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note."
   },
+  "journal.eyebrow": {
+    "text": "Le journal · quand vous le souhaitez",
+    "from": "The journal · when you want to"
+  },
+  "journal.title": {
+    "text": "Votre journée, avec vos propres mots.",
+    "from": "Your day, in your own words."
+  },
+  "journal.body": {
+    "text": "Tout ce que vous gardez dans la journée est déjà dans votre journal : il commence à moitié écrit. Ajoutez quelques lignes, une note vocale ou une photo, et dites ce que vous avez ressenti. Nocturne revient sur chaque journée, et sur chaque semaine, chaque mois et chaque année dans un bilan. Chaque ligne renvoie à ce dont elle vient.",
+    "from": "Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from."
+  },
+  "journal.felt.term": {
+    "text": "Votre ressenti, jamais deviné",
+    "from": "How you felt, never guessed"
+  },
+  "journal.felt.detail": {
+    "text": "Notez votre ressenti : Sous tension (Wound up), Enthousiaste (Lit up), À plat (Low) ou Calme (Settled), et choisissez les mots qui conviennent. Une réflexion cite ce que vous avez dit ressentir, n’évalue jamais la journée et ne donne jamais de conseils.",
+    "from": "Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice."
+  },
+  "journal.good.term": {
+    "text": "Les bonnes choses",
+    "from": "Good things"
+  },
+  "journal.good.detail": {
+    "text": "Jusqu’à trois par jour, avec une photo si vous voulez. Vos bilans les font revenir.",
+    "from": "Up to three a day, with a photo if you like. Your recaps bring them back."
+  },
+  "journal.calm.term": {
+    "text": "Ni séries, ni insistance",
+    "from": "No streaks, no nagging"
+  },
+  "journal.calm.detail": {
+    "text": "Rien ne compte les jours où vous écrivez ni ne vous dit que vous en avez manqué un. Un rappel n’arrive que si vous l’activez. Quand une réflexion ou un bilan est nouveau, la page du matin le dit en une ligne.",
+    "from": "Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line."
+  },
+  "journal.quiet.term": {
+    "text": "Il reste discret",
+    "from": "It stays quiet"
+  },
+  "journal.quiet.detail": {
+    "text": "Rien de votre journal n’est lu à voix haute ni affiché dans une notification ou sur un écran verrouillé. Si vous activez Réponses en ligne (Online answers), une ligne de votre journal peut accompagner une question à laquelle elle aide à répondre. Vos ressentis, réflexions et bilans, jamais.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+  },
+  "journal.day.alt": {
+    "text": "Aujourd’hui dans le journal, jeudi 12 novembre : une entrée sur un déjeuner avec Priya, avec une note vocale et une photo. À côté, le ressenti de la journée, noté trois fois (fatigue, plaisir, soulagement et contentement).",
+    "from": "Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content)."
+  },
+  "journal.look.alt": {
+    "text": "La journée, revue après coup : un court paragraphe sur Leo qui a oublié ses affaires de sport, la fatigue du matin et un déjeuner enfin avec Priya, avec en dessous les notes, les ressentis, le document et l’entrée d’où il vient.",
+    "from": "The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath."
+  },
+  "journal.caption": {
+    "text": "Le journal du jour, et la journée revue après coup. Tiré de l’application, avec des données d’exemple.",
+    "from": "Today’s journal, and the day looked back on. From the app, with demo data."
+  },
   "privacy.eyebrow": {
     "text": "Ce qu’il promet",
     "from": "What it promises"
@@ -188,8 +244,8 @@
     "from": "Nothing to sign in to"
   },
   "promise.signin.detail": {
-    "text": "Pas de compte, pas de statistiques d’usage, pas de rapports de plantage, pas de copie dans le cloud.",
-    "from": "No account, no analytics, no crash reports, no cloud copy."
+    "text": "Pas de compte, pas de statistiques d’usage, pas de rapports de plantage, pas de copie dans le cloud. Pour garder une copie en lieu sûr, sauvegardez tout dans un seul fichier, verrouillé par un mot de passe de votre choix.",
+    "from": "No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose."
   },
   "promise.checked.term": {
     "text": "Vérifié, pas seulement promis",
@@ -228,12 +284,12 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "En déplacement (Away from home) permet à votre propre téléphone de demander, garder et lire votre page, sous scellé, pour que l’entreprise entre les deux ne puisse pas le lire. Réponses en ligne (Online answers) envoie une question, avec les quelques phrases retenues dont elle a besoin, à un seul service de votre choix. Jamais rien de marqué comme privé.",
-    "from": "Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private."
+    "text": "En déplacement (Away from home) permet à votre propre téléphone de demander, garder et lire votre page et votre journal, sous scellé, pour que l’entreprise entre les deux ne puisse pas les lire. Réponses en ligne (Online answers) envoie une question, avec les quelques phrases retenues dont elle a besoin, à un seul service de votre choix. Elles peuvent inclure des lignes de votre journal, mais jamais vos ressentis, réflexions ou bilans. Jamais rien de marqué comme privé.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
-    "text": "Nocturne sur un téléphone associé : connecté à l’ordinateur de la maison, avec Demander, Garder et la page du jour, et une note indiquant que ce qui est marqué comme privé reste sur l’ordinateur.",
-    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer."
+    "text": "Nocturne sur un téléphone associé : connecté à l’ordinateur de la maison, avec Demander, Garder, la page du jour et le journal, et une note indiquant que ce qui est marqué comme privé reste sur l’ordinateur.",
+    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer."
   },
   "phone.caption": {
     "text": "En déplacement sur un téléphone associé, avec des données d’exemple.",

@@ -889,6 +889,71 @@ figcaption {
   pointer-events: none;
 }
 
+/* The journal: the words and what it promises on the left, the day on the right, the reverse of
+   Privacy below it, so the two bands alternate. One column below 824 px, where the picture comes
+   between the words and the promises. */
+
+.journal-shot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.journal-shot .feature-shot img {
+  width: 100%;
+  height: auto;
+}
+
+/* A day looked back on sits over the corner of the day: what you wrote, beside what came of it.
+   The same move as the keep box over the morning page in the hero. The window is cut on a blank
+   line, and the card overlaps only that blank foot, so no words show half hidden behind it. */
+.journal-look {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 80%);
+  margin: -28px 0 0 -28px;
+}
+
+.journal-look img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule), 0 18px 40px -12px rgb(0 0 0 / 0.35);
+}
+
+.journal-shot figcaption {
+  margin-top: 0;
+}
+
+@media (min-width: 824px) {
+  #journal .promises {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #journal .journal-shot {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+/* In one column the card would reach the screen's edge, so it sits inside the mat instead. */
+@media (max-width: 823px) {
+  .journal-look {
+    margin-left: 12px;
+  }
+}
+
+@media (max-width: 640px) {
+  .journal-look {
+    width: auto;
+    margin: -28px 12px 0;
+  }
+}
+
 /* Privacy */
 
 .promises {

@@ -51,13 +51,21 @@ Each term is rendered the same way on every page.
 | its mind | zijn brein | Plain image. |
 | AI chip | AI-chip | Only in Systeemeisen, as in English. |
 | demo data | voorbeeldgegevens | Plain. |
+| journal | dagboek | The everyday word. |
+| entry | dagboektekst | Notitie is kept for notes. |
+| check in (verb); a check-in | noteren hoe je je voelt; gevoelsnotitie | Inchecken would read as a hotel or an airport. |
+| Wound up, Lit up, Low, Settled (the four parts) | Gespannen, Opgetogen, Somber, Rustig | With the English in brackets while the app is English. |
+| good thing | iets moois; Mooie dingen | Warmer than goede dingen. |
+| reflection | reflectie | Kept apart from the ochtendpagina and from terugblik. |
+| recap | terugblik | For a week, a month or a year. |
+| streak | reeks | As streak counters in Dutch apps say it. |
 
 ## Landing page, head and link preview
 
 | Id | English | Nederlands |
 |---|---|---|
 | `head.title` | Nocturne · Keep everything, ask about it, get one page each morning | Nocturne · Bewaar alles, vraag ernaar, elke ochtend één pagina |
-| `head.description` | Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. | Nocturne is een gratis, privé-app voor je computer. Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, met het origineel achter elke regel. |
+| `head.description` | Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. Keep a journal too, if you like. | Nocturne is een gratis, privé-app voor je computer. Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, met het origineel achter elke regel. Houd ook een dagboek bij, als je wilt. |
 | `head.og.description` | Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer. | Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, allemaal op je eigen computer. |
 | `head.og.image.alt` | Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data. | Nocturne. Bewaar alles. Nocturne onthoudt het voor je. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht. Naast de tekst de ochtendpagina uit de app met voorbeeldgegevens. |
 
@@ -129,6 +137,25 @@ Each term is rendered the same way on every page.
 | `page.body` | Whenever the computer is plugged in and idle, by night or by day, Nocturne reads what you kept and notices what changed. At the time you choose, you get a short list to read, hear or print. When two things disagree, it asks instead of guessing. | Telkens als de computer aan de stroom hangt en niets doet, ’s nachts of overdag, leest Nocturne wat je hebt bewaard en ziet het wat er is veranderd. Op het tijdstip dat jij kiest, krijg je een kort lijstje om te lezen, te beluisteren of te printen. Als twee dingen elkaar tegenspreken, vraagt het in plaats van te gokken. |
 | `page.alt` | The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note. | De ochtendpagina: vandaag wachten er twee dingen op je. Het formulier voor het schoolreisje moet volgende week vrijdag binnen zijn, met de brief waar het uit komt. De afspraak bij de tandarts is veranderd, met een keuze tussen de afsprakenkaart en de spraakmemo. |
 
+## The journal
+
+| Id | English | Nederlands |
+|---|---|---|
+| `journal.eyebrow` | The journal · when you want to | Het dagboek · wanneer je wilt |
+| `journal.title` | Your day, in your own words. | Je dag, in je eigen woorden. |
+| `journal.body` | Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from. | Alles wat je overdag bewaart, staat al in je dagboek, dus het is al half geschreven. Voeg een paar regels, een spraakmemo of een foto toe en zeg hoe je je voelde. Nocturne kijkt terug op elke dag, en in een terugblik op elke week, maand en jaar. Elke regel verwijst naar waar hij vandaan komt. |
+| `journal.felt.term` | How you felt, never guessed | Hoe je je voelde, nooit geraden |
+| `journal.felt.detail` | Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice. | Noteer hoe je je voelt: Gespannen (Wound up), Opgetogen (Lit up), Somber (Low) of Rustig (Settled), en kies de woorden die passen. Een reflectie citeert wat je zei dat je voelde, en geeft de dag nooit een cijfer of advies. |
+| `journal.good.term` | Good things | Mooie dingen |
+| `journal.good.detail` | Up to three a day, with a photo if you like. Your recaps bring them back. | Tot drie per dag, met een foto als je wilt. Je terugblikken halen ze weer naar boven. |
+| `journal.calm.term` | No streaks, no nagging | Geen reeksen, geen gezeur |
+| `journal.calm.detail` | Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line. | Niets telt de dagen dat je schrijft of zegt dat je er een hebt overgeslagen. Een seintje om te schrijven komt alleen als je dat aanzet. Is er een nieuwe reflectie of terugblik, dan zegt de ochtendpagina dat in één regel. |
+| `journal.quiet.term` | It stays quiet | Het blijft stil |
+| `journal.quiet.detail` | Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do. | Niets uit je dagboek wordt voorgelezen of getoond in een melding of op een vergrendelscherm. Zet je Online antwoorden (Online answers) aan, dan kan een regel uit je dagboek meegaan met een vraag die hij helpt beantwoorden. Je gevoelsnotities, reflecties en terugblikken nooit. |
+| `journal.day.alt` | Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content). | Vandaag in het dagboek, donderdag 12 november: een dagboektekst over de lunch met Priya, met een spraakmemo en een foto. Ernaast hoe vandaag voelde, met drie gevoelsnotities (moe, blij, opgelucht en tevreden). |
+| `journal.look.alt` | The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath. | De dag, achteraf bekeken: een korte alinea over Leo die zijn gymspullen vergat, een vermoeide ochtend en eindelijk de lunch met Priya, met daaronder de notities, gevoelsnotities, het document en de dagboektekst waar hij uit komt. |
+| `journal.caption` | Today’s journal, and the day looked back on. From the app, with demo data. | Het dagboek van vandaag, en de dag achteraf bekeken. Uit de app, met voorbeeldgegevens. |
+
 ## What it promises
 
 | Id | English | Nederlands |
@@ -137,7 +164,7 @@ Each term is rendered the same way on every page.
 | `privacy.title` | Your life stays on your computer. | Je leven blijft op je computer. |
 | `privacy.body` | Out of the box, Nocturne goes online only for downloads you agree to: its mind at setup and any update you allow. Privacy in the app lists each one with the day and the size. | Standaard gaat Nocturne alleen online voor downloads waarmee je instemt: zijn brein bij het instellen en elke update die je toestaat. Privacy, in de app, toont ze een voor een met de dag en de grootte. |
 | `promise.signin.term` | Nothing to sign in to | Nergens op inloggen |
-| `promise.signin.detail` | No account, no analytics, no crash reports, no cloud copy. | Geen account, geen analyse, geen crashrapporten, geen kopie in de cloud. |
+| `promise.signin.detail` | No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose. | Geen account, geen analyse, geen crashrapporten, geen kopie in de cloud. Wil je ergens een veilige kopie, maak dan een back-up van alles in één bestand, vergrendeld met een wachtwoord dat jij kiest. |
 | `promise.checked.term` | Checked, not just claimed | Gecontroleerd, niet alleen beloofd |
 | `promise.checked.detail` | Before a release, Nocturne is run with its network cut off from everything but this computer, and any attempt to reach further fails the check. | Voor een release draait Nocturne met zijn netwerk afgesloten van alles behalve deze computer, en elke poging om verder te komen laat de controle mislukken. |
 | `promise.edit.term` | It never edits what you kept | Het past nooit aan wat je hebt bewaard |
@@ -147,8 +174,8 @@ Each term is rendered the same way on every page.
 | `promise.note.term` | One quiet note a day | Eén rustige melding per dag |
 | `promise.note.detail` | When the page is ready, one note says so and how many things need you. Never what you kept. | Als de pagina klaar is, zegt één melding dat, en hoeveel dingen op je wachten. Nooit wat je hebt bewaard. |
 | `promise.extras.term` | Two extras, off until you ask | Twee extra’s, uit tot je erom vraagt |
-| `promise.extras.detail` | Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private. | Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Nooit iets wat als privé is gemarkeerd. |
-| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer. | Nocturne op een gekoppelde telefoon: verbonden met de computer thuis, met Vragen, Bewaren en de pagina van vandaag, en een opmerking dat wat als privé is gemarkeerd op de computer blijft. |
+| `promise.extras.detail` | Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private. | Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina en dagboek lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Daar kunnen regels uit je dagboek bij zitten, maar nooit je gevoelsnotities, reflecties of terugblikken. Nooit iets wat als privé is gemarkeerd. |
+| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer. | Nocturne op een gekoppelde telefoon: verbonden met de computer thuis, met Vragen, Bewaren, de pagina van vandaag en het dagboek, en een opmerking dat wat als privé is gemarkeerd op de computer blijft. |
 | `phone.caption` | Away from home on a paired phone, with demo data. | Onderweg op een gekoppelde telefoon, met voorbeeldgegevens. |
 
 ## The engine
@@ -308,3 +335,7 @@ Each term is rendered the same way on every page.
 ## Approval
 
 The owner approved these words on 2026-11-16, with the answers in [the site in five languages](../site-localisation.md#approval).
+
+The journal band, the two reworded Privacy details, the phone picture's description and the meta description were
+translated on 2026-11-19 from the English in [the journal on the site](../site-capabilities.md),
+with the glossary rows above for the journal.
