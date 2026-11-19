@@ -8,6 +8,7 @@ import type { PairingResult } from "../pairing";
 import { memoryQueue } from "../queue";
 import type { PairingLike, Services } from "../services";
 import { detectPlatform } from "../services";
+import { emptyDay, stamp, TODAY, WEEK_PERIOD, YESTERDAY } from "./journalFixtures";
 import { memoryKeyStore } from "./memoryStore";
 
 const SCENARIOS = [
@@ -34,8 +35,47 @@ const SCENARIOS = [
   "relinkWords",
   "relinkHere",
   "noPage",
+  "journalAsleep",
+  "journalEmpty",
+  "checkIn",
+  "lookBackDay",
+  "lookBackWeek",
+  "lookBackToday",
 ] as const;
 export type Scenario = (typeof SCENARIOS)[number];
+
+/** The screen a scenario opens on, instead of Home. The app reads it from the history entry. */
+function startView(scenario: Scenario): object | null {
+  switch (scenario) {
+    case "journalAsleep":
+    case "journalEmpty":
+      return { name: "journal", day: null, today: TODAY };
+    case "checkIn":
+      return { name: "checkin" };
+    case "lookBackDay":
+      return {
+        name: "lookback",
+        kind: "day",
+        start: YESTERDAY,
+        end: YESTERDAY,
+        write: false,
+        today: TODAY,
+      };
+    case "lookBackWeek":
+      return {
+        name: "lookback",
+        kind: WEEK_PERIOD.kind,
+        start: WEEK_PERIOD.start,
+        end: WEEK_PERIOD.end,
+        write: false,
+        today: TODAY,
+      };
+    case "lookBackToday":
+      return { name: "lookback", kind: "day", start: TODAY, end: TODAY, write: true, today: TODAY };
+    default:
+      return null;
+  }
+}
 
 const HOST = "amber-otter-lamp-quiet.trycloudflare.com";
 
@@ -66,6 +106,8 @@ export async function mockServices(): Promise<Services> {
   const waitingCount = Number(
     params.get("waiting") ?? (scenario === "asleep" || scenario === "asleepMostPrivate" ? 2 : 0),
   );
+  const start = startView(scenario);
+  if (start) history.replaceState({ view: start }, "");
   const key = await generateDeviceKey();
   const cpub = (await generateDeviceKey()).publicKey;
   const device: PairedDevice = {
@@ -111,10 +153,32 @@ export async function mockServices(): Promise<Services> {
     });
   }
 
+  if (scenario === "journalAsleep") {
+    await queue.add({
+      clientId: "seed-voice",
+      kind: "recording",
+      blob: new Blob([new Uint8Array(8)], { type: "audio/wav" }),
+      size: 44 + 48 * 32_000,
+      createdAt: Date.parse(stamp(TODAY, "20:40").replace("Z", "")),
+    });
+    await queue.add({
+      clientId: "seed-checkin",
+      kind: "checkin",
+      checkIn: {
+        feeling: { part: "settled", point: { pleasant: 0.5, energy: -0.5 }, words: ["calm"] },
+        line: null,
+        urge: null,
+        replaces: null,
+      },
+      size: 1,
+      createdAt: Date.parse(stamp(TODAY, "20:44").replace("Z", "")),
+    });
+  }
+
   const connection: MockScript["connection"] =
     scenario === "removed"
       ? "removed"
-      : scenario === "asleepMostPrivate"
+      : scenario === "asleepMostPrivate" || scenario === "journalAsleep"
         ? "asleep"
         : scenario === "turnedOff" ||
             scenario === "outdated" ||
@@ -165,6 +229,7 @@ export async function mockServices(): Promise<Services> {
     queue,
     engineFor: () => ({
       ...createMockPhoneEngine(script),
+      ...(scenario === "journalEmpty" ? { getJournalDay: async () => emptyDay(TODAY, true) } : {}),
       disconnect: async () => {
         await store.clear();
         return { reached: scenario !== "asleep" && scenario !== "cantConnect" };
