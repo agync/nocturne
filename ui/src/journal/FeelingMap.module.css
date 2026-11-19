@@ -1,0 +1,63 @@
+.map {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sheet);
+  flex: none;
+}
+
+.part {
+  position: relative;
+}
+
+.corner {
+  position: absolute;
+  display: inline-flex;
+}
+
+.part[data-part="woundUp"] .corner {
+  top: 6px;
+  left: 6px;
+}
+
+.part[data-part="litUp"] .corner {
+  top: 6px;
+  right: 6px;
+}
+
+.part[data-part="low"] .corner {
+  bottom: 6px;
+  left: 6px;
+}
+
+.part[data-part="settled"] .corner {
+  bottom: 6px;
+  right: 6px;
+}
+
+.dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  background: var(--sheet);
+  padding: 0;
+  color: var(--ink2);
+}
+
+button.dot {
+  cursor: pointer;
+}
+
+button.dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
