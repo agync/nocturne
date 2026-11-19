@@ -1171,7 +1171,10 @@ describe("journal on the phone", () => {
       expect(
         await screen.findByText("Your computer is looking back on your day…"),
       ).toBeInTheDocument();
+      // Two polls: the first still finds it writing, the second finds it written.
       await vi.advanceTimersByTimeAsync(4500);
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(reads).toBe(2);
       expect(await screen.findByRole("heading", { name: "The day" })).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
