@@ -11,6 +11,7 @@ import { memoryQueue } from "./queue";
 import { Ask, capQuestion, useAskSession } from "./screens/Ask";
 import { Scan, Welcome } from "./screens/Entry";
 import { browserRecorder, Keep } from "./screens/Keep";
+import { LookBack } from "./screens/LookBack";
 import { Original } from "./screens/Original";
 import { PageScreen } from "./screens/PageScreen";
 import { Which } from "./screens/Which";
@@ -1208,6 +1209,19 @@ describe("journal on the phone", () => {
 });
 
 describe("journal on the phone, hardening", () => {
+  const yesterday = { kind: "day", start: "2026-11-18", end: "2026-11-18" } as const;
+  const lookProps = (engine: PhoneEngine, write = false) => ({
+    engine,
+    period: yesterday,
+    write,
+    today: "2026-11-19",
+    now: () => Date.now(),
+    onStarted: () => {},
+    onBack: () => {},
+    onToday: () => {},
+    onItem: () => {},
+    onReceipt: () => {},
+  });
   it("which.failed_read: a failed read says so and tries again, it is not called answered", async () => {
     const base = createMockPhoneEngine({});
     let reads = 0;
@@ -1258,5 +1272,42 @@ describe("journal on the phone, hardening", () => {
       />,
     );
     expect(await screen.findByText("This one has already been answered.")).toBeInTheDocument();
+  });
+
+  it("lookback.retry_read: Try again after a failed read reads, it does not ask to write", async () => {
+    const base = createMockPhoneEngine({});
+    let reads = 0;
+    const lookBack = vi.fn(base.lookBack);
+    const getLookBack = vi.fn(async (p: typeof yesterday) => {
+      reads += 1;
+      if (reads === 1) throw new Error("down");
+      return base.getLookBack(p);
+    });
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack, lookBack }))} />);
+    expect(
+      await screen.findByText("Nocturne couldn’t get this day. What you kept is safe."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/couldn’t write this/)).not.toBeInTheDocument();
+    await userEvent.click(button("Try again"));
+    await waitFor(() => expect(getLookBack).toHaveBeenCalledTimes(2));
+    expect(lookBack).not.toHaveBeenCalled();
+  });
+
+  it("lookback.retry_write: Try again after a failed write asks to write again", async () => {
+    const base = createMockPhoneEngine({});
+    let writes = 0;
+    const lookBack = vi.fn(async (p: typeof yesterday) => {
+      writes += 1;
+      if (writes === 1) throw new Error("down");
+      return base.lookBack(p);
+    });
+    const getLookBack = vi.fn(base.getLookBack);
+    render(<LookBack {...lookProps(engineWith({}, { getLookBack, lookBack }), true)} />);
+    expect(
+      await screen.findByText("Nocturne couldn’t write this just now. Your entries are safe."),
+    ).toBeInTheDocument();
+    await userEvent.click(button("Try again"));
+    await waitFor(() => expect(lookBack).toHaveBeenCalledTimes(2));
+    expect(getLookBack).not.toHaveBeenCalled();
   });
 });

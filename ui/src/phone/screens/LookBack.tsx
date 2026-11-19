@@ -594,6 +594,8 @@ export function LookBack(p: LookBackProps) {
   const [attempt, setAttempt] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const writeNext = useRef(p.write);
+  const lastCall = useRef<"read" | "write">("read");
+  const [failedCall, setFailedCall] = useState<"read" | "write">("read");
   const onStarted = useRef(p.onStarted);
   onStarted.current = p.onStarted;
 
@@ -606,11 +608,14 @@ export function LookBack(p: LookBackProps) {
     };
     const failed = (e: unknown) => {
       if (gone) return;
-      if (e instanceof Error) setView({ type: "failed" });
-      else throw e;
+      if (e instanceof Error) {
+        setFailedCall(lastCall.current);
+        setView({ type: "failed" });
+      } else throw e;
     };
     if (writeNext.current) {
       writeNext.current = false;
+      lastCall.current = "write";
       setWriting(true);
       onStarted.current();
       engine.lookBack(period).then(
@@ -625,6 +630,7 @@ export function LookBack(p: LookBackProps) {
         },
       );
     } else {
+      lastCall.current = "read";
       engine.getLookBack(period).then(settle, failed);
     }
     return () => {
@@ -641,7 +647,10 @@ export function LookBack(p: LookBackProps) {
       engine.getLookBack(period).then(
         (next) => !gone && setView(next),
         (e: unknown) => {
-          if (!gone && !(e instanceof ConnectionError)) setView({ type: "failed" });
+          if (gone || e instanceof ConnectionError) return;
+          lastCall.current = "read";
+          setFailedCall("read");
+          setView({ type: "failed" });
         },
       );
     }, POLL_MS);
@@ -680,6 +689,11 @@ export function LookBack(p: LookBackProps) {
 
   const ask = () => {
     writeNext.current = true;
+    setAttempt((n) => n + 1);
+  };
+
+  const retry = () => {
+    writeNext.current = failedCall === "write";
     setAttempt((n) => n + 1);
   };
 
@@ -727,8 +741,10 @@ export function LookBack(p: LookBackProps) {
   } else {
     body = (
       <div className="ph-stack" style={{ gap: 12 }} role="alert">
-        <p className="ph-body">{t("journal.reflection.failed")}</p>
-        <Button kind="quiet" onClick={ask}>
+        <p className="ph-body">
+          {failedCall === "write" ? t("journal.reflection.failed") : t("journal.timeline.error")}
+        </p>
+        <Button kind="quiet" onClick={retry}>
           {t("phone.tryAgain")}
         </Button>
       </div>
