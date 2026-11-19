@@ -7,7 +7,13 @@ import { Button } from "../../components/Button/Button";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
-import type { Glance, GlanceReason, Period, ReflectionView } from "../../engine/bindings";
+import type {
+  Glance,
+  GlanceReason,
+  JournalDay,
+  Period,
+  ReflectionView,
+} from "../../engine/bindings";
 import { useEngine, useJournalDay, useReflection, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { GlanceView } from "./Glance";
@@ -24,10 +30,20 @@ interface ViewProps {
   /** What to show while a look back is being written here, or null. */
   writing: Glance | null | "none";
   onWrite: () => void;
+  /** Wait for what is still being read, then write. */
+  onWriteWhenRead: () => void;
+  waiting: boolean;
   onStop: () => void;
   onPrint: () => void;
   onDelete: () => void;
 }
+
+const READ_POLL_MS = 3000;
+
+const beingRead = (day: JournalDay) =>
+  [...day.entry.map((b) => b.item), ...day.rows.map((r) => r.item)].some(
+    (item) => item.status === "kept" || item.status === "reading",
+  );
 
 const onDemandId = (kind: Period["kind"]) =>
   kind === "week"
@@ -82,6 +98,8 @@ function Body(props: ViewProps) {
         <WrittenView
           reflection={view.reflection}
           onWriteAgain={props.onWrite}
+          onWriteWhenRead={props.onWriteWhenRead}
+          waiting={props.waiting}
           onPrint={props.onPrint}
           onDelete={props.onDelete}
         />
@@ -161,13 +179,16 @@ function Loaded({ period }: { period: Period }) {
   const write = useQueryParam("write") === "1";
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [waiting, setWaiting] = useState(false);
   const started = useRef(false);
   const mounted = useRef(true);
+  const wake = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      wake.current?.();
     };
   }, []);
 
@@ -190,6 +211,27 @@ function Loaded({ period }: { period: Period }) {
       refresh("journal");
     }
   }, [engine, period, refresh]);
+
+  const writeWhenRead = async () => {
+    if (waiting) return;
+    setWaiting(true);
+    try {
+      while (mounted.current) {
+        const day = await engine.getJournalDay(period.start).catch(() => null);
+        if (day && !beingRead(day)) break;
+        await new Promise<void>((resolve) => {
+          const timer = window.setTimeout(resolve, READ_POLL_MS);
+          wake.current = () => {
+            window.clearTimeout(timer);
+            resolve();
+          };
+        });
+      }
+      if (mounted.current) await run();
+    } finally {
+      if (mounted.current) setWaiting(false);
+    }
+  };
 
   useEffect(() => {
     if (!write || started.current) return;
@@ -248,6 +290,8 @@ function Loaded({ period }: { period: Period }) {
                   if (query.isError && !failed) void query.refetch();
                   else void run();
                 }}
+                onWriteWhenRead={() => void writeWhenRead()}
+                waiting={waiting}
                 onStop={() => void stop()}
                 onPrint={() => void platform.print()}
                 onDelete={() => void remove()}

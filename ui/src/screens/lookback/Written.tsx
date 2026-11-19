@@ -136,12 +136,21 @@ function PeopleChips({ people, day }: { people: readonly NameRef[]; day: string 
 interface WrittenProps {
   reflection: DayReflection;
   onWriteAgain: () => void;
+  onWriteWhenRead: () => void;
+  waiting: boolean;
   onPrint: () => void;
   onDelete: () => void;
 }
 
 /** The day's reflection: what happened, how it felt, what was good, who and where, what is open. */
-export function WrittenView({ reflection: r, onWriteAgain, onPrint, onDelete }: WrittenProps) {
+export function WrittenView({
+  reflection: r,
+  onWriteAgain,
+  onWriteWhenRead,
+  waiting,
+  onPrint,
+  onDelete,
+}: WrittenProps) {
   const receipt = useActiveReceipt();
   const paragraph = r.theDay.flatMap((line) => line.receipts);
   return (
@@ -149,7 +158,7 @@ export function WrittenView({ reflection: r, onWriteAgain, onPrint, onDelete }: 
       {r.stillReading > 0 ? (
         <div className={styles.notice}>
           <span>{t("journal.reflection.partial", { count: r.stillReading })}</span>
-          <Button variant="secondary" onClick={onWriteAgain}>
+          <Button variant="secondary" disabled={waiting} onClick={onWriteWhenRead}>
             {t("journal.reflection.partialAction", { count: r.stillReading })}
           </Button>
         </div>

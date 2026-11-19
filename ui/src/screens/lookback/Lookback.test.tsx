@@ -127,6 +127,59 @@ describe("a day's reflection", () => {
     await waitFor(() => expect(reflect).toHaveBeenCalledTimes(1));
   });
 
+  describe("writing it again when the rest is read", () => {
+    afterEach(() => vi.useRealTimers());
+
+    const pending = async () => {
+      const engine = engineIn();
+      serve(engine, (view) =>
+        view.type === "written"
+          ? { ...view, reflection: { ...view.reflection, stillReading: 2 } }
+          : view,
+      );
+      const state = { reading: true };
+      const real = engine.getJournalDay.bind(engine);
+      vi.spyOn(engine, "getJournalDay").mockImplementation(async (day) => {
+        const view = await real(day);
+        if (!state.reading) return view;
+        return {
+          ...view,
+          rows: view.rows.map((row, at) =>
+            at === 0 ? { ...row, item: { ...row.item, status: "reading" as const } } : row,
+          ),
+        };
+      });
+      const reflect = vi.spyOn(engine, "reflect");
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      const view = open("#/journal/look-back/day/2026-11-19", engine);
+      const button = await screen.findByRole("button", {
+        name: "Write it again when they’re read",
+      });
+      return { state, reflect, view, button };
+    };
+
+    it("waits until nothing from the day is being read, then writes", async () => {
+      const { state, reflect, button } = await pending();
+      fireEvent.click(button);
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(reflect).not.toHaveBeenCalled();
+      expect(button).toBeDisabled();
+      state.reading = false;
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(reflect).toHaveBeenCalledTimes(1);
+    });
+
+    it("stops waiting when the screen is left", async () => {
+      const { state, reflect, view, button } = await pending();
+      fireEvent.click(button);
+      await vi.advanceTimersByTimeAsync(4000);
+      view.unmount();
+      state.reading = false;
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(reflect).not.toHaveBeenCalled();
+    });
+  });
+
   it("says a line was taken out when what it came from was deleted", async () => {
     const engine = engineIn();
     serve(engine, (view) =>
