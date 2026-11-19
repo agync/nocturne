@@ -361,7 +361,8 @@ impl Engine {
     }
 
     /// Keep a note. An ordinary note, or a good thing of today when `good`. With a feeling, a
-    /// check-in about the note is kept beside it on the same day.
+    /// check-in about the note is kept beside it, on the note's day, or on today when the note
+    /// was kept before.
     pub fn keep_note(
         &self,
         text: &str,
@@ -382,8 +383,22 @@ impl Engine {
             self.keep_text(text, source)?
         };
         if let Some(f) = feeling {
-            let (Kept::New { item } | Kept::Duplicate { item }) = &kept;
-            self.attach_feeling(&item.id, f, source)?;
+            // The note may be an old one kept again; the feeling is new, so it is today's.
+            let (item, on_today) = match &kept {
+                Kept::New { item } => (item, false),
+                Kept::Duplicate { item } => (item, true),
+            };
+            self.insert_checkin(
+                CheckInInput {
+                    feeling: f,
+                    line: None,
+                    urge: None,
+                    replaces: None,
+                },
+                source,
+                Some(&item.id),
+                on_today,
+            )?;
         }
         Ok(kept)
     }
@@ -404,13 +419,14 @@ impl Engine {
             },
             source,
             Some(item_id),
+            false,
         )
     }
 
     /// Keep a check-in. With no line and no urge there is nothing to read, so it is understood
     /// at once; otherwise it is read for names only.
     pub fn keep_checkin(&self, input: CheckInInput, source: Source) -> Result<CheckIn> {
-        self.insert_checkin(input, source, None)
+        self.insert_checkin(input, source, None, false)
     }
 
     fn insert_checkin(
@@ -418,6 +434,7 @@ impl Engine {
         input: CheckInInput,
         source: Source,
         about: Option<&str>,
+        on_today: bool,
     ) -> Result<CheckIn> {
         validate_feeling(&input.feeling)?;
         let line = clean(&input.line);
@@ -447,7 +464,7 @@ impl Engine {
                     about = old.about().map(str::to_string);
                 }
                 old.day(&ctx)?
-            } else if let Some(target) = &about {
+            } else if let Some(target) = about.as_ref().filter(|_| !on_today) {
                 load_item(tx, &originals, target)?.day(&ctx)?
             } else {
                 ctx.today()?

@@ -276,6 +276,30 @@ fn a_quick_note_with_a_feeling_shows_the_feeling_on_its_row_and_no_separate_chec
 }
 
 #[test]
+fn a_feeling_with_a_note_kept_before_belongs_to_today_not_the_old_note_day() {
+    let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
+    let first = keep(&f.engine, "Lunch with Priya");
+    f.clock.set_str("2026-11-13T10:00:00Z");
+    let kept = f
+        .engine
+        .keep_note(
+            "Lunch with Priya",
+            Source::QuickCapture,
+            Some(feeling(FeelingPart::Settled, &["calm"])),
+            false,
+        )
+        .unwrap();
+    let Kept::Duplicate { item } = kept else {
+        panic!("the same note again")
+    };
+    assert_eq!(item.id, first);
+    let yesterday = f.engine.journal_day(date("2026-11-12")).unwrap();
+    assert!(yesterday.checkins.is_empty());
+    let today = f.engine.journal_day(date("2026-11-13")).unwrap();
+    assert_eq!(today.checkins.len(), 1);
+}
+
+#[test]
 fn taking_back_a_note_takes_back_the_feeling_kept_with_it() {
     let f = fixture();
     let Kept::New { item } = f
