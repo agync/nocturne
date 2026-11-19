@@ -848,8 +848,10 @@ fn switching_during_download_starts_the_right_helper() {
     *a.helpers.transport.addresses.lock().unwrap() =
         vec!["https://nocturne-ab12.tail1234.ts.net".into()];
     a.start("simple", true).unwrap();
-    wait_for("downloading", || {
+    // The state is set before the download task runs, so wait for the download itself.
+    wait_for("the download started", || {
         matches!(a.hub.state(), RemoteState::Downloading { .. })
+            && a.helpers.installs.load(Ordering::SeqCst) == 1
     });
     a.h.ok(
         "update_remote_settings",
