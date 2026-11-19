@@ -83,6 +83,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["getPage", ["2026-11-13"], "get_page", ["date"]],
   ["listPages", [], "list_pages", []],
   ["answerQuestion", ["2026-11-13", "yes"], "answer_question", ["pageDate", "choice"]],
+  ["addAnswerLine", ["2026-11-13", "It went fine."], "add_answer_line", ["pageDate", "line"]],
   ["resolveWhich", ["c1", "m1"], "resolve_which", ["conflictId", "memoryId"]],
   ["confirmMemory", ["m1", true], "confirm_memory", ["id", "confirmed"]],
   ["markDone", ["m1"], "mark_done", ["memoryId"]],
