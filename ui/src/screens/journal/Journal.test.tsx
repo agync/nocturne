@@ -403,12 +403,36 @@ describe("rows of the timeline", () => {
     );
     await userEvent.click(within(row).getByRole("button", { name: "More about this" }));
     await userEvent.click(
-      await screen.findByRole("menuitem", { name: "Leave out of reflections" }),
+      await screen.findByRole("menuitemcheckbox", { name: "Leave out of reflections" }),
     );
     expect(set).toHaveBeenCalledWith("j-note-leo", true);
     expect(await screen.findByText("Left out. It stays in your journal.")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(set).toHaveBeenLastCalledWith("j-note-leo", false);
+  });
+
+  it("marks a left-out row and lets the same menu item put it back", async () => {
+    const { engine } = await open();
+    const set = vi.spyOn(engine, "setLeftOut");
+    const menuOf = async () => {
+      await userEvent.click(within(rowOf(LEO)).getByRole("button", { name: "More about this" }));
+      return screen.findByRole("menuitemcheckbox", { name: "Leave out of reflections" });
+    };
+    expect(within(rowOf(LEO)).queryByRole("img", { name: "Leave out of reflections" })).toBeNull();
+    expect(await menuOf()).toHaveAttribute("aria-checked", "false");
+    await userEvent.click(await menuOf());
+    expect(set).toHaveBeenLastCalledWith("j-note-leo", true);
+    expect(
+      await within(rowOf(LEO)).findByRole("img", { name: "Leave out of reflections" }),
+    ).toBeInTheDocument();
+    expect(await menuOf()).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(screen.getByRole("menuitemcheckbox", { checked: true }));
+    expect(set).toHaveBeenLastCalledWith("j-note-leo", false);
+    await waitFor(() =>
+      expect(
+        within(rowOf(LEO)).queryByRole("img", { name: "Leave out of reflections" }),
+      ).toBeNull(),
+    );
   });
 
   it("opens the menu from the keyboard without adding a tab stop", async () => {
@@ -423,7 +447,9 @@ describe("rows of the timeline", () => {
     const link = within(row).getByRole("link", { name: /Leo forgot/ });
     link.focus();
     fireEvent.keyDown(link, { key: "F10", shiftKey: true });
-    const item = await screen.findByRole("menuitem", { name: "Leave out of reflections" });
+    const item = await screen.findByRole("menuitemcheckbox", {
+      name: "Leave out of reflections",
+    });
     expect(item).toHaveFocus();
     fireEvent.keyDown(item, { key: "Escape" });
     await waitFor(() => expect(link).toHaveFocus());

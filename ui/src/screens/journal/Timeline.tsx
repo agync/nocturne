@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "../../components/Icon/Icon";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { CheckIn, DayPart, JournalDay, Mention, TimelineRow } from "../../engine/bindings";
@@ -63,7 +64,9 @@ function glyphOf(row: TimelineRow): GlyphName {
   return row.item.fromDevice && row.kind === "note" ? "phone" : "pen";
 }
 
-/** The three rows of a day's timeline that open a small menu: leave out, move, change. */
+const ITEMS = '[role="menuitem"], [role="menuitemcheckbox"]';
+
+/** A row's small menu: change, leave out, move. */
 function RowMenu({
   row,
   link,
@@ -82,7 +85,7 @@ function RowMenu({
 
   useEffect(() => {
     if (!open) return;
-    menu.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    menu.current?.querySelector<HTMLElement>(ITEMS)?.focus();
     const away = (event: PointerEvent) => {
       const target = event.target as Node;
       if (menu.current?.contains(target)) return;
@@ -99,9 +102,11 @@ function RowMenu({
 
   const leaveOut = async () => {
     close(true);
+    const next = !row.leftOut;
     try {
-      await engine.setLeftOut(row.item.id, true);
+      await engine.setLeftOut(row.item.id, next);
       refresh("journal");
+      if (!next) return;
       toast.show({
         message: t("journal.timeline.leftOut"),
         action: {
@@ -137,7 +142,7 @@ function RowMenu({
       role="menu"
       aria-label={t("journal.timeline.rowMenu")}
       onKeyDown={(event) => {
-        const items = [...(menu.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [])];
+        const items = [...(menu.current?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
         const at = items.indexOf(document.activeElement as HTMLElement);
         if (event.key === "Escape") {
           event.preventDefault();
@@ -163,16 +168,15 @@ function RowMenu({
           {t("journal.timeline.change")}
         </a>
       ) : null}
-      {row.leftOut ? null : (
-        <button
-          type="button"
-          role="menuitem"
-          className={styles.menuItem}
-          onClick={() => void leaveOut()}
-        >
-          {t("journal.timeline.leaveOut")}
-        </button>
-      )}
+      <button
+        type="button"
+        role="menuitemcheckbox"
+        aria-checked={row.leftOut}
+        className={styles.menuItem}
+        onClick={() => void leaveOut()}
+      >
+        {t("journal.timeline.leaveOut")}
+      </button>
       {row.moveTo ? (
         <button
           type="button"
@@ -258,6 +262,11 @@ function Row({
           <span className={styles.text}>{text}</span>
         )}
         {reading ? <span className={styles.status}>{t("item.status.reading")}</span> : null}
+        {row.leftOut ? (
+          <span className={styles.leftOut}>
+            <Icon name="eye-off" size={14} label={t("journal.timeline.leaveOut")} />
+          </span>
+        ) : null}
         {tapped}
       </span>
     </>
