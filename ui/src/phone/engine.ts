@@ -1,25 +1,50 @@
-// What the phone app may do, and what it keeps about itself. The ten allowed calls and the two
-// phone verbs are the whole of `PhoneEngine`; nothing else crosses the sealed channel.
+// What the phone app may do, and what it keeps about itself. The ten allowed calls, the journal
+// calls and the two phone verbs are the whole of `PhoneEngine`; nothing else crosses the sealed
+// channel.
 
 import type {
   AskDelta,
+  CheckIn,
+  CheckInInput,
+  Feeling,
+  JournalDay,
   PageSummary,
   PageView,
+  Period,
   PhoneError,
   PhoneHello,
   PhoneItem,
   PhoneKept,
   PhoneStatus,
+  ReflectionView,
   RemoteConnection,
+  SameNameAnswer,
+  SameNameAnswered,
 } from "../engine/bindings";
 import type { Bytes } from "./bytes";
+
+/** What a keep may carry besides what is kept: how it feels, and that it is a good thing. */
+export interface KeepMarks {
+  feeling?: Feeling;
+  good?: boolean;
+}
 
 export interface PhoneEngine {
   hello(): Promise<PhoneHello>;
   status(): Promise<PhoneStatus>;
-  keepText(text: string, clientId: string): Promise<PhoneKept>;
-  keepBytes(blob: Blob, clientId: string, caption?: string): Promise<PhoneKept>;
-  keepRecording(blob: Blob, clientId: string): Promise<PhoneKept>;
+  keepText(text: string, clientId: string, marks?: KeepMarks): Promise<PhoneKept>;
+  keepBytes(blob: Blob, clientId: string, caption?: string, marks?: KeepMarks): Promise<PhoneKept>;
+  keepRecording(blob: Blob, clientId: string, marks?: KeepMarks): Promise<PhoneKept>;
+  /** The whole check-in, by touch. Kept once however often it is sent. */
+  keepCheckIn(input: CheckInInput, clientId: string): Promise<CheckIn>;
+  /** A journal day, today when none is given. The computer sends it whole; nothing is cached. */
+  getJournalDay(date?: string): Promise<JournalDay>;
+  /** What is written for a day or a period, or its glance. */
+  getLookBack(period: Period): Promise<ReflectionView>;
+  /** Asks the computer to write it ("Reflect on today"), then answers as `getLookBack` does. */
+  lookBack(period: Period): Promise<ReflectionView>;
+  /** "Which {name} is this?": the one change a phone makes beyond keeping. */
+  answerSameName(questionId: string, answer: SameNameAnswer): Promise<SameNameAnswered>;
   unkeep(id: string): Promise<void>;
   ask(question: string, onDelta: (delta: AskDelta) => void): Promise<string>;
   cancelAsk(askId: string): Promise<void>;
@@ -83,11 +108,16 @@ export interface KeyStore {
 
 export interface PendingKeep {
   clientId: string;
-  kind: "text" | "photo" | "recording";
+  kind: "text" | "photo" | "recording" | "checkin";
   text?: string;
   blob?: Blob;
   caption?: string;
-  /** Bytes of the text, or the blob's size. */
+  /** How it feels, kept with the keep so a keep that waits does not lose it. */
+  feeling?: Feeling;
+  good?: boolean;
+  /** A check-in kept while the computer was out of reach. */
+  checkIn?: CheckInInput;
+  /** Bytes of the text, or the blob's size; a check-in counts its words. */
   size: number;
   createdAt: number;
 }
@@ -97,6 +127,7 @@ export interface FlushResult {
   failed: number;
   remaining: number;
   kept: PhoneKept[];
+  checkIns: CheckIn[];
 }
 
 export interface Queue {

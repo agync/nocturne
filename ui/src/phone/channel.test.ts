@@ -10,6 +10,7 @@ import { offerFromFragment, Pairing } from "./pairing";
 import * as P from "./protocol";
 import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, PHONE_BUILD } from "./protocol";
 import { delta, FakeComputer } from "./testing/fakeComputer";
+import { DAY_PERIOD, WEEK_PERIOD, YESTERDAY, YESTERDAY_PERIOD } from "./testing/journalFixtures";
 import { memoryKeyStore } from "./testing/memoryStore";
 
 async function paired(options: { computer?: FakeComputer } = {}) {
@@ -854,6 +855,132 @@ describe("the engine's calls", () => {
       ),
     ).rejects.toMatchObject({ code: "invalid" });
     engine.close();
+  });
+
+  describe("the journal", () => {
+    const glad = {
+      part: "litUp" as const,
+      point: { pleasant: 0.6, energy: 0.5 },
+      words: ["glad"],
+    };
+
+    async function engineOn(computer: FakeComputer, device: PairedDevice) {
+      return createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+        env: computer.env,
+      });
+    }
+
+    it("a keep carries its feeling and its good-thing mark, and a plain keep neither", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      await engine.keepText("Tea with Priya", "c-f1", { feeling: glad, good: true });
+      await engine.keepText("Plain", "c-f2");
+      const text = (id: string) => [...computer.items.values()].find((i) => i.clientId === id);
+      expect(text("c-f1")).toMatchObject({ feeling: glad, good: true });
+      expect(text("c-f2")).toMatchObject({ feeling: null, good: null });
+      const jpeg = new Uint8Array(100);
+      jpeg.set([0xff, 0xd8, 0xff, 0xe0]);
+      await engine.keepBytes(new Blob([jpeg], { type: "image/jpeg" }), "c-f3", "Sun", {
+        feeling: glad,
+        good: true,
+      });
+      const wav = new Uint8Array(44 + 8);
+      wav.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
+      await engine.keepRecording(new Blob([wav], { type: "audio/wav" }), "c-f4", {
+        feeling: glad,
+      });
+      expect(text("c-f3")).toMatchObject({ feeling: glad, good: true });
+      expect(text("c-f4")).toMatchObject({ feeling: glad, good: null });
+      const sent = computer.seen.up.length;
+      expect(sent).toBeGreaterThan(0);
+      engine.close();
+    });
+
+    it("a feeling off the field, or a good thing that is not a photo, is not sent", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const off = { ...glad, point: { pleasant: 1.5, energy: 0 } };
+      const many = { ...glad, words: ["a", "b", "c", "d"] };
+      await expect(engine.keepText("x", "c-b1", { feeling: off })).rejects.toMatchObject({
+        code: "invalid",
+      });
+      await expect(engine.keepText("x", "c-b2", { feeling: many })).rejects.toMatchObject({
+        code: "invalid",
+      });
+      const wav = new Uint8Array(44 + 8);
+      wav.set([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x41, 0x56, 0x45]);
+      await expect(
+        engine.keepRecording(new Blob([wav], { type: "audio/wav" }), "c-b3", { good: true }),
+      ).rejects.toMatchObject({ code: "invalid" });
+      expect(computer.items.size).toBe(0);
+      engine.close();
+    });
+
+    it("a check-in is kept once however often it is sent, and is never a change", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const input = { feeling: glad, line: "A good walk", urge: null, replaces: null };
+      const first = await engine.keepCheckIn(input, "c-ci");
+      const again = await engine.keepCheckIn({ ...input, line: "Again" }, "c-ci");
+      expect(again.id).toBe(first.id);
+      expect(first.line).toBe("A good walk");
+      await expect(
+        engine.keepCheckIn({ ...input, replaces: first.id }, "c-ci2"),
+      ).rejects.toMatchObject({ code: "invalid" });
+      await expect(
+        engine.keepCheckIn({ ...input, feeling: { ...glad, words: ["", "b"] } }, "c-ci3"),
+      ).rejects.toMatchObject({ code: "invalid" });
+      engine.close();
+    });
+
+    it("reads today, another day and a day that has not come", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const today = await engine.getJournalDay();
+      expect(today.today).toBe(true);
+      expect(today.checkins.length).toBeGreaterThan(0);
+      expect(today.sameName).toHaveLength(1);
+      const yesterday = await engine.getJournalDay(YESTERDAY);
+      expect(yesterday.reflection?.firstSentence).toContain("Leo");
+      await expect(engine.getJournalDay("2026-12-31")).rejects.toMatchObject({ code: "invalid" });
+      await expect(engine.getJournalDay("soon")).rejects.toMatchObject({ code: "invalid" });
+      engine.close();
+    });
+
+    it("reads a day's reflection, a week's recap and a day not yet looked back on", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      expect((await engine.getLookBack(YESTERDAY_PERIOD)).type).toBe("written");
+      expect((await engine.getLookBack(WEEK_PERIOD)).type).toBe("recap");
+      expect((await engine.getLookBack(DAY_PERIOD)).type).toBe("notYet");
+      const written = await engine.lookBack(DAY_PERIOD);
+      expect(written.type).toBe("written");
+      await expect(
+        engine.getLookBack({ kind: "day", start: "yesterday", end: "yesterday" }),
+      ).rejects.toMatchObject({ code: "invalid" });
+      engine.close();
+    });
+
+    it("answers which Sam, and the answer names who it was filed under", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const q = (await engine.getJournalDay()).sameName[0];
+      const choice = q?.options[1];
+      expect(q && choice).toBeTruthy();
+      const answered = await engine.answerSameName(q?.id ?? "", {
+        type: "entity",
+        entityId: choice?.entityId ?? "",
+      });
+      expect(answered).toEqual({ name: "Sam", role: "from work" });
+      expect(await engine.answerSameName(q?.id ?? "", { type: "leave" })).toEqual({
+        name: "Sam",
+        role: null,
+      });
+      await expect(engine.answerSameName("bad id", { type: "new" })).rejects.toMatchObject({
+        code: "invalid",
+      });
+      engine.close();
+    });
   });
 
   it("reads an original from chunks and refuses one whose bytes are not its type", async () => {

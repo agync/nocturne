@@ -1,18 +1,26 @@
-// The phone's engine over the sealed channel: the ten allowed calls and the two phone verbs, a
+// The phone's engine over the sealed channel: the ten allowed calls, the journal calls and the two
+// phone verbs, a
 // session opened when one is needed and renewed before it lapses, and a connection state the
 // screens read. Calls are retried once on a new session after a transport error; a keep carries
 // its client id, so the computer keeps it once.
 
 import type {
   AskDelta,
+  CheckIn,
+  Feeling,
+  JournalDay,
   PageSummary,
   PageView,
+  Period,
   PhoneHello,
   PhoneItem,
   PhoneKept,
   PhoneStatus,
+  ReflectionView,
   RemoteAnswer,
   RemoteCall,
+  SameNameAnswer,
+  SameNameAnswered,
 } from "../engine/bindings";
 import { type Bytes, copy, utf8 } from "./bytes";
 import {
@@ -29,6 +37,7 @@ import {
   type ConnectedEngine,
   type Connection,
   ConnectionError,
+  type KeepMarks,
   type KeyStore,
   PhoneRequestError,
 } from "./engine";
@@ -291,31 +300,70 @@ export function createPhoneEngine(
     async status(): Promise<PhoneStatus> {
       return (await once({ cmd: "getStatus" }, "status")).status;
     },
-    async keepText(text, clientId): Promise<PhoneKept> {
+    async keepText(text, clientId, marks): Promise<PhoneKept> {
       const size = utf8(text).length;
       if (text.trim() === "") throw new PhoneRequestError("invalid");
       if (size > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
       checkClientId(clientId);
-      return (await once({ cmd: "keepText", text, clientId }, "kept")).kept;
+      checkMarks(marks);
+      return (await once({ cmd: "keepText", text, clientId, ...sent(marks) }, "kept")).kept;
     },
-    async keepBytes(blob, clientId, caption) {
+    async keepBytes(blob, clientId, caption, marks) {
       checkClientId(clientId);
+      checkMarks(marks);
       const note = (caption ?? "").trim();
       if ([...note].length > P.MAX_CAPTION) throw new PhoneRequestError("invalid");
       if (blob.size < 1) throw new PhoneRequestError("invalid");
       if (blob.size > P.MAX_ITEM) throw new PhoneRequestError("tooLarge");
       const mime = await mimeOf(blob);
+      // Only a photo can be a good thing; a document cannot.
+      if (marks?.good && !mime.startsWith("image/")) throw new PhoneRequestError("invalid");
       return keep(
-        { cmd: "keepBytes", mime, size: blob.size, clientId, caption: note === "" ? null : note },
+        {
+          cmd: "keepBytes",
+          mime,
+          size: blob.size,
+          clientId,
+          caption: note === "" ? null : note,
+          ...sent(marks),
+        },
         blob,
       );
     },
-    async keepRecording(blob, clientId) {
+    async keepRecording(blob, clientId, marks) {
       checkClientId(clientId);
+      checkMarks(marks);
+      if (marks?.good) throw new PhoneRequestError("invalid");
       if (blob.size < 1) throw new PhoneRequestError("invalid");
       if (blob.size > P.MAX_ITEM) throw new PhoneRequestError("tooLarge");
       const mime = await mimeOf(blob);
-      return keep({ cmd: "keepRecording", mime, size: blob.size, clientId }, blob);
+      return keep({ cmd: "keepRecording", mime, size: blob.size, clientId, ...sent(marks) }, blob);
+    },
+    async keepCheckIn(input, clientId): Promise<CheckIn> {
+      checkClientId(clientId);
+      checkFeeling(input.feeling);
+      // Changing a check-in is for the computer.
+      if (input.replaces) throw new PhoneRequestError("invalid");
+      const said = utf8(input.line ?? "").length + utf8(input.urge ?? "").length;
+      if (said > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
+      return (await once({ cmd: "keepCheckIn", input, clientId }, "checkIn")).checkin;
+    },
+    async getJournalDay(date): Promise<JournalDay> {
+      if (date !== undefined) checkDate(date);
+      return (await once({ cmd: "getJournalDay", date: date ?? null }, "journalDay")).day;
+    },
+    async getLookBack(period): Promise<ReflectionView> {
+      checkPeriod(period);
+      return (await once({ cmd: "getLookBack", period }, "lookBack")).view;
+    },
+    async lookBack(period): Promise<ReflectionView> {
+      checkPeriod(period);
+      return (await once({ cmd: "lookBack", period }, "lookBack")).view;
+    },
+    async answerSameName(questionId, answer): Promise<SameNameAnswered> {
+      checkClientId(questionId);
+      checkAnswer(answer);
+      return (await once({ cmd: "answerSameName", questionId, answer }, "sameName")).answered;
     },
     async unkeep(id) {
       checkItemId(id);
@@ -436,4 +484,42 @@ function checkClientId(id: string): void {
 
 function checkItemId(id: string): void {
   checkClientId(id);
+}
+
+/** The marks of a keep as the call carries them: absent when not set, so older computers parse it. */
+function sent(marks: KeepMarks | undefined): { feeling?: Feeling; good?: boolean } {
+  const out: { feeling?: Feeling; good?: boolean } = {};
+  if (marks?.feeling) out.feeling = marks.feeling;
+  if (marks?.good !== undefined) out.good = marks.good;
+  return out;
+}
+
+function checkMarks(marks: KeepMarks | undefined): void {
+  if (marks?.feeling) checkFeeling(marks.feeling);
+}
+
+/** A point on the field and up to three short words, as the computer checks them. */
+function checkFeeling(f: Feeling): void {
+  const onField = (v: number) => Number.isFinite(v) && v >= -1 && v <= 1;
+  if (!onField(f.point.pleasant) || !onField(f.point.energy)) {
+    throw new PhoneRequestError("invalid");
+  }
+  if (f.words.length > 3) throw new PhoneRequestError("invalid");
+  for (const w of f.words) {
+    const n = [...w].length;
+    if (n < 1 || n > 40) throw new PhoneRequestError("invalid");
+  }
+}
+
+function checkDate(date: string): void {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new PhoneRequestError("invalid");
+}
+
+function checkPeriod(period: Period): void {
+  checkDate(period.start);
+  checkDate(period.end);
+}
+
+function checkAnswer(answer: SameNameAnswer): void {
+  if (answer.type === "entity") checkClientId(answer.entityId);
 }

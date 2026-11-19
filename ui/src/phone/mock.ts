@@ -3,12 +3,14 @@
 
 import type {
   AskDelta,
+  CheckIn,
   PageLine,
   PageView,
   PhoneHello,
   PhoneItem,
   PhoneKept,
   Receipt,
+  ReflectionView,
 } from "../engine/bindings";
 import { copy } from "./bytes";
 import {
@@ -17,6 +19,16 @@ import {
   ConnectionError,
   PhoneRequestError,
 } from "./engine";
+import {
+  emptyDay,
+  lookBackFor,
+  SAME_NAME,
+  TODAY,
+  todayDay,
+  todayReflection,
+  YESTERDAY,
+  yesterdayDay,
+} from "./testing/journalFixtures";
 
 export interface MockScript {
   connection?: Connection["kind"];
@@ -303,6 +315,58 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     },
     async keepRecording() {
       return keptAnswer("Voice note", "audio");
+    },
+    async keepCheckIn(input) {
+      if (script.keepFails) throw new ConnectionError("asleep");
+      gate();
+      if (input.replaces) throw new PhoneRequestError("invalid");
+      kept += 1;
+      const checkin: CheckIn = {
+        id: `checkin-new-${kept}`,
+        keptAt: new Date(now()).toISOString(),
+        day: TODAY,
+        feeling: input.feeling,
+        line: input.line,
+        urge: input.urge,
+        about: null,
+        tried: [],
+        fromDevice: null,
+        mentions: [],
+        leftOut: false,
+      };
+      return checkin;
+    },
+    async getJournalDay(date) {
+      gate();
+      const wanted = date ?? TODAY;
+      if (wanted > TODAY) throw new PhoneRequestError("invalid");
+      if (wanted === TODAY) return todayDay();
+      return wanted === YESTERDAY ? yesterdayDay() : emptyDay(wanted, false);
+    },
+    async getLookBack(period) {
+      gate();
+      return lookBackFor(period);
+    },
+    async lookBack(period) {
+      gate();
+      await sleep(pace);
+      if (period.kind === "day" && period.start === TODAY) {
+        const view: ReflectionView = {
+          type: "written",
+          reflection: todayReflection(new Date(now()).toISOString()),
+        };
+        return view;
+      }
+      return lookBackFor(period);
+    },
+    async answerSameName(questionId, answer) {
+      gate();
+      if (questionId !== SAME_NAME.id) throw new PhoneRequestError("notFound");
+      const chosen =
+        answer.type === "entity"
+          ? SAME_NAME.options.find((o) => o.entityId === answer.entityId)
+          : undefined;
+      return { name: SAME_NAME.name, role: chosen?.role ?? null };
     },
     async unkeep() {
       gate();

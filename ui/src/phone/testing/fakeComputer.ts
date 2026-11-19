@@ -4,6 +4,9 @@
 // network. It never runs in the shipped phone app.
 
 import type {
+  CheckIn,
+  Feeling,
+  ReflectionView,
   RemoteAnswer,
   RemoteConnection,
   RemoteReply,
@@ -25,6 +28,16 @@ import {
 import type { Env, WebSocketLike } from "../channel";
 import * as C from "../crypto";
 import * as P from "../protocol";
+import {
+  emptyDay,
+  lookBackFor,
+  SAME_NAME,
+  TODAY,
+  todayDay,
+  todayReflection,
+  YESTERDAY,
+  yesterdayDay,
+} from "./journalFixtures";
 
 export type Outcome = "ok" | "refuse" | "gone" | "notFound";
 
@@ -84,6 +97,8 @@ export interface Upload {
   mime: string;
   clientId: string;
   caption: string | null;
+  feeling: Feeling | null;
+  good: boolean | null;
   chunks: Bytes[];
   received: number;
 }
@@ -195,8 +210,17 @@ export class FakeComputer {
   readonly uploads = new Map<string, Upload>();
   readonly items = new Map<
     string,
-    { clientId: string; text: string | null; mime: string | null; bytes: Bytes | null }
+    {
+      clientId: string;
+      text: string | null;
+      mime: string | null;
+      bytes: Bytes | null;
+      feeling?: Feeling | null;
+      good?: boolean | null;
+    }
   >();
+  /** Check-ins kept, by client id, so a repeat is answered with the first. */
+  readonly checkIns = new Map<string, CheckIn>();
   opens = 0;
   refusals: string[] = [];
   /** Set to make every request go to this instead of the default. */
@@ -673,7 +697,14 @@ export class FakeComputer {
       const id = `item-${this.items.size + 1}`;
       const kept = [...this.items.values()].find((i) => i.clientId === up.clientId);
       if (!kept)
-        this.items.set(id, { clientId: up.clientId, text: null, mime: up.mime, bytes: total });
+        this.items.set(id, {
+          clientId: up.clientId,
+          text: null,
+          mime: up.mime,
+          bytes: total,
+          feeling: up.feeling,
+          good: up.good,
+        });
       const shown = kept ? ([...this.items].find(([, v]) => v === kept)?.[0] ?? id) : id;
       await this.sealDown(
         session,
@@ -713,6 +744,8 @@ export class FakeComputer {
             text: call.text,
             mime: null,
             bytes: null,
+            feeling: call.feeling ?? null,
+            good: call.good ?? null,
           });
         return ctx.reply(keptAnswer(itemId, call.text.slice(0, 40), !!existing, this.now()));
       }
@@ -724,6 +757,8 @@ export class FakeComputer {
           mime: call.mime,
           clientId: call.clientId,
           caption: call.cmd === "keepBytes" ? call.caption : null,
+          feeling: call.feeling ?? null,
+          good: call.good ?? null,
           chunks: [],
           received: 0,
         });
@@ -744,6 +779,49 @@ export class FakeComputer {
       case "cancelAsk":
       case "disconnect":
         return ctx.reply({ type: "done" });
+      case "keepCheckIn": {
+        const earlier = this.checkIns.get(call.clientId);
+        const checkin: CheckIn = earlier ?? {
+          id: `checkin-${this.checkIns.size + 1}`,
+          keptAt: new Date(this.now()).toISOString(),
+          day: TODAY,
+          feeling: call.input.feeling,
+          line: call.input.line,
+          urge: call.input.urge,
+          about: null,
+          tried: [],
+          fromDevice: null,
+          mentions: [],
+          leftOut: false,
+        };
+        this.checkIns.set(call.clientId, checkin);
+        return ctx.reply({ type: "checkIn", checkin });
+      }
+      case "getJournalDay": {
+        const date = call.date ?? TODAY;
+        if (date > TODAY) return ctx.reply({ type: "error", code: "invalid" });
+        const day =
+          date === TODAY ? todayDay() : date === YESTERDAY ? yesterdayDay() : emptyDay(date, false);
+        return ctx.reply({ type: "journalDay", day });
+      }
+      case "getLookBack":
+        return ctx.reply({ type: "lookBack", view: lookBackFor(call.period) });
+      case "lookBack": {
+        const written = todayReflection(new Date(this.now()).toISOString());
+        const view: ReflectionView =
+          call.period.kind === "day" && call.period.start === TODAY
+            ? { type: "written", reflection: written }
+            : lookBackFor(call.period);
+        return ctx.reply({ type: "lookBack", view });
+      }
+      case "answerSameName": {
+        const answer = call.answer;
+        const role =
+          answer.type === "entity"
+            ? (SAME_NAME.options.find((o) => o.entityId === answer.entityId)?.role ?? null)
+            : null;
+        return ctx.reply({ type: "sameName", answered: { name: "Sam", role } });
+      }
       case "listPages":
         return ctx.reply({
           type: "pages",

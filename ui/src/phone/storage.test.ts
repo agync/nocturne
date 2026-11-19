@@ -233,6 +233,126 @@ describe("the waiting queue", () => {
   });
 });
 
+describe("a keep waiting with its feeling", () => {
+  const glad = { part: "litUp" as const, point: { pleasant: 0.6, energy: 0.5 }, words: ["glad"] };
+
+  function recorder() {
+    const calls: Array<{ what: string; clientId: string; marks?: unknown; input?: unknown }> = [];
+    const kept = (clientId: string) => ({
+      item: {
+        id: `item-${clientId}`,
+        kind: "text",
+        title: "",
+        keptAt: "",
+        durationMs: null,
+        pages: null,
+        hasOriginal: false,
+        summary: null,
+        text: null,
+        truncated: false,
+      },
+      duplicate: false,
+      takeBackUntil: "",
+    });
+    const engine = {
+      async keepText(_t: string, clientId: string, marks?: unknown) {
+        calls.push({ what: "text", clientId, marks });
+        return kept(clientId);
+      },
+      async keepBytes(_b: Blob, clientId: string, _c?: string, marks?: unknown) {
+        calls.push({ what: "photo", clientId, marks });
+        return kept(clientId);
+      },
+      async keepRecording(_b: Blob, clientId: string, marks?: unknown) {
+        calls.push({ what: "recording", clientId, marks });
+        return kept(clientId);
+      },
+      async keepCheckIn(input: unknown, clientId: string) {
+        calls.push({ what: "checkin", clientId, input });
+        return { id: `checkin-${clientId}` };
+      },
+    } as unknown as PhoneEngine;
+    return { engine, calls };
+  }
+
+  it("keeps its feeling and its good-thing mark until it goes, whichever queue holds it", async () => {
+    for (const queue of [memoryQueue(), idbQueue(fakeIndexedDb())]) {
+      await queue.add({
+        clientId: "c-1",
+        kind: "text",
+        text: "Tea",
+        feeling: glad,
+        good: true,
+        size: 3,
+        createdAt: 1,
+      });
+      await queue.add({
+        clientId: "c-2",
+        kind: "photo",
+        blob: new Blob(["x"]),
+        feeling: glad,
+        size: 1,
+        createdAt: 2,
+      });
+      await queue.add({
+        clientId: "c-3",
+        kind: "recording",
+        blob: new Blob(["y"]),
+        feeling: glad,
+        size: 1,
+        createdAt: 3,
+      });
+      const waiting = await queue.list();
+      expect(waiting.map((k) => k.feeling)).toEqual([glad, glad, glad]);
+      const { engine, calls } = recorder();
+      await queue.flush(engine);
+      expect(calls).toEqual([
+        { what: "text", clientId: "c-1", marks: { feeling: glad, good: true } },
+        { what: "photo", clientId: "c-2", marks: { feeling: glad, good: undefined } },
+        { what: "recording", clientId: "c-3", marks: { feeling: glad, good: undefined } },
+      ]);
+    }
+  });
+
+  it("holds a check-in kept while asleep, and sends it once with its client id", async () => {
+    for (const queue of [memoryQueue(), idbQueue(fakeIndexedDb())]) {
+      const input = { feeling: glad, line: "A walk", urge: null, replaces: null };
+      await queue.add({
+        clientId: "c-ci",
+        kind: "checkin",
+        checkIn: input,
+        size: 6,
+        createdAt: 1,
+      });
+      expect(await queue.count()).toBe(1);
+      const { engine, calls } = recorder();
+      const result = await queue.flush(engine);
+      expect(calls).toEqual([{ what: "checkin", clientId: "c-ci", input }]);
+      expect(result).toMatchObject({ sent: 1, remaining: 0 });
+      expect(result.checkIns).toHaveLength(1);
+      expect(await queue.count()).toBe(0);
+    }
+  });
+
+  it("leaves a check-in waiting when the computer cannot be reached", async () => {
+    const queue = memoryQueue();
+    await queue.add({
+      clientId: "c-ci",
+      kind: "checkin",
+      checkIn: { feeling: glad, line: null, urge: null, replaces: null },
+      size: 0,
+      createdAt: 1,
+    });
+    const engine = {
+      async keepCheckIn() {
+        throw new ConnectionError("asleep");
+      },
+    } as unknown as PhoneEngine;
+    const result = await queue.flush(engine);
+    expect(result).toMatchObject({ sent: 0, remaining: 1 });
+  });
+});
+
 describe("one upload in flight across tabs", () => {
   it("direct keeps take the same lock as the queue, so two tabs never send at once", async () => {
     let held = false;

@@ -24,32 +24,53 @@ export function withKeepLock<T>(fn: () => Promise<T>): Promise<T> {
   return locks ? locks.request(KEEP_LOCK, fn) : fn();
 }
 
+const idle = (waiting: PendingKeep[]): FlushResult => ({
+  sent: 0,
+  failed: 0,
+  remaining: waiting.length,
+  kept: [],
+  checkIns: [],
+});
+
 function build(backing: Backing): Queue {
   let flushing = false;
   const rejected = new Set<string>();
 
   const list = async () => (await backing.all()).sort((a, b) => a.createdAt - b.createdAt);
 
-  async function send(engine: PhoneEngine, keep: PendingKeep) {
+  const marks = (keep: PendingKeep) => ({ feeling: keep.feeling, good: keep.good });
+
+  async function send(engine: PhoneEngine, keep: PendingKeep, out: FlushResult) {
     switch (keep.kind) {
       case "text":
-        return engine.keepText(keep.text ?? "", keep.clientId);
+        out.kept.push(await engine.keepText(keep.text ?? "", keep.clientId, marks(keep)));
+        return;
       case "photo":
-        return engine.keepBytes(keep.blob ?? new Blob(), keep.clientId, keep.caption);
+        out.kept.push(
+          await engine.keepBytes(keep.blob ?? new Blob(), keep.clientId, keep.caption, marks(keep)),
+        );
+        return;
       case "recording":
-        return engine.keepRecording(keep.blob ?? new Blob(), keep.clientId);
+        out.kept.push(
+          await engine.keepRecording(keep.blob ?? new Blob(), keep.clientId, marks(keep)),
+        );
+        return;
+      case "checkin":
+        if (!keep.checkIn) throw new PhoneRequestError("invalid");
+        out.checkIns.push(await engine.keepCheckIn(keep.checkIn, keep.clientId));
+        return;
     }
   }
 
   async function flushOnce(engine: PhoneEngine): Promise<FlushResult> {
-    const out: FlushResult = { sent: 0, failed: 0, remaining: 0, kept: [] };
+    const out: FlushResult = { sent: 0, failed: 0, remaining: 0, kept: [], checkIns: [] };
     for (const keep of await list()) {
       if (rejected.has(keep.clientId)) {
         out.failed += 1;
         continue;
       }
       try {
-        out.kept.push(await send(engine, keep));
+        await send(engine, keep, out);
         await backing.remove(keep.clientId);
         out.sent += 1;
       } catch (e) {
@@ -75,7 +96,7 @@ function build(backing: Backing): Queue {
     clear: () => backing.clear(),
     async flush(engine) {
       if (flushing) {
-        return { sent: 0, failed: 0, remaining: (await backing.all()).length, kept: [] };
+        return idle(await backing.all());
       }
       flushing = true;
       try {
@@ -85,7 +106,7 @@ function build(backing: Backing): Queue {
         const result = await locks.request(KEEP_LOCK, { ifAvailable: true }, async (lock) =>
           lock ? flushOnce(engine) : null,
         );
-        return result ?? { sent: 0, failed: 0, remaining: (await backing.all()).length, kept: [] };
+        return result ?? idle(await backing.all());
       } finally {
         flushing = false;
       }
