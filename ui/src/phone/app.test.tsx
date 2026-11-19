@@ -1388,4 +1388,32 @@ describe("journal on the phone, hardening", () => {
     expect(await screen.findByRole("heading", { name: /^Saved\./ })).toBeInTheDocument();
     expect(keepCheckIn).toHaveBeenCalledTimes(1);
   });
+
+  it("checkin.radio_part: a part chosen by its radio opens the words with no drag", async () => {
+    await open("s=checkIn");
+    const settled = await screen.findByRole("radio", { name: "Settled" });
+    await userEvent.click(settled);
+    expect(settled).toBeChecked();
+    expect(await screen.findByRole("dialog", { name: "Words for Settled" })).toBeInTheDocument();
+  });
+
+  it("checkin.sheet_focus_and_close: the sheet traps focus and closes on Escape and back", async () => {
+    await open("s=checkIn");
+    await userEvent.click(await screen.findByRole("radio", { name: "Settled" }));
+    let sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
+    const stops = within(sheet).getAllByRole("button");
+    const last = within(sheet).getByRole("button", { name: "Save" });
+    last.focus();
+    await userEvent.tab();
+    expect(sheet.contains(document.activeElement)).toBe(true);
+    expect(document.activeElement).toBe(stops[0]);
+    await userEvent.tab({ shift: true });
+    expect(document.activeElement).toBe(last);
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("radio", { name: "Settled" }));
+    sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
+    window.history.back();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
 });
