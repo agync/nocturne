@@ -17,7 +17,7 @@ use nocturne_contract::{
     TidyProgress, TidyReport,
 };
 use nocturne_engine::day::page_instant;
-use nocturne_engine::{Clock, Engine, Error as EngineError};
+use nocturne_engine::{BoxFuture, Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
 use crate::events::{Events, notice};
@@ -44,6 +44,10 @@ const CAREFUL_PER_NIGHT: usize = 8;
 /// Items kept this long before the page's end are looked at for a careful re-read: each is
 /// looked at on the night after it was kept.
 const CAREFUL_WINDOW: SignedDuration = SignedDuration::from_hours(24);
+
+/// Runs once the backlog is read and before the page is composed: the journal's looking back,
+/// which the page may then carry a line about.
+pub type BeforePage = Arc<dyn Fn() -> BoxFuture<'static, ()> + Send + Sync>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TidyKind {
@@ -111,6 +115,7 @@ struct Inner {
     finishing: AtomicBool,
     anyway: AtomicBool,
     progress: watch::Sender<Option<TidyProgress>>,
+    before_page: std::sync::Mutex<Option<BeforePage>>,
 }
 
 /// The tidy. Cheap to clone; clones share one state.
@@ -140,8 +145,18 @@ impl Tidy {
                 finishing: AtomicBool::new(false),
                 anyway: AtomicBool::new(false),
                 progress: watch::channel(None).0,
+                before_page: std::sync::Mutex::new(None),
             }),
         }
+    }
+
+    /// What runs after the backlog is read and before the page is composed.
+    pub fn set_before_page(&self, hook: BeforePage) {
+        *self
+            .inner
+            .before_page
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = Some(hook);
     }
 
     /// The person pressed "Tidy anyway": the battery rule is set aside until this tidy is done.
@@ -370,6 +385,15 @@ impl Tidy {
             .await
             .unwrap_or_default();
         self.backfill_embeddings().await;
+        let hook = self
+            .inner
+            .before_page
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(hook) = hook {
+            hook().await;
+        }
 
         let Some(mut page) = self.compose(date, end).await else {
             return (TidyStep::Skipped, None);

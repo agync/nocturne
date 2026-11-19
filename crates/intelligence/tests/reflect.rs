@@ -234,3 +234,388 @@ async fn writing_is_not_using_what_was_read() {
     assert_eq!(after[0].last_used, before[0].last_used);
     assert_eq!(after[0].last_used, None);
 }
+
+// ---- the morning run ----
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+
+use nocturne_contract::ReflectionView;
+use nocturne_intelligence::{SchedStep, TidyKind, TidyStep};
+
+const NOTE: &str = "Dropped Leo at school, then a long walk by the canal";
+
+fn open_gate(w: &World) -> Arc<AtomicBool> {
+    let gate = Arc::new(AtomicBool::new(true));
+    let g = gate.clone();
+    w.scheduler
+        .set_reflecting(w.slot.clone(), Arc::new(move || g.load(Ordering::SeqCst)));
+    gate
+}
+
+fn period(w: &World, kind: PeriodKind, day: &str) -> nocturne_contract::Period {
+    w.engine.period_of(kind, date(day)).unwrap()
+}
+
+fn saved(w: &World, kind: PeriodKind, day: &str) -> Option<ReflectionView> {
+    w.engine.saved_reflection(&period(w, kind, day)).unwrap()
+}
+
+fn first_line(w: &World, day: &str) -> String {
+    match saved(w, PeriodKind::Day, day) {
+        Some(ReflectionView::Written { reflection }) => reflection.the_day[0].text.clone(),
+        other => panic!("no reflection for {day}: {other:?}"),
+    }
+}
+
+/// Tick until the tidy has saved its page (reading what is unread between ticks).
+async fn until_page(w: &World) -> Vec<SchedStep> {
+    let mut steps = Vec::new();
+    for _ in 0..8 {
+        read_all(w).await;
+        let step = w.scheduler.tick().await;
+        let done = matches!(step, SchedStep::Tidy(TidyStep::Finished(_)));
+        steps.push(step);
+        if done {
+            break;
+        }
+    }
+    steps
+}
+
+/// The evening of the 12th with a note kept, then a night tidy at 01:30 that wrote the page
+/// before the day's end at 04:00.
+async fn night_tidy_before_the_boundary(mind: FakeMind) -> World {
+    let w = world_at("2026-11-12T18:00:00Z", mind);
+    keep(&w, NOTE);
+    w.clock.set_str("2026-11-13T01:30:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    let steps = until_page(&w).await;
+    assert!(
+        steps
+            .iter()
+            .any(|s| matches!(s, SchedStep::Tidy(TidyStep::Finished(_)))),
+        "{steps:?}"
+    );
+    w
+}
+
+#[tokio::test]
+async fn the_morning_run_writes_the_day_that_ended_once_the_boundary_has_passed() {
+    let mind = FakeMind::new()
+        .with_headline("A quiet night", "One thing kept.")
+        .with_reflection(vec![sentence("You **walked by the canal**.", &[0])]);
+    let w = night_tidy_before_the_boundary(mind).await;
+    open_gate(&w);
+
+    w.clock.set_str("2026-11-13T03:30:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Idle,
+        "the day ends at 04:00"
+    );
+    assert!(saved(&w, PeriodKind::Day, DAY).is_none());
+
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    let step = w.scheduler.tick().await;
+    assert_eq!(
+        step,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, DAY)])
+    );
+    assert_eq!(first_line(&w, DAY), "You **walked by the canal**.");
+    let Some(ReflectionView::Written { reflection }) = saved(&w, PeriodKind::Day, DAY) else {
+        panic!("written")
+    };
+    assert_eq!(
+        reflection.written,
+        nocturne_contract::WrittenWhen::Overnight
+    );
+    assert!(!reflection.so_far);
+
+    // Written once, not again at the next look.
+    w.clock.set_str("2026-11-13T04:20:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert_eq!(w.mind.call_count("reflect"), 1);
+}
+
+#[tokio::test]
+async fn the_morning_run_waits_for_mains_and_an_empty_desk_like_the_night_tidy() {
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+
+    w.host.set_idle(Some(Duration::from_secs(5 * 60)));
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    w.host.set_idle(Some(Duration::from_secs(3600)));
+    w.host.on_battery(90);
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert!(saved(&w, PeriodKind::Day, DAY).is_none());
+    assert_eq!(w.mind.call_count("reflect"), 0);
+
+    w.host.set_ac(Some(true));
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+}
+
+#[tokio::test]
+async fn nothing_is_written_while_the_gate_is_closed() {
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    let gate = open_gate(&w);
+    gate.store(false, Ordering::SeqCst);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    for _ in 0..3 {
+        assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    }
+    assert_eq!(w.mind.call_count("reflect"), 0);
+    assert!(saved(&w, PeriodKind::Day, DAY).is_none());
+
+    gate.store(true, Ordering::SeqCst);
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+}
+
+#[tokio::test]
+async fn a_scheduler_with_no_gate_set_writes_nothing() {
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert_eq!(w.mind.call_count("reflect"), 0);
+}
+
+#[tokio::test]
+async fn a_missing_mind_is_skipped_quietly_and_tried_again_at_the_next_tick() {
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    w.mind_away();
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert!(w.events.notices().is_empty(), "no notice for it");
+    w.mind_back();
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+}
+
+#[tokio::test]
+async fn a_failed_write_is_not_tried_again_at_every_tick() {
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    w.mind
+        .fail_next("reflect", MindError::Failed("model".into()));
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert_eq!(w.mind.call_count("reflect"), 1, "it waits a while");
+    w.clock.set_str("2026-11-13T04:40:00Z");
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+}
+
+#[tokio::test]
+async fn a_day_that_cannot_be_written_is_listed_and_not_asked_for_again() {
+    let mind = FakeMind::new()
+        .with_headline("H", "d")
+        .with_reflection(vec![sentence("A good day.", &[])]);
+    let w = night_tidy_before_the_boundary(mind).await;
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    w.clock.set_str("2026-11-13T04:20:00Z");
+    assert_eq!(w.scheduler.tick().await, SchedStep::Idle);
+    assert_eq!(w.mind.call_count("reflect"), 1);
+    assert!(saved(&w, PeriodKind::Day, DAY).is_none());
+}
+
+#[tokio::test]
+async fn the_week_is_composed_after_the_days_it_ends_with() {
+    // The week of Monday 2 November ends on Sunday the 8th, and its last day on the 9th at 04:00.
+    let w = world_at(
+        "2026-11-08T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, "Sunday lunch at Gran's");
+    w.clock.set_str("2026-11-09T01:30:00Z");
+    open_gate(&w);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    w.clock.set_str("2026-11-09T04:10:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Reflected(vec![
+            period(&w, PeriodKind::Day, "2026-11-08"),
+            period(&w, PeriodKind::Week, "2026-11-08"),
+        ])
+    );
+    assert!(matches!(
+        saved(&w, PeriodKind::Week, "2026-11-08"),
+        Some(ReflectionView::Recap { .. })
+    ));
+}
+
+#[tokio::test]
+async fn a_tidy_that_starts_after_the_boundary_writes_the_reflection_before_its_page() {
+    let w = world_at(
+        "2026-11-12T18:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, NOTE);
+    w.clock.set_str("2026-11-13T05:00:00Z");
+    open_gate(&w);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    assert!(saved(&w, PeriodKind::Day, DAY).is_some());
+    let calls = w.mind.calls();
+    let reflect = calls.iter().position(|c| c == "reflect").unwrap();
+    let headline = calls.iter().position(|c| c == "write_headline").unwrap();
+    assert!(reflect < headline, "{calls:?}");
+}
+
+// ---- the catch-up ----
+
+#[tokio::test]
+async fn a_missed_night_writes_missed_days_newest_first_before_the_page_and_stops_at_seven_days() {
+    let mind = FakeMind::new()
+        .with_headline("A late page", "Three days.")
+        .with_reflection(vec![sentence("Newest.", &[0])])
+        .with_reflection(vec![sentence("Middle.", &[0])])
+        .with_reflection(vec![sentence("Oldest.", &[0])]);
+    let w = world_at("2026-11-02T10:00:00Z", mind);
+    // Too far back to be written: kept on the 2nd, looked at on the 13th.
+    keep(&w, "Notes from the first week of the month");
+    for (day, text) in [
+        ("2026-11-10", "Tuesday: dentist, then soup"),
+        ("2026-11-11", "Wednesday: the long walk"),
+        ("2026-11-12", "Thursday: Leo's concert"),
+    ] {
+        w.clock.set_str(&format!("{day}T12:00:00Z"));
+        keep(&w, text);
+    }
+    // The laptop was off; it wakes at nine in the morning of the 13th.
+    w.clock.set_str("2026-11-13T09:00:00Z");
+    open_gate(&w);
+
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::CatchUp)
+    );
+    let steps = until_page(&w).await;
+    assert!(
+        steps
+            .iter()
+            .any(|s| matches!(s, SchedStep::Tidy(TidyStep::Finished(_)))),
+        "{steps:?}"
+    );
+    assert_eq!(first_line(&w, "2026-11-12"), "Newest.");
+    assert_eq!(first_line(&w, "2026-11-11"), "Middle.");
+    assert_eq!(first_line(&w, "2026-11-10"), "Oldest.");
+    assert!(saved(&w, PeriodKind::Day, "2026-11-02").is_none());
+
+    // Before the page: the mind wrote reflections, then the headline.
+    let calls = w.mind.calls();
+    let last_reflect = calls.iter().rposition(|c| c == "reflect").unwrap();
+    let headline = calls.iter().position(|c| c == "write_headline").unwrap();
+    assert!(last_reflect < headline, "{calls:?}");
+    assert_eq!(w.mind.call_count("reflect"), 3);
+}
+
+#[tokio::test]
+async fn the_catch_up_writes_nothing_while_the_gate_is_closed() {
+    let w = world_at(
+        "2026-11-12T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, NOTE);
+    w.clock.set_str("2026-11-13T09:00:00Z");
+    let gate = open_gate(&w);
+    gate.store(false, Ordering::SeqCst);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::CatchUp)
+    );
+    until_page(&w).await;
+    assert_eq!(w.mind.call_count("reflect"), 0);
+    assert!(saved(&w, PeriodKind::Day, DAY).is_none());
+}
+
+#[tokio::test]
+async fn the_catch_up_on_battery_writes_above_forty_per_cent_and_leaves_it_below() {
+    let w = world_at(
+        "2026-11-12T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&w, NOTE);
+    w.clock.set_str("2026-11-13T09:00:00Z");
+    open_gate(&w);
+    w.host.on_battery(55);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::CatchUp)
+    );
+    until_page(&w).await;
+    assert!(saved(&w, PeriodKind::Day, DAY).is_some());
+
+    let low = world_at(
+        "2026-11-12T12:00:00Z",
+        FakeMind::new().with_headline("H", "d"),
+    );
+    keep(&low, NOTE);
+    low.clock.set_str("2026-11-13T09:00:00Z");
+    open_gate(&low);
+    low.host.on_battery(30);
+    assert_eq!(low.scheduler.tick().await, SchedStep::WaitingForPower);
+    assert_eq!(low.mind.call_count("reflect"), 0);
+}
+
+#[tokio::test]
+async fn a_page_already_written_still_gets_its_missed_reflection_when_the_desk_is_empty() {
+    // The night tidy ran at 01:30 and the laptop slept through 04:00 to 07:00: it wakes at nine.
+    let w = night_tidy_before_the_boundary(FakeMind::new().with_headline("H", "d")).await;
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T09:00:00Z");
+    w.host.resume();
+    w.host.set_idle(Some(Duration::from_secs(60)));
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Idle,
+        "someone is at the keyboard"
+    );
+    w.host.set_idle(Some(Duration::from_secs(11 * 60)));
+    w.clock.set_str("2026-11-13T09:20:00Z");
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+    assert!(saved(&w, PeriodKind::Day, DAY).is_some());
+}
+
+#[tokio::test]
+async fn the_morning_run_never_marks_a_memory_used() {
+    let mind = FakeMind::new()
+        .with_headline("H", "d")
+        .with_extract(NOTE, vec![gran()]);
+    let w = world_at("2026-11-12T18:00:00Z", mind);
+    keep(&w, NOTE);
+    w.clock.set_str("2026-11-13T01:30:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    let used = || -> Vec<Option<String>> {
+        w.engine
+            .memories(nocturne_contract::MemoryFilter::default())
+            .unwrap()
+            .into_iter()
+            .map(|m| m.last_used)
+            .collect()
+    };
+    let before = used();
+    assert_eq!(before.len(), 1);
+
+    open_gate(&w);
+    w.clock.set_str("2026-11-13T04:10:00Z");
+    assert!(matches!(w.scheduler.tick().await, SchedStep::Reflected(_)));
+    assert_eq!(used(), before, "looking back is not use");
+}
