@@ -603,6 +603,72 @@ fn a_saved_recap_is_read_back_and_hides_what_was_left_out() {
 }
 
 #[test]
+fn private_items_and_items_being_forgotten_feed_no_reflection_recap_or_glance() {
+    let f = fixture();
+    let plain = keep(&f.engine, "Posted the parcel");
+    let private = keep(&f.engine, "My own private worry");
+    f.engine.set_item_private(&private, true).unwrap();
+    let forgetting = keep(&f.engine, "Being forgotten right now");
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(
+        "INSERT INTO forget_jobs(ids, items, include_originals) VALUES ('[]', ?1, 0)",
+        [format!("[\"{forgetting}\"]")],
+    )
+    .unwrap();
+
+    let day = day_period(&f.engine, "2026-11-13");
+    let (_, input) = written(&f, "2026-11-13");
+    let ids: Vec<&str> = input.items.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, [plain.as_str()]);
+
+    let glance = f.engine.glance(&day).unwrap();
+    let counted: Vec<&String> = glance.kept.iter().flat_map(|k| &k.item_ids).collect();
+    assert_eq!(counted, [&plain]);
+
+    let week = f
+        .engine
+        .period_of(PeriodKind::Week, date("2026-11-13"))
+        .unwrap();
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::OnDemand)
+        .unwrap();
+    let text = serde_json::to_string(&recap).unwrap();
+    assert!(!text.contains(&private) && !text.contains(&forgetting));
+    let glance = f.engine.glance(&week).unwrap();
+    let counted: Vec<&String> = glance.kept.iter().flat_map(|k| &k.item_ids).collect();
+    assert_eq!(counted, [&plain]);
+}
+
+#[test]
+fn a_source_of_a_private_memory_is_left_out_of_what_a_reflection_is_written_from() {
+    let f = fixture();
+    let plain = keep(&f.engine, "Posted the parcel");
+    let source = keep(&f.engine, "Priya told me about her diagnosis");
+    let report = f
+        .engine
+        .apply(
+            &source,
+            vec![cand(
+                "Priya",
+                nocturne_engine::Predicate::Knows,
+                "a diagnosis",
+                "Priya has a diagnosis.",
+            )],
+        )
+        .unwrap();
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(
+        "UPDATE memories SET private = 1 WHERE id = ?1",
+        [&report.created[0]],
+    )
+    .unwrap();
+    let (_, input) = written(&f, "2026-11-13");
+    let ids: Vec<&str> = input.items.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, [plain.as_str()]);
+}
+
+#[test]
 fn reflections_due_lists_an_ended_day_once_and_not_a_written_one() {
     let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
     let note = keep(&f.engine, "A day with something in it");

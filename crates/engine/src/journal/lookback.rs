@@ -176,12 +176,18 @@ impl Gathered {
     fn load(conn: &Connection, ctx: &Ctx, originals: &Path, period: &Period) -> Result<Gathered> {
         let (start, end) = period_days(period)?;
         let all = items_in_days(conn, ctx, originals, start, end)?;
-        let items: Vec<JItem> = current(&all).into_iter().cloned().collect();
+        let mut items: Vec<JItem> = Vec::new();
+        for i in current(&all) {
+            if !i.view.private && !crate::capture::in_forget_job(conn, i.id())? {
+                items.push(i.clone());
+            }
+        }
         let mentions = mentions_of(conn, &super::day::ids_of(&items))?;
         Ok(Gathered { items, mentions })
     }
 
-    /// What reflections and recaps may use: nothing left out.
+    /// What reflections and recaps may use: nothing left out. Private items and items being
+    /// forgotten are never gathered.
     fn usable(&self) -> impl Iterator<Item = &JItem> {
         self.items.iter().filter(|i| !i.left_out)
     }
@@ -296,11 +302,16 @@ fn reflect_text(item: &JItem) -> String {
         .unwrap_or_default()
 }
 
-fn reflect_items(ctx: &Ctx, g: &Gathered) -> Result<Vec<ReflectItem>> {
-    let mut items: Vec<&JItem> = g
+fn reflect_items(conn: &Connection, ctx: &Ctx, g: &Gathered) -> Result<Vec<ReflectItem>> {
+    let mut items: Vec<&JItem> = Vec::new();
+    for i in g
         .usable()
         .filter(|i| i.role() != Some(JournalRole::Checkin))
-        .collect();
+    {
+        if !crate::remote::withheld_from_phones(conn, i.id())? {
+            items.push(i);
+        }
+    }
     items.sort_by(|a, b| {
         a.saved_at()
             .cmp(b.saved_at())
@@ -764,11 +775,11 @@ fn compose(
     })
 }
 
-fn day_input(ctx: &Ctx, day: Date, g: &Gathered) -> Result<ReflectInput> {
+fn day_input(conn: &Connection, ctx: &Ctx, day: Date, g: &Gathered) -> Result<ReflectInput> {
     Ok(ReflectInput {
         day,
         so_far: !ctx.ended(day)?,
-        items: reflect_items(ctx, g)?,
+        items: reflect_items(conn, ctx, g)?,
     })
 }
 
@@ -791,7 +802,7 @@ impl Engine {
         self.read(|conn| {
             let ctx = Ctx::load(conn, self.clock())?;
             let g = Gathered::load(conn, &ctx, &originals, period)?;
-            day_input(&ctx, period_days(period)?.0, &g)
+            day_input(conn, &ctx, period_days(period)?.0, &g)
         })
     }
 
@@ -962,7 +973,7 @@ impl Engine {
                     }
                     if kind == PeriodKind::Day {
                         let g = Gathered::load(conn, &ctx, &originals, &period)?;
-                        if day_input(&ctx, day, &g)?.items.is_empty() {
+                        if day_input(conn, &ctx, day, &g)?.items.is_empty() {
                             continue;
                         }
                     }
