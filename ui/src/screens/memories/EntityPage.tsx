@@ -1,14 +1,15 @@
 import type { ReactNode } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { useToast } from "../../components/Toast/Toast";
+import { formatDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import { useEngine, useRefresh } from "../../engine/context";
 import styles from "./Memories.module.css";
 import { MemoryList } from "./MemoryList";
-import { MEMORY_KEYS, useEntity, useMemories } from "./queries";
+import { MEMORY_KEYS, useEntity, useEntityJournalDays, useMemories } from "./queries";
 import { RenameDialog } from "./RenameDialog";
 import { useForget } from "./useForget";
 import { useRefile } from "./useRefile";
@@ -21,7 +22,9 @@ export function EntityPage({ id }: { id: string }) {
   const [, navigate] = useLocation();
   const entity = useEntity(id);
   const memories = useMemories({ entityId: id });
+  const journalDays = useEntityJournalDays(id, entity.data ? entity.data.kind !== "thing" : false);
   const heading = useRef<HTMLHeadingElement>(null);
+  const journalHeading = useId();
   const [busy, setBusy] = useState(false);
   const forget = useForget(() => heading.current?.focus());
   const refile = useRefile();
@@ -158,6 +161,22 @@ export function EntityPage({ id }: { id: string }) {
           <p className={styles.hint}>{t("memories.hint")}</p>
         </>
       )}
+      {journalDays.data && journalDays.data.length > 0 ? (
+        <section className={styles.journalDays} aria-labelledby={journalHeading}>
+          <h2 id={journalHeading} className={styles.journalHead}>
+            {t("journal.people.section")}
+          </h2>
+          <ul className={styles.journalList}>
+            {journalDays.data.map((day) => (
+              <li key={day}>
+                <a className={styles.journalDay} href={`#/journal/${day}`}>
+                  {formatDay(day)}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       {renaming ? (
         <RenameDialog
           entity={e}

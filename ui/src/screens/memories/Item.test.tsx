@@ -235,3 +235,22 @@ describe("helpers", () => {
     expect(computePeaks(new Float32Array(8), 4)).toEqual([0, 0, 0, 0]);
   });
 });
+
+describe("a journal item", () => {
+  it("does not offer Mark private, and an ordinary thing still does", async () => {
+    const engine = createMockEngine();
+    const ordinary = await engine.getItem("item-letter");
+    const original = engine.getItem.bind(engine);
+    vi.spyOn(engine, "getItem").mockImplementation(async (id) => ({
+      ...(await original(id)),
+      journal: id === "item-letter" ? "entry" : undefined,
+    }));
+    await open("item-letter", engine);
+    expect(screen.getByRole("button", { name: "Keep forever" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Mark private" })).toBeNull();
+    expect(ordinary.journal).toBeUndefined();
+    cleanup();
+    await open("item-card", createMockEngine());
+    expect(screen.getByRole("button", { name: "Mark private" })).toBeVisible();
+  });
+});

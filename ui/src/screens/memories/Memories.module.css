@@ -305,6 +305,41 @@
   font-size: 0.8125rem;
 }
 
+.journalDays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+  margin-top: var(--s-6);
+}
+
+.journalHead {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.33 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.journalList {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journalDay {
+  display: block;
+  padding: var(--s-2) 0;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.journalDay:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .hint {
   margin-top: var(--s-4);
   color: var(--ink2);

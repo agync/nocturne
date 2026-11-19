@@ -437,3 +437,37 @@ describe("What Nocturne remembers", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Leo" })).toBeInTheDocument();
   });
 });
+
+describe("In your journal", () => {
+  it("lists the days a person appears in, newest first, each opening that day", async () => {
+    const engine = createMockEngine();
+    const days = await engine.entityJournalDays("ent-gran");
+    expect(days.length).toBeGreaterThan(0);
+    await browse("#/memories/ent-gran", engine);
+    const section = await screen.findByRole("region", { name: "In your journal" });
+    const links = within(section).getAllByRole("link");
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(days.map((d) => `#/journal/${d}`));
+    expect(links[0]?.textContent).toMatch(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}$/);
+    expect(days).toEqual([...days].sort().reverse());
+  });
+
+  it("is absent when the person is in no entry", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "entityJournalDays").mockResolvedValue([]);
+    await browse("#/memories/ent-gran", engine);
+    await screen.findByRole("heading", { level: 1, name: /Gran/ });
+    expect(screen.queryByText("In your journal")).toBeNull();
+  });
+
+  it("is absent for a thing, and its days are not even asked for", async () => {
+    const engine = createMockEngine();
+    const things = await engine.listEntities("thing", null);
+    const thing = things[0];
+    expect(thing).toBeDefined();
+    const spy = vi.spyOn(engine, "entityJournalDays");
+    await browse(`#/memories/${thing?.id}`, engine);
+    await screen.findByRole("heading", { level: 1, name: thing?.name });
+    expect(screen.queryByText("In your journal")).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+});

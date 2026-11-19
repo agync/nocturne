@@ -27,6 +27,15 @@ export function useEntity(id: string | null) {
   });
 }
 
+export function useEntityJournalDays(id: string, enabled: boolean) {
+  const engine = useEngine();
+  return useQuery({
+    queryKey: ["journal", "entity", id],
+    queryFn: () => engine.entityJournalDays(id),
+    enabled,
+  });
+}
+
 export function useMemories(filter: Partial<MemoryFilter>, enabled = true) {
   const engine = useEngine();
   const full = { ...none, ...filter };

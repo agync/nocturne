@@ -169,19 +169,21 @@ export function ItemPage({ id }: { id: string }) {
           </section>
 
           <div className={styles.actions}>
-            <Button
-              variant="secondary"
-              aria-pressed={it.private}
-              disabled={busy}
-              onClick={() =>
-                void run(
-                  () => engine.setItemPrivate(id, !it.private),
-                  t(it.private ? "item.private.off" : "item.private.on"),
-                )
-              }
-            >
-              {t("item.action.private")}
-            </Button>
+            {it.journal ? null : (
+              <Button
+                variant="secondary"
+                aria-pressed={it.private}
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    () => engine.setItemPrivate(id, !it.private),
+                    t(it.private ? "item.private.off" : "item.private.on"),
+                  )
+                }
+              >
+                {t("item.action.private")}
+              </Button>
+            )}
             <Button
               variant="secondary"
               aria-pressed={keptForever}
