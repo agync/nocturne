@@ -51,7 +51,7 @@ A fact is one durable claim. It is not a document chunk.
 | `recorded_at` | text | When Nocturne learned it |
 | `confidence` | real | 0.0 to 1.0 |
 | `provenance` | JSON | Supporting event ids, each with an optional source span: an audio time range, a page, an image region, or a quoted passage |
-| `sensitivity` | text | `normal`, `private` or `journal`; private facts never reach audio, print, notifications or the tray. A `journal` fact is read from a journal entry or a good thing: it never reaches audio, notifications, the tray or a phone's lock screen, and is allowed in Print, export, the phone and Online answers ([decision 0015](/adr/0015-journal-privacy-class.md)). A fact takes the strictest of its sources: private, then journal, then normal |
+| `sensitivity` | text | `normal`, `private` or `journal`; private facts never reach audio, print, notifications or the tray. A `journal` fact is read from a journal entry or a good thing: it never reaches audio, notifications, the tray or a phone's lock screen, and is allowed in Print, export, the phone and Online answers ([decision 0015](/adr/0015-journal-privacy-class.md)). A fact takes the strictest of its sources: private, then journal, then normal. The journal mark is never cleared when a journal source is later deleted or refiled; it stays the stricter mark |
 | `status` | text | `active`, `fading`, `archived`, or `quarantined` |
 | `last_seen` | text or null | Last reinforcement or use |
 | `ttl_days` | integer or null | An explicit expiry, when the user sets one |
