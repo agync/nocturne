@@ -89,6 +89,16 @@ export function formatTime(input: string | Date): string {
   return safely(input, (d) => fmt({ hour: "2-digit", minute: "2-digit", hour12: false }).format(d));
 }
 
+/** "6:10 pm": twelve hours, in words and numbers, as the journal writes times. */
+export function formatTime12(input: string | Date): string {
+  return safely(input, (d) =>
+    fmt({ hour: "numeric", minute: "2-digit", hour12: true })
+      .format(d)
+      .replace(/[\u00a0\u202f]/g, " ")
+      .toLowerCase(),
+  );
+}
+
 /** `HH:MM` text kept as typed. */
 export function formatClock(hhmm: string): string {
   return hhmm;

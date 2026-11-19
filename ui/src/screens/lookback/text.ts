@@ -1,4 +1,4 @@
-import { formatWeekday, localDay } from "../../copy/format";
+import { formatTime12, formatWeekday, localDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { CheckIn, FeelingPart, NameRef, Receipt } from "../../engine/bindings";
 import { PARTS } from "../../journal/feelings";
@@ -18,9 +18,7 @@ const safely = (input: string | Date, format: (d: Date) => string): string => {
 
 /** "3:15 pm", twelve hours, as the design writes times. */
 export function clock(input: string | Date): string {
-  return safely(input, (d) =>
-    new Intl.DateTimeFormat(LOCALE, { hour: "numeric", minute: "2-digit", hour12: true }).format(d),
-  );
+  return formatTime12(input);
 }
 
 /** The pieces of a day's name, for "{weekday} {day} {month}". */

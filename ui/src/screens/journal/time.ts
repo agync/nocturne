@@ -1,18 +1,11 @@
-import { addDays, isDay, localDay } from "../../copy/format";
+import { addDays, formatTime12, isDay, localDay } from "../../copy/format";
 
-const CLOCK = new Intl.DateTimeFormat("en-GB", {
-  hour: "numeric",
-  minute: "2-digit",
-  hour12: true,
-});
 const WEEKDAY = new Intl.DateTimeFormat("en-GB", { weekday: "long" });
 const MONTH = new Intl.DateTimeFormat("en-GB", { month: "long" });
 
 /** "6:10 pm": the time as the journal writes it, in words and numbers. */
 export function clock12(input: string | Date): string {
-  const d = new Date(input);
-  if (Number.isNaN(d.getTime())) return "";
-  return CLOCK.format(d).replace(/[  ]/g, " ").toLowerCase();
+  return formatTime12(input);
 }
 
 /** A `YYYY-MM-DD` journal day at local noon. */

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
-import { formatTime } from "../../copy/format";
+import { formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { CheckIn } from "../../engine/bindings";
 import { FeelingMark } from "../../journal/FeelingMark";
@@ -42,7 +42,7 @@ export function Done({ checkin, onChange }: DoneProps) {
             ? t("journal.checkin.feel", { part: name, words: words.join(", ") })
             : name}
         </span>{" "}
-        {t("journal.checkin.doneAt", { time: formatTime(checkin.keptAt) })}
+        {t("journal.checkin.doneAt", { time: formatTime12(checkin.keptAt) })}
       </p>
       {heavy ? (
         <Button variant="quiet" flush aria-expanded={helping} onClick={() => setHelping(!helping)}>
