@@ -284,7 +284,7 @@ impl Engine {
         let hold = hold_until(self.clock_now())?;
         let stamp = fmt_ts(self.clock_now());
         let originals = self.originals_dir();
-        self.write(|tx| {
+        let files = self.write(|tx| {
             let ctx = Ctx::load(tx, self.clock())?;
             not_future(&ctx, day)?;
             let item = load_item(tx, &originals, item_id)?;
@@ -305,8 +305,10 @@ impl Engine {
                     hold
                 ],
             )?;
-            Ok(())
+            crate::memory::mark_journal_tx(tx, item_id)
         })?;
+        self.bump_audio();
+        crate::audio::shred_all(files);
         self.entry_block_of(item_id)
     }
 
@@ -494,7 +496,7 @@ impl Engine {
             } else {
                 "kept"
             };
-            insert(
+            let id = insert(
                 tx,
                 &stamp,
                 &NewJournal {
@@ -506,7 +508,8 @@ impl Engine {
                     meta,
                     hold_until: None,
                 },
-            )
+            )?;
+            Ok(id)
         })?;
         self.read(|conn| {
             let item = load_item(conn, &originals, &id)?;
@@ -549,7 +552,7 @@ impl Engine {
         }
         let stamp = fmt_ts(self.clock_now());
         let originals = self.originals_dir();
-        let id = self.write(|tx| {
+        let (id, files) = self.write(|tx| {
             let ctx = Ctx::load(tx, self.clock())?;
             not_future(&ctx, day)?;
             let count: u32 = tx.query_row(
@@ -573,7 +576,7 @@ impl Engine {
                     title = photo.view.title.clone();
                 }
             }
-            insert(
+            let id = insert(
                 tx,
                 &stamp,
                 &NewJournal {
@@ -589,8 +592,18 @@ impl Engine {
                     meta,
                     hold_until: None,
                 },
-            )
+            )?;
+            // The photo is now journal content, whatever was read from it before.
+            let files = match photo {
+                Some(p) => crate::memory::mark_journal_tx(tx, p)?,
+                None => Vec::new(),
+            };
+            Ok((id, files))
         })?;
+        if photo.is_some() {
+            self.bump_audio();
+            crate::audio::shred_all(files);
+        }
         self.read(|conn| {
             let item = load_item(conn, &originals, &id)?;
             let mentions = super::day::mentions_of(conn, std::slice::from_ref(&id))?;

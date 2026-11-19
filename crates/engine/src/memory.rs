@@ -838,13 +838,45 @@ struct ItemInfo {
     journal: Option<String>,
     /// A feelings check-in: it names people and places, and says nothing that becomes a memory.
     checkin: bool,
+    /// The photo of a good thing.
+    good_photo: bool,
 }
 
 impl ItemInfo {
     /// Memories read from this item carry the journal mark.
     fn marks_memories(&self) -> bool {
-        matches!(self.journal.as_deref(), Some("entry" | "good"))
+        self.good_photo || matches!(self.journal.as_deref(), Some("entry" | "good"))
     }
+}
+
+/// Give every memory linked to this item, with its versions, the journal mark, and drop the
+/// cached audio of the pages citing any chain that did not carry it yet. Returns the audio files
+/// to shred once the transaction has committed.
+pub(crate) fn mark_journal_tx(tx: &Transaction<'_>, item_id: &str) -> Result<Vec<PathBuf>> {
+    let linked: Vec<String> = {
+        let mut stmt = tx.prepare(
+            "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+             WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
+        )?;
+        stmt.query_map([item_id], |r| r.get(0))?
+            .collect::<rusqlite::Result<_>>()?
+    };
+    let mut files = Vec::new();
+    for id in &linked {
+        let versions = chain(tx, id)?;
+        let mut changed = 0;
+        for v in &versions {
+            changed += tx.execute(
+                "UPDATE memories SET journal = 1 WHERE id = ?1 AND journal = 0",
+                [v],
+            )?;
+        }
+        if changed > 0 {
+            let pages = pages_citing(tx, &versions)?;
+            files.extend(crate::audio::drop_audio_rows(tx, &pages)?);
+        }
+    }
+    Ok(files)
 }
 
 /// What reading needs to know about an item.
@@ -891,6 +923,12 @@ fn load_item_info(
         kept_on,
         checkin: kind == "checkin" || journal.as_deref() == Some("checkin"),
         journal,
+        good_photo: tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM items WHERE json_extract(metadata, '$.journal') = 'good' \
+             AND json_extract(metadata, '$.photo') = ?1)",
+            [item_id],
+            |r| r.get(0),
+        )?,
     })
 }
 
@@ -1382,31 +1420,26 @@ pub(crate) fn file_held(
 
 /// What an item says takes its sensitivity: every memory now linked to it, whether it made the
 /// memory, agreed with it, or kept a tombstone link, is private when the item is, and carries
-/// the journal mark when the item is an entry or a good thing. (Early returns in `apply_one`
-/// skip the report lists, so the links are the truth.) Returns the files a private memory
-/// let go of.
+/// the journal mark when the item is an entry, a good thing or a good thing's photo. (Early
+/// returns in `apply_one` skip the report lists, so the links are the truth.) Returns the cached
+/// audio files a private or newly marked memory let go of.
 fn settle_links(tx: &Transaction<'_>, item_id: &str, item: &ItemInfo) -> Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    if !item.private && !item.marks_memories() {
-        return Ok(files);
-    }
-    let linked: Vec<String> = {
-        let mut stmt = tx.prepare(
-            "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
-             WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
-        )?;
-        stmt.query_map([item_id], |r| r.get(0))?
-            .collect::<rusqlite::Result<_>>()?
-    };
-    for id in &linked {
-        if item.private {
+    if item.private {
+        let linked: Vec<String> = {
+            let mut stmt = tx.prepare(
+                "SELECT s.memory_id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+                 WHERE s.item_id = ?1 AND m.forgetting = 0 ORDER BY s.memory_id",
+            )?;
+            stmt.query_map([item_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        for id in &linked {
             files.extend(crate::lifecycle::set_private_tx(tx, id, true)?);
         }
-        if item.marks_memories() {
-            for v in chain(tx, id)? {
-                tx.execute("UPDATE memories SET journal = 1 WHERE id = ?1", [&v])?;
-            }
-        }
+    }
+    if item.marks_memories() {
+        files.extend(mark_journal_tx(tx, item_id)?);
     }
     Ok(files)
 }

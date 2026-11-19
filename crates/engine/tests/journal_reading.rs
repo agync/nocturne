@@ -1409,3 +1409,110 @@ fn the_needs_you_count_matches_the_questions_listed() {
         "a question nobody can answer is not counted"
     );
 }
+
+fn memory_of(f: &Fixture, item: &str) -> String {
+    conn(f)
+        .query_row(
+            "SELECT memory_id FROM memory_sources WHERE item_id = ?1",
+            [item],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+fn spoken_and_cached(f: &Fixture) {
+    save_page(f, "2026-11-14");
+    f.engine.cache("2026-11-14", "v", b"spoken").unwrap();
+    assert!(f.engine.cached_audio("2026-11-14", "v").unwrap().is_some());
+}
+
+fn keep_photo(f: &Fixture, bytes: &[u8], source: nocturne_contract::Source) -> String {
+    match f.engine.keep_bytes(bytes, "jpg", source).unwrap() {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    }
+}
+
+#[test]
+fn an_entry_agreeing_with_a_spoken_memory_drops_the_cached_audio() {
+    let f = fixture();
+    promise(&f, "I promised Priya the book.", None, "Priya the book");
+    let note = conn(&f)
+        .query_row("SELECT id FROM items", [], |r| r.get::<_, String>(0))
+        .unwrap();
+    let memory = memory_of(&f, &note);
+    assert!(!journal_flag(&f, &memory));
+    spoken_and_cached(&f);
+    promise(
+        &f,
+        "Told Priya she can have the book.",
+        Some("entry"),
+        "Priya the book",
+    );
+    assert!(journal_flag(&f, &memory), "the same memory, now journal");
+    assert!(
+        f.engine.cached_audio("2026-11-14", "v").unwrap().is_none(),
+        "the old audio still says the line"
+    );
+}
+
+#[test]
+fn a_good_things_photo_gives_its_memories_the_journal_mark() {
+    let f = fixture();
+    let photo = keep_photo(&f, b"jpeg-of-the-gate", nocturne_contract::Source::Phone);
+    let claim = |what: &str| {
+        vec![cand(
+            "me",
+            Predicate::Promised,
+            what,
+            &format!("You promised {what}."),
+        )]
+    };
+    f.engine.apply(&photo, claim("to fix the gate")).unwrap();
+    let memory = memory_of(&f, &photo);
+    assert!(!journal_flag(&f, &memory));
+    spoken_and_cached(&f);
+    f.engine
+        .keep_good_thing(
+            common::date("2026-11-13"),
+            "",
+            Some(&photo),
+            nocturne_contract::Source::Phone,
+        )
+        .unwrap();
+    assert!(journal_flag(&f, &memory));
+    assert!(f.engine.cached_audio("2026-11-14", "v").unwrap().is_none());
+    f.engine.apply(&photo, claim("to paint the gate")).unwrap();
+    let again = memory_of(&f, &photo);
+    assert!(journal_flag(&f, &again), "read again, still journal");
+}
+
+#[test]
+fn a_reused_voice_note_placed_in_the_entry_takes_the_journal_mark() {
+    let f = fixture();
+    let Ok(nocturne_contract::Kept::New { item }) =
+        f.engine
+            .keep_bytes(b"webm-voice", "webm", nocturne_contract::Source::Recording)
+    else {
+        panic!("new")
+    };
+    f.engine
+        .apply(
+            &item.id,
+            vec![cand(
+                "me",
+                Predicate::Promised,
+                "to ring Gran",
+                "You promised to ring Gran.",
+            )],
+        )
+        .unwrap();
+    let memory = memory_of(&f, &item.id);
+    spoken_and_cached(&f);
+    f.engine
+        .place_in_entry(&item.id, common::date("2026-11-13"), 0)
+        .unwrap();
+    assert!(journal_flag(&f, &memory));
+    assert!(f.engine.cached_audio("2026-11-14", "v").unwrap().is_none());
+}
