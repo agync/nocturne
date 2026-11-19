@@ -149,10 +149,7 @@ impl Engine {
                  AND (m.snoozed_until IS NULL OR m.snoozed_until <= ?1)",
                 &[&today_s],
             )?;
-            let same_name = count(
-                "SELECT COUNT(*) FROM name_questions WHERE answered_at IS NULL",
-                &[],
-            )?;
+            let same_name = crate::journal::mentions::open_questions(conn, None)?.len() as u32;
             let waiting_to_read = count(
                 "SELECT COUNT(*) FROM items WHERE status IN ('kept', 'reading') \
                  AND NOT EXISTS (SELECT 1 FROM forget_jobs \

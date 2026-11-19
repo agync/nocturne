@@ -1390,3 +1390,22 @@ fn an_earlier_versions_open_question_closes_once_the_new_version_is_read() {
     f.engine.apply(&v3, vec![]).unwrap();
     assert!(f.engine.same_name_questions(None).unwrap().is_empty());
 }
+
+#[test]
+fn the_needs_you_count_matches_the_questions_listed() {
+    let f = fixture();
+    let (_jones, _patel) = two_sams(&f);
+    let entry = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    assert_eq!(f.engine.status_counts().unwrap().needs_you, 1);
+
+    conn(&f)
+        .execute("UPDATE name_questions SET options = '[]'", [])
+        .unwrap();
+    assert!(f.engine.same_name_questions(None).unwrap().is_empty());
+    assert_eq!(
+        f.engine.status_counts().unwrap().needs_you,
+        0,
+        "a question nobody can answer is not counted"
+    );
+}
