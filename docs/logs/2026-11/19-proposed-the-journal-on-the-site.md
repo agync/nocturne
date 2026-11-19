@@ -18,3 +18,9 @@ journal shipping first. None of it is on the site yet.
 
 A copy pass then brought the band and the two privacy details into the site's voice: shorter
 promises, nothing the hero already says, and Online answers described in plain words.
+
+The owner then approved it with four answers: no Journal link in the header, one more sentence in
+the meta description, one Privacy row for the two extras, and nothing on Requirements until the
+reflection gate has run, which makes 18 strings per language. The band, the Privacy changes and the
+new pictures are now built in all six languages, with pictures captured from the app on Thursday 12
+November and the differences from the mockup listed on the page.

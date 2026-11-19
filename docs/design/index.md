@@ -18,4 +18,4 @@ screen follows, the data model, and how quality is measured.
 - [Advanced details](advanced-details.md) - The words the advanced details view uses where they have been designed and approved.
 - [The site in five languages](site-localisation.md) - Addresses, language switch and upkeep for the site in German, French, Spanish, Italian and Dutch.
 - [Site copy](site-copy/index.md) - The approved words for the site in each language, with a glossary per language.
-- [The journal and the other capabilities on the site](site-capabilities.md) - Proposal for a journal band beside the morning page, an honest line about Online answers, and the strings each language must translate.
+- [The journal and the other capabilities on the site](site-capabilities.md) - The journal band beside the morning page, an honest line about Online answers, and the strings each language translates.
