@@ -26,6 +26,7 @@ interface Entry {
 
 const MAIN: Entry[] = [
   { to: "/today", label: "rail.today", also: ["/pages/"] },
+  { to: "/journal", label: "rail.journal" },
   { to: "/needs-you", label: "rail.needsYou" },
   { to: "/memories", label: "rail.memories", also: ["/items/"] },
   { to: "/recent", label: "rail.recent" },

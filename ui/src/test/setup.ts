@@ -6,6 +6,9 @@ import { afterEach } from "vitest";
 // here, before a test starts, keeps that cost out of every wait.
 await Promise.all([
   import("../screens/today"),
+  import("../screens/journal"),
+  import("../screens/checkin"),
+  import("../screens/lookback"),
   import("../screens/ask"),
   import("../screens/needs-you"),
   import("../screens/recent"),

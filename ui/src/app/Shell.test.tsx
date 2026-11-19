@@ -155,15 +155,16 @@ describe("rail", () => {
     const names = within(nav)
       .getAllByRole("link")
       .map((a) => a.textContent?.trim());
-    expect(names.slice(0, 6).map((n) => n?.replace(/\d|Fri/g, "").trim())).toEqual([
+    expect(names.slice(0, 7).map((n) => n?.replace(/\d|Fri/g, "").trim())).toEqual([
       "Today",
+      "Journal",
       "Needs you",
       "What Nocturne remembers",
       "Recently kept",
       "Fading & let go",
       "Past pages",
     ]);
-    expect(names.slice(6)).toEqual(["Privacy", "Settings"]);
+    expect(names.slice(7)).toEqual(["Privacy", "Settings"]);
   });
 
   it("draws the gear beside Settings, as the Settings chip does, and no icon beside Privacy", async () => {

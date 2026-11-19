@@ -6,6 +6,10 @@ describe("route table", () => {
     const table: Record<string, string> = {
       "/today": "today",
       "/pages/2026-11-12": "today",
+      "/journal": "journal",
+      "/journal/2026-11-19": "journal",
+      "/journal/check-in": "checkin",
+      "/journal/look-back/week/2026-11-09": "lookback",
       "/ask": "ask",
       "/needs-you": "needs-you",
       "/recent": "recent",

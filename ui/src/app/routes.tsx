@@ -13,6 +13,9 @@ export interface AppRoute {
 }
 
 const today = lazy(() => import("../screens/today"));
+const journal = lazy(() => import("../screens/journal"));
+const checkin = lazy(() => import("../screens/checkin"));
+const lookback = lazy(() => import("../screens/lookback"));
 const ask = lazy(() => import("../screens/ask"));
 const needsYou = lazy(() => import("../screens/needs-you"));
 const recent = lazy(() => import("../screens/recent"));
@@ -40,6 +43,34 @@ export const routes: readonly AppRoute[] = [
     title: "screen.page.title",
     shell: true,
     Component: today,
+  },
+  {
+    path: "/journal",
+    folder: "journal",
+    title: "screen.journal.title",
+    shell: true,
+    Component: journal,
+  },
+  {
+    path: "/journal/check-in",
+    folder: "checkin",
+    title: "screen.checkin.title",
+    shell: true,
+    Component: checkin,
+  },
+  {
+    path: "/journal/look-back/:kind/:start",
+    folder: "lookback",
+    title: "screen.lookback.title",
+    shell: true,
+    Component: lookback,
+  },
+  {
+    path: "/journal/:day",
+    folder: "journal",
+    title: "screen.journal.title",
+    shell: true,
+    Component: journal,
   },
   { path: "/ask", folder: "ask", title: "screen.ask.title", shell: true, Component: ask },
   {
