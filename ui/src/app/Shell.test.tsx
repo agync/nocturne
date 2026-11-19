@@ -21,7 +21,7 @@ afterEach(() => {
 const SCREENS: Array<[string, string]> = [
   ["#/today", "Two things need you today."],
   ["#/pages/2026-11-12", "One thing needs you today."],
-  ["#/needs-you", "2 things are waiting"],
+  ["#/needs-you", "3 things are waiting"],
   ["#/ask", "Ask about anything you’ve kept."],
   ["#/recent", "Today and yesterday"],
   ["#/quick-capture", "Keep something"],
@@ -134,11 +134,11 @@ describe("rail", () => {
   it("shows the Needs you count as plain Ember text, not a badge", async () => {
     renderApp();
     const link = await screen.findByRole("link", { name: /Needs you/ });
-    const count = await within(link).findByText("2");
+    const count = await within(link).findByText("3");
     expect(count.tagName).toBe("SPAN");
     expect(count).not.toHaveAttribute("role");
     expect(count.querySelector("*")).toBeNull();
-    expect(link).toHaveAccessibleName("Needs you 2");
+    expect(link).toHaveAccessibleName("Needs you 3");
   });
 
   it("marks the current screen and the day on Today", async () => {

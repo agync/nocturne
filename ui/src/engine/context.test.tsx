@@ -42,11 +42,11 @@ describe("event to query invalidation", () => {
   it("refreshes the status when the engine says something needs the person", async () => {
     const engine = createMockEngine({ now: NOW });
     const { result } = renderHook(() => useStatus(), { wrapper: wrapper(engine) });
-    await waitFor(() => expect(result.current.data?.needsYou).toBe(2));
+    await waitFor(() => expect(result.current.data?.needsYou).toBe(3));
     await act(async () => {
       await engine.markDone("mem-trip");
     });
-    await waitFor(() => expect(result.current.data?.needsYou).toBe(1));
+    await waitFor(() => expect(result.current.data?.needsYou).toBe(2));
   });
 
   it("refreshes the page when an item changes", async () => {

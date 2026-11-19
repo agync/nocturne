@@ -346,7 +346,7 @@ describe("MockEngine page", () => {
     const engine = createMockEngine({ now: NOW });
     const counts: number[] = [];
     engine.on("needs-you-changed", (n) => counts.push(n));
-    expect((await engine.getStatus()).needsYou).toBe(2);
+    expect((await engine.getStatus()).needsYou).toBe(3);
     const resolved = await engine.resolveWhich("conflict-dentist", "mem-dentist-thu");
     expect(resolved).toEqual({
       subject: "Dentist",
@@ -355,7 +355,7 @@ describe("MockEngine page", () => {
     });
     const page = await engine.getPage();
     expect(page.needsYou.find((l) => l.kind === "which")?.done).toBe(true);
-    expect(counts.at(-1)).toBe(1);
+    expect(counts.at(-1)).toBe(2);
     expect(page.headline).toBe("One thing needs you today.");
     const chosen = (
       await engine.listMemories({

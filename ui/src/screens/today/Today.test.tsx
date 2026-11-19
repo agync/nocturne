@@ -49,7 +49,7 @@ describe("the morning page on Today", () => {
     ).toBeInTheDocument();
     const rail = screen.getByRole("navigation", { name: "Main" });
     await waitFor(() =>
-      expect(within(rail).getByRole("link", { name: /Needs you/ })).toHaveTextContent("1"),
+      expect(within(rail).getByRole("link", { name: /Needs you/ })).toHaveTextContent("2"),
     );
   });
 

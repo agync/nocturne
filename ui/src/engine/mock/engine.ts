@@ -458,7 +458,8 @@ export class MockEngine implements EngineClient {
     const waiting = this.items.filter((i) => i.status === "kept" || i.status === "reading").length;
     this.status = {
       ...this.status,
-      needsYou: this.openNeeds() + this.waitingUnconfirmed().length,
+      needsYou:
+        this.openNeeds() + this.waitingUnconfirmed().length + this.journal.openQuestions().length,
       waitingToRead: waiting,
     };
     if (this.status.state !== "paused") {
@@ -1538,6 +1539,7 @@ export class MockEngine implements EngineClient {
     this.journal.refileMention(mentionId, target);
   answerSameName: EngineClient["answerSameName"] = async (questionId, answer) => {
     const done = await this.journal.answerSameName(questionId, answer);
+    this.refreshStatus(true);
     this.emit("needs-you-changed", this.status.needsYou);
     return done;
   };
