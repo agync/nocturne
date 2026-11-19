@@ -110,6 +110,20 @@ impl Reflecting {
     }
 }
 
+/// A write being tracked as `Writing`, untracked when this is dropped: finished, cancelled or
+/// unwound.
+struct Tracked<'a> {
+    reflecting: &'a Reflecting,
+    period: &'a Period,
+    id: u64,
+}
+
+impl Drop for Tracked<'_> {
+    fn drop(&mut self) {
+        self.reflecting.end(self.period, self.id);
+    }
+}
+
 struct AbortOnDrop<T>(tokio::task::JoinHandle<T>);
 
 impl<T> Drop for AbortOnDrop<T> {
@@ -229,9 +243,14 @@ pub async fn reflect(state: &AppState, period: &Period) -> Result<ReflectionView
     let Some(id) = state.reflecting.begin(period, task.0.abort_handle(), stop) else {
         return Ok(ReflectionView::Writing { glance });
     };
+    let tracked = Tracked {
+        reflecting: &state.reflecting,
+        period,
+        id,
+    };
     let _ = go.send(());
     let joined = (&mut task.0).await;
-    state.reflecting.end(period, id);
+    drop(tracked);
     match joined {
         Ok(Ok(Wrote::Day(_) | Wrote::Recap(_))) => {
             let p = period.clone();
