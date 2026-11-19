@@ -3671,7 +3671,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-app"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "aes-gcm 0.11.1",
  "age",
@@ -3723,7 +3723,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-contract"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -3732,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-engine"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "age",
  "dunce",
@@ -3754,7 +3754,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-helpers"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "flate2",
  "nocturne-engine",
@@ -3775,7 +3775,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-intelligence"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "jiff",
  "nocturne-contract",
@@ -3792,7 +3792,7 @@ dependencies = [
 
 [[package]]
 name = "nocturne-lemonade"
-version = "0.7.0"
+version = "0.7.1"
 dependencies = [
  "axum",
  "base64 0.23.1",
