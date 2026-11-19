@@ -1,0 +1,31 @@
+import {
+  Calendar,
+  Ellipsis,
+  FileText,
+  Globe,
+  Image,
+  Mic,
+  Pencil,
+  Plus,
+  Smartphone,
+} from "lucide-react";
+
+const GLYPHS = {
+  calendar: Calendar,
+  more: Ellipsis,
+  file: FileText,
+  web: Globe,
+  image: Image,
+  mic: Mic,
+  pen: Pencil,
+  plus: Plus,
+  phone: Smartphone,
+} as const;
+
+export type GlyphName = keyof typeof GLYPHS;
+
+/** The small shapes the journal draws, always beside words or named by the control around them. */
+export function Glyph({ name, size = 16 }: { name: GlyphName; size?: number }) {
+  const Shape = GLYPHS[name];
+  return <Shape size={size} strokeWidth={1.5} aria-hidden="true" focusable="false" />;
+}

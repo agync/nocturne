@@ -50,8 +50,16 @@ export function MentionCard({ mention, anchor, onClose }: MentionCardProps) {
     const put = () => {
       const rect = anchor.getBoundingClientRect();
       const width = Math.min(WIDTH, window.innerWidth - 32);
+      const height = card.current?.offsetHeight ?? 0;
+      const below = rect.bottom + GAP;
+      const room = window.innerHeight - 16;
+      let top = below;
+      if (below + height > room) {
+        const above = rect.top - GAP - height;
+        top = above >= 16 ? above : Math.max(16, room - height);
+      }
       setPlace({
-        top: rect.bottom + GAP,
+        top,
         left: Math.max(16, Math.min(rect.left, window.innerWidth - width - 16)),
       });
     };
