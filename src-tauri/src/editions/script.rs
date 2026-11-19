@@ -3,7 +3,7 @@
 //! Built from the audio edition of the page, which already has every line about a private
 //! memory removed. Forgotten lines are skipped, and the interface's emphasis marks are dropped.
 
-use nocturne_contract::{LineKind, PageLine, PageView, SpokenKind};
+use nocturne_contract::{LineKind, PageLine, PageView, QuestionKind, SpokenKind};
 
 /// How many lines of "what changed" and "coming up" are read.
 const TOP: usize = 6;
@@ -78,9 +78,25 @@ fn section(kind: SpokenKind, lines: impl IntoIterator<Item = String>) -> Option<
     (!text.is_empty()).then_some(Section { kind, text, parts })
 }
 
+/// What the reading says in place of a question from the journal.
+pub const JOURNAL_QUESTION_NOTE: &str = "Today\u{2019}s question is on the page.";
+
+/// Add a closing sentence to the last section, or make it a section of its own on a page with
+/// nothing else to say.
+fn close_with(out: &mut Vec<Section>, note: String) {
+    match out.last_mut() {
+        Some(last) => {
+            last.text = format!("{} {note}", last.text);
+            last.parts.push(note);
+        }
+        None => out.extend(section(SpokenKind::Question, [note])),
+    }
+}
+
 /// The script for a page: the opening, what needs the person, what changed (the top few),
-/// what is coming up, what was let go (one sentence), and the question. When lines from the
-/// journal were left out, the last section ends by saying how many.
+/// what is coming up, what was let go (one sentence), and the question. A question from the
+/// journal is not read: the last section ends by saying it is on the page. When lines from the
+/// journal were left out, it also ends by saying how many.
 pub fn audio_script(page: &PageView) -> Vec<Section> {
     let mut out = Vec::new();
     out.extend(section(
@@ -115,7 +131,8 @@ pub fn audio_script(page: &PageView) -> Vec<Section> {
             [format!("Nocturne let go of {}.", joined(&names, "and"))],
         ));
     }
-    if let Some(q) = page.question.as_ref().filter(|q| q.answered.is_none()) {
+    let question = page.question.as_ref();
+    if let Some(q) = question.filter(|q| q.kind != QuestionKind::Journal && q.answered.is_none()) {
         out.extend(section(
             SpokenKind::Question,
             [
@@ -124,12 +141,12 @@ pub fn audio_script(page: &PageView) -> Vec<Section> {
             ],
         ));
     }
-    if let Some(count) = page.journal_skipped.filter(|n| *n > 0)
-        && let Some(last) = out.last_mut()
-    {
-        let note = journal_note(count);
-        last.text = format!("{} {note}", last.text);
-        last.parts.push(note);
+    // A question from the journal is never read: the reading ends by saying it is on the page.
+    if question.is_some_and(|q| q.kind == QuestionKind::Journal) {
+        close_with(&mut out, JOURNAL_QUESTION_NOTE.to_string());
+    }
+    if let Some(count) = page.journal_skipped.filter(|n| *n > 0) {
+        close_with(&mut out, journal_note(count));
     }
     out
 }
@@ -299,6 +316,89 @@ mod tests {
         assert_eq!(
             audio_script(&p)[1].text,
             "Nocturne let go of One thing and Another."
+        );
+    }
+
+    fn journal_question(answered: Option<nocturne_contract::QuestionChoice>) -> Question {
+        Question {
+            kind: QuestionKind::Journal,
+            text: String::new(),
+            memory_id: None,
+            receipt: None,
+            last_asked: None,
+            answered,
+            journal: None,
+        }
+    }
+
+    #[test]
+    fn a_question_from_the_journal_is_not_read_and_the_reading_ends_by_saying_it_is_on_the_page() {
+        let mut p = page();
+        p.let_go = vec![line(LineKind::LetGo, "Old coupon")];
+        p.question = Some(journal_question(None));
+        let script = audio_script(&p);
+        assert_eq!(
+            kinds(&script),
+            [SpokenKind::Opening, SpokenKind::LetGo],
+            "no question section"
+        );
+        let last = script.last().unwrap();
+        assert_eq!(
+            last.text,
+            "Nocturne let go of Old coupon. Today\u{2019}s question is on the page."
+        );
+        assert_eq!(
+            last.parts.last().unwrap(),
+            "Today\u{2019}s question is on the page."
+        );
+        assert!(script.iter().all(|s| s.parts.join(" ") == s.text));
+
+        // The count of the journal's own lines comes after it.
+        p.journal_skipped = Some(2);
+        let script = audio_script(&p);
+        let parts = &script.last().unwrap().parts;
+        assert_eq!(
+            parts[parts.len() - 2..],
+            [
+                "Today\u{2019}s question is on the page.",
+                "2 lines from your journal are on the page, not read aloud."
+            ]
+        );
+
+        // With nothing after the opening it closes the opening.
+        p.let_go.clear();
+        p.journal_skipped = None;
+        let script = audio_script(&p);
+        assert_eq!(kinds(&script), [SpokenKind::Opening]);
+        assert_eq!(
+            script[0].text,
+            "Good morning. One thing today. Today\u{2019}s question is on the page."
+        );
+        let words: String = script.iter().map(|s| s.text.as_str()).collect();
+        assert!(!words.contains('\u{2014}'));
+    }
+
+    #[test]
+    fn an_ordinary_question_is_still_read_and_says_nothing_about_the_page_when_answered() {
+        let mut p = page();
+        p.question = Some(Question {
+            kind: QuestionKind::YesNo,
+            text: "Do you still go to the gym?".into(),
+            memory_id: None,
+            receipt: None,
+            last_asked: None,
+            answered: None,
+            journal: None,
+        });
+        assert!(
+            audio_script(&p)
+                .iter()
+                .any(|s| s.kind == SpokenKind::Question)
+        );
+        assert!(
+            audio_script(&p)
+                .iter()
+                .all(|s| !s.text.contains("question is on the page"))
         );
     }
 

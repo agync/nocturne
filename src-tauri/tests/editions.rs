@@ -519,3 +519,61 @@ fn a_journal_line_is_never_read_and_the_reading_says_how_many_it_left_out() {
     assert_eq!(again["path"], page["path"], "kept, not made again");
     assert_eq!(again["journalSkipped"], 1, "the kept reading says it too");
 }
+
+#[test]
+fn a_question_from_the_journal_is_never_read_and_the_reading_says_it_is_on_the_page() {
+    let voice = Voice::new();
+    let h = harness_with_mind(voice.clone());
+    let e = h.engine();
+    h.save_todays_page();
+
+    h.clock.set_str("2026-11-13T19:00:00Z");
+    let sentences = "Parents\u{2019} evening at six. Not looking forward to it.";
+    let entry = h.ok(
+        "save_entry_text",
+        json!({"day": "2026-11-13", "itemId": null, "block": 0, "text": sentences}),
+    );
+    let item = entry["item"]["id"].as_str().unwrap().to_string();
+    h.ok("read_entry_now", json!({"day": "2026-11-13"}));
+    let mut scheduled = Candidate::new(
+        "Parents evening",
+        Predicate::Scheduled,
+        "at six",
+        "Parents\u{2019} evening is at six.",
+        0.9,
+    );
+    scheduled.valid_from = Some("2026-11-13".parse().unwrap());
+    scheduled.span = Some(nocturne_contract::Span::Quote {
+        text: sentences.into(),
+    });
+    let leased = e
+        .lease_item(&item, Duration::from_secs(60))
+        .expect("the entry can be read");
+    e.apply_candidates(&item, &leased.lease, vec![scheduled])
+        .unwrap();
+
+    h.clock.set_str("2026-11-14T07:00:00Z");
+    let saved = h.save_todays_page();
+    assert_eq!(saved.date, "2026-11-14");
+    assert_eq!(
+        saved.question.as_ref().map(|q| q.kind),
+        Some(nocturne_contract::QuestionKind::Journal)
+    );
+
+    let page = h.ok("speak_page", json!({"date": "2026-11-14"}));
+    let said = voice.said();
+    let all = said.join(" ");
+    assert!(!all.to_lowercase().contains("parents"), "{all}");
+    assert!(!all.contains("How did it go"), "{all}");
+    assert!(
+        said.contains(&"Today\u{2019}s question is on the page.".to_string()),
+        "{said:?}"
+    );
+    let kinds: Vec<_> = page["sections"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|s| s["kind"].as_str().unwrap().to_string())
+        .collect();
+    assert!(!kinds.contains(&"question".to_string()), "{kinds:?}");
+}
