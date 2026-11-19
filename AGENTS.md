@@ -38,8 +38,8 @@ is not built or a build that is not designed.
 8. **Scratch stays local.** `.agents/brain/` is git-ignored. Never commit or link it.
 9. **Logical commits.** One topic per commit; stage explicit paths, never `git add -A`.
 10. **Parallel work in worktrees.** One worktree per change, on a branch rebased on the latest `main`.
-11. **Automation over manual conformance.** `make check` and the git hooks own style and quality.
-    Never bypass hooks.
+11. **Automation over manual conformance.** `make check-changed`, the git hooks and CI own style
+    and quality. Never bypass hooks.
 12. **Design before build.** Nothing a person sees is implemented before its screens, copy and
     behaviour are agreed in `docs/design/`.
 
@@ -54,9 +54,13 @@ is not built or a build that is not designed.
 
 ## Verification
 
-A change is done only when `make check` passes and the relevant tests are green, with real captured
-output. A skeptical-maintainer review (`.agents/agents/maintainer-reviewer.md`) precedes every push,
-and a human approves the push.
+Before a push, run `make check-changed` (the lint and drift checks of the areas the change
+touches, plus the cheap hooks on the changed files), the tests for what you changed (for example
+`make check-changed TESTS="cargo test -p nocturne-engine journal::"`), and any manual or visual
+validation, with real captured output. The full suite runs in CI, so `make check` stays the full
+gate for anyone who wants it locally, and a change is done when CI is green. A skeptical-maintainer
+review (`.agents/agents/maintainer-reviewer.md`) precedes every push, and a human approves the
+push.
 
 ## Contributor guide
 
