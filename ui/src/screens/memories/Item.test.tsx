@@ -194,21 +194,6 @@ describe("an original", () => {
     await waitFor(() => expect(window.location.hash).toBe("#/memories"));
   });
 
-  it("deletes a check-in, which has no memories of its own", async () => {
-    const engine = createMockEngine({
-      now: new Date("2026-11-19T21:20:00Z"),
-      journal: { mode: "day", delayMs: 0 },
-    });
-    await open("j-ci-tired", engine);
-    const button = screen.getByRole("button", { name: "Delete…" });
-    expect(button).toBeEnabled();
-    await userEvent.click(button);
-    const dialog = await screen.findByRole("dialog", { name: "Delete 1 thing?" });
-    await userEvent.click(await within(dialog).findByRole("button", { name: "Delete 1 thing" }));
-    expect(await within(dialog).findByText("Deleted.")).toBeInTheDocument();
-    expect((await engine.getJournalDay()).checkins.map((c) => c.id)).not.toContain("j-ci-tired");
-  });
-
   it("explains why something could not be read and offers to read it again", async () => {
     const { engine } = await open("item-counciltax");
     expect(screen.getByText(/password-locked/)).toBeInTheDocument();

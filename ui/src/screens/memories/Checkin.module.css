@@ -1,0 +1,93 @@
+.left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-4);
+  align-items: center;
+  justify-content: center;
+  padding: var(--s-6);
+  border-right: 1px solid var(--rule);
+  background: var(--bg);
+}
+
+.quote {
+  max-width: 300px;
+  margin: 0;
+  font: 400 1.25rem / 1.5 var(--font-serif);
+  text-align: center;
+  text-wrap: balance;
+}
+
+.title {
+  display: inline-flex;
+  gap: var(--s-3);
+  align-items: center;
+  margin: 0;
+  font-size: 2rem;
+}
+
+.title [data-mark] {
+  flex: none;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.section h2 {
+  margin: 0;
+  color: var(--ink2);
+}
+
+.section p {
+  margin: 0;
+}
+
+.names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.note {
+  margin: 0;
+  padding: var(--s-3) var(--s-4);
+  border-radius: var(--r-md);
+  background: var(--bg);
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.problem {
+  margin: 0;
+  color: var(--ember);
+}
+
+.stays {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink2);
+  font-size: 0.875rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  justify-content: flex-end;
+}
+
+@media (max-width: 720px) {
+  .left {
+    padding: var(--s-5) var(--s-4);
+  }
+}

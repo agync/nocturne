@@ -172,5 +172,14 @@
   "refile.option.thing": "Thing",
   "refile.save": "Move it",
   "refile.done": "Moved to {name}.",
-  "refile.undone": "Moved back."
+  "refile.undone": "Moved back.",
+  "item.checkin.eyebrow": "Check-in · {day} · {time}",
+  "item.checkin.field": "{feel}, {time}",
+  "item.checkin.line": "What you wrote",
+  "item.checkin.urge": "Did you feel like doing anything?",
+  "item.checkin.names": "In this check-in",
+  "item.checkin.note": "Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade and Ask never uses them.",
+  "item.checkin.change": "Change",
+  "item.checkin.bringBack": "Bring back into reflections",
+  "item.checkin.backIn": "Back in your reflections."
 }

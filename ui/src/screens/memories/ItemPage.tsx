@@ -11,6 +11,7 @@ import { t } from "../../copy/t";
 import type { CouldntReadReason } from "../../engine/bindings";
 import { useEngine, useEngineEvent, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { CheckinPage } from "./CheckinPage";
 import styles from "./Item.module.css";
 import { kindWord } from "./memoryText";
 import { Original } from "./Original";
@@ -78,6 +79,9 @@ export function ItemPage({ id }: { id: string }) {
   }
 
   const it = item.data;
+  if (it.journal === "checkin" && it.checkin) {
+    return page(<CheckinPage item={it} checkin={it.checkin} />);
+  }
   const list = memories.data;
   const keptForever = list.length > 0 && list.every((m) => m.keepForever);
   const highlights = list.flatMap((m) =>
