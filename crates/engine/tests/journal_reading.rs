@@ -1254,8 +1254,14 @@ fn the_journal_day_carries_its_open_same_name_question() {
     two_sams(&f);
     let entry = journal_item(&f, SAM_ENTRY, "entry");
     f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    let before = f.engine.status_counts().unwrap().needs_you;
     let day = f.engine.journal_day("2026-11-12".parse().unwrap()).unwrap();
     assert_eq!(day.same_name.len(), 1);
+    let question = day.same_name[0].id.clone();
+    f.engine
+        .answer_same_name(&question, nocturne_contract::SameNameAnswer::Leave)
+        .unwrap();
+    assert_eq!(f.engine.status_counts().unwrap().needs_you, before - 1);
     assert_eq!(day.same_name[0].receipt.item_id, entry);
     assert!(
         f.engine

@@ -149,6 +149,10 @@ impl Engine {
                  AND (m.snoozed_until IS NULL OR m.snoozed_until <= ?1)",
                 &[&today_s],
             )?;
+            let same_name = count(
+                "SELECT COUNT(*) FROM name_questions WHERE answered_at IS NULL",
+                &[],
+            )?;
             let waiting_to_read = count(
                 "SELECT COUNT(*) FROM items WHERE status IN ('kept', 'reading') \
                  AND NOT EXISTS (SELECT 1 FROM forget_jobs \
@@ -162,7 +166,7 @@ impl Engine {
                 &[],
             )?;
             Ok(StatusCounts {
-                needs_you: dated + which + unconfirmed,
+                needs_you: dated + which + unconfirmed + same_name,
                 waiting_to_read,
                 couldnt_read,
                 unconfirmed,
