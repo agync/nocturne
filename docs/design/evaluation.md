@@ -96,15 +96,16 @@ only when every check holds in every run, on a set of journal days.
 
 | Check | Pass |
 |---|---|
-| Receipts | Every sentence carries a receipt to an entry, good thing or check-in kept that day |
+| Receipts | Every sentence carries a receipt to something kept that day; check-ins are not shown to the mind, so they are never cited there |
 | No feeling without support | No feeling is written that no check-in or quote supports |
 | No advice | No sentence tells the person what to do or how to feel |
 | No invented people | No person or place appears that the day's items do not name |
 
-The check is a scripted one, which checks the wiring and the scoring on a scripted mind and not a
-size, and a run on the real models of each size. The size of the set will be recorded with the
-first run. No size has passed yet, so every size shows "At a glance" and the line "On this
-computer, Nocturne lists the day rather than writing about it."
+The set and the scoring are in `src-tauri/tests/eval/journal.rs`: three seeded journal days, each
+written three times. `cargo test -p nocturne-app --test journal` runs it on a scripted mind, which
+checks the wiring and the scoring, not a size. A run on the real models of each size is not wired
+yet; it will follow the help check's `make e2e-help`. No size has passed, so every size shows "At a
+glance" and the line "On this computer, Nocturne lists the day rather than writing about it."
 
 ## Online answers on the smallest tier (S1b)
 
