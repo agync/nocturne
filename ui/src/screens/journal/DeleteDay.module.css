@@ -1,0 +1,369 @@
+/* The panel is Dialog's own; with this body in it, it widens and gives the list the scroll. */
+:global([role="dialog"]):has(.root) {
+  gap: 0;
+  width: min(100%, 680px);
+  max-height: calc(100vh - 48px);
+  padding: 0;
+  overflow: hidden;
+  background: var(--sheet);
+}
+
+:global([role="dialog"]):has(.root) > :first-child {
+  padding: var(--s-6) var(--s-6) 0;
+}
+
+:global([role="dialog"]):has(.root) > :first-child h2 {
+  font: 400 1.75rem / 1.2 var(--font-serif);
+}
+
+:global([role="dialog"]):has(.root) > :last-child {
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+}
+
+.root {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.lead {
+  margin: 0;
+  padding: var(--s-2) var(--s-6) var(--s-4);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink2);
+}
+
+.scroll {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: var(--s-5);
+  min-height: 0;
+  padding: var(--s-4) var(--s-6) var(--s-5);
+  overflow: auto;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+}
+
+.groupHead {
+  display: flex;
+  align-items: center;
+  gap: var(--s-3);
+  padding-bottom: var(--s-2);
+  border-bottom: 1px solid var(--rule);
+}
+
+.groupBox {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--s-3);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.groupLabel {
+  color: var(--ink2);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.count {
+  margin-left: auto;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.4 var(--font-mono);
+}
+
+.groupNote {
+  margin: 0;
+  padding: var(--s-2) 0 0 28px;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.sub {
+  margin: 0;
+  padding: var(--s-3) 0 var(--s-1) 28px;
+  color: var(--ink2);
+  font: 500 0.6875rem / 1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  border-bottom: 1px solid var(--rule);
+}
+
+.line {
+  display: grid;
+  grid-template-columns: 16px 18px 76px minmax(0, 1fr);
+  gap: 0 var(--s-3);
+  align-items: center;
+  min-height: 38px;
+  padding: 5px 0;
+  cursor: pointer;
+}
+
+div.line {
+  cursor: default;
+}
+
+.boxCell {
+  position: relative;
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+}
+
+.boxCell .box {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border-width: 1px;
+}
+
+.boxCell .box[data-state="on"]::after {
+  top: 1px;
+  left: 4px;
+  width: 4px;
+  height: 8px;
+}
+
+.boxCell .box[data-state="mixed"]::after {
+  top: 6px;
+  left: 3px;
+  width: 8px;
+}
+
+.boxCell input {
+  inset: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.noBox {
+  width: 16px;
+}
+
+.kind {
+  display: inline-flex;
+  color: var(--ink2);
+}
+
+.kind[data-part="woundUp"] {
+  color: var(--part-wound-ink);
+}
+
+.kind[data-part="litUp"],
+.kind[data-part="sun"] {
+  color: var(--part-lit-ink);
+}
+
+.kind[data-part="low"] {
+  color: var(--part-low-ink);
+}
+
+.kind[data-part="settled"] {
+  color: var(--part-settled-ink);
+}
+
+.when {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.4 var(--font-mono);
+  white-space: nowrap;
+}
+
+.what {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+}
+
+.row[data-off="true"] .what {
+  color: var(--ink2);
+}
+
+.snip {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feel {
+  flex: none;
+  font-weight: 500;
+}
+
+.meta {
+  flex: none;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.4 var(--font-mono);
+}
+
+.extra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 0 0 5px calc(16px + 18px + 76px + 3 * var(--s-3));
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.disclose {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+}
+
+.versions {
+  flex-basis: 100%;
+  margin: 6px 0 2px;
+  padding: 0 0 0 var(--s-3);
+  border-left: 2px solid var(--rule);
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.versions li {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: var(--s-3);
+  padding: 2px 0;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  padding: var(--s-4) var(--s-6) var(--s-5);
+  border-top: 1px solid var(--rule);
+}
+
+.also {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.also > li {
+  display: flex;
+  gap: var(--s-2);
+  align-items: baseline;
+}
+
+.also > li::before {
+  flex: none;
+  align-self: flex-start;
+  width: 5px;
+  height: 5px;
+  margin-top: 7px;
+  border-radius: 50%;
+  background: var(--ink3);
+  content: "";
+}
+
+.memoryList {
+  max-height: 9rem;
+  overflow: auto;
+}
+
+.memoryList ul {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--ink2);
+}
+
+.link {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+}
+
+.small {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.note {
+  margin: 0;
+  color: var(--ink2);
+}
+
+.problem {
+  margin: 0;
+  color: var(--ember);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2);
+  justify-content: flex-end;
+}
+
+.done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.doneText {
+  margin: 0;
+  color: var(--ink2);
+}
+
+@media (max-width: 720px) {
+  :global([role="presentation"]):has(.root) {
+    padding: 0;
+  }
+
+  :global([role="dialog"]):has(.root) {
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+
+  .scroll,
+  .foot,
+  .lead,
+  :global([role="dialog"]):has(.root) > :first-child {
+    padding-inline: var(--s-4);
+  }
+}

@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRoute } from "wouter";
-import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { t } from "../../copy/t";
-import type { Mention } from "../../engine/bindings";
+import type { JournalDay, Mention } from "../../engine/bindings";
 import {
   useEngine,
   useJournalDay,
@@ -14,6 +13,7 @@ import {
 import { MentionCard } from "../../journal/MentionCard";
 import { NotFound } from "../NotFound";
 import { DayPicker } from "./DayPicker";
+import { DeleteDay } from "./DeleteDay";
 import { Entry } from "./Entry";
 import { Glyph } from "./glyphs";
 import styles from "./Journal.module.css";
@@ -37,8 +37,8 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
   const days = useJournalDays();
   const status = useStatus();
   const [picking, setPicking] = useState(false);
-  /** The day's items as they were when "Delete this day…" was chosen. */
-  const [deleting, setDeleting] = useState<string[] | null>(null);
+  /** The day as it was when "Delete this day…" was chosen. */
+  const [deleting, setDeleting] = useState<JournalDay | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [highlight, setHighlight] = useState<string | null>(null);
   const [card, setCard] = useState<{ mention: Mention; anchor: HTMLElement } | null>(null);
@@ -97,15 +97,6 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
   const words = dayWords(data.day);
   const notReady = status.data?.state === "gettingReady" || status.data?.state === "starting";
   const canAddGood = data.good.length < 3;
-  const itemIds = [
-    ...new Set([
-      ...data.entry.flatMap((b) => [b.item.id, ...b.earlier.map((e) => e.itemId)]),
-      ...data.rows.map((r) => r.item.id),
-      ...data.checkins.map((c) => c.id),
-      ...data.good.map((g) => g.id),
-    ]),
-  ];
-
   return (
     <ScreenSheet>
       <div className={styles.head}>
@@ -144,7 +135,7 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
                     }}
                     onClick={() => {
                       setMenuOpen(false);
-                      setDeleting(itemIds);
+                      setDeleting(data);
                     }}
                   >
                     {t("journal.day.deleteDay")}
@@ -220,11 +211,8 @@ function JournalPage({ day: routeDay }: { day: string | undefined }) {
         <DayPicker today={todayDay ?? data.day} onClose={() => setPicking(false)} />
       ) : null}
       {deleting ? (
-        <ForgetDialog
-          memoryIds={[]}
-          itemIds={deleting}
-          pick
-          defaultIncludeOriginals
+        <DeleteDay
+          data={deleting}
           onDone={() => refresh("journal", "items", "memories", "entities", "page", "status")}
           onClose={() => setDeleting(null)}
         />
