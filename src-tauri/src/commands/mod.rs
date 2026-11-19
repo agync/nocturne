@@ -25,6 +25,7 @@ mod needs;
 mod online;
 mod os;
 pub(crate) mod page;
+mod reflect;
 mod remote;
 mod settings;
 mod system;
@@ -170,6 +171,10 @@ pub const COMMAND_NAMES: &[&str] = &[
     "refile_mention",
     "answer_same_name",
     "entity_journal_days",
+    "get_reflection",
+    "reflect",
+    "stop_reflecting",
+    "delete_reflection",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -317,6 +322,10 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         journal::refile_mention,
         journal::answer_same_name,
         journal::entity_journal_days,
+        reflect::get_reflection,
+        reflect::reflect,
+        reflect::stop_reflecting,
+        reflect::delete_reflection,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();

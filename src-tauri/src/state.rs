@@ -108,6 +108,8 @@ pub struct AppState {
     pub asks: AskRegistry,
     /// The guide's vectors, for help with Nocturne.
     pub help: crate::help::HelpStore,
+    /// The journal's looking back: the override of its check, and the writes in flight.
+    pub reflecting: crate::journal::Reflecting,
     pub setup: RwLock<SetupView>,
     pub clock: Arc<dyn Clock>,
     pub data_dir: PathBuf,
@@ -227,6 +229,7 @@ impl AppState {
             status,
             asks: AskRegistry::default(),
             help: crate::help::HelpStore::default(),
+            reflecting: crate::journal::Reflecting::default(),
             setup: RwLock::new(blank_setup(data_dir)),
             clock,
             data_dir: data_dir.to_path_buf(),

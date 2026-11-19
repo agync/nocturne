@@ -415,6 +415,10 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("refile_mention", Never),
         ("answer_same_name", Never),
         ("entity_journal_days", Never),
+        ("get_reflection", Never),
+        ("reflect", Never),
+        ("stop_reflecting", Never),
+        ("delete_reflection", Never),
     ]
 };
 

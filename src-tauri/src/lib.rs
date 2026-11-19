@@ -18,6 +18,7 @@ pub mod editions;
 pub mod error;
 pub mod fsutil;
 pub mod help;
+pub mod journal;
 pub mod logging;
 pub mod models;
 pub mod online;
