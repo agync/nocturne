@@ -649,11 +649,13 @@ impl<R: Runtime> Call<R> {
                 {
                     tracing::warn!("a phone's feeling was not kept: {error}");
                 }
-                if good
-                    && let Err(error) =
-                        e.keep_good_thing(e.journal_today()?, &words, Some(&item.id), Source::Phone)
-                {
-                    tracing::warn!("a phone's good thing was not kept: {error}");
+                if good {
+                    let made = e.journal_today().and_then(|today| {
+                        e.keep_good_thing(today, &words, Some(&item.id), Source::Phone)
+                    });
+                    if let Err(error) = made {
+                        tracing::warn!("a phone's good thing was not kept: {error}");
+                    }
                 }
             }
             Ok(kept)
