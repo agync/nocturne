@@ -23,7 +23,7 @@ use crate::host::{Host, probe};
 use crate::reader::Reader;
 use crate::reflect::{self, ReflectError, Wrote};
 use crate::schedule::{coming, parse_hm, target_date};
-use crate::tidy::{LOW_BATTERY, Tidy, TidyKind, TidyStep};
+use crate::tidy::{CATCH_UP_LIMIT, LOW_BATTERY, Tidy, TidyKind, TidyStep};
 use crate::{MindSlot, current_mind};
 
 /// How often the scheduler looks.
@@ -47,6 +47,18 @@ const RETRY_FAILED: SignedDuration = SignedDuration::from_mins(10);
 /// A day that was listed, not written (nothing of it to write about), is not asked for again
 /// for this long.
 const RETRY_LISTED: SignedDuration = SignedDuration::from_hours(12);
+
+/// What must still hold between one period and the next of a run of writing: the rules the run
+/// started under.
+#[derive(Clone, Copy)]
+struct Rules {
+    /// In the small hours before the page: any battery blocks, not just a low one.
+    in_window: bool,
+    /// The person asked for it now.
+    anyway: bool,
+    /// Nobody is about. A run inside the tidy has no such rule.
+    need_away: bool,
+}
 
 /// Whether this size of computer writes reflections now (the journal check, or the person's own
 /// model, or a test's override).
@@ -452,17 +464,13 @@ impl Scheduler {
         let tz = self.inner.clock.tz();
         let next = coming(now, parse_hm(&settings.page_time), &tz)?;
         let in_window = now >= next.opens && now < next.instant;
-        let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
-        let percent = probe(&self.inner.host, |h| h.battery_percent()).await;
-        let blocked = if in_window {
-            ac == Some(false)
-        } else {
-            ac == Some(false) && percent.is_some_and(|p| p < LOW_BATTERY)
+        let rules = Rules {
+            in_window,
+            anyway,
+            need_away: true,
         };
-        let away = probe(&self.inner.host, |h| h.idle_for())
-            .await
-            .is_none_or(|d| d >= IDLE_NEEDED);
-        if !anyway && (blocked || !away) {
+        let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
+        if !self.may_write(rules).await {
             // Looked at again at the next tick, before anything is asked of the store.
             self.state().reflect_due = true;
             return None;
@@ -477,7 +485,12 @@ impl Scheduler {
         } else {
             probe(&self.inner.host, |h| h.inhibit_sleep()).await
         };
-        let written = self.write_due(&mind, due, None).await;
+        let until = if in_window {
+            next.instant
+        } else {
+            now + SignedDuration::try_from(CATCH_UP_LIMIT).unwrap_or_default()
+        };
+        let written = self.write_due(&mind, due, Some(until), rules).await;
         (!written.is_empty()).then_some(SchedStep::Reflected(written))
     }
 
@@ -486,9 +499,12 @@ impl Scheduler {
         let Some(mind) = self.reflect_mind() else {
             return;
         };
-        let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
-        let percent = probe(&self.inner.host, |h| h.battery_percent()).await;
-        if ac == Some(false) && percent.is_some_and(|p| p < LOW_BATTERY) {
+        let rules = Rules {
+            in_window: false,
+            anyway: false,
+            need_away: false,
+        };
+        if !self.may_write(rules).await {
             return;
         }
         let now = self.inner.clock.now();
@@ -496,26 +512,49 @@ impl Scheduler {
         if due.is_empty() {
             return;
         }
-        let until = tokio::time::Instant::now() + BEFORE_PAGE_LIMIT;
-        self.write_due(&mind, due, Some(until)).await;
+        let until = now + SignedDuration::try_from(BEFORE_PAGE_LIMIT).unwrap_or_default();
+        self.write_due(&mind, due, Some(until), rules).await;
+    }
+
+    /// Whether the battery and, when `rules` ask for it, the idle time allow writing.
+    async fn may_write(&self, rules: Rules) -> bool {
+        if rules.anyway {
+            return true;
+        }
+        let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
+        let percent = probe(&self.inner.host, |h| h.battery_percent()).await;
+        let blocked = if rules.in_window {
+            ac == Some(false)
+        } else {
+            ac == Some(false) && percent.is_some_and(|p| p < LOW_BATTERY)
+        };
+        if blocked {
+            return false;
+        }
+        !rules.need_away
+            || probe(&self.inner.host, |h| h.idle_for())
+                .await
+                .is_none_or(|d| d >= IDLE_NEEDED)
     }
 
     /// Write each period in turn, stopping when the person pauses, the app quits, the mind is
-    /// not there, or `until` has passed. Returns what was written.
+    /// not there, `until` has passed, or `rules` no longer hold. Returns what was written.
     async fn write_due(
         &self,
         mind: &Arc<dyn Mind>,
         due: Vec<Period>,
-        until: Option<tokio::time::Instant>,
+        until: Option<Timestamp>,
+        rules: Rules,
     ) -> Vec<Period> {
         // The reader reads nothing while the mind writes: it serves one request at a time.
         let _reader_waits = self.inner.reader.ask_begin();
         let shutdown = self.state().shutdown.clone();
         let mut written = Vec::new();
-        for period in due {
+        for (n, period) in due.into_iter().enumerate() {
             if self.paused()
                 || shutdown.as_ref().is_some_and(|t| t.is_cancelled())
-                || until.is_some_and(|u| tokio::time::Instant::now() >= u)
+                || until.is_some_and(|u| self.inner.clock.now() >= u)
+                || (n > 0 && !self.may_write(rules).await)
             {
                 break;
             }

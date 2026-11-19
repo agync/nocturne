@@ -496,6 +496,69 @@ async fn the_week_is_composed_after_the_days_it_ends_with() {
     ));
 }
 
+/// The Sunday-lunch world of the week test, with the day's reflection held at the mind until
+/// `act` has run, so that a second period (the week) is still to come.
+async fn hold_the_first_period_while(act: impl FnOnce(&World)) -> (World, SchedStep) {
+    let mind = FakeMind::new().with_headline("H", "d");
+    let gate = mind.gate("reflect");
+    let w = world_at("2026-11-08T12:00:00Z", mind);
+    keep(&w, "Sunday lunch at Gran's");
+    w.clock.set_str("2026-11-09T01:30:00Z");
+    open_gate(&w);
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    until_page(&w).await;
+    w.clock.set_str("2026-11-09T04:10:00Z");
+    let scheduler = w.scheduler.clone();
+    let tick = tokio::spawn(async move { scheduler.tick().await });
+    for _ in 0..2000 {
+        if w.mind.call_count("reflect") == 1 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(1)).await;
+    }
+    assert_eq!(w.mind.call_count("reflect"), 1, "the day is being written");
+    act(&w);
+    gate.open();
+    let step = tick.await.unwrap();
+    (w, step)
+}
+
+#[tokio::test]
+async fn a_second_period_is_not_written_once_the_desk_is_in_use_again() {
+    let (w, step) = hold_the_first_period_while(|w| {
+        w.host.set_idle(Some(Duration::from_secs(5)));
+    })
+    .await;
+    assert_eq!(
+        step,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, "2026-11-08")])
+    );
+    assert!(saved(&w, PeriodKind::Week, "2026-11-08").is_none());
+}
+
+#[tokio::test]
+async fn a_second_period_is_not_written_once_the_battery_is_low() {
+    let (w, step) = hold_the_first_period_while(|w| w.host.on_battery(10)).await;
+    assert_eq!(
+        step,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, "2026-11-08")])
+    );
+    assert!(saved(&w, PeriodKind::Week, "2026-11-08").is_none());
+}
+
+#[tokio::test]
+async fn a_second_period_is_not_written_once_the_page_time_has_passed() {
+    let (w, step) = hold_the_first_period_while(|w| w.clock.set_str("2026-11-09T09:00:00Z")).await;
+    assert_eq!(
+        step,
+        SchedStep::Reflected(vec![period(&w, PeriodKind::Day, "2026-11-08")])
+    );
+    assert!(saved(&w, PeriodKind::Week, "2026-11-08").is_none());
+}
+
 #[tokio::test]
 async fn a_tidy_that_starts_after_the_boundary_writes_the_reflection_before_its_page() {
     let w = world_at(
