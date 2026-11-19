@@ -719,6 +719,10 @@ export class MockEngine implements EngineClient {
 
   async unkeep(id: string): Promise<void> {
     const found = this.items.find((i) => i.id === id);
+    if (!found && this.journal.unkeep(id)) {
+      this.refreshStatus(true);
+      return;
+    }
     if (!found) throw new Error(`No item ${id}`);
     // Taking back is only for something kept a moment ago, as in the real engine.
     if (this.clock.getTime() - new Date(found.keptAt).getTime() > UNKEEP_MINUTES * 60_000) {

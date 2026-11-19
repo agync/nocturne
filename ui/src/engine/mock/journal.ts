@@ -177,6 +177,21 @@ export class MockJournal {
     return undefined;
   }
 
+  /**
+   * Takes back an item the journal holds, with any feeling tapped beside it. False when the
+   * journal does not hold it.
+   */
+  unkeep(id: string): boolean {
+    if (!this.data.items.has(id)) return false;
+    const gone = new Set([id]);
+    for (const rec of this.data.recs) {
+      if (rec.t === "checkin" && rec.checkin.about === id) gone.add(rec.checkin.id);
+    }
+    this.data.recs = this.data.recs.filter((rec) => !gone.has(this.recItemId(rec)));
+    for (const item of gone) this.data.items.delete(item);
+    return true;
+  }
+
   /** Items this journal holds, for receipts and item pages. */
   findItem(id: string): ItemView | undefined {
     const found = this.data.items.get(id);

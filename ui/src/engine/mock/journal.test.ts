@@ -165,6 +165,20 @@ describe("keeping", () => {
     expect(day.checkins).toHaveLength(1);
   });
 
+  it("takes back a note with the feeling kept beside it", async () => {
+    const engine = engineIn("empty");
+    const kept = await engine.keepNote(
+      "Lunch with Priya, finally",
+      "quickCapture",
+      { part: "litUp", point: { pleasant: 0.4, energy: 0.3 }, words: ["pleased"] },
+      false,
+    );
+    await engine.unkeep(kept.item.id);
+    const day = await engine.getJournalDay();
+    expect(day.rows).toHaveLength(0);
+    expect(day.checkins).toHaveLength(0);
+  });
+
   it("keeps a note marked as a good thing as a good thing", async () => {
     const engine = engineIn("empty");
     await engine.keepNote("Sam fixed the gate", "phone", null, true);
