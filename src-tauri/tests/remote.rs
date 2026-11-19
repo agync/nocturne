@@ -17,8 +17,9 @@ use nocturne_app_lib::remote::testing::client::{
 };
 use nocturne_app_lib::remote::testing::{self, FakeHelpers, PhoneKeys, PhonePair};
 use nocturne_contract::{
-    AskPhase, ItemKind, PhoneError, RemoteAction, RemoteAnswer, RemoteCall, RemoteState, Source,
-    Trust,
+    AskPhase, CheckInInput, EntityKind, Feeling, FeelingPart, FeelingPoint, GlanceReason, ItemKind,
+    JournalDay, PeriodKind, PhoneError, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall,
+    RemoteState, SameNameAnswer, Source, Trust,
 };
 use nocturne_engine::{Candidate, FakeMind, Mind, Predicate};
 use nocturne_helpers::{HelperKind, Origin};
@@ -132,6 +133,8 @@ fn keep_text(c: &mut PhoneClient, text: &str, client_id: &str) -> RemoteAnswer {
         RemoteCall::KeepText {
             text: text.into(),
             client_id: client_id.into(),
+            feeling: None,
+            good: None,
         },
     )
 }
@@ -151,6 +154,13 @@ fn jpeg(len: usize) -> Vec<u8> {
     b
 }
 
+/// What a journaling phone adds to a keep.
+#[derive(Default)]
+struct Marks {
+    feeling: Option<Feeling>,
+    good: Option<bool>,
+}
+
 /// Keep bytes: declare, send in chunks of `chunk`, wait for the answer.
 fn keep_bytes(
     c: &mut PhoneClient,
@@ -160,11 +170,25 @@ fn keep_bytes(
     caption: Option<&str>,
     chunk: usize,
 ) -> RemoteAnswer {
+    keep_bytes_marked(c, bytes, mime, client_id, caption, chunk, Marks::default())
+}
+
+fn keep_bytes_marked(
+    c: &mut PhoneClient,
+    bytes: &[u8],
+    mime: &str,
+    client_id: &str,
+    caption: Option<&str>,
+    chunk: usize,
+    marks: Marks,
+) -> RemoteAnswer {
     let id = block(c.request(RemoteCall::KeepBytes {
         mime: mime.into(),
         size: bytes.len() as f64,
         client_id: client_id.into(),
         caption: caption.map(str::to_string),
+        feeling: marks.feeling,
+        good: marks.good,
     }))
     .unwrap();
     let parts: Vec<&[u8]> = bytes.chunks(chunk).collect();
@@ -242,7 +266,7 @@ fn forbidden_commands_refused_over_listener() {
 }
 
 #[test]
-fn only_ten_calls_and_two_phone_verbs_parse() {
+fn only_the_allowed_calls_parse() {
     let allowed = [
         json!({"cmd": "getStatus"}),
         json!({"cmd": "keepText", "text": "x", "clientId": "c"}),
@@ -256,6 +280,15 @@ fn only_ten_calls_and_two_phone_verbs_parse() {
         json!({"cmd": "getItem", "id": "x"}),
         json!({"cmd": "getOriginal", "id": "x"}),
         json!({"cmd": "disconnect"}),
+        json!({"cmd": "keepText", "text": "x", "clientId": "c", "feeling": {"part": "settled", "point": {"pleasant": 0.5, "energy": -0.5}, "words": ["calm"]}, "good": true}),
+        json!({"cmd": "keepBytes", "mime": "image/png", "size": 1, "clientId": "c", "caption": null, "good": false}),
+        json!({"cmd": "keepRecording", "mime": "audio/wav", "size": 1, "clientId": "c", "feeling": null}),
+        json!({"cmd": "getJournalDay", "date": null}),
+        json!({"cmd": "getJournalDay", "date": "2026-11-12"}),
+        json!({"cmd": "getLookBack", "period": {"kind": "week", "start": "2026-11-09", "end": "2026-11-15"}}),
+        json!({"cmd": "lookBack", "period": {"kind": "day", "start": "2026-11-13", "end": "2026-11-13"}}),
+        json!({"cmd": "keepCheckIn", "clientId": "c", "input": {"feeling": {"part": "litUp", "point": {"pleasant": 1, "energy": 1}, "words": []}, "line": null, "urge": null, "replaces": null}}),
+        json!({"cmd": "answerSameName", "questionId": "snq_1", "answer": {"type": "new"}}),
     ];
     for call in &allowed {
         let req = json!({"id": 1, "call": call});
@@ -273,6 +306,10 @@ fn only_ten_calls_and_two_phone_verbs_parse() {
         "openOriginal",
         "invoke",
         "forward",
+        "setLeftOut",
+        "keepGoodThing",
+        "saveEntryText",
+        "confirmMention",
     ] {
         let req = json!({"id": 1, "call": {"cmd": cmd}});
         assert!(
@@ -800,6 +837,8 @@ fn argument_caps() {
             RemoteCall::KeepText {
                 text: "x".into(),
                 client_id: "c".repeat(MAX_ID + 1),
+                feeling: None,
+                good: None,
             },
             PhoneError::Invalid,
         ),
@@ -807,6 +846,8 @@ fn argument_caps() {
             RemoteCall::KeepText {
                 text: "x".into(),
                 client_id: "../c".into(),
+                feeling: None,
+                good: None,
             },
             PhoneError::Invalid,
         ),
@@ -840,6 +881,8 @@ fn argument_caps() {
                 size: 1.5,
                 client_id: "c".into(),
                 caption: None,
+                feeling: None,
+                good: None,
             },
             PhoneError::Invalid,
         ),
@@ -868,6 +911,8 @@ fn argument_caps() {
         size: 200.0,
         client_id: "c-size".into(),
         caption: None,
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     block(c.chunk(id, 0, true, &jpeg(100))).unwrap();
@@ -915,6 +960,8 @@ fn item_over_50mb_refused_before_chunks() {
             size: (MAX_ITEM + 1) as f64,
             client_id: "c-1".into(),
             caption: None,
+            feeling: None,
+            good: None,
         },
     );
     assert_eq!(error_of(&a), Some(PhoneError::TooLarge));
@@ -1025,6 +1072,8 @@ fn upload_streams_to_disk() {
         size: bytes.len() as f64,
         client_id: "c-1".into(),
         caption: None,
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     // The file's own metadata, not the folder listing's: Windows updates the size in the listing
@@ -1063,6 +1112,8 @@ fn one_upload_per_phone() {
         size: 100.0,
         client_id: "c-1".into(),
         caption: None,
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     wait_for("the first upload begins", || {
@@ -1075,6 +1126,8 @@ fn one_upload_per_phone() {
             size: 100.0,
             client_id: "c-2".into(),
             caption: None,
+            feeling: None,
+            good: None,
         },
     );
     assert_eq!(error_of(&second), Some(PhoneError::Busy));
@@ -1096,6 +1149,8 @@ fn retried_upload_replaces_dead_session_upload() {
         size: bytes.len() as f64,
         client_id: "c-photo".into(),
         caption: None,
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     block(dead.chunk(id, 0, false, &bytes[..100])).unwrap();
@@ -1154,6 +1209,8 @@ fn incoming_total_cap() {
             size: MAX_ITEM as f64,
             client_id: "c-1".into(),
             caption: None,
+            feeling: None,
+            good: None,
         }))
         .unwrap();
         held.push(c);
@@ -1167,6 +1224,8 @@ fn incoming_total_cap() {
             size: (MAX_INCOMING_TOTAL - 2 * MAX_ITEM + 1) as f64,
             client_id: "c-1".into(),
             caption: None,
+            feeling: None,
+            good: None,
         },
     );
     assert_eq!(error_of(&a), Some(PhoneError::Busy));
@@ -2069,6 +2128,8 @@ fn recording_must_be_wav() {
         mime: "audio/webm".into(),
         size: webm.len() as f64,
         client_id: "c-1".into(),
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     assert_eq!(
@@ -2081,6 +2142,8 @@ fn recording_must_be_wav() {
         mime: "audio/wav".into(),
         size: wav.len() as f64,
         client_id: "c-2".into(),
+        feeling: None,
+        good: None,
     }))
     .unwrap();
     block(c.chunk(id, 0, true, &wav)).unwrap();
@@ -2135,4 +2198,606 @@ fn session_opens_limited_per_phone() {
     ));
     p.mono.advance(Duration::from_secs(60));
     p.open(&keys, Mode::WebSocket);
+}
+
+// The journal ----------------------------------------------------------------------------------
+
+fn glad() -> Feeling {
+    Feeling {
+        part: FeelingPart::LitUp,
+        point: FeelingPoint {
+            pleasant: 0.6,
+            energy: 0.5,
+        },
+        words: vec!["glad".into()],
+    }
+}
+
+fn check_in_input(line: Option<&str>) -> CheckInInput {
+    CheckInInput {
+        feeling: glad(),
+        line: line.map(str::to_string),
+        urge: None,
+        replaces: None,
+    }
+}
+
+fn today(p: &Phone) -> jiff::civil::Date {
+    p.h.engine().journal_today().unwrap()
+}
+
+fn day_on_phone(c: &mut PhoneClient, date: Option<&str>) -> Box<JournalDay> {
+    match call(
+        c,
+        RemoteCall::GetJournalDay {
+            date: date.map(str::to_string),
+        },
+    ) {
+        RemoteAnswer::JournalDay { day } => day,
+        other => panic!("not a day: {other:?}"),
+    }
+}
+
+#[test]
+fn a_phone_keep_with_a_feeling_makes_a_check_in_about_the_note() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let a = call(
+        &mut c,
+        RemoteCall::KeepText {
+            text: "Tea with Priya".into(),
+            client_id: "c-feel".into(),
+            feeling: Some(glad()),
+            good: None,
+        },
+    );
+    let note = kept_id(&a);
+    let day = p.h.engine().journal_day(today(&p)).unwrap();
+    assert_eq!(day.checkins.len(), 1);
+    let checkin = &day.checkins[0];
+    assert_eq!(checkin.about.as_deref(), Some(note.as_str()));
+    assert_eq!(checkin.feeling.words, vec!["glad"]);
+    assert_eq!(day.rows[0].item.from_device.as_deref(), Some("Pixel"));
+    assert_eq!(day.rows.len(), 1, "the check-in is not a row of its own");
+    assert_eq!(
+        day.rows[0].feeling.as_ref().map(|f| f.id.clone()),
+        Some(checkin.id.clone())
+    );
+
+    let seen = day_on_phone(&mut c, None);
+    assert_eq!(seen.checkins.len(), 1);
+    assert_eq!(seen.rows[0].item.id, note);
+
+    // An older phone, which sends neither, keeps exactly as before.
+    let plain = keep_text(&mut c, "Plain note", "c-plain");
+    assert!(matches!(plain, RemoteAnswer::Kept { .. }));
+    assert_eq!(
+        p.h.engine().journal_day(today(&p)).unwrap().checkins.len(),
+        1
+    );
+
+    // Taking the keep back takes its feeling with it.
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: note }),
+        RemoteAnswer::Done
+    ));
+    let day = p.h.engine().journal_day(today(&p)).unwrap();
+    assert!(day.checkins.is_empty());
+    assert_eq!(day.rows.len(), 1);
+}
+
+#[test]
+fn bad_feelings_are_refused_before_anything_is_kept() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let mut off_the_field = glad();
+    off_the_field.point.energy = 1.5;
+    let mut four_words = glad();
+    four_words.words = vec!["a".into(), "b".into(), "c".into(), "d".into()];
+    for (i, f) in [off_the_field, four_words].into_iter().enumerate() {
+        let a = call(
+            &mut c,
+            RemoteCall::KeepText {
+                text: "x".into(),
+                client_id: format!("c-bad{i}"),
+                feeling: Some(f.clone()),
+                good: None,
+            },
+        );
+        assert_eq!(error_of(&a), Some(PhoneError::Invalid));
+        let a = call(
+            &mut c,
+            RemoteCall::KeepCheckIn {
+                input: CheckInInput {
+                    feeling: f,
+                    line: None,
+                    urge: None,
+                    replaces: None,
+                },
+                client_id: format!("c-badci{i}"),
+            },
+        );
+        assert_eq!(error_of(&a), Some(PhoneError::Invalid));
+    }
+    assert!(p.h.engine().items(Default::default()).unwrap().is_empty());
+}
+
+#[test]
+fn a_text_kept_as_a_good_thing_is_a_good_thing() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let a = call(
+        &mut c,
+        RemoteCall::KeepText {
+            text: "Sun on the balcony".into(),
+            client_id: "c-good".into(),
+            feeling: None,
+            good: Some(true),
+        },
+    );
+    let id = kept_id(&a);
+    let day = p.h.engine().journal_day(today(&p)).unwrap();
+    assert_eq!(day.good.len(), 1);
+    assert_eq!(day.good[0].id, id);
+    assert_eq!(day.good[0].text, "Sun on the balcony");
+    for i in 0..2 {
+        keep_good(&mut c, &format!("more {i}"), &format!("c-g{i}"));
+    }
+    let fourth = call(
+        &mut c,
+        RemoteCall::KeepText {
+            text: "One too many".into(),
+            client_id: "c-g4".into(),
+            feeling: None,
+            good: Some(true),
+        },
+    );
+    assert_eq!(error_of(&fourth), Some(PhoneError::Invalid), "three a day");
+}
+
+fn keep_good(c: &mut PhoneClient, text: &str, client_id: &str) {
+    let a = call(
+        c,
+        RemoteCall::KeepText {
+            text: text.into(),
+            client_id: client_id.into(),
+            feeling: None,
+            good: Some(true),
+        },
+    );
+    kept_id(&a);
+}
+
+#[test]
+fn a_photo_kept_as_a_good_thing() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let a = keep_bytes_marked(
+        &mut c,
+        &jpeg(300),
+        "image/jpeg",
+        "c-photo",
+        Some("Sun on the balcony"),
+        100,
+        Marks {
+            feeling: Some(glad()),
+            good: Some(true),
+        },
+    );
+    let photo = kept_id(&a);
+    let e = p.h.engine();
+    let day = e.journal_day(today(&p)).unwrap();
+    assert_eq!(day.good.len(), 1);
+    assert_eq!(day.good[0].text, "Sun on the balcony");
+    assert_eq!(
+        day.good[0].photo.as_ref().map(|v| v.id.clone()),
+        Some(photo.clone())
+    );
+    assert_eq!(day.checkins.len(), 1);
+    assert_eq!(day.checkins[0].about.as_deref(), Some(photo.as_str()));
+
+    let seen = day_on_phone(&mut c, None);
+    let thing = &seen.good[0];
+    assert_eq!(thing.photo.as_ref().unwrap().original_path, None);
+    // The photo is named in the day the phone read, so it opens.
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetItem { id: photo.clone() }),
+        RemoteAnswer::Item { .. }
+    ));
+
+    // A voice note or a document cannot be a good thing; nothing is kept.
+    let id = block(c.request(RemoteCall::KeepRecording {
+        mime: "audio/wav".into(),
+        size: 4.0,
+        client_id: "c-voice".into(),
+        feeling: None,
+        good: Some(true),
+    }))
+    .unwrap();
+    assert_eq!(
+        error_of(&block(c.answer(id)).unwrap()),
+        Some(PhoneError::Invalid)
+    );
+
+    // Take back: the photo, its feeling and its good thing all go.
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: photo }),
+        RemoteAnswer::Done
+    ));
+    let day = e.journal_day(today(&p)).unwrap();
+    assert!(day.good.is_empty() && day.checkins.is_empty() && day.rows.is_empty());
+}
+
+#[test]
+fn a_check_in_from_the_phone_is_kept_once() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let first = call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: check_in_input(Some("A good walk")),
+            client_id: "c-ci".into(),
+        },
+    );
+    let RemoteAnswer::CheckIn { checkin } = first else {
+        panic!("not a check-in: {first:?}");
+    };
+    assert_eq!(checkin.line.as_deref(), Some("A good walk"));
+    assert_eq!(checkin.feeling.words, vec!["glad"]);
+    assert_eq!(checkin.from_device.as_deref(), Some("Pixel"));
+    let again = call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: check_in_input(Some("A good walk, again")),
+            client_id: "c-ci".into(),
+        },
+    );
+    assert!(matches!(&again, RemoteAnswer::CheckIn { checkin: c } if c.id == checkin.id));
+    let day = p.h.engine().journal_day(today(&p)).unwrap();
+    assert_eq!(day.checkins.len(), 1);
+    assert_eq!(day.rows.len(), 1);
+    assert_eq!(day.rows[0].kind, nocturne_contract::RowKind::Checkin);
+
+    // Changing a check-in is not for a phone.
+    let change = call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: CheckInInput {
+                replaces: Some(checkin.id.clone()),
+                ..check_in_input(None)
+            },
+            client_id: "c-ci2".into(),
+        },
+    );
+    assert_eq!(error_of(&change), Some(PhoneError::Invalid));
+
+    // Take back works as for any keep.
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: checkin.id }),
+        RemoteAnswer::Done
+    ));
+    assert!(
+        p.h.engine()
+            .journal_day(today(&p))
+            .unwrap()
+            .checkins
+            .is_empty()
+    );
+}
+
+#[test]
+fn the_journal_day_reaches_the_phone_without_a_private_quick_note() {
+    let p = on();
+    let e = p.h.engine();
+    let day = today(&p);
+    let entry = e
+        .save_entry_text(day, None, 0, "A slow morning, then the market.")
+        .unwrap()
+        .unwrap();
+    e.keep_checkin(check_in_input(Some("Calm")), Source::Journal)
+        .unwrap();
+    let open = desk_keep(&p, "Bought milk");
+    let secret = desk_keep(&p, "Clinic result: private matter");
+    e.set_item_private(&secret, true).unwrap();
+    e.keep_note("Felt it all day", Source::QuickCapture, Some(glad()), false)
+        .unwrap();
+
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    assert_eq!(seen.entry.len(), 1);
+    assert_eq!(seen.entry[0].item.id, entry.item.id);
+    assert!(seen.checkins.len() >= 2, "check-ins are journal content");
+    let ids: Vec<&str> = seen.rows.iter().map(|r| r.item.id.as_str()).collect();
+    assert!(ids.contains(&open.as_str()));
+    assert!(!ids.contains(&secret.as_str()));
+    let text = serde_json::to_string(&seen).unwrap();
+    assert!(
+        !text.contains(&secret) && !text.contains("Clinic"),
+        "{text}"
+    );
+    assert!(
+        seen.rows.iter().all(|r| r.item.original_path.is_none()),
+        "no path leaves the computer"
+    );
+    // What it names, it may open; the private one it cannot.
+    assert!(matches!(
+        call(
+            &mut c,
+            RemoteCall::GetItem {
+                id: entry.item.id.clone()
+            }
+        ),
+        RemoteAnswer::Item { .. }
+    ));
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::GetItem { id: secret })),
+        Some(PhoneError::NotFound)
+    );
+
+    // Any past day reads; a day that has not come does not.
+    let yesterday = day.yesterday().unwrap().to_string();
+    assert!(day_on_phone(&mut c, Some(&yesterday)).rows.is_empty());
+    let tomorrow = day.tomorrow().unwrap().to_string();
+    assert_eq!(
+        error_of(&call(
+            &mut c,
+            RemoteCall::GetJournalDay {
+                date: Some(tomorrow)
+            }
+        )),
+        Some(PhoneError::Invalid)
+    );
+    assert_eq!(
+        error_of(&call(
+            &mut c,
+            RemoteCall::GetJournalDay {
+                date: Some("soon".into())
+            }
+        )),
+        Some(PhoneError::Invalid)
+    );
+}
+
+#[test]
+fn a_private_check_in_target_is_not_named_to_the_phone() {
+    let p = on();
+    let e = p.h.engine();
+    let secret = desk_keep(&p, "Clinic result: private matter");
+    e.attach_feeling(&secret, glad(), Source::QuickCapture)
+        .unwrap();
+    e.set_item_private(&secret, true).unwrap();
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    assert!(seen.rows.is_empty());
+    assert_eq!(seen.checkins.len(), 1, "the feeling is journal content");
+    assert_eq!(seen.checkins[0].about, None);
+    assert!(!serde_json::to_string(&seen).unwrap().contains(&secret));
+}
+
+#[test]
+fn a_private_memory_from_an_entry_does_not_hide_the_entry() {
+    let p = on();
+    let e = p.h.engine();
+    let entry = e
+        .save_entry_text(today(&p), None, 0, "Dentist on Thursday.")
+        .unwrap()
+        .unwrap();
+    let lease = e
+        .lease_item(&entry.item.id, Duration::from_secs(60))
+        .unwrap();
+    let made = e
+        .apply_candidates(
+            &entry.item.id,
+            &lease.lease,
+            vec![Candidate::new(
+                "Dentist",
+                Predicate::Prefers,
+                "Thursday",
+                "The dentist is on Thursday.",
+                0.9,
+            )],
+        )
+        .unwrap()
+        .created;
+    e.set_private(&made[0], true).unwrap();
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    assert_eq!(seen.entry.len(), 1, "journal content is read in full");
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetItem { id: entry.item.id }),
+        RemoteAnswer::Item { .. }
+    ));
+}
+
+#[test]
+fn no_private_item_is_cited_in_a_journal_answer() {
+    let p = on();
+    let e = p.h.engine();
+    let secret = desk_keep(&p, "Clinic result: private matter");
+    let day = e.journal_day(today(&p)).unwrap();
+    // As the engine builds it, the day names the note...
+    let raw = RemoteAnswer::JournalDay { day: Box::new(day) };
+    assert_eq!(dispatch::cited_ids(&raw), vec![secret.clone()]);
+    e.set_item_private(&secret, true).unwrap();
+    // ...and the outbound filter holds back any answer that still names it.
+    assert_eq!(
+        e.private_ids(std::slice::from_ref(&secret)).unwrap(),
+        vec![secret.clone()]
+    );
+    // What the phone is sent names nothing private.
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    let sent = RemoteAnswer::JournalDay { day: seen };
+    assert!(dispatch::cited_ids(&sent).is_empty());
+}
+
+#[test]
+fn a_look_back_is_read_as_a_glance_and_writing_waits() {
+    let p = on();
+    let e = p.h.engine();
+    let secret = desk_keep(&p, "Clinic result: private matter");
+    desk_keep(&p, "Bought milk");
+    e.set_item_private(&secret, true).unwrap();
+    let (_, mut c) = p.session("Pixel");
+    let period = e.period_of(PeriodKind::Day, today(&p)).unwrap();
+    let a = call(
+        &mut c,
+        RemoteCall::GetLookBack {
+            period: period.clone(),
+        },
+    );
+    let RemoteAnswer::LookBack { view } = a else {
+        panic!("not a look back: {a:?}");
+    };
+    let ReflectionView::Glance { glance, reason } = *view else {
+        panic!("not a glance");
+    };
+    assert_eq!(reason, GlanceReason::NotOnThisComputer);
+    let counted: usize = glance.kept.iter().map(|k| k.item_ids.len()).sum();
+    assert_eq!(counted, 1, "a private note is not counted");
+    assert!(!serde_json::to_string(&glance).unwrap().contains(&secret));
+
+    let week = e.period_of(PeriodKind::Week, today(&p)).unwrap();
+    assert!(matches!(
+        call(&mut c, RemoteCall::GetLookBack { period: week }),
+        RemoteAnswer::LookBack { .. }
+    ));
+    // Writing is not on this computer yet.
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::LookBack { period })),
+        Some(PhoneError::NotReady)
+    );
+    // Not a period at all.
+    let bad = nocturne_contract::Period {
+        kind: PeriodKind::Week,
+        start: "2026-11-10".into(),
+        end: "2026-11-13".into(),
+    };
+    assert_eq!(
+        error_of(&call(&mut c, RemoteCall::GetLookBack { period: bad })),
+        Some(PhoneError::Invalid)
+    );
+}
+
+fn two_sams(p: &Phone) -> (String, String) {
+    let learn = |full: &str| {
+        let mut c = Candidate::new(
+            full,
+            Predicate::Knows,
+            "you",
+            &format!("{full} is someone you know."),
+            0.9,
+        );
+        c.subject_kind = Some(EntityKind::Person);
+        let (_, made) =
+            p.h.learn_candidate(&format!("{full} is someone you know."), c);
+        p.h.memory(&made[0]).entity_id.unwrap()
+    };
+    (learn("Sam Jones"), learn("Sam Patel"))
+}
+
+#[test]
+fn a_phone_answers_which_sam_and_files_one_item() {
+    let p = on();
+    let e = p.h.engine();
+    let (jones, patel) = two_sams(&p);
+    let entry = e
+        .save_entry_text(
+            today(&p),
+            None,
+            0,
+            "Priya made tea. Sam came round to fix the sink.",
+        )
+        .unwrap()
+        .unwrap();
+    let lease = e
+        .lease_item(&entry.item.id, Duration::from_secs(60))
+        .unwrap();
+    let mut claim = Candidate::new(
+        "Sam",
+        Predicate::Promised,
+        "the sink",
+        "Sam will fix the sink.",
+        0.9,
+    );
+    claim.subject_kind = Some(EntityKind::Person);
+    e.apply_candidates(&entry.item.id, &lease.lease, vec![claim])
+        .unwrap();
+    let (_, mut c) = p.session("Pixel");
+    let seen = day_on_phone(&mut c, None);
+    assert_eq!(seen.same_name.len(), 1);
+    let q = seen.same_name[0].clone();
+    assert_eq!(q.options.len(), 2);
+
+    // Only a choice the question offered.
+    let stranger = call(
+        &mut c,
+        RemoteCall::AnswerSameName {
+            question_id: q.id.clone(),
+            answer: SameNameAnswer::Entity {
+                entity_id: "ent_0000000000000000".into(),
+            },
+        },
+    );
+    assert_eq!(error_of(&stranger), Some(PhoneError::Invalid));
+    let missing = call(
+        &mut c,
+        RemoteCall::AnswerSameName {
+            question_id: "snq_0000000000000000".into(),
+            answer: SameNameAnswer::Leave,
+        },
+    );
+    assert_eq!(error_of(&missing), Some(PhoneError::NotFound));
+
+    let a = call(
+        &mut c,
+        RemoteCall::AnswerSameName {
+            question_id: q.id.clone(),
+            answer: SameNameAnswer::Entity {
+                entity_id: jones.clone(),
+            },
+        },
+    );
+    let RemoteAnswer::SameName { answered } = a else {
+        panic!("not answered: {a:?}");
+    };
+    assert_eq!(answered.name, "Sam Jones");
+    assert!(e.same_name_questions(None).unwrap().is_empty());
+    assert!(day_on_phone(&mut c, None).same_name.is_empty());
+    let about = |entity: &str| e.entity(entity).unwrap().1.len();
+    assert_eq!(about(&jones), 2, "the promise is filed under Sam Jones");
+    assert_eq!(about(&patel), 1, "and nothing under Sam Patel");
+
+    // The same question cannot be answered twice.
+    let again = call(
+        &mut c,
+        RemoteCall::AnswerSameName {
+            question_id: q.id,
+            answer: SameNameAnswer::Leave,
+        },
+    );
+    assert_eq!(error_of(&again), Some(PhoneError::NotFound));
+}
+
+#[test]
+fn the_activity_list_has_what_a_phone_did_in_the_journal() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: check_in_input(None),
+            client_id: "c-act".into(),
+        },
+    );
+    day_on_phone(&mut c, None);
+    let actions: Vec<RemoteAction> =
+        p.h.engine()
+            .remote_events(20)
+            .unwrap()
+            .into_iter()
+            .map(|e| e.action)
+            .collect();
+    assert!(actions.contains(&RemoteAction::KeptText));
+    assert!(actions.contains(&RemoteAction::ReadPage));
 }

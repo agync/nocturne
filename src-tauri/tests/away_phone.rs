@@ -56,6 +56,8 @@ async fn run(s: Value) -> Result<Value, String> {
         .call(RemoteCall::KeepText {
             text: text.into(),
             client_id: format!("{name}-text"),
+            feeling: None,
+            good: None,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;
@@ -66,6 +68,8 @@ async fn run(s: Value) -> Result<Value, String> {
             size: bytes.len() as f64,
             client_id: format!("{name}-photo"),
             caption: Some("a photo".into()),
+            feeling: None,
+            good: None,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;

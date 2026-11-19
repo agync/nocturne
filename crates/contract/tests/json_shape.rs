@@ -31,12 +31,56 @@ fn remote_calls_are_tagged_by_cmd() {
         call: RemoteCall::KeepText {
             text: "milk".into(),
             client_id: "c-1".into(),
+            feeling: None,
+            good: None,
         },
     };
     assert_eq!(
         serde_json::to_string(&req).unwrap(),
         r#"{"id":3,"call":{"cmd":"keepText","text":"milk","clientId":"c-1"}}"#
     );
+    let marked = RemoteCall::KeepText {
+        text: "milk".into(),
+        client_id: "c-1".into(),
+        feeling: Some(Feeling {
+            part: FeelingPart::Settled,
+            point: FeelingPoint {
+                pleasant: 0.5,
+                energy: -0.5,
+            },
+            words: vec!["calm".into()],
+        }),
+        good: Some(true),
+    };
+    assert_eq!(
+        serde_json::to_string(&marked).unwrap(),
+        r#"{"cmd":"keepText","text":"milk","clientId":"c-1","feeling":{"part":"settled","point":{"pleasant":0.5,"energy":-0.5},"words":["calm"]},"good":true}"#
+    );
+    let older: RemoteCall = serde_json::from_str(
+        r#"{"cmd":"keepRecording","mime":"audio/wav","size":4,"clientId":"c"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        older,
+        RemoteCall::KeepRecording {
+            feeling: None,
+            good: None,
+            ..
+        }
+    ));
+    let day: RemoteCall =
+        serde_json::from_str(r#"{"cmd":"getJournalDay","date":"2026-11-19"}"#).unwrap();
+    assert_eq!(
+        day,
+        RemoteCall::GetJournalDay {
+            date: Some("2026-11-19".into())
+        }
+    );
+    let same: RemoteCall = serde_json::from_str(
+        r#"{"cmd":"answerSameName","questionId":"snq_1","answer":{"type":"entity","entityId":"ent_1"}}"#,
+    )
+    .unwrap();
+    assert!(matches!(same, RemoteCall::AnswerSameName { .. }));
     let unit: RemoteCall = serde_json::from_str(r#"{"cmd":"listPages"}"#).unwrap();
     assert_eq!(unit, RemoteCall::ListPages);
     assert!(serde_json::from_str::<RemoteCall>(r#"{"cmd":"deleteEverything"}"#).is_err());

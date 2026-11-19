@@ -306,6 +306,7 @@
   "away.event.keptPhoto": "{name} kept {count, plural, one {a photo} other {# photos}}",
   "away.event.keptDocument": "{name} kept {count, plural, one {a document} other {# documents}}",
   "away.event.keptVoiceNote": "{name} kept {count, plural, one {a voice note} other {# voice notes}}",
+  "away.event.answeredName": "{name} answered {count, plural, one {a question about a name} other {# questions about a name}}",
   "away.event.tookBack": "{name} took back {count, plural, one {something it kept} other {# things it kept}}",
   "away.event.readPage": "{name} read {count, plural, one {a page} other {pages # times}}",
   "away.event.openedOriginal": "{name} opened {count, plural, one {something you kept} other {# things you kept}}",

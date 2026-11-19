@@ -7,7 +7,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{AskDelta, ItemKind, PageSummary, PageView};
+use crate::{
+    AskDelta, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay, PageSummary, PageView, Period,
+    ReflectionView, SameNameAnswer, SameNameAnswered,
+};
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
 /// person's own Tailscale account.
@@ -195,6 +198,7 @@ pub enum RemoteAction {
     KeptPhoto,
     KeptDocument,
     KeptVoiceNote,
+    AnsweredName,
     TookBack,
     ReadPage,
     OpenedOriginal,
@@ -351,7 +355,11 @@ pub enum PhoneError {
     SessionExpired,
 }
 
-/// Everything a phone may ask for: the ten allowed calls and the two phone verbs.
+/// Everything a phone may ask for: the ten allowed calls, the journal calls and the two phone
+/// verbs.
+///
+/// A keep may carry a feeling and a good-thing mark; both are optional and default to nothing,
+/// so a phone built before the journal still parses and keeps as it always did.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "cmd", rename_all = "camelCase", rename_all_fields = "camelCase")]
 #[ts(export)]
@@ -360,17 +368,35 @@ pub enum RemoteCall {
     KeepText {
         text: String,
         client_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        feeling: Option<Feeling>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        good: Option<bool>,
     },
     KeepBytes {
         mime: String,
         size: f64,
         client_id: String,
         caption: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        feeling: Option<Feeling>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        good: Option<bool>,
     },
     KeepRecording {
         mime: String,
         size: f64,
         client_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        feeling: Option<Feeling>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        good: Option<bool>,
     },
     Unkeep {
         id: String,
@@ -392,6 +418,28 @@ pub enum RemoteCall {
         id: String,
     },
     Disconnect,
+    /// A journal day, today when `date` is none.
+    GetJournalDay {
+        date: Option<String>,
+    },
+    /// What is written for a day, week, month or year, or its glance.
+    GetLookBack {
+        period: Period,
+    },
+    /// Ask the computer to write it ("Reflect on today").
+    LookBack {
+        period: Period,
+    },
+    /// The whole check-in, by touch.
+    KeepCheckIn {
+        input: CheckInInput,
+        client_id: String,
+    },
+    /// "Which {name} is this?": the one change a phone may make beyond keeping.
+    AnswerSameName {
+        question_id: String,
+        answer: SameNameAnswer,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -419,6 +467,10 @@ pub enum RemoteAnswer {
     Pages { pages: Vec<PageSummary> },
     Item { item: PhoneItem },
     OriginalStart { mime: String, size: f64 },
+    JournalDay { day: Box<JournalDay> },
+    LookBack { view: Box<ReflectionView> },
+    CheckIn { checkin: Box<CheckIn> },
+    SameName { answered: SameNameAnswered },
     Done,
     Error { code: PhoneError },
     Revoked,

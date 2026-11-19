@@ -25,6 +25,7 @@ pub mod crypto;
 pub mod dispatch;
 pub mod frame;
 pub mod incoming;
+pub mod journal;
 pub mod keepawake;
 pub mod limits;
 pub mod listener;
@@ -272,7 +273,8 @@ pub enum RemoteDecision {
 }
 
 /// One row per registered command: what a paired phone may do. Only the ten `Allow` rows
-/// are reachable from a phone, each through its own typed call, never by name.
+/// are reachable from a phone, each through its own typed call, never by name; the journal
+/// calls are typed the same way (see [`PHONE_ONLY_CALLS`]).
 pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
     use RemoteDecision::{Allow, Never};
     &[
@@ -422,39 +424,62 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
     ]
 };
 
-/// What a phone may do that no window command does: fetch a cited original, end its session.
-pub const PHONE_ONLY_CALLS: &[&str] = &["get_original", "disconnect"];
+/// What a phone may do that no window command does: fetch a cited original, end its session,
+/// and the journal calls, which answer from the computer's own journal module.
+pub const PHONE_ONLY_CALLS: &[&str] = &[
+    "get_original",
+    "disconnect",
+    "get_journal_day",
+    "get_look_back",
+    "look_back",
+    "keep_check_in",
+    "answer_same_name",
+];
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
-    use nocturne_contract::RemoteCall;
+    use nocturne_contract::{
+        CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind, RemoteCall,
+        SameNameAnswer,
+    };
 
     use super::*;
     use crate::commands::COMMAND_NAMES;
 
-    /// A phone's calls are exactly the ten allowed commands and the two phone verbs: the
-    /// `cmd` tag of each call, in snake case, names one of them.
+    /// A phone's calls are exactly the ten allowed commands, the two phone verbs and the
+    /// journal calls: the `cmd` tag of each call, in snake case, names one of them.
     #[test]
     fn phone_calls_are_the_allowed_commands_and_the_phone_verbs() {
         let s = String::new;
+        let period = || Period {
+            kind: PeriodKind::Day,
+            start: s(),
+            end: s(),
+        };
         let calls = [
             RemoteCall::GetStatus,
             RemoteCall::KeepText {
                 text: s(),
                 client_id: s(),
+                feeling: None,
+                good: None,
             },
             RemoteCall::KeepBytes {
                 mime: s(),
                 size: 0.0,
                 client_id: s(),
                 caption: None,
+                feeling: None,
+                good: None,
             },
             RemoteCall::KeepRecording {
                 mime: s(),
                 size: 0.0,
                 client_id: s(),
+                feeling: None,
+                good: None,
             },
             RemoteCall::Unkeep { id: s() },
             RemoteCall::Ask { question: s() },
@@ -464,6 +489,29 @@ mod tests {
             RemoteCall::GetItem { id: s() },
             RemoteCall::GetOriginal { id: s() },
             RemoteCall::Disconnect,
+            RemoteCall::GetJournalDay { date: None },
+            RemoteCall::GetLookBack { period: period() },
+            RemoteCall::LookBack { period: period() },
+            RemoteCall::KeepCheckIn {
+                input: CheckInInput {
+                    feeling: Feeling {
+                        part: FeelingPart::Settled,
+                        point: FeelingPoint {
+                            pleasant: 0.0,
+                            energy: 0.0,
+                        },
+                        words: Vec::new(),
+                    },
+                    line: None,
+                    urge: None,
+                    replaces: None,
+                },
+                client_id: s(),
+            },
+            RemoteCall::AnswerSameName {
+                question_id: s(),
+                answer: SameNameAnswer::Leave,
+            },
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -479,7 +527,12 @@ mod tests {
                 | RemoteCall::ListPages
                 | RemoteCall::GetItem { .. }
                 | RemoteCall::GetOriginal { .. }
-                | RemoteCall::Disconnect => {}
+                | RemoteCall::Disconnect
+                | RemoteCall::GetJournalDay { .. }
+                | RemoteCall::GetLookBack { .. }
+                | RemoteCall::LookBack { .. }
+                | RemoteCall::KeepCheckIn { .. }
+                | RemoteCall::AnswerSameName { .. } => {}
             }
         }
         let snake = |camel: &str| {

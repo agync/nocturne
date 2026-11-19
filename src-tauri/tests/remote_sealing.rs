@@ -159,6 +159,8 @@ fn run(path: u8) {
         let kept = block(c.call(RemoteCall::KeepText {
             text: MARKER.into(),
             client_id: format!("c-text-{i}"),
+            feeling: None,
+            good: None,
         }))
         .unwrap();
         assert!(matches!(kept, RemoteAnswer::Kept { .. }));
@@ -167,6 +169,8 @@ fn run(path: u8) {
             size: photo.len() as f64,
             client_id: format!("c-photo-{i}"),
             caption: Some("Blue door".into()),
+            feeling: None,
+            good: None,
         }))
         .unwrap();
         let parts: Vec<&[u8]> = photo.chunks(100 * 1024).collect();
