@@ -37,6 +37,7 @@ export function Which({ engine, question, questionId, day, today, onBack, onDone
     question ? { name: "ready", question } : { name: "loading" },
   );
   const [choice, setChoice] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState(false);
   const [done, setDone] = useState<SameNameAnswered | null>(null);
@@ -45,6 +46,7 @@ export function Which({ engine, question, questionId, day, today, onBack, onDone
   useEffect(() => {
     if (question) return;
     let gone = false;
+    setLoad({ name: "loading" });
     engine.getJournalDay(day).then(
       (data) => {
         if (gone) return;
@@ -56,7 +58,7 @@ export function Which({ engine, question, questionId, day, today, onBack, onDone
     return () => {
       gone = true;
     };
-  }, [engine, question, questionId, day]);
+  }, [engine, question, questionId, day, attempt]);
 
   const stage = done ? "done" : load.name;
   useEffect(() => {
@@ -96,6 +98,23 @@ export function Which({ engine, question, questionId, day, today, onBack, onDone
             {t("phone.journal.which.back")}
           </Button>
         </footer>
+      </Page>
+    );
+  }
+
+  if (load.name === "failed") {
+    return (
+      <Page bar={bar}>
+        <main className="ph-main">
+          <h1 className="ph-h1 ph-h1--small" role="alert">
+            {t("journal.timeline.error")}
+          </h1>
+          <div className="ph-spacer">
+            <Button kind="primary" onClick={() => setAttempt((n) => n + 1)}>
+              {t("phone.tryAgain")}
+            </Button>
+          </div>
+        </main>
       </Page>
     );
   }

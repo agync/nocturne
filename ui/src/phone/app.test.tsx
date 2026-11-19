@@ -13,6 +13,7 @@ import { Scan, Welcome } from "./screens/Entry";
 import { browserRecorder, Keep } from "./screens/Keep";
 import { Original } from "./screens/Original";
 import { PageScreen } from "./screens/PageScreen";
+import { Which } from "./screens/Which";
 import type { Services } from "./services";
 import { mockServices } from "./testing/mockServices";
 
@@ -1203,5 +1204,59 @@ describe("journal on the phone", () => {
       type: "entity",
       entityId: "ent-sam-work",
     });
+  });
+});
+
+describe("journal on the phone, hardening", () => {
+  it("which.failed_read: a failed read says so and tries again, it is not called answered", async () => {
+    const base = createMockPhoneEngine({});
+    let reads = 0;
+    const engine = engineWith(
+      {},
+      {
+        getJournalDay: async (d) => {
+          reads += 1;
+          if (reads === 1) throw new Error("down");
+          return base.getJournalDay(d);
+        },
+      },
+    );
+    render(
+      <Which
+        engine={engine}
+        question={null}
+        questionId="snq-0001"
+        day="2026-11-19"
+        today
+        onBack={() => {}}
+        onDone={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByText("Nocturne couldn’t get this day. What you kept is safe."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("This one has already been answered.")).not.toBeInTheDocument();
+    await userEvent.click(button("Try again"));
+    expect(await screen.findByText("Which Sam is this?")).toBeInTheDocument();
+  });
+
+  it("which.gone: only a question that is truly gone says it was answered", async () => {
+    const base = createMockPhoneEngine({});
+    const engine = engineWith(
+      {},
+      { getJournalDay: async (d) => ({ ...(await base.getJournalDay(d)), sameName: [] }) },
+    );
+    render(
+      <Which
+        engine={engine}
+        question={null}
+        questionId="snq-0001"
+        day="2026-11-19"
+        today
+        onBack={() => {}}
+        onDone={() => {}}
+      />,
+    );
+    expect(await screen.findByText("This one has already been answered.")).toBeInTheDocument();
   });
 });
