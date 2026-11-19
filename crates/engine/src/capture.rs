@@ -381,7 +381,8 @@ impl Engine {
     /// Items waiting to be read, oldest first, without leasing them (their `lease` is empty).
     pub fn pending_items(&self, limit: usize) -> Result<Vec<PendingItem>> {
         let dir = self.originals_dir();
-        self.read(|conn| pending(conn, &dir, Some(limit), None))
+        let now = fmt_ts(self.clock().now());
+        self.read(|conn| pending(conn, &dir, Some(limit), None, &now))
     }
 
     /// Atomically take up to `limit` waiting items: they become `reading` under a lease token,
@@ -394,7 +395,7 @@ impl Engine {
         let dir = self.originals_dir();
         self.write(|tx| {
             reset_expired_leases(tx, &fmt_ts(now))?;
-            let mut items = pending(tx, &dir, Some(limit), None)?;
+            let mut items = pending(tx, &dir, Some(limit), None, &fmt_ts(now))?;
             for item in &mut items {
                 take_lease(tx, item, &fmt_ts(until))?;
             }
@@ -445,7 +446,7 @@ impl Engine {
             if in_forget_job(tx, id)? {
                 return Err(Error::LeaseLost);
             }
-            let mut items = pending(tx, &dir, None, Some(id))?;
+            let mut items = pending(tx, &dir, None, Some(id), &fmt_ts(now))?;
             let mut item = items
                 .pop()
                 .ok_or_else(|| Error::not_found(format!("item {id}")))?;
@@ -549,11 +550,14 @@ impl Engine {
     /// Only an item that was understood, wholly or in part, keeps a time.
     pub fn record_reading_time(&self, item: &str, took: Duration) -> Result<()> {
         let ms = u32::try_from(took.as_millis()).unwrap_or(u32::MAX);
+        let now = fmt_ts(self.clock().now());
         self.write(|tx| {
             tx.execute(
-                "UPDATE items SET understood_in_ms = ?2 WHERE id = ?1 \
+                "UPDATE items SET understood_in_ms = ?2, \
+                 metadata = CASE WHEN json_extract(metadata, '$.journal') IS NOT NULL \
+                   THEN json_set(metadata, '$.read_at', ?3) ELSE metadata END WHERE id = ?1 \
                  AND status IN ('understood', 'partlyUnderstood', 'needsYou', 'unconfirmed')",
-                params![item, ms],
+                params![item, ms, now],
             )?;
             Ok(())
         })
@@ -684,7 +688,7 @@ fn is_reread(conn: &rusqlite::Connection, item: &str) -> Result<bool> {
 }
 
 /// Move a waiting item ahead of everything waiting, the latest request first.
-fn bump_priority(tx: &Transaction<'_>, id: &str) -> Result<()> {
+pub(crate) fn bump_priority(tx: &Transaction<'_>, id: &str) -> Result<()> {
     tx.execute(
         "UPDATE items SET priority = (SELECT COALESCE(MAX(priority), 0) + 1 FROM items) \
          WHERE id = ?1 AND status = 'kept'",
@@ -779,12 +783,14 @@ pub(crate) fn reset_all_leases(conn: &rusqlite::Connection) -> Result<usize> {
     )?)
 }
 
-/// Queue rows: waiting items (`status = 'kept'`), or exactly the one named.
+/// Queue rows: waiting items (`status = 'kept'`) that are not held back for more writing, or
+/// exactly the one named.
 fn pending(
     conn: &rusqlite::Connection,
     dir: &Path,
     limit: Option<usize>,
     only: Option<&str>,
+    now: &str,
 ) -> Result<Vec<PendingItem>> {
     let mut sql = String::from(
         "SELECT id, kind, source, trust, kept_at, sha256, ext, file_name, mime, text, attempts \
@@ -793,7 +799,7 @@ fn pending(
     sql.push_str(if only.is_some() {
         "id = ?1"
     } else {
-        "status = 'kept' \
+        "status = 'kept' AND (hold_until IS NULL OR hold_until <= ?2) \
          AND NOT EXISTS (SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || items.id || '\"') > 0) \
          ORDER BY priority DESC, kept_at, id LIMIT ?1"
     });
@@ -821,7 +827,10 @@ fn pending(
             .collect::<rusqlite::Result<_>>()?,
         None => stmt
             .query_map(
-                [limit.unwrap_or(usize::MAX).min(i64::MAX as usize) as i64],
+                params![
+                    limit.unwrap_or(usize::MAX).min(i64::MAX as usize) as i64,
+                    now
+                ],
                 map,
             )?
             .collect::<rusqlite::Result<_>>()?,

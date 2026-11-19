@@ -174,6 +174,14 @@ impl Engine {
     pub fn set_item_private(&self, item_id: &str, on: bool) -> Result<()> {
         let files = self.write(|tx| {
             item_exists(tx, item_id)?;
+            let journal: bool = tx.query_row(
+                "SELECT json_extract(metadata, '$.journal') IS NOT NULL FROM items WHERE id = ?1",
+                [item_id],
+                |r| r.get(0),
+            )?;
+            if journal {
+                return Err(Error::invalid("a journal item cannot be marked private"));
+            }
             tx.execute(
                 "UPDATE items SET private = ?2 WHERE id = ?1",
                 params![item_id, on],

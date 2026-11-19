@@ -35,6 +35,10 @@ const TABLES: &[&str] = &[
     "online_sends",
     "embeddings_next",
     "reindex_state",
+    "mentions",
+    "reflections",
+    "reflection_cites",
+    "name_questions",
 ];
 
 #[test]

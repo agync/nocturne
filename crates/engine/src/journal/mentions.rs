@@ -11,7 +11,6 @@ use crate::util::parse_enum;
 /// The mentions of each of `item_ids`, in the order they appear in the item. A mention the person
 /// removed is returned with its state, so the interface can offer Undo; callers that show only
 /// live names filter on `state`.
-#[allow(dead_code)]
 pub(crate) fn mentions_for_items(
     conn: &Connection,
     item_ids: &[String],
