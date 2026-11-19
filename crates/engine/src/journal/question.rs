@@ -423,6 +423,18 @@ pub(crate) fn ask_json(ask: &JournalAsk) -> String {
     .to_string()
 }
 
+/// A memory is going. The questions asked about it go with it, except a journal question: its row
+/// stays with no memory and no words, because it still counts for the week and for the page.
+pub(crate) fn drop_memory_questions(tx: &Transaction<'_>, memory_id: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE questions SET memory_id = NULL, text = '' \
+         WHERE memory_id = ?1 AND kind = 'journal'",
+        [memory_id],
+    )?;
+    tx.execute("DELETE FROM questions WHERE memory_id = ?1", [memory_id])?;
+    Ok(())
+}
+
 fn choice_title(choice: QuestionChoice) -> &'static str {
     match choice {
         QuestionChoice::Fine => "Fine",

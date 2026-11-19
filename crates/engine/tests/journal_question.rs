@@ -1304,3 +1304,78 @@ fn an_answer_never_reaches_the_tray_or_a_notification() {
     assert_eq!(w.f.engine.needs_you().unwrap().len(), 1);
     assert!(w.f.engine.needs_you_public().unwrap().is_empty());
 }
+
+// ---- the week rule survives a forgotten memory -------------------------------------------------
+
+#[test]
+fn a_forgotten_memorys_journal_question_still_counts_for_the_week() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let preview =
+        w.f.engine
+            .preview_forget(std::slice::from_ref(&w.memory), false)
+            .unwrap();
+    w.f.engine.forget(&preview.token).unwrap();
+    let (memory, text, kind): (Option<String>, String, String) = conn(&w.f)
+        .query_row(
+            "SELECT memory_id, text, kind FROM questions WHERE page_date = ?1",
+            [PAGE],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap();
+    assert_eq!(
+        (memory, text.as_str(), kind.as_str()),
+        (None, "", "journal")
+    );
+    assert!(
+        w.f.engine
+            .page(Some(date(PAGE)))
+            .unwrap()
+            .unwrap()
+            .question
+            .is_none(),
+        "a saved journal question with no memory is not shown"
+    );
+
+    w.f.clock.set_str("2026-11-14T19:00:00Z");
+    read_block(
+        &w.f,
+        "2026-11-14",
+        "Swimming at nine. Leo is excited.",
+        "Swimming",
+        "2026-11-14",
+        "Swimming at nine. Leo is excited.",
+    );
+    w.f.clock.set_str("2026-11-15T07:00:00Z");
+    let next = compose(&w.f, "2026-11-15").question;
+    assert!(
+        next.is_none_or(|q| q.kind != QuestionKind::Journal),
+        "the week is still taken"
+    );
+}
+
+#[test]
+fn a_forgotten_yes_no_question_is_still_dropped() {
+    let f = fixture();
+    let (_, memory) = common::learn(
+        &f.engine,
+        "Leo likes swimming.",
+        cand("Leo", Predicate::Prefers, "swimming", "Leo likes swimming."),
+    );
+    save_day(&f, "2026-11-10");
+    f.clock.set_str("2026-11-11T07:00:00Z");
+    save_day(&f, "2026-11-11");
+    let preview = f
+        .engine
+        .preview_forget(std::slice::from_ref(&memory), false)
+        .unwrap();
+    f.engine.forget(&preview.token).unwrap();
+    let left: i64 = conn(&f)
+        .query_row(
+            "SELECT COUNT(*) FROM questions WHERE kind = 'yesNo'",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(left, 0);
+}

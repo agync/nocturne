@@ -182,6 +182,7 @@ fn question_for(
         let answered: Option<QuestionChoice> = opt_enum(answer)?;
         let kind: QuestionKind = parse_enum(&kind)?;
         return Ok(match memory_id {
+            None if kind == QuestionKind::Journal => None,
             None => Some(Question {
                 kind,
                 text,
