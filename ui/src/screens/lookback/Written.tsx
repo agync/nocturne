@@ -1,12 +1,16 @@
+import { useMemo, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Disclosure } from "../../components/Disclosure/Disclosure";
 import { Icon } from "../../components/Icon/Icon";
 import { richText } from "../../components/PageLine/richText";
 import { t } from "../../copy/t";
-import type { CheckIn, DayReflection, NameRef } from "../../engine/bindings";
+import type { CheckIn, DayReflection, Mention, NameRef } from "../../engine/bindings";
+import { useJournalDay } from "../../engine/context";
 import { FeelingMap } from "../../journal/FeelingMap";
 import { FeelingMark } from "../../journal/FeelingMark";
+import { MentionCard } from "../../journal/MentionCard";
+import { MentionChip } from "../../journal/MentionChip";
 import { CheckinTable } from "./Charts";
 import styles from "./Lookback.module.css";
 import { NameMark } from "./NameMark";
@@ -76,18 +80,55 @@ function FeltSection({ felt }: { felt: readonly CheckIn[] }) {
   );
 }
 
-function PeopleChips({ people }: { people: readonly NameRef[] }) {
+/** The mention behind each name of the day, so a name opens the same card as on the day. */
+function useMentions(day: string): Map<string, Mention> {
+  const { data } = useJournalDay(day);
+  return useMemo(() => {
+    const out = new Map<string, Mention>();
+    if (!data) return out;
+    const all = [
+      ...data.entry.flatMap((b) => b.mentions),
+      ...data.rows.flatMap((r) => r.mentions),
+      ...data.checkins.flatMap((c) => c.mentions),
+      ...data.good.flatMap((g) => g.mentions),
+    ];
+    for (const m of all) {
+      if (m.state !== "removed" && !out.has(m.entityId)) out.set(m.entityId, m);
+    }
+    return out;
+  }, [data]);
+}
+
+function PeopleChips({ people, day }: { people: readonly NameRef[]; day: string }) {
+  const mentions = useMentions(day);
+  const [open, setOpen] = useState<{ mention: Mention; anchor: HTMLElement } | null>(null);
   return (
     <ul className={styles.chips}>
-      {people.map((n) => (
-        <li key={n.entityId}>
-          <a className={styles.nameChip} href={entityHref(n.entityId)}>
-            <NameMark kind={n.kind} />
-            {n.name}
-            {n.new ? <span className={styles.newTag}>{t("journal.people.new")}</span> : null}
-          </a>
-        </li>
-      ))}
+      {people.map((n) => {
+        const mention = mentions.get(n.entityId);
+        return (
+          <li key={n.entityId}>
+            {mention ? (
+              <MentionChip
+                name={n.name}
+                kind={n.kind}
+                isNew={n.new}
+                pressed={open?.mention.id === mention.id}
+                onClick={(e) => setOpen({ mention, anchor: e.currentTarget })}
+              />
+            ) : (
+              <a className={styles.nameChip} href={entityHref(n.entityId)}>
+                <NameMark kind={n.kind} />
+                {n.name}
+                {n.new ? <span className={styles.newTag}>{t("journal.people.new")}</span> : null}
+              </a>
+            )}
+          </li>
+        );
+      })}
+      {open ? (
+        <MentionCard mention={open.mention} anchor={open.anchor} onClose={() => setOpen(null)} />
+      ) : null}
     </ul>
   );
 }
@@ -166,7 +207,7 @@ export function WrittenView({ reflection: r, onWriteAgain, onPrint, onDelete }: 
           <h2 id="sec-people" className={styles.label}>
             {t("journal.reflection.section.people")}
           </h2>
-          <PeopleChips people={r.people} />
+          <PeopleChips people={r.people} day={r.period.start} />
         </section>
       ) : null}
 

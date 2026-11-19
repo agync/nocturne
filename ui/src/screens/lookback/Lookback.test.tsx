@@ -36,6 +36,15 @@ describe("a day's reflection", () => {
     expect(screen.queryByText(/so far/i)).toBeNull();
   });
 
+  it("opens the same card for a name as the day does", async () => {
+    open("#/journal/look-back/day/2026-11-19");
+    const people = await screen.findByRole("heading", { name: "People and places" });
+    const section = people.closest("section") as HTMLElement;
+    const priya = await within(section).findByRole("button", { name: /Priya/ });
+    fireEvent.click(priya);
+    expect(await screen.findByText("Nocturne thinks Priya is someone new.")).toBeTruthy();
+  });
+
   it("labels today's reflection so far, with the time it was written", async () => {
     open("#/journal/look-back/day/2026-11-19");
     expect(await screen.findByText("Today so far · at 3:15 pm")).toBeTruthy();
