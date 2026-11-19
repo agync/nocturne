@@ -30,9 +30,10 @@
 #   package-windows     scripts/package.sh --config windows under Git Bash, and the installers' sums
 #
 # Every job but hygiene and the gate runs only when a path it reads changed: the `changes` job
-# lists the paths and scripts/ci-areas.sh says which jobs they run. A change to a workflow, the
-# Makefile or the Rust toolchain, a push to main and a hand run run every job. A job reads its flag as
-# `!= 'false'`, so a flag the script does not write runs the job rather than skipping it.
+# lists the paths and scripts/ci-areas.sh says which jobs they run. A change to a workflow or an
+# action, the Makefile or the Rust toolchain, a push to main and a hand run run every job. A job
+# reads its flag as `!= 'false'`, so a flag the script does not write runs the job rather than
+# skipping it.
 #
 # Not run here, on purpose, and listed again in the run summary:
 #   e2e-real, e2e-online, e2e-models  need the real models, about 4.8 GB or more to download
@@ -138,11 +139,11 @@ jobs:
           sudo apt-get update -qq
           read -ra packages <<< "$APT_PACKAGES"
           sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       # The registry and the dependencies' build output, one cache per job and platform, keyed
-      # on the toolchain and the lock file. The workspace's own crates are left out, so the cache
-      # stays small. Only main saves it; a pull request restores it.
+      # on the pinned toolchain and the lock file. The workspace's own crates are left out, so the
+      # cache stays small. Only main saves it; a pull request restores it. cache-prune.yml keeps
+      # the newest cache for each job and platform and deletes the older generations.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
@@ -216,16 +217,17 @@ jobs:
           sudo apt-get update -qq
           read -ra packages <<< "$APT_PACKAGES"
           sudo apt-get install -y -qq --no-install-recommends "${packages[@]}"
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       # As in the rust job; the toolchain's host in the key keeps one cache per platform.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # Every test target is built first, so a compile error in one does not hide another's, and
-      # every test runs, so one failure does not hide the next.
+      # every test runs, so one failure does not hide the next. The `test` profile is the one
+      # `cargo test` uses: building the `dev` profile here made the test step compile the same
+      # workspace crates a second time.
       - name: Build the tests
-        run: cargo build --workspace --tests --keep-going
+        run: cargo build --workspace --tests --profile test --keep-going
       - name: Test
         run: |
           set -euo pipefail
@@ -287,11 +289,16 @@ jobs:
       run:
         shell: bash
     steps:
+      # The cache key hashes .cargo/config.toml and rust-toolchain.toml byte for
+      # byte, and Git for Windows would otherwise check them out with CRLF, which
+      # gave this job a key of its own. Every other Windows job sets this first.
+      - name: Keep LF line endings
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           key: lint
@@ -536,8 +543,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       # Release builds, so a cache of their own; target/package is not kept.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -564,8 +570,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       # Release builds, so a cache of their own; target/package is not kept.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
@@ -604,8 +609,7 @@ jobs:
           printf '#!/usr/bin/env bash\nexec python "$@"\n' > "$RUNNER_TEMP/bin/python3"
           chmod +x "$RUNNER_TEMP/bin/python3"
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
-      - name: Rust
-        run: rustup toolchain install
+      - uses: ./.github/actions/rust-toolchain
       # Release builds, so a cache of their own; target/package is not kept.
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:

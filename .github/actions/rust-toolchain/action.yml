@@ -1,0 +1,39 @@
+# Installs the toolchain rust-toolchain.toml pins and leaves no other in rustup's
+# list.
+#
+# Swatinem/rust-cache hashes every installed toolchain into its cache key. A
+# hosted runner image also carries a preinstalled Rust next to the pinned one,
+# and that extra toolchain comes and goes between runner instances. The same job
+# then computes two different keys, and a run on the other instance finds no
+# cache and rebuilds every dependency. Removing the extras makes the key depend
+# on the repository, not on the machine that happened to run it.
+name: Rust toolchain
+description: Install the pinned toolchain and remove the runner image's other ones.
+
+runs:
+  using: composite
+  steps:
+    - name: Install the pinned toolchain only
+      shell: bash
+      run: |
+        set -euo pipefail
+        rustup toolchain install
+        pinned=$(sed -n \
+          's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+          rust-toolchain.toml)
+        if [ -z "$pinned" ]; then
+          echo "rust-toolchain.toml has no channel" >&2
+          exit 1
+        fi
+        rustup default "$pinned"
+        all=$(rustup toolchain list --quiet) || {
+          echo "could not read rustup's toolchain list" >&2
+          exit 1
+        }
+        extras=$(printf '%s\n' "$all" | tr -d '\r' |
+          awk -v keep="$pinned" 'index($0, keep) != 1 && NF')
+        if [ -n "$extras" ]; then
+          while read -r toolchain; do
+            rustup toolchain uninstall "$toolchain"
+          done <<< "$extras"
+        fi

@@ -164,6 +164,7 @@ class Table(unittest.TestCase):
     def test_a_change_to_ci_runs_everything(self):
         for path in (
             ".github/workflows/release.yml",
+            ".github/actions/rust-toolchain/action.yml",
             "Makefile",
             "rust-toolchain.toml",
             "scripts/ci-areas.sh",
