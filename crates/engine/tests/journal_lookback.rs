@@ -64,11 +64,28 @@ fn mention(f: &Fixture, item: &str, entity: &str, name: &str, new: bool) {
     .unwrap();
 }
 
-/// A reflection written for the day, citing the first item the day offers.
+/// What a reflection on the day is written from, once everything kept has been read.
 fn written(f: &Fixture, day: &str) -> (Period, ReflectInput) {
+    read_all(f);
     let period = day_period(&f.engine, day);
     let input = f.engine.reflection_input(&period).unwrap();
     (period, input)
+}
+
+/// Read every item still waiting, with nothing found in it.
+fn read_all(f: &Fixture) {
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    let ids: Vec<String> = conn
+        .prepare("SELECT id FROM items WHERE status = 'kept'")
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    for id in ids {
+        // An item being forgotten cannot be read; it is left as it is.
+        let _ = f.engine.apply(&id, vec![]);
+    }
 }
 
 fn advance(f: &Fixture, minutes: i64) {
@@ -743,6 +760,7 @@ fn reflections_due_lists_an_ended_day_once_and_not_a_written_one() {
     let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
     let note = keep(&f.engine, "A day with something in it");
     checkin(&f, FeelingPart::Settled, &["calm"]);
+    read_all(&f);
     f.clock.set_str("2026-11-12T20:00:00Z");
     assert!(
         f.engine.reflections_due(7).unwrap().is_empty(),
@@ -817,6 +835,7 @@ fn a_so_far_reflection_is_still_due_once_its_day_has_ended() {
 fn reflections_due_lists_ended_weeks_months_and_years_after_the_days_newest_first() {
     let f = fixture_at("2028-12-31T10:00:00Z", "Europe/London");
     keep(&f.engine, "Last day of the year");
+    read_all(&f);
     f.clock.set_str("2029-01-01T10:00:00Z");
     let due = f.engine.reflections_due(7).unwrap();
     let kinds: Vec<PeriodKind> = due.iter().map(|p| p.kind).collect();
@@ -944,4 +963,25 @@ fn deleting_everything_removes_the_journal_tables_too() {
         );
     }
     assert_eq!(f.engine.evening_reminder().unwrap().time, "21:00");
+}
+
+#[test]
+fn a_reflection_is_not_written_from_what_is_still_being_read() {
+    let f = fixture();
+    let day = date("2026-11-13");
+    let read = keep(&f.engine, "Posted the parcel");
+    f.engine.apply(&read, vec![]).unwrap();
+    let held = f
+        .engine
+        .save_entry_text(day, None, 0, "Still writing this")
+        .unwrap()
+        .unwrap();
+    let waiting = keep(&f.engine, "Not read yet");
+    let input = f
+        .engine
+        .reflection_input(&day_period(&f.engine, "2026-11-13"))
+        .unwrap();
+    let ids: Vec<&str> = input.items.iter().map(|i| i.id.as_str()).collect();
+    assert_eq!(ids, vec![read.as_str()]);
+    assert!(!ids.contains(&held.item.id.as_str()) && !ids.contains(&waiting.as_str()));
 }

@@ -322,7 +322,7 @@ fn reflect_items(conn: &Connection, ctx: &Ctx, g: &Gathered) -> Result<Vec<Refle
     let mut items: Vec<&JItem> = Vec::new();
     for i in g
         .usable()
-        .filter(|i| i.role() != Some(JournalRole::Checkin))
+        .filter(|i| i.role() != Some(JournalRole::Checkin) && !i.pending())
     {
         if !crate::remote::withheld_from_phones(conn, i.id())? {
             items.push(i);

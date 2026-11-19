@@ -46,6 +46,24 @@ fn sentence(text: &str, cites: &[usize]) -> WrittenSentence {
     }
 }
 
+/// Read everything still waiting, with nothing found in it: a reflection is written from what
+/// was read.
+fn read_all(h: &Harness) {
+    let e = h.engine();
+    let waiting = e
+        .items(nocturne_contract::ItemFilter {
+            since: None,
+            status: Some(nocturne_contract::ItemStatus::Kept),
+            limit: None,
+        })
+        .unwrap();
+    for item in waiting {
+        if let Ok(p) = e.lease_item(&item.id, Duration::from_secs(60)) {
+            let _ = e.apply_candidates(&item.id, &p.lease, vec![]);
+        }
+    }
+}
+
 /// Two notes kept on the 12th, then the morning after.
 fn keep_a_day(h: &Harness) -> Vec<String> {
     let e = h.engine();
@@ -64,6 +82,7 @@ fn keep_a_day(h: &Harness) -> Vec<String> {
             }
         }
     }
+    read_all(h);
     h.clock.set_str(MORNING);
     ids
 }
@@ -237,6 +256,7 @@ fn a_day_still_going_is_written_as_so_far_and_a_week_comes_back_as_a_recap() {
     h.engine()
         .keep_note("Porridge and the school run", Source::Journal, None, false)
         .unwrap();
+    read_all(&h);
     h.clock.set_str("2026-11-13T09:00:00Z");
     let today = period(&h, PeriodKind::Day, "2026-11-13");
     let v = h.ok("reflect", arg(&today));
@@ -543,6 +563,7 @@ fn seed(h: &Harness, d: &SeedDay) {
         )
         .unwrap();
     }
+    read_all(h);
     h.clock.set_str(MORNING);
 }
 

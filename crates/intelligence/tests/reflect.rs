@@ -15,6 +15,21 @@ fn sentence(text: &str, cites: &[usize]) -> WrittenSentence {
     }
 }
 
+/// Keep a note and read it, with nothing found in it: a reflection is written from what was read.
+fn keep(w: &World, text: &str) -> String {
+    let id = common::keep(w, text);
+    read(w, &id);
+    id
+}
+
+fn read(w: &World, id: &str) {
+    let p = w
+        .engine
+        .lease_item(id, std::time::Duration::from_secs(60))
+        .unwrap();
+    w.engine.apply_candidates(id, &p.lease, vec![]).unwrap();
+}
+
 fn day(w: &World) -> nocturne_contract::Period {
     w.engine.period_of(PeriodKind::Day, date(DAY)).unwrap()
 }
@@ -223,9 +238,12 @@ async fn a_day_where_half_or_more_of_the_sentences_survived_is_written() {
 #[tokio::test]
 async fn a_day_of_only_things_kept_from_elsewhere_is_listed_without_asking_the_mind() {
     let w = world_at("2026-11-12T10:00:00Z", FakeMind::new());
-    w.engine
-        .keep_text("Screenshot of the school letter", Source::Screenshot)
-        .unwrap();
+    let letter = id_of(
+        w.engine
+            .keep_text("Screenshot of the school letter", Source::Screenshot)
+            .unwrap(),
+    );
+    read(&w, &letter);
     w.clock.set_str("2026-11-13T09:00:00Z");
     let period = day(&w);
     let wrote = write(
@@ -301,7 +319,7 @@ async fn writing_is_not_using_what_was_read() {
         "2026-11-12T10:00:00Z",
         FakeMind::new().with_extract("Gran lives in Leeds", vec![gran()]),
     );
-    keep(&w, "Gran lives in Leeds");
+    common::keep(&w, "Gran lives in Leeds");
     read_all(&w).await;
     w.clock.set_str("2026-11-13T09:00:00Z");
     let before = w
@@ -755,7 +773,7 @@ async fn the_morning_run_never_marks_a_memory_used() {
         .with_headline("H", "d")
         .with_extract(NOTE, vec![gran()]);
     let w = world_at("2026-11-12T18:00:00Z", mind);
-    keep(&w, NOTE);
+    common::keep(&w, NOTE);
     w.clock.set_str("2026-11-13T01:30:00Z");
     assert_eq!(
         w.scheduler.tick().await,
