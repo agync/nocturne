@@ -27,7 +27,7 @@ not make Nocturne depend on any one company.
   the provider through Lemonade's experimental `cloud_providers` feature. The app has no HTTPS
   client to a provider.
 - **Only the last step.** Only Ask can reach the route. Reading, the overnight tidy and the page never
-  do. What is sent is the question and at most 12 remembered sentences. Private memories are never
+  do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; check-ins, reflections and recaps never are. Private memories are never
   sent. Memories about health, money or ID are left out unless the person turns that on, which is
   off by default. Phones use the route only while Away from home is on and the person has left phones on in its settings.
 - **Bounded.** One request per question, no retry, a per-month limit that applies only if the person sets one, and a
