@@ -5,4 +5,8 @@ import type { ForgetRow } from "./ForgetRow";
 /**
  * Exactly what a forget will remove. Executing needs the token.
  */
-export type ForgetPreview = { token: string, memories: Array<ForgetRow>, originals: Array<ForgetOriginal>, includeOriginals: boolean, pagesAffected: number, };
+export type ForgetPreview = { token: string, memories: Array<ForgetRow>, originals: Array<ForgetOriginal>, includeOriginals: boolean, pagesAffected: number, 
+/**
+ * Lines in reflections and recaps that cite what is deleted and will be taken out.
+ */
+reflectionLines?: number, };

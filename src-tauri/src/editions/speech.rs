@@ -113,6 +113,7 @@ async fn make<R: Runtime>(
                 sections,
                 duration_ms,
                 private_skipped: skipped,
+                journal_skipped: None,
             });
         }
         let page = page.ok_or_else(|| CommandError::not_found(format!("page {day}")))?;
@@ -161,6 +162,7 @@ async fn make<R: Runtime>(
                 sections,
                 duration_ms,
                 private_skipped: page.private_skipped,
+                journal_skipped: page.journal_skipped,
             });
         }
     }

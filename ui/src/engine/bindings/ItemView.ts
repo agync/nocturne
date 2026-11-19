@@ -2,6 +2,7 @@
 import type { CouldntReadReason } from "./CouldntReadReason";
 import type { ItemKind } from "./ItemKind";
 import type { ItemStatus } from "./ItemStatus";
+import type { JournalRole } from "./JournalRole";
 import type { Source } from "./Source";
 import type { Trust } from "./Trust";
 
@@ -29,4 +30,9 @@ text: string | null, language: string | null,
 /**
  * The paired phone it was kept from, by name; revoked phones keep their name.
  */
-fromDevice: string | null, };
+fromDevice: string | null, 
+/**
+ * What it is in the journal; `None` for an ordinary thing kept. Journal items cannot be
+ * marked private.
+ */
+journal?: JournalRole, };

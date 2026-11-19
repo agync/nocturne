@@ -2,6 +2,7 @@
 import type { Edition } from "./Edition";
 import type { PageLine } from "./PageLine";
 import type { PageVariant } from "./PageVariant";
+import type { Period } from "./Period";
 import type { Question } from "./Question";
 import type { UpdateOffer } from "./UpdateOffer";
 
@@ -12,4 +13,13 @@ export type PageView = { date: string, pageNumber: number, edition: Edition, var
 /**
  * Items in this page's window still waiting to be read.
  */
-pending: number, tidiedFrom: string | null, tidiedTo: string | null, update: UpdateOffer | null, };
+pending: number, tidiedFrom: string | null, tidiedTo: string | null, update: UpdateOffer | null, 
+/**
+ * The quiet line under the last section on the morning a reflection or recap is new:
+ * "Yesterday, looked back on" or "Last week, looked back on". Never read aloud.
+ */
+journalLine?: Period, 
+/**
+ * Lines left out of a spoken page because they cite something from the journal.
+ */
+journalSkipped?: number, };

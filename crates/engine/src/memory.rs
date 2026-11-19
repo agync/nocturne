@@ -2117,6 +2117,8 @@ impl Engine {
                         }
                         any
                     }
+                    // A name question quotes the journal, which never reaches these places.
+                    NeedsYouEntry::SameName { .. } => true,
                 };
                 if !private {
                     out.push(entry);

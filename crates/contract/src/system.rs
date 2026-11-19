@@ -229,6 +229,10 @@ pub struct SettingsView {
     pub reminders: bool,
     pub lock: bool,
     pub agents: bool,
+    /// The optional evening reminder, off by default.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub evening_reminder: Option<crate::EveningReminder>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
@@ -250,6 +254,9 @@ pub struct SettingsPatch {
     pub reminders: Option<bool>,
     pub lock: Option<bool>,
     pub agents: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub evening_reminder: Option<crate::EveningReminder>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]

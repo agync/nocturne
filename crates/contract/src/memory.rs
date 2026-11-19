@@ -204,6 +204,10 @@ pub enum NeedsYouEntry {
         memory: MemoryView,
         done: bool,
     },
+    /// "Which {name} is this?": a name in an entry that fits two people. Badge "Same name".
+    SameName {
+        question: crate::SameNameQuestion,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -238,6 +242,10 @@ pub struct ForgetPreview {
     pub originals: Vec<ForgetOriginal>,
     pub include_originals: bool,
     pub pages_affected: u32,
+    /// Lines in reflections and recaps that cite what is deleted and will be taken out.
+    #[serde(default)]
+    #[ts(optional)]
+    pub reflection_lines: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

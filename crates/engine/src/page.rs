@@ -338,6 +338,8 @@ fn compose(
                 }
                 Planned { line, private }
             }
+            // A name question lives in Needs you and the journal, not on the page.
+            NeedsYouEntry::SameName { .. } => continue,
         };
         if screen || !planned.private {
             needs.push(planned);
@@ -505,6 +507,8 @@ fn compose(
         tidied_from: None,
         tidied_to: None,
         update: None,
+        journal_line: None,
+        journal_skipped: None,
     })
 }
 
@@ -1187,6 +1191,8 @@ fn empty_like(page: &nocturne_contract::PageView) -> nocturne_contract::PageView
         tidied_from: None,
         tidied_to: None,
         update: None,
+        journal_line: None,
+        journal_skipped: None,
     }
 }
 
@@ -1217,6 +1223,9 @@ pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract
         pending: 0,
         // An offer to update the app is for the computer.
         update: None,
+        // The phone reads the whole journal; the quiet line stays as it is.
+        journal_line: page.journal_line,
+        journal_skipped: None,
         // Not content: when the page was tidied and how many days it catches up on.
         catch_up_days: page.catch_up_days,
         tidied_from: page.tidied_from,

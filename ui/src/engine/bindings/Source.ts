@@ -3,4 +3,4 @@
 /**
  * Where an item came from. Decides its default trust.
  */
-export type Source = "quickCapture" | "drop" | "paste" | "pastedWeb" | "watchedFolder" | "screenshot" | "recording" | "agent" | "setup" | "phone";
+export type Source = "quickCapture" | "drop" | "paste" | "pastedWeb" | "watchedFolder" | "screenshot" | "recording" | "agent" | "setup" | "phone" | "journal";

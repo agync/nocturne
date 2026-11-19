@@ -178,6 +178,7 @@ mod tests {
 
     fn settings(page_time: &str, delivery: Delivery) -> SettingsView {
         SettingsView {
+            evening_reminder: None,
             page_time: page_time.into(),
             delivery,
             auto_print: false,

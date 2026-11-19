@@ -54,6 +54,20 @@ import type {
   SpokenPage,
   Tier,
   WhichResolved,
+  CheckIn,
+  CheckInInput,
+  EntryBlock,
+  Feeling,
+  FeelingPart,
+  GoodThing,
+  JournalDay,
+  Mention,
+  Period,
+  PeriodKind,
+  PeriodSummary,
+  ReflectionView,
+  SameNameAnswer,
+  SameNameAnswered,
 } from "./bindings";
 
 export type Unsubscribe = () => void;
@@ -302,6 +316,68 @@ export interface EngineClient {
 
   /** The Nocturne guide as it came with this version. Read from inside the app; nothing is fetched. */
   getGuide(): Promise<GuideView>;
+
+  /** The journal (docs/design/journaling.md). Days are journal days, `YYYY-MM-DD`. */
+  /** One day as the journal opens it; today when `day` is absent. */
+  getJournalDay(day?: string): Promise<JournalDay>;
+  /** Every day with anything in the journal, oldest first, for "Choose a day". */
+  listJournalDays(): Promise<string[]>;
+  /** Weeks, months or years with anything kept, newest first. */
+  listPeriods(kind: PeriodKind): Promise<PeriodSummary[]>;
+  /** "Got it" on the first-use card. */
+  dismissJournalIntro(): Promise<void>;
+  /**
+   * Saves a paragraph of the day's entry as the person writes. `itemId` is the block being
+   * changed, absent for a new one. A block not read yet changes in place; a read block keeps its
+   * earlier version as history. An empty text removes a block not read yet and returns null.
+   */
+  saveEntryText(
+    day: string,
+    itemId: string | null,
+    block: number,
+    text: string,
+  ): Promise<EntryBlock | null>;
+  /** Places a voice note or photo kept with `keepBytes(…, "journal")` in the day's entry. */
+  placeInEntry(itemId: string, day: string, block: number): Promise<EntryBlock>;
+  /** "Describe this photo": the photo's alternative text. */
+  describePhoto(itemId: string, text: string): Promise<void>;
+  /** The person left the journal: the day's entry is read now rather than after a pause. */
+  readEntryNow(day: string): Promise<void>;
+  /**
+   * Keeps a quick note from the keep bar, quick capture or the journal, with an optional
+   * feeling tapped beside it (kept as a check-in about the note) and the good-thing mark.
+   */
+  keepNote(text: string, source: Source, feeling: Feeling | null, good: boolean): Promise<Kept>;
+  /** The four words this person used most in a part, or the first four of the list. */
+  topFeelingWords(part: FeelingPart): Promise<string[]>;
+  keepCheckIn(input: CheckInInput): Promise<CheckIn>;
+  /** "I tried this" for one of the ideas in "Something that might help", by its id. */
+  markTried(checkinId: string, idea: string): Promise<void>;
+  /** A good thing on `day`, with a photo already kept (a new one, or one from that day). */
+  keepGoodThing(day: string, text: string, photoItemId: string | null): Promise<GoodThing>;
+  /** "Leave out of reflections" and its Undo. */
+  setLeftOut(itemId: string, leftOut: boolean): Promise<void>;
+  /** "Move to {weekday}" for a quick note kept after the day it was about. */
+  moveToDay(itemId: string, day: string): Promise<void>;
+  /** "That's right", with the role typed on a new person's card. */
+  confirmMention(mentionId: string, role: string | null): Promise<Mention>;
+  /** "Not about {name}": the memories this item added about them are let go. */
+  removeMention(mentionId: string): Promise<Mention>;
+  /** Undo of "Not about {name}". */
+  restoreMention(mentionId: string): Promise<Mention>;
+  /** "Someone else…" and "Not a person": only the memories from this item move. */
+  refileMention(mentionId: string, target: RefileTarget): Promise<Mention>;
+  answerSameName(questionId: string, answer: SameNameAnswer): Promise<SameNameAnswered>;
+  /** Days an entity appears in the journal, newest first ("In your journal"). */
+  entityJournalDays(entityId: string): Promise<string[]>;
+  /** The reflection or recap for a period: written, at a glance, or nothing yet. */
+  getReflection(period: Period): Promise<ReflectionView>;
+  /** Writes it now on this computer ("Reflect on today", "Write it again"). Can take a minute. */
+  reflect(period: Period): Promise<ReflectionView>;
+  /** "Stop" while it is being written. */
+  stopReflecting(period: Period): Promise<void>;
+  /** "Delete this reflection": removes only the writing. */
+  deleteReflection(period: Period): Promise<void>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

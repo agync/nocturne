@@ -271,7 +271,7 @@ each, keeping those words in the sentence:\n{}",
 
 pub fn extraction_user(text: &str, cx: &ExtractContext, nonce: &str) -> String {
     let kind = match cx.item_kind {
-        ItemKind::Text => "a note",
+        ItemKind::Text | ItemKind::Checkin => "a note",
         ItemKind::Image => "text read from an image",
         ItemKind::Audio => "a voice recording transcript",
         ItemKind::Document => "a document",

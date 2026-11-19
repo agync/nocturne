@@ -181,6 +181,7 @@ fn needs_you_is_ranked_due_soonest_then_promises_then_which_then_unconfirmed() {
             NeedsYouEntry::Promise { .. } => "promise".into(),
             NeedsYouEntry::Which { .. } => "which".into(),
             NeedsYouEntry::Unconfirmed { .. } => "unconfirmed".into(),
+            NeedsYouEntry::SameName { .. } => "same name".into(),
         })
         .collect();
     assert_eq!(

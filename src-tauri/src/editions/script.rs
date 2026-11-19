@@ -166,6 +166,8 @@ mod tests {
             tidied_from: None,
             tidied_to: None,
             update: None,
+            journal_line: None,
+            journal_skipped: None,
         }
     }
 

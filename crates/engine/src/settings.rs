@@ -10,6 +10,7 @@ use crate::error::{Error, Result};
 
 pub(crate) fn defaults() -> SettingsView {
     SettingsView {
+        evening_reminder: None,
         page_time: "07:00".to_string(),
         delivery: Delivery::Notify,
         auto_print: false,

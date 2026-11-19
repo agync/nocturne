@@ -10,6 +10,8 @@ pub enum ItemKind {
     Audio,
     Document,
     Web,
+    /// A feelings check-in from the journal. It yields mentions only, never memories.
+    Checkin,
 }
 
 /// Where an item came from. Decides its default trust.
@@ -28,6 +30,8 @@ pub enum Source {
     Setup,
     /// Kept from a paired phone through Away from home.
     Phone,
+    /// Written in the journal: an entry block, a check-in or a good thing.
+    Journal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -94,6 +98,11 @@ pub struct ItemView {
     pub language: Option<String>,
     /// The paired phone it was kept from, by name; revoked phones keep their name.
     pub from_device: Option<String>,
+    /// What it is in the journal; `None` for an ordinary thing kept. Journal items cannot be
+    /// marked private.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub journal: Option<crate::JournalRole>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

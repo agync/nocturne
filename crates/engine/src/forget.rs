@@ -215,6 +215,7 @@ impl Engine {
                 ],
             )?;
             Ok(ForgetPreview {
+                reflection_lines: None,
                 token,
                 memories: memories
                     .into_iter()

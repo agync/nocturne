@@ -5,4 +5,8 @@ import type { SpokenSection } from "./SpokenSection";
  * The spoken page: the audio file, its parts and how long it runs. `private_skipped` counts
  * the lines left out because they are private.
  */
-export type SpokenPage = { path: string, sections: Array<SpokenSection>, durationMs: number, privateSkipped: number, };
+export type SpokenPage = { path: string, sections: Array<SpokenSection>, durationMs: number, privateSkipped: number, 
+/**
+ * Lines left out because they cite something from the journal.
+ */
+journalSkipped?: number, };

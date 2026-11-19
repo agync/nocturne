@@ -938,7 +938,7 @@ impl Reader {
 
         if text.is_none() {
             match p.kind {
-                ItemKind::Text | ItemKind::Web => {
+                ItemKind::Text | ItemKind::Web | ItemKind::Checkin => {
                     return self
                         .fail(&id, &lease, CouldntReadReason::Unsupported, reread)
                         .await;

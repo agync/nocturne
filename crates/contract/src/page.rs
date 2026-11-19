@@ -143,6 +143,15 @@ pub struct PageView {
     pub tidied_from: Option<String>,
     pub tidied_to: Option<String>,
     pub update: Option<UpdateOffer>,
+    /// The quiet line under the last section on the morning a reflection or recap is new:
+    /// "Yesterday, looked back on" or "Last week, looked back on". Never read aloud.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub journal_line: Option<crate::Period>,
+    /// Lines left out of a spoken page because they cite something from the journal.
+    #[serde(default)]
+    #[ts(optional)]
+    pub journal_skipped: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -187,4 +196,8 @@ pub struct SpokenPage {
     pub sections: Vec<SpokenSection>,
     pub duration_ms: u32,
     pub private_skipped: u32,
+    /// Lines left out because they cite something from the journal.
+    #[serde(default)]
+    #[ts(optional)]
+    pub journal_skipped: Option<u32>,
 }
