@@ -12,7 +12,7 @@ use jiff::tz::TimeZone;
 use jiff::{SignedDuration, Timestamp};
 use nocturne_contract::{
     Choice, Edition, LineKind, MemoryView, NeedsYouEntry, PageLine, PageSummary, PageVariant,
-    Question, QuestionChoice, QuestionKind, Receipt,
+    Period, PeriodKind, Question, QuestionChoice, QuestionKind, Receipt,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -21,7 +21,7 @@ use crate::audio::{drop_audio_rows, shred_all};
 use crate::day::{PrevPage, Window, window};
 use crate::error::{Error, Result};
 use crate::lifecycle::mark_used_tx;
-use crate::memory::{confirm_tx, is_private_chain, needs_you_on};
+use crate::memory::{confirm_tx, is_journal_chain, is_private_chain, needs_you_on};
 use crate::rows::{MemRow, mem_view, query_mems};
 use crate::settings::{parse_page_time, read_settings, set_page_time};
 use crate::util::{enum_str, fmt_ts, new_id, opt_enum, parse_enum, parse_ts};
@@ -989,6 +989,34 @@ fn strip_stale(
     Ok(page)
 }
 
+/// The period the page's quiet line looks back on: the morning after the night wrote the
+/// journal day's reflection, or after a week, month or year closed. The larger period wins.
+fn quiet_line(conn: &Connection, date: &str) -> Result<Option<Period>> {
+    let Ok(day) = date.parse::<Date>() else {
+        return Ok(None);
+    };
+    let before = day.yesterday().map_err(Error::from)?.to_string();
+    let row: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT kind, start, end FROM reflections WHERE so_far = 0 AND \
+             ((kind = 'day' AND start = ?1 AND written = 'overnight') \
+              OR (kind IN ('week', 'month', 'year') AND end = ?1)) \
+             ORDER BY CASE kind WHEN 'year' THEN 0 WHEN 'month' THEN 1 WHEN 'week' THEN 2 \
+             ELSE 3 END LIMIT 1",
+            [&before],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    row.map(|(kind, start, end)| {
+        Ok(Period {
+            kind: parse_enum::<PeriodKind>(&kind)?,
+            start,
+            end,
+        })
+    })
+    .transpose()
+}
+
 pub(crate) fn load_page(
     conn: &Connection,
     day: Option<Date>,
@@ -1035,6 +1063,7 @@ pub(crate) fn load_page(
             }
         }
     }
+    page.journal_line = quiet_line(conn, &date)?;
     if let Some(q) = page.question.as_mut() {
         let answer: Option<String> = conn
             .query_row(
@@ -1067,7 +1096,12 @@ fn edition_page(
     if edition == Edition::Screen {
         return Ok(Some(page));
     }
+    let spoken = edition == Edition::Audio;
+    if spoken {
+        page.journal_line = None;
+    }
     let mut skipped = 0u32;
+    let mut journal_skipped = 0u32;
     let mut dropped_let_go = 0u32;
     for (i, list) in [
         &mut page.needs_you,
@@ -1082,11 +1116,17 @@ fn edition_page(
         let mut kept = Vec::new();
         for line in std::mem::take(list) {
             let mut private = false;
+            let mut journal = false;
             for m in &line.memory_ids {
                 private |= is_private(conn, m)?;
+                journal |= spoken && is_journal_chain(conn, m)?;
             }
-            if private {
-                skipped += 1;
+            if private || journal {
+                if private {
+                    skipped += 1;
+                } else {
+                    journal_skipped += 1;
+                }
                 if i == 2 {
                     dropped_let_go += 1;
                 }
@@ -1098,13 +1138,20 @@ fn edition_page(
     }
     if let Some(q) = &page.question
         && let Some(m) = &q.memory_id
-        && is_private(conn, m)?
     {
-        page.question = None;
-        skipped += 1;
+        if is_private(conn, m)? {
+            page.question = None;
+            skipped += 1;
+        } else if spoken && is_journal_chain(conn, m)? {
+            page.question = None;
+            journal_skipped += 1;
+        }
     }
     page.private_skipped += skipped;
-    if skipped > 0 {
+    if spoken {
+        page.journal_skipped = Some(journal_skipped);
+    }
+    if skipped + journal_skipped > 0 {
         // The stored headline and dek were written with the private content in view.
         // Never hand them to audio or print: fall back to the template, from the
         // counts that remain.

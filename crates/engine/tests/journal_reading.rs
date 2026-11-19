@@ -6,7 +6,9 @@ mod common;
 
 use common::{EngineExt, Fixture, cand, fixture, keep};
 use nocturne_contract::ItemStatus;
-use nocturne_contract::{EntityKind, MentionState, RefileTarget, SameNameAnswer, Span};
+use nocturne_contract::{
+    Edition, EntityKind, MentionState, PeriodKind, RefileTarget, SameNameAnswer, Span,
+};
 use nocturne_engine::{Candidate, Predicate};
 
 fn conn(f: &Fixture) -> rusqlite::Connection {
@@ -1027,4 +1029,221 @@ fn refiling_a_mention_moves_only_this_items_memories_and_the_link() {
         .unwrap();
     assert_eq!(back.name, "Sam");
     assert_eq!(under("Sam likes tea."), "Sam");
+}
+
+fn save_page(f: &Fixture, day: &str) {
+    let page = f
+        .engine
+        .compose_page(common::date(day), Edition::Screen)
+        .unwrap();
+    f.engine.save_page(&page).unwrap();
+}
+
+fn page_for(f: &Fixture, day: &str, edition: Edition) -> nocturne_contract::PageView {
+    f.engine
+        .page_for(Some(common::date(day)), edition)
+        .unwrap()
+        .unwrap()
+}
+
+fn texts(page: &nocturne_contract::PageView) -> Vec<String> {
+    page.needs_you
+        .iter()
+        .chain(&page.changed)
+        .chain(&page.learned)
+        .chain(&page.upcoming)
+        .chain(&page.let_go)
+        .map(|l| l.text.clone())
+        .collect()
+}
+
+fn promise(f: &Fixture, text: &str, role: Option<&str>, what: &str) {
+    let item = match role {
+        Some(role) => journal_item(f, text, role),
+        None => keep(&f.engine, text),
+    };
+    f.engine
+        .apply(
+            &item,
+            vec![cand(
+                "me",
+                Predicate::Promised,
+                what,
+                &format!("You promised {what}."),
+            )],
+        )
+        .unwrap();
+}
+
+#[test]
+fn the_spoken_page_skips_a_journal_line_and_counts_it() {
+    let f = fixture();
+    promise(&f, "I will water the plants.", None, "to water the plants");
+    promise(
+        &f,
+        "I told Priya I would call.",
+        Some("entry"),
+        "to call Priya",
+    );
+    save_page(&f, "2026-11-14");
+
+    let screen = page_for(&f, "2026-11-14", Edition::Screen);
+    assert_eq!(texts(&screen).len(), 2);
+    let spoken = page_for(&f, "2026-11-14", Edition::Audio);
+    let said = texts(&spoken);
+    assert_eq!(said.len(), 1, "{said:?}");
+    assert!(said[0].contains("water the plants"));
+    assert_eq!(spoken.journal_skipped, Some(1));
+    assert_eq!(spoken.private_skipped, 0);
+
+    let printed = page_for(&f, "2026-11-14", Edition::Print);
+    assert_eq!(texts(&printed).len(), 2, "print keeps the journal");
+    assert_eq!(printed.journal_skipped, None);
+}
+
+#[test]
+fn the_spoken_page_skips_a_question_about_a_journal_memory() {
+    let f = fixture();
+    promise(
+        &f,
+        "I told Priya I would call.",
+        Some("entry"),
+        "to call Priya",
+    );
+    let mut page = f
+        .engine
+        .compose_page(common::date("2026-11-14"), Edition::Screen)
+        .unwrap();
+    let memory_id: String = conn(&f)
+        .query_row("SELECT id FROM memories", [], |r| r.get(0))
+        .unwrap();
+    page.question = Some(nocturne_contract::Question {
+        kind: nocturne_contract::QuestionKind::YesNo,
+        text: "Did you call Priya?".into(),
+        memory_id: Some(memory_id),
+        receipt: None,
+        last_asked: None,
+        answered: None,
+    });
+    f.engine.save_page(&page).unwrap();
+    assert!(
+        page_for(&f, "2026-11-14", Edition::Screen)
+            .question
+            .is_some()
+    );
+    let spoken = page_for(&f, "2026-11-14", Edition::Audio);
+    assert!(spoken.question.is_none());
+    assert_eq!(spoken.journal_skipped, Some(2), "the line and its question");
+}
+
+#[test]
+fn a_memory_keeps_the_journal_mark_through_its_versions_in_the_spoken_page() {
+    let f = fixture();
+    let entry = journal_item(&f, "Priya lives in Leeds.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![cand(
+                "Priya",
+                Predicate::LivesIn,
+                "Leeds",
+                "Priya lives in Leeds.",
+            )],
+        )
+        .unwrap();
+    let later = keep(&f.engine, "Priya moved to York.");
+    f.engine
+        .apply(
+            &later,
+            vec![cand(
+                "Priya",
+                Predicate::LivesIn,
+                "York",
+                "Priya lives in York.",
+            )],
+        )
+        .unwrap();
+    save_page(&f, "2026-11-14");
+    let screen = texts(&page_for(&f, "2026-11-14", Edition::Screen));
+    assert!(!screen.is_empty());
+    let spoken = page_for(&f, "2026-11-14", Edition::Audio);
+    assert!(texts(&spoken).is_empty(), "{:?}", texts(&spoken));
+    assert!(spoken.journal_skipped.unwrap() > 0);
+}
+
+#[test]
+fn a_journal_entrys_memory_is_not_withheld_from_a_phone() {
+    let f = fixture();
+    promise(
+        &f,
+        "I told Priya I would call.",
+        Some("entry"),
+        "to call Priya",
+    );
+    save_page(&f, "2026-11-14");
+    let phone = page_for(&f, "2026-11-14", Edition::Phone);
+    assert_eq!(texts(&phone).len(), 1);
+}
+
+fn reflect(f: &Fixture, kind: &str, start: &str, end: &str, written: &str, so_far: bool) {
+    conn(f)
+        .execute(
+            "INSERT INTO reflections(id, kind, start, end, written_at, written, so_far, \
+             from_count, body) VALUES (?1, ?2, ?3, ?4, '2026-11-14T02:00:00Z', ?5, ?6, 3, '{}')",
+            rusqlite::params![
+                format!("ref_{kind}_{start}"),
+                kind,
+                start,
+                end,
+                written,
+                so_far
+            ],
+        )
+        .unwrap();
+}
+
+fn line_of(f: &Fixture, edition: Edition) -> Option<nocturne_contract::Period> {
+    page_for(f, "2026-11-14", edition).journal_line
+}
+
+#[test]
+fn the_page_gets_a_quiet_line_after_an_overnight_day_reflection() {
+    let f = fixture();
+    save_page(&f, "2026-11-14");
+    assert_eq!(line_of(&f, Edition::Screen), None);
+    reflect(&f, "day", "2026-11-13", "2026-11-13", "overnight", false);
+    let day = nocturne_contract::Period {
+        kind: PeriodKind::Day,
+        start: "2026-11-13".into(),
+        end: "2026-11-13".into(),
+    };
+    assert_eq!(line_of(&f, Edition::Screen), Some(day.clone()));
+    assert_eq!(line_of(&f, Edition::Print), Some(day.clone()));
+    assert_eq!(line_of(&f, Edition::Phone), Some(day));
+    assert_eq!(line_of(&f, Edition::Audio), None, "never read aloud");
+}
+
+#[test]
+fn a_so_far_or_on_demand_or_older_reflection_makes_no_quiet_line() {
+    let f = fixture();
+    save_page(&f, "2026-11-14");
+    reflect(&f, "day", "2026-11-13", "2026-11-13", "overnight", true);
+    assert_eq!(line_of(&f, Edition::Screen), None);
+    conn(&f).execute("DELETE FROM reflections", []).unwrap();
+    reflect(&f, "day", "2026-11-13", "2026-11-13", "onDemand", false);
+    assert_eq!(line_of(&f, Edition::Screen), None);
+    conn(&f).execute("DELETE FROM reflections", []).unwrap();
+    reflect(&f, "day", "2026-11-12", "2026-11-12", "overnight", false);
+    assert_eq!(line_of(&f, Edition::Screen), None);
+}
+
+#[test]
+fn a_recap_that_ended_yesterday_comes_before_the_day() {
+    let f = fixture();
+    save_page(&f, "2026-11-14");
+    reflect(&f, "day", "2026-11-13", "2026-11-13", "overnight", false);
+    reflect(&f, "week", "2026-11-07", "2026-11-13", "overnight", false);
+    let line = line_of(&f, Edition::Screen).unwrap();
+    assert_eq!(line.kind, PeriodKind::Week);
+    assert_eq!(line.start, "2026-11-07");
 }
