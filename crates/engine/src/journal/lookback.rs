@@ -845,6 +845,19 @@ impl Engine {
         sentences: &[WrittenSentence],
         written: WrittenWhen,
     ) -> Result<DayReflection> {
+        self.save_day_reflection_unless(period, input, sentences, written, &|| false)
+    }
+
+    /// [`Engine::save_day_reflection`], except that nothing is stored when `stopped` says so,
+    /// checked inside the transaction that would store it. The reflection stored before stays.
+    pub fn save_day_reflection_unless(
+        &self,
+        period: &Period,
+        input: &ReflectInput,
+        sentences: &[WrittenSentence],
+        written: WrittenWhen,
+        stopped: &dyn Fn() -> bool,
+    ) -> Result<DayReflection> {
         if period.kind != PeriodKind::Day || period_days(period)?.0 != input.day {
             return Err(Error::invalid("that reflection is not for this day"));
         }
@@ -852,6 +865,9 @@ impl Engine {
         let now = fmt_ts(self.clock_now());
         let id = new_id("rfl");
         self.write(|tx| {
+            if stopped() {
+                return Err(Error::Cancelled);
+            }
             let ctx = Ctx::load(tx, self.clock())?;
             let mut lines = Vec::new();
             for s in sentences {
@@ -914,10 +930,19 @@ impl Engine {
 
     /// Store a recap, replacing the one for its period.
     pub fn save_recap(&self, recap: &Recap) -> Result<()> {
+        self.save_recap_unless(recap, &|| false)
+    }
+
+    /// [`Engine::save_recap`], except that nothing is stored when `stopped` says so, checked
+    /// inside the transaction that would store it.
+    pub fn save_recap_unless(&self, recap: &Recap, stopped: &dyn Fn() -> bool) -> Result<()> {
         if recap.period.kind == PeriodKind::Day {
             return Err(Error::invalid("a day is reflected on, not recapped"));
         }
         self.write(|tx| {
+            if stopped() {
+                return Err(Error::Cancelled);
+            }
             store::upsert(
                 tx,
                 &NewRow {

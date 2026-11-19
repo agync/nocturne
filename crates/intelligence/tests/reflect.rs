@@ -4,7 +4,7 @@ use common::*;
 use nocturne_contract::{PeriodKind, Source};
 use nocturne_engine::{FakeMind, MindError, WrittenSentence};
 use nocturne_intelligence::Wrote;
-use nocturne_intelligence::reflect::{MAX_SENTENCES, write};
+use nocturne_intelligence::reflect::{MAX_SENTENCES, write, write_stoppable};
 
 const DAY: &str = "2026-11-12";
 
@@ -122,6 +122,60 @@ async fn a_day_with_no_sentence_that_cites_anything_is_listed_and_stores_nothing
     .unwrap();
     assert_eq!(wrote, Wrote::Listed);
     assert!(w.engine.saved_reflection(&period).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_write_stopped_before_its_save_stores_nothing_and_keeps_the_earlier_one() {
+    let mind = FakeMind::new();
+    let gate = mind.gate("reflect");
+    let (w, _) = world_after_a_day(mind);
+    let period = day(&w);
+    gate.open();
+    let Wrote::Day(first) = write(
+        &w.engine,
+        w.mind.as_ref(),
+        &period,
+        nocturne_contract::WrittenWhen::Overnight,
+    )
+    .await
+    .unwrap() else {
+        panic!("a day")
+    };
+
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let late = stop.clone();
+    let held = w.mind.gate("reflect");
+    let engine = w.engine.clone();
+    let mind = w.mind.clone();
+    let p = period.clone();
+    let task = tokio::spawn(async move {
+        write_stoppable(
+            &engine,
+            mind.as_ref(),
+            &p,
+            nocturne_contract::WrittenWhen::OnDemand,
+            late,
+        )
+        .await
+    });
+    held.entered().await;
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    held.open();
+    let got = task.await.unwrap();
+    assert!(
+        matches!(
+            got,
+            Err(nocturne_intelligence::ReflectError::Engine(
+                nocturne_engine::Error::Cancelled
+            ))
+        ),
+        "{got:?}"
+    );
+    let Some(ReflectionView::Written { reflection }) = w.engine.saved_reflection(&period).unwrap()
+    else {
+        panic!("the earlier one stays")
+    };
+    assert_eq!(reflection.id, first.id);
 }
 
 #[tokio::test]

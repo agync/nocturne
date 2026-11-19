@@ -7,8 +7,8 @@
 //! memory's last-used time, and nothing here goes online.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use nocturne_contract::{
     ComponentRole, Glance, GlanceReason, Period, PeriodKind, ReflectionView, Tier, WrittenWhen,
@@ -46,6 +46,8 @@ pub fn writes_now(state: &AppState) -> bool {
 struct Live {
     id: u64,
     abort: AbortHandle,
+    /// Checked by the write inside the store's transaction, which an abort cannot reach.
+    stop: Arc<AtomicBool>,
 }
 
 /// The override of the journal check, and the reflections being written on request, which the
@@ -78,13 +80,13 @@ impl Reflecting {
     }
 
     /// Track a write; `None` when one for this period is already going.
-    fn begin(&self, period: &Period, abort: AbortHandle) -> Option<u64> {
+    fn begin(&self, period: &Period, abort: AbortHandle, stop: Arc<AtomicBool>) -> Option<u64> {
         let mut live = self.live();
         if live.contains_key(period) {
             return None;
         }
         let id = self.next.fetch_add(1, Ordering::SeqCst);
-        live.insert(period.clone(), Live { id, abort });
+        live.insert(period.clone(), Live { id, abort, stop });
         Some(id)
     }
 
@@ -101,6 +103,7 @@ impl Reflecting {
         let found = self.live().remove(period);
         let was = found.is_some();
         if let Some(l) = found {
+            l.stop.store(true, Ordering::SeqCst);
             l.abort.abort();
         }
         was
@@ -216,12 +219,14 @@ pub async fn reflect(state: &AppState, period: &Period) -> Result<ReflectionView
     let _reader_waits = state.services().map(|s| s.reader.ask_begin());
     let (e, p) = (engine.clone(), period.clone());
     let (go, wait) = tokio::sync::oneshot::channel::<()>();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopped = stop.clone();
     let mut task = AbortOnDrop(tokio::spawn(async move {
         let _ = wait.await;
-        reflect::write(&e, mind.as_ref(), &p, WrittenWhen::OnDemand).await
+        reflect::write_stoppable(&e, mind.as_ref(), &p, WrittenWhen::OnDemand, stopped).await
     }));
     // Tracked before it starts, so a stop can never come too early to find it.
-    let Some(id) = state.reflecting.begin(period, task.0.abort_handle()) else {
+    let Some(id) = state.reflecting.begin(period, task.0.abort_handle(), stop) else {
         return Ok(ReflectionView::Writing { glance });
     };
     let _ = go.send(());
@@ -242,6 +247,9 @@ pub async fn reflect(state: &AppState, period: &Period) -> Result<ReflectionView
                 glance,
                 reason: GlanceReason::NotReady,
             })
+        }
+        Ok(Err(ReflectError::Engine(nocturne_engine::Error::Cancelled))) => {
+            Ok(ReflectionView::NotYet { glance })
         }
         Ok(Err(ReflectError::Engine(e))) => Err(e.into()),
         Ok(Err(ReflectError::Mind(e))) => {
@@ -265,4 +273,33 @@ pub async fn delete(state: &AppState, period: &Period) -> Result<(), CommandErro
     let engine = state.engine()?;
     let p = period.clone();
     blocking(move || engine.delete_reflection(&p)).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn day() -> Period {
+        Period {
+            kind: PeriodKind::Day,
+            start: "2026-11-12".into(),
+            end: "2026-11-12".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn stopping_a_write_sets_the_flag_its_save_checks() {
+        let reflecting = Reflecting::default();
+        let task = tokio::spawn(std::future::pending::<()>());
+        let stop = Arc::new(AtomicBool::new(false));
+        let id = reflecting
+            .begin(&day(), task.abort_handle(), stop.clone())
+            .unwrap();
+        assert!(!stop.load(Ordering::SeqCst));
+        assert!(reflecting.stop(&day()));
+        assert!(stop.load(Ordering::SeqCst));
+        assert!(!reflecting.is_writing(&day()));
+        reflecting.end(&day(), id);
+        assert!(task.await.unwrap_err().is_cancelled());
+    }
 }

@@ -697,6 +697,48 @@ fn a_reflection_is_shown_a_summary_for_background_items_and_a_capped_text_for_th
 }
 
 #[test]
+fn a_save_that_is_stopped_stores_nothing_and_leaves_what_was_there() {
+    let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
+    let note = keep(&f.engine, "A day with something in it");
+    f.clock.set_str("2026-11-13T08:00:00Z");
+    let (period, input) = written(&f, "2026-11-12");
+    let at = input.items.iter().position(|i| i.id == note).unwrap();
+    f.engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[sentence("You **kept something**.", &[at])],
+            WrittenWhen::Overnight,
+        )
+        .unwrap();
+    let before = f.engine.saved_reflection(&period).unwrap();
+
+    let stopped = f.engine.save_day_reflection_unless(
+        &period,
+        &input,
+        &[sentence("You **kept it twice**.", &[at])],
+        WrittenWhen::OnDemand,
+        &|| true,
+    );
+    assert!(matches!(stopped, Err(nocturne_engine::Error::Cancelled)));
+    assert_eq!(f.engine.saved_reflection(&period).unwrap(), before);
+
+    let week = f
+        .engine
+        .period_of(PeriodKind::Week, date("2026-11-09"))
+        .unwrap();
+    let recap = f
+        .engine
+        .compose_recap(&week, WrittenWhen::Overnight)
+        .unwrap();
+    assert!(matches!(
+        f.engine.save_recap_unless(&recap, &|| true),
+        Err(nocturne_engine::Error::Cancelled)
+    ));
+    assert!(f.engine.saved_reflection(&week).unwrap().is_none());
+}
+
+#[test]
 fn reflections_due_lists_an_ended_day_once_and_not_a_written_one() {
     let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
     let note = keep(&f.engine, "A day with something in it");

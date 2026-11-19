@@ -6,6 +6,8 @@
 //! from what was kept. Nothing here counts as use of a memory.
 
 use std::fmt;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use nocturne_contract::{DayReflection, Period, PeriodKind, Recap, WrittenWhen};
 use nocturne_engine::{Engine, Error as EngineError, Mind, MindError, WrittenSentence};
@@ -71,12 +73,33 @@ pub async fn write(
     period: &Period,
     written: WrittenWhen,
 ) -> Result<Wrote, ReflectError> {
+    write_stoppable(
+        engine,
+        mind,
+        period,
+        written,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+}
+
+/// [`write`], which stores nothing once `stop` is set, checked inside the store's own
+/// transaction: a write already past its last await, running on a blocking thread, can still
+/// be stopped. A stopped write is `ReflectError::Engine(Error::Cancelled)`.
+pub async fn write_stoppable(
+    engine: &Engine,
+    mind: &dyn Mind,
+    period: &Period,
+    written: WrittenWhen,
+    stop: Arc<AtomicBool>,
+) -> Result<Wrote, ReflectError> {
     if period.kind != PeriodKind::Day {
         let p = period.clone();
+        let stopped = stop.clone();
         let recap = on_engine(engine, move |e| {
             let recap = e.compose_recap(&p, written)?;
             if recap.days > 0 {
-                e.save_recap(&recap)?;
+                e.save_recap_unless(&recap, &|| stopped.load(Ordering::SeqCst))?;
             }
             Ok(recap)
         })
@@ -111,7 +134,9 @@ pub async fn write(
     }
     let p = period.clone();
     let reflection = on_engine(engine, move |e| {
-        let reflection = e.save_day_reflection(&p, &input, &kept, written)?;
+        let reflection = e.save_day_reflection_unless(&p, &input, &kept, written, &|| {
+            stop.load(Ordering::SeqCst)
+        })?;
         if reflection.the_day.is_empty() {
             e.delete_reflection(&p)?;
         }

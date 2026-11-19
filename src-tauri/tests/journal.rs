@@ -327,6 +327,29 @@ fn stopping_cancels_the_write_and_stores_nothing() {
 }
 
 #[test]
+fn deleting_during_a_write_leaves_nothing_stored() {
+    let (h, mind) = world(FakeMind::new());
+    keep_a_day(&h);
+    h.state().reflecting.set_writes(Some(true));
+    let day = period(&h, PeriodKind::Day, "2026-11-12");
+    h.ok("reflect", arg(&day));
+    assert!(h.engine().saved_reflection(&day).unwrap().is_some());
+
+    let gate = mind.gate("reflect");
+    let app = h.app.handle().clone();
+    let p = day.clone();
+    let call = tauri::async_runtime::spawn(async move {
+        nocturne_app_lib::journal::reflect(&app.state(), &p).await
+    });
+    block_on(async { tokio::time::timeout(Duration::from_secs(10), gate.entered()).await })
+        .expect("the mind is asked");
+    h.ok("delete_reflection", arg(&day));
+    gate.open();
+    let _ = block_on(call);
+    assert!(h.engine().saved_reflection(&day).unwrap().is_none());
+}
+
+#[test]
 fn a_write_for_a_period_already_being_written_is_not_started_twice() {
     let (h, mind) = world(FakeMind::new());
     keep_a_day(&h);
