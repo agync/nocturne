@@ -885,7 +885,7 @@
             {
               "parts": [
                 {
-                  "text": "Ask a question, keep text, a photo, a document or a voice note, take back what it just kept, read today's page and the last seven, and open an original that an answer or the page cited. It never sees anything you marked private. It cannot forget, delete, export, change settings or add other phones.",
+                  "text": "Ask a question, keep text, a photo, a document or a voice note, take back what it just kept, read today's page and the last seven, read your journal, keep a note with a feeling or as a good thing, answer \"Which {name} is this?\", and open an original that an answer or the page cited. It never sees anything you marked private. It cannot forget, delete, export, change settings or add other phones.",
                   "type": "text"
                 }
               ],
@@ -903,7 +903,7 @@
             {
               "parts": [
                 {
-                  "text": "An unlocked or stolen phone can read everything not marked private until you remove it from the computer, so remove a lost phone first.",
+                  "text": "An unlocked or stolen phone can read everything not marked private. That includes your journal. It can read it until you remove it from the computer, so remove a lost phone first.",
                   "type": "text"
                 }
               ],
@@ -1315,6 +1315,12 @@
                 ],
                 [
                   {
+                    "text": "Your check-ins, reflections and recaps. They are written and kept on this computer.",
+                    "type": "text"
+                  }
+                ],
+                [
+                  {
                     "text": "Health, money and ID memories, unless you turn that on. It is off by default.",
                     "type": "text"
                   }
@@ -1351,6 +1357,15 @@
                 ]
               ],
               "type": "list"
+            },
+            {
+              "parts": [
+                {
+                  "text": "Journal entries and good things can't be marked private, so while Online answers is on, a line from one can go with a question it helps answer.",
+                  "type": "text"
+                }
+              ],
+              "type": "paragraph"
             },
             {
               "parts": [
