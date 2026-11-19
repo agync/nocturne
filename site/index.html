@@ -163,6 +163,37 @@
   </div>
 </section>
 
+<section id="journal" class="band split" aria-labelledby="journal-title">
+  <div class="intro">
+    <p class="eyebrow">{{t:journal.eyebrow}}</p>
+    <h2 id="journal-title">{{t:journal.title}}</h2>
+    <p>{{t:journal.body}}</p>
+  </div>
+  <figure class="journal-shot">
+    <div class="feature-shot">
+      <picture class="only-light window">
+        <source media="(max-width: 640px)" srcset="/assets/img/journal-narrow-light-390.webp 390w, /assets/img/journal-narrow-light-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="950">
+        <img src="/assets/img/journal-light-768.webp" srcset="/assets/img/journal-light-768.webp 768w, /assets/img/journal-light-1536.webp 1536w" sizes="(min-width: 1120px) 488px, (min-width: 824px) calc(50vw - 62px), min(620px, calc(100vw - 76px))" width="1536" height="1404" alt="{{t:journal.day.alt}}" loading="lazy">
+      </picture>
+      <picture class="only-dark window">
+        <source media="(max-width: 640px)" srcset="/assets/img/journal-narrow-dark-390.webp 390w, /assets/img/journal-narrow-dark-780.webp 780w" sizes="calc(100vw - 32px)" width="780" height="950">
+        <img src="/assets/img/journal-dark-768.webp" srcset="/assets/img/journal-dark-768.webp 768w, /assets/img/journal-dark-1536.webp 1536w" sizes="(min-width: 1120px) 488px, (min-width: 824px) calc(50vw - 62px), min(620px, calc(100vw - 76px))" width="1536" height="1404" alt="{{t:journal.day.alt}}" loading="lazy">
+      </picture>
+    </div>
+    <div class="journal-look">
+      <picture class="only-light"><img src="/assets/img/look-light-560.webp" srcset="/assets/img/look-light-560.webp 560w, /assets/img/look-light-1120.webp 1120w" sizes="(min-width: 641px) 420px, calc(100vw - 56px)" width="1120" height="648" alt="{{t:journal.look.alt}}" loading="lazy"></picture>
+      <picture class="only-dark"><img src="/assets/img/look-dark-560.webp" srcset="/assets/img/look-dark-560.webp 560w, /assets/img/look-dark-1120.webp 1120w" sizes="(min-width: 641px) 420px, calc(100vw - 56px)" width="1120" height="648" alt="{{t:journal.look.alt}}" loading="lazy"></picture>
+    </div>
+    <figcaption>{{t:journal.caption}}</figcaption>
+  </figure>
+  <dl class="promises">
+    <div><dt>{{t:journal.felt.term}}</dt><dd>{{t:journal.felt.detail}}</dd></div>
+    <div><dt>{{t:journal.good.term}}</dt><dd>{{t:journal.good.detail}}</dd></div>
+    <div><dt>{{t:journal.calm.term}}</dt><dd>{{t:journal.calm.detail}}</dd></div>
+    <div><dt>{{t:journal.quiet.term}}</dt><dd>{{t:journal.quiet.detail}}</dd></div>
+  </dl>
+</section>
+
 <section id="privacy" class="band split" aria-labelledby="privacy-title">
   <div class="intro">
     <p class="eyebrow">{{t:privacy.eyebrow}}</p>

@@ -50,13 +50,21 @@ Each term is rendered the same way on every page.
 | its mind | sein Gehirn | Same plain metaphor, no jargon. |
 | AI chip | KI-Chip | Only in Requirements, as in English. |
 | demo data | Beispieldaten | Demodaten reads technical. |
+| journal | Tagebuch | The everyday word for writing your day; Journal reads as a magazine. |
+| entry | Eintrag | Plain. |
+| check in (verb); a check-in | notieren, wie es dir geht; Gefühlsnotiz | Einchecken would read as a hotel or an airport, and festhalten is kept for keep. Gefühlsnotiz sits beside Sprachnotiz. |
+| Wound up, Lit up, Low, Settled (the four parts) | Angespannt, Beschwingt, Gedrückt, Ausgeglichen | With the English in brackets while the app is English. |
+| good thing | Schönes; Schöne Dinge | Warmer than gute Dinge. |
+| reflection | Reflexion | Kept apart from the Morgenseite and from Rückblick. |
+| recap | Rückblick | As in Jahresrückblick, for a week, a month or a year. |
+| streak | Serie | As streak counters in German apps say it. |
 
 ## Landing page, head and link preview
 
 | Id | English | Deutsch |
 |---|---|---|
 | `head.title` | Nocturne · Keep everything, ask about it, get one page each morning | Nocturne · Alles festhalten, danach fragen, jeden Morgen eine Seite |
-| `head.description` | Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. | Nocturne ist eine kostenlose, private App für deinen Computer. Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, mit dem Original hinter jeder Zeile. |
+| `head.description` | Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. Keep a journal too, if you like. | Nocturne ist eine kostenlose, private App für deinen Computer. Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, mit dem Original hinter jeder Zeile. Führ auch ein Tagebuch, wenn du magst. |
 | `head.og.description` | Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, all on your own computer. | Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, alles auf deinem eigenen Computer. |
 | `head.og.image.alt` | Nocturne. Keep everything. Nocturne remembers it for you. Ask about any of it later, and get one page each morning of what needs you. Beside the words, the morning page from the app with demo data. | Nocturne. Halte alles fest. Nocturne merkt es sich für dich. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht. Daneben die Morgenseite aus der App mit Beispieldaten. |
 
@@ -128,6 +136,25 @@ Each term is rendered the same way on every page.
 | `page.body` | Whenever the computer is plugged in and idle, by night or by day, Nocturne reads what you kept and notices what changed. At the time you choose, you get a short list to read, hear or print. When two things disagree, it asks instead of guessing. | Immer wenn der Computer am Strom hängt und nichts zu tun hat, bei Nacht oder bei Tag, liest Nocturne, was du festgehalten hast, und bemerkt, was sich geändert hat. Zu der Uhrzeit, die du wählst, bekommst du eine kurze Liste zum Lesen, Anhören oder Ausdrucken. Wenn sich zwei Dinge widersprechen, fragt es nach, statt zu raten. |
 | `page.alt` | The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note. | Die Morgenseite: Heute stehen zwei Dinge an. Das Formular für den Klassenausflug muss bis nächsten Freitag abgegeben werden, mit dem Brief, aus dem es stammt. Der Zahnarzttermin hat sich geändert, mit der Wahl zwischen der Terminkarte und der Sprachnotiz. |
 
+## The journal
+
+| Id | English | Deutsch |
+|---|---|---|
+| `journal.eyebrow` | The journal · when you want to | Das Tagebuch · wann du willst |
+| `journal.title` | Your day, in your own words. | Dein Tag, in deinen eigenen Worten. |
+| `journal.body` | Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from. | Alles, was du im Lauf des Tages festhältst, steht schon in deinem Tagebuch, darum beginnt es halb geschrieben. Füg ein paar Zeilen, eine Sprachnotiz oder ein Foto hinzu und sag, wie du dich gefühlt hast. Nocturne blickt auf jeden Tag zurück, und in einem Rückblick auf jede Woche, jeden Monat und jedes Jahr. Jede Zeile verweist auf das, woraus sie stammt. |
+| `journal.felt.term` | How you felt, never guessed | Wie du dich gefühlt hast, nie geraten |
+| `journal.felt.detail` | Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice. | Notier, wie es dir geht: Angespannt (Wound up), Beschwingt (Lit up), Gedrückt (Low) oder Ausgeglichen (Settled), und wähl die Worte, die passen. Eine Reflexion zitiert, was du über dein Gefühl gesagt hast, bewertet nie den Tag und gibt keine Ratschläge. |
+| `journal.good.term` | Good things | Schöne Dinge |
+| `journal.good.detail` | Up to three a day, with a photo if you like. Your recaps bring them back. | Bis zu drei am Tag, mit einem Foto, wenn du magst. Deine Rückblicke holen sie wieder hervor. |
+| `journal.calm.term` | No streaks, no nagging | Keine Serien, kein Drängeln |
+| `journal.calm.detail` | Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line. | Nichts zählt die Tage, an denen du schreibst, oder sagt dir, dass du einen verpasst hast. Ans Schreiben erinnert es dich nur, wenn du das einschaltest. Wenn eine Reflexion oder ein Rückblick neu ist, sagt die Morgenseite das in einer Zeile. |
+| `journal.quiet.term` | It stays quiet | Es bleibt leise |
+| `journal.quiet.detail` | Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do. | Nichts aus deinem Tagebuch wird vorgelesen oder in einer Benachrichtigung oder auf dem Sperrbildschirm gezeigt. Wenn du Online-Antworten (Online answers) einschaltest, kann eine Zeile aus deinem Tagebuch mit einer Frage mitgehen, wenn sie hilft, sie zu beantworten. Deine Gefühlsnotizen, Reflexionen und Rückblicke gehen nie mit. |
+| `journal.day.alt` | Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content). | Heute im Tagebuch, Donnerstag, 12. November: ein Eintrag über das Mittagessen mit Priya, mit einer Sprachnotiz und einem Foto. Daneben, wie sich der Tag angefühlt hat, mit drei Gefühlsnotizen (müde, froh, erleichtert und zufrieden). |
+| `journal.look.alt` | The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath. | Der Blick zurück auf den Tag: ein kurzer Absatz darüber, dass Leo sein Sportzeug vergessen hat, über einen müden Morgen und endlich das Mittagessen mit Priya, darunter die Notizen, Gefühlsnotizen, das Dokument und der Eintrag, aus denen er stammt. |
+| `journal.caption` | Today’s journal, and the day looked back on. From the app, with demo data. | Das heutige Tagebuch und der Blick zurück auf den Tag. Aus der App, mit Beispieldaten. |
+
 ## What it promises
 
 | Id | English | Deutsch |
@@ -136,7 +163,7 @@ Each term is rendered the same way on every page.
 | `privacy.title` | Your life stays on your computer. | Dein Leben bleibt auf deinem Computer. |
 | `privacy.body` | Out of the box, Nocturne goes online only for downloads you agree to: its mind at setup and any update you allow. Privacy in the app lists each one with the day and the size. | Ab Werk geht Nocturne nur für Downloads online, denen du zustimmst: sein Gehirn bei der Einrichtung und jedes Update, das du erlaubst. Unter Datenschutz (Privacy) in der App steht jeder einzelne mit Tag und Größe. |
 | `promise.signin.term` | Nothing to sign in to | Keine Anmeldung |
-| `promise.signin.detail` | No account, no analytics, no crash reports, no cloud copy. | Kein Konto, keine Analyse, keine Absturzberichte, keine Kopie in der Cloud. |
+| `promise.signin.detail` | No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose. | Kein Konto, keine Analyse, keine Absturzberichte, keine Kopie in der Cloud. Willst du eine Kopie an einem sicheren Ort, sichere alles in einer einzigen Datei, geschützt mit einem Passwort, das du wählst. |
 | `promise.checked.term` | Checked, not just claimed | Geprüft, nicht nur behauptet |
 | `promise.checked.detail` | Before a release, Nocturne is run with its network cut off from everything but this computer, and any attempt to reach further fails the check. | Vor einer Veröffentlichung läuft Nocturne mit einem Netz, das zu allem außer diesem Computer gekappt ist, und jeder Versuch, weiter zu kommen, lässt die Prüfung scheitern. |
 | `promise.edit.term` | It never edits what you kept | Es ändert nie, was du festgehalten hast |
@@ -146,8 +173,8 @@ Each term is rendered the same way on every page.
 | `promise.note.term` | One quiet note a day | Ein ruhiger Hinweis am Tag |
 | `promise.note.detail` | When the page is ready, one note says so and how many things need you. Never what you kept. | Wenn die Seite fertig ist, sagt ein Hinweis Bescheid und wie viele Dinge anstehen. Nie, was du festgehalten hast. |
 | `promise.extras.term` | Two extras, off until you ask | Zwei Extras, aus, bis du sie willst |
-| `promise.extras.detail` | Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private. | Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Nie etwas, das als privat markiert ist. |
-| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer. | Nocturne auf einem gekoppelten Handy: verbunden mit dem Computer zu Hause, mit Fragen, Festhalten und der heutigen Seite, und einem Hinweis, dass als privat markierte Dinge auf dem Computer bleiben. |
+| `promise.extras.detail` | Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private. | Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite und dein Tagebuch lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Darunter können Zeilen aus deinem Tagebuch sein, aber nie deine Gefühlsnotizen, Reflexionen oder Rückblicke. Nie etwas, das als privat markiert ist. |
+| `phone.alt` | Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer. | Nocturne auf einem gekoppelten Handy: verbunden mit dem Computer zu Hause, mit Fragen, Festhalten, der heutigen Seite und dem Tagebuch, und einem Hinweis, dass als privat markierte Dinge auf dem Computer bleiben. |
 | `phone.caption` | Away from home on a paired phone, with demo data. | Unterwegs auf einem gekoppelten Handy, mit Beispieldaten. |
 
 ## The engine
@@ -308,3 +335,7 @@ Each term is rendered the same way on every page.
 ## Approval
 
 The owner approved these words on 2026-11-16, with the answers in [the site in five languages](../site-localisation.md#approval).
+
+The journal band, the two reworded Privacy details, the phone picture's description and the meta description were
+translated on 2026-11-19 from the English in [the journal on the site](../site-capabilities.md),
+with the glossary rows above for the journal.

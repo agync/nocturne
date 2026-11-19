@@ -4,8 +4,8 @@
     "from": "Nocturne · Keep everything, ask about it, get one page each morning"
   },
   "head.description": {
-    "text": "Nocturne ist eine kostenlose, private App für deinen Computer. Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, mit dem Original hinter jeder Zeile.",
-    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line."
+    "text": "Nocturne ist eine kostenlose, private App für deinen Computer. Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, mit dem Original hinter jeder Zeile. Führ auch ein Tagebuch, wenn du magst.",
+    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. Keep a journal too, if you like."
   },
   "head.og.description": {
     "text": "Halte Notizen, Fotos, Sprachnotizen und Dateien fest, ohne sie zu sortieren, weder jetzt noch später. Frag später nach allem davon, und jeden Morgen bekommst du eine Seite mit dem, was ansteht, alles auf deinem eigenen Computer.",
@@ -171,6 +171,62 @@
     "text": "Die Morgenseite: Heute stehen zwei Dinge an. Das Formular für den Klassenausflug muss bis nächsten Freitag abgegeben werden, mit dem Brief, aus dem es stammt. Der Zahnarzttermin hat sich geändert, mit der Wahl zwischen der Terminkarte und der Sprachnotiz.",
     "from": "The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note."
   },
+  "journal.eyebrow": {
+    "text": "Das Tagebuch · wann du willst",
+    "from": "The journal · when you want to"
+  },
+  "journal.title": {
+    "text": "Dein Tag, in deinen eigenen Worten.",
+    "from": "Your day, in your own words."
+  },
+  "journal.body": {
+    "text": "Alles, was du im Lauf des Tages festhältst, steht schon in deinem Tagebuch, darum beginnt es halb geschrieben. Füg ein paar Zeilen, eine Sprachnotiz oder ein Foto hinzu und sag, wie du dich gefühlt hast. Nocturne blickt auf jeden Tag zurück, und in einem Rückblick auf jede Woche, jeden Monat und jedes Jahr. Jede Zeile verweist auf das, woraus sie stammt.",
+    "from": "Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from."
+  },
+  "journal.felt.term": {
+    "text": "Wie du dich gefühlt hast, nie geraten",
+    "from": "How you felt, never guessed"
+  },
+  "journal.felt.detail": {
+    "text": "Notier, wie es dir geht: Angespannt (Wound up), Beschwingt (Lit up), Gedrückt (Low) oder Ausgeglichen (Settled), und wähl die Worte, die passen. Eine Reflexion zitiert, was du über dein Gefühl gesagt hast, bewertet nie den Tag und gibt keine Ratschläge.",
+    "from": "Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice."
+  },
+  "journal.good.term": {
+    "text": "Schöne Dinge",
+    "from": "Good things"
+  },
+  "journal.good.detail": {
+    "text": "Bis zu drei am Tag, mit einem Foto, wenn du magst. Deine Rückblicke holen sie wieder hervor.",
+    "from": "Up to three a day, with a photo if you like. Your recaps bring them back."
+  },
+  "journal.calm.term": {
+    "text": "Keine Serien, kein Drängeln",
+    "from": "No streaks, no nagging"
+  },
+  "journal.calm.detail": {
+    "text": "Nichts zählt die Tage, an denen du schreibst, oder sagt dir, dass du einen verpasst hast. Ans Schreiben erinnert es dich nur, wenn du das einschaltest. Wenn eine Reflexion oder ein Rückblick neu ist, sagt die Morgenseite das in einer Zeile.",
+    "from": "Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line."
+  },
+  "journal.quiet.term": {
+    "text": "Es bleibt leise",
+    "from": "It stays quiet"
+  },
+  "journal.quiet.detail": {
+    "text": "Nichts aus deinem Tagebuch wird vorgelesen oder in einer Benachrichtigung oder auf dem Sperrbildschirm gezeigt. Wenn du Online-Antworten (Online answers) einschaltest, kann eine Zeile aus deinem Tagebuch mit einer Frage mitgehen, wenn sie hilft, sie zu beantworten. Deine Gefühlsnotizen, Reflexionen und Rückblicke gehen nie mit.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+  },
+  "journal.day.alt": {
+    "text": "Heute im Tagebuch, Donnerstag, 12. November: ein Eintrag über das Mittagessen mit Priya, mit einer Sprachnotiz und einem Foto. Daneben, wie sich der Tag angefühlt hat, mit drei Gefühlsnotizen (müde, froh, erleichtert und zufrieden).",
+    "from": "Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content)."
+  },
+  "journal.look.alt": {
+    "text": "Der Blick zurück auf den Tag: ein kurzer Absatz darüber, dass Leo sein Sportzeug vergessen hat, über einen müden Morgen und endlich das Mittagessen mit Priya, darunter die Notizen, Gefühlsnotizen, das Dokument und der Eintrag, aus denen er stammt.",
+    "from": "The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath."
+  },
+  "journal.caption": {
+    "text": "Das heutige Tagebuch und der Blick zurück auf den Tag. Aus der App, mit Beispieldaten.",
+    "from": "Today’s journal, and the day looked back on. From the app, with demo data."
+  },
   "privacy.eyebrow": {
     "text": "Was es verspricht",
     "from": "What it promises"
@@ -188,8 +244,8 @@
     "from": "Nothing to sign in to"
   },
   "promise.signin.detail": {
-    "text": "Kein Konto, keine Analyse, keine Absturzberichte, keine Kopie in der Cloud.",
-    "from": "No account, no analytics, no crash reports, no cloud copy."
+    "text": "Kein Konto, keine Analyse, keine Absturzberichte, keine Kopie in der Cloud. Willst du eine Kopie an einem sicheren Ort, sichere alles in einer einzigen Datei, geschützt mit einem Passwort, das du wählst.",
+    "from": "No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose."
   },
   "promise.checked.term": {
     "text": "Geprüft, nicht nur behauptet",
@@ -228,12 +284,12 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Nie etwas, das als privat markiert ist.",
-    "from": "Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private."
+    "text": "Mit Unterwegs (Away from home) kann dein eigenes Handy fragen, festhalten und deine Seite und dein Tagebuch lesen, versiegelt, sodass die Firma dazwischen nichts davon lesen kann. Online-Antworten (Online answers) schickt eine Frage und die wenigen gemerkten Sätze, die sie braucht, an einen Dienst deiner Wahl. Darunter können Zeilen aus deinem Tagebuch sein, aber nie deine Gefühlsnotizen, Reflexionen oder Rückblicke. Nie etwas, das als privat markiert ist.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
-    "text": "Nocturne auf einem gekoppelten Handy: verbunden mit dem Computer zu Hause, mit Fragen, Festhalten und der heutigen Seite, und einem Hinweis, dass als privat markierte Dinge auf dem Computer bleiben.",
-    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer."
+    "text": "Nocturne auf einem gekoppelten Handy: verbunden mit dem Computer zu Hause, mit Fragen, Festhalten, der heutigen Seite und dem Tagebuch, und einem Hinweis, dass als privat markierte Dinge auf dem Computer bleiben.",
+    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer."
   },
   "phone.caption": {
     "text": "Unterwegs auf einem gekoppelten Handy, mit Beispieldaten.",

@@ -4,8 +4,8 @@
     "from": "Nocturne · Keep everything, ask about it, get one page each morning"
   },
   "head.description": {
-    "text": "Nocturne is een gratis, privé-app voor je computer. Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, met het origineel achter elke regel.",
-    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line."
+    "text": "Nocturne is een gratis, privé-app voor je computer. Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, met het origineel achter elke regel. Houd ook een dagboek bij, als je wilt.",
+    "from": "Nocturne is a free, private app for your computer. Save notes, photos, voice notes and files without sorting them, now or later. Ask about any of it later, and each morning get one page of what needs you, with the original behind every line. Keep a journal too, if you like."
   },
   "head.og.description": {
     "text": "Bewaar notities, foto’s, spraakmemo’s en bestanden zonder ze te sorteren, niet nu en niet later. Vraag er later alles over, en krijg elke ochtend één pagina met wat op je wacht, allemaal op je eigen computer.",
@@ -171,6 +171,62 @@
     "text": "De ochtendpagina: vandaag wachten er twee dingen op je. Het formulier voor het schoolreisje moet volgende week vrijdag binnen zijn, met de brief waar het uit komt. De afspraak bij de tandarts is veranderd, met een keuze tussen de afsprakenkaart en de spraakmemo.",
     "from": "The morning page: two things need you today. The Year 4 trip form is due next Friday, with the letter it came from. The dentist appointment changed, with a choice between the appointment card and the voice note."
   },
+  "journal.eyebrow": {
+    "text": "Het dagboek · wanneer je wilt",
+    "from": "The journal · when you want to"
+  },
+  "journal.title": {
+    "text": "Je dag, in je eigen woorden.",
+    "from": "Your day, in your own words."
+  },
+  "journal.body": {
+    "text": "Alles wat je overdag bewaart, staat al in je dagboek, dus het is al half geschreven. Voeg een paar regels, een spraakmemo of een foto toe en zeg hoe je je voelde. Nocturne kijkt terug op elke dag, en in een terugblik op elke week, maand en jaar. Elke regel verwijst naar waar hij vandaan komt.",
+    "from": "Everything you keep during the day is already in your journal, so it starts half written. Add a few lines, a voice note or a photo, and say how you felt. Nocturne looks back on each day, and on each week, month and year in a recap. Every line points to what it came from."
+  },
+  "journal.felt.term": {
+    "text": "Hoe je je voelde, nooit geraden",
+    "from": "How you felt, never guessed"
+  },
+  "journal.felt.detail": {
+    "text": "Noteer hoe je je voelt: Gespannen (Wound up), Opgetogen (Lit up), Somber (Low) of Rustig (Settled), en kies de woorden die passen. Een reflectie citeert wat je zei dat je voelde, en geeft de dag nooit een cijfer of advies.",
+    "from": "Check in as Wound up, Lit up, Low or Settled, and choose the words that fit. A reflection quotes what you said you felt, and never scores the day or gives advice."
+  },
+  "journal.good.term": {
+    "text": "Mooie dingen",
+    "from": "Good things"
+  },
+  "journal.good.detail": {
+    "text": "Tot drie per dag, met een foto als je wilt. Je terugblikken halen ze weer naar boven.",
+    "from": "Up to three a day, with a photo if you like. Your recaps bring them back."
+  },
+  "journal.calm.term": {
+    "text": "Geen reeksen, geen gezeur",
+    "from": "No streaks, no nagging"
+  },
+  "journal.calm.detail": {
+    "text": "Niets telt de dagen dat je schrijft of zegt dat je er een hebt overgeslagen. Een seintje om te schrijven komt alleen als je dat aanzet. Is er een nieuwe reflectie of terugblik, dan zegt de ochtendpagina dat in één regel.",
+    "from": "Nothing counts the days you write or says you missed one. A reminder comes only if you turn one on. When a reflection or recap is new, the morning page says so in one line."
+  },
+  "journal.quiet.term": {
+    "text": "Het blijft stil",
+    "from": "It stays quiet"
+  },
+  "journal.quiet.detail": {
+    "text": "Niets uit je dagboek wordt voorgelezen of getoond in een melding of op een vergrendelscherm. Zet je Online antwoorden (Online answers) aan, dan kan een regel uit je dagboek meegaan met een vraag die hij helpt beantwoorden. Je gevoelsnotities, reflecties en terugblikken nooit.",
+    "from": "Nothing from your journal is read aloud or shown in a notification or on a lock screen. If you turn on Online answers, a line from your journal can go with a question it helps answer. Your check-ins, reflections and recaps never do."
+  },
+  "journal.day.alt": {
+    "text": "Vandaag in het dagboek, donderdag 12 november: een dagboektekst over de lunch met Priya, met een spraakmemo en een foto. Ernaast hoe vandaag voelde, met drie gevoelsnotities (moe, blij, opgelucht en tevreden).",
+    "from": "Today in the journal, Thursday 12 November: an entry about lunch with Priya, with a voice note and a photo. Beside it, how today felt, with three check-ins (tired, pleased, relieved and content)."
+  },
+  "journal.look.alt": {
+    "text": "De dag, achteraf bekeken: een korte alinea over Leo die zijn gymspullen vergat, een vermoeide ochtend en eindelijk de lunch met Priya, met daaronder de notities, gevoelsnotities, het document en de dagboektekst waar hij uit komt.",
+    "from": "The day, looked back on: a short paragraph about Leo forgetting his PE kit, a tired morning and lunch with Priya at last, with the notes, check-ins, document and entry it came from listed underneath."
+  },
+  "journal.caption": {
+    "text": "Het dagboek van vandaag, en de dag achteraf bekeken. Uit de app, met voorbeeldgegevens.",
+    "from": "Today’s journal, and the day looked back on. From the app, with demo data."
+  },
   "privacy.eyebrow": {
     "text": "Wat het belooft",
     "from": "What it promises"
@@ -188,8 +244,8 @@
     "from": "Nothing to sign in to"
   },
   "promise.signin.detail": {
-    "text": "Geen account, geen analyse, geen crashrapporten, geen kopie in de cloud.",
-    "from": "No account, no analytics, no crash reports, no cloud copy."
+    "text": "Geen account, geen analyse, geen crashrapporten, geen kopie in de cloud. Wil je ergens een veilige kopie, maak dan een back-up van alles in één bestand, vergrendeld met een wachtwoord dat jij kiest.",
+    "from": "No account, no analytics, no crash reports, no cloud copy. To keep a copy somewhere safe, back everything up to one file, locked with a passphrase you choose."
   },
   "promise.checked.term": {
     "text": "Gecontroleerd, niet alleen beloofd",
@@ -228,12 +284,12 @@
     "from": "Two extras, off until you ask"
   },
   "promise.extras.detail": {
-    "text": "Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Nooit iets wat als privé is gemarkeerd.",
-    "from": "Away from home lets your own phone ask, keep and read your page, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. Never anything marked private."
+    "text": "Met Onderweg (Away from home) kan je eigen telefoon vragen, bewaren en je pagina en dagboek lezen, verzegeld zodat het bedrijf ertussen het niet kan lezen. Online antwoorden (Online answers) stuurt een vraag, en de paar onthouden zinnen die daarvoor nodig zijn, naar één dienst die jij kiest. Daar kunnen regels uit je dagboek bij zitten, maar nooit je gevoelsnotities, reflecties of terugblikken. Nooit iets wat als privé is gemarkeerd.",
+    "from": "Away from home lets your own phone ask, keep and read your page and journal, sealed so the company in between cannot read it. Online answers sends a question, and the few remembered sentences it needs, to one service you choose. They can include lines from your journal, but never your check-ins, reflections or recaps. Never anything marked private."
   },
   "phone.alt": {
-    "text": "Nocturne op een gekoppelde telefoon: verbonden met de computer thuis, met Vragen, Bewaren en de pagina van vandaag, en een opmerking dat wat als privé is gemarkeerd op de computer blijft.",
-    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep and today’s page, and a note that things marked private stay on the computer."
+    "text": "Nocturne op een gekoppelde telefoon: verbonden met de computer thuis, met Vragen, Bewaren, de pagina van vandaag en het dagboek, en een opmerking dat wat als privé is gemarkeerd op de computer blijft.",
+    "from": "Nocturne on a paired phone: connected to the home computer, with Ask, Keep, today’s page and the journal, and a note that things marked private stay on the computer."
   },
   "phone.caption": {
     "text": "Onderweg op een gekoppelde telefoon, met voorbeeldgegevens.",
