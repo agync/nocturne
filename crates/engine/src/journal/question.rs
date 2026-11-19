@@ -333,9 +333,12 @@ fn minutes_in(text: &str) -> Option<u32> {
         {
             continue;
         }
-        let (h, mi) = match number.split_once([':', '.']) {
-            Some((h, mi)) => (h.parse::<u32>().ok()?, mi.parse::<u32>().ok()?),
-            None => (number.parse::<u32>().ok()?, 0),
+        let parsed = match number.split_once([':', '.']) {
+            Some((h, mi)) => h.parse::<u32>().ok().zip(mi.parse::<u32>().ok()),
+            None => number.parse::<u32>().ok().map(|h| (h, 0)),
+        };
+        let Some((h, mi)) = parsed else {
+            continue;
         };
         let meridiem = match suffix {
             "am" | "pm" => suffix,
@@ -542,6 +545,17 @@ mod tests {
         assert_eq!(minutes_in("Parents evening at 6"), Some(18 * 60));
         assert_eq!(minutes_in("Twelve oranges"), None);
         assert_eq!(minutes_in("Room 6 is free"), None);
+    }
+
+    #[test]
+    fn an_odd_token_is_skipped_and_the_reading_goes_on() {
+        assert_eq!(minutes_in("Ref 1:2:3 then dinner at 7pm"), Some(19 * 60));
+        assert_eq!(
+            minutes_in("Ref 99:99 then call at 14:30"),
+            Some(14 * 60 + 30)
+        );
+        assert_eq!(minutes_in("Version 1.2.3 and dentist at 9am"), Some(9 * 60));
+        assert_eq!(minutes_in("Only 1:2:3 here"), None);
     }
 
     #[test]
