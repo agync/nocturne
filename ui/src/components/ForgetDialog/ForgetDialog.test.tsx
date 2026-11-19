@@ -62,6 +62,17 @@ describe("ForgetDialog", () => {
     expect(within(dialog).getByRole("button", { name: "Delete 4 things" })).toBeInTheDocument();
   });
 
+  it("says how many lines in reflections and recaps will be taken out", async () => {
+    const engine = createMockEngine();
+    vi.spyOn(engine, "previewForget").mockResolvedValue(preview({ reflectionLines: 2 }));
+    open({ memoryIds: ["a"], defaultIncludeOriginals: true }, engine);
+    expect(
+      await screen.findByText(
+        "2 lines in your reflections and recaps cite it and will be taken out.",
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("titles the dialog with the same noun and count as the button", async () => {
     const engine = createMockEngine();
     vi.spyOn(engine, "previewForget").mockResolvedValue(preview());

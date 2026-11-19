@@ -27,6 +27,8 @@ type Phase = "loading" | "ready" | "working" | "done" | "failedPreview";
 interface Prepared {
   token: string;
   includeOriginals: boolean;
+  /** Lines in reflections and recaps that cite what goes, and will be taken out. */
+  reflectionLines: number;
 }
 
 const isExpired = (error: unknown): boolean => {
@@ -121,7 +123,11 @@ export function ForgetDialog({
         const own = include ? full : await engine.previewForget(list, false);
         if (mine !== latest.current || !alive.current) return;
         setListing(full);
-        setPrepared({ token: own.token, includeOriginals: include });
+        setPrepared({
+          token: own.token,
+          includeOriginals: include,
+          reflectionLines: own.reflectionLines ?? 0,
+        });
         setPhase("ready");
       } catch {
         if (mine === latest.current && alive.current) setPhase("failedPreview");
@@ -262,6 +268,11 @@ export function ForgetDialog({
                   />
                 ) : null}
                 <div className={styles.stays}>
+                  {prepared?.reflectionLines ? (
+                    <p className={styles.note}>
+                      {t("journal.forget.cites", { count: prepared.reflectionLines })}
+                    </p>
+                  ) : null}
                   {hasOriginals && !(prepared?.includeOriginals && removable > 0) ? (
                     <p className={styles.note}>{t("forget.stays.original")}</p>
                   ) : null}
