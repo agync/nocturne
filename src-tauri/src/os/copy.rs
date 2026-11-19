@@ -17,6 +17,7 @@ pub const TIDY_PAUSING_IS_FINE: &str = "Pausing is fine.";
 
 pub const MENU_KEEP: &str = "Keep something\u{2026}";
 pub const MENU_ASK: &str = "Ask\u{2026}";
+pub const MENU_CHECK_IN: &str = "Check in\u{2026}";
 pub const MENU_OPEN_TODAY: &str = "Open today\u{2019}s page";
 pub const MENU_PAUSE: &str = "Pause Nocturne";
 pub const MENU_PAUSE_HOUR: &str = "For 1 hour";
@@ -76,6 +77,7 @@ pub fn all() -> Vec<String> {
         TIDY_PAUSING_IS_FINE,
         MENU_KEEP,
         MENU_ASK,
+        MENU_CHECK_IN,
         MENU_OPEN_TODAY,
         MENU_PAUSE,
         MENU_PAUSE_HOUR,

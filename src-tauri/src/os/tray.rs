@@ -34,6 +34,7 @@ pub const ID: &str = "nocturne";
 pub enum Action {
     Keep,
     Ask,
+    CheckIn,
     OpenToday,
     Pause(PauseFor),
     Resume,
@@ -276,6 +277,10 @@ pub fn menu_model(
         label: copy::MENU_ASK.to_string(),
     });
     menu.push(MenuEntry::Action {
+        action: Action::CheckIn,
+        label: copy::MENU_CHECK_IN.to_string(),
+    });
+    menu.push(MenuEntry::Action {
         action: Action::OpenToday,
         label: copy::MENU_OPEN_TODAY.to_string(),
     });
@@ -329,6 +334,7 @@ impl Action {
         match self {
             Action::Keep => "keep",
             Action::Ask => "ask",
+            Action::CheckIn => "check-in",
             Action::OpenToday => "open-today",
             Action::Pause(PauseFor::Hour) => "pause-hour",
             Action::Pause(PauseFor::Tonight) => "pause-tonight",
@@ -346,6 +352,7 @@ impl Action {
         Some(match id {
             "keep" => Action::Keep,
             "ask" => Action::Ask,
+            "check-in" => Action::CheckIn,
             "open-today" => Action::OpenToday,
             "pause-hour" => Action::Pause(PauseFor::Hour),
             "pause-tonight" => Action::Pause(PauseFor::Tonight),
@@ -676,6 +683,7 @@ async fn run<R: Runtime>(app: &AppHandle<R>, action: Action) {
     match action {
         Action::Keep => quick_capture::open(app),
         Action::Ask => navigate(app, "/ask"),
+        Action::CheckIn => navigate(app, "/journal/check-in"),
         Action::OpenToday => navigate(app, "/today"),
         Action::Pause(how) => {
             let state = app.state::<AppState>();
@@ -880,6 +888,14 @@ mod tests {
         assert_eq!(infos(&resting), ["Resting"]);
         assert!(has_pause_submenu(&resting) && !has(&resting, Action::Resume));
         assert!(has(&resting, Action::Quit) && has(&resting, Action::OpenToday));
+        assert!(
+            resting.iter().any(|e| matches!(e, MenuEntry::Action {
+                action: Action::CheckIn,
+                label,
+            } if label == "Check in\u{2026}")),
+            "the check-in is one entry, with fixed words"
+        );
+        assert_eq!(Action::from_id(Action::CheckIn.id()), Some(Action::CheckIn));
 
         let mut reading = status(EngineState::Reading);
         reading.waiting_to_read = 3;
