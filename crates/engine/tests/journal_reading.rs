@@ -6,7 +6,7 @@ mod common;
 
 use common::{EngineExt, Fixture, cand, fixture, keep};
 use nocturne_contract::ItemStatus;
-use nocturne_contract::{EntityKind, SameNameAnswer, Span};
+use nocturne_contract::{EntityKind, MentionState, RefileTarget, SameNameAnswer, Span};
 use nocturne_engine::{Candidate, Predicate};
 
 fn conn(f: &Fixture) -> rusqlite::Connection {
@@ -799,4 +799,232 @@ fn a_checkin_naming_a_sam_asks_too_and_answering_records_the_mention_only() {
         .unwrap();
     assert_eq!(count(&f, "SELECT COUNT(*) FROM memories"), 2);
     assert_eq!(mentions(&f, &checkin)[0].0, "Sam Jones");
+}
+
+fn mention_id(f: &Fixture, item: &str, name: &str) -> String {
+    conn(f)
+        .query_row(
+            "SELECT n.id FROM mentions n JOIN entities e ON e.id = n.entity_id \
+             WHERE n.item_id = ?1 AND e.name = ?2",
+            rusqlite::params![item, name],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+fn status_of(f: &Fixture, sentence: &str) -> String {
+    conn(f)
+        .query_row(
+            "SELECT status FROM memories WHERE sentence = ?1",
+            [sentence],
+            |r| r.get(0),
+        )
+        .unwrap()
+}
+
+#[test]
+fn removing_a_mention_lets_go_what_only_this_item_said_and_restoring_brings_it_back() {
+    let f = fixture();
+    let other = keep(&f.engine, "Priya likes tea.");
+    f.engine
+        .apply(
+            &other,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    let entry = journal_item(&f, "Priya likes tea and walks to work.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![
+                person("Priya", Predicate::Prefers, "tea", "Priya likes tea."),
+                person(
+                    "Priya",
+                    Predicate::Happened,
+                    "a walk",
+                    "Priya walks to work.",
+                ),
+            ],
+        )
+        .unwrap();
+    let id = mention_id(&f, &entry, "Priya");
+
+    let removed = f.engine.remove_mention(&id).unwrap();
+    assert_eq!(removed.state, MentionState::Removed);
+    assert_eq!(status_of(&f, "Priya walks to work."), "letGo");
+    assert_eq!(
+        status_of(&f, "Priya likes tea."),
+        "active",
+        "another item says it too"
+    );
+    assert_eq!(
+        count(&f, "SELECT COUNT(*) FROM memories"),
+        2,
+        "nothing is deleted"
+    );
+
+    let back = f.engine.restore_mention(&id).unwrap();
+    assert_eq!(back.state, MentionState::Found);
+    assert_eq!(status_of(&f, "Priya walks to work."), "active");
+    assert_eq!(
+        count(
+            &f,
+            "SELECT COUNT(*) FROM memories WHERE let_go_at IS NOT NULL"
+        ),
+        0
+    );
+}
+
+#[test]
+fn restoring_brings_back_only_what_removing_let_go() {
+    let f = fixture();
+    let entry = journal_item(&f, "Priya likes tea and walks to work.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![
+                person("Priya", Predicate::Prefers, "tea", "Priya likes tea."),
+                person(
+                    "Priya",
+                    Predicate::Happened,
+                    "a walk",
+                    "Priya walks to work.",
+                ),
+            ],
+        )
+        .unwrap();
+    conn(&f)
+        .execute(
+            "UPDATE memories SET status = 'letGo', let_go_at = '2026-10-01T00:00:00Z' \
+             WHERE sentence = 'Priya likes tea.'",
+            [],
+        )
+        .unwrap();
+    let id = mention_id(&f, &entry, "Priya");
+    f.engine.remove_mention(&id).unwrap();
+    f.engine.restore_mention(&id).unwrap();
+    assert_eq!(
+        status_of(&f, "Priya likes tea."),
+        "letGo",
+        "it was let go before"
+    );
+    assert_eq!(status_of(&f, "Priya walks to work."), "active");
+}
+
+#[test]
+fn confirming_a_mention_confirms_this_items_memories_and_keeps_a_role_once() {
+    let f = fixture();
+    let entry = journal_item(&f, "Priya likes tea.", "entry");
+    f.engine
+        .apply(
+            &entry,
+            vec![person(
+                "Priya",
+                Predicate::Prefers,
+                "tea",
+                "Priya likes tea.",
+            )],
+        )
+        .unwrap();
+    let id = mention_id(&f, &entry, "Priya");
+    let m = f
+        .engine
+        .confirm_mention(&id, Some("a friend from climbing"))
+        .unwrap();
+    assert_eq!(m.state, MentionState::Confirmed);
+    assert_eq!(m.role.as_deref(), Some("a friend from climbing"));
+    let (confirmed, used): (bool, Option<String>) = conn(&f)
+        .query_row("SELECT confirmed, last_used FROM memories", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .unwrap();
+    assert!(confirmed && used.is_some());
+    let m = f.engine.confirm_mention(&id, Some("my boss")).unwrap();
+    assert_eq!(m.role.as_deref(), Some("a friend from climbing"));
+    f.engine.remove_mention(&id).unwrap();
+    assert!(f.engine.confirm_mention(&id, None).is_err());
+}
+
+#[test]
+fn refiling_a_mention_moves_only_this_items_memories_and_the_link() {
+    let f = fixture();
+    let a = journal_item(&f, "Sam likes tea.", "entry");
+    f.engine
+        .apply(
+            &a,
+            vec![person("Sam", Predicate::Prefers, "tea", "Sam likes tea.")],
+        )
+        .unwrap();
+    let b = keep(&f.engine, "Sam lives in Leeds.");
+    f.engine
+        .apply(
+            &b,
+            vec![person(
+                "Sam",
+                Predicate::LivesIn,
+                "Leeds",
+                "Sam lives in Leeds.",
+            )],
+        )
+        .unwrap();
+    let id = mention_id(&f, &a, "Sam");
+
+    let moved = f
+        .engine
+        .refile_mention(
+            &id,
+            RefileTarget::New {
+                name: "Samir".into(),
+                kind: EntityKind::Person,
+            },
+        )
+        .unwrap();
+    assert_eq!(moved.name, "Samir");
+    assert!(moved.new);
+    assert_eq!(moved.memory_count, 1);
+    let under = |sentence: &str| -> String {
+        conn(&f)
+            .query_row(
+                "SELECT e.name FROM memories m JOIN entities e ON e.id = m.entity_id \
+                 WHERE m.sentence = ?1",
+                [sentence],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    assert_eq!(
+        under("Sam likes tea."),
+        "Samir",
+        "its words stay as they were"
+    );
+    assert_eq!(under("Sam lives in Leeds."), "Sam");
+    assert_eq!(mentions(&f, &a)[0].0, "Samir");
+    assert!(
+        f.engine
+            .refile_mention(
+                &id,
+                RefileTarget::New {
+                    name: "Samir".into(),
+                    kind: EntityKind::Person
+                }
+            )
+            .is_err()
+    );
+
+    let sam: String = conn(&f)
+        .query_row("SELECT id FROM entities WHERE name = 'Sam'", [], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    let back = f
+        .engine
+        .refile_mention(&id, RefileTarget::Existing { entity_id: sam })
+        .unwrap();
+    assert_eq!(back.name, "Sam");
+    assert_eq!(under("Sam likes tea."), "Sam");
 }

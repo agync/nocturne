@@ -81,7 +81,7 @@ fn entity_with_key(conn: &Connection, key: &str, except: Option<&str>) -> Result
 
 /// Names must be something a person could say: trimmed, one space between words, not empty
 /// once keyed, not absurdly long.
-fn clean_name(name: &str) -> Result<(String, String)> {
+pub(crate) fn clean_name(name: &str) -> Result<(String, String)> {
     let name = name.nfc().collect::<String>();
     let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
     if name.chars().count() > MAX_NAME {

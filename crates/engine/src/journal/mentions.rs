@@ -3,15 +3,15 @@
 use std::collections::{HashMap, HashSet};
 
 use nocturne_contract::{
-    EntityKind, Mention, MentionState, Receipt, SameNameAnswer, SameNameAnswered, SameNameOption,
-    SameNameQuestion, Span,
+    EntityKind, Mention, MentionState, Receipt, RefileTarget, SameNameAnswer, SameNameAnswered,
+    SameNameOption, SameNameQuestion, Span,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params, params_from_iter};
 
 use serde::{Deserialize, Serialize};
 
 use crate::Engine;
-use crate::entity::{find_by_key, resolve_alias};
+use crate::entity::{clean_name, find_by_key, resolve_alias};
 use crate::error::{Error, Result};
 use crate::types::{Candidate, Predicate};
 use crate::util::{fmt_ts, key_of, new_id, parse_enum};
@@ -648,5 +648,256 @@ impl Engine {
         self.invalidate_vectors();
         self.bump_audio();
         Ok(answered)
+    }
+}
+
+struct MentionRow {
+    item_id: String,
+    entity_id: String,
+    state: MentionState,
+}
+
+fn mention_row(conn: &Connection, id: &str) -> Result<MentionRow> {
+    let row: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT item_id, entity_id, state FROM mentions WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let (item_id, entity_id, state) =
+        row.ok_or_else(|| Error::not_found(format!("mention {id}")))?;
+    Ok(MentionRow {
+        item_id,
+        entity_id,
+        state: parse_enum(&state)?,
+    })
+}
+
+fn mention_view(conn: &Connection, id: &str) -> Result<Mention> {
+    let row = mention_row(conn, id)?;
+    mentions_for_items(conn, std::slice::from_ref(&row.item_id))?
+        .remove(&row.item_id)
+        .unwrap_or_default()
+        .into_iter()
+        .find(|m| m.id == id)
+        .ok_or_else(|| Error::not_found(format!("mention {id}")))
+}
+
+/// The current memories this item says about a thing.
+fn memories_of(conn: &Connection, item_id: &str, entity_id: &str) -> Result<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT m.id FROM memory_sources s JOIN memories m ON m.id = s.memory_id \
+         WHERE s.item_id = ?1 AND m.entity_id = ?2 AND m.superseded_at IS NULL \
+         AND m.forgetting = 0 ORDER BY m.recorded_at, m.id",
+    )?;
+    Ok(stmt
+        .query_map(params![item_id, entity_id], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// What removing a mention let go, and what the mention was, so that Undo brings back exactly that.
+#[derive(Serialize, Deserialize)]
+struct LetGo {
+    mention: String,
+    entity: String,
+    prior: MentionState,
+    memories: Vec<(String, String, Option<String>)>,
+}
+
+impl Engine {
+    /// "That's right": the link is confirmed, a role is kept when the thing has none, and the
+    /// memories this item says about them count as confirmed, as confirming does anywhere.
+    pub fn confirm_mention(&self, id: &str, role: Option<&str>) -> Result<Mention> {
+        let now = fmt_ts(self.clock().now());
+        let today = self.today();
+        let role = role.map(str::trim).filter(|r| !r.is_empty());
+        self.write(|tx| {
+            let row = mention_row(tx, id)?;
+            if row.state == MentionState::Removed {
+                return Err(Error::invalid("bring the name back first"));
+            }
+            tx.execute(
+                "UPDATE mentions SET state = 'confirmed' WHERE id = ?1",
+                [id],
+            )?;
+            if let Some(role) = role {
+                tx.execute(
+                    "UPDATE entities SET role = ?2 WHERE id = ?1 AND role IS NULL",
+                    params![row.entity_id, role],
+                )?;
+            }
+            for memory in memories_of(tx, &row.item_id, &row.entity_id)? {
+                crate::memory::confirm_tx(tx, &memory, true, &now, &today)?;
+            }
+            Ok(())
+        })?;
+        self.bump_audio();
+        self.read(|conn| mention_view(conn, id))
+    }
+
+    /// "Not about {name}": the link goes, and what this item alone said about them is let go,
+    /// not deleted. Nothing else is touched.
+    pub fn remove_mention(&self, id: &str) -> Result<Mention> {
+        let now = fmt_ts(self.clock().now());
+        self.write(|tx| {
+            let row = mention_row(tx, id)?;
+            if row.state == MentionState::Removed {
+                return Ok(());
+            }
+            let mut let_go = Vec::new();
+            for memory in memories_of(tx, &row.item_id, &row.entity_id)? {
+                let (status, at, alone): (String, Option<String>, bool) = tx.query_row(
+                    "SELECT status, let_go_at, NOT EXISTS (SELECT 1 FROM memory_sources o \
+                     WHERE o.memory_id = memories.id AND o.item_id != ?2) \
+                     FROM memories WHERE id = ?1",
+                    params![memory, row.item_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )?;
+                if !alone || status == "letGo" {
+                    continue;
+                }
+                tx.execute(
+                    "UPDATE memories SET status = 'letGo', let_go_at = ?2 WHERE id = ?1",
+                    params![memory, now],
+                )?;
+                let_go.push((memory, status, at));
+            }
+            tx.execute(
+                "INSERT INTO entity_changes(id, kind, at, detail) VALUES (?1, 'mention', ?2, ?3)",
+                params![
+                    new_id("chg"),
+                    now,
+                    serde_json::to_string(&LetGo {
+                        mention: id.to_string(),
+                        entity: row.entity_id.clone(),
+                        prior: row.state,
+                        memories: let_go,
+                    })?
+                ],
+            )?;
+            tx.execute("UPDATE mentions SET state = 'removed' WHERE id = ?1", [id])?;
+            Ok(())
+        })?;
+        self.invalidate_vectors();
+        self.bump_audio();
+        self.read(|conn| mention_view(conn, id))
+    }
+
+    /// Undo "Not about {name}": the link and exactly what it let go come back.
+    pub fn restore_mention(&self, id: &str) -> Result<Mention> {
+        let now = fmt_ts(self.clock().now());
+        self.write(|tx| {
+            let row = mention_row(tx, id)?;
+            if row.state != MentionState::Removed {
+                return Ok(());
+            }
+            let record: Option<(String, String)> = tx
+                .query_row(
+                    "SELECT id, detail FROM entity_changes WHERE kind = 'mention' \
+                     AND undone_at IS NULL AND json_extract(detail, '$.mention') = ?1 \
+                     ORDER BY rowid DESC LIMIT 1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .optional()?;
+            let mut state = MentionState::Found;
+            if let Some((change, detail)) = record {
+                let detail: LetGo = serde_json::from_str(&detail)?;
+                state = detail.prior;
+                for (memory, status, at) in detail.memories {
+                    tx.execute(
+                        "UPDATE memories SET status = ?2, let_go_at = ?3 \
+                         WHERE id = ?1 AND status = 'letGo'",
+                        params![memory, status, at],
+                    )?;
+                }
+                tx.execute(
+                    "UPDATE entity_changes SET undone_at = ?2 WHERE id = ?1",
+                    params![change, now],
+                )?;
+            }
+            tx.execute(
+                "UPDATE mentions SET state = ?2 WHERE id = ?1",
+                params![id, crate::util::enum_str(&state)],
+            )?;
+            Ok(())
+        })?;
+        self.invalidate_vectors();
+        self.bump_audio();
+        self.read(|conn| mention_view(conn, id))
+    }
+
+    /// "Someone else...": move only what this item says about the name to another person, place
+    /// or thing, or a new one. Their words stay as they are. The link follows them.
+    pub fn refile_mention(&self, id: &str, target: RefileTarget) -> Result<Mention> {
+        let (row, memories, created) = self.read(|conn| {
+            let row = mention_row(conn, id)?;
+            let memories = memories_of(conn, &row.item_id, &row.entity_id)?;
+            let created = match &target {
+                RefileTarget::Existing { .. } => false,
+                RefileTarget::New { name, .. } => {
+                    let (_, key) = clean_name(name)?;
+                    find_by_key(conn, &key, None)?.is_none()
+                }
+            };
+            if let RefileTarget::Existing { entity_id } = &target
+                && *entity_id == row.entity_id
+            {
+                return Err(Error::invalid("it is already filed there"));
+            }
+            if let RefileTarget::New { name, .. } = &target {
+                let (_, key) = clean_name(name)?;
+                if find_by_key(conn, &key, None)?.as_deref() == Some(row.entity_id.as_str()) {
+                    return Err(Error::invalid("it is already filed there"));
+                }
+            }
+            Ok((row, memories, created))
+        })?;
+        let mut dest: Option<String> = match &target {
+            RefileTarget::Existing { entity_id } => Some(entity_id.clone()),
+            RefileTarget::New { .. } => None,
+        };
+        for memory in &memories {
+            let refiled = self.refile_memory(memory, target.clone())?;
+            dest = Some(refiled.entity.id);
+        }
+        self.write(|tx| {
+            let dest = match dest {
+                Some(d) => d,
+                None => {
+                    let RefileTarget::New { name, kind } = &target else {
+                        unreachable!("an existing target names its thing")
+                    };
+                    let (name, key) = clean_name(name)?;
+                    match crate::memory::upsert_entity(tx, &name, &key, Some(*kind))? {
+                        Some((d, _)) => d,
+                        None => unreachable!("a kind was given"),
+                    }
+                }
+            };
+            let twin: Option<String> = tx
+                .query_row(
+                    "SELECT id FROM mentions WHERE item_id = ?1 AND entity_id = ?2",
+                    params![row.item_id, dest],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if let Some(twin) = twin {
+                tx.execute("DELETE FROM mentions WHERE id = ?1", [id])?;
+                renumber(tx, &row.item_id)?;
+                return Ok(twin);
+            }
+            tx.execute(
+                "UPDATE mentions SET entity_id = ?2, new = ?3 WHERE id = ?1",
+                params![id, dest, created],
+            )?;
+            Ok(id.to_string())
+        })
+        .and_then(|kept| {
+            self.invalidate_vectors();
+            self.bump_audio();
+            self.read(|conn| mention_view(conn, &kept))
+        })
     }
 }
