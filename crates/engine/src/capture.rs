@@ -800,6 +800,7 @@ fn pending(
         "id = ?1"
     } else {
         "status = 'kept' AND (hold_until IS NULL OR hold_until <= ?2) \
+         AND NOT EXISTS (SELECT 1 FROM items r WHERE json_extract(r.metadata, '$.replaces') = items.id) \
          AND NOT EXISTS (SELECT 1 FROM forget_jobs WHERE instr(items, '\"' || items.id || '\"') > 0) \
          ORDER BY priority DESC, kept_at, id LIMIT ?1"
     });
