@@ -643,20 +643,35 @@ export function LookBack(p: LookBackProps) {
   useEffect(() => {
     if (!engineWriting) return;
     let gone = false;
-    const timer = setInterval(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      if (gone) return;
+      if (document.visibilityState === "hidden") {
+        timer = setTimeout(poll, POLL_MS);
+        return;
+      }
       engine.getLookBack(period).then(
-        (next) => !gone && setView(next),
+        (next) => {
+          if (gone) return;
+          setView(next);
+          if (next.type === "writing") timer = setTimeout(poll, POLL_MS);
+        },
         (e: unknown) => {
-          if (gone || e instanceof ConnectionError) return;
+          if (gone) return;
+          if (e instanceof ConnectionError) {
+            timer = setTimeout(poll, POLL_MS);
+            return;
+          }
           lastCall.current = "read";
           setFailedCall("read");
           setView({ type: "failed" });
         },
       );
-    }, POLL_MS);
+    };
+    timer = setTimeout(poll, POLL_MS);
     return () => {
       gone = true;
-      clearInterval(timer);
+      clearTimeout(timer);
     };
   }, [engineWriting, engine, period]);
 

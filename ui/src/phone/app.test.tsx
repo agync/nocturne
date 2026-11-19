@@ -1222,6 +1222,20 @@ describe("journal on the phone, hardening", () => {
     onItem: () => {},
     onReceipt: () => {},
   });
+  const writingView = (p: typeof yesterday) =>
+    ({
+      type: "writing",
+      glance: {
+        period: p,
+        kept: [],
+        felt: [],
+        good: [],
+        with: [],
+        entryLines: [],
+        entryItemId: null,
+      },
+    }) as never;
+
   it("which.failed_read: a failed read says so and tries again, it is not called answered", async () => {
     const base = createMockPhoneEngine({});
     let reads = 0;
@@ -1309,5 +1323,43 @@ describe("journal on the phone, hardening", () => {
     await userEvent.click(button("Try again"));
     await waitFor(() => expect(lookBack).toHaveBeenCalledTimes(2));
     expect(getLookBack).not.toHaveBeenCalled();
+  });
+
+  it("lookback.polling_stops: leaving while it says writing stops the asking", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const getLookBack = vi.fn(async (p: typeof yesterday) => writingView(p));
+      const view = render(<LookBack {...lookProps(engineWith({}, { getLookBack }))} />);
+      expect(
+        await screen.findByText("Your computer is looking back on your day…"),
+      ).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(4100);
+      const seen = getLookBack.mock.calls.length;
+      expect(seen).toBeGreaterThan(1);
+      view.unmount();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(getLookBack).toHaveBeenCalledTimes(seen);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("lookback.polling_hidden: a hidden page does not ask", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const state = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    try {
+      const getLookBack = vi.fn(async (p: typeof yesterday) => writingView(p));
+      render(<LookBack {...lookProps(engineWith({}, { getLookBack }))} />);
+      expect(
+        await screen.findByText("Your computer is looking back on your day…"),
+      ).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(13_000);
+      expect(getLookBack).toHaveBeenCalledTimes(1);
+      state.mockReturnValue("visible");
+      await vi.advanceTimersByTimeAsync(4100);
+      expect(getLookBack.mock.calls.length).toBeGreaterThan(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
