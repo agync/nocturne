@@ -5,6 +5,6 @@
   "journal.checkin.listHint": "Choose up to three, from any part.",
   "journal.checkin.meaning": ": {meaning}",
   "journal.checkin.feel": "{part} · {words}",
-  "journal.checkin.savedBare": "Saved.",
+  "journal.checkin.savedBare": "Saved. You checked in as {part}.",
   "journal.checkin.doneAt": "at {time}. It’s on today’s journal."
 }

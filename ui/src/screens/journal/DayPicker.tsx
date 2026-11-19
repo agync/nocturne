@@ -37,8 +37,14 @@ function periodLabel(period: Period): string {
   return t("journal.recap.eyebrow.year", { year: period.start.slice(0, 4) });
 }
 
-function Empty() {
-  return <p className={styles.pickerEmpty}>{t("journal.recap.nothing")}</p>;
+const EMPTY = {
+  week: "journal.recap.empty.week",
+  month: "journal.recap.empty.month",
+  year: "journal.recap.empty.year",
+} as const satisfies Record<Exclude<PeriodKind, "day">, Parameters<typeof t>[0]>;
+
+function Empty({ kind }: { kind: Exclude<PeriodKind, "day"> }) {
+  return <p className={styles.pickerEmpty}>{t(EMPTY[kind])}</p>;
 }
 
 function Days({ today, onPick }: { today: string; onPick: () => void }) {
@@ -47,7 +53,6 @@ function Days({ today, onPick }: { today: string; onPick: () => void }) {
     .filter((day) => day <= today)
     .sort()
     .reverse();
-  if (list.length === 0) return <Empty />;
   return (
     <ul className={styles.pickerList}>
       {list.map((day) => (
@@ -65,10 +70,10 @@ function Days({ today, onPick }: { today: string; onPick: () => void }) {
   );
 }
 
-function Periods({ kind, onPick }: { kind: PeriodKind; onPick: () => void }) {
+function Periods({ kind, onPick }: { kind: Exclude<PeriodKind, "day">; onPick: () => void }) {
   const periods = usePeriods(kind);
   const list = periods.data ?? [];
-  if (list.length === 0) return <Empty />;
+  if (list.length === 0) return <Empty kind={kind} />;
   return (
     <ul className={styles.pickerList}>
       {list.map(({ period }) => (

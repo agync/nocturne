@@ -162,7 +162,14 @@ describe("the check-in screen", () => {
         replaces: null,
       }),
     );
-    expect(await screen.findByRole("heading", { level: 1, name: "Saved." })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Saved. You checked in as lit up." }),
+    ).toBeInTheDocument();
+  });
+
+  it("asks for a line without promising to talk", async () => {
+    await open();
+    expect(screen.getByPlaceholderText("A line, if you like.")).toBeInTheDocument();
   });
 
   it("starts with a part when the address names one", async () => {
@@ -279,7 +286,7 @@ describe("something that might help", () => {
     const view = await open();
     await userEvent.click(screen.getByRole("radio", { name: part }));
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
-    await screen.findByRole("heading", { level: 1, name: "Saved." });
+    await screen.findByRole("heading", { level: 1, name: /^Saved\. You checked in as / });
     return view;
   }
 

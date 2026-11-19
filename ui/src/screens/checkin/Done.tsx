@@ -33,7 +33,7 @@ export function Done({ checkin, onChange }: DoneProps) {
       <h1 ref={title} tabIndex={-1} className="t-page-title">
         {words.length > 0
           ? t("journal.checkin.saved", { words: sentence(words) })
-          : t("journal.checkin.savedBare")}
+          : t("journal.checkin.savedBare", { part: name.toLowerCase() })}
       </h1>
       <p className={styles.muted}>
         <span className={styles.feel} data-part={part}>
