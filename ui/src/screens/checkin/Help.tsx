@@ -6,6 +6,9 @@ import { useEngine } from "../../engine/context";
 import styles from "./Checkin.module.css";
 
 /** The ideas are fixed and ship with Nocturne. Each idea's copy id is the id the engine stores. */
+/** Ideas are kept by their short id, "slow.name", which the recap words again. */
+const IDEA = "journal.help.idea.";
+
 const KINDS = [
   {
     name: "journal.help.kind.move",
@@ -41,7 +44,7 @@ export function Help({ checkinId }: { checkinId: string }) {
     if (!idea || working) return;
     setWorking(true);
     try {
-      await engine.markTried(checkinId, idea);
+      await engine.markTried(checkinId, idea.slice(IDEA.length));
       setNoted(true);
     } catch {
       toast.show({ message: t("notice.action.failed") });

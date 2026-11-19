@@ -323,7 +323,7 @@ describe("something that might help", () => {
     expect(screen.queryByText("Pick one above first.")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "I tried this" }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
-    expect(spy.mock.calls[0]?.[1]).toBe("journal.help.idea.slow.name");
+    expect(spy.mock.calls[0]?.[1]).toBe("slow.name");
     expect(await screen.findByText("Noted.")).toBeInTheDocument();
     expect(screen.queryByText(/worked/i)).toBeNull();
   });
