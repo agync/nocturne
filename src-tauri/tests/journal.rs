@@ -468,6 +468,120 @@ fn looking_back_is_not_use() {
     assert!(h.engine().get_item(&item).is_ok());
 }
 
+// ---- recaps on every computer ----
+
+#[test]
+fn a_week_is_put_together_when_asked_on_a_computer_that_has_not_passed_the_check() {
+    let (h, mind) = world(FakeMind::new());
+    keep_a_day(&h);
+    let week = period(&h, PeriodKind::Week, "2026-11-12");
+    let v = h.ok("get_reflection", arg(&week));
+    assert_eq!(kind_of(&v), "notYet", "{v}");
+    let v = h.ok("reflect", arg(&week));
+    assert_eq!(kind_of(&v), "recap", "{v}");
+    assert_eq!(v["recap"]["written"], "onDemand");
+    assert_eq!(
+        mind.call_count("reflect"),
+        0,
+        "a recap asks the mind nothing"
+    );
+    assert_eq!(kind_of(&h.ok("get_reflection", arg(&week))), "recap");
+    // The same computer still lists the day.
+    let day = period(&h, PeriodKind::Day, "2026-11-12");
+    let v = h.ok("get_reflection", arg(&day));
+    assert_eq!(
+        (kind_of(&v), reason_of(&v)),
+        ("glance", "notOnThisComputer")
+    );
+}
+
+#[test]
+fn a_week_is_put_together_with_no_mind_and_while_it_starts() {
+    let h = harness();
+    keep_a_day(&h);
+    let week = period(&h, PeriodKind::Week, "2026-11-12");
+    let v = h.ok("reflect", arg(&week));
+    assert_eq!(kind_of(&v), "recap", "no mind at all: {v}");
+
+    let (h, mind) = world(FakeMind::new());
+    keep_a_day(&h);
+    h.state().mind.set_loading(true);
+    for kind in [PeriodKind::Week, PeriodKind::Month, PeriodKind::Year] {
+        let p = period(&h, kind, "2026-11-12");
+        let v = h.ok("reflect", arg(&p));
+        assert_eq!(kind_of(&v), "recap", "{kind:?} while loading: {v}");
+    }
+    assert_eq!(mind.call_count("reflect"), 0);
+    let day = period(&h, PeriodKind::Day, "2026-11-12");
+    h.state().reflecting.set_writes(Some(true));
+    assert_eq!(reason_of(&h.ok("reflect", arg(&day))), "notReady");
+}
+
+#[test]
+fn a_week_of_only_things_kept_from_elsewhere_stays_at_a_glance() {
+    let (h, _) = world(FakeMind::new());
+    h.clock.set_str("2026-11-12T10:00:00Z");
+    h.engine()
+        .keep_bytes(b"%PDF-1.4 school letter", "pdf", Source::Drop)
+        .unwrap();
+    h.clock.set_str(MORNING);
+    let week = period(&h, PeriodKind::Week, "2026-11-12");
+    for cmd in ["get_reflection", "reflect"] {
+        let v = h.ok(cmd, arg(&week));
+        assert_eq!((kind_of(&v), reason_of(&v)), ("glance", "listed"), "{cmd}");
+    }
+    assert!(h.engine().saved_reflection(&week).unwrap().is_none());
+}
+
+#[test]
+fn a_recap_that_waits_on_unread_things_says_how_many() {
+    let (h, _) = world(FakeMind::new());
+    keep_a_day(&h);
+    h.engine()
+        .keep_note("Still to be read", Source::Journal, None, false)
+        .unwrap();
+    let week = period(&h, PeriodKind::Week, "2026-11-12");
+    let v = h.ok("reflect", arg(&week));
+    assert_eq!(v["recap"]["stillReading"], 1, "{v}");
+}
+
+#[test]
+fn a_deleted_recap_shows_the_week_at_a_glance_until_the_person_asks_again() {
+    let (h, _) = world(FakeMind::new());
+    keep_a_day(&h);
+    h.clock.set_str("2026-11-16T09:00:00Z");
+    let week = period(&h, PeriodKind::Week, "2026-11-12");
+    assert_eq!(kind_of(&h.ok("reflect", arg(&week))), "recap");
+    h.ok("delete_reflection", arg(&week));
+    assert!(h.engine().saved_reflection(&week).unwrap().is_none());
+    let v = h.ok("get_reflection", arg(&week));
+    assert_eq!(kind_of(&v), "notYet", "{v}");
+    assert!(!v["glance"]["kept"].as_array().unwrap().is_empty());
+    assert!(
+        !h.engine().reflections_due(7).unwrap().contains(&week),
+        "not put together again overnight"
+    );
+
+    assert_eq!(kind_of(&h.ok("reflect", arg(&week))), "recap");
+    h.engine().discard_reflection(&week).unwrap();
+    assert!(
+        h.engine().reflections_due(7).unwrap().contains(&week),
+        "asking cleared the decline"
+    );
+}
+
+#[test]
+fn deleting_a_day_reflection_stops_it_being_written_again_overnight() {
+    let (h, _) = world(FakeMind::new());
+    keep_a_day(&h);
+    h.state().reflecting.set_writes(Some(true));
+    let day = period(&h, PeriodKind::Day, "2026-11-12");
+    h.ok("reflect", arg(&day));
+    h.ok("delete_reflection", arg(&day));
+    assert!(!h.engine().reflections_due(7).unwrap().contains(&day));
+    assert_eq!(kind_of(&h.ok("reflect", arg(&day))), "written");
+}
+
 // ---- overnight, wired into the app ----
 
 fn seed_the_12th(h: &Harness) {
@@ -760,4 +874,29 @@ fn files_kept_into_the_entry_go_on_when_one_cannot() {
         .unwrap();
     let blocks: Vec<u32> = day.entry.iter().map(|b| b.block).collect();
     assert_eq!(blocks, [0, 1]);
+}
+
+#[test]
+fn the_night_puts_a_week_together_with_the_gate_closed_and_writes_no_day() {
+    let (h, mind) = world(FakeMind::new().with_headline("A quiet night", "One thing."));
+    h.clock.set_str("2026-11-08T20:00:00Z");
+    h.engine()
+        .keep_note("Sunday lunch at Gran's", Source::Journal, None, false)
+        .unwrap();
+    let services = start_manual(&h, FakeHost::new());
+    h.clock.set_str("2026-11-09T05:00:00Z");
+    assert!(run_until_page(&h, &services));
+    assert_eq!(mind.call_count("reflect"), 0);
+    assert!(
+        h.engine()
+            .saved_reflection(&period(&h, PeriodKind::Day, "2026-11-08"))
+            .unwrap()
+            .is_none()
+    );
+    assert!(matches!(
+        h.engine()
+            .saved_reflection(&period(&h, PeriodKind::Week, "2026-11-08"))
+            .unwrap(),
+        Some(ReflectionView::Recap { .. })
+    ));
 }

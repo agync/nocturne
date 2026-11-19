@@ -1,10 +1,12 @@
 //! The journal's looking back, from the app's side: which computers write reflections, what the
 //! journal shows for a day or a period, and writing one when the person asks.
 //!
-//! A reflection or recap is written only on a size of computer that passed the journal check
-//! with its preset answering model (`docs/design/evaluation.md`, "The journal check"). Everywhere
-//! else the journal shows the day at a glance. Looking back is never use: nothing here touches a
-//! memory's last-used time, and nothing here goes online.
+//! A day's reflection is written only on a size of computer that passed the journal check with
+//! its preset answering model (`docs/design/evaluation.md`, "The journal check"), and only once
+//! the engine is ready. Everywhere else the journal shows the day at a glance. A recap of a
+//! week, month or year is put together from what was kept, writes no sentence, and so is put
+//! together on every computer, before the engine is ready too. Looking back is never use:
+//! nothing here touches a memory's last-used time, and nothing here goes online.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -27,14 +29,14 @@ use crate::state::AppState;
 /// each run.
 pub const WRITES_REFLECTIONS: &[Tier] = &[];
 
-/// Whether a size of computer writes reflections and recaps: it passed the check with its preset
+/// Whether a size of computer writes day reflections: it passed the check with its preset
 /// answering model. A model the person chose themselves has not been through the check.
 pub fn writes_reflections(tier: Tier, own_answering_model: bool) -> bool {
     !own_answering_model && WRITES_REFLECTIONS.contains(&tier)
 }
 
-/// Whether this computer writes reflections now: the override, else the size of computer and
-/// whether the person chose their own answering model.
+/// Whether this computer writes day reflections now: the override, else the size of computer and
+/// whether the person chose their own answering model. Recaps are not asked of it.
 pub fn writes_now(state: &AppState) -> bool {
     if let Some(w) = state.reflecting.writes() {
         return w;
@@ -50,8 +52,8 @@ struct Live {
     stop: Arc<AtomicBool>,
 }
 
-/// The override of the journal check, and the reflections being written on request, which the
-/// person can stop.
+/// The override of the journal check, and the reflections and recaps being put together on
+/// request, which the person can stop.
 #[derive(Default)]
 pub struct Reflecting {
     writes: Mutex<Option<bool>>,
@@ -132,7 +134,8 @@ impl<T> Drop for AbortOnDrop<T> {
     }
 }
 
-/// What stands in the way of writing for `period`, or the glance to write beside.
+/// What stands in the way of writing for `period`, or the glance to write beside. The mind and
+/// the journal check stand in the way of a day only: a recap needs neither.
 enum Assessed {
     Refused(Box<ReflectionView>),
     Ready(Glance),
@@ -186,9 +189,11 @@ async fn assess(state: &AppState, period: &Period) -> Result<Assessed, CommandEr
         Assessed::Refused(Box::new(ReflectionView::Nothing {
             period: period.clone(),
         }))
-    } else if state.mind.get().is_none() || state.mind.is_loading() {
+    } else if period.kind == PeriodKind::Day
+        && (state.mind.get().is_none() || state.mind.is_loading())
+    {
         Assessed::Refused(Box::new(refused(GlanceReason::NotReady)))
-    } else if !writes_now(state) {
+    } else if period.kind == PeriodKind::Day && !writes_now(state) {
         Assessed::Refused(Box::new(refused(GlanceReason::NotOnThisComputer)))
     } else if !own {
         Assessed::Refused(Box::new(refused(GlanceReason::Listed)))
@@ -215,29 +220,49 @@ pub async fn view(state: &AppState, period: &Period) -> Result<ReflectionView, C
     })
 }
 
-/// Write the reflection or recap for `period` now, because the person asked. It holds off the
-/// reading like an answer does, runs on battery, and replaces what was written. A period that is
-/// still going is written as it is so far. Returns what is now stored, or why nothing could be.
+/// Write the reflection or recap for `period` now, because the person asked. A day holds off the
+/// reading like an answer does, runs on battery, and needs the mind; a week, month or year is
+/// put together without it, on any computer. Either replaces what was written, and asking
+/// brings back a period the person had deleted. A period that is still going is written as it
+/// is so far. Returns what is now stored, or why nothing could be.
 pub async fn reflect(state: &AppState, period: &Period) -> Result<ReflectionView, CommandError> {
     let glance = match assess(state, period).await? {
         Assessed::Refused(view) => return Ok(*view),
         Assessed::Ready(glance) => glance,
     };
     let engine = state.engine()?;
-    let Some(mind) = state.mind.get() else {
-        return Ok(ReflectionView::Glance {
-            glance,
-            reason: GlanceReason::NotReady,
-        });
+    let day = period.kind == PeriodKind::Day;
+    let mind = if day {
+        let Some(mind) = state.mind.get() else {
+            return Ok(ReflectionView::Glance {
+                glance,
+                reason: GlanceReason::NotReady,
+            });
+        };
+        Some(mind)
+    } else {
+        None
     };
-    let _reader_waits = state.services().map(|s| s.reader.ask_begin());
+    {
+        let (e, p) = (engine.clone(), period.clone());
+        blocking(move || e.clear_declined_reflection(&p)).await?;
+    }
+    let _reader_waits = day
+        .then(|| state.services().map(|s| s.reader.ask_begin()))
+        .flatten();
     let (e, p) = (engine.clone(), period.clone());
     let (go, wait) = tokio::sync::oneshot::channel::<()>();
     let stop = Arc::new(AtomicBool::new(false));
     let stopped = stop.clone();
     let mut task = AbortOnDrop(tokio::spawn(async move {
         let _ = wait.await;
-        reflect::write_stoppable(&e, mind.as_ref(), &p, WrittenWhen::OnDemand, stopped).await
+        match mind {
+            Some(mind) => {
+                reflect::write_stoppable(&e, mind.as_ref(), &p, WrittenWhen::OnDemand, stopped)
+                    .await
+            }
+            None => reflect::write_recap(&e, &p, WrittenWhen::OnDemand, stopped).await,
+        }
     }));
     // Tracked before it starts, so a stop can never come too early to find it.
     let Some(id) = state.reflecting.begin(period, task.0.abort_handle(), stop) else {
@@ -286,7 +311,9 @@ pub fn stop(state: &AppState, period: &Period) {
     state.reflecting.stop(period);
 }
 
-/// Delete the writing for `period`, and stop it being written first. Entries are untouched.
+/// The person deletes the writing for `period`, and it is stopped first if it was being written.
+/// Entries are untouched, and the period is not put together again overnight: only asking for
+/// it again does that.
 pub async fn delete(state: &AppState, period: &Period) -> Result<(), CommandError> {
     stop(state, period);
     let engine = state.engine()?;
