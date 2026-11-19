@@ -484,9 +484,23 @@ export function seedJournal(clock: Date, mode: JournalMode): JournalData {
       "text",
       { text: paraTwo, title: paraTwo.slice(0, 60) },
       [["ent-gran"], ["ent-allotment"]],
-      {},
+      {
+        earlier: [
+          {
+            itemId: "j-block-2-v1",
+            text: "Gran rang at six. Her scan came back fine. She’d been at the allotment all day and sounded tired but pleased with herself.",
+            keptAt: at(today, 21, 10),
+          },
+        ],
+        changedAt: at(today, 21, 40),
+      },
       { text: "**Gran rang at six** to say her scan had come back clear." },
     );
+    item("j-block-2-v1", "text", today, 21, 10, {
+      journal: "entry",
+      source: "journal",
+      text: "Gran rang at six. Her scan came back fine. She’d been at the allotment all day and sounded tired but pleased with herself.",
+    });
 
     data.open.push({
       id: "open-climbing",
@@ -533,6 +547,9 @@ export function seedJournal(clock: Date, mode: JournalMode): JournalData {
 
   // ---- The days before: lighter ----
   const wed = addDays(today, -1);
+  note("j-wed-gran", wed, 10, 5, "Gran’s scan is tomorrow at ten. Said I’d ring her after.", [
+    ["ent-gran"],
+  ]);
   note("j-wed-note", wed, 12, 40, "Posted the Hendersons’ invoice on the way to the school gate.", [
     ["ent-hendersons", {}, "Hendersons"],
     ["ent-school", {}, "school"],

@@ -811,7 +811,8 @@ export class MockEngine implements EngineClient {
   async getItem(id: string): Promise<ItemView> {
     const found = this.items.find((i) => i.id === id) ?? this.journal.findItem(id);
     if (!found) throw new Error(`No item ${id}`);
-    return clone(found);
+    const checkin = this.journal.checkinOf(id);
+    return clone(checkin ? { ...found, journal: "checkin" as const, checkin } : found);
   }
 
   async retryItem(id: string): Promise<ItemView> {
@@ -1427,12 +1428,15 @@ export class MockEngine implements EngineClient {
     this.counter += 1;
     const token = `forget-${this.counter}`;
     const rows = ids.map((id) => ({ memoryId: id, sentence: this.memory(id).sentence }));
+    const read = items?.pick ? this.journalMemories(items.also) : [];
+    for (const m of read) rows.push({ memoryId: m.memoryId, sentence: m.sentence });
     const itemIds = new Set(
       this.memories
         .filter((m) => ids.includes(m.id))
         .flatMap((m) => m.receipts.map((r) => r.itemId)),
     );
     for (const also of items?.also ?? []) itemIds.add(also);
+    for (const m of read) for (const cited of m.cites) itemIds.add(cited);
     const originals = includeOriginals
       ? [...itemIds].flatMap((itemId) => {
           const item = this.items.find((i) => i.id === itemId) ?? this.journal.findItem(itemId);
@@ -1456,7 +1460,12 @@ export class MockEngine implements EngineClient {
     const gone = originals
       .filter((o) => o.removable && (!items?.pick || items.also.includes(o.itemId)))
       .map((o) => o.itemId);
-    this.previews.set(token, { ids, includeOriginals, gone });
+    this.previews.set(token, {
+      ids: [...ids, ...read.map((m) => m.memoryId)],
+      includeOriginals,
+      gone,
+    });
+    const cited = this.journal.citedLines(gone);
     const pagesAffected = this.pages.filter((p) =>
       [...p.needsYou, ...p.changed, ...p.letGo].some((l) =>
         l.memoryIds.some((m) => ids.includes(m)),
@@ -1468,7 +1477,26 @@ export class MockEngine implements EngineClient {
       originals: originals.filter((o) => o.removable),
       includeOriginals,
       pagesAffected,
+      reflectionLines: cited.lines,
+      recapLines: cited.recap,
     };
+  }
+
+  /**
+   * What the journal's own items yielded, as sentences, for "Delete this day". A sentence cites
+   * its item and, for the entry's second paragraph, a note from the day before.
+   */
+  private journalMemories(
+    also: string[],
+  ): Array<{ memoryId: string; sentence: string; cites: string[] }> {
+    const SHARED: Record<string, string[]> = { "j-block-2": ["j-wed-gran"] };
+    return also.flatMap((id) => {
+      const item = this.journal.findItem(id);
+      const text = item?.text ?? item?.summary;
+      if (!item || item.kind === "checkin" || !text) return [];
+      const sentence = text.split(/(?<=[.!?])\s+/)[0] ?? text;
+      return [{ memoryId: `jm-${id}`, sentence, cites: SHARED[id] ?? [] }];
+    });
   }
 
   private removeMemories(ids: string[], redact: boolean): { pages: number } {

@@ -237,6 +237,24 @@ export class MockJournal {
     view.status = "kept";
   }
 
+  /** The check-in kept as item `id`, for its own page. */
+  checkinOf(id: string): CheckIn | undefined {
+    const rec = this.data.recs.find((r) => r.t === "checkin" && r.checkin.id === id);
+    return rec?.t === "checkin" ? clone(rec.checkin) : undefined;
+  }
+
+  /** Lines of the day's reflection and recaps that cite any of `ids` (what a deletion takes out). */
+  citedLines(ids: string[]): { lines: number; recap: number } {
+    const gone = new Set(ids);
+    const lines = this.data.recs.filter((rec) => {
+      if (this.left.has(this.recItemId(rec))) return false;
+      const says = this.sentenceOf(rec);
+      if (!says) return false;
+      return gone.has(this.recItemId(rec)) || (says.ids ?? []).some((id) => gone.has(id));
+    }).length;
+    return { lines, recap: lines > 1 ? Math.floor(lines / 2) : 0 };
+  }
+
   /** Items this journal holds, for receipts and item pages. */
   findItem(id: string): ItemView | undefined {
     const found = this.data.items.get(id);
