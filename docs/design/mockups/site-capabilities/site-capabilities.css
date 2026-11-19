@@ -1,0 +1,108 @@
+/* Mockup only. The site's own fonts by a path that works when the repository root is served, then
+   the rules the journal band adds to site/assets/css/site.css. */
+
+@font-face {
+  font-family: "Newsreader";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("../../../../site/assets/fonts/newsreader-latin-opsz-normal.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "Newsreader";
+  font-style: italic;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("../../../../site/assets/fonts/newsreader-latin-wght-italic.woff2") format("woff2-variations");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../../../site/assets/fonts/ibm-plex-sans-latin-400-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../../../../site/assets/fonts/ibm-plex-sans-latin-500-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../../../../site/assets/fonts/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+}
+
+/* The journal: the words and what it promises on the left, the day on the right, the reverse of
+   Privacy below it, so the two bands alternate. One column below 824 px, where the picture comes
+   between the words and the promises. */
+
+.journal-shot {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+
+.journal-shot .feature-shot img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1536 / 1330;
+  object-fit: cover;
+  object-position: top;
+}
+
+/* A day looked back on sits over the corner of the day: what you wrote, beside what came of it.
+   The same move as the keep box over the morning page in the hero. The window is cut on a blank
+   line below the check-ins, and the card overlaps only that blank foot, so no words show half
+   hidden behind it. */
+.journal-look {
+  position: relative;
+  z-index: 1;
+  width: min(420px, 80%);
+  margin: -28px 0 0 -28px;
+}
+
+.journal-look img {
+  width: 100%;
+  height: auto;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule), 0 18px 40px -12px rgb(0 0 0 / 0.35);
+}
+
+.journal-shot figcaption {
+  margin-top: 0;
+}
+
+@media (min-width: 824px) {
+  #journal .promises {
+    grid-column: 1;
+    grid-row: 2;
+  }
+
+  #journal .journal-shot {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 640px) {
+  .journal-shot .feature-shot img {
+    aspect-ratio: 780 / 1005;
+  }
+
+  .journal-look {
+    width: auto;
+    margin: -28px 12px 0;
+  }
+}
