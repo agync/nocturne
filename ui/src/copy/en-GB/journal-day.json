@@ -1,0 +1,9 @@
+{
+  "journal.people.countOnly": "{count, plural, one {# memory} other {# memories}} from this entry",
+  "journal.entry.photoUnread": "Photo, not read yet",
+  "journal.entry.paragraph": "Your entry, paragraph {number}",
+  "journal.entry.photoAlt": "Photo in your entry",
+  "journal.timeline.fromDevice": "from {phone}",
+  "journal.timeline.rowMenu": "More about this",
+  "journal.good.photoChosen": "Photo from today: {name}"
+}
