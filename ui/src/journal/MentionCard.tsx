@@ -93,7 +93,7 @@ export function MentionCard({ mention, anchor, onClose }: MentionCardProps) {
       await engine.confirmMention(mention.id, mention.new && role.trim() ? role.trim() : null);
       refresh("journal");
       toast.show({ message: t("journal.people.confirmed", { name: mention.name }) });
-      onClose();
+      close();
     } catch {
       failed();
       setBusy(false);
@@ -114,7 +114,7 @@ export function MentionCard({ mention, anchor, onClose }: MentionCardProps) {
           },
         },
       });
-      onClose();
+      close();
     } catch {
       failed();
       setBusy(false);
@@ -130,7 +130,7 @@ export function MentionCard({ mention, anchor, onClose }: MentionCardProps) {
         onDone={(moved) => {
           refresh("journal");
           toast.show({ message: t("refile.done", { name: moved.name }) });
-          onClose();
+          close();
         }}
       />
     );
@@ -152,6 +152,22 @@ export function MentionCard({ mention, anchor, onClose }: MentionCardProps) {
         if (event.key === "Escape") {
           event.stopPropagation();
           close();
+        } else if (event.key === "Tab") {
+          const stops = [
+            ...(card.current?.querySelectorAll<HTMLElement>(
+              "input:not(:disabled), button:not(:disabled), a[href]",
+            ) ?? []),
+          ];
+          const first = stops[0];
+          const last = stops[stops.length - 1];
+          const here = document.activeElement;
+          if (event.shiftKey && (here === first || here === card.current)) {
+            event.preventDefault();
+            last?.focus();
+          } else if (!event.shiftKey && here === last) {
+            event.preventDefault();
+            first?.focus();
+          }
         }
       }}
     >

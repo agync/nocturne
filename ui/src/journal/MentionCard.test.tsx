@@ -139,6 +139,49 @@ describe("the card for a name in an entry", () => {
     expect(priya).toHaveFocus();
   });
 
+  it("gives focus back to the chip after confirm, remove and refile", async () => {
+    const engine = await open();
+    vi.spyOn(engine, "refileMention");
+    const returns = async (name: RegExp, act: () => Promise<void>) => {
+      const el = chip(name);
+      const focus = vi.spyOn(el, "focus");
+      await userEvent.click(el);
+      await screen.findByRole("dialog");
+      focus.mockClear();
+      await act();
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      expect(focus).toHaveBeenCalled();
+    };
+    await returns(/Priya/, async () => {
+      await userEvent.click(screen.getByRole("button", { name: "That’s right" }));
+    });
+    await returns(/^Gran$/, async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Not about Gran" }));
+    });
+    await returns(/the allotment/, async () => {
+      await userEvent.click(screen.getByRole("button", { name: "Someone else…" }));
+      const dialog = await screen.findByRole("dialog", { name: "Is this about something else?" });
+      await userEvent.click(await within(dialog).findByRole("radio", { name: /^Leo Person/ }));
+      await userEvent.click(within(dialog).getByRole("button", { name: "Move it" }));
+    });
+  });
+
+  it("keeps Tab inside the card", async () => {
+    await open();
+    await userEvent.click(chip(/Gran/));
+    const card = await screen.findByRole("dialog", { name: "Gran" });
+    const buttons = within(card).getAllByRole("button");
+    const last = buttons[buttons.length - 1] as HTMLElement;
+    last.focus();
+    await userEvent.tab();
+    expect(card.contains(document.activeElement)).toBe(true);
+    await userEvent.tab({ shift: true });
+    expect(card.contains(document.activeElement)).toBe(true);
+    (within(card).getByRole("link", { name: "Open Gran" }) as HTMLElement).focus();
+    await userEvent.tab({ shift: true });
+    expect(card.contains(document.activeElement)).toBe(true);
+  });
+
   it("opens the same card from the side column", async () => {
     await open();
     const side = screen.getByRole("heading", { level: 2, name: "People and places today" })
