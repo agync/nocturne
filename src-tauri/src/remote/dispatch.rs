@@ -12,9 +12,9 @@ use std::time::Duration;
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    AskDelta, AskPhase, CheckInInput, Edition, Feeling, GlanceReason, ItemView, Kept, Period,
-    PeriodKind, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, ReflectionView,
-    RemoteAction, RemoteAnswer, RemoteCall, RemoteResult, SameNameAnswer, Source,
+    AskDelta, AskPhase, CheckInInput, Edition, Feeling, ItemView, Kept, Period, PeriodKind,
+    PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, ReflectionView, RemoteAction,
+    RemoteAnswer, RemoteCall, RemoteResult, SameNameAnswer, Source,
 };
 use nocturne_engine::{DeviceRow, Engine};
 use tauri::{AppHandle, Manager, Runtime};
@@ -986,14 +986,27 @@ impl<R: Runtime> Call<R> {
                 self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
                 return err(PhoneError::TooMany);
             }
-            self.audit(RemoteAction::Asked, RemoteResult::Failed, 0.0);
-            return err(PhoneError::NotReady);
+            // The computer writes it whether or not the phone stays: the person can leave the
+            // page and find it in the journal.
+            let app = self.app.clone();
+            let asked = period.clone();
+            tauri::async_runtime::spawn(async move {
+                let state = app.state::<AppState>();
+                if let Err(e) = crate::journal::reflect(&state, &asked).await {
+                    tracing::info!("a look back asked from a phone was not written: {e}");
+                }
+            });
+            self.audit(RemoteAction::Asked, RemoteResult::Ok, 0.0);
         }
-        let e = self.engine()?;
-        let wanted = period.clone();
-        let view = match blocking(move || stored_look_back(&e, &wanted)).await {
-            Ok(v) => v,
-            Err(e) => return err(phone_code(&e)),
+        let view = {
+            let state = self.app.state::<AppState>();
+            match crate::journal::view(&state, &period).await {
+                Ok(ReflectionView::NotYet { glance }) if write => {
+                    ReflectionView::Writing { glance }
+                }
+                Ok(v) => v,
+                Err(_) => return err(PhoneError::NotReady),
+            }
         };
         let mut ids = Vec::new();
         journal_view::view_ids(&view, &mut |i| ids.push(i.to_string()));
@@ -1179,28 +1192,6 @@ fn phone_code(e: &CommandError) -> PhoneError {
         ErrorCode::Busy => PhoneError::Busy,
         _ => PhoneError::NotReady,
     }
-}
-
-/// What the computer holds for a period: what was written, else the period at a glance, else
-/// nothing. The desktop's journal module, which also writes, replaces this.
-fn stored_look_back(e: &Engine, period: &Period) -> nocturne_engine::Result<ReflectionView> {
-    if let Some(view) = e.saved_reflection(period)? {
-        return Ok(view);
-    }
-    let glance = e.glance(period)?;
-    if glance.kept.is_empty()
-        && glance.felt.is_empty()
-        && glance.good.is_empty()
-        && glance.entry_lines.is_empty()
-    {
-        return Ok(ReflectionView::Nothing {
-            period: period.clone(),
-        });
-    }
-    Ok(ReflectionView::Glance {
-        glance,
-        reason: GlanceReason::NotOnThisComputer,
-    })
 }
 
 /// A check-in as the journal shows it, found on the day it was kept or the day before.

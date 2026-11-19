@@ -2632,7 +2632,7 @@ fn no_private_item_is_cited_in_a_journal_answer() {
 }
 
 #[test]
-fn a_look_back_is_read_as_a_glance_and_writing_waits() {
+fn a_look_back_is_read_as_a_glance_where_it_cannot_be_written() {
     let p = on();
     let e = p.h.engine();
     let secret = desk_keep(&p, "Clinic result: private matter");
@@ -2662,11 +2662,18 @@ fn a_look_back_is_read_as_a_glance_and_writing_waits() {
         call(&mut c, RemoteCall::GetLookBack { period: week }),
         RemoteAnswer::LookBack { .. }
     ));
-    // Writing is not on this computer yet.
-    assert_eq!(
-        error_of(&call(&mut c, RemoteCall::LookBack { period })),
-        Some(PhoneError::NotReady)
-    );
+    // Asking for it on a size of computer that has not passed the journal check lists it.
+    let a = call(&mut c, RemoteCall::LookBack { period });
+    let RemoteAnswer::LookBack { view } = a else {
+        panic!("not a look back: {a:?}");
+    };
+    assert!(matches!(
+        *view,
+        ReflectionView::Glance {
+            reason: GlanceReason::NotOnThisComputer,
+            ..
+        }
+    ));
     // Not a period at all.
     let bad = nocturne_contract::Period {
         kind: PeriodKind::Week,
