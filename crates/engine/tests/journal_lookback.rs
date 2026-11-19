@@ -669,6 +669,34 @@ fn a_source_of_a_private_memory_is_left_out_of_what_a_reflection_is_written_from
 }
 
 #[test]
+fn a_reflection_is_shown_a_summary_for_background_items_and_a_capped_text_for_the_rest() {
+    let f = fixture();
+    let long = "word ".repeat(600);
+    let note = keep(&f.engine, &long);
+    let file = write_file(
+        f.dir.path(),
+        "form.txt",
+        b"The full text of the school form",
+    );
+    let doc = match f.engine.keep_file(&file, Source::WatchedFolder).unwrap() {
+        Kept::New { item } | Kept::Duplicate { item } => item.id,
+    };
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(
+        "UPDATE items SET text = 'The full text of the school form', \
+         summary = 'A school form about a trip' WHERE id = ?1",
+        [&doc],
+    )
+    .unwrap();
+    let (_, input) = written(&f, "2026-11-13");
+    let text_of = |id: &str| &input.items.iter().find(|i| i.id == id).unwrap().text;
+    assert_eq!(text_of(&doc), "A school form about a trip");
+    let n = text_of(&note);
+    assert!(n.chars().count() <= 1200, "{}", n.chars().count());
+    assert!(n.ends_with("word"), "cut at a word");
+}
+
+#[test]
 fn reflections_due_lists_an_ended_day_once_and_not_a_written_one() {
     let f = fixture_at("2026-11-12T10:00:00Z", "Europe/London");
     let note = keep(&f.engine, "A day with something in it");

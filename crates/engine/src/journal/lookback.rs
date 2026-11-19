@@ -40,6 +40,8 @@ const STRONG: f32 = 0.7;
 const TOGETHER_DAYS: u32 = 3;
 /// Lines of "What changed" a recap carries.
 const CHANGED_CAP: usize = 20;
+/// Characters of one item a reflection is shown.
+const REFLECT_TEXT_CAP: usize = 1200;
 
 fn left_out_ids(conn: &Connection) -> Result<HashSet<String>> {
     let mut stmt = conn.prepare("SELECT id FROM items WHERE left_out = 1")?;
@@ -292,14 +294,28 @@ fn reflect_label(item: &JItem) -> &'static str {
     }
 }
 
+/// What a reflection is shown of an item: the person's words or what was read from it, a
+/// summary instead for what was kept from elsewhere, cut at a word when long.
 fn reflect_text(item: &JItem) -> String {
-    [&item.view.text, &item.view.summary]
+    let fields = if is_background(item) {
+        [&item.view.summary, &item.view.text]
+    } else {
+        [&item.view.text, &item.view.summary]
+    };
+    let text = fields
         .into_iter()
         .flatten()
         .map(|s| s.trim())
         .find(|s| !s.is_empty())
-        .map(str::to_string)
-        .unwrap_or_default()
+        .unwrap_or_default();
+    match text.char_indices().nth(REFLECT_TEXT_CAP) {
+        None => text.to_string(),
+        Some((at, _)) => text[..at]
+            .rsplit_once(char::is_whitespace)
+            .map_or(&text[..at], |(head, _)| head)
+            .trim_end()
+            .to_string(),
+    }
 }
 
 fn reflect_items(conn: &Connection, ctx: &Ctx, g: &Gathered) -> Result<Vec<ReflectItem>> {
