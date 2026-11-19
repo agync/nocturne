@@ -931,3 +931,277 @@ describe("today’s page", () => {
     expect(opened).toEqual(["item-chat"]);
   });
 });
+
+describe("journal on the phone", () => {
+  it("home.journal_tile: connected opens it, asleep greys it with its reason", async () => {
+    await open("s=connected");
+    expect(await screen.findByText("Connected to Home computer")).toBeInTheDocument();
+    expect(button(/^Journal/)).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByText("Today so far, and looking back.")).toBeInTheDocument();
+    expect(
+      screen.getByText("A note, a photo or a voice note, a feeling or a good thing."),
+    ).toBeInTheDocument();
+    cleanup();
+    await open("s=asleep");
+    expect(
+      await screen.findByText("Last connected 07:48 · tries again by itself"),
+    ).toBeInTheDocument();
+    expect(button(/^Journal/)).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getAllByText("Back when your computer is. This phone keeps no copy."),
+    ).toHaveLength(2);
+  });
+
+  it("keep.feeling_and_good: the chosen part, word and the good-thing mark reach the engine", async () => {
+    const keepText = vi.fn(async () => kept);
+    await open("s=connected", (s) => {
+      s.engineFor = () => engineWith({}, { keepText });
+    });
+    await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+    await userEvent.type(screen.getByLabelText("Type something to keep"), "Lunch with Priya");
+    await userEvent.click(screen.getByRole("button", { name: "Lit up" }));
+    expect(screen.getByText("A word for it")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "cheerful" }));
+    await userEvent.click(screen.getByRole("switch", { name: "This is a good thing" }));
+    await userEvent.click(button("Keep"));
+    await waitFor(() => expect(keepText).toHaveBeenCalledOnce());
+    const [, , marks] = keepText.mock.calls[0] as unknown as [
+      string,
+      string,
+      { feeling: { part: string; point: object; words: string[] }; good: boolean },
+    ];
+    expect(marks.feeling).toEqual({
+      part: "litUp",
+      point: { pleasant: 0.5, energy: 0.5 },
+      words: ["cheerful"],
+    });
+    expect(marks.good).toBe(true);
+    expect(
+      await screen.findByRole("heading", { name: "Kept, with cheerful." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("It’s on today’s journal. Your computer reads it shortly."),
+    ).toBeInTheDocument();
+  });
+
+  it("keep.feeling_waits: a feeling kept while asleep waits with the keep", async () => {
+    const services = await open("s=asleep");
+    await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+    await userEvent.type(screen.getByLabelText("Type something to keep"), "Quiet evening");
+    await userEvent.click(screen.getByRole("button", { name: "Settled" }));
+    await userEvent.click(button("Keep"));
+    expect(await screen.findByRole("heading", { name: "Waiting." })).toBeInTheDocument();
+    const waiting = (await services.queue.list()).find((k) => k.text === "Quiet evening");
+    expect(waiting?.feeling?.part).toBe("settled");
+  });
+
+  it("checkin.field_words_save: a part opens the words, up to three, and Save keeps it once", async () => {
+    const keepCheckIn = vi.fn(createMockPhoneEngine({}).keepCheckIn);
+    await open("s=checkIn", (s) => {
+      s.engineFor = () => engineWith({}, { keepCheckIn });
+    });
+    expect(
+      await screen.findByText("Tap or drag to a spot, then pick the words that fit."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Settled" }));
+    const sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
+    expect(within(sheet).getByText("Up to three")).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole("button", { name: "relieved" }));
+    expect(within(sheet).getByText(/A worry has lifted/)).toBeInTheDocument();
+    await userEvent.click(within(sheet).getByRole("button", { name: "cosy" }));
+    await userEvent.click(within(sheet).getByRole("button", { name: "safe" }));
+    await userEvent.click(within(sheet).getByRole("button", { name: "loved" }));
+    expect(within(sheet).getByRole("button", { name: "loved" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+    await userEvent.type(
+      within(sheet).getByLabelText("What’s going on? (optional)"),
+      "Gran’s scan",
+    );
+    await userEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findByRole("heading", { name: "Saved. Relieved, cosy, safe." }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("It’s on today’s journal.")).toBeInTheDocument();
+    expect(keepCheckIn).toHaveBeenCalledOnce();
+    const [input, id] = keepCheckIn.mock.calls[0] as unknown as [
+      { feeling: { part: string; words: string[] }; line: string },
+      string,
+    ];
+    expect(input.feeling.part).toBe("settled");
+    expect(input.line).toBe("Gran’s scan");
+    expect(id).toMatch(/^[A-Za-z0-9_-]{1,36}$/);
+  });
+
+  it("checkin.list_mode: every word as a list, with the meaning once chosen", async () => {
+    const keepCheckIn = vi.fn(createMockPhoneEngine({}).keepCheckIn);
+    await open("s=checkIn", (s) => {
+      s.engineFor = () => engineWith({}, { keepCheckIn });
+    });
+    await userEvent.click(await screen.findByRole("button", { name: "Show all words as a list" }));
+    expect(screen.getByRole("button", { name: "Save" })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(screen.getByRole("checkbox", { name: "drained" }));
+    expect(screen.getByText("Nothing left to give")).toBeInTheDocument();
+    await userEvent.click(button("Save"));
+    expect(await screen.findByRole("heading", { name: "Saved. Drained." })).toBeInTheDocument();
+    const [input] = keepCheckIn.mock.calls[0] as unknown as [{ feeling: { part: string } }];
+    expect(input.feeling.part).toBe("low");
+  });
+
+  it("checkin.asleep_waits: a check-in kept while asleep goes to the queue", async () => {
+    const services = await open("s=asleep");
+    await userEvent.click(await screen.findByRole("button", { name: /^Keep/ }));
+    window.history.pushState({ view: { name: "checkin" } }, "");
+    window.dispatchEvent(new PopStateEvent("popstate", { state: { view: { name: "checkin" } } }));
+    await userEvent.click(await screen.findByRole("button", { name: "Show all words as a list" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: "calm" }));
+    await userEvent.click(button("Save"));
+    expect(await screen.findByRole("heading", { name: "Waiting." })).toBeInTheDocument();
+    expect((await services.queue.list()).some((k) => k.kind === "checkin")).toBe(true);
+  });
+
+  it("day.timeline: the Sam card, the entry, the rows and the pinned buttons", async () => {
+    await open("s=connected");
+    await userEvent.click(await screen.findByRole("button", { name: /^Journal/ }));
+    expect(await screen.findByText("Today · Thursday 19 November")).toBeInTheDocument();
+    const card = screen.getByRole("button", { name: /Which Sam is this\?/ });
+    expect(within(card).getByText("Needs you")).toBeInTheDocument();
+    expect(within(card).getByText("Same name")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Today’s entry" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Read it all" }));
+    expect(screen.getByText(/dropped it at the school office/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Leo forgot his PE kit again/).length).toBeGreaterThan(1);
+    expect(screen.getByText("Low · tired")).toBeInTheDocument();
+    expect(screen.getByText("Sam fixed the gate without being asked.")).toBeInTheDocument();
+    expect(button("Reflect on today")).toBeInTheDocument();
+    expect(button("← Wednesday")).toBeInTheDocument();
+    await userEvent.click(button("Choose a day"));
+    expect(screen.getByRole("dialog", { name: "Choose a day" })).toBeInTheDocument();
+  });
+
+  it("day.empty: nothing kept offers Keep something and Check in", async () => {
+    await open("s=journalEmpty");
+    expect(await screen.findByText("Nothing kept today yet.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Anything you keep, here or on your computer, shows up here."),
+    ).toBeInTheDocument();
+    expect(button("Keep something")).toBeInTheDocument();
+    expect(button("Check in")).toBeInTheDocument();
+  });
+
+  it("day.asleep: no copy is kept, and what is waiting is listed", async () => {
+    await open("s=journalAsleep");
+    expect(
+      await screen.findByText(
+        "The journal is back when your computer is. This phone keeps no copy. What you keep now waits here.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "Waiting on this phone" }),
+    ).toBeInTheDocument();
+    expect(await screen.findByText("Voice note, 0:48")).toBeInTheDocument();
+    expect(screen.getAllByText("waiting on this phone")).toHaveLength(2);
+    expect(screen.queryByText("Today’s entry")).not.toBeInTheDocument();
+  });
+
+  it("reflect.writing_then_written: Reflect on today shows the writing state, then the reflection", async () => {
+    await open("s=connected&pace=150");
+    await userEvent.click(await screen.findByRole("button", { name: /^Journal/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Reflect on today" }));
+    expect(
+      await screen.findByText("Your computer is looking back on your day…"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This can take a minute. You can leave this page; it will be in your journal.",
+      ),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "The day" })).toBeInTheDocument();
+    expect(screen.getByText("lunch with Priya")).toBeInTheDocument();
+  });
+
+  it("reflect.polls_while_writing: it asks again until the computer has written", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reads = 0;
+    const base = createMockPhoneEngine({});
+    try {
+      await open("s=lookBackToday", (s) => {
+        s.engineFor = () =>
+          engineWith(
+            {},
+            {
+              lookBack: async (p) => ({
+                type: "writing",
+                glance:
+                  (await base.getLookBack(p)).type === "notYet"
+                    ? {
+                        period: p,
+                        kept: [],
+                        felt: [],
+                        good: [],
+                        with: [],
+                        entryLines: [],
+                        entryItemId: null,
+                      }
+                    : ({} as never),
+              }),
+              getLookBack: async (p) => {
+                reads += 1;
+                return reads < 2
+                  ? {
+                      type: "writing",
+                      glance: {
+                        period: p,
+                        kept: [],
+                        felt: [],
+                        good: [],
+                        with: [],
+                        entryLines: [],
+                        entryItemId: null,
+                      },
+                    }
+                  : base.lookBack(p);
+              },
+            },
+          );
+      });
+      expect(
+        await screen.findByText("Your computer is looking back on your day…"),
+      ).toBeInTheDocument();
+      await vi.advanceTimersByTimeAsync(4500);
+      expect(await screen.findByRole("heading", { name: "The day" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("which.answer_files_and_shows_done: the choice is sent, and the answer says what was filed", async () => {
+    const answerSameName = vi.fn(createMockPhoneEngine({}).answerSameName);
+    await open("s=connected", (s) => {
+      s.engineFor = () => engineWith({}, { answerSameName });
+    });
+    await userEvent.click(await screen.findByRole("button", { name: /^Journal/ }));
+    await userEvent.click(await screen.findByRole("button", { name: /Which Sam is this\?/ }));
+    expect(
+      await screen.findByText("“I think I’ll go with her and Sam on Saturday.”"),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^From a note · today, \d{1,2}:20 [ap]m$/)).toBeInTheDocument();
+    expect(button("This one")).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.getByText("Only this one is filed. You can change it later on your computer."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: /from work/ }));
+    await userEvent.click(button("This one"));
+    expect(
+      await screen.findByRole("heading", { name: "Filed under Sam, from work." }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Only this one. You can change it on your computer."),
+    ).toBeInTheDocument();
+    expect(answerSameName).toHaveBeenCalledWith("snq-0001", {
+      type: "entity",
+      entityId: "ent-sam-work",
+    });
+  });
+});
