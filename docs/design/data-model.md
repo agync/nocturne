@@ -19,7 +19,7 @@ The tape is append-only. An event is what arrived, not what it means.
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | text | `evt_` plus 16 hex characters |
-| `kind` | text | `text`, `image`, `audio`, `page`, or `note` |
+| `kind` | text | `text`, `image`, `audio`, `page`, `note`, or `checkin` |
 | `source` | text | The capture surface: quick capture, drop, watched folder, MCP, or an app name |
 | `content` | text | The text, or the transcription, or a description |
 | `captured_at` | text | ISO 8601 UTC |
@@ -27,7 +27,14 @@ The tape is append-only. An event is what arrived, not what it means.
 | `trust` | text | `trusted` or `untrusted`, from the source (see [trust by source](#trust-by-source)) |
 | `metadata` | JSON | Stored original, MIME type, the understanding step that produced `content`, and other context |
 
-The hash makes capture idempotent. Re-ingesting the same page does not create a second event.
+The hash makes capture idempotent. Re-ingesting the same page does not create a second event. A
+journal item hashes its text with its own id, so two entries with the same words are both kept.
+
+A `checkin` is a feelings check-in from the journal. It holds a part, a point (two numbers from
+-1 to 1), up to three words, and optionally a line and an urge, in `metadata`. A check-in yields
+mentions only, never facts: reading its lines, the urge included, finds names and writes
+[mentions](#mentions), so a check-in never enters the fact graph, never fades, and never reaches
+Ask or goes online.
 
 ## Fact graph
 
@@ -44,7 +51,7 @@ A fact is one durable claim. It is not a document chunk.
 | `recorded_at` | text | When Nocturne learned it |
 | `confidence` | real | 0.0 to 1.0 |
 | `provenance` | JSON | Supporting event ids, each with an optional source span: an audio time range, a page, an image region, or a quoted passage |
-| `sensitivity` | text | `normal` or `private`; private facts never reach audio, print, notifications or the tray |
+| `sensitivity` | text | `normal`, `private` or `journal`; private facts never reach audio, print, notifications or the tray. A `journal` fact is read from a journal entry or a good thing: it never reaches audio, notifications, the tray or a phone's lock screen, and is allowed in Print, export, the phone and Online answers ([decision 0015](/adr/0015-journal-privacy-class.md)). A fact takes the strictest of its sources: private, then journal, then normal |
 | `status` | text | `active`, `fading`, `archived`, or `quarantined` |
 | `last_seen` | text or null | Last reinforcement or use |
 | `ttl_days` | integer or null | An explicit expiry, when the user sets one |
@@ -118,6 +125,58 @@ a merge does not take its undo away. A move whose source has been forgotten cann
 An export lists former names and where a moved memory was first filed, and leaves out things
 merged into another, which the one that remains is also known by. Delete everything removes every
 one of these rows.
+
+## Mentions
+
+A mention links a span of an item's text to an entity, so the journal can show who and where an
+entry is about. Reading writes them, for entries, good things and the lines of check-ins.
+
+| Field | Meaning |
+|---|---|
+| item | The item the words are in |
+| entity | The person or place the words are taken to mean |
+| span | Where the words start and end in the item's text, and the words themselves |
+| state | `found` by reading, `confirmed` by the person, or `removed` |
+
+"Not about {name}" sets `removed` and lets go the memories from that item filed under the entity;
+Undo restores both. Two people who share a first name are never guessed between: reading keeps
+no memory for that name and asks "Which {name} is this?" in Needs you.
+
+## Journal grouping and versions
+
+A good thing is a `text` item with `metadata.journal` set to `good`; an entry block is one with
+`entry`, and a check-in one with `checkin`. Journal items carry a few more keys in `metadata`:
+
+| Key | Meaning |
+|---|---|
+| `journal_day` | The day the item belongs to, by the day boundary, not the clock date |
+| `block` | The block's order in the day's entry |
+| `replaces` | The item an edit replaces |
+| `about` | The note a feeling tapped in quick capture belongs to |
+
+A block saved in today's entry is held for a short while before reading, so a half-written
+sentence is not read; Read now, or the overnight tidy, ends the hold. Editing a block that was
+never read changes it in place. Editing one that was read keeps the earlier version until it is
+deleted, and reading treats the new version as a re-read through the same path: memories only the
+earlier version supported are let go. An item can be left out of reflections with a flag on the
+item; looking back never updates `last_seen`.
+
+## Reflections and recaps
+
+A reflection is the writing about one day, and a recap is the writing about a week, a month or a
+year. Both are derived, kept per period, and never read as facts.
+
+| Field | Meaning |
+|---|---|
+| period and kind | The day, week, month or year, and which it is |
+| lines | The text of each line, in order |
+| cited items | The ids of the items each line cites, so every line has a receipt |
+| written | When, and whether on demand or overnight |
+
+Only the day's reflection is written by the mind; counts, quotes, check-ins and mentions are
+composed from what was kept. A line citing an item that is left out is hidden, and forgetting an
+item removes the lines that cite it. Delete everything removes them, and export includes them as
+text. Their lines carry `journal` sensitivity, they never go online, and citing them is not use.
 
 ## Search
 

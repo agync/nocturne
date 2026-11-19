@@ -88,6 +88,24 @@ e2e-help` runs it on the real models of the size `NOCTURNE_E2E_TIER` sets up and
 `help.json` with the checks per run and every sentence the script could not settle, for a person
 to read. No size has passed yet, so every size shows the guide's own words.
 
+## The journal check
+
+Whether a size of computer may write reflections and recaps is decided by the check in
+[Journaling](journaling.md#overnight-and-on-demand), as the help check decides help. A size passes
+only when every check holds in every run, on a set of journal days.
+
+| Check | Pass |
+|---|---|
+| Receipts | Every sentence carries a receipt to an entry, good thing or check-in kept that day |
+| No feeling without support | No feeling is written that no check-in or quote supports |
+| No advice | No sentence tells the person what to do or how to feel |
+| No invented people | No person or place appears that the day's items do not name |
+
+The check is a scripted one, which checks the wiring and the scoring on a scripted mind and not a
+size, and a run on the real models of each size. The size of the set will be recorded with the
+first run. No size has passed yet, so every size shows "At a glance" and the line "On this
+computer, Nocturne lists the day rather than writing about it."
+
 ## Online answers on the smallest tier (S1b)
 
 Measured against a stand-in provider with a larger model, on the smallest tier, with the same

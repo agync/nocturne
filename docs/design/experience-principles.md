@@ -20,6 +20,6 @@ decide every trade-off between capability and clarity.
 | Forgetting is gentle and reversible | Fading and letting go are visible, undoable and explained; hard deletion is explicit and confirmed |
 | Private by proof, not by promise | The app shows that nothing leaves the computer instead of only claiming it |
 | Zero required settings | Defaults are right for most people; settings exist but nothing needs them |
-| Calm presence | No badges, streaks or engagement loops; one page a day, one question a day |
+| Calm presence | No badges, streaks or engagement loops; one page a day, one question a day; the one optional evening reminder is off by default and always says the same words |
 | Recover without asking | Background failures restart and retry on their own; the person sees a plain sentence only when they must act |
 | Accessible by default | WCAG 2.2 AA, complete keyboard use, screen reader support, text scaling and reduced motion |

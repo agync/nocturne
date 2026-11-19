@@ -161,8 +161,8 @@ On screen, 88 words including the buttons and the bar line:
 |---|---|
 | Step label | Online answers · step 1 of 5 |
 | Title | Have your answers written by an online service you choose. |
-| Sent | Your question, with a few short lines from what you kept that help answer it. |
-| Never sent | Your photos, recordings and documents themselves, and anything you marked private. |
+| Sent | Your question, with a few short lines from what you kept that help answer it, your journal entries and good things included. |
+| Never sent | Your photos, recordings and documents themselves, your check-ins, reflections and recaps, and anything you marked private. |
 | You need | An account with that service. Most charge a little for each question. Setting up means copying three details from its website. |
 | Expander, closed | Everything that is sent, and what stays here |
 | Bar | Continue · Not now · Nothing is turned on until the last step. |
@@ -179,6 +179,15 @@ Behind the expander, in this order, with today's words unchanged:
 7. Stays on this computer: the four list lines, then "If the service can’t be reached, this
    computer answers, and says so." and "Turn it off at any time, in Settings or on the Privacy
    page."
+
+The journal adds words behind the expander, and everything else there is unchanged:
+
+| Part | Added words |
+|---|---|
+| What is sent, after its first sentence | "A line from a journal entry or a good thing can go too, when it helps answer the question." |
+| Never sent, after "Things you marked private are never sent." | "Your check-ins, reflections and recaps are never sent: they are written and kept on this computer." |
+| Never sent, after "so mark anything you never want sent as private." | "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer." |
+| Stays on this computer, a fifth line | "Writing your reflections and recaps" |
 
 Why each short line is true:
 
@@ -227,6 +236,15 @@ Corrected lead:
 |---|---|
 | Before | While this is on, your questions leave this computer. Everything else stays here. |
 | After | While this is on, each question and the few lines that answer it leave this computer. Everything else you kept stays here. |
+
+With the journal, step 5 changes these words:
+
+| Part | Words |
+|---|---|
+| What is sent, for each question | "Your question, and the few things you kept that answer it, as short sentences, lines from your journal entries and good things included. At most 12, each with the day you kept it. For example:" |
+| Never sent, a new line after "Things you marked private" | "Your check-ins, reflections and recaps. They are written on this computer and stay here." |
+| Never sent, a line under the list | "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer." |
+| Your choices, two new rows | "Journal entries and good things" / "May be sent" and "Check-ins, reflections, recaps" / "Never sent" |
 
 The bar holds "Turn on online answers" and "Not now", with no line.
 
