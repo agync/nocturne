@@ -3781,6 +3781,7 @@ dependencies = [
  "nocturne-contract",
  "nocturne-engine",
  "nocturne-intelligence",
+ "rusqlite",
  "tempfile",
  "tokio",
  "tokio-util",

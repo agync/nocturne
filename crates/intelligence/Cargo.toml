@@ -27,6 +27,7 @@ fake = []
 [dev-dependencies]
 nocturne-intelligence = { path = ".", features = ["fake"] }
 nocturne-engine = { workspace = true, features = ["fake"] }
+rusqlite.workspace = true
 tempfile.workspace = true
 tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
 

@@ -106,6 +106,37 @@ async fn images_and_documents_are_read_and_a_blank_scan_with_a_title_is_partly_u
 }
 
 #[tokio::test]
+async fn a_checkin_with_no_words_is_understood_not_unreadable() {
+    let w = world(FakeMind::new());
+    let id = keep(&w, "placeholder");
+    rusqlite::Connection::open(w.dir.path().join("nocturne.db"))
+        .unwrap()
+        .execute(
+            "UPDATE items SET kind = 'checkin', text = NULL, \
+             metadata = json_set(metadata, '$.journal', 'checkin') WHERE id = ?1",
+            [&id],
+        )
+        .unwrap();
+    let step = w.reader.tick().await;
+    assert_eq!(
+        step,
+        Step::Read {
+            item: id.clone(),
+            outcome: Outcome::Understood
+        }
+    );
+    assert_eq!(
+        w.engine.get_item(&id).unwrap().status,
+        ItemStatus::Understood
+    );
+    assert!(
+        w.mind.calls().is_empty(),
+        "nothing to read, so the mind is not asked"
+    );
+    assert!(w.engine.memories(Default::default()).unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn an_unreadable_scan_without_a_title_is_unsupported() {
     let w = world(FakeMind::new());
     let (scan, name) = keep_pdf(&w, b"%PDF blank");

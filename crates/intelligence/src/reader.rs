@@ -938,7 +938,15 @@ impl Reader {
 
         if text.is_none() {
             match p.kind {
-                ItemKind::Text | ItemKind::Web | ItemKind::Checkin => {
+                // Nothing was said, so there is nothing to read: a feeling alone is understood.
+                ItemKind::Checkin => {
+                    let (i, l) = (id.clone(), lease.clone());
+                    let took = started.elapsed();
+                    self.eng(move |e| e.apply_candidates_took(&i, &l, Vec::new(), took))
+                        .await?;
+                    return Ok(Outcome::Understood);
+                }
+                ItemKind::Text | ItemKind::Web => {
                     return self
                         .fail(&id, &lease, CouldntReadReason::Unsupported, reread)
                         .await;
