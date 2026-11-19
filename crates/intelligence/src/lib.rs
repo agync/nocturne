@@ -2,8 +2,9 @@
 //!
 //! The engine never calls a mind. This crate does: one [`Reader`] holds the mind and reads what
 //! was kept, in a fixed order of priority; the [`Tidy`] writes the morning page and the
-//! [`Scheduler`] decides when, with catch-up for laptops that were asleep; the [`Host`] answers
-//! the questions the policy needs (on mains power, away from the keyboard, about to sleep).
+//! [`Scheduler`] decides when, with catch-up for laptops that were asleep; [`reflect`] writes
+//! the journal's looking back; the [`Host`] answers the questions the policy needs (on mains
+//! power, away from the keyboard, about to sleep).
 //!
 //! Everything takes its time from the engine's clock and exposes `tick()`, so tests drive it with
 //! a manual clock and a mutable fake host.
@@ -12,6 +13,7 @@ mod chunk;
 mod events;
 pub mod host;
 mod reader;
+pub mod reflect;
 pub mod reindex;
 mod schedule;
 mod scheduler;
@@ -29,6 +31,7 @@ pub use events::{Events, NullEvents};
 pub use host::FakeHost;
 pub use host::{Host, SleepGuard, SystemHost, probe};
 pub use reader::{AskGuard, DrainHandle, DrainProgress, Outcome, Reader, ReaderStats, Step};
+pub use reflect::{ReflectError, Wrote};
 pub use schedule::{Coming, coming, target_date};
 pub use scheduler::{SchedStep, Scheduler};
 pub use tidy::{Tidy, TidyKind, TidyStep};
