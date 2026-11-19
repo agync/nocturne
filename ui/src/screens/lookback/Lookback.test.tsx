@@ -99,6 +99,32 @@ describe("a day's reflection", () => {
     expect(within(rows[1] as HTMLElement).getByText("tired")).toBeTruthy();
   });
 
+  it("shows a line with asterisks as it was written", async () => {
+    const engine = engineIn();
+    const line = "a **big** day, **really";
+    serve(engine, (view) =>
+      view.type === "written"
+        ? {
+            ...view,
+            reflection: {
+              ...view.reflection,
+              felt: view.reflection.felt.map((c, at) => (at === 0 ? { ...c, line } : c)),
+            },
+          }
+        : view,
+    );
+    open("#/journal/look-back/day/2026-11-19", engine);
+    const sentence = (await screen.findByText(/you checked in as/, {
+      selector: "p",
+    })) as HTMLElement;
+    expect(sentence.textContent).toContain(`: “${line}”`);
+    expect(
+      within(sentence)
+        .getAllByRole("link")
+        .map((a) => a.textContent),
+    ).toEqual(["tired", "pleased", "relieved and content"]);
+  });
+
   it("says only that the day was not described when there are no check-ins", async () => {
     const engine = engineIn();
     serve(engine, (view) =>

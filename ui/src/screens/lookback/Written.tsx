@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Disclosure } from "../../components/Disclosure/Disclosure";
@@ -27,27 +27,32 @@ export function dayTitle(day: string): string {
   return t("journal.day.title", dayParts(day));
 }
 
+const WORDS = "\uE000words";
+const LINE = "\uE000line";
+
 /** One check-in as a sentence; its words are bold and open the check-in. */
 function FeltSentence({ checkin: c }: { checkin: CheckIn }) {
-  const text = c.line
-    ? t("journal.lookback.felt.sentenceLine", {
-        time: clock(c.keptAt),
-        words: wordsOf(c),
-        line: c.line,
-      })
-    : t("journal.lookback.felt.sentence", { time: clock(c.keptAt), words: wordsOf(c) });
+  const template = t(
+    c.line ? "journal.lookback.felt.sentenceLine" : "journal.lookback.felt.sentence",
+    { time: clock(c.keptAt), words: WORDS, line: LINE },
+  );
+  const fill = (part: string) =>
+    part.split(/(\uE000words|\uE000line)/).map((piece) => {
+      if (piece === WORDS) return wordsOf(c);
+      if (piece === LINE) return c.line;
+      return piece;
+    });
   return (
     <>
-      {text.split("**").map((part, index) => {
-        const key = `${index}-${part}`;
-        return index % 2 === 1 ? (
-          <a key={key} className={styles.span} href={itemHref(c.id)}>
-            {part}
+      {template.split("**").map((part, index) =>
+        index % 2 === 1 ? (
+          <a key={part} className={styles.span} href={itemHref(c.id)}>
+            {fill(part)}
           </a>
         ) : (
-          part
-        );
-      })}{" "}
+          <Fragment key={part}>{fill(part)}</Fragment>
+        ),
+      )}{" "}
     </>
   );
 }
