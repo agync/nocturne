@@ -30,6 +30,7 @@ interface HomeProps {
   onAsk(): void;
   onKeep(): void;
   onPage(): void;
+  onJournal(): void;
   onMenu(): void;
   onRelink(kind: "scan" | "words"): void;
 }
@@ -140,6 +141,13 @@ export function Home(p: HomeProps) {
               off
               onPress={p.onPage}
             />
+            <Tile
+              icon="book"
+              title={t("phone.journal.tile.title")}
+              hint={t("phone.journal.tile.asleep")}
+              off
+              onPress={p.onJournal}
+            />
             {kind === "asleep" && p.device.connection !== "mostPrivate" && (
               <section className="ph-card" aria-labelledby="new-address-title">
                 <h2 id="new-address-title" className="ph-card-title">
@@ -182,6 +190,13 @@ export function Home(p: HomeProps) {
                 {p.headline ?? (p.needsPage ? t("phone.home.page.none") : " ")}
               </p>
             </Tile>
+            <Tile
+              icon="book"
+              title={t("phone.journal.tile.title")}
+              hint={t("phone.journal.tile.hint")}
+              off={!connected}
+              onPress={p.onJournal}
+            />
           </>
         )}
 

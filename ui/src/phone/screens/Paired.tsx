@@ -1,21 +1,36 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { t } from "../../copy/t";
-import type { Receipt } from "../../engine/bindings";
+import type { FeelingPart, PeriodKind, Receipt, SameNameQuestion } from "../../engine/bindings";
 import type { PairedDevice } from "../engine";
 import type { Services } from "../services";
 import { refreshShellOnce } from "../shell";
 import { Ask, useAskSession } from "./Ask";
+import { CheckIn } from "./CheckIn";
 import { Home, Outdated, Removed, Sheet, TurnedOff } from "./Home";
+import { Journal } from "./Journal";
 import { Keep } from "./Keep";
+import { LookBack } from "./LookBack";
 import { Original } from "./Original";
 import { PageScreen } from "./PageScreen";
+import { Which } from "./Which";
 
 type View =
   | { name: "home" }
   | { name: "keep" }
   | { name: "ask" }
   | { name: "page" }
-  | { name: "original"; id: string };
+  | { name: "original"; id: string }
+  | { name: "journal"; day: string | null; today: string | null }
+  | { name: "checkin"; part?: FeelingPart }
+  | {
+      name: "lookback";
+      kind: PeriodKind;
+      start: string;
+      end: string;
+      write: boolean;
+      today: string | null;
+    }
+  | { name: "which"; id: string; day: string; today: string | null };
 
 const HOME: View = { name: "home" };
 
@@ -33,6 +48,11 @@ function useView() {
     history.pushState({ view: next }, "");
     setView(next);
   }, []);
+  /** Swaps the current entry for another, so a mark that has been used does not come back. */
+  const replace = useCallback((next: View) => {
+    history.replaceState({ view: next }, "");
+    setView(next);
+  }, []);
   const back = useCallback(() => {
     if (history.length > 1 && history.state?.view?.name !== "home") history.back();
     else {
@@ -40,7 +60,7 @@ function useView() {
       setView(HOME);
     }
   }, []);
-  return { view, go, back };
+  return { view, go, back, replace };
 }
 
 const RETRY_MS = 30_000;
@@ -62,7 +82,7 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
   const engine = useMemo(() => services.engineFor(() => address.current), [services]);
   useEffect(() => () => engine.close(), [engine]);
   const conn = useSyncExternalStore(engine.subscribe, engine.connection);
-  const { view, go, back } = useView();
+  const { view, go, back, replace } = useView();
   const [sheet, setSheet] = useState(false);
   const [waiting, setWaiting] = useState(0);
   const [sent, setSent] = useState(0);
@@ -70,6 +90,8 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
   const [noPage, setNoPage] = useState(false);
   const ask = useAskSession(engine);
   const quote = useRef<string | null>(null);
+  const question = useRef<SameNameQuestion | null>(null);
+  const draft = useRef("");
   const now = services.now();
 
   const refreshWaiting = useCallback(() => {
@@ -151,6 +173,14 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
     [go],
   );
 
+  const openItem = useCallback(
+    (id: string) => {
+      quote.current = null;
+      go({ name: "original", id });
+    },
+    [go],
+  );
+
   const clearWaiting = useCallback(async () => {
     await services.queue.clear();
     setWaiting(0);
@@ -184,6 +214,96 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
         now={services.now}
         onHome={back}
         onQueued={refreshWaiting}
+        onMoreWords={(part) => go({ name: "checkin", part })}
+        draft={draft}
+      />
+    );
+  }
+  if (view.name === "checkin") {
+    return (
+      <CheckIn
+        engine={engine}
+        queue={services.queue}
+        connection={conn}
+        deviceName={device.deviceName}
+        now={services.now}
+        part={view.part}
+        onBack={back}
+        onQueued={refreshWaiting}
+      />
+    );
+  }
+  if (view.name === "journal") {
+    return (
+      <Journal
+        engine={engine}
+        queue={services.queue}
+        connection={conn}
+        computerName={
+          conn.kind === "connected"
+            ? conn.hello.computerName
+            : (device.computerName ?? t("phone.home.computer"))
+        }
+        day={view.day}
+        today={view.today}
+        onBack={back}
+        onDay={(day, today) => go({ name: "journal", day, today })}
+        onOpen={openItem}
+        onWhich={(q, day, today) => {
+          question.current = q;
+          go({ name: "which", id: q.id, day, today });
+        }}
+        onReflect={(day, today) =>
+          go({
+            name: "lookback",
+            kind: "day",
+            start: day,
+            end: day,
+            write: true,
+            today,
+          })
+        }
+        onReflection={(day, today) =>
+          go({
+            name: "lookback",
+            kind: "day",
+            start: day,
+            end: day,
+            write: false,
+            today,
+          })
+        }
+        onKeep={() => go({ name: "keep" })}
+        onCheckIn={() => go({ name: "checkin" })}
+      />
+    );
+  }
+  if (view.name === "lookback") {
+    return (
+      <LookBack
+        engine={engine}
+        period={{ kind: view.kind, start: view.start, end: view.end }}
+        write={view.write}
+        today={view.today}
+        now={services.now}
+        onStarted={() => replace({ ...view, write: false })}
+        onBack={back}
+        onToday={() => go({ name: "journal", day: null, today: view.today })}
+        onItem={openItem}
+        onReceipt={open}
+      />
+    );
+  }
+  if (view.name === "which") {
+    return (
+      <Which
+        engine={engine}
+        question={question.current?.id === view.id ? question.current : null}
+        questionId={view.id}
+        day={view.day}
+        today={view.day === view.today}
+        onBack={back}
+        onDone={back}
       />
     );
   }
@@ -230,6 +350,7 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
         onAsk={() => go({ name: "ask" })}
         onKeep={toKeep}
         onPage={() => go({ name: "page" })}
+        onJournal={() => go({ name: "journal", day: null, today: null })}
         onMenu={openMenu}
         onRelink={onRelink}
       />
