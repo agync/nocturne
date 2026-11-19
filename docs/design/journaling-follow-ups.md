@@ -88,6 +88,7 @@ The snippet for each kind:
 | Check-in | "{part} · {words}" in medium weight, then its line in quotes. No line: just the part and words |
 | Good thing | Tag "Good thing", then the line as written |
 | Document or web page | Tag "Document" or "Web page", then its title |
+| Answer to the page question | "{choice}" in medium weight, then the line in quotes. No line: just the choice |
 
 There is no "ORIGINAL" column and no kind in brackets. Two rows never look the same: each has its
 own time, and two things with the same words in the same group also show where they came from
@@ -250,7 +251,7 @@ A memory qualifies when every line holds:
 | # | Condition |
 |---|---|
 | 1 | Its predicate is `scheduled`: something the person said would happen at a time |
-| 2 | Its date falls on the day the page looks back on (yesterday, by the [day boundary](journaling.md#what-a-day-is)) |
+| 2 | Its date falls on the day the page looks back on (yesterday, by the [day boundary](journaling.md#what-a-day-is)). A plan with no day named, written in a block kept on that day ("Parents’ evening at six."), is dated that day |
 | 3 | It was read from a block of a day's entry, text or voice, kept within the 30 days before that date |
 | 4 | The sentences the memory's span touches, taken whole, are 3 to 20 words together, and are in the newest version of the block |
 | 5 | Nothing kept after that block, up to the end of the event's day, mentions the memory's subject. If the person already wrote about how it went, Nocturne does not ask |
@@ -334,6 +335,7 @@ page does not show the day's question today, and still does not.
 | Added | "“{line}” Added." |
 | Open | "Open today’s journal ›" |
 | Timeline row | "{choice}" then the line; under it "About: “{sentence}”" |
+| Row menu | "Open what it was about", which opens the block, so the keyboard reaches it with one stop per row. Not shown, and no "About", once the block is deleted |
 
 **Testing.** Each condition is a fact about stored rows (predicate, date, source item kind,
 sentence length, mentions, sensitivity, earlier questions), so each has a test that flips one
