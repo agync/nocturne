@@ -1,25 +1,35 @@
 //! Reads a reflection's reply: sentences, the item markers `[i2]` that end them, and the `**bold**`
 //! words drawn from each item. A sentence that cites nothing real is never returned.
 
-use nocturne_engine::WrittenSentence;
+use nocturne_engine::{Reflected, WrittenSentence};
 
 use super::guard;
 
 /// Words that end in a full stop without ending a sentence.
 const ABBREVIATIONS: [&str; 9] = ["dr", "mr", "mrs", "ms", "st", "vs", "prof", "e.g", "i.e"];
 
-/// What the mind wrote, as sentences each citing items of a day of `items` items. `system` is the
-/// instructions it was given, so that a reply that reads them back is dropped.
-pub fn sentences(reply: &str, items: usize, system: &str) -> Vec<WrittenSentence> {
+/// What the mind wrote, as sentences each citing items of a day of `items` items, with how many it
+/// wrote before any was dropped. `system` is the instructions it was given, so that a reply that
+/// reads them back is dropped.
+pub fn sentences(reply: &str, items: usize, system: &str) -> Reflected {
     let reply = guard::strip_control(reply);
+    let pieces: Vec<String> = split(&reply)
+        .into_iter()
+        .filter(|raw| !raw.trim().is_empty())
+        .collect();
+    let written = pieces.len();
     if guard::degenerate(&strip_markers(&reply), system) {
-        return Vec::new();
+        return Reflected {
+            sentences: Vec::new(),
+            written,
+        };
     }
-    split(&reply)
+    let sentences = pieces
         .iter()
         .filter_map(|raw| sentence(raw, items))
         .filter(|s| !guard::not_sure(&s.text, true) && !guard::degenerate(&s.text, system))
-        .collect()
+        .collect();
+    Reflected { sentences, written }
 }
 
 fn strip_markers(text: &str) -> String {
@@ -335,9 +345,22 @@ mod tests {
 
     fn read(reply: &str, items: usize) -> Vec<(String, Vec<usize>)> {
         sentences(reply, items, SYSTEM)
+            .sentences
             .into_iter()
             .map(|s| (s.text, s.cites))
             .collect()
+    }
+
+    #[test]
+    fn the_count_written_includes_the_sentences_that_were_dropped() {
+        let got = sentences(
+            "You walked to the station [i1]. You felt tired. You called Sam [i2].",
+            2,
+            SYSTEM,
+        );
+        assert_eq!((got.sentences.len(), got.written), (2, 3));
+        let got = sentences("You had a lovely day. Truly.", 2, SYSTEM);
+        assert_eq!((got.sentences.len(), got.written), (0, 2));
     }
 
     #[test]

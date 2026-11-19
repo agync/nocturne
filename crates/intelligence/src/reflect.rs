@@ -92,9 +92,12 @@ pub async fn write(
     if input.items.iter().all(|i| i.background) {
         return Ok(Wrote::Listed);
     }
-    let kept: Vec<WrittenSentence> = mind
-        .reflect(&input)
-        .await?
+    let reflected = mind.reflect(&input).await?;
+    if reflected.sentences.is_empty() || reflected.sentences.len() * 2 < reflected.written {
+        return Ok(Wrote::Listed);
+    }
+    let kept: Vec<WrittenSentence> = reflected
+        .sentences
         .into_iter()
         .filter(|s| {
             !s.text.trim().is_empty()

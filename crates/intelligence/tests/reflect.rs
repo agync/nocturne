@@ -125,6 +125,48 @@ async fn a_day_with_no_sentence_that_cites_anything_is_listed_and_stores_nothing
 }
 
 #[tokio::test]
+async fn a_day_where_more_than_half_the_sentences_were_lost_is_listed() {
+    let (w, _) = world_after_a_day(
+        FakeMind::new().with_reflection_written(vec![sentence("You **made soup**.", &[1])], 3),
+    );
+    let period = day(&w);
+    let wrote = write(
+        &w.engine,
+        w.mind.as_ref(),
+        &period,
+        nocturne_contract::WrittenWhen::OnDemand,
+    )
+    .await
+    .unwrap();
+    assert_eq!(wrote, Wrote::Listed);
+    assert!(w.engine.saved_reflection(&period).unwrap().is_none());
+}
+
+#[tokio::test]
+async fn a_day_where_half_or_more_of_the_sentences_survived_is_written() {
+    let (w, _) = world_after_a_day(FakeMind::new().with_reflection_written(
+        vec![
+            sentence("You **made soup**.", &[1]),
+            sentence("You **walked by the canal**.", &[0]),
+        ],
+        3,
+    ));
+    let period = day(&w);
+    let wrote = write(
+        &w.engine,
+        w.mind.as_ref(),
+        &period,
+        nocturne_contract::WrittenWhen::OnDemand,
+    )
+    .await
+    .unwrap();
+    let Wrote::Day(r) = wrote else {
+        panic!("{wrote:?}")
+    };
+    assert_eq!(r.the_day.len(), 2);
+}
+
+#[tokio::test]
 async fn a_day_of_only_things_kept_from_elsewhere_is_listed_without_asking_the_mind() {
     let w = world_at("2026-11-12T10:00:00Z", FakeMind::new());
     w.engine

@@ -213,7 +213,7 @@ pub trait Mind: Send + Sync {
     fn reflect<'a>(
         &'a self,
         input: &'a ReflectInput,
-    ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+    ) -> BoxFuture<'a, Result<Reflected, MindError>> {
         let _ = input;
         Box::pin(async { Err(MindError::Unsupported("reflect".into())) })
     }
@@ -253,6 +253,14 @@ pub struct WrittenSentence {
     pub cites: Vec<usize>,
 }
 
+/// What a mind wrote for a day: the sentences that cite something real, and how many sentences
+/// it wrote before any was dropped, so a caller can tell a day that was mostly lost.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Reflected {
+    pub sentences: Vec<WrittenSentence>,
+    pub written: usize,
+}
+
 #[cfg(any(test, feature = "fake"))]
 pub use fake::{FAKE_DIM, FakeMind, Gate, hash_embedding};
 
@@ -267,8 +275,8 @@ mod fake {
     use tokio::sync::{Notify, mpsc, watch};
 
     use super::{
-        AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, ReflectInput, Transcript,
-        Understanding, WrittenSentence,
+        AnswerMeta, BoxFuture, ExtractContext, Fact, Mind, MindError, ReflectInput, Reflected,
+        Transcript, Understanding, WrittenSentence,
     };
     use crate::types::Candidate;
 
@@ -318,7 +326,7 @@ mod fake {
         always: HashMap<String, MindError>,
         gates: HashMap<String, Arc<Gate>>,
         headline: Option<(String, String)>,
-        reflections: VecDeque<Vec<WrittenSentence>>,
+        reflections: VecDeque<Reflected>,
         extract: HashMap<String, Vec<Candidate>>,
         embed: HashMap<String, Vec<f32>>,
         transcripts: HashMap<String, Transcript>,
@@ -440,7 +448,19 @@ mod fake {
         /// The sentences the next `reflect` returns. Queue several for several calls; once they
         /// are used, `reflect` writes one sentence per item kept on its own.
         pub fn with_reflection(self, sentences: Vec<WrittenSentence>) -> Self {
-            self.script().reflections.push_back(sentences);
+            let written = sentences.len();
+            self.with_reflection_written(sentences, written)
+        }
+
+        /// Like `with_reflection`, for a mind that wrote `written` sentences and lost some.
+        pub fn with_reflection_written(
+            self,
+            sentences: Vec<WrittenSentence>,
+            written: usize,
+        ) -> Self {
+            self.script()
+                .reflections
+                .push_back(Reflected { sentences, written });
             self
         }
 
@@ -606,13 +626,13 @@ mod fake {
         fn reflect<'a>(
             &'a self,
             input: &'a ReflectInput,
-        ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+        ) -> BoxFuture<'a, Result<Reflected, MindError>> {
             Box::pin(async move {
                 self.check("reflect").await?;
                 if let Some(scripted) = self.script().reflections.pop_front() {
                     return Ok(scripted);
                 }
-                Ok(input
+                let sentences: Vec<WrittenSentence> = input
                     .items
                     .iter()
                     .enumerate()
@@ -625,7 +645,11 @@ mod fake {
                             cites: vec![i],
                         }
                     })
-                    .collect())
+                    .collect();
+                Ok(Reflected {
+                    written: sentences.len(),
+                    sentences,
+                })
             })
         }
 
@@ -669,8 +693,9 @@ mod reflect_tests {
     async fn an_unscripted_reflection_cites_each_item_that_is_not_background() {
         let mind = FakeMind::new();
         let got = mind.reflect(&input()).await.unwrap();
+        assert_eq!(got.written, 2);
         assert_eq!(
-            got,
+            got.sentences,
             vec![
                 WrittenSentence {
                     text: "You kept **one two three four five six**.".into(),
@@ -692,8 +717,11 @@ mod reflect_tests {
             cites: vec![2],
         }];
         let mind = FakeMind::new().with_reflection(scripted.clone());
-        assert_eq!(mind.reflect(&input()).await.unwrap(), scripted);
-        assert_eq!(mind.reflect(&input()).await.unwrap().len(), 2);
+        let got = mind.reflect(&input()).await.unwrap();
+        assert_eq!((got.sentences, got.written), (scripted.clone(), 1));
+        assert_eq!(mind.reflect(&input()).await.unwrap().sentences.len(), 2);
+        let lossy = FakeMind::new().with_reflection_written(scripted.clone(), 3);
+        assert_eq!(lossy.reflect(&input()).await.unwrap().written, 3);
         mind.fail_next("reflect", MindError::Unavailable);
         assert_eq!(
             mind.reflect(&input()).await.unwrap_err(),

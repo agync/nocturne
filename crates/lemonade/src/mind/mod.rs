@@ -22,7 +22,7 @@ use nocturne_contract::{ComponentRole, EntityKind, PageView, Span, Tier};
 use nocturne_engine::coverage::{self, normalise};
 use nocturne_engine::{
     AnswerMeta, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError, Predicate,
-    ReflectInput, Transcript, Understanding, WrittenSentence,
+    ReflectInput, Reflected, Transcript, Understanding,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -876,9 +876,12 @@ impl LemonadeMind {
         Ok((headline, dek))
     }
 
-    async fn reflect_impl(&self, input: &ReflectInput) -> Result<Vec<WrittenSentence>, MindError> {
+    async fn reflect_impl(&self, input: &ReflectInput) -> Result<Reflected, MindError> {
         if input.items.is_empty() {
-            return Ok(Vec::new());
+            return Ok(Reflected {
+                sentences: Vec::new(),
+                written: 0,
+            });
         }
         let nonce = prompts::nonce();
         let system = prompts::reflect_system(self.tier, &nonce);
@@ -1578,7 +1581,7 @@ impl Mind for LemonadeMind {
     fn reflect<'a>(
         &'a self,
         input: &'a ReflectInput,
-    ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+    ) -> BoxFuture<'a, Result<Reflected, MindError>> {
         Box::pin(self.reflect_impl(input))
     }
 

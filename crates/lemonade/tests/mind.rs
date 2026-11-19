@@ -2282,7 +2282,12 @@ async fn a_scripted_reflection_becomes_cited_sentences_and_the_items_are_fenced(
     r.script(json!([{"content": "You **walked to the old station** [i1]. You also kept **Leo's trip form** [i2]. You felt great. You **cooked with Sam** [i3][i9]."}]))
         .await;
     let got = r.mind.reflect(&reflect_input()).await.unwrap();
+    assert_eq!(
+        got.written, 4,
+        "the sentence it lost still counts as written"
+    );
     let got: Vec<_> = got
+        .sentences
         .iter()
         .map(|s| (s.text.as_str(), s.cites.clone()))
         .collect();
@@ -2310,13 +2315,13 @@ async fn a_scripted_reflection_becomes_cited_sentences_and_the_items_are_fenced(
 async fn the_fake_engine_reflects_with_a_receipt_and_an_empty_day_asks_nothing() {
     let r = rig().await;
     let got = r.mind.reflect(&reflect_input()).await.unwrap();
-    assert_eq!(got.len(), 1);
-    assert_eq!(got[0].cites, vec![0]);
+    assert_eq!(got.sentences.len(), 1);
+    assert_eq!(got.sentences[0].cites, vec![0]);
     let empty = ReflectInput {
         items: Vec::new(),
         ..reflect_input()
     };
-    assert!(r.mind.reflect(&empty).await.unwrap().is_empty());
+    assert!(r.mind.reflect(&empty).await.unwrap().sentences.is_empty());
     assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
 }
 
@@ -2325,5 +2330,7 @@ async fn a_reflection_with_no_receipts_is_empty() {
     let r = rig().await;
     r.script(json!([{"content": "You had a lovely day."}]))
         .await;
-    assert!(r.mind.reflect(&reflect_input()).await.unwrap().is_empty());
+    let got = r.mind.reflect(&reflect_input()).await.unwrap();
+    assert!(got.sentences.is_empty());
+    assert_eq!(got.written, 1);
 }
