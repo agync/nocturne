@@ -253,8 +253,8 @@ setup:
 | Notification, evening reminder | A second note, off by default, at the time the person picks, with always the same words and never anything kept, so no journal content is ever in a notification |
 | Start with this computer | On Linux the app writes its own autostart entry (the plugin would start the running executable, which is a temporary mount in an AppImage); it passes `--hidden`. In a Flatpak the Background portal writes it |
 | Watched folder | Files that appear in a chosen folder are kept once, after they stop changing. The folder is only read. Links are never followed |
-| Scheduler | The morning page run starts after the day boundary, separate from the overnight tidy. Its first step writes the reflection for the day that ended, then any recap that is due. A missed night runs in the catch-up, newest first, up to seven days back |
-| Editions | The spoken page (`src-tauri/src/editions`) and the print view of the page. The spoken page skips any line with `journal` sensitivity and the journal's quiet line and question, and ends with the count of lines left unread |
+| Scheduler | Reflections and recaps are written in two places, only on a size of computer that has passed the journal check (`WRITES_REFLECTIONS` in `src-tauri/src/journal.rs`, empty until one does). When the tidy has nothing to start and the computer has been idle for ten minutes (on mains in the night window, otherwise on mains or above 40 per cent), the scheduler writes what is due: the days that ended, then any week, month or year, newest first, seven days back at most. A tidy that runs after the day boundary, or a catch-up, writes them after it has read the backlog and before it composes the page. Each write holds off reading like an answer and has a time limit; a failure is tried again later |
+| Editions | The spoken page (`src-tauri/src/editions`) and the print view of the page. The spoken page skips any line with `journal` sensitivity and the journal's quiet line, and ends with the count of lines left unread |
 
 ## Device placement
 
