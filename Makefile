@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help setup build test lint fmt check contract/ts contract/check docs/check \
+.PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help preview-real helpers-pin phone tailnet/test \
 	server/build server/image \
 	site site/serve site/clean
@@ -40,6 +40,10 @@ lint: rust/lint $(if $(UI_PRESENT),ui/lint) contract/check docs/check site/strin
 fmt: rust/fmt $(if $(UI_PRESENT),ui/fmt) ## Format all code
 
 check: lint test ## Run every gate
+
+# CI runs the full suite. TESTS is the change's own tests, run last, e.g. TESTS="cargo test -p x y::".
+check-changed: ## Run the basics for what changed since BASE (default merge base with main); CI runs the full suite
+	BASE="$(BASE)" TESTS="$(TESTS)" scripts/check-changed.sh
 
 rust/build: ## Build the Rust workspace
 	cargo build --workspace
