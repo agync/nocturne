@@ -2486,6 +2486,39 @@ fn a_check_in_from_the_phone_is_kept_once() {
 }
 
 #[test]
+fn a_repeated_check_in_is_not_kept_again_after_it_was_replaced() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let keep = |c: &mut PhoneClient| {
+        call(
+            c,
+            RemoteCall::KeepCheckIn {
+                input: check_in_input(Some("A good walk")),
+                client_id: "c-gone".into(),
+            },
+        )
+    };
+    let RemoteAnswer::CheckIn { checkin } = keep(&mut c) else {
+        panic!("not a check-in");
+    };
+    let e = p.h.engine();
+    let replacement = e
+        .keep_checkin(
+            CheckInInput {
+                replaces: Some(checkin.id.clone()),
+                ..check_in_input(Some("A better walk"))
+            },
+            Source::Journal,
+        )
+        .unwrap();
+    assert!(matches!(keep(&mut c), RemoteAnswer::Done));
+    assert!(matches!(keep(&mut c), RemoteAnswer::Done));
+    let day = e.journal_day(today(&p)).unwrap();
+    assert_eq!(day.checkins.len(), 1);
+    assert_eq!(day.checkins[0].id, replacement.id);
+}
+
+#[test]
 fn the_journal_day_reaches_the_phone_without_a_private_quick_note() {
     let p = on();
     let e = p.h.engine();

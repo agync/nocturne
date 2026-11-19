@@ -1034,10 +1034,16 @@ impl<R: Runtime> Call<R> {
         if said > MAX_TEXT {
             return err(PhoneError::TooLarge);
         }
-        if let Some(earlier) = self.kept_check_in(&client_id).await {
-            return Some(RemoteAnswer::CheckIn {
-                checkin: Box::new(earlier),
-            });
+        match self.kept_check_in(&client_id).await {
+            Ok(Some(Some(earlier))) => {
+                return Some(RemoteAnswer::CheckIn {
+                    checkin: Box::new(earlier),
+                });
+            }
+            // Kept before, since replaced or taken back: never kept again.
+            Ok(Some(None)) => return Some(RemoteAnswer::Done),
+            Ok(None) => {}
+            Err(code) => return err(code),
         }
         if !self.core.limits.take(Bucket::Keeps, me) {
             self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
@@ -1064,19 +1070,22 @@ impl<R: Runtime> Call<R> {
         })
     }
 
-    /// The check-in this phone already kept under `client_id`, as it was kept.
-    async fn kept_check_in(&self, client_id: &str) -> Option<nocturne_contract::CheckIn> {
-        let e = self.engine()?;
+    /// What this phone already kept under `client_id`: nothing, or a keep (with its check-in
+    /// while it is still one).
+    async fn kept_check_in(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<Option<nocturne_contract::CheckIn>>, PhoneError> {
+        let e = self.engine().ok_or(PhoneError::NotReady)?;
         let (me, cid) = (self.device.id.clone(), client_id.to_string());
         blocking(move || {
             let Some(id) = e.remote_keep(&me, &cid)? else {
                 return Ok(None);
             };
-            find_check_in(&e, &id)
+            Ok(Some(find_check_in(&e, &id)?))
         })
         .await
-        .ok()
-        .flatten()
+        .map_err(|_| PhoneError::NotReady)
     }
 
     /// "Which {name} is this?": the one change a phone may make beyond keeping. It files one
