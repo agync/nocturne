@@ -159,6 +159,24 @@ export class MockJournal {
     return this.notReady ? { ...status, state: "gettingReady" } : status;
   }
 
+  /**
+   * The quiet line for the page dated `date`: yesterday's reflection when the night wrote it, or
+   * a week, month or year that ended yesterday and has its recap, the larger period first.
+   */
+  pageLine(date: string): Period | undefined {
+    const yesterday = addDays(date, -1);
+    for (const kind of ["year", "month", "week"] as const) {
+      const p = periodOf(kind, yesterday);
+      const view = this.saved.get(keyOf(p));
+      if (p.end === yesterday && view?.type === "recap" && !view.recap.soFar) return p;
+    }
+    const view = this.saved.get(keyOf(periodOf("day", yesterday)));
+    if (view?.type === "written" && view.reflection.written === "overnight") {
+      return periodOf("day", yesterday);
+    }
+    return undefined;
+  }
+
   /** Items this journal holds, for receipts and item pages. */
   findItem(id: string): ItemView | undefined {
     const found = this.data.items.get(id);

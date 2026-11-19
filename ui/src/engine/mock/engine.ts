@@ -1025,7 +1025,8 @@ export class MockEngine implements EngineClient {
   async getPage(date?: string): Promise<PageView> {
     const day = date ?? this.today();
     const found = this.pages.find((p) => p.date === day);
-    if (found) return clone(found);
+    const journalLine = this.journal.pageLine(day);
+    if (found) return { ...clone(found), ...(journalLine ? { journalLine } : {}) };
     const quiet: PageView = {
       ...clone(this.pages[this.pages.length - 1] as PageView),
       date: day,

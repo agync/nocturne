@@ -357,7 +357,9 @@ describe("the quiet line to a look back", () => {
   });
 
   it("is not there when the night wrote nothing", async () => {
-    await open();
+    const engine = createMockEngine();
+    vi.spyOn(engine.journal, "pageLine").mockReturnValue(undefined);
+    await open(engine);
     expect(screen.queryByText(/looked back on/)).toBeNull();
   });
 });
