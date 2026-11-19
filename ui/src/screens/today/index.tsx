@@ -297,15 +297,17 @@ function TodayPage({ date }: { date: string | undefined }) {
           live={!date || date === todayQuery.data?.date}
           resolved={resolved}
           fadeDays={paceDays(settings?.lettingGo).fade}
+          after={
+            page.journalLine ? (
+              <p className={styles.looked}>
+                <a href={`#/journal/look-back/${page.journalLine.kind}/${page.journalLine.start}`}>
+                  {lookedBack(page.journalLine)}
+                </a>
+              </p>
+            ) : null
+          }
         />
       </div>
-      {page.journalLine ? (
-        <p className={styles.looked}>
-          <a href={`#/journal/look-back/${page.journalLine.kind}/${page.journalLine.start}`}>
-            {lookedBack(page.journalLine)}
-          </a>
-        </p>
-      ) : null}
       {forgetDialog}
     </div>
   );

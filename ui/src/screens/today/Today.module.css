@@ -18,6 +18,7 @@
 }
 
 .looked {
+  margin: 0;
   padding: var(--s-3) var(--s-4);
   font-size: 0.875rem;
 }

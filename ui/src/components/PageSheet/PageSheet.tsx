@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { formatEta, formatLongDay, formatTime, formatWeekday } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
@@ -45,6 +45,8 @@ interface PageSheetProps {
   resolved?: Record<string, WhichResolved>;
   /** Days a brought-back line stays clear of fading, from the letting-go pace. */
   fadeDays?: number;
+  /** One quiet line under the page's last section, such as "Yesterday, looked back on ›". */
+  after?: ReactNode;
 }
 
 function openCount(lines: Line[]): number {
@@ -105,6 +107,7 @@ export function PageSheet({
   live = true,
   resolved = {},
   fadeDays = 30,
+  after,
 }: PageSheetProps) {
   const base = useId();
   const [changing, setChanging] = useState(false);
@@ -377,6 +380,8 @@ export function PageSheet({
               </div>
             </section>
           ) : null}
+
+          {after}
 
           {page.privateSkipped > 0 ? (
             <p className={styles.private}>
