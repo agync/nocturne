@@ -391,6 +391,15 @@ Each string as built, where it is, what is wrong with it, and the settled words.
 "Saved." in Settings and in Away from home are not journal words and were designed before; they
 are unchanged.
 
+## 6. What needs you, counted once
+
+The rail's Needs you count includes "Which {name} is this?", but the page's headline counted only
+the lines on the page ("Two things need you today." beside a 3 in the rail). The two now agree:
+the page's headline and its opening line count everything waiting in Needs you when the page is
+made, the name question included. The name question still has no line of its own on the page
+(it lives in Needs you and the journal); it is counted in the existing "{count} more this week in
+Needs you" link under the page's Needs you lines.
+
 ## Changes to the journaling design
 
 Made on [Journaling](journaling.md) in the same change, so the two pages agree:
