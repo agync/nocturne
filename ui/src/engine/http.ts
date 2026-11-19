@@ -347,4 +347,49 @@ export class HttpEngine implements EngineClient {
   removeOldModel: EngineClient["removeOldModel"] = () => this.call("remove_old_model");
   resetModelsToTier: EngineClient["resetModelsToTier"] = () => this.call("reset_models_to_tier");
   getGuide: EngineClient["getGuide"] = () => this.call("get_guide");
+
+  getJournalDay: EngineClient["getJournalDay"] = (day) =>
+    this.call("get_journal_day", { day: day ?? null });
+  listJournalDays: EngineClient["listJournalDays"] = () => this.call("list_journal_days");
+  listPeriods: EngineClient["listPeriods"] = (kind) => this.call("list_periods", { kind });
+  dismissJournalIntro: EngineClient["dismissJournalIntro"] = () =>
+    this.call("dismiss_journal_intro");
+  saveEntryText: EngineClient["saveEntryText"] = (day, itemId, block, text) =>
+    this.call("save_entry_text", { day, itemId, block, text });
+  placeInEntry: EngineClient["placeInEntry"] = (itemId, day, block) =>
+    this.call("place_in_entry", { itemId, day, block });
+  describePhoto: EngineClient["describePhoto"] = (itemId, text) =>
+    this.call("describe_photo", { itemId, text });
+  readEntryNow: EngineClient["readEntryNow"] = (day) => this.call("read_entry_now", { day });
+  keepNote: EngineClient["keepNote"] = (text, source, feeling, good) =>
+    this.call("keep_note", { text, source, feeling, good });
+  topFeelingWords: EngineClient["topFeelingWords"] = (part) =>
+    this.call("top_feeling_words", { part });
+  keepCheckIn: EngineClient["keepCheckIn"] = (input) => this.call("keep_check_in", { input });
+  markTried: EngineClient["markTried"] = (checkinId, idea) =>
+    this.call("mark_tried", { checkinId, idea });
+  keepGoodThing: EngineClient["keepGoodThing"] = (day, text, photoItemId) =>
+    this.call("keep_good_thing", { day, text, photoItemId });
+  setLeftOut: EngineClient["setLeftOut"] = (itemId, leftOut) =>
+    this.call("set_left_out", { itemId, leftOut });
+  moveToDay: EngineClient["moveToDay"] = (itemId, day) => this.call("move_to_day", { itemId, day });
+  confirmMention: EngineClient["confirmMention"] = (mentionId, role) =>
+    this.call("confirm_mention", { mentionId, role });
+  removeMention: EngineClient["removeMention"] = (mentionId) =>
+    this.call("remove_mention", { mentionId });
+  restoreMention: EngineClient["restoreMention"] = (mentionId) =>
+    this.call("restore_mention", { mentionId });
+  refileMention: EngineClient["refileMention"] = (mentionId, target) =>
+    this.call("refile_mention", { mentionId, target });
+  answerSameName: EngineClient["answerSameName"] = (questionId, answer) =>
+    this.call("answer_same_name", { questionId, answer });
+  entityJournalDays: EngineClient["entityJournalDays"] = (entityId) =>
+    this.call("entity_journal_days", { entityId });
+  getReflection: EngineClient["getReflection"] = (period) =>
+    this.call("get_reflection", { period });
+  reflect: EngineClient["reflect"] = (period) => this.call("reflect", { period });
+  stopReflecting: EngineClient["stopReflecting"] = (period) =>
+    this.call("stop_reflecting", { period });
+  deleteReflection: EngineClient["deleteReflection"] = (period) =>
+    this.call("delete_reflection", { period });
 }
