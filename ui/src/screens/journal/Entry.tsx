@@ -205,21 +205,17 @@ export function Entry({
 
   // Voice and photos
 
-  const place = useCallback(
-    async (itemId: string, at: number) => {
-      await engine.placeInEntry(itemId, day, at);
-      setExtra(null);
-      refresh("journal", "items", "status");
-    },
-    [engine, day, refresh],
-  );
+  const inEntry = useCallback(() => {
+    setExtra(null);
+    refresh("journal", "items", "status");
+  }, [refresh]);
 
   const recordAt = useRef<number | null>(null);
   const keepVoice = useCallback(
     async (bytes: Uint8Array, mime: string, durationMs: number, at: number) => {
       try {
-        const kept = await engine.keepBytes(bytes, mime, "journal");
-        await place(kept.item.id, at);
+        await engine.keepBytes(bytes, mime, "journal", { day, block: at });
+        inEntry();
         toast.show({
           message: t("capture.kept.toast", {
             kind: t("kind.audio"),
@@ -236,7 +232,7 @@ export function Entry({
         });
       }
     },
-    [engine, place, toast],
+    [engine, day, inEntry, toast],
   );
 
   const recorder = useRecorder({
@@ -253,12 +249,8 @@ export function Entry({
     if (paths.length === 0) return;
     setBusy(true);
     try {
-      const kept = await engine.keepFiles(paths, "journal");
-      let at = blocksRef.current.length;
-      for (const one of kept) {
-        await place(one.item.id, at);
-        at += 1;
-      }
+      await engine.keepFiles(paths, "journal", { day, block: blocksRef.current.length });
+      inEntry();
     } catch (error) {
       toast.show({
         message: t(isUnsupported(error) ? "capture.addFile.unsupported" : "memories.failed"),

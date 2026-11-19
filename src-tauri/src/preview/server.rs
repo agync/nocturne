@@ -108,7 +108,12 @@ async fn invoke_command(
     };
     let result = if raw {
         let mut forwarded = tauri::http::HeaderMap::new();
-        for name in ["x-nocturne-mime", "x-nocturne-source"] {
+        for name in [
+            "x-nocturne-mime",
+            "x-nocturne-source",
+            "x-nocturne-day",
+            "x-nocturne-block",
+        ] {
             if let Some(value) = headers.get(name) {
                 forwarded.insert(tauri::http::HeaderName::from_static(name), value.clone());
             }

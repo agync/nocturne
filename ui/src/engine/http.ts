@@ -4,6 +4,7 @@ import {
   EngineError,
   type EngineEventName,
   type EngineEvents,
+  entryHeaders,
   toEngineError,
   type Unsubscribe,
 } from "./client";
@@ -194,21 +195,26 @@ export class HttpEngine implements EngineClient {
    * A browser has no paths to give: what the platform handed out are keys of files the person
    * chose, and each one travels as bytes.
    */
-  keepFiles: EngineClient["keepFiles"] = async (keys, source) => {
+  keepFiles: EngineClient["keepFiles"] = async (keys, source, entry) => {
     const kept = [];
-    for (const key of keys) {
+    for (const [n, key] of keys.entries()) {
       const file = takeFile(key);
       if (!file) throw new EngineError("invalid", "that file was not chosen");
       const bytes = new Uint8Array(await file.arrayBuffer());
-      kept.push(await this.keepBytes(bytes, mimeOf(file), source));
+      const at = entry ? { day: entry.day, block: entry.block + n } : undefined;
+      kept.push(await this.keepBytes(bytes, mimeOf(file), source, at));
     }
     return kept;
   };
   /** The audio travels as the raw request body; the mime type rides in a header. */
   keepRecording: EngineClient["keepRecording"] = (bytes, mime) =>
     this.raw("keep_recording", bytes, { "x-nocturne-mime": mime });
-  keepBytes: EngineClient["keepBytes"] = (bytes, mime, source) =>
-    this.raw("keep_bytes", bytes, { "x-nocturne-mime": mime, "x-nocturne-source": source });
+  keepBytes: EngineClient["keepBytes"] = (bytes, mime, source, entry) =>
+    this.raw("keep_bytes", bytes, {
+      "x-nocturne-mime": mime,
+      "x-nocturne-source": source,
+      ...entryHeaders(entry),
+    });
   unkeep: EngineClient["unkeep"] = (id) => this.call("unkeep", { id });
   readNow: EngineClient["readNow"] = (id) => this.call("read_now", { id });
   setItemPrivate: EngineClient["setItemPrivate"] = (id, isPrivate) =>

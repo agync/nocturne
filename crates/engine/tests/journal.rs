@@ -680,6 +680,51 @@ fn photos_and_voice_notes_become_blocks_of_the_entry_and_a_photo_can_be_describe
 }
 
 #[test]
+fn a_voice_note_kept_into_the_entry_is_a_held_block_from_the_start() {
+    let f = fixture();
+    let day = date("2026-11-13");
+    let Kept::New { item } = f
+        .engine
+        .keep_bytes_in_entry(b"wav-voice", "wav", Source::Journal, day, 1)
+        .unwrap()
+    else {
+        panic!("new")
+    };
+    assert_eq!(item.journal, Some(JournalRole::Entry));
+    assert!(
+        f.engine.pending_items(10).unwrap().is_empty(),
+        "held like a saved block, never an ordinary item waiting to be read"
+    );
+    assert_eq!(f.engine.journal_day(day).unwrap().entry[0].block, 1);
+
+    let file = write_file(f.dir.path(), "allotment.jpg", b"jpeg-allotment");
+    let Kept::New { item: photo } = f.engine.keep_file(&file, Source::Drop).unwrap() else {
+        panic!("new")
+    };
+    let Kept::Duplicate { item: placed } = f
+        .engine
+        .keep_file_in_entry(&file, Source::Journal, day, 2)
+        .unwrap()
+    else {
+        panic!("the same bytes")
+    };
+    assert_eq!(placed.id, photo.id);
+    assert_eq!(placed.journal, Some(JournalRole::Entry));
+    assert!(
+        f.engine
+            .keep_bytes_in_entry(b"wav-voice", "wav", Source::Journal, day, 3)
+            .is_err(),
+        "already in the entry"
+    );
+    assert!(
+        f.engine
+            .keep_bytes_in_entry(b"wav-later", "wav", Source::Journal, date("2026-11-14"), 0)
+            .is_err()
+    );
+    assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM items"), 2);
+}
+
+#[test]
 fn leaving_an_item_out_is_reversible_and_marked_on_its_row() {
     let f = fixture();
     let note = keep(&f.engine, "A thing to leave out");

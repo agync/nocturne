@@ -64,6 +64,7 @@ import type {
   EngineClient,
   EngineEventName,
   EngineEvents,
+  EntryAt,
   RecordingState,
   Unsubscribe,
 } from "../client";
@@ -684,8 +685,8 @@ export class MockEngine implements EngineClient {
     return { type: "new", item: clone(item) };
   }
 
-  async keepFiles(paths: string[], source: Source): Promise<Kept[]> {
-    return paths.map((path) => {
+  async keepFiles(paths: string[], source: Source, entry?: EntryAt): Promise<Kept[]> {
+    const kept = paths.map((path) => {
       const name = path.split(/[\\/]/).pop() ?? path;
       // The same file kept twice is the same thing: say so, never add a second copy.
       const duplicate = this.items.find((i) => i.fileName === name);
@@ -693,9 +694,15 @@ export class MockEngine implements EngineClient {
       const item = this.newItem(kindFromName(name), name, source, { fileName: name });
       return { type: "new", item: clone(item) } satisfies Kept;
     });
+    if (entry) {
+      for (const [n, k] of kept.entries()) {
+        await this.journal.placeInEntry(k.item.id, entry.day, entry.block + n);
+      }
+    }
+    return kept;
   }
 
-  async keepBytes(bytes: Uint8Array, mime: string, source: Source): Promise<Kept> {
+  async keepBytes(bytes: Uint8Array, mime: string, source: Source, entry?: EntryAt): Promise<Kept> {
     const kind: ItemKind = mime.startsWith("image/")
       ? "image"
       : mime.startsWith("audio/")
@@ -714,6 +721,7 @@ export class MockEngine implements EngineClient {
       durationMs: kind === "audio" ? Math.max(1000, Math.round(bytes.length / 16)) : null,
       ...heldOriginal(bytes, mime),
     });
+    if (entry) await this.journal.placeInEntry(item.id, entry.day, entry.block);
     return { type: "new", item: clone(item) };
   }
 

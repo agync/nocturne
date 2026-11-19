@@ -383,7 +383,7 @@ describe("writing the entry", () => {
     expect(field).toHaveValue("");
   });
 
-  it("records a voice note while Space is held and places it in the entry", async () => {
+  it("records a voice note while Space is held and keeps it straight into the entry", async () => {
     installFakeAudio(48000, true);
     Object.defineProperty(navigator, "mediaDevices", {
       configurable: true,
@@ -399,14 +399,15 @@ describe("writing the entry", () => {
       speak(500);
     });
     fireEvent.keyUp(field, { key: " " });
-    await waitFor(() => expect(place).toHaveBeenCalled());
+    await waitFor(() => expect(keep).toHaveBeenCalled());
     expect(keep.mock.calls[0]?.[1]).toBe("audio/wav");
     expect(keep.mock.calls[0]?.[2]).toBe("journal");
-    expect(place.mock.calls[0]?.[1]).toBe(TODAY);
+    expect(keep.mock.calls[0]?.[3]).toEqual({ day: TODAY, block: 0 });
+    expect(place).not.toHaveBeenCalled();
     expect(await screen.findByText(/^Voice note, /)).toBeInTheDocument();
   });
 
-  it("keeps a photo for the entry and places it", async () => {
+  it("keeps a photo straight into the entry", async () => {
     const platform = fakePlatform();
     platform.pickFiles = async () => ["/pics/windowsill.jpg"];
     const engine = engineIn("empty");
@@ -415,9 +416,13 @@ describe("writing the entry", () => {
     renderApp({ hash: "#/journal", engine, platform });
     await screen.findByRole("heading", { level: 2, name: "Through the day" });
     await userEvent.click(screen.getByRole("button", { name: "Add a photo" }));
-    await waitFor(() => expect(place).toHaveBeenCalled());
-    expect(keep).toHaveBeenCalledWith(["/pics/windowsill.jpg"], "journal");
-    expect(place.mock.calls[0]?.[1]).toBe(TODAY);
+    await waitFor(() =>
+      expect(keep).toHaveBeenCalledWith(["/pics/windowsill.jpg"], "journal", {
+        day: TODAY,
+        block: 0,
+      }),
+    );
+    expect(place).not.toHaveBeenCalled();
   });
 
   it("changes a photo's description", async () => {

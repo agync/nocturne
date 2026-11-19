@@ -2,6 +2,7 @@
 //! person makes to them.
 
 use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 
 use jiff::civil::Date;
 use jiff::{SignedDuration, Timestamp};
@@ -178,6 +179,38 @@ fn set_meta(tx: &Transaction<'_>, id: &str, key: &str, value: &Value) -> Result<
     Ok(())
 }
 
+/// Make a kept photo or voice note block `block` of `day`'s entry, held like a saved block. What
+/// was already read from it takes the journal mark. Returns the cached audio files to shred once
+/// the transaction has committed.
+pub(crate) fn place_tx(
+    tx: &Transaction<'_>,
+    ctx: &Ctx,
+    originals: &Path,
+    item_id: &str,
+    day: Date,
+    block: u32,
+) -> Result<Vec<PathBuf>> {
+    not_future(ctx, day)?;
+    let item = load_item(tx, originals, item_id)?;
+    if item.role().is_some() || !matches!(item.view.kind, ItemKind::Image | ItemKind::Audio) {
+        return Err(Error::invalid("only a photo or a voice note can be placed"));
+    }
+    if item.view.private {
+        return Err(Error::invalid("a private item cannot go in the journal"));
+    }
+    tx.execute(
+        "UPDATE items SET metadata = json_patch(metadata, ?2), hold_until = ?3 WHERE id = ?1",
+        params![
+            item_id,
+            json!({"journal": "entry", "journal_day": day.to_string(), "block": block,
+                   "saved_at": fmt_ts(ctx.now)})
+            .to_string(),
+            hold_until(ctx.now)?
+        ],
+    )?;
+    crate::memory::mark_journal_tx(tx, item_id)
+}
+
 impl Engine {
     /// Save the text of an entry block. A new block when `item_id` is `None` (nothing is made
     /// for empty text). While the block is unread it is changed in place; once it was read, a
@@ -291,31 +324,10 @@ impl Engine {
 
     /// Turn a kept photo or voice note into a block of the day's entry.
     pub fn place_in_entry(&self, item_id: &str, day: Date, block: u32) -> Result<EntryBlock> {
-        let hold = hold_until(self.clock_now())?;
-        let stamp = fmt_ts(self.clock_now());
         let originals = self.originals_dir();
         let files = self.write(|tx| {
             let ctx = Ctx::load(tx, self.clock())?;
-            not_future(&ctx, day)?;
-            let item = load_item(tx, &originals, item_id)?;
-            if item.role().is_some() || !matches!(item.view.kind, ItemKind::Image | ItemKind::Audio)
-            {
-                return Err(Error::invalid("only a photo or a voice note can be placed"));
-            }
-            if item.view.private {
-                return Err(Error::invalid("a private item cannot go in the journal"));
-            }
-            tx.execute(
-                "UPDATE items SET metadata = json_patch(metadata, ?2), hold_until = ?3 WHERE id = ?1",
-                params![
-                    item_id,
-                    json!({"journal": "entry", "journal_day": day.to_string(), "block": block,
-                           "saved_at": stamp})
-                    .to_string(),
-                    hold
-                ],
-            )?;
-            crate::memory::mark_journal_tx(tx, item_id)
+            place_tx(tx, &ctx, &originals, item_id, day, block)
         })?;
         self.bump_audio();
         crate::audio::shred_all(files);

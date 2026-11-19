@@ -5,6 +5,7 @@ import {
   type EngineClient,
   type EngineEventName,
   type EngineEvents,
+  entryHeaders,
   toEngineError,
   type Unsubscribe,
 } from "./client";
@@ -81,8 +82,8 @@ export class TauriEngine implements EngineClient {
   tidyAnyway: EngineClient["tidyAnyway"] = () => this.call("tidy_anyway");
 
   keepText: EngineClient["keepText"] = (text, source) => this.call("keep_text", { text, source });
-  keepFiles: EngineClient["keepFiles"] = (paths, source) =>
-    this.call("keep_files", { paths, source });
+  keepFiles: EngineClient["keepFiles"] = (paths, source, entry) =>
+    this.call("keep_files", { paths, source, day: entry?.day, block: entry?.block });
   /** The audio travels as the raw request body; the mime type rides in a header. */
   keepRecording: EngineClient["keepRecording"] = async (bytes, mime) => {
     try {
@@ -91,10 +92,10 @@ export class TauriEngine implements EngineClient {
       throw toEngineError(error);
     }
   };
-  keepBytes: EngineClient["keepBytes"] = async (bytes, mime, source) => {
+  keepBytes: EngineClient["keepBytes"] = async (bytes, mime, source, entry) => {
     try {
       return await invoke("keep_bytes", bytes, {
-        headers: { "x-nocturne-mime": mime, "x-nocturne-source": source },
+        headers: { "x-nocturne-mime": mime, "x-nocturne-source": source, ...entryHeaders(entry) },
       });
     } catch (error) {
       throw toEngineError(error);

@@ -732,3 +732,32 @@ fn a_size_passes_only_when_every_sentence_of_every_run_does() {
     let empty = run_check(1, |_| (evidence_of_day_one(), Vec::new()));
     assert!(!empty.passes(), "a run that wrote nothing has not passed");
 }
+
+#[test]
+fn files_kept_into_the_entry_go_on_when_one_cannot() {
+    let h = harness();
+    h.clock.set_str(MORNING);
+    let src = tempfile::tempdir().unwrap();
+    let paths = [
+        write_file(src.path(), "allotment.jpg", b"jpeg of the allotment"),
+        write_file(src.path(), "letter.pdf", b"%PDF a letter"),
+        write_file(src.path(), "gate.jpg", b"jpeg of the gate"),
+    ];
+    h.state().allow_paths(paths.clone());
+    let kept = h.ok(
+        "keep_files",
+        json!({
+            "paths": paths.iter().map(|p| p.to_str().unwrap()).collect::<Vec<_>>(),
+            "source": "journal",
+            "day": "2026-11-13",
+            "block": 0,
+        }),
+    );
+    assert_eq!(kept.as_array().unwrap().len(), 2, "{kept}");
+    let day = h
+        .engine()
+        .journal_day("2026-11-13".parse().unwrap())
+        .unwrap();
+    let blocks: Vec<u32> = day.entry.iter().map(|b| b.block).collect();
+    assert_eq!(blocks, [0, 1]);
+}

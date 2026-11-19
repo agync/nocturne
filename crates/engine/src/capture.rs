@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use jiff::SignedDuration;
+use jiff::civil::Date;
 use nocturne_contract::{CouldntReadReason, ItemFilter, ItemKind, ItemView, Kept, Source, Trust};
 use rusqlite::{OptionalExtension, Transaction, params};
 use sha2::{Digest, Sha256};
@@ -176,6 +177,27 @@ impl Engine {
 
     /// Keep a file: hash and copy outside the lock, then rename and insert under it.
     pub fn keep_file(&self, path: &Path, source: Source) -> Result<Kept> {
+        self.keep_file_at(path, source, None)
+    }
+
+    /// Keep a photo or voice note as block `block` of `day`'s entry, in the same step that keeps
+    /// it, so it is never an ordinary item in between. The same bytes kept before are placed.
+    pub fn keep_file_in_entry(
+        &self,
+        path: &Path,
+        source: Source,
+        day: Date,
+        block: u32,
+    ) -> Result<Kept> {
+        self.keep_file_at(path, source, Some((day, block)))
+    }
+
+    fn keep_file_at(
+        &self,
+        path: &Path,
+        source: Source,
+        entry: Option<(Date, u32)>,
+    ) -> Result<Kept> {
         let originals = self.originals_dir();
         std::fs::create_dir_all(&originals)?;
         let tmp = originals.join(format!(".tmp-{}", random_hex(8)));
@@ -207,12 +229,35 @@ impl Engine {
                 origin,
             },
             source,
+            entry,
         )
     }
 
     /// Keep bytes that never had a file: a pasted image or a recording. The extension must be
     /// one of the supported kinds (see [`kind_for_ext`]); the rest follows `keep_file`.
     pub fn keep_bytes(&self, bytes: &[u8], ext: &str, source: Source) -> Result<Kept> {
+        self.keep_bytes_at(bytes, ext, source, None)
+    }
+
+    /// [`Engine::keep_bytes`] as block `block` of `day`'s entry (see `keep_file_in_entry`).
+    pub fn keep_bytes_in_entry(
+        &self,
+        bytes: &[u8],
+        ext: &str,
+        source: Source,
+        day: Date,
+        block: u32,
+    ) -> Result<Kept> {
+        self.keep_bytes_at(bytes, ext, source, Some((day, block)))
+    }
+
+    fn keep_bytes_at(
+        &self,
+        bytes: &[u8],
+        ext: &str,
+        source: Source,
+        entry: Option<(Date, u32)>,
+    ) -> Result<Kept> {
         let ext = ext.trim().trim_start_matches('.').to_lowercase();
         let Some((kind, _)) = kind_for_ext(&ext) else {
             return Err(Error::invalid(format!(
@@ -250,12 +295,18 @@ impl Engine {
                 origin: None,
             },
             source,
+            entry,
         )
     }
 
     /// Put a hashed temporary file in its place and insert its row, or recognise a duplicate.
     /// The temporary file is gone afterwards either way.
-    fn keep_stored(&self, stored: Stored, source: Source) -> Result<Kept> {
+    fn keep_stored(
+        &self,
+        stored: Stored,
+        source: Source,
+        entry: Option<(Date, u32)>,
+    ) -> Result<Kept> {
         let Stored {
             tmp,
             sha,
@@ -270,8 +321,19 @@ impl Engine {
         let dest = original_path(&originals, &sha, ext.as_deref());
         let now = fmt_ts(self.clock().now());
 
+        let mut audio = Vec::new();
         let result = self.write(|tx| {
+            let mut place = |tx: &Transaction<'_>, id: &str| -> Result<()> {
+                if let Some((day, block)) = entry {
+                    let ctx = crate::journal::Ctx::load(tx, self.clock())?;
+                    audio = crate::journal::keep::place_tx(tx, &ctx, &originals, id, day, block)?;
+                }
+                Ok(())
+            };
             if let Some(item) = find_by_sha(tx, &originals, &sha)? {
+                place(tx, &item.id)?;
+                let item = get_item_view(tx, &originals, &item.id)?
+                    .ok_or_else(|| Error::not_found(&item.id))?;
                 return Ok(Kept::Duplicate { item });
             }
             let id = insert_item(
@@ -289,6 +351,7 @@ impl Engine {
                     origin: origin.as_deref(),
                 },
             )?;
+            place(tx, &id)?;
             std::fs::rename(&tmp, &dest)?;
             let item = get_item_view(tx, &originals, &id)?.ok_or_else(|| Error::not_found(&id))?;
             Ok(Kept::New { item })
@@ -298,6 +361,10 @@ impl Engine {
             _ => {
                 let _ = std::fs::remove_file(&tmp);
             }
+        }
+        if result.is_ok() && entry.is_some() {
+            self.bump_audio();
+            crate::audio::shred_all(audio);
         }
         result
     }

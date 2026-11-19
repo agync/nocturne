@@ -160,17 +160,22 @@ pub async fn keep_text<R: Runtime>(
     .await
 }
 
+/// Keep files by path. With `day` and `block`, each photo or voice note goes straight into that
+/// day's entry, from `block` on, in the same step that keeps it.
 #[tauri::command]
 pub async fn keep_files<R: Runtime>(
     app: AppHandle<R>,
     webview: tauri::Webview<R>,
     paths: Vec<String>,
     source: Source,
+    day: Option<String>,
+    block: Option<u32>,
 ) -> Result<Vec<Kept>, CommandError> {
     run(app, move |app| async move {
         if paths.is_empty() {
             return Err(CommandError::invalid("there is nothing to keep"));
         }
+        let entry = entry_at(day, block.map(|b| b.to_string()))?;
         let state = app.state::<AppState>();
         let paths: Vec<PathBuf> = paths.into_iter().map(PathBuf::from).collect();
         // Only files the person dropped or picked in this session are kept by path.
@@ -179,7 +184,40 @@ pub async fn keep_files<R: Runtime>(
             let _ = p;
             return Err(CommandError::invalid("that file was not chosen"));
         }
-        let kept = keep_paths(&app, paths, source).await?;
+        let kept = match entry {
+            None => keep_paths(&app, paths, source).await?,
+            Some((day, first)) => {
+                let e = engine(&app)?;
+                // As `keep_paths`: a file that cannot be kept is logged and skipped, and only
+                // when none could be is the first error returned.
+                let (kept, first_error) = blocking_cmd(move || {
+                    let mut kept = Vec::new();
+                    let mut first_error = None;
+                    for path in &paths {
+                        let at = first + kept.len() as u32;
+                        match check_file(path).and_then(|()| {
+                            e.keep_file_in_entry(path, source, day, at)
+                                .map_err(CommandError::from)
+                        }) {
+                            Ok(k) => kept.push(k),
+                            Err(err) => {
+                                tracing::warn!("a file could not be kept: {:?}", err.code);
+                                first_error.get_or_insert(err);
+                            }
+                        }
+                    }
+                    Ok((kept, first_error))
+                })
+                .await?;
+                if kept.is_empty()
+                    && let Some(err) = first_error
+                {
+                    return Err(err);
+                }
+                announce(&app, &kept).await;
+                kept
+            }
+        };
         note_quick(&app, &webview, &kept);
         Ok(kept)
     })
@@ -224,8 +262,30 @@ pub(crate) fn extension_for(mime: &str) -> Option<&'static str> {
     })
 }
 
+/// Where in the journal a photo or voice note goes, when it is kept straight into an entry: a
+/// day and a block, both or neither.
+fn entry_at(
+    day: Option<String>,
+    block: Option<String>,
+) -> Result<Option<(jiff::civil::Date, u32)>, CommandError> {
+    match (day, block) {
+        (None, None) => Ok(None),
+        (Some(day), Some(block)) => Ok(Some((
+            day.parse()
+                .map_err(|_| CommandError::invalid("that is not a day"))?,
+            block
+                .parse()
+                .map_err(|_| CommandError::invalid("that is not a place in the entry"))?,
+        ))),
+        _ => Err(CommandError::invalid(
+            "a day and a place in the entry go together",
+        )),
+    }
+}
+
 /// Keep the raw body of a request: the mime type rides in `x-nocturne-mime`, and (when the
-/// caller does not fix it) the source in `x-nocturne-source`.
+/// caller does not fix it) the source in `x-nocturne-source`. `x-nocturne-day` and
+/// `x-nocturne-block` keep it straight into that day's entry.
 async fn keep_raw<R: Runtime>(
     app: AppHandle<R>,
     webview: tauri::Webview<R>,
@@ -250,7 +310,9 @@ async fn keep_raw<R: Runtime>(
     };
     let mime = header("x-nocturne-mime");
     let source_header = header("x-nocturne-source");
+    let entry = entry_at(header("x-nocturne-day"), header("x-nocturne-block"));
     run(app, move |app| async move {
+        let entry = entry?;
         let source = match (fixed_source, source_header) {
             (Some(s), _) => s,
             (None, Some(s)) => serde_json::from_value::<Source>(serde_json::Value::String(s))
@@ -273,7 +335,11 @@ async fn keep_raw<R: Runtime>(
             return Err(CommandError::invalid("there is nothing to keep"));
         }
         let e = engine(&app)?;
-        let kept = blocking(move || e.keep_bytes(&bytes, ext, source)).await?;
+        let kept = blocking(move || match entry {
+            Some((day, block)) => e.keep_bytes_in_entry(&bytes, ext, source, day, block),
+            None => e.keep_bytes(&bytes, ext, source),
+        })
+        .await?;
         note_quick(&app, &webview, std::slice::from_ref(&kept));
         announce(&app, std::slice::from_ref(&kept)).await;
         Ok(kept)

@@ -83,6 +83,11 @@ export class EngineError extends Error {
   }
 }
 
+/** The headers that keep raw bytes straight into an entry. */
+export function entryHeaders(entry: EntryAt | undefined): Record<string, string> {
+  return entry ? { "x-nocturne-day": entry.day, "x-nocturne-block": String(entry.block) } : {};
+}
+
 /** Tauri rejects with a string or an object; this makes both an `EngineError`. */
 export function toEngineError(raw: unknown): EngineError {
   if (raw instanceof EngineError) return raw;
@@ -138,6 +143,12 @@ export type RecordingState = "available" | "not-secure" | "no-devices" | "no-rec
  * Everything the interface may ask of the engine. One async method per contract command; the
  * Tauri implementation invokes the snake_case command of the same name.
  */
+/** Where a photo or voice note goes in the journal when it is kept straight into an entry. */
+export interface EntryAt {
+  day: string;
+  block: number;
+}
+
 export interface EngineClient {
   /** The first screen has painted: the app shows its window now. */
   appReady(): Promise<void>;
@@ -162,10 +173,14 @@ export interface EngineClient {
   tidyAnyway(): Promise<void>;
 
   keepText(text: string, source: Source): Promise<Kept>;
-  keepFiles(paths: string[], source: Source): Promise<Kept[]>;
+  /** With `entry`, each photo or voice note goes straight into that day's entry, from `block` on. */
+  keepFiles(paths: string[], source: Source, entry?: EntryAt): Promise<Kept[]>;
   keepRecording(bytes: Uint8Array, mime: string): Promise<Kept>;
-  /** Keeps a pasted or dragged image, audio or document. The bytes are the raw body. */
-  keepBytes(bytes: Uint8Array, mime: string, source: Source): Promise<Kept>;
+  /**
+   * Keeps a pasted or dragged image, audio or document. The bytes are the raw body. With `entry`,
+   * a photo or voice note is kept straight into that day's entry.
+   */
+  keepBytes(bytes: Uint8Array, mime: string, source: Source, entry?: EntryAt): Promise<Kept>;
   /** Takes back something just kept, as if it had not been. */
   unkeep(id: string): Promise<void>;
   /** Skips the queue: reads this item now instead of tonight. */
@@ -337,7 +352,7 @@ export interface EngineClient {
     block: number,
     text: string,
   ): Promise<EntryBlock | null>;
-  /** Places a voice note or photo kept with `keepBytes(…, "journal")` in the day's entry. */
+  /** Places a voice note or photo already kept in the day's entry. */
   placeInEntry(itemId: string, day: string, block: number): Promise<EntryBlock>;
   /** "Describe this photo": the photo's alternative text. */
   describePhoto(itemId: string, text: string): Promise<void>;
