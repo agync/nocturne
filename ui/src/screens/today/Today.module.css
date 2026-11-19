@@ -17,6 +17,22 @@
   box-shadow: none;
 }
 
+.looked {
+  padding: var(--s-3) var(--s-4);
+  font-size: 0.875rem;
+}
+
+.looked a {
+  color: var(--ink2);
+  text-decoration: none;
+}
+
+.looked a:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .message {
   display: flex;
   flex-direction: column;

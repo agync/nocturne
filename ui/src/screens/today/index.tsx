@@ -7,7 +7,7 @@ import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, isDay } from "../../copy/format";
 import { paceDays } from "../../copy/pace";
 import { t } from "../../copy/t";
-import type { PageLine, WhichResolved } from "../../engine/bindings";
+import type { PageLine, Period, WhichResolved } from "../../engine/bindings";
 import {
   useEngine,
   usePage,
@@ -19,6 +19,24 @@ import {
 import { NotFound } from "../NotFound";
 import { applyOverrides, NO_OVERRIDES, type Overrides } from "./optimistic";
 import styles from "./Today.module.css";
+
+/** "Yesterday, looked back on ›": the one quiet line to the look back the night wrote. */
+function lookedBack(period: Period): string {
+  switch (period.kind) {
+    case "day":
+      return t("journal.page.yesterday");
+    case "week":
+      return t("journal.page.week");
+    case "month":
+      return t("journal.page.month", {
+        month: new Intl.DateTimeFormat("en-GB", { month: "long" }).format(
+          new Date(`${period.start}T12:00:00`),
+        ),
+      });
+    case "year":
+      return t("journal.page.year", { year: period.start.slice(0, 4) });
+  }
+}
 
 /** Serves #/today and #/pages/:date. */
 export default function Today() {
@@ -281,6 +299,13 @@ function TodayPage({ date }: { date: string | undefined }) {
           fadeDays={paceDays(settings?.lettingGo).fade}
         />
       </div>
+      {page.journalLine ? (
+        <p className={styles.looked}>
+          <a href={`#/journal/look-back/${page.journalLine.kind}/${page.journalLine.start}`}>
+            {lookedBack(page.journalLine)}
+          </a>
+        </p>
+      ) : null}
       {forgetDialog}
     </div>
   );

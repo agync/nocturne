@@ -1,4 +1,4 @@
-import { act, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
@@ -316,5 +316,48 @@ describe("the morning page on Today", () => {
     });
     const buttons = screen.getAllByRole("button", { name: "Mark as done" });
     expect(buttons.some((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  });
+});
+
+describe("the quiet line to a look back", () => {
+  const withLine = async (period: {
+    kind: "day" | "week" | "month" | "year";
+    start: string;
+    end: string;
+  }) => {
+    const engine = createMockEngine();
+    const original = engine.getPage.bind(engine);
+    vi.spyOn(engine, "getPage").mockImplementation(async (date) => ({
+      ...(await original(date)),
+      journalLine: period,
+    }));
+    return open(engine);
+  };
+
+  it("says Yesterday for a day and opens its look back", async () => {
+    await withLine({ kind: "day", start: "2026-11-18", end: "2026-11-18" });
+    const link = screen.getByRole("link", { name: "Yesterday, looked back on ›" });
+    expect(link).toHaveAttribute("href", "#/journal/look-back/day/2026-11-18");
+  });
+
+  it("says Last week for a week", async () => {
+    await withLine({ kind: "week", start: "2026-11-09", end: "2026-11-15" });
+    expect(screen.getByRole("link", { name: "Last week, looked back on ›" })).toHaveAttribute(
+      "href",
+      "#/journal/look-back/week/2026-11-09",
+    );
+  });
+
+  it("names a month and a year", async () => {
+    await withLine({ kind: "month", start: "2026-10-01", end: "2026-10-31" });
+    expect(screen.getByRole("link", { name: "October, looked back on ›" })).toBeVisible();
+    cleanup();
+    await withLine({ kind: "year", start: "2025-01-01", end: "2025-12-31" });
+    expect(screen.getByRole("link", { name: "2025, looked back on ›" })).toBeVisible();
+  });
+
+  it("is not there when the night wrote nothing", async () => {
+    await open();
+    expect(screen.queryByText(/looked back on/)).toBeNull();
   });
 });
