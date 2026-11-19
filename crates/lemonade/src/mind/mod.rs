@@ -6,6 +6,7 @@ mod documents;
 mod guard;
 pub mod online;
 mod prompts;
+mod reflect;
 mod sampling;
 mod watch;
 
