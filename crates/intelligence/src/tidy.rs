@@ -219,6 +219,10 @@ impl Tidy {
         // Items kept after this belong to the next page, so only what came before is read
         // and counted.
         let end = instant.min(started);
+        // The night reads what the person was still writing in the journal.
+        if let Err(e) = self.eng(|e| e.release_entry_holds()).await {
+            tracing::warn!("could not release the held journal entries: {e}");
+        }
         let drain = self.inner.reader.start_drain(end).await?;
         let mut run = Run {
             kind,

@@ -1113,3 +1113,32 @@ async fn a_private_item_read_again_stays_private() {
     assert_eq!(memories.len(), 2, "read again");
     assert!(memories.iter().all(|m| m.private), "{memories:?}");
 }
+
+// ---- the journal ----
+
+#[tokio::test]
+async fn the_night_tidy_clears_every_entry_hold_so_the_night_reads_held_blocks() {
+    let w = world_at("2026-11-12T20:00:00Z", mind());
+    keep(&w, TEXT);
+    // The person was writing until a few minutes ago: the block is still held for ten minutes.
+    w.clock.set_str("2026-11-13T02:55:00Z");
+    let block = w
+        .engine
+        .save_entry_text(date("2026-11-12"), None, 0, "Walked home by the canal")
+        .unwrap()
+        .unwrap();
+    w.clock.set_str("2026-11-13T03:00:00Z");
+    read_all(&w).await;
+    assert_eq!(
+        status(&w, &block.item.id),
+        ItemStatus::Kept,
+        "held: the reader leaves it"
+    );
+
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    read_all(&w).await;
+    assert_eq!(status(&w, &block.item.id), ItemStatus::Understood);
+}
