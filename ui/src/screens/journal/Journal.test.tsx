@@ -1,6 +1,7 @@
 import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EngineError } from "../../engine/client";
 import { createMockEngine, type MockEngine } from "../../engine/mock/engine";
 import type { JournalMode } from "../../engine/mock/seed/journal";
 import { installFakeAudio, speak } from "../../test/fakeAudio";
@@ -284,6 +285,91 @@ describe("writing the entry", () => {
     );
     window.location.hash = "#/today";
     await waitFor(() => expect(order).toEqual(["save", "read"]));
+  });
+
+  it("does not try again a save the engine refused", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { engine } = await open("empty");
+    const save = vi.spyOn(engine, "saveEntryText").mockImplementation(async () => {
+      throw new EngineError("invalid", "a block that was read cannot be emptied");
+    });
+    const read = vi.spyOn(engine, "readEntryNow").mockResolvedValue(undefined);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(
+      screen.getByPlaceholderText("Write about today, or hold Space to talk."),
+      "Refused",
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    window.location.hash = "#/today";
+    await waitFor(() => expect(read).toHaveBeenCalled());
+    expect(save).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps a draft whose save failed and tries it again when the person leaves", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { engine } = await open("empty");
+    const order: string[] = [];
+    const save = vi
+      .spyOn(engine, "saveEntryText")
+      .mockImplementationOnce(async () => {
+        throw new Error("down");
+      })
+      .mockImplementation(async () => {
+        order.push("save");
+        return null;
+      });
+    vi.spyOn(engine, "readEntryNow").mockImplementation(async () => {
+      order.push("read");
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(
+      screen.getByPlaceholderText("Write about today, or hold Space to talk."),
+      "Kept safe",
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("That didn’t work. Nothing was changed.")).toBeInTheDocument();
+    window.location.hash = "#/today";
+    await waitFor(() => expect(order).toEqual(["save", "read"]));
+    expect(save).toHaveBeenLastCalledWith(TODAY, null, 0, "Kept safe");
+  });
+
+  it("waits for a save that is still on its way before it reads, when the person leaves", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { engine } = await open("empty");
+    let land: () => void = () => {};
+    const save = vi.spyOn(engine, "saveEntryText").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          land = () => resolve(null);
+        }),
+    );
+    const read = vi.spyOn(engine, "readEntryNow").mockResolvedValue(undefined);
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await user.type(
+      screen.getByPlaceholderText("Write about today, or hold Space to talk."),
+      "Slow one",
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(save).toHaveBeenCalledTimes(1);
+    window.location.hash = "#/today";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(read).not.toHaveBeenCalled();
+    await act(async () => {
+      land();
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(read).toHaveBeenCalledWith(TODAY);
+    expect(save).toHaveBeenCalledTimes(1);
   });
 
   it("says the microphone is unavailable when Space is held in an empty paragraph", async () => {

@@ -91,10 +91,10 @@ export function Entry({
 
   const save = useCallback(
     (key: string) => {
-      const text = texts.current.get(key);
-      if (text === undefined) return Promise.resolve();
-      texts.current.delete(key);
+      if (!texts.current.has(key)) return Promise.resolve();
       const run = async () => {
+        const text = texts.current.get(key);
+        if (text === undefined) return;
         const current = blocksRef.current.find(
           (b) => (keys.current.get(b.item.id) ?? b.item.id) === key,
         );
@@ -104,6 +104,7 @@ export function Entry({
         const at = current?.block ?? where.current.get(key) ?? blocksRef.current.length;
         try {
           const made = await engine.saveEntryText(day, itemId, at, text);
+          if (texts.current.get(key) === text) texts.current.delete(key);
           if (made) {
             keys.current.set(made.item.id, key);
             latest.current.set(key, made.item.id);
@@ -112,7 +113,16 @@ export function Entry({
           }
           setSaved(t("journal.a11y.saved"));
           refresh("journal");
-        } catch {
+        } catch (error) {
+          // A save the engine refuses (emptying a block that was read) never succeeds: it is
+          // said once, not retried.
+          if (
+            error instanceof EngineError &&
+            error.code === "invalid" &&
+            texts.current.get(key) === text
+          ) {
+            texts.current.delete(key);
+          }
           toast.show({ message: t("memories.failed") });
         }
       };
@@ -124,12 +134,10 @@ export function Entry({
   );
 
   const flush = useCallback(() => {
-    const waiting = [...timers.current.keys()];
-    for (const key of waiting) {
-      clearTimeout(timers.current.get(key));
-      timers.current.delete(key);
-    }
-    return Promise.all(waiting.map((key) => save(key)));
+    const waiting = new Set([...timers.current.keys(), ...texts.current.keys()]);
+    for (const timer of timers.current.values()) clearTimeout(timer);
+    timers.current.clear();
+    return Promise.all([...waiting].map((key) => save(key)));
   }, [save]);
 
   const write = (key: string, text: string, at: number) => {
@@ -147,7 +155,7 @@ export function Entry({
   };
 
   const flushKey = (key: string) => {
-    if (!timers.current.has(key)) return;
+    if (!timers.current.has(key) && !texts.current.has(key)) return;
     clearTimeout(timers.current.get(key));
     timers.current.delete(key);
     void save(key);
