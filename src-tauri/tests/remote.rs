@@ -135,6 +135,7 @@ fn keep_text(c: &mut PhoneClient, text: &str, client_id: &str) -> RemoteAnswer {
             client_id: client_id.into(),
             feeling: None,
             good: None,
+            captured_at: None,
         },
     )
 }
@@ -159,6 +160,7 @@ fn jpeg(len: usize) -> Vec<u8> {
 struct Marks {
     feeling: Option<Feeling>,
     good: Option<bool>,
+    captured_at: Option<String>,
 }
 
 /// Keep bytes: declare, send in chunks of `chunk`, wait for the answer.
@@ -189,6 +191,7 @@ fn keep_bytes_marked(
         caption: caption.map(str::to_string),
         feeling: marks.feeling,
         good: marks.good,
+        captured_at: marks.captured_at,
     }))
     .unwrap();
     let parts: Vec<&[u8]> = bytes.chunks(chunk).collect();
@@ -839,6 +842,7 @@ fn argument_caps() {
                 client_id: "c".repeat(MAX_ID + 1),
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             PhoneError::Invalid,
         ),
@@ -848,6 +852,7 @@ fn argument_caps() {
                 client_id: "../c".into(),
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             PhoneError::Invalid,
         ),
@@ -883,6 +888,7 @@ fn argument_caps() {
                 caption: None,
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             PhoneError::Invalid,
         ),
@@ -913,6 +919,7 @@ fn argument_caps() {
         caption: None,
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     block(c.chunk(id, 0, true, &jpeg(100))).unwrap();
@@ -962,6 +969,7 @@ fn item_over_50mb_refused_before_chunks() {
             caption: None,
             feeling: None,
             good: None,
+            captured_at: None,
         },
     );
     assert_eq!(error_of(&a), Some(PhoneError::TooLarge));
@@ -1074,6 +1082,7 @@ fn upload_streams_to_disk() {
         caption: None,
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     // The file's own metadata, not the folder listing's: Windows updates the size in the listing
@@ -1114,6 +1123,7 @@ fn one_upload_per_phone() {
         caption: None,
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     wait_for("the first upload begins", || {
@@ -1128,6 +1138,7 @@ fn one_upload_per_phone() {
             caption: None,
             feeling: None,
             good: None,
+            captured_at: None,
         },
     );
     assert_eq!(error_of(&second), Some(PhoneError::Busy));
@@ -1151,6 +1162,7 @@ fn retried_upload_replaces_dead_session_upload() {
         caption: None,
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     block(dead.chunk(id, 0, false, &bytes[..100])).unwrap();
@@ -1211,6 +1223,7 @@ fn incoming_total_cap() {
             caption: None,
             feeling: None,
             good: None,
+            captured_at: None,
         }))
         .unwrap();
         held.push(c);
@@ -1226,6 +1239,7 @@ fn incoming_total_cap() {
             caption: None,
             feeling: None,
             good: None,
+            captured_at: None,
         },
     );
     assert_eq!(error_of(&a), Some(PhoneError::Busy));
@@ -2130,6 +2144,7 @@ fn recording_must_be_wav() {
         client_id: "c-1".into(),
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     assert_eq!(
@@ -2144,6 +2159,7 @@ fn recording_must_be_wav() {
         client_id: "c-2".into(),
         feeling: None,
         good: None,
+        captured_at: None,
     }))
     .unwrap();
     block(c.chunk(id, 0, true, &wav)).unwrap();
@@ -2249,6 +2265,7 @@ fn a_phone_keep_with_a_feeling_makes_a_check_in_about_the_note() {
             client_id: "c-feel".into(),
             feeling: Some(glad()),
             good: None,
+            captured_at: None,
         },
     );
     let note = kept_id(&a);
@@ -2302,6 +2319,7 @@ fn bad_feelings_are_refused_before_anything_is_kept() {
                 client_id: format!("c-bad{i}"),
                 feeling: Some(f.clone()),
                 good: None,
+                captured_at: None,
             },
         );
         assert_eq!(error_of(&a), Some(PhoneError::Invalid));
@@ -2315,6 +2333,7 @@ fn bad_feelings_are_refused_before_anything_is_kept() {
                     replaces: None,
                 },
                 client_id: format!("c-badci{i}"),
+                captured_at: None,
             },
         );
         assert_eq!(error_of(&a), Some(PhoneError::Invalid));
@@ -2333,6 +2352,7 @@ fn a_text_kept_as_a_good_thing_is_a_good_thing() {
             client_id: "c-good".into(),
             feeling: None,
             good: Some(true),
+            captured_at: None,
         },
     );
     let id = kept_id(&a);
@@ -2350,6 +2370,7 @@ fn a_text_kept_as_a_good_thing_is_a_good_thing() {
             client_id: "c-g4".into(),
             feeling: None,
             good: Some(true),
+            captured_at: None,
         },
     );
     assert_eq!(error_of(&fourth), Some(PhoneError::Invalid), "three a day");
@@ -2363,6 +2384,7 @@ fn keep_good(c: &mut PhoneClient, text: &str, client_id: &str) {
             client_id: client_id.into(),
             feeling: None,
             good: Some(true),
+            captured_at: None,
         },
     );
     kept_id(&a);
@@ -2382,6 +2404,7 @@ fn a_photo_kept_as_a_good_thing() {
         Marks {
             feeling: Some(glad()),
             good: Some(true),
+            ..Default::default()
         },
     );
     let photo = kept_id(&a);
@@ -2412,6 +2435,7 @@ fn a_photo_kept_as_a_good_thing() {
         client_id: "c-voice".into(),
         feeling: None,
         good: Some(true),
+        captured_at: None,
     }))
     .unwrap();
     assert_eq!(
@@ -2458,6 +2482,7 @@ fn a_photo_the_computer_already_has_still_gets_its_feeling_and_good_thing_once()
             Marks {
                 feeling: Some(glad()),
                 good: Some(true),
+                ..Default::default()
             },
         );
         assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
@@ -2485,6 +2510,7 @@ fn a_note_the_computer_already_has_still_gets_its_feeling_once() {
                 client_id: "c-dup-note".into(),
                 feeling: Some(glad()),
                 good: None,
+                captured_at: None,
             },
         );
         assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
@@ -2511,6 +2537,7 @@ fn a_keep_whose_good_thing_cannot_be_recorded_is_not_answered_as_kept() {
         Marks {
             feeling: None,
             good: Some(true),
+            ..Default::default()
         },
     );
     assert_eq!(error_of(&a), Some(PhoneError::Invalid), "{a:?}");
@@ -2531,6 +2558,7 @@ fn taking_back_a_photo_leaves_a_good_thing_written_on_the_computer() {
         Marks {
             feeling: Some(glad()),
             good: Some(true),
+            ..Default::default()
         },
     );
     let photo = kept_id(&a);
@@ -2581,6 +2609,7 @@ fn taking_back_a_repeat_upload_takes_back_only_what_it_made() {
         Marks {
             feeling: Some(glad()),
             good: Some(true),
+            ..Default::default()
         },
     );
     assert_eq!(e.journal_day(today(&p)).unwrap().good.len(), 2);
@@ -2595,6 +2624,136 @@ fn taking_back_a_repeat_upload_takes_back_only_what_it_made() {
     assert!(e.get_item(&desk).is_ok(), "the computer's photo stays");
 }
 
+const LAST_NIGHT: &str = "2026-11-12T22:50:00Z";
+
+fn on_day(p: &Phone, day: &str) -> JournalDay {
+    p.h.engine().journal_day(day.parse().unwrap()).unwrap()
+}
+
+#[test]
+fn a_keep_that_waited_belongs_to_the_day_it_was_made() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let note = kept_id(&call(
+        &mut c,
+        RemoteCall::KeepText {
+            text: "Late walk".into(),
+            client_id: "c-late-note".into(),
+            feeling: Some(glad()),
+            good: None,
+            captured_at: Some(LAST_NIGHT.into()),
+        },
+    ));
+    let photo = kept_id(&keep_bytes_marked(
+        &mut c,
+        &jpeg(300),
+        "image/jpeg",
+        "c-late-photo",
+        Some("Moon over the gate"),
+        100,
+        Marks {
+            feeling: Some(glad()),
+            good: Some(true),
+            captured_at: Some(LAST_NIGHT.into()),
+        },
+    ));
+    let mut wav = b"RIFF\x24\x00\x00\x00WAVEfmt ".to_vec();
+    wav.resize(64, 0);
+    let voice = block(c.request(RemoteCall::KeepRecording {
+        mime: "audio/wav".into(),
+        size: wav.len() as f64,
+        client_id: "c-late-voice".into(),
+        feeling: None,
+        good: None,
+        captured_at: Some(LAST_NIGHT.into()),
+    }))
+    .unwrap();
+    block(c.chunk(voice, 0, true, &wav)).unwrap();
+    let voice = kept_id(&block(c.answer(voice)).unwrap());
+    let RemoteAnswer::CheckIn { checkin } = call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: check_in_input(Some("Calm now")),
+            client_id: "c-late-ci".into(),
+            captured_at: Some(LAST_NIGHT.into()),
+        },
+    ) else {
+        panic!("not a check-in")
+    };
+    assert_eq!(checkin.day, "2026-11-12");
+
+    let past = on_day(&p, "2026-11-12");
+    let rows: Vec<&str> = past.rows.iter().map(|r| r.item.id.as_str()).collect();
+    for id in [&note, &photo, &voice] {
+        assert!(
+            rows.contains(&id.as_str()),
+            "{id} is on the day it was made"
+        );
+    }
+    assert_eq!(past.good.len(), 1);
+    assert_eq!(past.checkins.len(), 3, "two feelings and the check-in");
+    let now = on_day(&p, "2026-11-13");
+    assert!(now.rows.is_empty() && now.good.is_empty() && now.checkins.is_empty());
+
+    // The same keep sent again is the same keep.
+    let again = call(
+        &mut c,
+        RemoteCall::KeepCheckIn {
+            input: check_in_input(Some("Calm now")),
+            client_id: "c-late-ci".into(),
+            captured_at: Some(LAST_NIGHT.into()),
+        },
+    );
+    assert!(matches!(&again, RemoteAnswer::CheckIn { checkin: c } if c.id == checkin.id));
+    assert_eq!(on_day(&p, "2026-11-12").checkins.len(), 3);
+}
+
+#[test]
+fn a_capture_instant_is_never_in_the_future_nor_over_a_week_old_and_a_bad_one_is_now() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let e = p.h.engine();
+    let week_back = e
+        .journal_day_of(
+            e.clock_now()
+                .checked_sub(jiff::SignedDuration::from_hours(7 * 24))
+                .unwrap(),
+        )
+        .unwrap()
+        .to_string();
+    for (i, (at, day)) in [
+        ("2099-01-01T00:00:00Z", "2026-11-13"),
+        ("2026-01-01T00:00:00Z", week_back.as_str()),
+        ("soon", "2026-11-13"),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let a = call(
+            &mut c,
+            RemoteCall::KeepText {
+                text: format!("Note {i}"),
+                client_id: format!("c-clamp-{i}"),
+                feeling: Some(glad()),
+                good: None,
+                captured_at: Some(at.into()),
+            },
+        );
+        let id = kept_id(&a);
+        let seen = on_day(&p, day);
+        assert!(
+            seen.rows.iter().any(|r| r.item.id == id),
+            "{at} is on {day}"
+        );
+        assert!(
+            seen.checkins
+                .iter()
+                .any(|c| c.about.as_deref() == Some(&id)),
+            "its feeling is on {day} too"
+        );
+    }
+}
+
 #[test]
 fn a_check_in_from_the_phone_is_kept_once() {
     let p = on();
@@ -2604,6 +2763,7 @@ fn a_check_in_from_the_phone_is_kept_once() {
         RemoteCall::KeepCheckIn {
             input: check_in_input(Some("A good walk")),
             client_id: "c-ci".into(),
+            captured_at: None,
         },
     );
     let RemoteAnswer::CheckIn { checkin } = first else {
@@ -2617,6 +2777,7 @@ fn a_check_in_from_the_phone_is_kept_once() {
         RemoteCall::KeepCheckIn {
             input: check_in_input(Some("A good walk, again")),
             client_id: "c-ci".into(),
+            captured_at: None,
         },
     );
     assert!(matches!(&again, RemoteAnswer::CheckIn { checkin: c } if c.id == checkin.id));
@@ -2634,6 +2795,7 @@ fn a_check_in_from_the_phone_is_kept_once() {
                 ..check_in_input(None)
             },
             client_id: "c-ci2".into(),
+            captured_at: None,
         },
     );
     assert_eq!(error_of(&change), Some(PhoneError::Invalid));
@@ -2662,6 +2824,7 @@ fn a_repeated_check_in_is_not_kept_again_after_it_was_replaced() {
             RemoteCall::KeepCheckIn {
                 input: check_in_input(Some("A good walk")),
                 client_id: "c-gone".into(),
+                captured_at: None,
             },
         )
     };
@@ -3052,6 +3215,7 @@ fn the_activity_list_has_what_a_phone_did_in_the_journal() {
         RemoteCall::KeepCheckIn {
             input: check_in_input(None),
             client_id: "c-act".into(),
+            captured_at: None,
         },
     );
     day_on_phone(&mut c, None);

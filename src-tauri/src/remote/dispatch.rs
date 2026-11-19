@@ -246,6 +246,7 @@ impl<R: Runtime> Call<R> {
                 client_id,
                 feeling,
                 good,
+                captured_at,
             } => {
                 if crypto::check_id(&client_id).is_err()
                     || text.trim().is_empty()
@@ -273,6 +274,7 @@ impl<R: Runtime> Call<R> {
                 let (device, client) = (me.clone(), client_id.clone());
                 let made = blocking(move || {
                     let place = KeepPlace {
+                        day: Some(e.capture_day(captured_at.as_deref())?),
                         phone: Some((&device, &client)),
                     };
                     let kept = e.keep_note_item(&text, Source::Phone, good, &place)?;
@@ -298,12 +300,14 @@ impl<R: Runtime> Call<R> {
                 caption,
                 feeling,
                 good,
+                captured_at,
             } => {
                 let opts = UploadOpts {
                     caption,
                     recording: false,
                     feeling,
                     good: good.unwrap_or(false),
+                    captured_at,
                 };
                 self.keep_upload(upload, &mime, size, &client_id, opts)
                     .await
@@ -314,12 +318,14 @@ impl<R: Runtime> Call<R> {
                 client_id,
                 feeling,
                 good,
+                captured_at,
             } => {
                 let opts = UploadOpts {
                     caption: None,
                     recording: true,
                     feeling,
                     good: good.unwrap_or(false),
+                    captured_at,
                 };
                 self.keep_upload(upload, &mime, size, &client_id, opts)
                     .await
@@ -356,7 +362,11 @@ impl<R: Runtime> Call<R> {
             RemoteCall::GetJournalDay { date } => self.journal_day(date).await,
             RemoteCall::GetLookBack { period } => self.look_back(period, false).await,
             RemoteCall::LookBack { period } => self.look_back(period, true).await,
-            RemoteCall::KeepCheckIn { input, client_id } => self.check_in(input, client_id).await,
+            RemoteCall::KeepCheckIn {
+                input,
+                client_id,
+                captured_at,
+            } => self.check_in(input, client_id, captured_at).await,
             RemoteCall::AnswerSameName {
                 question_id,
                 answer,
@@ -410,6 +420,7 @@ impl<R: Runtime> Call<R> {
                 return Ok(None);
             };
             let place = KeepPlace {
+                day: None,
                 phone: Some((&me, &cid)),
             };
             if !e.keep_is_marked(&place, feeling, good)? {
@@ -601,7 +612,7 @@ impl<R: Runtime> Call<R> {
         {
             return Some(dup);
         }
-        if opts.good && !self.good_room(client_id).await {
+        if opts.good && !self.good_room(client_id, opts.captured_at.clone()).await {
             return err(PhoneError::Invalid);
         }
         if !self.core.limits.take(Bucket::Keeps, &me) {
@@ -620,17 +631,18 @@ impl<R: Runtime> Call<R> {
         answer
     }
 
-    /// Whether today can take the good thing of this keep (three a day).
-    async fn good_room(&self, client_id: &str) -> bool {
+    /// Whether the day it was made on can take the good thing of this keep (three a day).
+    async fn good_room(&self, client_id: &str, captured_at: Option<String>) -> bool {
         let Some(e) = self.engine() else {
             return false;
         };
         let (me, cid) = (self.device.id.clone(), client_id.to_string());
         blocking(move || {
             let place = KeepPlace {
+                day: None,
                 phone: Some((&me, &cid)),
             };
-            e.good_room(e.journal_today()?, &place)
+            e.good_room(e.capture_day(captured_at.as_deref())?, &place)
         })
         .await
         .unwrap_or(false)
@@ -648,6 +660,7 @@ impl<R: Runtime> Call<R> {
             recording,
             feeling,
             good,
+            captured_at,
         } = opts;
         let done = tokio::select! {
             d = upload => d,
@@ -687,13 +700,16 @@ impl<R: Runtime> Call<R> {
             .to_string();
         let (device, client) = (self.device.id.clone(), client_id.to_string());
         let made = blocking(move || {
+            let day = e.capture_day(captured_at.as_deref())?;
             let place = KeepPlace {
+                day: Some(day),
                 phone: Some((&device, &client)),
             };
             let kept = e.keep_file(&file, Source::Phone)?;
             let (Kept::New { item } | Kept::Duplicate { item }) = &kept;
             if matches!(kept, Kept::New { .. }) {
                 e.link_remote_keep(&item.id, &device, &client)?;
+                e.place_on_day(&item.id, day)?;
             }
             // The item is kept either way; a feeling or a mark that cannot be made is
             // answered, so the phone sends the keep again and makes it then.
@@ -705,13 +721,7 @@ impl<R: Runtime> Call<R> {
                     // A private item is not shown beside a good thing; its words stand alone.
                     let photo = (!item.private).then_some(item.id.as_str());
                     if photo.is_some() || !words.is_empty() {
-                        e.keep_good_thing_at(
-                            e.journal_today()?,
-                            &words,
-                            photo,
-                            Source::Phone,
-                            &place,
-                        )?;
+                        e.keep_good_thing_at(day, &words, photo, Source::Phone, &place)?;
                     }
                 }
                 Ok(())
@@ -818,6 +828,7 @@ impl<R: Runtime> Call<R> {
             let (device, client) = (self.device.id.clone(), made.client_id);
             let _ = blocking(move || {
                 let place = KeepPlace {
+                    day: None,
                     phone: Some((&device, &client)),
                 };
                 for record in e.keep_records(&place)? {
@@ -1143,7 +1154,12 @@ impl<R: Runtime> Call<R> {
         })
     }
 
-    async fn check_in(&self, input: CheckInInput, client_id: String) -> Option<RemoteAnswer> {
+    async fn check_in(
+        &self,
+        input: CheckInInput,
+        client_id: String,
+        captured_at: Option<String>,
+    ) -> Option<RemoteAnswer> {
         let me = &self.device.id;
         // A phone keeps a check-in; changing one is for the computer.
         if crypto::check_id(&client_id).is_err()
@@ -1175,7 +1191,11 @@ impl<R: Runtime> Call<R> {
         let e = self.engine()?;
         let device = me.clone();
         let made = blocking(move || {
-            let made = e.keep_checkin(input, Source::Phone)?;
+            let place = KeepPlace {
+                day: Some(e.capture_day(captured_at.as_deref())?),
+                phone: None,
+            };
+            let made = e.keep_checkin_at(input, Source::Phone, &place)?;
             e.link_remote_keep(&made.id, &device, &client_id)?;
             let item = e.get_item(&made.id)?;
             // As the phone will read it: with the name of the phone it came from.
@@ -1326,12 +1346,12 @@ fn phone_code(e: &CommandError) -> PhoneError {
     }
 }
 
-/// A check-in as the journal shows it, found on the day it was kept or the day before.
+/// A check-in as the journal shows it, found on its day or the day before.
 fn find_check_in(
     e: &Engine,
     id: &str,
 ) -> nocturne_engine::Result<Option<nocturne_contract::CheckIn>> {
-    let kept = e.journal_day_of(e.get_item(id)?.kept_at.parse()?)?;
+    let kept = e.journal_item_day(id)?;
     for day in [Some(kept), kept.yesterday().ok()].into_iter().flatten() {
         if let Some(c) = e
             .journal_day(day)?
@@ -1352,6 +1372,7 @@ fn dependents(e: &Engine, device: &str, id: &str) -> nocturne_engine::Result<Vec
         return Ok(Vec::new());
     };
     let place = KeepPlace {
+        day: None,
         phone: Some((device, &client)),
     };
     Ok(e.keep_records(&place)?
@@ -1366,6 +1387,7 @@ struct UploadOpts {
     recording: bool,
     feeling: Option<Feeling>,
     good: bool,
+    captured_at: Option<String>,
 }
 
 /// What a phone sent with a keep: the text, or the name its file was kept under.

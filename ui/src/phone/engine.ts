@@ -23,10 +23,15 @@ import type {
 } from "../engine/bindings";
 import type { Bytes } from "./bytes";
 
-/** What a keep may carry besides what is kept: how it feels, and that it is a good thing. */
+/**
+ * What a keep may carry besides what is kept: how it feels, that it is a good thing, and when it
+ * was made (RFC 3339), so a keep that waited belongs to the day it was made, not the day it
+ * arrived. The computer never puts it in the future or more than a week back.
+ */
 export interface KeepMarks {
   feeling?: Feeling;
   good?: boolean;
+  capturedAt?: string;
 }
 
 export interface PhoneEngine {
@@ -36,7 +41,7 @@ export interface PhoneEngine {
   keepBytes(blob: Blob, clientId: string, caption?: string, marks?: KeepMarks): Promise<PhoneKept>;
   keepRecording(blob: Blob, clientId: string, marks?: KeepMarks): Promise<PhoneKept>;
   /** The whole check-in, by touch. Kept once however often it is sent. */
-  keepCheckIn(input: CheckInInput, clientId: string): Promise<CheckIn>;
+  keepCheckIn(input: CheckInInput, clientId: string, capturedAt?: string): Promise<CheckIn>;
   /** A journal day, today when none is given. The computer sends it whole; nothing is cached. */
   getJournalDay(date?: string): Promise<JournalDay>;
   /** What is written for a day or a period, or its glance. */

@@ -161,6 +161,7 @@ fn run(path: u8) {
             client_id: format!("c-text-{i}"),
             feeling: None,
             good: None,
+            captured_at: None,
         }))
         .unwrap();
         assert!(matches!(kept, RemoteAnswer::Kept { .. }));
@@ -171,6 +172,7 @@ fn run(path: u8) {
             caption: Some("Blue door".into()),
             feeling: None,
             good: None,
+            captured_at: None,
         }))
         .unwrap();
         let parts: Vec<&[u8]> = photo.chunks(100 * 1024).collect();

@@ -89,6 +89,12 @@ export interface CallContext {
   chunk(seq: number, last: boolean, data: Uint8Array): Promise<void>;
 }
 
+/** The day a check-in made at `instant` lands on, as the computer files it: never after today. */
+function dayOf(instant: string | undefined): string {
+  const day = instant?.slice(0, 10) ?? TODAY;
+  return /^\d{4}-\d\d-\d\d$/.test(day) && day <= TODAY ? day : TODAY;
+}
+
 export type Handler = (ctx: CallContext) => void | Promise<void>;
 
 export interface Upload {
@@ -99,6 +105,7 @@ export interface Upload {
   caption: string | null;
   feeling: Feeling | null;
   good: boolean | null;
+  capturedAt: string | null;
   chunks: Bytes[];
   received: number;
 }
@@ -217,6 +224,8 @@ export class FakeComputer {
       bytes: Bytes | null;
       feeling?: Feeling | null;
       good?: boolean | null;
+      /** When the phone said it was made, as it sent it. */
+      capturedAt?: string | null;
     }
   >();
   /** Check-ins kept, by client id, so a repeat is answered with the first. */
@@ -704,6 +713,7 @@ export class FakeComputer {
           bytes: total,
           feeling: up.feeling,
           good: up.good,
+          capturedAt: up.capturedAt,
         });
       const shown = kept ? ([...this.items].find(([, v]) => v === kept)?.[0] ?? id) : id;
       await this.sealDown(
@@ -746,6 +756,7 @@ export class FakeComputer {
             bytes: null,
             feeling: call.feeling ?? null,
             good: call.good ?? null,
+            capturedAt: call.capturedAt ?? null,
           });
         return ctx.reply(keptAnswer(itemId, call.text.slice(0, 40), !!existing, this.now()));
       }
@@ -759,6 +770,7 @@ export class FakeComputer {
           caption: call.cmd === "keepBytes" ? call.caption : null,
           feeling: call.feeling ?? null,
           good: call.good ?? null,
+          capturedAt: call.capturedAt ?? null,
           chunks: [],
           received: 0,
         });
@@ -784,7 +796,7 @@ export class FakeComputer {
         const checkin: CheckIn = earlier ?? {
           id: `checkin-${this.checkIns.size + 1}`,
           keptAt: new Date(this.now()).toISOString(),
-          day: TODAY,
+          day: dayOf(call.capturedAt),
           feeling: call.input.feeling,
           line: call.input.line,
           urge: call.input.urge,

@@ -20,11 +20,13 @@ use crate::capture::{in_forget_job, text_title, trust_for};
 use crate::error::{Error, Result};
 use crate::util::{enum_str, fmt_ts, new_id, sha256_hex};
 
-/// Where a keep from a phone comes from: the phone's id and the client id it sent. What the
-/// keep makes beside its item carries that name, so a retry finds what is already made and
-/// taking the keep back takes only that.
+/// Where a keep from a phone belongs. `day` is the journal day it was made on, when that is
+/// not the day it arrived (see [`Engine::capture_day`]). `phone` is the phone's id and the
+/// client id it sent: what the keep makes beside its item carries that name, so a retry finds
+/// what is already made and taking the keep back takes only that.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct KeepPlace<'a> {
+    pub day: Option<Date>,
     pub phone: Option<(&'a str, &'a str)>,
 }
 
@@ -447,7 +449,10 @@ impl Engine {
         place: &KeepPlace<'_>,
     ) -> Result<Kept> {
         let kept = if good {
-            let day = self.journal_today()?;
+            let day = match place.day {
+                Some(day) => day,
+                None => self.journal_today()?,
+            };
             let thing = self.keep_good_thing_at(day, text, None, source, place)?;
             Kept::New {
                 item: self.get_item(&thing.id)?,
@@ -457,6 +462,9 @@ impl Engine {
         };
         if let (Some((device, client)), Kept::New { item }) = (place.phone, &kept) {
             self.link_remote_keep(&item.id, device, client)?;
+        }
+        if let (false, Some(day), Kept::New { item }) = (good, place.day, &kept) {
+            self.place_on_day(&item.id, day)?;
         }
         Ok(kept)
     }
@@ -513,7 +521,17 @@ impl Engine {
     /// Keep a check-in. With no line and no urge there is nothing to read, so it is understood
     /// at once; otherwise it is read for names only.
     pub fn keep_checkin(&self, input: CheckInInput, source: Source) -> Result<CheckIn> {
-        self.insert_checkin(input, source, None, false, &KeepPlace::default())
+        self.keep_checkin_at(input, source, &KeepPlace::default())
+    }
+
+    /// [`Engine::keep_checkin`] for a keep from a phone, on the day it was made.
+    pub fn keep_checkin_at(
+        &self,
+        input: CheckInInput,
+        source: Source,
+        place: &KeepPlace<'_>,
+    ) -> Result<CheckIn> {
+        self.insert_checkin(input, source, None, false, place)
     }
 
     fn insert_checkin(
@@ -561,6 +579,9 @@ impl Engine {
                     about = old.about().map(str::to_string);
                 }
                 old.day(&ctx)?
+            } else if let Some(day) = place.day {
+                not_future(&ctx, day)?;
+                day
             } else if let Some(target) = about.as_ref().filter(|_| !on_today) {
                 load_item(tx, &originals, target)?.day(&ctx)?
             } else {
@@ -730,6 +751,50 @@ impl Engine {
             let item = load_item(conn, &originals, &id)?;
             let mentions = super::day::mentions_of(conn, std::slice::from_ref(&id))?;
             good_view(conn, &originals, &item, &mentions)
+        })
+    }
+
+    /// The journal day a phone's keep was made on, from the instant it says (RFC 3339). Never
+    /// a day that has not come and never more than seven days back; an instant that cannot
+    /// be read is now.
+    pub fn capture_day(&self, at: Option<&str>) -> Result<Date> {
+        let now = self.clock_now();
+        let earliest = now.checked_sub(SignedDuration::from_hours(7 * 24))?;
+        let at = at
+            .and_then(|at| at.parse::<Timestamp>().ok())
+            .unwrap_or(now);
+        self.journal_day_of(at.clamp(earliest, now))
+    }
+
+    /// Put an item a phone kept on the day it was made. Only a day other than the one it was
+    /// kept on is written down.
+    pub fn place_on_day(&self, item_id: &str, day: Date) -> Result<()> {
+        let originals = self.originals_dir();
+        self.write(|tx| {
+            let ctx = Ctx::load(tx, self.clock())?;
+            not_future(&ctx, day)?;
+            let item = load_item(tx, &originals, item_id)?;
+            if item.role().is_some() {
+                return Err(Error::invalid("a journal item is already on its day"));
+            }
+            if day == ctx.day_of(crate::util::parse_ts(&item.view.kept_at)?)? {
+                tx.execute(
+                    "UPDATE items SET metadata = json_remove(metadata, '$.journal_day') WHERE id = ?1",
+                    [item_id],
+                )?;
+            } else {
+                set_meta(tx, item_id, "journal_day", &json!(day.to_string()))?;
+            }
+            Ok(())
+        })
+    }
+
+    /// The journal day an item belongs to.
+    pub fn journal_item_day(&self, item_id: &str) -> Result<Date> {
+        let originals = self.originals_dir();
+        self.read(|conn| {
+            let ctx = Ctx::load(conn, self.clock())?;
+            load_item(conn, &originals, item_id)?.day(&ctx)
         })
     }
 

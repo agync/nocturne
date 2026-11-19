@@ -896,6 +896,27 @@ describe("the engine's calls", () => {
       engine.close();
     });
 
+    it("a keep says when it was made, and a check-in lands on that day", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      const made = "2026-11-18T23:50:00.000Z";
+      await engine.keepText("Late note", "c-t1", { capturedAt: made });
+      await engine.keepText("Now note", "c-t2");
+      const text = (id: string) => [...computer.items.values()].find((i) => i.clientId === id);
+      expect(text("c-t1")).toMatchObject({ capturedAt: made });
+      expect(text("c-t2")).toMatchObject({ capturedAt: null });
+      const jpeg = new Uint8Array(100);
+      jpeg.set([0xff, 0xd8, 0xff, 0xe0]);
+      await engine.keepBytes(new Blob([jpeg], { type: "image/jpeg" }), "c-t3", "Moon", {
+        capturedAt: made,
+      });
+      expect(text("c-t3")).toMatchObject({ capturedAt: made });
+      const input = { feeling: glad, line: null, urge: null, replaces: null };
+      expect((await engine.keepCheckIn(input, "c-t4", made)).day).toBe("2026-11-18");
+      expect((await engine.keepCheckIn(input, "c-t5")).day).toBe("2026-11-19");
+      engine.close();
+    });
+
     it("a feeling off the field, or a good thing that is not a photo, is not sent", async () => {
       const { computer, device } = await paired();
       const engine = await engineOn(computer, device);

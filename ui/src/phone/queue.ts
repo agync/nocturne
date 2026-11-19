@@ -38,7 +38,15 @@ function build(backing: Backing): Queue {
 
   const list = async () => (await backing.all()).sort((a, b) => a.createdAt - b.createdAt);
 
-  const marks = (keep: PendingKeep) => ({ feeling: keep.feeling, good: keep.good });
+  /** When the keep was made, so the computer files it on that day however late it arrives. */
+  const madeAt = (keep: PendingKeep) =>
+    Number.isFinite(keep.createdAt) ? new Date(keep.createdAt).toISOString() : undefined;
+
+  const marks = (keep: PendingKeep) => ({
+    feeling: keep.feeling,
+    good: keep.good,
+    capturedAt: madeAt(keep),
+  });
 
   async function send(engine: PhoneEngine, keep: PendingKeep, out: FlushResult) {
     switch (keep.kind) {
@@ -57,7 +65,7 @@ function build(backing: Backing): Queue {
         return;
       case "checkin":
         if (!keep.checkIn) throw new PhoneRequestError("invalid");
-        out.checkIns.push(await engine.keepCheckIn(keep.checkIn, keep.clientId));
+        out.checkIns.push(await engine.keepCheckIn(keep.checkIn, keep.clientId, madeAt(keep)));
         return;
     }
   }

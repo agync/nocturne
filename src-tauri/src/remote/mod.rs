@@ -457,6 +457,7 @@ mod tests {
                 client_id: s(),
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             RemoteCall::KeepBytes {
                 mime: s(),
@@ -465,6 +466,7 @@ mod tests {
                 caption: None,
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             RemoteCall::KeepRecording {
                 mime: s(),
@@ -472,6 +474,7 @@ mod tests {
                 client_id: s(),
                 feeling: None,
                 good: None,
+                captured_at: None,
             },
             RemoteCall::Unkeep { id: s() },
             RemoteCall::Ask { question: s() },
@@ -499,6 +502,7 @@ mod tests {
                     replaces: None,
                 },
                 client_id: s(),
+                captured_at: None,
             },
             RemoteCall::AnswerSameName {
                 question_id: s(),

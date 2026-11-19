@@ -374,9 +374,11 @@ fn what_a_phones_keep_makes_beside_its_item_is_made_once_and_found_by_the_keep()
         .id;
     let place = KeepPlace {
         phone: Some((&device, "c-1")),
+        ..Default::default()
     };
     let other = KeepPlace {
         phone: Some((&device, "c-2")),
+        ..Default::default()
     };
     let day = date("2026-11-13");
     let kept = f
@@ -444,6 +446,151 @@ fn what_a_phones_keep_makes_beside_its_item_is_made_once_and_found_by_the_keep()
     }
     assert!(f.engine.good_room(day, &place).unwrap());
     assert!(!f.engine.good_room(day, &other).unwrap());
+}
+
+#[test]
+fn a_capture_instant_gives_its_day_never_a_future_one_or_one_over_a_week_old() {
+    let f = fixture();
+    let on = |at: Option<&str>| f.engine.capture_day(at).unwrap();
+    assert_eq!(on(None), date("2026-11-13"));
+    assert_eq!(on(Some("2026-11-12T15:00:00Z")), date("2026-11-12"));
+    assert_eq!(
+        on(Some("2026-11-12T16:00:00+01:00")),
+        date("2026-11-12"),
+        "an offset is read"
+    );
+    assert_eq!(on(Some("2026-11-06T09:00:00Z")), date("2026-11-06"));
+    let a_week_back = f
+        .engine
+        .journal_day_of(
+            f.clock
+                .now()
+                .checked_sub(SignedDuration::from_hours(7 * 24))
+                .unwrap(),
+        )
+        .unwrap();
+    assert_eq!(on(Some("2026-10-01T12:00:00Z")), a_week_back);
+    assert_eq!(on(Some("2026-11-14T12:00:00Z")), date("2026-11-13"));
+    for bad in ["", "yesterday", "2026-11-12", "12:00"] {
+        assert_eq!(on(Some(bad)), date("2026-11-13"), "{bad:?} is now");
+    }
+}
+
+#[test]
+fn a_phones_keep_made_earlier_belongs_to_the_day_it_was_made() {
+    let f = fixture();
+    let device = f
+        .engine
+        .add_device(
+            "Pixel",
+            &[7, 1, 9],
+            "https://home.example",
+            RemoteConnection::Simple,
+            "a",
+        )
+        .unwrap()
+        .id;
+    let (yesterday, today) = (date("2026-11-12"), date("2026-11-13"));
+    let place = KeepPlace {
+        day: Some(yesterday),
+        phone: Some((&device, "c-1")),
+    };
+
+    let kept = f
+        .engine
+        .keep_note_item("Walked home late", Source::Phone, false, &place)
+        .unwrap();
+    let Kept::New { item } = &kept else {
+        panic!("a new note")
+    };
+    f.engine
+        .feel_kept(
+            &kept,
+            feeling(FeelingPart::Low, &["tired"]),
+            Source::Phone,
+            &place,
+        )
+        .unwrap();
+    let past = f.engine.journal_day(yesterday).unwrap();
+    assert_eq!(past.rows.len(), 1);
+    assert_eq!(past.rows[0].item.id, item.id);
+    assert_eq!(past.checkins.len(), 1, "its feeling is on the same day");
+    let now = f.engine.journal_day(today).unwrap();
+    assert!(now.rows.is_empty() && now.checkins.is_empty());
+
+    let good = KeepPlace {
+        phone: Some((&device, "c-2")),
+        ..place
+    };
+    f.engine
+        .keep_note_item("Dry socks", Source::Phone, true, &good)
+        .unwrap();
+    assert_eq!(f.engine.journal_day(yesterday).unwrap().good.len(), 1);
+    assert!(f.engine.journal_day(today).unwrap().good.is_empty());
+
+    f.engine
+        .keep_checkin_at(
+            input(feeling(FeelingPart::Settled, &["calm"]), None),
+            Source::Phone,
+            &KeepPlace {
+                day: Some(yesterday),
+                phone: None,
+            },
+        )
+        .unwrap();
+    assert_eq!(f.engine.journal_day(yesterday).unwrap().checkins.len(), 2);
+    assert!(f.engine.journal_day(today).unwrap().checkins.is_empty());
+
+    // A note that was kept before stays where it is; only the new feeling takes the day.
+    let before = keep(&f.engine, "Bought milk");
+    let again = f
+        .engine
+        .keep_note_item(
+            "Bought milk",
+            Source::Phone,
+            false,
+            &KeepPlace {
+                day: Some(yesterday),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(matches!(&again, Kept::Duplicate { item } if item.id == before));
+    assert!(
+        f.engine
+            .journal_day(yesterday)
+            .unwrap()
+            .rows
+            .iter()
+            .all(|r| r.item.id != before)
+    );
+
+    // The day it was kept on needs no mark.
+    let same = f
+        .engine
+        .keep_note_item(
+            "Same day",
+            Source::Phone,
+            false,
+            &KeepPlace {
+                day: Some(today),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let Kept::New { item } = same else {
+        panic!("a new note")
+    };
+    assert_eq!(
+        common::sql_count(
+            f.dir.path(),
+            &format!(
+                "SELECT COUNT(*) FROM items WHERE id = '{}' AND json_extract(metadata, '$.journal_day') IS NULL",
+                item.id
+            )
+        ),
+        1
+    );
 }
 
 #[test]

@@ -359,7 +359,9 @@ pub enum PhoneError {
 /// verbs.
 ///
 /// A keep may carry a feeling and a good-thing mark; both are optional and default to nothing,
-/// so a phone built before the journal still parses and keeps as it always did.
+/// so a phone built before the journal still parses and keeps as it always did. It may also say
+/// when it was made (`captured_at`, RFC 3339): a keep that waited on the phone belongs to the
+/// day it was made, not the day it arrived.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(tag = "cmd", rename_all = "camelCase", rename_all_fields = "camelCase")]
 #[ts(export)]
@@ -374,6 +376,9 @@ pub enum RemoteCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         good: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        captured_at: Option<String>,
     },
     KeepBytes {
         mime: String,
@@ -386,6 +391,9 @@ pub enum RemoteCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         good: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        captured_at: Option<String>,
     },
     KeepRecording {
         mime: String,
@@ -397,6 +405,9 @@ pub enum RemoteCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         good: Option<bool>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        captured_at: Option<String>,
     },
     Unkeep {
         id: String,
@@ -434,6 +445,9 @@ pub enum RemoteCall {
     KeepCheckIn {
         input: CheckInInput,
         client_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        captured_at: Option<String>,
     },
     /// "Which {name} is this?": the one change a phone may make beyond keeping.
     AnswerSameName {

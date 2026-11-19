@@ -33,6 +33,7 @@ fn remote_calls_are_tagged_by_cmd() {
             client_id: "c-1".into(),
             feeling: None,
             good: None,
+            captured_at: None,
         },
     };
     assert_eq!(
@@ -51,6 +52,7 @@ fn remote_calls_are_tagged_by_cmd() {
             words: vec!["calm".into()],
         }),
         good: Some(true),
+        captured_at: None,
     };
     assert_eq!(
         serde_json::to_string(&marked).unwrap(),
@@ -65,9 +67,23 @@ fn remote_calls_are_tagged_by_cmd() {
         RemoteCall::KeepRecording {
             feeling: None,
             good: None,
+            captured_at: None,
             ..
         }
     ));
+    let waited: RemoteCall = serde_json::from_str(
+        r#"{"cmd":"keepText","text":"x","clientId":"c","capturedAt":"2026-11-12T22:50:00Z"}"#,
+    )
+    .unwrap();
+    assert!(matches!(
+        &waited,
+        RemoteCall::KeepText { captured_at: Some(at), .. } if at == "2026-11-12T22:50:00Z"
+    ));
+    assert!(
+        serde_json::to_string(&waited)
+            .unwrap()
+            .ends_with(r#""capturedAt":"2026-11-12T22:50:00Z"}"#)
+    );
     let day: RemoteCall =
         serde_json::from_str(r#"{"cmd":"getJournalDay","date":"2026-11-19"}"#).unwrap();
     assert_eq!(

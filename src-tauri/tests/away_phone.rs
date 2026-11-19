@@ -58,6 +58,7 @@ async fn run(s: Value) -> Result<Value, String> {
             client_id: format!("{name}-text"),
             feeling: None,
             good: None,
+            captured_at: None,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;
@@ -70,6 +71,7 @@ async fn run(s: Value) -> Result<Value, String> {
             caption: Some("a photo".into()),
             feeling: None,
             good: None,
+            captured_at: None,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;

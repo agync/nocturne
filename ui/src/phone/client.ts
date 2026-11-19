@@ -338,14 +338,19 @@ export function createPhoneEngine(
       const mime = await mimeOf(blob);
       return keep({ cmd: "keepRecording", mime, size: blob.size, clientId, ...sent(marks) }, blob);
     },
-    async keepCheckIn(input, clientId): Promise<CheckIn> {
+    async keepCheckIn(input, clientId, capturedAt): Promise<CheckIn> {
       checkClientId(clientId);
       checkFeeling(input.feeling);
       // Changing a check-in is for the computer.
       if (input.replaces) throw new PhoneRequestError("invalid");
       const said = utf8(input.line ?? "").length + utf8(input.urge ?? "").length;
       if (said > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
-      return (await once({ cmd: "keepCheckIn", input, clientId }, "checkIn")).checkin;
+      return (
+        await once(
+          { cmd: "keepCheckIn", input, clientId, ...(capturedAt ? { capturedAt } : {}) },
+          "checkIn",
+        )
+      ).checkin;
     },
     async getJournalDay(date): Promise<JournalDay> {
       if (date !== undefined) checkDate(date);
@@ -486,10 +491,15 @@ function checkItemId(id: string): void {
 }
 
 /** The marks of a keep as the call carries them: absent when not set, so older computers parse it. */
-function sent(marks: KeepMarks | undefined): { feeling?: Feeling; good?: boolean } {
-  const out: { feeling?: Feeling; good?: boolean } = {};
+function sent(marks: KeepMarks | undefined): {
+  feeling?: Feeling;
+  good?: boolean;
+  capturedAt?: string;
+} {
+  const out: { feeling?: Feeling; good?: boolean; capturedAt?: string } = {};
   if (marks?.feeling) out.feeling = marks.feeling;
   if (marks?.good !== undefined) out.good = marks.good;
+  if (marks?.capturedAt) out.capturedAt = marks.capturedAt;
   return out;
 }
 

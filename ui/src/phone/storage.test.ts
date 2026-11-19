@@ -237,7 +237,13 @@ describe("a keep waiting with its feeling", () => {
   const glad = { part: "litUp" as const, point: { pleasant: 0.6, energy: 0.5 }, words: ["glad"] };
 
   function recorder() {
-    const calls: Array<{ what: string; clientId: string; marks?: unknown; input?: unknown }> = [];
+    const calls: Array<{
+      what: string;
+      clientId: string;
+      marks?: unknown;
+      input?: unknown;
+      capturedAt?: string;
+    }> = [];
     const kept = (clientId: string) => ({
       item: {
         id: `item-${clientId}`,
@@ -267,8 +273,8 @@ describe("a keep waiting with its feeling", () => {
         calls.push({ what: "recording", clientId, marks });
         return kept(clientId);
       },
-      async keepCheckIn(input: unknown, clientId: string) {
-        calls.push({ what: "checkin", clientId, input });
+      async keepCheckIn(input: unknown, clientId: string, capturedAt?: string) {
+        calls.push({ what: "checkin", clientId, input, capturedAt });
         return { id: `checkin-${clientId}` };
       },
     } as unknown as PhoneEngine;
@@ -306,10 +312,19 @@ describe("a keep waiting with its feeling", () => {
       expect(waiting.map((k) => k.feeling)).toEqual([glad, glad, glad]);
       const { engine, calls } = recorder();
       await queue.flush(engine);
+      const at = (n: number) => new Date(n).toISOString();
       expect(calls).toEqual([
-        { what: "text", clientId: "c-1", marks: { feeling: glad, good: true } },
-        { what: "photo", clientId: "c-2", marks: { feeling: glad, good: undefined } },
-        { what: "recording", clientId: "c-3", marks: { feeling: glad, good: undefined } },
+        { what: "text", clientId: "c-1", marks: { feeling: glad, good: true, capturedAt: at(1) } },
+        {
+          what: "photo",
+          clientId: "c-2",
+          marks: { feeling: glad, good: undefined, capturedAt: at(2) },
+        },
+        {
+          what: "recording",
+          clientId: "c-3",
+          marks: { feeling: glad, good: undefined, capturedAt: at(3) },
+        },
       ]);
     }
   });
@@ -327,10 +342,32 @@ describe("a keep waiting with its feeling", () => {
       expect(await queue.count()).toBe(1);
       const { engine, calls } = recorder();
       const result = await queue.flush(engine);
-      expect(calls).toEqual([{ what: "checkin", clientId: "c-ci", input }]);
+      expect(calls).toEqual([
+        { what: "checkin", clientId: "c-ci", input, capturedAt: new Date(1).toISOString() },
+      ]);
       expect(result).toMatchObject({ sent: 1, remaining: 0 });
       expect(result.checkIns).toHaveLength(1);
       expect(await queue.count()).toBe(0);
+    }
+  });
+
+  it("sends the instant a keep was made, not the instant it is sent", async () => {
+    const made = Date.parse("2026-11-12T23:50:00Z");
+    for (const queue of [memoryQueue(), idbQueue(fakeIndexedDb())]) {
+      await queue.add({ clientId: "c-1", kind: "text", text: "Late", size: 4, createdAt: made });
+      await queue.add({
+        clientId: "c-2",
+        kind: "checkin",
+        checkIn: { feeling: glad, line: null, urge: null, replaces: null },
+        size: 0,
+        createdAt: made + 1000,
+      });
+      const { engine, calls } = recorder();
+      await queue.flush(engine);
+      expect(calls.map((c) => c.marks ?? c.capturedAt)).toEqual([
+        { feeling: undefined, good: undefined, capturedAt: "2026-11-12T23:50:00.000Z" },
+        "2026-11-12T23:50:01.000Z",
+      ]);
     }
   });
 
