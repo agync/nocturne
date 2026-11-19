@@ -412,10 +412,8 @@ impl Scheduler {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()?;
-        if !(cfg.gate)() {
-            return None;
-        }
-        current_mind(&cfg.slot)
+        let mind = current_mind(&cfg.slot)?;
+        (cfg.gate)().then_some(mind)
     }
 
     fn paused(&self) -> bool {

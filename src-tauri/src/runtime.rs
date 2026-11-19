@@ -242,6 +242,10 @@ pub fn start<R: Runtime>(app: &AppHandle<R>, opts: StartOptions) -> Option<Arc<S
         events.clone(),
     );
     let scheduler = Scheduler::new(engine, reader.clone(), tidy.clone(), host, clock, events);
+    scheduler.set_reflecting(state.mind.shared(), {
+        let app = app.clone();
+        Arc::new(move || crate::journal::writes_now(&app.state::<AppState>()))
+    });
     let token = CancellationToken::new();
     let mut tasks = vec![tauri::async_runtime::spawn({
         let (reader, token) = (reader.clone(), token.clone());
