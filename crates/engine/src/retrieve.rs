@@ -777,7 +777,9 @@ struct LineSource {
 
 /// What an original must be to give lines: trusted, not private, read, with text, nothing of it
 /// forgotten or being forgotten, and none of its memories let go, corrected, replaced or private.
+/// A check-in is never an original that gives lines: Ask never searches check-ins.
 const LINE_ITEM_RULES: &str = "i.private = 0 AND i.trust = 'trusted' \
+     AND i.kind != 'checkin' AND COALESCE(json_extract(i.metadata, '$.journal'), '') != 'checkin' \
      AND i.status IN ('understood', 'partlyUnderstood') AND i.text IS NOT NULL \
      AND i.forget_epoch = 0 \
      AND NOT EXISTS (SELECT 1 FROM forgotten_claims c WHERE c.item_id = i.id) \
