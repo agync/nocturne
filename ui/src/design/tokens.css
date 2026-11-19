@@ -18,6 +18,14 @@
   --ember-soft: #F5E6DF;
   --marker: #F2D488;
   --focus: #2C4BCF;
+  --part-wound: #F5E6DF;
+  --part-lit: #F6EDD3;
+  --part-low: #E3E7F8;
+  --part-settled: #E0EEE5;
+  --part-wound-ink: #A8402A;
+  --part-lit-ink: #8A6A12;
+  --part-low-ink: #2C4BCF;
+  --part-settled-ink: #3B7556;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -38,6 +46,14 @@
     --ember-soft: #3A2420;
     --marker: #5C4A18;
     --focus: #9DB0FF;
+    --part-wound: #3A2420;
+    --part-lit: #3A3218;
+    --part-low: #1E2640;
+    --part-settled: #1C3328;
+    --part-wound-ink: #EE8C6F;
+    --part-lit-ink: #E3C46A;
+    --part-low-ink: #9DB0FF;
+    --part-settled-ink: #8CC3A3;
   }
 }
 
@@ -58,6 +74,14 @@
   --ember-soft: #3A2420;
   --marker: #5C4A18;
   --focus: #9DB0FF;
+  --part-wound: #3A2420;
+  --part-lit: #3A3218;
+  --part-low: #1E2640;
+  --part-settled: #1C3328;
+  --part-wound-ink: #EE8C6F;
+  --part-lit-ink: #E3C46A;
+  --part-low-ink: #9DB0FF;
+  --part-settled-ink: #8CC3A3;
 }
 
 :root {
