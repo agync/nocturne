@@ -35,6 +35,7 @@ const ROADMAP: &[&str] = &[
     "get_page",
     "list_pages",
     "answer_question",
+    "add_answer_line",
     "resolve_which",
     "confirm_memory",
     "mark_done",
@@ -639,6 +640,50 @@ fn the_page_commands_serve_pages_and_the_days_question() {
         h.code(
             "answer_question",
             json!({"pageDate": "yesterday", "choice": "yes"})
+        ),
+        "invalid"
+    );
+}
+
+#[test]
+fn a_line_is_added_only_to_an_answered_question_from_the_journal() {
+    let h = harness();
+    assert_eq!(
+        h.code(
+            "add_answer_line",
+            json!({"pageDate": "2026-11-13", "line": "Went well"})
+        ),
+        "notFound",
+        "no question from the journal that day"
+    );
+    assert_eq!(
+        h.code(
+            "add_answer_line",
+            json!({"pageDate": "2026-11-13", "line": "   "})
+        ),
+        "invalid"
+    );
+    assert_eq!(
+        h.code(
+            "add_answer_line",
+            json!({"pageDate": "yesterday", "line": "Went well"})
+        ),
+        "invalid"
+    );
+    // The page-time question of page one is not one from the journal.
+    h.save_todays_page();
+    assert_eq!(
+        h.code(
+            "add_answer_line",
+            json!({"pageDate": "2026-11-13", "line": "Went well"})
+        ),
+        "notFound"
+    );
+    // And a journal choice does not fit it.
+    assert_eq!(
+        h.code(
+            "answer_question",
+            json!({"pageDate": "2026-11-13", "choice": "fine"})
         ),
         "invalid"
     );

@@ -299,6 +299,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("get_page", Allow),
         ("list_pages", Allow),
         ("answer_question", Never),
+        ("add_answer_line", Never),
         ("resolve_which", Never),
         ("confirm_memory", Never),
         ("mark_done", Never),

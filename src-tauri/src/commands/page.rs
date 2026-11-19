@@ -89,6 +89,18 @@ pub async fn answer_question<R: Runtime>(
     change(app, move |e| e.answer_question(day, choice)).await
 }
 
+/// Add a line to the answer given to the page's question from the journal. Kept on today's
+/// journal and read like an entry; allowed once, while that page is the latest.
+#[tauri::command]
+pub async fn add_answer_line<R: Runtime>(
+    app: AppHandle<R>,
+    page_date: String,
+    line: String,
+) -> Result<(), CommandError> {
+    let day = parse_date(&page_date)?;
+    change(app, move |e| e.add_answer_line(day, &line)).await
+}
+
 /// Choose which of two memories is right. Returns what was settled, in the person's words.
 #[tauri::command]
 pub async fn resolve_which<R: Runtime>(
