@@ -435,6 +435,25 @@ pub(crate) fn drop_memory_questions(tx: &Transaction<'_>, memory_id: &str) -> Re
     Ok(())
 }
 
+/// Items are being deleted. The sentence a journal question quoted from one of them, kept on the
+/// question and on the answer given to it, goes too. The answer and the question stay, without it.
+pub(crate) fn forget_sentences_about(tx: &Transaction<'_>, items: &[String]) -> Result<()> {
+    for item in items {
+        tx.execute(
+            "UPDATE items SET metadata = json_set(metadata, '$.sentence', '') \
+             WHERE json_extract(metadata, '$.journal') = 'answer' \
+             AND json_extract(metadata, '$.about') = ?1",
+            [item],
+        )?;
+        tx.execute(
+            "UPDATE questions SET text = '' \
+             WHERE kind = 'journal' AND json_extract(journal, '$.itemId') = ?1",
+            [item],
+        )?;
+    }
+    Ok(())
+}
+
 fn choice_title(choice: QuestionChoice) -> &'static str {
     match choice {
         QuestionChoice::Fine => "Fine",

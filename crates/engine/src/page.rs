@@ -202,13 +202,13 @@ fn question_for(
                 }
                 let journal =
                     journal_question::read_ask(conn, &day.to_string(), journal.as_deref())?;
+                // A journal question quotes its block: with the block gone there is nothing to
+                // show, and no other source stands in for it.
                 let receipt = match &journal {
-                    Some(ask) => view
-                        .receipts
-                        .iter()
-                        .find(|r| r.item_id == ask.item_id)
-                        .cloned()
-                        .or_else(|| first_receipt(&view)),
+                    Some(ask) => match view.receipts.iter().find(|r| r.item_id == ask.item_id) {
+                        Some(r) => Some(r.clone()),
+                        None => return Ok(None),
+                    },
                     None => first_receipt(&view),
                 };
                 Some(Question {

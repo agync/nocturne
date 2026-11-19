@@ -294,5 +294,6 @@ pub(crate) fn scrub_items(tx: &Transaction<'_>, items: &[String]) -> Result<u32>
     for item in items {
         tx.execute("DELETE FROM reflection_cites WHERE item_id = ?1", [item])?;
     }
+    super::question::forget_sentences_about(tx, items)?;
     Ok(total)
 }

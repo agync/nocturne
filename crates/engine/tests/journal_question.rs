@@ -1305,6 +1305,172 @@ fn an_answer_never_reaches_the_tray_or_a_notification() {
     assert!(w.f.engine.needs_you_public().unwrap().is_empty());
 }
 
+// ---- a deleted block takes its sentence with it ------------------------------------------------
+
+const NEEDLE: &str = "Not looking forward";
+
+/// Every place the sentence could still be read: the stored rows and what the views show.
+fn places_with_the_sentence(f: &Fixture) -> Vec<String> {
+    let c = conn(f);
+    let mut found = Vec::new();
+    for (name, sql) in [
+        ("items.metadata", "SELECT metadata FROM items"),
+        (
+            "items.text",
+            "SELECT text FROM items WHERE text IS NOT NULL",
+        ),
+        ("questions.text", "SELECT text FROM questions"),
+        ("pages.body", "SELECT body FROM pages"),
+        ("page_lines.text", "SELECT text FROM page_lines"),
+    ] {
+        let mut stmt = c.prepare(sql).unwrap();
+        let rows: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        if rows.iter().any(|t| t.contains(NEEDLE)) {
+            found.push(name.to_string());
+        }
+    }
+    for edition in [Edition::Screen, Edition::Print, Edition::Phone] {
+        let saved = f.engine.page_for(Some(date(PAGE)), edition).unwrap();
+        if serde_json::to_string(&saved).unwrap().contains(NEEDLE) {
+            found.push(format!("saved page {edition:?}"));
+        }
+    }
+    if serde_json::to_string(&compose(f, PAGE))
+        .unwrap()
+        .contains(NEEDLE)
+    {
+        found.push("composed page".into());
+    }
+    let day = f.engine.journal_day(date("2026-11-14")).unwrap();
+    if serde_json::to_string(&day).unwrap().contains(NEEDLE) {
+        found.push("journal day".into());
+    }
+    found
+}
+
+fn answered_world() -> World {
+    let w = world();
+    save_day(&w.f, PAGE);
+    w.f.clock.set_str("2026-11-14T08:15:00Z");
+    w.f.engine
+        .answer_question(date(PAGE), QuestionChoice::NotGreat)
+        .unwrap();
+    assert!(
+        places_with_the_sentence(&w.f).len() > 3,
+        "the sentence is kept while the block is"
+    );
+    w
+}
+
+fn assert_nothing_left(w: &World) {
+    assert_eq!(places_with_the_sentence(&w.f), Vec::<String>::new());
+    let (_, _, _, meta) = &answer_items(&w.f)[0];
+    let meta: serde_json::Value = serde_json::from_str(meta).unwrap();
+    assert_eq!(meta["sentence"], "", "blanked, not removed");
+    assert_eq!(meta["choice"], "notGreat", "the answer itself stays");
+    let day = w.f.engine.journal_day(date("2026-11-14")).unwrap();
+    let row = day.rows.iter().find(|r| r.kind == RowKind::Answer).unwrap();
+    assert_eq!(row.answer.as_ref().unwrap().sentence, "");
+    let (kind, text): (String, String) = conn(&w.f)
+        .query_row(
+            "SELECT kind, text FROM questions WHERE page_date = ?1",
+            [PAGE],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .unwrap();
+    assert_eq!((kind.as_str(), text.as_str()), ("journal", ""));
+    assert!(compose(&w.f, PAGE).question.is_none());
+    assert!(
+        w.f.engine
+            .page(Some(date(PAGE)))
+            .unwrap()
+            .unwrap()
+            .question
+            .is_none()
+    );
+}
+
+#[test]
+fn deleting_the_block_and_its_memory_leaves_the_sentence_nowhere() {
+    let w = answered_world();
+    let preview =
+        w.f.engine
+            .preview_delete(std::slice::from_ref(&w.memory), true, &[], false)
+            .unwrap();
+    assert!(preview.originals.iter().any(|o| o.item_id == w.block));
+    w.f.engine.forget(&preview.token).unwrap();
+    assert_nothing_left(&w);
+}
+
+#[test]
+fn taking_the_block_back_while_its_memory_lives_on_leaves_the_sentence_nowhere() {
+    let f = fixture();
+    save_day(&f, "2026-11-10");
+    f.clock.set_str("2026-11-14T06:55:00Z");
+    let (block, memory) = read_block(&f, EVENT, ENTRY, SUBJECT, EVENT, ENTRY);
+    f.clock.set_str("2026-11-14T07:02:00Z");
+    let w = World { f, block, memory };
+    save_day(&w.f, PAGE);
+    w.f.engine
+        .answer_question(date(PAGE), QuestionChoice::NotGreat)
+        .unwrap();
+    let other = keep(&w.f.engine, "Another note about the evening.");
+    sql(
+        &w.f,
+        "INSERT INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, NULL)",
+        params![w.memory, other],
+    );
+    w.f.engine.unkeep(&w.block).unwrap();
+    let alive: bool = conn(&w.f)
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM memories WHERE id = ?1)",
+            [&w.memory],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert!(alive, "the memory has another source");
+    assert_nothing_left(&w);
+}
+
+#[test]
+fn deleting_everything_clears_the_answer_and_the_question() {
+    let w = answered_world();
+    w.f.engine
+        .delete_everything(nocturne_engine::DELETE_PHRASE)
+        .unwrap();
+    assert_eq!(
+        places_with_the_sentence(&w.f),
+        Vec::<String>::new(),
+        "{:?}",
+        places_with_the_sentence(&w.f)
+    );
+}
+
+#[test]
+fn a_journal_question_whose_block_is_gone_is_not_shown_even_with_the_memory_left() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let other = keep(&w.f.engine, "Another note about the evening.");
+    sql(
+        &w.f,
+        "INSERT INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, NULL)",
+        params![w.memory, other],
+    );
+    sql(
+        &w.f,
+        "DELETE FROM memory_sources WHERE memory_id = ?1 AND item_id = ?2",
+        params![w.memory, w.block],
+    );
+    assert!(
+        compose(&w.f, PAGE).question.is_none(),
+        "no fall back to another source"
+    );
+}
+
 // ---- the week rule survives a forgotten memory -------------------------------------------------
 
 #[test]
