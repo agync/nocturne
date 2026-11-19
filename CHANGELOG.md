@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/agync/nocturne/compare/v0.7.0...v0.7.1) (2026-11-19)
+
+
+### Bug Fixes
+
+* **engine:** capture icacls output ([0ddc3e4](https://github.com/agync/nocturne/commit/0ddc3e4d7223cf0bb56cd783cf59cd462abf3ad0))
+
 ## [0.7.0](https://github.com/agync/nocturne/compare/v0.6.0...v0.7.0) (2026-11-19)
 
 
