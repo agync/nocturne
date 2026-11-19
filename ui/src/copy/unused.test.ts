@@ -75,6 +75,16 @@ const BUILT_AT_RUN_TIME: Array<{ prefix: string; why: string; producible: string
     producible: each(ITEM_KINDS, (k) => [`kind.${k}`, `kind.${k}.spoken`]),
   },
   {
+    prefix: "journal.",
+    why: "the journal screens, built by the lanes that follow the foundation; tighten this to named keys as each screen lands",
+    producible: Object.keys(copyDeck).filter((key) => key.startsWith("journal.")),
+  },
+  {
+    prefix: "feeling.",
+    why: "the check-in builds part, word and meaning ids from the word lists in ui/src/journal/feelings.ts",
+    producible: Object.keys(copyDeck).filter((key) => key.startsWith("feeling.")),
+  },
+  {
     prefix: "mark.",
     why: "t(`mark.${state}`)",
     producible: each(MARK_STATES, (s) => [`mark.${s}`]),

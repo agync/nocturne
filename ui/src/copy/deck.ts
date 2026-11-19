@@ -6,7 +6,9 @@ import capture from "./en-GB/capture.json";
 import common from "./en-GB/common.json";
 import editions from "./en-GB/editions.json";
 import fading from "./en-GB/fading.json";
+import feelings from "./en-GB/feelings.json";
 import guide from "./en-GB/guide.json";
+import journal from "./en-GB/journal.json";
 import memories from "./en-GB/memories.json";
 import models from "./en-GB/models.json";
 import needsYou from "./en-GB/needs-you.json";
@@ -49,4 +51,6 @@ export const enGB = {
   ...sent,
   ...models,
   ...guide,
+  ...journal,
+  ...feelings,
 };
