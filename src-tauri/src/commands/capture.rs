@@ -44,7 +44,11 @@ pub async fn announce<R: Runtime>(app: &AppHandle<R>, kept: &[Kept]) {
 
 /// Remember what the quick capture window kept: it may read and take back those items and no
 /// others (it has no business with the rest of what the person has kept).
-fn note_quick<R: Runtime>(app: &AppHandle<R>, webview: &tauri::Webview<R>, kept: &[Kept]) {
+pub(super) fn note_quick<R: Runtime>(
+    app: &AppHandle<R>,
+    webview: &tauri::Webview<R>,
+    kept: &[Kept],
+) {
     if webview.label() != crate::os::quick_capture::LABEL {
         return;
     }

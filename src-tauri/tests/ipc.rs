@@ -1952,3 +1952,78 @@ fn ask_place_defaults_to_auto() {
         nocturne_contract::AskPlace::Auto
     );
 }
+
+// ---- The journal ----
+
+fn feeling_json(word: &str) -> Value {
+    json!({
+        "part": "settled",
+        "point": {"pleasant": 0.5, "energy": -0.5},
+        "words": [word],
+    })
+}
+
+#[test]
+fn keep_note_with_a_feeling_keeps_announces_and_lands_on_the_journal_day() {
+    let h = harness();
+    let items = h.events(EVENT_ITEM);
+    let kept = h.ok(
+        "keep_note",
+        json!({
+            "text": "Walked by the river",
+            "source": "quickCapture",
+            "feeling": feeling_json("calm"),
+            "good": false,
+        }),
+    );
+    assert_eq!(kept["type"], "new");
+    assert_eq!(items.lock().unwrap().len(), 1, "announced like keep_text");
+
+    let day = h.ok("get_journal_day", json!({"day": null}));
+    assert_eq!(day["day"], "2026-11-13");
+    assert_eq!(day["today"], true);
+    assert_eq!(day["checkins"].as_array().unwrap().len(), 1);
+    assert_eq!(day["checkins"][0]["feeling"]["words"], json!(["calm"]));
+    let named = h.ok("get_journal_day", json!({"day": "2026-11-13"}));
+    assert_eq!(named["day"], day["day"]);
+    assert_eq!(
+        h.ok("list_journal_days", json!({})),
+        json!(["2026-11-13"]),
+        "dates come back as YYYY-MM-DD"
+    );
+    assert_eq!(
+        h.code("get_journal_day", json!({"day": "last week"})),
+        "invalid"
+    );
+}
+
+#[test]
+fn check_ins_and_good_things_are_kept_and_announced() {
+    let h = harness();
+    let items = h.events(EVENT_ITEM);
+    let checkin = h.ok(
+        "keep_check_in",
+        json!({"input": {
+            "feeling": feeling_json("calm"),
+            "line": null,
+            "urge": null,
+            "replaces": null,
+        }}),
+    );
+    assert_eq!(checkin["day"], "2026-11-13");
+    let thing = h.ok(
+        "keep_good_thing",
+        json!({"day": "2026-11-13", "text": "Sun on the balcony", "photoItemId": null}),
+    );
+    assert_eq!(thing["text"], "Sun on the balcony");
+    assert_eq!(items.lock().unwrap().len(), 2);
+    assert_eq!(
+        h.code(
+            "keep_good_thing",
+            json!({"day": "tomorrow", "text": "x", "photoItemId": null})
+        ),
+        "invalid"
+    );
+    let words = h.ok("top_feeling_words", json!({"part": "settled"}));
+    assert!(!words.as_array().unwrap().is_empty());
+}

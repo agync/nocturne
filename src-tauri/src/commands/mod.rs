@@ -18,6 +18,7 @@ mod files;
 pub use capture::{MAX_FILE_BYTES, MAX_RAW_BYTES, NOT_KEPT_NOTICE, keep_each, keep_paths};
 mod forget;
 mod help;
+mod journal;
 mod memories;
 mod models;
 mod needs;
@@ -148,6 +149,27 @@ pub const COMMAND_NAMES: &[&str] = &[
     "remove_old_model",
     "reset_models_to_tier",
     "get_guide",
+    "get_journal_day",
+    "list_journal_days",
+    "list_periods",
+    "dismiss_journal_intro",
+    "save_entry_text",
+    "place_in_entry",
+    "describe_photo",
+    "read_entry_now",
+    "keep_note",
+    "top_feeling_words",
+    "keep_check_in",
+    "mark_tried",
+    "keep_good_thing",
+    "set_left_out",
+    "move_to_day",
+    "confirm_mention",
+    "remove_mention",
+    "restore_mention",
+    "refile_mention",
+    "answer_same_name",
+    "entity_journal_days",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -274,6 +296,27 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         models::remove_old_model,
         models::reset_models_to_tier,
         help::get_guide,
+        journal::get_journal_day,
+        journal::list_journal_days,
+        journal::list_periods,
+        journal::dismiss_journal_intro,
+        journal::save_entry_text,
+        journal::place_in_entry,
+        journal::describe_photo,
+        journal::read_entry_now,
+        journal::keep_note,
+        journal::top_feeling_words,
+        journal::keep_check_in,
+        journal::mark_tried,
+        journal::keep_good_thing,
+        journal::set_left_out,
+        journal::move_to_day,
+        journal::confirm_mention,
+        journal::remove_mention,
+        journal::restore_mention,
+        journal::refile_mention,
+        journal::answer_same_name,
+        journal::entity_journal_days,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();
