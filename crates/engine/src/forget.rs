@@ -762,7 +762,8 @@ fn forget_in_pages(tx: &Transaction<'_>, kept_at: &str, was_pending: bool) -> Re
         if was_pending {
             view.pending = view.pending.saturating_sub(1);
         }
-        let needs = view.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        let needs =
+            view.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + view.more_needs_you;
         view.dek = template_dek(view.kept_count, needs, view.let_go_count);
         tx.execute(
             "UPDATE pages SET body = ?2, dek = ?3 WHERE date = ?1",
@@ -951,7 +952,8 @@ fn redact_pages(
         }) {
             view.question = None;
         }
-        let needs = view.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        let needs =
+            view.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + view.more_needs_you;
         let date_parsed: jiff::civil::Date = date.parse()?;
         view.headline = template_headline(date_parsed);
         view.dek = template_dek(view.kept_count, needs, view.let_go_count);
