@@ -1042,3 +1042,94 @@ fn phone_summaries_never_count_or_headline_private_lines() {
     );
     assert_eq!(f.engine.pages_for(Edition::Screen).unwrap()[0].needs_you, 2);
 }
+
+// ---- the name question is counted once -----------------------------------------------------------
+
+/// Two people called Sam and an entry saying "Sam": one open "Which Sam is this?" question.
+fn a_name_question(f: &Fixture) {
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    for (full, role) in [
+        ("Sam Jones", "your neighbour"),
+        ("Sam Patel", "Leo\u{2019}s teacher"),
+    ] {
+        let mut c = cand(full, Predicate::Knows, "you", &format!("{full} is {role}."));
+        c.subject_kind = Some(nocturne_contract::EntityKind::Person);
+        let (_, memory) = learn(&f.engine, &format!("{full} is {role}."), c);
+        conn.execute(
+            "UPDATE entities SET role = ?2 WHERE id = (SELECT entity_id FROM memories WHERE id = ?1)",
+            rusqlite::params![memory, role],
+        )
+        .unwrap();
+    }
+    let entry = keep(&f.engine, "Priya made tea. Sam came round to fix the sink.");
+    conn.execute(
+        "UPDATE items SET metadata = json_set(metadata, '$.journal', 'entry', \
+         '$.journal_day', '2026-11-12') WHERE id = ?1",
+        [&entry],
+    )
+    .unwrap();
+    let mut sam = cand(
+        "Sam",
+        Predicate::Promised,
+        "the sink",
+        "Sam will fix the sink.",
+    );
+    sam.subject_kind = Some(nocturne_contract::EntityKind::Person);
+    f.engine.apply(&entry, vec![sam]).unwrap();
+    assert_eq!(f.engine.same_name_questions(None).unwrap().len(), 1);
+}
+
+#[test]
+fn the_page_counts_the_name_question_with_the_lines_that_need_you() {
+    let f = fixture();
+    learn(&f.engine, "form", due("Trip form", "2026-11-16"));
+    learn(&f.engine, "rent", due("Rent", "2026-11-14"));
+    a_name_question(&f);
+    let p = compose(&f, "2026-11-14");
+    assert_eq!(
+        p.needs_you.len(),
+        2,
+        "the name question has no line of its own"
+    );
+    assert_eq!(
+        p.more_needs_you, 1,
+        "it is counted in the link under the lines"
+    );
+    assert!(p.dek.contains(" 3 need you."), "{}", p.dek);
+
+    let saved = save_day(&f, "2026-11-14");
+    assert_eq!(saved.more_needs_you, 1);
+    let p = f.engine.page(Some(date("2026-11-14"))).unwrap().unwrap();
+    assert_eq!((p.needs_you.len(), p.more_needs_you), (2, 1));
+
+    let print = f
+        .engine
+        .page_for(Some(date("2026-11-14")), Edition::Print)
+        .unwrap()
+        .unwrap();
+    assert_eq!(print.more_needs_you, 1);
+    let phone = f
+        .engine
+        .page_for(Some(date("2026-11-14")), Edition::Phone)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        phone.dek, "3 need you.",
+        "a phone can answer the name question too"
+    );
+    assert_eq!(phone.more_needs_you, 1);
+    assert_eq!(
+        nocturne_engine::phone_view(phone.clone()).unwrap(),
+        phone,
+        "settled"
+    );
+}
+
+#[test]
+fn a_page_with_no_name_question_counts_as_before() {
+    let f = fixture();
+    learn(&f.engine, "rent", due("Rent", "2026-11-14"));
+    let p = compose(&f, "2026-11-14");
+    assert_eq!(p.more_needs_you, 0);
+    assert!(p.dek.contains(" 1 needs you."), "{}", p.dek);
+}

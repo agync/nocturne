@@ -328,6 +328,7 @@ fn compose(
     // Needs you, already ranked by `needs_you_on` (due soonest, promises, which, unconfirmed).
     let mut needs_ids: HashSet<String> = HashSet::new();
     let mut needs: Vec<Planned> = Vec::new();
+    let mut name_questions = 0u32;
     for entry in needs_you_on(conn, day)? {
         let planned = match entry {
             NeedsYouEntry::Due { memory, due, .. } => {
@@ -383,8 +384,12 @@ fn compose(
                 }
                 Planned { line, private }
             }
-            // A name question lives in Needs you and the journal, not on the page.
-            NeedsYouEntry::SameName { .. } => continue,
+            // A name question lives in Needs you and the journal, not on the page. It is still
+            // waiting, so the page counts it.
+            NeedsYouEntry::SameName { .. } => {
+                name_questions += 1;
+                continue;
+            }
         };
         if screen || !planned.private {
             needs.push(planned);
@@ -527,7 +532,7 @@ fn compose(
         PageVariant::Normal
     };
 
-    let needs_total = ny_total as u32;
+    let needs_total = ny_total as u32 + name_questions;
     Ok(nocturne_contract::PageView {
         date: day.to_string(),
         page_number: number,
@@ -541,7 +546,7 @@ fn compose(
         upcoming,
         learned,
         question,
-        more_needs_you: (ny_total - ny_show) as u32,
+        more_needs_you: (ny_total - ny_show) as u32 + name_questions,
         more_changed: (ch_total - ch_show) as u32,
         kept_count,
         changes_count: ch_total as u32,
@@ -1103,7 +1108,8 @@ fn strip_stale(
     }
     if changed {
         let day: Date = page.date.parse()?;
-        let needs = page.needs_you.iter().filter(|l| !l.forgotten).count() as u32;
+        let needs =
+            page.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + page.more_needs_you;
         page.headline = template_headline(day);
         page.dek = template_dek(page.kept_count, needs, page.let_go_count);
     }
@@ -1353,8 +1359,46 @@ fn phone_only(conn: &Connection, page: &mut nocturne_contract::PageView) -> Resu
     {
         page.question = None;
     }
+    // Lines past the cap are not known one by one, but the name questions a phone can answer
+    // are: they are the only thing left to count beyond its lines.
+    page.more_needs_you = phone_name_questions(conn)?;
     *page = phone_view(std::mem::replace(page, empty_like(page)))?;
     Ok(())
+}
+
+/// The open "Which {name} is this?" questions a phone is shown: the questions whose block and
+/// people it may read, the same ones its journal day offers.
+fn phone_name_questions(conn: &Connection) -> Result<u32> {
+    let withheld = |item: &str| crate::remote::withheld_from_phones(conn, item);
+    let mut count = 0;
+    for q in crate::journal::mentions::open_questions(conn, None)? {
+        if withheld(&q.receipt.item_id)? {
+            continue;
+        }
+        let mut seen = 0;
+        for o in &q.options {
+            let memories: Vec<String> = conn
+                .prepare_cached(
+                    "SELECT id FROM memories WHERE entity_id = ?1 AND superseded_at IS NULL \
+                     AND forgetting = 0",
+                )?
+                .query_map([&o.entity_id], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            let mut visible = memories.is_empty();
+            for m in &memories {
+                let mut shown = !is_private_chain(conn, m)?;
+                for r in crate::rows::receipts_for(conn, m)? {
+                    shown &= !withheld(&r.item_id)?;
+                }
+                visible |= shown;
+            }
+            seen += u32::from(visible);
+        }
+        if seen >= 2 {
+            count += 1;
+        }
+    }
+    Ok(count)
 }
 
 fn empty_like(page: &nocturne_contract::PageView) -> nocturne_contract::PageView {
@@ -1393,7 +1437,14 @@ fn empty_like(page: &nocturne_contract::PageView) -> nocturne_contract::PageView
 /// the stored ones were written with everything in view. Safe to apply more than once.
 pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract::PageView> {
     let day: Date = page.date.parse()?;
-    let needs = needs_you_count(&page);
+    // On a page already made for a phone, `more_needs_you` counts the name questions the phone
+    // can answer, which the lines do not show. On any other it is not known to be safe.
+    let waiting = if page.edition == Edition::Phone {
+        page.more_needs_you
+    } else {
+        0
+    };
+    let needs = needs_you_count(&page) + waiting;
     let changes = page.changed.len() as u32;
     Ok(nocturne_contract::PageView {
         headline: template_headline(day),
@@ -1404,7 +1455,7 @@ pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract
             v => v,
         },
         // Lines past the cap are not known one by one, so none is claimed.
-        more_needs_you: 0,
+        more_needs_you: waiting,
         more_changed: 0,
         changes_count: changes,
         kept_count: 0,

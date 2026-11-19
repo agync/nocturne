@@ -640,8 +640,12 @@ pub fn headline_user(page: &PageView, nonce: &str) -> String {
             body.push_str(&format!("- {}\n", l.text.replace("**", "")));
         }
     }
+    // Every thing waiting in Needs you, the lines past the cap and the questions that have no
+    // line on the page included, so the headline and the rail say the same number.
+    let waiting =
+        page.needs_you.iter().filter(|l| !l.forgotten).count() as u32 + page.more_needs_you;
     format!(
-        "Page for {}, number {}. Kept: {}, changes: {}, let go: {}.\n\n{}",
+        "Page for {}, number {}. Kept: {}, changes: {}, let go: {}.\nWaiting in Needs you: {waiting}.\n\n{}",
         page.date,
         page.page_number,
         page.kept_count,
@@ -664,6 +668,63 @@ mod tests {
         for tier in [Tier::Small, Tier::Standard, Tier::Large, Tier::Unsupported] {
             assert_eq!(answer_system(tier, "n"), FULL, "{tier:?}");
         }
+    }
+
+    fn bare_page() -> PageView {
+        use nocturne_contract::{Edition, PageVariant};
+        PageView {
+            date: "2026-11-14".into(),
+            page_number: 2,
+            edition: Edition::Screen,
+            variant: PageVariant::Normal,
+            headline: String::new(),
+            dek: String::new(),
+            needs_you: Vec::new(),
+            changed: Vec::new(),
+            let_go: Vec::new(),
+            upcoming: Vec::new(),
+            learned: Vec::new(),
+            question: None,
+            more_needs_you: 0,
+            more_changed: 0,
+            kept_count: 4,
+            changes_count: 0,
+            let_go_count: 0,
+            catch_up_days: 0,
+            private_skipped: 0,
+            pending: 0,
+            tidied_from: None,
+            tidied_to: None,
+            update: None,
+            journal_line: None,
+            journal_skipped: None,
+        }
+    }
+
+    #[test]
+    fn the_headline_prompt_says_how_many_are_waiting_in_needs_you() {
+        let line = |text: &str| nocturne_contract::PageLine {
+            id: "l".into(),
+            kind: nocturne_contract::LineKind::Due,
+            text: text.into(),
+            memory_ids: Vec::new(),
+            receipts: Vec::new(),
+            choices: Vec::new(),
+            conflict_id: None,
+            subject: None,
+            done: false,
+            forgotten: false,
+            on: None,
+            last_used: None,
+        };
+        let mut page = bare_page();
+        page.needs_you = vec![line("Rent is due."), line("Form is due.")];
+        assert!(headline_user(&page, "n").contains("Waiting in Needs you: 2.\n"));
+        // A name question has no line, and counts in "more".
+        page.more_needs_you = 1;
+        let prompt = headline_user(&page, "n");
+        assert!(prompt.contains("Waiting in Needs you: 3.\n"), "{prompt}");
+        assert_eq!(prompt.matches("Waiting in Needs you").count(), 1);
     }
 
     const REFLECT_FULL: &str = include_str!("golden/reflect_system_full.txt").trim_ascii_end();
