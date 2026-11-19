@@ -272,7 +272,7 @@ pub enum RemoteDecision {
     Never,
 }
 
-/// One row per registered command: what a paired phone may do. Only the ten `Allow` rows
+/// One row per registered command: what a paired phone may do. Only the `Allow` rows
 /// are reachable from a phone, each through its own typed call, never by name; the journal
 /// calls are typed the same way (see [`PHONE_ONLY_CALLS`]).
 pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
@@ -396,7 +396,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("remove_old_model", Never),
         ("reset_models_to_tier", Never),
         ("get_guide", Never),
-        ("get_journal_day", Never),
+        ("get_journal_day", Allow),
         ("list_journal_days", Never),
         ("list_periods", Never),
         ("dismiss_journal_intro", Never),
@@ -406,7 +406,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("read_entry_now", Never),
         ("keep_note", Never),
         ("top_feeling_words", Never),
-        ("keep_check_in", Never),
+        ("keep_check_in", Allow),
         ("mark_tried", Never),
         ("keep_good_thing", Never),
         ("set_left_out", Never),
@@ -415,7 +415,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("remove_mention", Never),
         ("restore_mention", Never),
         ("refile_mention", Never),
-        ("answer_same_name", Never),
+        ("answer_same_name", Allow),
         ("entity_journal_days", Never),
         ("get_reflection", Never),
         ("reflect", Never),
@@ -426,15 +426,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
 
 /// What a phone may do that no window command does: fetch a cited original, end its session,
 /// and the journal calls, which answer from the computer's own journal module.
-pub const PHONE_ONLY_CALLS: &[&str] = &[
-    "get_original",
-    "disconnect",
-    "get_journal_day",
-    "get_look_back",
-    "look_back",
-    "keep_check_in",
-    "answer_same_name",
-];
+pub const PHONE_ONLY_CALLS: &[&str] = &["get_original", "disconnect", "get_look_back", "look_back"];
 
 #[cfg(test)]
 mod tests {
@@ -448,7 +440,7 @@ mod tests {
     use super::*;
     use crate::commands::COMMAND_NAMES;
 
-    /// A phone's calls are exactly the ten allowed commands, the two phone verbs and the
+    /// A phone's calls are exactly the allowed commands, the two phone verbs and the
     /// journal calls: the `cmd` tag of each call, in snake case, names one of them.
     #[test]
     fn phone_calls_are_the_allowed_commands_and_the_phone_verbs() {
@@ -573,7 +565,7 @@ mod tests {
             .filter(|(_, d)| *d == RemoteDecision::Allow)
             .map(|(n, _)| *n)
             .collect();
-        let ten: BTreeSet<&str> = [
+        let allowed_calls: BTreeSet<&str> = [
             "get_status",
             "keep_text",
             "keep_bytes",
@@ -584,10 +576,13 @@ mod tests {
             "get_page",
             "list_pages",
             "get_item",
+            "get_journal_day",
+            "keep_check_in",
+            "answer_same_name",
         ]
         .into_iter()
         .collect();
-        assert_eq!(allowed, ten);
+        assert_eq!(allowed, allowed_calls);
         for never in ["report_recording", "delete_everything", "get_remote"] {
             assert!(
                 REMOTE_DECISIONS.contains(&(never, RemoteDecision::Never)),

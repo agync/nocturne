@@ -1,4 +1,4 @@
-// What the phone app may do, and what it keeps about itself. The ten allowed calls, the journal
+// What the phone app may do, and what it keeps about itself. The allowed calls, the journal
 // calls and the two phone verbs are the whole of `PhoneEngine`; nothing else crosses the sealed
 // channel.
 

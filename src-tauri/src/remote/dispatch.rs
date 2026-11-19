@@ -1,4 +1,4 @@
-//! What a paired phone may do: a typed match over [`RemoteCall`], the ten allowed calls and
+//! What a paired phone may do: a typed match over [`RemoteCall`], the allowed calls and
 //! the two phone verbs, each through the same engine and command cores the windows use. Never a
 //! generic forwarder: nothing here names a command, a folder or another phone's item.
 //!

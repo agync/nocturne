@@ -355,7 +355,7 @@ pub enum PhoneError {
     SessionExpired,
 }
 
-/// Everything a phone may ask for: the ten allowed calls, the journal calls and the two phone
+/// Everything a phone may ask for: the allowed calls, the journal calls and the two phone
 /// verbs.
 ///
 /// A keep may carry a feeling and a good-thing mark; both are optional and default to nothing,
