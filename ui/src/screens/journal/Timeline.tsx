@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../components/Icon/Icon";
+import { choiceText } from "../../components/PageSheet/journalQuestion";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { CheckIn, DayPart, JournalDay, Mention, TimelineRow } from "../../engine/bindings";
@@ -232,7 +233,8 @@ function Row({
     row.part === "afterMidnight" ? t("journal.timeline.afterMidnight", { time }) : time;
   const mentions = row.mentions.filter((m) => m.state !== "removed");
   const text = lineOf(row);
-  const reading = unread(row) && row.kind !== "entry" && row.kind !== "checkin";
+  const reading =
+    unread(row) && row.kind !== "entry" && row.kind !== "checkin" && row.kind !== "answer";
   const hasMenu = row.kind !== "entry";
   const photo = row.kind === "photo";
   const src = row.item.originalPath ? platform.originalSrc(row.item.originalPath) : null;
@@ -276,6 +278,11 @@ function Row({
             {data.today
               ? t("journal.entry.heading.today")
               : t("journal.entry.heading.day", { weekday: weekdayOf(data.day) })}
+          </span>
+        ) : row.answer ? (
+          <span className={styles.text}>
+            <span className={styles.choice}>{choiceText(row.answer.choice)}</span>
+            {row.answer.line ? ` ${row.answer.line}` : ""}
           </span>
         ) : (
           <span className={styles.text}>{text}</span>
@@ -362,8 +369,13 @@ function Row({
           openCard={openCard}
         />
       ) : null}
-      {row.item.fromDevice || mentions.length > 0 ? (
+      {row.item.fromDevice || mentions.length > 0 || row.answer ? (
         <div className={styles.sub}>
+          {row.answer ? (
+            <a className={styles.about} href={`#/items/${row.answer.about}`} tabIndex={-1}>
+              {t("journal.timeline.about", { sentence: row.answer.sentence })}
+            </a>
+          ) : null}
           {row.item.fromDevice ? (
             <span className={styles.meta}>
               {t("journal.timeline.fromDevice", { phone: row.item.fromDevice })}
@@ -418,7 +430,11 @@ export function Timeline({
           <span>{t("journal.notReady.body")}</span>
         </div>
       ) : null}
-      {empty && !failed ? <p className={styles.empty}>{t("journal.timeline.empty")}</p> : null}
+      {empty && !failed ? (
+        <p className={styles.empty}>
+          {t(data.today ? "journal.timeline.empty" : "journal.timeline.emptyPast")}
+        </p>
+      ) : null}
       {PARTS_OF_DAY.map((part) => {
         const rows = data.rows.filter((r) => r.part === part);
         if (rows.length === 0) return null;

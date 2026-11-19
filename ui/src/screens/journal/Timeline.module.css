@@ -331,3 +331,19 @@
     padding-right: var(--s-6);
   }
 }
+
+.choice {
+  font-weight: 500;
+}
+
+.about {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.4 var(--font-sans);
+  text-decoration: underline;
+  text-decoration-color: var(--rule2);
+  text-underline-offset: 3px;
+}
+
+.about:hover {
+  color: var(--ink);
+}
