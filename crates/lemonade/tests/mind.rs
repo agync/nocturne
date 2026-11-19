@@ -9,7 +9,9 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use nocturne_contract::{EntityKind, MemoryView, PageView, Tier};
-use nocturne_engine::{ExtractContext, Fact, Mind, MindError, Predicate};
+use nocturne_engine::{
+    ExtractContext, Fact, Mind, MindError, Predicate, ReflectInput, ReflectItem,
+};
 use nocturne_lemonade::{Dirs, LemonadeMind, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -2253,4 +2255,75 @@ async fn a_question_is_embedded_as_a_search_query() {
 fn preset(tier: Tier) -> nocturne_lemonade::selection::Picks {
     use nocturne_lemonade::selection;
     selection::picks(&selection::Selection::preset(tier))
+}
+
+fn reflect_input() -> ReflectInput {
+    let item = |id: &str, at: &str, label: &str, text: &str, background: bool| ReflectItem {
+        id: id.into(),
+        at: at.into(),
+        label: label.into(),
+        text: text.into(),
+        background,
+    };
+    ReflectInput {
+        day: "2026-11-14".parse().unwrap(),
+        so_far: false,
+        items: vec![
+            item("a", "7:52 am", "note", "Walked to the old station.", false),
+            item("b", "9:10 am", "document", "Leo's trip form", true),
+            item("c", "6:10 pm", "today's entry", "Cooked with Sam.", false),
+        ],
+    }
+}
+
+#[tokio::test]
+async fn a_scripted_reflection_becomes_cited_sentences_and_the_items_are_fenced() {
+    let r = rig().await;
+    r.script(json!([{"content": "You **walked to the old station** [i1]. You also kept **Leo's trip form** [i2]. You felt great. You **cooked with Sam** [i3][i9]."}]))
+        .await;
+    let got = r.mind.reflect(&reflect_input()).await.unwrap();
+    let got: Vec<_> = got
+        .iter()
+        .map(|s| (s.text.as_str(), s.cites.clone()))
+        .collect();
+    assert_eq!(
+        got,
+        vec![
+            ("You **walked to the old station**.", vec![0]),
+            ("You also kept **Leo's trip form**.", vec![1]),
+            ("You **cooked with Sam**.", vec![2]),
+        ]
+    );
+    let calls = r.seen("/v1/chat/completions").await;
+    let system = calls[0]["body"]["messages"][0]["content"].as_str().unwrap();
+    let user = calls[0]["body"]["messages"][1]["content"].as_str().unwrap();
+    assert!(system.contains("<items-") && system.contains("untrusted"));
+    assert!(user.contains("<items-") && user.contains("</items-"));
+    assert!(user.contains("[i1] 7:52 am, note: Walked to the old station."));
+    assert!(user.contains("[i3] 6:10 pm, today's entry: Cooked with Sam."));
+    let background = user.lines().find(|l| l.starts_with("[i2]")).unwrap();
+    assert!(background.contains("kept from elsewhere: mention only as background"));
+    assert_eq!(user.matches("[i").count(), 3);
+}
+
+#[tokio::test]
+async fn the_fake_engine_reflects_with_a_receipt_and_an_empty_day_asks_nothing() {
+    let r = rig().await;
+    let got = r.mind.reflect(&reflect_input()).await.unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].cites, vec![0]);
+    let empty = ReflectInput {
+        items: Vec::new(),
+        ..reflect_input()
+    };
+    assert!(r.mind.reflect(&empty).await.unwrap().is_empty());
+    assert_eq!(r.seen("/v1/chat/completions").await.len(), 1);
+}
+
+#[tokio::test]
+async fn a_reflection_with_no_receipts_is_empty() {
+    let r = rig().await;
+    r.script(json!([{"content": "You had a lovely day."}]))
+        .await;
+    assert!(r.mind.reflect(&reflect_input()).await.unwrap().is_empty());
 }

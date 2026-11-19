@@ -1273,6 +1273,10 @@ fn default_chat_content(body: &Value) -> String {
         return json!({"title": "Fake", "text": "fake text", "summary": "s", "language": "en"})
             .to_string();
     }
+    let system = body["messages"][0]["content"].as_str().unwrap_or("");
+    if system.contains("reflection on one day") {
+        return "You kept a note that day **the fake engine says so** [i1].".to_string();
+    }
     "The fake engine says so [m1].".to_string()
 }
 
