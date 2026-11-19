@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { canCaptureSound, startWavCapture } from "../../app/wavCapture";
 import { formatBytes, formatDuration, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { PhoneError, PhoneKept } from "../../engine/bindings";
+import type { FeelingPart, PhoneError, PhoneKept } from "../../engine/bindings";
 import { copy } from "../bytes";
 import { sniffMime } from "../crypto";
 import {
@@ -15,6 +15,7 @@ import {
 } from "../engine";
 import { MAX_CAPTION, MAX_ITEM, MAX_TEXT } from "../protocol";
 import { withKeepLock } from "../queue";
+import { FeelingPick, feelingOfPick, GoodSwitch, type Pick } from "./Feeling";
 import { BackBar, Button, Icon, Page } from "./ui";
 
 type Kind = "text" | "photo" | "recording";
@@ -31,6 +32,9 @@ type State =
       url: string | null;
       undone: boolean;
       late: boolean;
+      /** The word kept with it, and whether it carried a feeling or a good-thing mark. */
+      word: string | null;
+      marked: boolean;
     }
   | { name: "waiting"; kind: Kind; title: string; at: number; url: string | null }
   | { name: "problem"; kind: "big" | "failed" | "kind" };
@@ -44,7 +48,7 @@ const KIND_LABEL: Record<
   recording: "phone.keep.kind.recording",
 };
 
-function clientId(): string {
+export function clientId(): string {
   const c = globalThis.crypto;
   if (typeof c.randomUUID === "function") return c.randomUUID();
   return Array.from(c.getRandomValues(new Uint8Array(16)), (b) =>
@@ -71,6 +75,10 @@ interface KeepProps {
   now(): number;
   onHome(): void;
   onQueued(): void;
+  /** "More words…" leaves for the check-in at this part. */
+  onMoreWords?(part: FeelingPart): void;
+  /** What was typed, kept while the check-in is open so nothing typed is lost. */
+  draft?: { current: string };
   /** For a scripted build that has no microphone. */
   recorder?: RecorderFactory;
 }
@@ -126,10 +134,18 @@ export function Keep({
   now,
   onHome,
   onQueued,
+  onMoreWords,
+  draft,
   recorder = browserRecorder,
 }: KeepProps) {
   const [state, setState] = useState<State>({ name: "compose" });
-  const [text, setText] = useState("");
+  const [text, setTextNow] = useState(draft?.current ?? "");
+  const setText = (next: string) => {
+    setTextNow(next);
+    if (draft) draft.current = next;
+  };
+  const [feel, setFeel] = useState<Pick | null>(null);
+  const [good, setGood] = useState(false);
   const [caption, setCaption] = useState("");
   const [micError, setMicError] = useState<"denied" | "none" | null>(null);
   const urls = useRef(new Set<string>());
@@ -164,6 +180,10 @@ export function Keep({
   const connected = connection.kind === "connected";
 
   const submit = async (kind: Kind, body: { text?: string; blob?: Blob; caption?: string }) => {
+    // A voice note is kept with how it feels; the good-thing mark is for notes and photos.
+    const feeling = feel ? feelingOfPick(feel) : undefined;
+    const goodMark = kind !== "recording" && good ? true : undefined;
+    const marks = feeling || goodMark ? { feeling, good: goodMark } : undefined;
     const size =
       body.text !== undefined ? encoder.encode(body.text).length : (body.blob?.size ?? 0);
     const limit = kind === "text" ? MAX_TEXT : MAX_ITEM;
@@ -178,6 +198,7 @@ export function Keep({
       text: body.text,
       blob: body.blob,
       caption: body.caption,
+      ...marks,
       size,
       createdAt: now(),
     };
@@ -203,15 +224,26 @@ export function Keep({
     try {
       const kept = await withKeepLock(() =>
         kind === "text"
-          ? engine.keepText(body.text ?? "", keep.clientId)
+          ? engine.keepText(body.text ?? "", keep.clientId, marks)
           : kind === "photo"
-            ? engine.keepBytes(body.blob as Blob, keep.clientId, body.caption)
-            : engine.keepRecording(body.blob as Blob, keep.clientId),
+            ? engine.keepBytes(body.blob as Blob, keep.clientId, body.caption, marks)
+            : engine.keepRecording(body.blob as Blob, keep.clientId, marks),
       );
       await drop();
-      setState({ name: "kept", kind, kept, url: preview, undone: false, late: false });
+      setState({
+        name: "kept",
+        kind,
+        kept,
+        url: preview,
+        undone: false,
+        late: false,
+        word: feel?.word ?? null,
+        marked: marks !== undefined,
+      });
       setText("");
       setCaption("");
+      setFeel(null);
+      setGood(false);
     } catch (e) {
       if (e instanceof ConnectionError) return wait();
       if (e instanceof PhoneRequestError) {
@@ -232,6 +264,8 @@ export function Keep({
     setState({ name: "compose" });
     setText("");
     setCaption("");
+    setFeel(null);
+    setGood(false);
     setTimeout(() => textArea.current?.focus(), 0);
   };
 
@@ -263,7 +297,9 @@ export function Keep({
           setMicError(e);
           setState({ name: "compose" });
         }}
-      />
+      >
+        <FeelingPick pick={feel} onPick={setFeel} />
+      </Recorder>
     );
   }
 
@@ -351,8 +387,10 @@ export function Keep({
                 e.target.value = "";
               }}
             />
-            <div className="ph-spacer ph-stack" style={{ gap: 12 }}>
-              <p className="ph-hint">{t("phone.keep.fromName", { name: deviceName })}</p>
+            <FeelingPick pick={feel} onPick={setFeel} onMore={(part) => onMoreWords?.(part)} />
+            <GoodSwitch on={good} onChange={setGood} />
+            <p className="ph-hint">{t("phone.keep.fromName", { name: deviceName })}</p>
+            <div className="ph-spacer ph-pin">
               <Button kind="primary" type="submit" disabled={text.trim() === ""}>
                 {t("phone.keep.submit")}
               </Button>
@@ -400,15 +438,18 @@ export function Keep({
               onChange={(e) => setCaption(capped(e.target.value, MAX_CAPTION))}
             />
           </div>
-          <div className="ph-spacer" />
-          <Button
-            kind="primary"
-            onClick={() =>
-              void submit("photo", { blob: state.blob, caption: caption.trim() || undefined })
-            }
-          >
-            {t("phone.keep.submit")}
-          </Button>
+          <FeelingPick pick={feel} onPick={setFeel} />
+          <GoodSwitch on={good} onChange={setGood} />
+          <div className="ph-spacer ph-pin">
+            <Button
+              kind="primary"
+              onClick={() =>
+                void submit("photo", { blob: state.blob, caption: caption.trim() || undefined })
+              }
+            >
+              {t("phone.keep.submit")}
+            </Button>
+          </div>
         </main>
       </Page>
     );
@@ -508,10 +549,14 @@ export function Keep({
             <Icon name="check" size={22} />
           </span>
           <h1 className="ph-kept-word" tabIndex={-1} ref={heading}>
-            {t("phone.keep.kept")}
+            {kept.word
+              ? t("journal.quick.keptWithLead", { word: kept.word })
+              : t("phone.keep.kept")}
           </h1>
         </div>
-        <p className="ph-body">{t("phone.keep.kept.body")}</p>
+        <p className="ph-body">
+          {kept.marked ? t("phone.journal.keep.body") : t("phone.keep.kept.body")}
+        </p>
         <KeptCard
           kind={kept.kind}
           title={kept.kept.item.title}
@@ -606,11 +651,13 @@ function Recorder({
   onCancel,
   onDone,
   onError,
+  children,
 }: {
   factory: RecorderFactory;
   onCancel(): void;
   onDone(blob: Blob | null): void;
   onError(kind: "denied" | "none"): void;
+  children?: React.ReactNode;
 }) {
   const [seconds, setSeconds] = useState(0);
   const [live, setLive] = useState(false);
@@ -669,6 +716,11 @@ function Recorder({
         <p className="ph-body" style={{ maxWidth: 300 }}>
           {t("phone.record.hint")}
         </p>
+        {children ? (
+          <div className="ph-stack" style={{ alignSelf: "stretch", textAlign: "left" }}>
+            {children}
+          </div>
+        ) : null}
         <div className="ph-spacer ph-stack" style={{ alignItems: "center", gap: 14 }}>
           <button
             type="button"
