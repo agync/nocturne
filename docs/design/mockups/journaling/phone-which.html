@@ -6,7 +6,7 @@
 <title>Phone · which Sam is this · Nocturne</title>
 <link rel="stylesheet" href="mock.css">
 </head>
-<body data-frame="phone" data-back="Needs you" data-states="which done">
+<body data-frame="phone" data-back="Needs you" data-states="which done gone">
 <main id="content" class="pmain">
   <div data-state="which" style="display: flex; flex-direction: column; gap: 14px">
     <span class="badge">Same name</span>
@@ -26,8 +26,13 @@
     <p class="plead">Only this one. You can change it on your computer.</p>
   </div>
 
+  <div data-state="gone" style="display: flex; flex-direction: column; gap: 12px; padding-top: 24px">
+    <p class="ptitle">Nothing to answer here now.</p>
+    <p class="plead">It was answered on your computer, or what it was about is gone.</p>
+  </div>
+
   <div class="pfoot" data-state="which"><span class="pbtn" data-kind="primary">This one</span><span class="pbtn" data-kind="quiet">Leave it</span></div>
-  <div class="pfoot" data-state="done"><span class="pbtn" data-kind="primary">Back to today</span></div>
+  <div class="pfoot" data-state="done gone"><span class="pbtn" data-kind="primary">Back to today</span></div>
 </main>
 <script src="shell.js"></script>
 </body>

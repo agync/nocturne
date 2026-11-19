@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The page’s question, from the journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Today" data-states="ask answered added">
+<div id="content" class="sheet">
+  <div class="pageMock">
+    <p class="eyebrow">Friday 20 November</p>
+    <h1 class="pageTitle">Nothing needs you today.</h1>
+    <p class="pageDeck">Overnight Nocturne read 9 things you kept and noticed 1 change.</p>
+
+    <section class="section">
+      <h2 class="label">What changed · 1</h2>
+      <p class="pageLine">Leo’s swimming moved from Wednesday to <strong>Monday</strong>, same time.</p>
+      <ul class="rchips"><li class="rchip"><span data-icon="pen" data-size="14"></span>Note · Thu 19 Nov</li></ul>
+    </section>
+
+    <section class="qbox" aria-labelledby="q">
+      <p class="label">One question · from your journal</p>
+
+      <p id="q" class="qtext" data-state="ask">Yesterday you wrote: <span class="qquote">“Parents’ evening at six. Not looking forward to it.”</span> How did it go?</p>
+      <p class="qtext" data-state="answered added" style="color: var(--ink2); font-size: 1.125rem">Yesterday you wrote: <span class="qquote">“Parents’ evening at six. Not looking forward to it.”</span> How did it go?</p>
+      <div class="buttons" style="gap: var(--s-2)">
+        <span class="rchip"><span data-icon="pen" data-size="14"></span>Entry · Thu 19 Nov · 8:12 am</span>
+      </div>
+
+      <div class="qchoices" data-state="ask">
+        <span class="qchoice">Fine</span>
+        <span class="qchoice">Not great</span>
+        <span class="qchoice">Not yet</span>
+      </div>
+
+      <div data-state="answered" style="display: flex; flex-direction: column; gap: var(--s-3)">
+        <p class="qdone">Not great. Kept on today’s journal.</p>
+        <label class="fieldLabel" for="more">Anything to add? (optional)</label>
+        <div class="lineRow">
+          <div class="fieldInput" id="more"><span>Mrs Okafor is worried about his reading<span class="caret"></span></span></div>
+          <span class="button" data-variant="secondary">Add</span>
+        </div>
+      </div>
+
+      <div data-state="added" style="display: flex; flex-direction: column; gap: var(--s-2)">
+        <p class="qdone">Not great. Kept on today’s journal.</p>
+        <p class="muted">“Mrs Okafor is worried about his reading.” Added.</p>
+        <span class="button" data-variant="quiet" data-flush style="align-self: flex-start">Open today’s journal ›</span>
+      </div>
+    </section>
+
+    <p class="muted" style="padding-left: var(--s-4)">Yesterday, looked back on ›</p>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

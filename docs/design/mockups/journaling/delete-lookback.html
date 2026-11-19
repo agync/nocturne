@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deleting a recap · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="recap deleted reflection">
+<div id="content" class="sheet" style="align-items: center">
+  <a class="back" href="#" style="align-self: flex-start"><span aria-hidden="true">←</span> Journal</a>
+  <article class="reflect" style="max-width: 860px">
+    <header class="headText">
+      <p class="eyebrow" data-state="recap deleted">9 to 15 November</p>
+      <h1 class="title" data-state="recap deleted">Your week</h1>
+      <p class="eyebrow" data-state="reflection">Wednesday 18 November · Looked back on</p>
+      <h1 class="title" data-state="reflection">Wednesday 18 November</h1>
+    </header>
+
+    <section class="rsection" data-state="recap">
+      <h2 class="rlabel">Highlights</h2>
+      <div class="highlights">
+        <div class="hcard"><span class="photoBox small"><span data-icon="image" data-size="16"></span></span><div><span class="hday">Tuesday 10</span><span class="hline">“Leo read the whole of his school play part to Gran on the phone.”</span></div></div>
+        <div class="hcard"><span class="feel" data-part="lit" style="align-self: flex-start"><span data-icon="lit" data-size="14"></span>proud</span><div><span class="hday">Wednesday 11</span><span class="hline">“Finished the Hendersons’ kitchen. They loved it.”</span></div></div>
+      </div>
+    </section>
+
+    <section class="rsection" data-state="reflection">
+      <h2 class="rlabel">The day</h2>
+      <p class="rtext">You took <span class="span">Leo to swimming</span> straight from school, and <span class="span">Sam cooked</span> for once.</p>
+    </section>
+
+    <footer class="footerMeta" data-state="recap reflection">
+      <p class="meta" data-state="recap">Written on this computer overnight on Sunday, from 7 days in your journal.</p>
+      <p class="meta" data-state="reflection">Written overnight on this computer, from 7 things you kept that day.</p>
+      <div class="buttons">
+        <span class="button" data-variant="secondary" data-state="reflection">Write it again</span>
+        <span class="button" data-variant="quiet"><span data-icon="print" data-size="16"></span>Print</span>
+        <span class="button" data-variant="quiet" style="margin-left: auto; color: var(--ember)" data-state="recap">Delete this recap</span>
+        <span class="button" data-variant="quiet" style="margin-left: auto; color: var(--ember)" data-state="reflection">Delete this reflection</span>
+      </div>
+    </footer>
+
+    <!-- After deleting: the week at a glance, and a way to put it together again -->
+    <div class="toast" role="status" data-state="deleted">
+      <span>Deleted. Everything you kept from that week is still here.</span>
+    </div>
+    <section class="rsection" data-state="deleted">
+      <h2 class="rlabel">At a glance</h2>
+      <ol class="glance">
+        <li><span>Kept</span><span>31 things kept: 18 notes, 5 voice notes, 6 photos, 2 documents.</span></li>
+        <li><span>Felt</span><span>tired (3), content (2), stressed (2), proud (1).</span></li>
+        <li><span>Good things</span><span>First frost on the allotment. Dug the last of the leeks with Gran.</span></li>
+        <li><span>With</span><span>Leo, Gran, Sam, Hendersons (new). At: the allotment.</span></li>
+      </ol>
+      <div class="buttons"><span class="button" data-variant="primary">Look back on this week</span></div>
+    </section>
+  </article>
+</div>
+
+<div id="overlay" data-state="recap reflection">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="ltitle" data-state="recap">
+      <h2 id="ltitle" class="dialogTitle">Delete this recap?</h2>
+      <p>Only the recap goes. Everything you kept from 9 to 15 November stays: entries, check-ins, good things, notes and photos.</p>
+      <p class="small">Nocturne won’t put this week together again unless you ask. To keep one thing out of recaps for good, choose “Leave out of reflections” on it.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep it</span>
+        <span class="button" data-variant="forget" data-filled>Delete recap</span>
+      </div>
+    </div>
+    <div class="panel" role="dialog" aria-labelledby="rtitle" data-state="reflection">
+      <h2 id="rtitle" class="dialogTitle">Delete this reflection?</h2>
+      <p>Only the writing goes. Everything you kept on Wednesday 18 November stays: your entry, check-ins, good things, notes and photos.</p>
+      <p class="small">Nocturne won’t write it again unless you ask.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep it</span>
+        <span class="button" data-variant="forget" data-filled>Delete reflection</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

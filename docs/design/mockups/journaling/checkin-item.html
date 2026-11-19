@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A check-in’s own page · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="item delete">
+<div id="content" class="sheet" data-flush>
+  <div class="itemPage">
+    <div class="itemPreview">
+      <div class="field" role="img" aria-label="Low, a little, at 8:05 am">
+        <span class="part" data-part="wound"><span data-icon="wound" data-size="14"></span>Wound up</span>
+        <span class="part" data-part="lit">Lit up<span data-icon="lit" data-size="14"></span></span>
+        <span class="part" data-part="low"><span data-icon="low" data-size="14"></span>Low</span>
+        <span class="part" data-part="settled">Settled<span data-icon="settled" data-size="14"></span></span>
+        <span class="dot big" data-part="low" style="left: 32%; top: 68%"></span>
+      </div>
+      <p class="quote">“Bad night.”</p>
+    </div>
+
+    <div class="itemSide" data-part="low">
+      <a class="back" href="#"><span aria-hidden="true">←</span> Journal</a>
+      <p class="eyebrow">Check-in · Thu 19 Nov · 8:05 am</p>
+      <h1 class="title"><span data-icon="low" data-size="28"></span>Low · tired</h1>
+
+      <section class="section">
+        <h2 class="label">What you wrote</h2>
+        <p>Bad night.</p>
+      </section>
+
+      <p class="aboutNote">Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade and Ask never uses them.</p>
+
+      <div class="buttons">
+        <span class="button" data-variant="secondary">Change</span>
+        <span class="button" data-variant="secondary">Leave out of reflections</span>
+        <span class="button" data-variant="forget">Delete…</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay" data-state="delete">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="ctitle">
+      <h2 id="ctitle" class="dialogTitle">Delete this check-in?</h2>
+      <p class="muted">Low · tired at 8:05 am, and the line you wrote with it, go from this computer for good.</p>
+      <ul class="alsoGoes">
+        <li><span>1 line in your reflections and recaps cites it and will be taken out.</span></li>
+        <li><span class="small">Anything you exported or printed is out of reach. Nocturne can’t delete it.</span></li>
+      </ul>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep it</span>
+        <span class="button" data-variant="forget" data-filled>Delete check-in</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>
