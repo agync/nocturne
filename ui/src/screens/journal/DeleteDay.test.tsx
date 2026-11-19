@@ -154,6 +154,8 @@ describe("Delete this day", () => {
     const kept = within(dialog).getByRole("region", { name: "Kept on this day" });
     const boxes = within(kept).getAllByRole("checkbox").length - 1;
     expect(within(kept).getByText(`${boxes} of ${boxes}`)).toBeInTheDocument();
+    expect(within(dialog).queryByText(/^Your reflection on this day/)).toBeNull();
+    expect(within(dialog).getByText(/cite these and will be taken out\.$/)).toBeInTheDocument();
   });
 
   it("says what else goes: the memories, the reflection and what is out of reach", async () => {

@@ -378,10 +378,9 @@ export function DeleteDay({ data, onClose, onDone }: DeleteDayProps) {
     }
   };
 
-  const group = mine.filter((r) => !cannot.has(r.key));
   const tickedRows = rowsAll.filter((r) => ticked.has(r.key) && !cannot.has(r.key));
   const count = tickedRows.length;
-  const allOfDay = group.length > 0 && group.every((r) => ticked.has(r.key));
+  const allOfDay = cannot.size === 0 && mine.length > 0 && mine.every((r) => ticked.has(r.key));
   const synced = prepared?.picked === [...ticked].sort().join("|");
   const idle = phase === "ready";
   const memories = count > 0 && synced ? (listing?.memories ?? []) : [];
