@@ -106,7 +106,8 @@ pub fn journal_day_of(t: Timestamp, page_hm: (i8, i8), tz: &TimeZone) -> Result<
 }
 
 /// The instants a journal day runs between: `[start, end)`. On a DST night a day is 23 or 25
-/// hours; a cutoff inside a spring-forward gap resolves to the instant just after the gap.
+/// hours; a cutoff inside a spring-forward gap resolves to the instant just after the gap, and
+/// is never later than half an hour before the page that follows.
 pub fn journal_day_bounds(
     day: Date,
     page_hm: (i8, i8),
@@ -115,7 +116,10 @@ pub fn journal_day_bounds(
     let edge = |d: Date| -> Result<Timestamp> {
         let midnight = d.tomorrow()?.at(0, 0, 0, 0);
         let at = midnight.checked_add(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?;
-        Ok(tz.to_ambiguous_zoned(at).compatible()?.timestamp())
+        let cutoff = tz.to_ambiguous_zoned(at).compatible()?.timestamp();
+        let latest = page_instant(d.tomorrow()?, page_hm, tz)?
+            .checked_sub(jiff::SignedDuration::from_mins(30))?;
+        Ok(cutoff.min(latest))
     };
     Ok((edge(day.yesterday()?)?, edge(day)?))
 }
@@ -175,6 +179,24 @@ mod tests {
         assert_eq!(next.start, w.end);
         // The night is 25 hours long.
         assert_eq!(w.end.duration_since(w.start).as_hours(), 25);
+    }
+
+    #[test]
+    fn an_early_page_on_the_night_clocks_go_forward_still_comes_after_the_day() {
+        // Paris, 2026-03-29: 02:00 CET becomes 03:00 CEST. A 03:00 page is 01:00 UTC; the
+        // nominal 02:30 cutoff falls in the gap and would resolve after the page.
+        let paris = tz("Europe/Paris");
+        let page = page_instant(d("2026-03-29"), (3, 0), &paris).unwrap();
+        assert_eq!(page, ts("2026-03-29T01:00:00Z"));
+        let (_, end) = journal_day_bounds(d("2026-03-28"), (3, 0), &paris).unwrap();
+        assert!(page.duration_since(end) >= jiff::SignedDuration::from_mins(30));
+        let (start, _) = journal_day_bounds(d("2026-03-29"), (3, 0), &paris).unwrap();
+        assert_eq!(start, end);
+        let quarter_past_three = ts("2026-03-29T01:15:00Z");
+        assert_eq!(
+            journal_day_of(quarter_past_three, (3, 0), &paris).unwrap(),
+            d("2026-03-29")
+        );
     }
 
     #[test]
@@ -318,21 +340,6 @@ mod tests {
         let (next_start, _) = journal_day_bounds(d("2026-10-25"), (7, 0), &london).unwrap();
         assert_eq!(end, next_start);
         assert_eq!(end.duration_since(start).as_hours(), 25);
-    }
-
-    #[test]
-    fn a_cutoff_inside_a_spring_forward_gap_keeps_the_day_and_its_bounds_in_step() {
-        let paris = tz("Europe/Paris");
-        // Page time 3:00 puts the cutoff at 2:30, which does not exist on 29 March.
-        let (_, end) = journal_day_bounds(d("2026-03-28"), (3, 0), &paris).unwrap();
-        assert_eq!(end, ts("2026-03-29T01:30:00Z"));
-        let at = ts("2026-03-29T01:00:00Z");
-        assert_eq!(journal_day_of(at, (3, 0), &paris).unwrap(), d("2026-03-28"));
-        let after = ts("2026-03-29T01:30:00Z");
-        assert_eq!(
-            journal_day_of(after, (3, 0), &paris).unwrap(),
-            d("2026-03-29")
-        );
     }
 
     #[test]
