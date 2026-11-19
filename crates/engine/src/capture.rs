@@ -401,8 +401,18 @@ impl Engine {
 
     pub fn get_item(&self, id: &str) -> Result<ItemView> {
         let originals = self.originals_dir();
-        self.read(|conn| get_item_view(conn, &originals, id))?
-            .ok_or_else(|| Error::not_found(format!("item {id}")))
+        self.read(|conn| {
+            let Some(mut view) = get_item_view(conn, &originals, id)? else {
+                return Ok(None);
+            };
+            if view.journal == Some(nocturne_contract::JournalRole::Checkin) {
+                let item = crate::journal::load_item(conn, &originals, id)?;
+                let mentions = crate::journal::day::mentions_of(conn, &[id.to_string()])?;
+                view.checkin = crate::journal::day::checkin_view(&item, &mentions).ok();
+            }
+            Ok(Some(view))
+        })?
+        .ok_or_else(|| Error::not_found(format!("item {id}")))
     }
 
     /// Put an item that could not be read back in the queue, at the front. An item that is

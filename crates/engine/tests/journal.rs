@@ -1126,3 +1126,44 @@ fn a_private_photo_cannot_be_placed_in_the_journal() {
     ));
     assert_eq!(f.engine.get_item(&photo.id).unwrap().journal, None);
 }
+
+#[test]
+fn a_checkins_own_page_carries_its_check_in_and_other_items_do_not() {
+    let f = fixture();
+    let mut with_line = input(
+        feeling(FeelingPart::Low, &["tired"]),
+        Some("Long day with Gran"),
+    );
+    with_line.urge = Some("Go for a walk".into());
+    let written = f.engine.keep_checkin(with_line, Source::Journal).unwrap();
+    let item = f.engine.get_item(&written.id).unwrap();
+    let checkin = item.checkin.expect("the check-in rides on its item");
+    assert_eq!(checkin.id, written.id);
+    assert_eq!(checkin.feeling.part, FeelingPart::Low);
+    assert_eq!(checkin.feeling.words, vec!["tired".to_string()]);
+    assert_eq!(checkin.line.as_deref(), Some("Long day with Gran"));
+    assert_eq!(checkin.urge.as_deref(), Some("Go for a walk"));
+    assert_eq!(checkin.day, "2026-11-13");
+    assert!(!checkin.left_out);
+    assert_eq!(checkin, written);
+
+    let note = keep(&f.engine, "Just a note");
+    assert!(f.engine.get_item(&note).unwrap().checkin.is_none());
+    let items = f.engine.items(Default::default()).unwrap();
+    assert!(items.iter().all(|i| i.checkin.is_none()));
+}
+
+#[test]
+fn a_left_out_checkin_says_so_on_its_page() {
+    let f = fixture();
+    let written = f
+        .engine
+        .keep_checkin(
+            input(feeling(FeelingPart::Settled, &["calm"]), None),
+            Source::Journal,
+        )
+        .unwrap();
+    f.engine.set_left_out(&written.id, true).unwrap();
+    let checkin = f.engine.get_item(&written.id).unwrap().checkin.unwrap();
+    assert!(checkin.left_out);
+}
