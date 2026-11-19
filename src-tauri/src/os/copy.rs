@@ -27,8 +27,9 @@ pub const MENU_RESUME: &str = "Resume now";
 pub const MENU_QUIT: &str = "Quit Nocturne";
 
 pub const NOTICE_TITLE: &str = "Your page is ready";
-/// The evening reminder: the app's name, and words that never change and carry nothing kept.
-pub const EVENING_TITLE: &str = "Nocturne";
+/// The evening reminder: a title that names the setting, so the person knows where to turn it
+/// off, and words that never change and carry nothing kept.
+pub const EVENING_TITLE: &str = "Evening reminder";
 pub const EVENING_BODY: &str = "Anything about today you want to keep?";
 pub const NOTICE_TAIL: &str = "It\u{2019}s there when you open Nocturne.";
 

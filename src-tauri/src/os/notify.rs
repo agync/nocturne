@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn the_evening_words_are_fixed_and_plain() {
-        assert_eq!(copy::EVENING_TITLE, "Nocturne");
+        assert_eq!(copy::EVENING_TITLE, "Evening reminder");
         assert_eq!(copy::EVENING_BODY, "Anything about today you want to keep?");
         let text = format!("{} {}", copy::EVENING_TITLE, copy::EVENING_BODY);
         assert!(!text.contains('\u{2014}') && copy::has_jargon(&text).is_none());

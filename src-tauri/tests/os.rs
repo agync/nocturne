@@ -410,7 +410,7 @@ fn the_evening_reminder_sends_once_at_its_time_with_fixed_words() {
         assert_eq!(
             sent[0],
             (
-                "Nocturne".to_string(),
+                "Evening reminder".to_string(),
                 "Anything about today you want to keep?".to_string()
             )
         );
