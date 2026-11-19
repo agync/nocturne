@@ -124,6 +124,7 @@ fn row_kind(item: &JItem) -> RowKind {
         Some(JournalRole::Checkin) => RowKind::Checkin,
         Some(JournalRole::Good) => RowKind::Good,
         Some(JournalRole::Entry) => RowKind::Entry,
+        Some(JournalRole::Answer) => RowKind::Answer,
         None if is_background(item) => RowKind::Elsewhere,
         None => match item.view.kind {
             ItemKind::Audio => RowKind::Voice,
@@ -311,6 +312,7 @@ pub(crate) fn build_day(
                 mentions: mentions.get(item.id()).cloned().unwrap_or_default(),
                 left_out: item.left_out,
                 move_to,
+                answer: None,
             },
         ));
     }
@@ -329,6 +331,7 @@ pub(crate) fn build_day(
                 mentions: Vec::new(),
                 left_out: latest.left_out,
                 move_to: None,
+                answer: None,
             },
         ));
     }

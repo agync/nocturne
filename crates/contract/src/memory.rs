@@ -246,6 +246,11 @@ pub struct ForgetPreview {
     #[serde(default)]
     #[ts(optional)]
     pub reflection_lines: Option<u32>,
+    /// Of those, the lines in week, month and year recaps ("Your reflection on this day, and
+    /// {count} lines in your recaps that cite it.").
+    #[serde(default)]
+    #[ts(optional)]
+    pub recap_lines: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

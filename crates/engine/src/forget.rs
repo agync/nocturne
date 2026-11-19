@@ -270,6 +270,7 @@ impl Engine {
             )?;
             Ok(ForgetPreview {
                 reflection_lines: (reflection_lines > 0).then_some(reflection_lines),
+                recap_lines: None,
                 token,
                 memories: memories
                     .into_iter()

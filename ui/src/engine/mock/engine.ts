@@ -1107,6 +1107,11 @@ export class MockEngine implements EngineClient {
     }
   }
 
+  async addAnswerLine(pageDate: string, line: string): Promise<void> {
+    const question = this.pages.find((p) => p.date === pageDate)?.question;
+    if (question?.journal) question.journal.line = line;
+  }
+
   async resolveWhich(conflictId: string, memoryId: string): Promise<WhichResolved> {
     let resolved: WhichResolved | null = null;
     for (const line of this.lines().filter((l) => l.conflictId === conflictId)) {

@@ -79,6 +79,8 @@ pub struct PageLine {
 pub enum QuestionKind {
     YesNo,
     PageTime,
+    /// "Yesterday you wrote: “{sentence}” How did it go?": at most once in seven pages.
+    Journal,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -91,6 +93,10 @@ pub enum QuestionChoice {
     Right,
     Earlier,
     Later,
+    /// A journal question's answers.
+    Fine,
+    NotGreat,
+    NotYet,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -103,6 +109,31 @@ pub struct Question {
     pub receipt: Option<Receipt>,
     pub last_asked: Option<String>,
     pub answered: Option<QuestionChoice>,
+    /// For a journal question: where its sentence came from and what was added. `text` is the
+    /// person's sentence, quoted whole, and `receipt` opens the block it was read from.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub journal: Option<JournalAsk>,
+}
+
+/// Where a journal question's sentence came from, for its opening: "Yesterday you wrote",
+/// "On {weekday} you said", "On {day} {month} you wrote".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JournalAsk {
+    /// The entry block the sentence was read from.
+    pub item_id: String,
+    /// The block is a voice note: "you said", not "you wrote".
+    pub voice: bool,
+    /// The journal day the block was kept on, `YYYY-MM-DD`.
+    pub written_on: String,
+    /// The day the event was on, the day the page looks back on, `YYYY-MM-DD`.
+    pub event_day: String,
+    /// The answer kept on today's journal, once a choice was pressed.
+    pub answer_item_id: Option<String>,
+    /// The line added to the answer, once added.
+    pub line: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

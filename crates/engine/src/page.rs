@@ -185,6 +185,7 @@ fn question_for(
                 receipt: None,
                 last_asked: None,
                 answered,
+                journal: None,
             }),
             Some(id) => {
                 let Some(row) = crate::rows::load_mem(conn, &id)? else {
@@ -201,6 +202,7 @@ fn question_for(
                     receipt: first_receipt(&view),
                     last_asked: last_asked(&id)?,
                     answered,
+                    journal: None,
                 })
             }
         });
@@ -213,6 +215,7 @@ fn question_for(
             receipt: None,
             last_asked: None,
             answered: None,
+            journal: None,
         }));
     }
     // Eligible: active, not a safety memory, not keep-forever, not asked in the last 14 days.
@@ -247,6 +250,7 @@ fn question_for(
         receipt: first_receipt(&view),
         last_asked: last_asked(&view.id)?,
         answered: None,
+        journal: None,
     }))
 }
 

@@ -419,6 +419,7 @@ mod tests {
             language: None,
             from_device: None,
             journal: None,
+            checkin: None,
         }
     }
 
@@ -433,6 +434,7 @@ mod tests {
             mentions: Vec::new(),
             left_out: false,
             move_to: None,
+            answer: None,
         }
     }
 

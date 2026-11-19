@@ -76,6 +76,7 @@ fn item_view_row(row: &Row<'_>) -> rusqlite::Result<ItemView> {
         memory_count: row.get(16)?,
         from_device: row.get(19)?,
         journal: de_opt(row.get(20)?)?,
+        checkin: None,
     })
 }
 

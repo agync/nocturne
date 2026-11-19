@@ -88,6 +88,8 @@ pub enum JournalRole {
     Entry,
     Good,
     Checkin,
+    /// An answer to the page's question from the journal, kept on the day it was answered.
+    Answer,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -188,6 +190,22 @@ pub enum RowKind {
     Elsewhere,
     /// "{time} · Today's entry": when the entry was written. Not repeated in full.
     Entry,
+    /// An answer to the page's question from the journal.
+    Answer,
+}
+
+/// An answer to the page's question from the journal, as the timeline shows it: the choice, the
+/// line if one was added, and "About: “{sentence}”", which opens the block.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JournalAnswer {
+    pub choice: crate::QuestionChoice,
+    pub line: Option<String>,
+    /// The entry block the question was about.
+    pub about: String,
+    /// The person's sentence the question quoted.
+    pub sentence: String,
 }
 
 /// One row of "Through the day", oldest first.
@@ -206,6 +224,10 @@ pub struct TimelineRow {
     pub left_out: bool,
     /// For a quick note: the day "Move to {weekday}" moves it to.
     pub move_to: Option<String>,
+    /// For an answer to the page's question from the journal.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub answer: Option<JournalAnswer>,
 }
 
 /// A name found in the day's entries, once per person, place or thing.
@@ -512,6 +534,10 @@ pub struct Recap {
     /// Empty for a year.
     pub still_open: Vec<MemoryView>,
     pub lines_removed: u32,
+    /// Things from the period not yet read when it was put together.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub still_reading: Option<u32>,
 }
 
 /// What the journal shows for a day or a period that is looked back on.

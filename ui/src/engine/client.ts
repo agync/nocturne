@@ -210,6 +210,8 @@ export interface EngineClient {
   getPage(date?: string): Promise<PageView>;
   listPages(): Promise<PageSummary[]>;
   answerQuestion(pageDate: string, choice: QuestionChoice): Promise<void>;
+  /** Adds a line to the answer of the page's question from the journal, until the page is replaced. */
+  addAnswerLine(pageDate: string, line: string): Promise<void>;
   resolveWhich(conflictId: string, memoryId: string): Promise<WhichResolved>;
   confirmMemory(id: string, confirmed: boolean): Promise<void>;
   markDone(memoryId: string): Promise<void>;

@@ -70,6 +70,8 @@ export type { ItemStatus } from "./ItemStatus";
 export type { ItemView } from "./ItemView";
 export type { Job } from "./Job";
 export type { JobView } from "./JobView";
+export type { JournalAnswer } from "./JournalAnswer";
+export type { JournalAsk } from "./JournalAsk";
 export type { JournalDay } from "./JournalDay";
 export type { JournalRole } from "./JournalRole";
 export type { JournalSent } from "./JournalSent";

@@ -125,6 +125,8 @@ export function PageSheet({
       return { title: t("page.question.answered.right", { time: pageTime }), body: "" };
     if (choice === "earlier") return { title: t("page.question.answered.earlier"), body: "" };
     if (choice === "later") return { title: t("page.question.answered.later"), body: "" };
+    if (choice === "fine" || choice === "notGreat" || choice === "notYet")
+      return { title: "", body: "" };
     const [title, body] = ANSWERS[choice];
     return { title: t(title), body: t(body) };
   };

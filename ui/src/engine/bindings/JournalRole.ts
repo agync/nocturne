@@ -3,4 +3,4 @@
 /**
  * What an item is in the journal. Ordinary things kept have none.
  */
-export type JournalRole = "entry" | "good" | "checkin";
+export type JournalRole = "entry" | "good" | "checkin" | "answer";

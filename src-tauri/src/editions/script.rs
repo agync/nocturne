@@ -215,6 +215,7 @@ mod tests {
             receipt: None,
             last_asked: None,
             answered: None,
+            journal: None,
         });
         let script = audio_script(&p);
         assert_eq!(
@@ -288,6 +289,7 @@ mod tests {
             receipt: None,
             last_asked: None,
             answered: Some(nocturne_contract::QuestionChoice::Yes),
+            journal: None,
         });
         assert_eq!(kinds(&audio_script(&p)), [SpokenKind::Opening]);
         p.let_go = vec![line(LineKind::LetGo, "One thing")];

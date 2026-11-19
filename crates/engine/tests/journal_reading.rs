@@ -1169,6 +1169,7 @@ fn the_spoken_page_skips_a_question_about_a_journal_memory() {
         receipt: None,
         last_asked: None,
         answered: None,
+        journal: None,
     });
     f.engine.save_page(&page).unwrap();
     assert!(

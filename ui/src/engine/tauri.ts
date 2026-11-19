@@ -122,6 +122,8 @@ export class TauriEngine implements EngineClient {
   listPages: EngineClient["listPages"] = () => this.call("list_pages");
   answerQuestion: EngineClient["answerQuestion"] = (pageDate, choice) =>
     this.call("answer_question", { pageDate, choice });
+  addAnswerLine: EngineClient["addAnswerLine"] = (pageDate, line) =>
+    this.call("add_answer_line", { pageDate, line });
   resolveWhich: EngineClient["resolveWhich"] = (conflictId, memoryId) =>
     this.call("resolve_which", { conflictId, memoryId });
   confirmMemory: EngineClient["confirmMemory"] = (id, confirmed) =>

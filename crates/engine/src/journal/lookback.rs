@@ -791,6 +791,7 @@ fn compose(
         changed,
         still_open,
         lines_removed: 0,
+        still_reading: None,
     })
 }
 

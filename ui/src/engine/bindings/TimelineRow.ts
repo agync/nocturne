@@ -3,6 +3,7 @@ import type { CheckIn } from "./CheckIn";
 import type { DayPart } from "./DayPart";
 import type { GoodThing } from "./GoodThing";
 import type { ItemView } from "./ItemView";
+import type { JournalAnswer } from "./JournalAnswer";
 import type { Mention } from "./Mention";
 import type { RowKind } from "./RowKind";
 
@@ -17,4 +18,8 @@ feeling: CheckIn | null, mentions: Array<Mention>, leftOut: boolean,
 /**
  * For a quick note: the day "Move to {weekday}" moves it to.
  */
-moveTo: string | null, };
+moveTo: string | null, 
+/**
+ * For an answer to the page's question from the journal.
+ */
+answer?: JournalAnswer, };

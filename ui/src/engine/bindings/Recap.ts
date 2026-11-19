@@ -36,4 +36,8 @@ newNames: Array<NameRef>, tried: Array<Tried>, changed: Array<PageLine>,
 /**
  * Empty for a year.
  */
-stillOpen: Array<MemoryView>, linesRemoved: number, };
+stillOpen: Array<MemoryView>, linesRemoved: number, 
+/**
+ * Things from the period not yet read when it was put together.
+ */
+stillReading?: number, };

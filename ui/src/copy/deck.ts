@@ -11,7 +11,9 @@ import guide from "./en-GB/guide.json";
 import journal from "./en-GB/journal.json";
 import journalCheckin from "./en-GB/journal-checkin.json";
 import journalDay from "./en-GB/journal-day.json";
+import journalDelete from "./en-GB/journal-delete.json";
 import journalLookback from "./en-GB/journal-lookback.json";
+import journalQuestion from "./en-GB/journal-question.json";
 import memories from "./en-GB/memories.json";
 import models from "./en-GB/models.json";
 import needsYou from "./en-GB/needs-you.json";
@@ -58,5 +60,7 @@ export const enGB = {
   ...journalLookback,
   ...journalCheckin,
   ...journalDay,
+  ...journalDelete,
+  ...journalQuestion,
   ...feelings,
 };

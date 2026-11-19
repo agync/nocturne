@@ -9,4 +9,9 @@ export type ForgetPreview = { token: string, memories: Array<ForgetRow>, origina
 /**
  * Lines in reflections and recaps that cite what is deleted and will be taken out.
  */
-reflectionLines?: number, };
+reflectionLines?: number, 
+/**
+ * Of those, the lines in week, month and year recaps ("Your reflection on this day, and
+ * {count} lines in your recaps that cite it.").
+ */
+recapLines?: number, };
