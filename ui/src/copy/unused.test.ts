@@ -22,6 +22,7 @@ const ITEM_KINDS: Record<ItemKind, true> = {
   audio: true,
   document: true,
   web: true,
+  checkin: true,
 };
 const MARK_STATES: Record<MarkState, true> = {
   resting: true,

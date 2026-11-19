@@ -18,6 +18,8 @@ export function receiptMeta(receipt: Receipt): string {
       return [t("kind.document"), date].join(" · ");
     case "web":
       return [t("kind.web"), date].join(" · ");
+    case "checkin":
+      return [t("kind.checkin"), date].join(" · ");
     case "text":
       return [receipt.source === "paste" ? t("kind.paste") : t("kind.text"), date].join(" · ");
   }

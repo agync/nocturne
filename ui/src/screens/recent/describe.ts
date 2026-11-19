@@ -10,6 +10,7 @@ export function thumbCode(item: ItemView): string {
     web: "recent.badge.web",
     document: "recent.badge.document",
     image: null,
+    checkin: "recent.badge.checkin",
   };
   const id = word[item.kind];
   return id === null ? "" : t(id);
@@ -27,6 +28,8 @@ function kindWord(item: ItemView): string {
       return item.source === "paste" ? t("kind.pasted") : t("kind.text");
     case "document":
       return item.source === "drop" ? t("recent.kind.dropped") : t("kind.document");
+    case "checkin":
+      return t("kind.checkin");
   }
 }
 

@@ -9,8 +9,13 @@ import { useEngine, useNeedsYou, usePage, useRefresh } from "../../engine/contex
 import { DueEntry, dueBadge, UnconfirmedEntry, WhichEntry } from "./Entries";
 import styles from "./NeedsYou.module.css";
 
+/** The entries this screen renders; a "Which name is this?" entry is not drawn here yet. */
+type HandledEntry = Exclude<NeedsYouEntry, { type: "sameName" }>;
+
+const isHandled = (entry: NeedsYouEntry): entry is HandledEntry => entry.type !== "sameName";
+
 /** One stable key per entry, so a settled entry stays settled whatever the engine says next. */
-export function entryKey(entry: NeedsYouEntry): string {
+export function entryKey(entry: HandledEntry): string {
   switch (entry.type) {
     case "which":
       return `which:${entry.conflictId}`;
@@ -24,14 +29,14 @@ export function entryKey(entry: NeedsYouEntry): string {
 }
 
 /** Decisions first, then things to confirm, then things to tick off, as the design lists them. */
-const RANK: Record<NeedsYouEntry["type"], number> = {
+const RANK: Record<HandledEntry["type"], number> = {
   which: 0,
   unconfirmed: 1,
   due: 2,
   promise: 3,
 };
 
-const isOpen = (entry: NeedsYouEntry) =>
+const isOpen = (entry: HandledEntry) =>
   entry.type === "which" || entry.type === "unconfirmed" || !entry.done;
 
 /** What is waiting for the person: decide, confirm or tick off. One at a time, from the keyboard if they like. */
@@ -53,6 +58,7 @@ export default function NeedsYou() {
   const afterForget = useRef<number | null>(null);
 
   const entries = (needs.data ?? [])
+    .filter(isHandled)
     .filter((e) => isOpen(e) && !settled.has(entryKey(e)))
     .sort((a, b) => RANK[a.type] - RANK[b.type]);
 

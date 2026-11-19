@@ -17,6 +17,8 @@ function kindWord(receipt: Receipt): string {
       return t("kind.document");
     case "web":
       return t("kind.web");
+    case "checkin":
+      return t("kind.checkin");
     case "text":
       return receipt.source === "paste" ? t("kind.paste") : t("kind.text");
   }

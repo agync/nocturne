@@ -57,13 +57,19 @@ export function letGoMeta(m: MemoryView): string {
 
 const KIND_WORD: Record<
   ItemKind,
-  "item.kind.text" | "item.kind.image" | "item.kind.audio" | "item.kind.document" | "item.kind.web"
+  | "item.kind.text"
+  | "item.kind.image"
+  | "item.kind.audio"
+  | "item.kind.document"
+  | "item.kind.web"
+  | "item.kind.checkin"
 > = {
   text: "item.kind.text",
   image: "item.kind.image",
   audio: "item.kind.audio",
   document: "item.kind.document",
   web: "item.kind.web",
+  checkin: "item.kind.checkin",
 };
 
 export const kindWord = (kind: ItemKind): string => t(KIND_WORD[kind]);
@@ -79,6 +85,7 @@ const SOURCE_WORD: Record<Source, string> = {
   agent: "item.source.agent",
   setup: "item.source.setup",
   phone: "item.source.phone",
+  journal: "item.source.journal",
 };
 
 export const sourceWord = (source: Source): string =>

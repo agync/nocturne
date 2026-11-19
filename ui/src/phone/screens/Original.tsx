@@ -29,6 +29,7 @@ const KIND = {
   audio: "kind.audio",
   document: "kind.document",
   web: "kind.web",
+  checkin: "kind.checkin",
 } as const;
 
 interface OriginalProps {

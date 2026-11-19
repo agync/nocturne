@@ -22,6 +22,8 @@ function kindLabel(item: ItemView): string {
       return t("kind.web");
     case "document":
       return t("kind.document");
+    case "checkin":
+      return t("kind.checkin");
   }
 }
 
