@@ -212,6 +212,16 @@ describe("a day's reflection", () => {
     ).toBeTruthy();
     expect(await screen.findByRole("button", { name: "Reflect on today" })).toBeTruthy();
   });
+
+  it("says so and keeps the reflection when it cannot be deleted", async () => {
+    const engine = engineIn();
+    vi.spyOn(engine, "deleteReflection").mockRejectedValue(new Error("no"));
+    open("#/journal/look-back/day/2026-11-19", engine);
+    fireEvent.click(await screen.findByRole("button", { name: "Delete this reflection" }));
+    expect(await screen.findByText("That didn’t work. Nothing was changed.")).toBeTruthy();
+    expect(screen.queryByText(/^Deleted\./)).toBeNull();
+    expect(screen.getByRole("button", { name: "Delete this reflection" })).toBeTruthy();
+  });
 });
 
 describe("writing it", () => {

@@ -258,7 +258,12 @@ function Loaded({ period }: { period: Period }) {
   };
 
   const remove = async () => {
-    await engine.deleteReflection(period);
+    try {
+      await engine.deleteReflection(period);
+    } catch {
+      toast.show({ message: t("memories.failed") });
+      return;
+    }
     await client.invalidateQueries({ queryKey: ["journal"] });
     toast.show({ message: t("journal.reflection.deleted") });
   };
