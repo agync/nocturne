@@ -3,10 +3,13 @@
 #
 # Usage: scripts/ci-areas.sh < changed-paths   (any other argument is refused)
 #        scripts/ci-areas.sh --all
+#        scripts/ci-areas.sh --local < changed-paths
 #
 # Reads the changed paths, one per line, and prints one `area=true|false` line per area, in a
 # fixed order. A change that matches `everything`, and --all, print every area true. Each area
 # lists the paths its jobs read, including the files one side's tests read from the other.
+# --local reads the same table but ignores `everything`: scripts/check-changed.sh uses it to pick
+# the quick checks for the paths that changed, and leaves the run-everything rule to CI.
 set -euo pipefail
 export LC_ALL=C
 
@@ -50,12 +53,13 @@ trap 'rm -f "$changed"' EXIT
 all=false
 case "$#:${1:-}" in
     1:--all) all=true ;;
+    1:--local) cat > "$changed" ;;
     0:)
         cat > "$changed"
         if matches "$everything" "$changed"; then all=true; fi
         ;;
     *)
-        printf 'usage: %s [--all] < changed-paths\n' "$0" >&2
+        printf 'usage: %s [--all|--local] < changed-paths\n' "$0" >&2
         exit 2
         ;;
 esac

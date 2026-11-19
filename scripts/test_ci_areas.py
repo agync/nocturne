@@ -171,6 +171,11 @@ class Table(unittest.TestCase):
             with self.subTest(path=path):
                 self.assertEqual(selected(path), EVERY)
 
+    def test_local_ignores_the_run_everything_rule(self):
+        self.assertEqual(areas("--local", paths=["Makefile"])[0], set())
+        self.assertEqual(areas("--local", paths=["docs/ui/notes.md"])[0], {"site"})
+        self.assertEqual(areas("--local", paths=["scripts/package.sh"])[0], {"scripts"} | PACKAGE)
+
     def test_each_path_selects_its_areas(self):
         for path, expected in CASES:
             with self.subTest(path=path):
