@@ -56,11 +56,15 @@ answer here and still checks that every line it shows leads back to something yo
 ## What is never sent
 
 - Anything marked private.
+- Your check-ins, reflections and recaps. They are written and kept on this computer.
 - Health, money and ID memories, unless you turn that on. It is off by default.
 - Anything while Online answers is off, and nothing at all from reading, the tidy or the page.
 - Questions from a paired phone, unless Away from home is on and **Questions from your phones** is
   on. That switch is on by default when Away from home is on during setup, and you can turn it off
   later in **Online answers**.
+
+Journal entries and good things can't be marked private, so while Online answers is on, a line from
+one can go with a question it helps answer.
 
 When Nocturne leaves something out, the answer says so, and you can ask again on this computer to
 include it.

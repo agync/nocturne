@@ -77,14 +77,15 @@ keeps its key.
 ## What the phone can do
 
 Ask a question, keep text, a photo, a document or a voice note, take back what it just kept, read
-today's page and the last seven, and open an original that an answer or the page cited. It never
+today's page and the last seven, read your journal, keep a note with a feeling or as a good thing,
+answer "Which {name} is this?", and open an original that an answer or the page cited. It never
 sees anything you marked private. It cannot forget, delete, export, change settings or add other
 phones.
 
 If the phone has no signal, what it keeps waits on the phone and is sent when it connects again.
 That waiting list sits in the phone's own storage and is not hidden from someone who has the phone.
 
-An unlocked or stolen phone can read everything not marked private until you remove it from the
+An unlocked or stolen phone can read everything not marked private. That includes your journal. It can read it until you remove it from the
 computer, so remove a lost phone first.
 
 ## What the companies can see
