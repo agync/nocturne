@@ -732,7 +732,7 @@ and never in a notification, on the lock screen or read aloud.
 | Read | Any day's timeline, entry, reflection, and any week, month or year recap; "Reflect on today" asks the computer to write one | Write a reflection on the phone, or read it aloud |
 | People and places | Answer "Which {name} is this?" | Answer "Which is right?", which stays on the computer; confirm, correct or remove a link; rename, merge or delete |
 | Change | Take back what it just kept, as today | Leave out, delete, or change settings |
-| Offline | Keep; what is kept waits on the phone | Read the journal; the phone keeps no copy |
+| Offline | Keep; what is kept waits on the phone, and goes on the day it was kept | Read the journal; the phone keeps no copy |
 
 **Home.** A fourth tile under Keep, Ask and Today's page: "Journal", "Today so far, and looking
 back." When the computer cannot be reached, it is greyed like Ask: "Back when your computer is.
@@ -998,7 +998,8 @@ it." A line that cites a deleted item is removed whole, never rewritten, and the
 is unchanged.
 
 **Delete this day…** On the day's menu. Lists everything kept that day, with the same rules. The
-person can untick things kept from elsewhere (a school letter) to keep them.
+person can untick things kept from elsewhere (a school letter) to keep them. Something from another
+day that shares a memory with this one is listed unticked, and goes only if the person ticks it.
 
 **Deleting a reflection or recap** removes only the writing, never an entry. It can be written
 again.

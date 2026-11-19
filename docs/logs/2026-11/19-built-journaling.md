@@ -28,5 +28,9 @@ Pages that changed with it:
 - [Evaluation](/design/evaluation.md): the journal check.
 - [Experience principles](/design/experience-principles.md): the one optional evening reminder.
 
+After review, "Delete this day…" lists something from another day that shares a memory with the
+day unticked, and a keep that waited on the phone goes on the day it was kept: both are now said in
+the [journal](/design/journaling.md), and the second in [Remote access](/architecture/remote.md).
+
 Renders of the built screens, desktop and phone, with the screens they changed as they were
 before, are in `docs/design/mockups/journaling/built/`.
