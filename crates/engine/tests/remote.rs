@@ -130,6 +130,11 @@ fn remote_keep_dedupes_by_client_id() {
     assert_eq!(f.engine.remote_keep(&a, "c2").unwrap(), None);
     assert_eq!(f.engine.remote_keep_owner(&second).unwrap(), None);
     assert_eq!(
+        f.engine.remote_keep_client(&item).unwrap().as_deref(),
+        Some("c1")
+    );
+    assert_eq!(f.engine.remote_keep_client(&second).unwrap(), None);
+    assert_eq!(
         f.engine.remote_keep_owner(&item).unwrap(),
         Some((a, ts("2026-11-13T07:00:00Z")))
     );

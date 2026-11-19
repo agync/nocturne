@@ -2518,6 +2518,84 @@ fn a_keep_whose_good_thing_cannot_be_recorded_is_not_answered_as_kept() {
 }
 
 #[test]
+fn taking_back_a_photo_leaves_a_good_thing_written_on_the_computer() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let a = keep_bytes_marked(
+        &mut c,
+        &jpeg(300),
+        "image/jpeg",
+        "c-own",
+        Some("Sun on the balcony"),
+        100,
+        Marks {
+            feeling: Some(glad()),
+            good: Some(true),
+        },
+    );
+    let photo = kept_id(&a);
+    let e = p.h.engine();
+    let own = e
+        .keep_good_thing(
+            today(&p),
+            "Written at the desk",
+            Some(&photo),
+            Source::Journal,
+        )
+        .unwrap();
+    assert_eq!(e.journal_day(today(&p)).unwrap().good.len(), 2);
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: photo }),
+        RemoteAnswer::Done
+    ));
+    let day = e.journal_day(today(&p)).unwrap();
+    assert_eq!(day.good.len(), 1, "only the phone's good thing goes");
+    assert_eq!(day.good[0].id, own.id);
+    assert_eq!(day.good[0].text, "Written at the desk");
+    assert!(day.good[0].photo.is_none(), "it only loses the photo");
+    assert!(day.checkins.is_empty(), "the phone's feeling goes with it");
+}
+
+#[test]
+fn taking_back_a_repeat_upload_takes_back_only_what_it_made() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let photo = jpeg(300);
+    let desk = desk_photo(&p, &photo, "jpg");
+    let e = p.h.engine();
+    let mine = e
+        .keep_good_thing(
+            today(&p),
+            "Written at the desk",
+            Some(&desk),
+            Source::Journal,
+        )
+        .unwrap();
+    let a = keep_bytes_marked(
+        &mut c,
+        &photo,
+        "image/jpeg",
+        "c-repeat",
+        Some("Sun on the balcony"),
+        100,
+        Marks {
+            feeling: Some(glad()),
+            good: Some(true),
+        },
+    );
+    assert_eq!(e.journal_day(today(&p)).unwrap().good.len(), 2);
+    assert!(matches!(
+        call(&mut c, RemoteCall::Unkeep { id: kept_id(&a) }),
+        RemoteAnswer::Done
+    ));
+    let day = e.journal_day(today(&p)).unwrap();
+    assert_eq!(day.good.len(), 1);
+    assert_eq!(day.good[0].id, mine.id);
+    assert!(day.checkins.is_empty());
+    assert!(e.get_item(&desk).is_ok(), "the computer's photo stays");
+}
+
+#[test]
 fn a_check_in_from_the_phone_is_kept_once() {
     let p = on();
     let (_, mut c) = p.session("Pixel");
@@ -2986,4 +3064,34 @@ fn the_activity_list_has_what_a_phone_did_in_the_journal() {
             .collect();
     assert!(actions.contains(&RemoteAction::KeptText));
     assert!(actions.contains(&RemoteAction::ReadPage));
+}
+
+#[test]
+fn taking_back_a_repeat_of_this_phones_own_photo_leaves_the_first_keep() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let photo = jpeg(300);
+    let marks = || Marks {
+        feeling: Some(glad()),
+        good: Some(true),
+        ..Default::default()
+    };
+    let first = keep_bytes_marked(&mut c, &photo, "image/jpeg", "c-own-1", None, 100, marks());
+    let again = keep_bytes_marked(&mut c, &photo, "image/jpeg", "c-own-2", None, 100, marks());
+    let e = p.h.engine();
+    assert_eq!(e.journal_day(today(&p)).unwrap().good.len(), 2);
+    assert!(matches!(
+        call(
+            &mut c,
+            RemoteCall::Unkeep {
+                id: kept_id(&again)
+            }
+        ),
+        RemoteAnswer::Done
+    ));
+    let day = e.journal_day(today(&p)).unwrap();
+    assert_eq!(day.good.len(), 1, "the first keep's good thing stays");
+    assert!(day.good[0].photo.is_some(), "with its photo");
+    assert_eq!(day.checkins.len(), 1);
+    assert!(e.get_item(&kept_id(&first)).is_ok(), "the first keep stays");
 }

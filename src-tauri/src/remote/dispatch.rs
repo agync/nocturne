@@ -25,7 +25,7 @@ use super::incoming::Uploaded;
 use super::journal as journal_view;
 use super::limits::Bucket;
 use super::protocol::*;
-use super::session::{BoxFuture, CallCtx, Core, Dispatch, ReplySink};
+use super::session::{BoxFuture, CallCtx, Core, Dispatch, MadeUp, ReplySink};
 use crate::ask::{self, AskLane, AskOptions, AskSink};
 use crate::error::{CommandError, ErrorCode, blocking};
 use crate::state::AppState;
@@ -459,13 +459,14 @@ impl<R: Runtime> Call<R> {
             Kept::New { item } => (item.clone(), false),
             Kept::Duplicate { item } => (item.clone(), true),
         };
-        if duplicate && !self.own_public(&item.id).await {
-            // Already kept, but not by this phone, or private now: the answer a new keep gets,
-            // from what the phone sent. It names no item, so it opens nothing, and a private
-            // match answers exactly as a public one does.
+        if duplicate && (!self.own_public(&item.id).await || self.made_records(client_id).await) {
+            // Already kept, but not by this phone, or private now, or this keep made a feeling
+            // or a good thing of its own: the answer a new keep gets, from what the phone sent.
+            // It names no item, so it opens nothing, a private match answers exactly as a
+            // public one does, and taking it back takes back only what this keep made.
             crate::commands::capture::announce(&self.app, std::slice::from_ref(&kept)).await;
             self.audit(action, RemoteResult::Ok, bytes);
-            return Some(self.sent_answer(&item, sent));
+            return Some(self.sent_answer(&item, client_id, sent));
         }
         // Only a new item is this phone's: a duplicate may be someone else's keep.
         if !duplicate && let Some(e) = self.engine() {
@@ -488,6 +489,23 @@ impl<R: Runtime> Call<R> {
         Some(self.kept_answer(&item, duplicate))
     }
 
+    /// Whether this keep made a feeling or a good thing.
+    async fn made_records(&self, client_id: &str) -> bool {
+        let Some(e) = self.engine() else {
+            return false;
+        };
+        let (device, client) = (self.device.id.clone(), client_id.to_string());
+        blocking(move || {
+            let place = KeepPlace {
+                day: None,
+                phone: Some((&device, &client)),
+            };
+            Ok(!e.keep_records(&place)?.is_empty())
+        })
+        .await
+        .unwrap_or(false)
+    }
+
     /// Whether this phone kept `item` itself and it may still go out.
     async fn own_public(&self, item: &str) -> bool {
         let Some(e) = self.engine() else {
@@ -503,7 +521,7 @@ impl<R: Runtime> Call<R> {
     }
 
     /// A keep's answer built only from what the phone sent and a new id of its own.
-    fn sent_answer(&self, item: &ItemView, sent: Sent) -> RemoteAnswer {
+    fn sent_answer(&self, item: &ItemView, client_id: &str, sent: Sent) -> RemoteAnswer {
         let now = self.app.state::<AppState>().now();
         let (title, text) = match sent {
             Sent::Text(t) => (nocturne_engine::text_title(&t), Some(t)),
@@ -540,7 +558,7 @@ impl<R: Runtime> Call<R> {
             truncated,
         };
         self.core
-            .remember_made_up(&self.device.id, made.clone(), now);
+            .remember_made_up(&self.device.id, made.clone(), client_id, now);
         RemoteAnswer::Kept {
             kept: PhoneKept {
                 item: made,
@@ -743,7 +761,7 @@ impl<R: Runtime> Call<R> {
             return err(PhoneError::Invalid);
         }
         if let Some(made) = self.core.made_up(&self.device.id, &id) {
-            return self.unkeep_made_up(&id, made.kept_at);
+            return self.unkeep_made_up(&id, made).await;
         }
         let e = self.engine()?;
         let check = id.clone();
@@ -765,9 +783,10 @@ impl<R: Runtime> Call<R> {
             .asks
             .cancel_lane(&AskLane::Phone(self.device.id.clone()));
         let e = self.engine()?;
+        let device = self.device.id.clone();
         match blocking(move || {
             // What the same keep made beside it goes with it: its feeling, its good thing.
-            for dependent in dependents(&e, &id).unwrap_or_default() {
+            for dependent in dependents(&e, &device, &id).unwrap_or_default() {
                 let _ = e.unkeep(&dependent);
             }
             e.unkeep(&id)
@@ -784,15 +803,30 @@ impl<R: Runtime> Call<R> {
 
     /// Taking back a keep that was answered from what the phone sent: the same answers as a new
     /// keep gets, with nothing in the store to remove.
-    fn unkeep_made_up(&self, id: &str, kept_at: Timestamp) -> Option<RemoteAnswer> {
+    async fn unkeep_made_up(&self, id: &str, made: MadeUp) -> Option<RemoteAnswer> {
         let now = self.app.state::<AppState>().now();
-        if now.duration_since(kept_at) >= jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64) {
+        if now.duration_since(made.kept_at)
+            >= jiff::SignedDuration::from_secs(TAKE_BACK_SECS as i64)
+        {
             return err(PhoneError::TooLate);
         }
         self.app
             .state::<AppState>()
             .asks
             .cancel_lane(&AskLane::Phone(self.device.id.clone()));
+        if let Some(e) = self.engine() {
+            let (device, client) = (self.device.id.clone(), made.client_id);
+            let _ = blocking(move || {
+                let place = KeepPlace {
+                    phone: Some((&device, &client)),
+                };
+                for record in e.keep_records(&place)? {
+                    let _ = e.unkeep(&record);
+                }
+                Ok(())
+            })
+            .await;
+        }
         self.core.forget_made_up(&self.device.id, id);
         self.audit(RemoteAction::TookBack, RemoteResult::Ok, 0.0);
         Some(RemoteAnswer::Done)
@@ -1311,24 +1345,19 @@ fn find_check_in(
     Ok(None)
 }
 
-/// The items kept beside this one in the same keep: a check-in about it, a good thing made
-/// of it.
-fn dependents(e: &Engine, id: &str) -> nocturne_engine::Result<Vec<String>> {
-    let kept = e.get_item(id)?.kept_at.parse()?;
-    let day = e.journal_day(e.journal_day_of(kept)?)?;
-    let mut out: Vec<String> = day
-        .checkins
-        .iter()
-        .filter(|c| c.about.as_deref() == Some(id))
-        .map(|c| c.id.clone())
-        .collect();
-    out.extend(
-        day.good
-            .iter()
-            .filter(|g| g.photo.as_ref().is_some_and(|p| p.id == id))
-            .map(|g| g.id.clone()),
-    );
-    Ok(out)
+/// What the same keep made beside this item: its feeling, its good thing. Never what the
+/// person wrote on the computer, which only loses the photo.
+fn dependents(e: &Engine, device: &str, id: &str) -> nocturne_engine::Result<Vec<String>> {
+    let Some(client) = e.remote_keep_client(id)? else {
+        return Ok(Vec::new());
+    };
+    let place = KeepPlace {
+        phone: Some((device, &client)),
+    };
+    Ok(e.keep_records(&place)?
+        .into_iter()
+        .filter(|r| r != id)
+        .collect())
 }
 
 /// What a phone sent with the bytes of a keep besides the file itself.

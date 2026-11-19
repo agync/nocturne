@@ -388,6 +388,19 @@ impl Engine {
         })
     }
 
+    /// The client id a phone gave the keep that made `item_id`.
+    pub fn remote_keep_client(&self, item_id: &str) -> Result<Option<String>> {
+        self.read(|conn| {
+            Ok(conn
+                .query_row(
+                    "SELECT client_id FROM remote_keeps WHERE item_id = ?1",
+                    [item_id],
+                    |r| r.get(0),
+                )
+                .optional()?)
+        })
+    }
+
     pub fn remote_keep_owner(&self, item_id: &str) -> Result<Option<(String, Timestamp)>> {
         self.read(|conn| {
             let row: Option<(String, String)> = conn

@@ -234,6 +234,8 @@ pub struct PhoneState {
 #[derive(Clone)]
 pub struct MadeUp {
     pub item: nocturne_contract::PhoneItem,
+    /// The client id the phone gave the keep, which names what the keep made beside the item.
+    pub client_id: String,
     /// When it was kept, for the take-back window.
     pub kept_at: jiff::Timestamp,
     /// When it was made, for how long it is remembered.
@@ -907,6 +909,7 @@ impl Core {
         &self,
         device: &str,
         item: nocturne_contract::PhoneItem,
+        client_id: &str,
         kept_at: jiff::Timestamp,
     ) {
         let at = self.now();
@@ -921,8 +924,15 @@ impl Core {
         {
             p.made_up.remove(&oldest);
         }
-        p.made_up
-            .insert(item.id.clone(), MadeUp { item, kept_at, at });
+        p.made_up.insert(
+            item.id.clone(),
+            MadeUp {
+                item,
+                client_id: client_id.to_string(),
+                kept_at,
+                at,
+            },
+        );
     }
 
     /// A made-up keep of this phone that is still remembered.
