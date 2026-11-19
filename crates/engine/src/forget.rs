@@ -572,7 +572,8 @@ impl Engine {
             tx.execute(
                 "WITH RECURSIVE keep(id) AS ( \
                    SELECT id FROM entities WHERE merged_into IS NULL \
-                     AND id IN (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL) \
+                     AND (id IN (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL) \
+                       OR id IN (SELECT entity_id FROM mentions)) \
                    UNION SELECT e.id FROM entities e JOIN keep k ON e.merged_into = k.id) \
                  DELETE FROM entities WHERE id NOT IN (SELECT id FROM keep)",
                 [],
