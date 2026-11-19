@@ -636,7 +636,7 @@ impl Engine {
         self.read(|conn| {
             let mut stmt = conn.prepare(
                 "SELECT id, metadata FROM items WHERE json_extract(metadata, '$.journal') = 'checkin' \
-                 ORDER BY kept_at, id",
+                 ORDER BY kept_at, rowid",
             )?;
             let rows: Vec<(String, String)> = stmt
                 .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
