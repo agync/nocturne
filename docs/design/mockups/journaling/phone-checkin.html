@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · check in · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Check in" data-states="words field list saved">
+<main id="content" class="pmain">
+  <div data-state="field words" style="display: flex; flex-direction: column; gap: 10px">
+    <h1 class="ptitle" data-state="field">How are you feeling?</h1>
+    <p class="plead" data-state="field">Tap or drag to a spot, then pick the words that fit.</p>
+    <div class="pfield" data-state="field">
+      <p class="axis top" style="text-align: center; margin-bottom: 6px">More energy</p>
+      <div class="field" role="radiogroup" aria-label="How it feels">
+        <span class="part" role="radio" data-part="wound" aria-checked="false"><span data-icon="wound" data-size="18"></span>Wound up</span>
+        <span class="part" role="radio" data-part="lit" aria-checked="false"><span data-icon="lit" data-size="18"></span>Lit up</span>
+        <span class="part" role="radio" data-part="low" aria-checked="false"><span data-icon="low" data-size="18"></span>Low</span>
+        <span class="part" role="radio" data-part="settled" aria-checked="false" data-state="field"><span data-icon="settled" data-size="18"></span>Settled</span>
+        <span class="part" role="radio" data-part="settled" aria-checked="true" data-state="words"><span data-icon="settled" data-size="18"></span>Settled</span>
+        <span class="dot big" data-part="settled" style="left: 72%; top: 70%" data-state="words"><span data-icon="settled" data-size="14"></span></span>
+      </div>
+      <p class="axis bottom" style="text-align: center; margin-top: 6px">Less energy</p>
+      <div class="paxisRow"><span>← Unpleasant</span><span>Pleasant →</span></div>
+    </div>
+    <div class="pfield" data-state="words" style="width: 230px; margin: 0 auto">
+      <p class="axis top" style="text-align: center; margin-bottom: 6px">More energy</p>
+      <div class="field" role="radiogroup" aria-label="How it feels">
+        <span class="part" role="radio" data-part="wound" aria-checked="false"><span data-icon="wound" data-size="16"></span></span>
+        <span class="part" role="radio" data-part="lit" aria-checked="false"><span data-icon="lit" data-size="16"></span></span>
+        <span class="part" role="radio" data-part="low" aria-checked="false"><span data-icon="low" data-size="16"></span></span>
+        <span class="part" role="radio" data-part="settled" aria-checked="false" data-state="field"><span data-icon="settled" data-size="16"></span></span>
+        <span class="part" role="radio" data-part="settled" aria-checked="true" data-state="words"><span data-icon="settled" data-size="16"></span></span>
+        <span class="dot big" data-part="settled" style="left: 72%; top: 70%" data-state="words"><span data-icon="settled" data-size="14"></span></span>
+      </div>
+      <p class="axis bottom" style="text-align: center; margin-top: 6px">Less energy</p>
+      <div class="paxisRow"><span>← Unpleasant</span><span>Pleasant →</span></div>
+    </div>
+    <span class="pbtn" data-kind="link" data-state="field">Show all words as a list</span>
+  </div>
+
+  <!-- Words, in a sheet that rises over the lower half -->
+  <section class="psheet" data-state="words" aria-label="Words for Settled" style="margin-top: auto; margin-bottom: -24px">
+    <span class="pgrab"></span>
+    <div class="sectionHead"><span class="plbl">Words for Settled</span><span class="small">Up to three</span></div>
+    <div class="pwords">
+      <span class="pword" data-part="settled" aria-checked="true">relieved</span>
+      <span class="pword" data-part="settled" aria-checked="true">content</span>
+      <span class="pword" data-part="settled">grateful</span>
+      <span class="pword" data-part="settled">calm</span>
+      <span class="pword" data-part="settled">relaxed</span>
+      <span class="pword" data-part="settled">safe</span>
+      <span class="pword" data-part="settled">loved</span>
+      <span class="pword" data-part="settled">cosy</span>
+    </div>
+    <p class="pmeaning" aria-live="polite"><strong>content</strong>: Happy with how things are</p>
+    <span class="pbtn" data-kind="link">More words</span>
+    <div class="pbox" style="min-height: 52px; display: flex; align-items: center; justify-content: space-between"><span class="ph">What’s going on? (optional)</span><span data-icon="mic" data-size="20"></span></div>
+    <div style="position: sticky; bottom: 0; margin: 0 -20px -20px; padding: 12px 20px 20px; background: var(--sheet); border-top: 1px solid var(--rule)"><span class="pbtn" data-kind="primary">Save</span></div>
+  </section>
+
+  <!-- All words as a list -->
+  <div data-state="list" style="display: flex; flex-direction: column; gap: 14px">
+    <h1 class="ptitle">How are you feeling?</h1>
+    <span class="pbtn" data-kind="link">Show the field</span>
+    <fieldset data-part="low" style="border: 0; margin: 0; padding: 0">
+      <legend class="plbl" style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px"><span data-icon="low" data-size="16"></span>Low</legend>
+      <div class="prow"><span>tired</span><span class="box"></span></div>
+      <div class="prow"><span>bored</span><span class="box"></span></div>
+      <div class="prow"><span>flat</span><span class="box"></span></div>
+      <div class="prow"><span>disappointed</span><span class="box"></span></div>
+      <div class="prow"><span>drained<small>Nothing left to give</small></span><span class="box" data-on></span></div>
+    </fieldset>
+    <fieldset data-part="settled" style="border: 0; margin: 0; padding: 0">
+      <legend class="plbl" style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px"><span data-icon="settled" data-size="16"></span>Settled</legend>
+      <div class="prow"><span>calm</span><span class="box"></span></div>
+      <div class="prow"><span>relieved<small>A worry has lifted</small></span><span class="box" data-on></span></div>
+    </fieldset>
+    <p class="small">Wound up and Lit up are above; scroll for the rest.</p>
+  </div>
+
+  <!-- Saved -->
+  <div data-state="saved" style="display: flex; flex-direction: column; gap: 12px; padding-top: 24px">
+    <p class="ptitle">Saved. Relieved, content.</p>
+    <p><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>Settled · relieved, content</span></p>
+    <p class="plead">It’s on today’s journal.</p>
+    <p class="meta">Check-in · 6:10 pm · kept from My phone</p>
+    <div class="pcard" style="margin-top: 12px"><span class="pcardTitle">Changed your mind? Until 6:20 pm</span><span class="pbtn" data-kind="quiet">Take back</span></div>
+  </div>
+  <div class="pfoot" data-state="list"><span class="pbtn" data-kind="primary">Save</span></div>
+  <div class="pfoot" data-state="saved"><span class="pbtn" data-kind="primary">Done</span></div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

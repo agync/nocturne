@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>People and places in an entry · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="new strip someone removed which">
+<div id="content" class="sheet">
+  <div class="head">
+    <div class="headText">
+      <p class="eyebrow">Journal</p>
+      <h1 class="title">Thursday 19 November</h1>
+    </div>
+  </div>
+
+  <div class="mainCol" style="max-width: 760px">
+    <section class="entry" aria-label="Today's entry">
+      <div class="sectionHead">
+        <span class="label">Today’s entry</span>
+        <span class="meta">Read 9:24 pm</span>
+      </div>
+      <p class="entryText">Finally had lunch with <span class="mention" data-state="new someone">Priya</span><span data-state="strip removed which">Priya</span>. We sat outside the café on Mill Lane even though it was cold, and she told me about the new climbing wall by the station. I think I’ll go with her and <span class="mention" data-state="which">Sam</span><span data-state="new strip someone removed">Sam</span> on Saturday.</p>
+
+      <ul class="chips" aria-label="In this entry">
+        <li class="chipsLabel">In this entry</li>
+        <li class="anchor" data-state="new">
+          <span class="chip" aria-pressed="true"><span data-icon="user" data-size="14"></span>Priya <span class="newTag">new</span></span>
+          <div class="pop" role="dialog" aria-label="Priya">
+            <div class="popHead"><span data-icon="user" data-size="18"></span>Priya <span class="newTag">new</span></div>
+            <p class="muted">Nocturne thinks Priya is someone new.</p>
+            <label class="fieldLabel" for="role">Who is Priya to you? (optional)</label>
+            <div class="fieldInput" id="role"><span>a friend from climbing<span class="caret"></span></span></div>
+            <div class="popActions">
+              <span class="button" data-variant="primary">That’s right</span>
+              <span class="button" data-variant="secondary">Someone else…</span>
+              <span class="button" data-variant="quiet">Not a person</span>
+              <span class="button" data-variant="quiet">Not about Priya</span>
+            </div>
+          </div>
+        </li>
+        <li data-state="strip someone which"><span class="chip"><span data-icon="user" data-size="14"></span>Priya <span class="newTag" data-state="strip">new</span></span></li>
+        <li><span class="chip"><span data-icon="pin" data-size="14"></span>Mill Lane café</span></li>
+        <li data-state="new strip someone which"><span class="chip"><span data-icon="pin" data-size="14"></span>the climbing wall <span class="newTag">new</span></span></li>
+        <li data-state="new strip someone removed"><span class="chip"><span data-icon="user" data-size="14"></span>Sam</span></li>
+      </ul>
+      <p class="small" data-state="strip">Hovering a name outlines the words it came from. Pressing it opens its card.</p>
+    </section>
+
+    <div class="toast" role="status" data-state="removed" style="width: 100%; max-width: 640px">
+      <span>Removed the climbing wall from this entry. What it said about it is let go, not deleted.</span>
+      <span class="button" data-variant="quiet">Undo</span>
+    </div>
+
+    <!-- Needs you: which Sam -->
+    <section class="section" data-state="which">
+      <h2 class="label">In Needs you</h2>
+      <div class="entry" style="gap: var(--s-3)">
+        <div class="sectionHead"><span class="badge">Same name</span><span class="meta">From today’s entry</span></div>
+        <p style="font: 500 1.125rem / 1.4 var(--font-sans)">Which Sam is this?</p>
+        <p class="quote">“I think I’ll go with her and Sam on Saturday.”</p>
+        <div style="display: flex; flex-direction: column; gap: var(--s-2)">
+          <span class="option"><span class="radio"></span><span>Sam<small>your partner</small></span></span>
+          <span class="option" data-on><span class="radio"></span><span>Sam<small>from work</small></span></span>
+          <span class="option"><span class="radio"></span><span>Someone new</span></span>
+        </div>
+        <div class="buttons"><span class="button" data-variant="primary">This one</span><span class="button" data-variant="quiet">Leave it</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- Someone else: the existing Re-file dialog, opened from the card -->
+<div id="overlay" data-state="someone">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-label="Is this about something else?">
+      <h2 style="font: 400 1.75rem / 1.2 var(--font-serif)">Is this about something else?</h2>
+      <p class="muted">Choose who or what this belongs to instead of Priya. Only the memories from this entry move, and their words stay as they are.</p>
+      <span class="option" data-on><span class="radio"></span>Someone or something Nocturne already knows</span>
+      <span class="option"><span class="radio"></span>Someone or something new</span>
+      <label class="fieldLabel" for="find">Find a person, place or thing</label>
+      <div class="fieldInput" id="find"><span>Pri<span class="caret"></span></span></div>
+      <span class="option" data-on><span class="radio"></span><span>Priya Shah<small>Leo’s teacher · 6 memories</small></span></span>
+      <div class="buttons"><span class="button" data-variant="primary">Move it</span><span class="button" data-variant="quiet">Cancel</span></div>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

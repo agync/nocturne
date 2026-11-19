@@ -6,6 +6,7 @@ screen follows, the data model, and how quality is measured.
 - [Concept](concept.md) - The four loops, the forgetting policy and the morning page.
 - [Experience principles](experience-principles.md) - The rules every screen, string and flow follows.
 - [Data model](data-model.md) - The event tape, the fact graph, the status lifecycle and the provenance rules.
+- [Journaling](journaling.md) - Proposal for a journal built on what Nocturne keeps: a daily entry, feelings, good things, people and places, and reflections and recaps with receipts.
 - [Back up and restore](backup-and-restore.md) - One file with everything, locked with a passphrase the person chooses, and the way back from it.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · today’s journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Journal" data-states="day asleep empty">
+<main id="content" class="pmain">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <p class="plbl">Today · Thursday 19 November</p>
+  </div>
+
+  <div class="pbanner" role="status" data-state="asleep">
+    <span data-icon="moon" data-size="22"></span>
+    <span><strong>Home computer can’t be reached.</strong>The journal is back when your computer is. This phone keeps no copy. What you keep now waits here.</span>
+  </div>
+
+  <a class="pcard" data-state="day" style="flex-direction: row; align-items: center; justify-content: space-between; text-decoration: none; color: inherit">
+    <span style="display: flex; flex-direction: column; gap: 6px"><span class="plbl">Needs you</span><span class="pcardTitle">Which Sam is this?</span><span class="badge">Same name</span></span><span data-icon="chevron-right" data-size="20"></span>
+  </a>
+
+  <div class="pcard" data-state="day">
+    <span class="plbl">Today’s entry</span>
+    <p class="quote">Finally had lunch with Priya. We sat outside the café on Mill Lane even though it was cold…</p>
+    <span class="pbtn" data-kind="link" style="height: 36px">Read it all</span>
+  </div>
+
+  <section data-state="day" aria-label="Through the day">
+    <p class="plbl" style="margin-bottom: 4px">Through the day</p>
+    <ul class="ptl">
+      <li><span class="t">7:52 am</span><span class="c">Leo forgot his PE kit again. Dropped it at the school office on the way to work.<span class="chips"><span class="chip"><span data-icon="user" data-size="14"></span>Leo</span></span></span></li>
+      <li><span class="t">8:05 am</span><span class="c"><span><span class="feel" data-part="low"><span data-icon="low" data-size="14"></span>Low · tired</span></span>“Bad night.”</span></li>
+      <li><span class="t">9:30 am</span><span class="c" style="color: var(--ink2); font-size: 0.875rem">Year 4 trip form · Document</span></li>
+      <li><span class="t">1:12 pm</span><span class="c">Lunch with Priya, finally <span><span class="feel" data-part="lit"><span data-icon="lit" data-size="14"></span>pleased</span></span><span class="meta">from My phone</span></span></li>
+      <li><span class="t">3:40 pm</span><span class="c" style="flex-direction: row; gap: 10px; align-items: center"><span class="photoBox small"><span data-icon="image" data-size="16"></span></span>Tomatoes ripening on a windowsill.</span></li>
+      <li><span class="t">6:10 pm</span><span class="c"><span><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>Settled · relieved, content</span></span>“Gran’s scan came back clear.”<span class="chips"><span class="chip"><span data-icon="user" data-size="14"></span>Gran</span></span></span></li>
+      <li><span class="t">7:30 pm</span><span class="c"><span style="display: flex; gap: 8px"><span data-icon="sun" data-size="18" style="color: var(--feel-lit)"></span>Sam fixed the gate without being asked.</span></span></li>
+    </ul>
+  </section>
+
+  <section data-state="asleep" aria-label="Waiting on this phone">
+    <p class="plbl" style="margin-bottom: 4px">Waiting on this phone</p>
+    <ul class="ptl">
+      <li><span class="t">8:40 pm</span><span class="c">Voice note, 0:48<span class="pwait">waiting on this phone</span></span></li>
+      <li><span class="t">8:44 pm</span><span class="c"><span><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>calm</span></span><span class="pwait">waiting on this phone</span></span></li>
+    </ul>
+  </section>
+
+  <div data-state="empty" style="display: flex; flex-direction: column; gap: 8px; padding-top: 8px">
+    <p class="ptext">Nothing kept today yet.</p>
+    <p class="plead">Anything you keep, here or on your computer, shows up here.</p>
+  </div>
+
+  <div class="pfoot" data-state="day"><span class="pbtn" data-kind="primary">Reflect on today</span><span class="pbtn" data-kind="quiet">← Wednesday</span></div>
+  <div class="pfoot" data-state="asleep empty"><span class="pbtn" data-kind="primary">Keep something</span><span class="pbtn" data-kind="quiet" data-state="empty">Check in</span></div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

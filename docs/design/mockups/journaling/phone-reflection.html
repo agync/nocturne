@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · a day, looked back on · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Journal" data-states="written writing">
+<main id="content" class="pmain">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <p class="plbl">Wednesday 18 November · Looked back on</p>
+    <h1 class="ptitle">Wednesday 18 November</h1>
+  </div>
+
+  <div data-state="writing" style="display: flex; flex-direction: column; gap: 10px">
+    <p class="writing"><span class="pulse"></span>Your computer is looking back on your day…</p>
+    <p class="plead">This can take a minute. You can leave this page; it will be in your journal.</p>
+  </div>
+
+  <section class="rsection" data-state="written">
+    <h2 class="rlabel">The day</h2>
+    <p class="ptext">You took <span class="span">Leo to swimming</span> straight from school, and <span class="span">Sam cooked</span> for once. You kept the <span class="span">dentist’s new time</span>: Tuesday at 8:40.</p>
+    <ul class="rchips"><li class="rchip"><span data-icon="pen" data-size="14"></span>5:10 pm · note</li><li class="rchip"><span data-icon="mic" data-size="14"></span>7:02 pm · voice</li><li class="rchip"><span data-icon="image" data-size="14"></span>Photo · letter</li></ul>
+  </section>
+
+  <section class="rsection" data-state="written">
+    <h2 class="rlabel">How it felt</h2>
+    <div class="field mini" style="max-width: 160px" role="img" aria-label="Check-ins: stressed at 4:30 pm, content at 9:10 pm">
+      <span class="part" data-part="wound"><span data-icon="wound" data-size="12"></span></span>
+      <span class="part" data-part="lit"><span data-icon="lit" data-size="12"></span></span>
+      <span class="part" data-part="low"><span data-icon="low" data-size="12"></span></span>
+      <span class="part" data-part="settled"><span data-icon="settled" data-size="12"></span></span>
+      <span class="dot small" data-part="wound" style="left: 28%; top: 30%"></span>
+      <span class="dot small" data-part="settled" style="left: 74%; top: 70%"></span>
+    </div>
+    <p class="ptext">At 4:30 pm, running late for swimming, you were <span class="span">stressed</span>. By 9:10 pm you checked in as <span class="span">content</span>.</p>
+  </section>
+
+  <section class="rsection" data-state="written">
+    <h2 class="rlabel">Good things</h2>
+    <ul class="slist"><li><span data-icon="sun" data-size="16"></span><span>Leo swam a whole length.</span></li></ul>
+  </section>
+
+  <section class="rsection" data-state="written">
+    <h2 class="rlabel">People and places</h2>
+    <ul class="chips"><li class="chip"><span data-icon="user" data-size="14"></span>Leo</li><li class="chip"><span data-icon="user" data-size="14"></span>Sam</li><li class="chip"><span data-icon="pin" data-size="14"></span>the leisure centre</li></ul>
+  </section>
+
+  <p class="meta" data-state="written">Written on your computer overnight, from 7 things you kept that day.</p>
+  <div class="pfoot" data-state="written"><span class="pbtn" data-kind="quiet">Today</span></div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

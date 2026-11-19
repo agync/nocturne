@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · your week · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Journal" data-states="week">
+<main id="content" class="pmain">
+  <div style="display: flex; flex-direction: column; gap: 6px">
+    <p class="plbl">9 to 15 November</p>
+    <h1 class="ptitle">Your week</h1>
+  </div>
+
+  <section class="rsection">
+    <h2 class="rlabel">Highlights</h2>
+    <div class="phl"><span class="hday">Tuesday 10</span><span class="hline">“Leo read the whole of his school play part to Gran on the phone.”</span></div>
+    <div class="phl"><span class="hday">Saturday 14</span><span class="hline">“First frost on the allotment. Dug the last of the leeks with Gran.”</span></div>
+    <div class="phl"><span class="hday">Sunday 15</span><span class="hline">You decided to <span class="span">take Fridays off in December</span>.</span></div>
+  </section>
+
+  <section class="rsection">
+    <h2 class="rlabel">How it felt</h2>
+    <div class="pweek" role="img" aria-label="Check-ins by day. Show as a table for the list.">
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="wound" style="left: 25%; top: 25%"></span><span class="dot small" data-part="low" style="left: 35%; top: 70%"></span></div><span class="wlabel">M</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="lit" style="left: 78%; top: 22%"></span></div><span class="wlabel">T</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="low" style="left: 30%; top: 78%"></span></div><span class="wlabel">W</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="wound" style="left: 22%; top: 30%"></span></div><span class="wlabel">T</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="low" style="left: 40%; top: 66%"></span></div><span class="wlabel">F</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="settled" style="left: 74%; top: 72%"></span></div><span class="wlabel">S</span></div>
+      <div class="wday"><div class="field"><span class="part" data-part="wound"></span><span class="part" data-part="lit"></span><span class="part" data-part="low"></span><span class="part" data-part="settled"></span><span class="dot small" data-part="settled" style="left: 68%; top: 64%"></span></div><span class="wlabel">S</span></div>
+    </div>
+    <ul class="counts">
+      <li data-part="low"><span>tired</span><span class="bar" style="width: 100%"></span><span>3</span></li>
+      <li data-part="wound"><span>stressed</span><span class="bar" style="width: 66%"></span><span>2</span></li>
+      <li data-part="settled"><span>content</span><span class="bar" style="width: 66%"></span><span>2</span></li>
+      <li data-part="lit"><span>proud</span><span class="bar" style="width: 33%"></span><span>1</span></li>
+    </ul>
+    <span class="pbtn" data-kind="link">Show as a table</span>
+    <p class="plbl">What tended to go together</p>
+    <p class="together">On 3 of the 4 days you saw Gran, you checked in as settled.</p>
+    <p class="small">Shown only when it held at least three times. It says what went together, never why.</p>
+  </section>
+
+  <section class="rsection">
+    <h2 class="rlabel">Good things</h2>
+    <div class="goodRow" style="grid-template-columns: 1fr 1fr">
+      <div class="good"><div class="photoBox"><span data-icon="image" data-size="20"></span></div><span>Leo’s play rehearsal.</span><span class="hday">Tue 10</span></div>
+      <div class="good"><div class="photoBox"><span data-icon="image" data-size="20"></span></div><span>Frost on the allotment.</span><span class="hday">Sat 14</span></div>
+    </div>
+  </section>
+
+  <section class="rsection">
+    <h2 class="rlabel">People and places</h2>
+    <ul class="slist plain">
+      <li><span data-icon="user" data-size="16"></span><span>Leo · 7 days</span></li>
+      <li><span data-icon="user" data-size="16"></span><span>Gran · 4 days</span></li>
+      <li><span data-icon="pin" data-size="16"></span><span>the allotment · 2 days</span></li>
+    </ul>
+  </section>
+
+  <section class="rsection">
+    <h2 class="rlabel">Still open</h2>
+    <div class="pcard"><span class="pcardTitle">Book Gran’s eye test</span><span class="small">You said you would, on Monday. Mark it done on your computer.</span></div>
+  </section>
+  <p class="meta">Written on your computer overnight on Sunday, from 7 days in your journal.</p>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

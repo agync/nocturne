@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal · today · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="day first empty partial notready">
+<div id="content" class="sheet">
+  <div class="head">
+    <div class="headText">
+      <p class="eyebrow">Journal</p>
+      <h1 class="title">Thursday 19 November</h1>
+      <div class="daynav"><span>← Wednesday</span><span><span data-icon="calendar" data-size="16"></span>Choose a day</span></div>
+    </div>
+    <div class="buttons" data-state="day first partial notready">
+      <span class="button" data-variant="primary">Reflect on today</span>
+    </div>
+    <div class="buttons" data-state="empty" style="flex-direction: column; align-items: flex-end; gap: 6px">
+      <button class="button" data-variant="primary" disabled>Reflect on today</button>
+      <span class="small">Keep something about today first.</span>
+    </div>
+  </div>
+
+  <div class="firstCard" data-state="first" style="margin-bottom: var(--s-5)">
+    <strong>Your journal</strong>
+    <p>Write about your day here, in words, voice or photos. Everything you keep during the day lands on the timeline below, so it is already half written. It is kept on this computer. A phone you added can read it too.</p>
+    <span class="button" data-variant="secondary">Got it</span>
+  </div>
+
+  <div class="cols">
+    <div class="mainCol">
+
+      <!-- Today's entry -->
+      <section class="entry" aria-label="Today's entry">
+        <div class="sectionHead">
+          <span class="label">Today’s entry</span>
+          <span class="meta">
+            <span data-state="day partial notready">Saved 9:14 pm</span>
+          </span>
+        </div>
+
+        <p class="entryText placeholder" data-state="first empty">Write about today, or hold Space to talk.<span class="caret"></span></p>
+
+        <div data-state="day partial notready" style="display: flex; flex-direction: column; gap: var(--s-4)">
+          <p class="entryText">Finally had lunch with Priya. We sat outside the café on Mill Lane even though it was cold, and she told me about the new climbing wall by the station. I think I’ll go with her on Saturday.</p>
+          <div class="voice">
+            <div class="voiceTop"><span class="playBtn"><span data-icon="play" data-size="14"></span></span><span>Voice note, 1:42</span><span class="wave"></span></div>
+            <span class="disclose" data-state="day"><span data-icon="chevron-right" data-size="14"></span>What was said</span>
+            <span class="tstatus" data-state="partial notready">reading…</span>
+          </div>
+          <figure class="photo" style="margin: 0">
+            <div class="photoBox"><span data-icon="image" data-size="28"></span></div>
+            <figcaption class="caption" data-state="day">Tomatoes ripening on a windowsill.</figcaption>
+            <figcaption class="caption" data-state="partial notready">Photo, not read yet</figcaption>
+          </figure>
+          <p class="entryText">Gran rang at six. Her scan came back clear. She’d been at the allotment all afternoon and sounded tired but pleased with herself.<span class="caret"></span></p>
+          <ul class="chips" aria-label="In this entry" data-state="day">
+            <li class="chipsLabel">In this entry</li>
+            <li class="chip"><span data-icon="user" data-size="14"></span>Priya <span class="newTag">new</span></li>
+            <li class="chip"><span data-icon="pin" data-size="14"></span>Mill Lane café</li>
+            <li class="chip"><span data-icon="pin" data-size="14"></span>the climbing wall <span class="newTag">new</span></li>
+            <li class="chip"><span data-icon="user" data-size="14"></span>Gran</li>
+            <li class="chip"><span data-icon="pin" data-size="14"></span>the allotment</li>
+          </ul>
+          <p class="small" data-state="partial notready">Nocturne will read this when you stop writing for a while.</p>
+        </div>
+
+        <div class="toolbar">
+          <span class="tool"><span data-icon="image" data-size="16"></span>Add a photo</span>
+          <span class="tool"><span data-icon="mic" data-size="16"></span>Record</span>
+          <span class="tool"><span data-icon="settled" data-size="16"></span>Check in</span>
+          <span class="tool"><span data-icon="sun" data-size="16"></span>Add a good thing</span>
+        </div>
+      </section>
+
+      <!-- The timeline -->
+      <section class="section" aria-labelledby="through">
+        <h2 class="label" id="through">Through the day</h2>
+
+        <div class="notice" data-state="notready">
+          <span><strong>Nocturne is getting ready.</strong>What you keep is safe and will be read when it is.</span>
+        </div>
+
+        <p class="muted" data-state="first empty">Nothing kept today yet. Anything you keep, from here, the keep bar or your phone, shows up here.</p>
+
+        <div class="timeline" data-state="day partial notready">
+          <div class="tgroup">
+            <p class="tgroupLabel">Morning</p>
+            <ul class="trows">
+              <li class="trow"><span class="ttime">7:52 am</span>
+                <div class="tline"><span data-icon="pen" data-size="16"></span><span class="ttext">Leo forgot his PE kit again. Dropped it at the school office on the way to work.</span></div>
+                <div class="tsub" data-state="day"><span class="chip"><span data-icon="user" data-size="14"></span>Leo</span><span class="chip"><span data-icon="pin" data-size="14"></span>the school</span></div>
+              </li>
+              <li class="trow" data-part="low"><span class="ttime">8:05 am</span>
+                <div class="tline"><span class="feel" data-part="low"><span data-icon="low" data-size="14"></span>Low · tired</span><span class="ttext">“Bad night.”</span></div>
+              </li>
+              <li class="trow compact"><span class="ttime">9:30 am</span>
+                <div class="tline"><span data-icon="file" data-size="16"></span><span class="ttext">Year 4 trip form · Document</span><span class="tstatus" data-state="partial notready">reading…</span></div>
+              </li>
+            </ul>
+          </div>
+          <div class="tgroup">
+            <p class="tgroupLabel">Afternoon</p>
+            <ul class="trows">
+              <li class="trow" data-part="lit"><span class="ttime">1:12 pm</span>
+                <div class="tline"><span data-icon="phone" data-size="16"></span><span class="ttext">Lunch with Priya, finally</span><span class="feel" data-part="lit"><span data-icon="lit" data-size="14"></span>pleased</span></div>
+                <div class="tsub"><span class="meta">from My phone</span><span class="chip" data-state="day"><span data-icon="user" data-size="14"></span>Priya <span class="newTag">new</span></span></div>
+              </li>
+              <li class="trow"><span class="ttime">3:40 pm</span>
+                <div class="tline"><span class="photoBox small"><span data-icon="image" data-size="16"></span></span><span class="ttext" data-state="day">Tomatoes ripening on a windowsill.</span><span class="ttext" data-state="partial notready">Photo <span class="tstatus">reading…</span></span></div>
+              </li>
+            </ul>
+          </div>
+          <div class="tgroup">
+            <p class="tgroupLabel">Evening</p>
+            <ul class="trows">
+              <li class="trow" data-part="settled"><span class="ttime">6:10 pm</span>
+                <div class="tline"><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>Settled · relieved, content</span><span class="ttext">“Gran’s scan came back clear.”</span></div>
+                <div class="tsub" data-state="day"><span class="chip"><span data-icon="user" data-size="14"></span>Gran</span></div>
+              </li>
+              <li class="trow"><span class="ttime">7:30 pm</span>
+                <div class="tline"><span data-icon="sun" data-size="16"></span><span class="ttext">Sam fixed the gate without being asked.</span></div>
+              </li>
+              <li class="trow marker"><span class="ttime">9:14 pm</span>
+                <div class="tline"><span data-icon="pen" data-size="16"></span><span class="ttext">Today’s entry</span></div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Side column -->
+    <aside class="sideCol" aria-label="About today">
+      <div class="sblock">
+        <h2 class="label">How today felt</h2>
+        <div data-state="day partial notready">
+          <div class="field mini" role="img" aria-label="Three check-ins: tired at 8:05 am, pleased at 1:12 pm, relieved and content at 6:10 pm">
+            <span class="part" data-part="wound"><span data-icon="wound" data-size="12"></span></span>
+            <span class="part" data-part="lit"><span data-icon="lit" data-size="12"></span></span>
+            <span class="part" data-part="low"><span data-icon="low" data-size="12"></span></span>
+            <span class="part" data-part="settled"><span data-icon="settled" data-size="12"></span></span>
+            <span class="dot small" data-part="low" style="left: 35%; top: 70%"></span>
+            <span class="dot small" data-part="lit" style="left: 70%; top: 37%"></span>
+            <span class="dot small" data-part="settled" style="left: 75%; top: 72%"></span>
+          </div>
+        </div>
+        <ul class="slist" data-state="day partial notready">
+          <li><span class="feel" data-part="low"><span data-icon="low" data-size="14"></span>tired</span><span class="meta">8:05 am</span></li>
+          <li><span class="feel" data-part="lit"><span data-icon="lit" data-size="14"></span>pleased</span><span class="meta">1:12 pm</span></li>
+          <li><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>relieved, content</span><span class="meta">6:10 pm</span></li>
+        </ul>
+        <p class="small" data-state="first empty">No check-ins today.</p>
+        <span class="button" data-variant="secondary" style="align-self: flex-start">Check in</span>
+      </div>
+
+      <div class="sblock" data-state="day partial notready">
+        <h2 class="label">Good things</h2>
+        <ul class="slist">
+          <li><span data-icon="sun" data-size="16"></span><span>Sam fixed the gate without being asked.</span></li>
+          <li><span data-icon="sun" data-size="16"></span><span>Gran’s news.</span></li>
+          <li><span data-icon="sun" data-size="16"></span><span>The tomatoes are finally red.</span></li>
+        </ul>
+      </div>
+      <div class="sblock" data-state="first empty">
+        <h2 class="label">Good things</h2>
+        <span class="button" data-variant="secondary" style="align-self: flex-start"><span data-icon="plus" data-size="16"></span>Add a good thing</span>
+      </div>
+
+      <div class="sblock" data-state="day">
+        <h2 class="label">People and places today</h2>
+        <ul class="chips">
+          <li class="chip"><span data-icon="user" data-size="14"></span>Gran</li>
+          <li class="chip"><span data-icon="user" data-size="14"></span>Leo</li>
+          <li class="chip"><span data-icon="user" data-size="14"></span>Priya <span class="newTag">new</span></li>
+          <li class="chip"><span data-icon="user" data-size="14"></span>Sam</li>
+          <li class="chip"><span data-icon="pin" data-size="14"></span>the allotment</li>
+          <li class="chip"><span data-icon="pin" data-size="14"></span>Mill Lane café</li>
+          <li class="chip"><span data-icon="pin" data-size="14"></span>the climbing wall <span class="newTag">new</span></li>
+        </ul>
+      </div>
+
+      <div class="sblock" data-state="day partial">
+        <h2 class="label">Looked back on</h2>
+        <p class="quote">A slow start, then lunch with Priya at last.</p>
+        <span class="meta">3:15 pm, from 6 things you kept</span>
+        <span class="button" data-variant="quiet" data-flush style="align-self: flex-start">Open</span>
+      </div>
+    </aside>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

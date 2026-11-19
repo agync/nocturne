@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Online answers settings, with the journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<style>
+.oRows { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.oRow { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-2) var(--s-4); padding: var(--s-3) 0; border-bottom: 1px solid var(--rule); }
+.oText { display: flex; flex-direction: column; gap: 2px; min-width: 12rem; max-width: 28rem; }
+.oLabel { font: 500 0.9375rem / 1.4 var(--font-sans); }
+.oHint { color: var(--ink2); font-size: 0.8125rem; line-height: 1.45; }
+.oValue { color: var(--ink2); font-size: 0.875rem; }
+.oTag { padding: 2px 8px; border-radius: var(--r-sm); background: var(--feel-settled-soft); font: 500 0.75rem / 1.4 var(--font-mono); }
+.newRow { outline: 2px dashed var(--marker); outline-offset: 3px; }
+</style>
+</head>
+<body data-frame="app" data-section="Settings" data-states="on">
+<div id="content" class="sheet">
+  <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
+  <div class="columns">
+    <div class="main" style="max-width: 680px">
+      <div style="display: flex; align-items: center; gap: var(--s-3)"><h1 class="stepTitle">Online answers</h1><span class="oTag">On</span></div>
+      <p class="lead">While this is on, your questions leave this computer. Everything else stays here.</p>
+      <p class="small">your provider (api.example.com) · Writes answers with <span class="mono">example-model</span>. The key is kept on this computer.</p>
+
+      <ul class="oRows">
+        <li class="oRow"><span class="oText"><span class="oLabel">Questions from your phones</span><span class="oHint">Your phones show where each answer was written.</span></span><span class="switch"></span></li>
+        <li class="oRow"><span class="oText"><span class="oLabel">Health, money and ID details</span><span class="oHint">Off: they stay on this computer, even when they’d help an answer.</span></span><span class="switch" style="background: var(--rule)"></span></li>
+        <li class="oRow"><span class="oText"><span class="oLabel">Private things</span><span class="oHint">Things you marked private stay on this computer.</span></span><span class="oValue">Never sent</span></li>
+        <li class="oRow newRow"><span class="oText"><span class="oLabel">Your journal</span><span class="oHint">A line from an entry or a good thing may go with a question it helps answer. They can’t be marked private. Check-ins, reflections and recaps never go.</span></span><span class="oValue">Entries and good things, when they help</span></li>
+        <li class="oRow"><span class="oText"><span class="oLabel">Monthly limit</span><span class="oHint">Then questions are answered here until the 1st.</span></span><span class="oValue">No limit</span></li>
+      </ul>
+
+      <div class="section">
+        <h2 class="label">Always stays here</h2>
+        <ul class="rules">
+          <li>Photos, recordings and documents</li>
+          <li>Things you marked private</li>
+          <li class="newRow">Your check-ins, reflections and recaps</li>
+          <li>Keeping, reading and the overnight tidy</li>
+          <li>Your morning page and its voice</li>
+        </ul>
+        <p class="small">Health, money and ID details stay here unless you choose otherwise. Nocturne can miss some, so mark anything you never want sent as private.</p>
+        <p class="small newRow">Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer.</p>
+      </div>
+
+      <div class="buttons"><span class="button" data-variant="secondary">See what was sent</span><span class="button" data-variant="quiet">Turn off</span></div>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

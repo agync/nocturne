@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · home with the journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-states="home asleep">
+<main id="content" class="pmain">
+  <p class="pstatus" data-state="home"><span class="pdot"></span>Connected to Home computer</p>
+  <div class="pbanner" role="status" data-state="asleep">
+    <span data-icon="moon" data-size="22"></span>
+    <span><strong>Home computer is asleep, switched off or has a new address.</strong>Things you keep now wait on this phone and go across when it’s back.</span>
+  </div>
+
+  <div class="ptile">
+    <span data-icon="plus" data-size="24"></span>
+    <div><span class="ptileTitle">Keep</span>
+      <span class="ptileHint" data-state="home">A note, a photo or a voice note, a feeling or a good thing.</span>
+      <span class="ptileHint" data-state="asleep">Still works. 2 things are waiting here.</span></div>
+  </div>
+  <div class="ptile" data-state="home">
+    <span data-icon="ask" data-size="24"></span>
+    <div><span class="ptileTitle">Ask</span><span class="ptileHint">Every answer shows where it came from.</span></div>
+  </div>
+  <div class="ptile" data-off data-state="asleep">
+    <span data-icon="ask" data-size="24"></span>
+    <div><span class="ptileTitle">Ask</span><span class="ptileHint">Back when your computer is. Answers come from it.</span></div>
+  </div>
+  <div class="ptile" data-state="home">
+    <span data-icon="file" data-size="24"></span>
+    <div><span class="ptileTitle">Today’s page</span><span class="ptileHint">Gran’s eye test is on Monday.</span></div>
+  </div>
+  <div class="ptile" style="outline: 2px dashed var(--marker); outline-offset: 3px" data-state="home">
+    <span data-icon="book" data-size="24"></span>
+    <div><span class="ptileTitle">Journal</span><span class="ptileHint">Today so far, and looking back.</span></div>
+  </div>
+  <div class="ptile" data-off style="outline: 2px dashed var(--marker); outline-offset: 3px" data-state="asleep">
+    <span data-icon="book" data-size="24"></span>
+    <div><span class="ptileTitle">Journal</span><span class="ptileHint">Back when your computer is. This phone keeps no copy.</span></div>
+  </div>
+  <p class="small" data-state="home">Things you marked private stay on your computer.</p>
+  <p class="small">A dashed outline marks what is new; it is not part of the design.</p>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A day, looked back on · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="written sofar glance writing">
+<div id="content" class="sheet" style="align-items: center">
+  <a class="back" href="#"><span aria-hidden="true">←</span> Journal</a>
+  <article class="reflect">
+    <header class="headText">
+      <p class="eyebrow" data-state="written">Thursday 19 November · Looked back on</p>
+      <p class="eyebrow" data-state="sofar writing glance">Today so far · at 3:15 pm</p>
+      <h1 class="title">Thursday 19 November</h1>
+    </header>
+
+    <!-- Writing -->
+    <div class="writing" role="status" data-state="writing">
+      <span class="pulse"></span>
+      <span>Looking back on your day… This can take a minute on this computer.</span>
+      <span class="button" data-variant="quiet">Stop</span>
+    </div>
+
+    <!-- Partial: some things still being read -->
+    <div class="notice" data-state="sofar">
+      <span>1 thing from today is still being read, so it isn’t in this yet.</span>
+      <span class="button" data-variant="secondary">Write it again when it’s read</span>
+    </div>
+
+    <!-- Not ready: at a glance -->
+    <p class="muted" data-state="glance">Nocturne can write about this day once it is ready. Until then, here is the day at a glance.</p>
+    <section class="rsection" data-state="glance writing" aria-label="At a glance">
+      <h2 class="rlabel">At a glance</h2>
+      <ul class="glance">
+        <li><span>Kept</span><span>6 things kept: 2 notes, 1 voice note, 1 photo, 1 document, 1 check-in.</span></li>
+        <li><span>Felt</span><span><span class="feel" data-part="low"><span data-icon="low" data-size="14"></span>tired</span> 8:05 am · <span class="feel" data-part="lit"><span data-icon="lit" data-size="14"></span>pleased</span> 1:12 pm</span></li>
+        <li><span>With</span><span>Leo, Priya (new). At: the school, Mill Lane café.</span></li>
+        <li><span>Entry</span><span>“Finally had lunch with Priya. We sat outside the café on Mill Lane even though it was cold…”</span></li>
+      </ul>
+    </section>
+
+    <!-- The day -->
+    <section class="rsection" data-state="written sofar">
+      <h2 class="rlabel">The day</h2>
+      <p class="rtext" data-state="written">It started slowly: you were <span class="span">tired after a bad night</span>, and <span class="span">Leo forgot his PE kit again</span>, so you dropped it at the school office. At lunch you finally <span class="span hl">saw Priya</span>, outside the café on Mill Lane, and you think you’ll <span class="span">go climbing with her on Saturday</span>. In the evening <span class="span">Gran rang</span>: she had spent the afternoon at the allotment, and her scan came back clear.</p>
+      <p class="rtext" data-state="sofar">It started slowly: you were <span class="span">tired after a bad night</span>, and <span class="span">Leo forgot his PE kit again</span>. At lunch you finally <span class="span hl">saw Priya</span>, outside the café on Mill Lane.</p>
+      <ul class="rchips" aria-label="Where this came from">
+        <li class="rchip"><span data-icon="low" data-size="14"></span>8:05 am · check-in</li>
+        <li class="rchip"><span data-icon="pen" data-size="14"></span>7:52 am · note</li>
+        <li class="rchip" data-on><span data-icon="pen" data-size="14"></span>Today’s entry · ¶1</li>
+        <li class="rchip" data-state="written"><span data-icon="mic" data-size="14"></span>Voice note · 0:12</li>
+        <li class="rchip" data-state="written"><span data-icon="pen" data-size="14"></span>Today’s entry · ¶2</li>
+      </ul>
+    </section>
+
+    <!-- How it felt -->
+    <section class="rsection" data-state="written sofar">
+      <h2 class="rlabel">How it felt</h2>
+      <div class="feelLines">
+        <div class="field mini" role="img" aria-label="Check-ins: tired at 8:05 am, pleased at 1:12 pm, relieved and content at 6:10 pm">
+          <span class="part" data-part="wound"><span data-icon="wound" data-size="12"></span></span>
+          <span class="part" data-part="lit"><span data-icon="lit" data-size="12"></span></span>
+          <span class="part" data-part="low"><span data-icon="low" data-size="12"></span></span>
+          <span class="part" data-part="settled"><span data-icon="settled" data-size="12"></span></span>
+          <span class="dot small" data-part="low" style="left: 35%; top: 70%"></span>
+          <span class="dot small" data-part="lit" style="left: 70%; top: 37%"></span>
+          <span class="dot small" data-part="settled" style="left: 75%; top: 72%" data-state="written"></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--s-3)">
+          <p class="rtext" data-state="written">At 8:05 am you checked in as <span class="span">tired</span>. At lunch you were <span class="span">pleased</span>. At 6:10 pm you checked in as <span class="span">relieved and content</span>: “Gran’s scan came back clear.”</p>
+          <p class="rtext" data-state="sofar">At 8:05 am you checked in as <span class="span">tired</span>. At lunch you were <span class="span">pleased</span>.</p>
+          <p class="small">“Show as a table” lists each check-in with its time and words.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Good things -->
+    <section class="rsection" data-state="written">
+      <h2 class="rlabel">Good things</h2>
+      <ul class="slist">
+        <li><span data-icon="sun" data-size="16"></span><span>Sam fixed the gate without being asked.</span></li>
+        <li><span data-icon="sun" data-size="16"></span><span>Gran’s news.</span></li>
+        <li><span data-icon="sun" data-size="16"></span><span>The tomatoes are finally red.</span></li>
+      </ul>
+    </section>
+
+    <!-- People and places -->
+    <section class="rsection" data-state="written sofar">
+      <h2 class="rlabel">People and places</h2>
+      <ul class="chips">
+        <li class="chip" data-state="written"><span data-icon="user" data-size="14"></span>Gran</li>
+        <li class="chip"><span data-icon="user" data-size="14"></span>Leo</li>
+        <li class="chip"><span data-icon="user" data-size="14"></span>Priya <span class="newTag">new</span></li>
+        <li class="chip" data-state="written"><span data-icon="user" data-size="14"></span>Sam</li>
+        <li class="chip"><span data-icon="pin" data-size="14"></span>Mill Lane café</li>
+        <li class="chip" data-state="written"><span data-icon="pin" data-size="14"></span>the allotment</li>
+        <li class="chip" data-state="written"><span data-icon="pin" data-size="14"></span>the climbing wall <span class="newTag">new</span></li>
+      </ul>
+    </section>
+
+    <!-- Still open -->
+    <section class="rsection" data-state="written">
+      <h2 class="rlabel">Still open</h2>
+      <div class="notice"><span><strong>Climbing with Priya, Saturday</strong><span class="small">You said you think you’ll go.</span></span><span class="button" data-variant="quiet">In Needs you ›</span></div>
+    </section>
+
+    <footer class="footerMeta" data-state="written sofar glance">
+      <p class="meta" data-state="written">Written overnight on this computer, from 9 things you kept that day.</p>
+      <p class="meta" data-state="sofar">Written on this computer at 3:15 pm from 6 things you kept that day.</p>
+      <div class="buttons" data-state="written sofar">
+        <span class="button" data-variant="secondary">Write it again</span>
+        <span class="button" data-variant="quiet"><span data-icon="print" data-size="16"></span>Print</span>
+        <span class="button" data-variant="quiet" style="margin-left: auto; color: var(--ember)">Delete this reflection</span>
+      </div>
+    </footer>
+  </article>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

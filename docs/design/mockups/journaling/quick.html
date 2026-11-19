@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quick capture with a feeling · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="window" data-states="feeling text kept">
+<div id="content" style="display: flex; flex-direction: column; align-items: center; gap: var(--s-5); width: 100%">
+  <section class="qc" aria-label="Keep something" data-state="text feeling">
+    <div class="qcBox">
+      <span>Lunch with Priya, finally<span class="caret"></span></span>
+      <span class="round"><span data-icon="paperclip"></span></span>
+      <span class="round"><span data-icon="mic"></span></span>
+    </div>
+
+    <div class="feelRow" role="group" aria-label="How does it feel? (optional)">
+      <span class="small">How does it feel? (optional)</span>
+      <span class="feelBtn" data-part="wound" aria-pressed="false"><span data-icon="wound" data-size="16"></span>Wound up</span>
+      <span class="feelBtn" data-part="lit" aria-pressed="false" data-state="text"><span data-icon="lit" data-size="16"></span>Lit up</span>
+      <span class="feelBtn" data-part="lit" aria-pressed="true" data-state="feeling"><span data-icon="lit" data-size="16"></span>Lit up</span>
+      <span class="feelBtn" data-part="low" aria-pressed="false"><span data-icon="low" data-size="16"></span>Low</span>
+      <span class="feelBtn" data-part="settled" aria-pressed="false"><span data-icon="settled" data-size="16"></span>Settled</span>
+    </div>
+
+    <div class="feelRow" role="group" aria-label="A word for it" data-state="feeling">
+      <span class="small">A word for it</span>
+      <span class="word" data-part="lit" aria-checked="true">pleased</span>
+      <span class="word" data-part="lit" aria-checked="false">cheerful</span>
+      <span class="word" data-part="lit" aria-checked="false">hopeful</span>
+      <span class="word" data-part="lit" aria-checked="false">excited</span>
+      <span class="button" data-variant="quiet">More words…</span>
+    </div>
+
+    <div class="qcFoot">
+      <span>Type, paste or drop. Hold Space in an empty box to talk.</span>
+      <span>Enter keeps · Esc closes</span>
+    </div>
+  </section>
+
+  <div class="toast" role="status" data-state="kept">
+    <span>Kept, with pleased. It’s on today’s journal.</span>
+    <span class="button" data-variant="quiet">Undo</span>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

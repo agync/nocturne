@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Check in · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="words field list done help">
+<div id="content" class="sheet">
+  <a class="back" href="#"><span aria-hidden="true">←</span> Journal</a>
+
+  <div class="head" data-state="words field list">
+    <div class="headText">
+      <h1 class="title">How are you feeling?</h1>
+      <p class="lead">Pick a spot, then the words that fit. There are no wrong answers.</p>
+    </div>
+    <span class="button" data-variant="quiet" data-state="words field">Show all words as a list</span>
+    <span class="button" data-variant="quiet" data-state="list">Show the field</span>
+  </div>
+
+  <!-- The field and the words -->
+  <div class="checkin" data-state="words field">
+    <div class="fieldWrap">
+      <span class="axis top">More energy</span>
+      <div class="field" role="radiogroup" aria-label="How it feels">
+        <span class="part" role="radio" data-part="wound" aria-checked="false"><span data-icon="wound" data-size="16"></span>Wound up</span>
+        <span class="part" role="radio" data-part="lit" aria-checked="false"><span data-icon="lit" data-size="16"></span>Lit up</span>
+        <span class="part" role="radio" data-part="low" aria-checked="false"><span data-icon="low" data-size="16"></span>Low</span>
+        <span class="part" role="radio" data-part="settled" aria-checked="false" data-state="field"><span data-icon="settled" data-size="16"></span>Settled</span>
+        <span class="part" role="radio" data-part="settled" aria-checked="true" data-state="words"><span data-icon="settled" data-size="16"></span>Settled</span>
+        <span class="dot big" data-part="settled" style="left: 75%; top: 72%" data-state="words"><span data-icon="settled" data-size="14"></span></span>
+      </div>
+      <span class="axis bottom">Less energy</span>
+      <span class="axisRow"><span>← Unpleasant</span><span>Pleasant →</span></span>
+    </div>
+
+    <div class="words">
+      <p class="muted" data-state="field" style="padding-top: var(--s-6)">Pick a spot in the field, or show all words as a list.</p>
+
+      <div data-state="words" style="display: flex; flex-direction: column; gap: var(--s-3)">
+        <div class="sectionHead"><h2 class="label">Words for Settled</h2><span class="small">Choose up to three.</span></div>
+        <ul class="wordGrid" role="group" aria-label="Words for Settled">
+          <li class="word" data-part="settled" aria-checked="true">relieved</li>
+          <li class="word" data-part="settled" aria-checked="true">content</li>
+          <li class="word" data-part="settled" aria-checked="false" data-focus>grateful</li>
+          <li class="word" data-part="settled" aria-checked="false">calm</li>
+          <li class="word" data-part="settled" aria-checked="false">relaxed</li>
+          <li class="word" data-part="settled" aria-checked="false">comfortable</li>
+          <li class="word" data-part="settled" aria-checked="false">peaceful</li>
+          <li class="word" data-part="settled" aria-checked="false">cosy</li>
+          <li class="word" data-part="settled" aria-checked="false">safe</li>
+          <li class="word" data-part="settled" aria-checked="false">loved</li>
+          <li class="word" data-part="settled" aria-checked="false">rested</li>
+          <li class="word" data-part="settled" aria-checked="false">at ease</li>
+        </ul>
+        <p class="meaning" aria-live="polite"><strong>grateful</strong>: Thankful for something or someone</p>
+        <span class="button" data-variant="quiet" data-flush style="align-self: flex-start">More words</span>
+
+        <label class="fieldLabel" for="going" style="margin-top: var(--s-3)">What’s going on? (optional)</label>
+        <div class="fieldInput" id="going"><span>Gran’s scan came back clear.</span><span class="round"><span data-icon="mic"></span></span></div>
+        <span class="disclose"><span data-icon="chevron-right" data-size="14"></span>More</span>
+
+        <div class="footer">
+          <span class="button" data-variant="primary">Save</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- All words as a list -->
+  <div data-state="list" style="display: flex; flex-direction: column; gap: var(--s-5)">
+    <div class="lists">
+      <fieldset data-part="wound"><legend><span data-icon="wound" data-size="16"></span>Wound up</legend>
+        <label><span class="box"></span>uneasy</label><label><span class="box"></span>restless</label><label><span class="box"></span>irritated</label><label><span class="box"></span>nervous</label><label><span class="box"></span>frustrated</label><label><span class="box"></span>worried</label><label><span class="box"></span>stressed</label><label><span class="box"></span>tense</label><label><span class="box"></span>overwhelmed</label><label><span class="box"></span>anxious</label><label><span class="box"></span>angry</label><label><span class="box"></span>panicked</label>
+      </fieldset>
+      <fieldset data-part="lit"><legend><span data-icon="lit" data-size="16"></span>Lit up</legend>
+        <label><span class="box"></span>pleased</label><label><span class="box"></span>cheerful</label><label><span class="box"></span>curious</label><label><span class="box"></span>hopeful</label><label><span class="box"></span>motivated</label><label><span class="box"></span>playful</label><label><span class="box" data-on></span>proud</label><label><span class="box"></span>energised</label><label><span class="box"></span>excited</label><label><span class="box"></span>joyful</label><label><span class="box"></span>delighted</label><label><span class="box"></span>thrilled</label>
+      </fieldset>
+      <fieldset data-part="low"><legend><span data-icon="low" data-size="16"></span>Low</legend>
+        <label><span class="box"></span>tired</label><label><span class="box"></span>bored</label><label><span class="box"></span>flat</label><label><span class="box"></span>disappointed</label><label><span class="box"></span>left out</label><label><span class="box"></span>lonely</label><label><span class="box"></span>sad</label><label><span class="box" data-on></span>drained</label><label><span class="box"></span>guilty</label><label><span class="box"></span>discouraged</label><label><span class="box"></span>numb</label><label><span class="box"></span>hopeless</label>
+      </fieldset>
+      <fieldset data-part="settled"><legend><span data-icon="settled" data-size="16"></span>Settled</legend>
+        <label><span class="box"></span>calm</label><label><span class="box"></span>relaxed</label><label><span class="box"></span>content</label><label><span class="box"></span>comfortable</label><label><span class="box"></span>grateful</label><label><span class="box"></span>relieved</label><label><span class="box"></span>peaceful</label><label><span class="box"></span>cosy</label><label><span class="box"></span>safe</label><label><span class="box"></span>loved</label><label><span class="box"></span>rested</label><label><span class="box"></span>at ease</label>
+      </fieldset>
+    </div>
+    <p class="small">Two chosen: proud, drained. Choose up to three, from any part. “More words” under each part shows eight more.</p>
+    <div class="footer"><span class="button" data-variant="primary">Save</span></div>
+  </div>
+
+  <!-- Saved -->
+  <div data-state="done" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 640px">
+    <h1 class="title">Saved. Relieved, content.</h1>
+    <p class="muted"><span class="feel" data-part="settled"><span data-icon="settled" data-size="14"></span>Settled · relieved, content</span> at 6:10 pm. It’s on today’s journal.</p>
+    <ul class="chips"><li class="chipsLabel">In this check-in</li><li class="chip"><span data-icon="user" data-size="14"></span>Gran</li></ul>
+    <div class="buttons"><span class="button" data-variant="secondary">Back to the journal</span><span class="button" data-variant="quiet">Change</span></div>
+  </div>
+
+  <!-- Saved after a heavy check-in, with the help opened -->
+  <div data-state="help" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+    <h1 class="title">Saved. Drained, discouraged.</h1>
+    <p class="muted"><span class="feel" data-part="low"><span data-icon="low" data-size="14"></span>Low · drained, discouraged</span> at 4:20 pm. It’s on today’s journal.</p>
+    <span class="button" data-variant="quiet" data-flush style="align-self: flex-start">Something that might help ›</span>
+    <section class="help" aria-label="Something that might help">
+      <div><h2 style="font: 500 1.0625rem / 1.4 var(--font-sans)">Something that might help</h2><p class="muted">Some ideas people find useful. Try one if you like.</p></div>
+      <div class="helpKinds">
+        <div class="helpKind" role="radiogroup" aria-label="Move"><h3>Move</h3><span class="idea"><span class="radio"></span>Walk to the end of the road and back.</span><span class="idea"><span class="radio"></span>Shake out your hands and shoulders for a minute.</span></div>
+        <div class="helpKind" role="radiogroup" aria-label="Slow down"><h3>Slow down</h3><span class="idea"><span class="radio"></span>Breathe out for longer than you breathe in, five times.</span><span class="idea"><span class="radio"></span>Name five things you can see.</span></div>
+        <div class="helpKind" role="radiogroup" aria-label="Think it through"><h3>Think it through</h3><span class="idea"><span class="radio"></span>Write the worry down, then write what you would tell a friend.</span><span class="idea"><span class="radio"></span>Ask: will this matter in a week?</span></div>
+        <div class="helpKind" role="radiogroup" aria-label="Reach someone"><h3>Reach someone</h3><span class="idea"><span class="radio"></span>Send a message to someone you like.</span><span class="idea"><span class="radio"></span>Tell someone how today is going.</span></div>
+      </div>
+      <div class="buttons"><button class="button" data-variant="secondary" disabled><span data-icon="check" data-size="16"></span>I tried this</button><span class="small">Pick one above first.</span></div>
+      <p class="safety">If you feel unsafe, or might hurt yourself, call your local emergency number or someone you trust now.</p>
+    </section>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

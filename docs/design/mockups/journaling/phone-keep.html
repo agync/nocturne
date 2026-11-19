@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · keep on the go · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Keep" data-states="feeling text voice photo good kept waiting">
+<main id="content" class="pmain">
+
+  <!-- Typing, with a feeling, or a good thing -->
+  <div data-state="text feeling good" style="display: flex; flex-direction: column; gap: 14px">
+    <label class="plbl" for="k">Type something to keep</label>
+    <div class="pbox" id="k" data-state="text feeling">Lunch with Priya, finally<span class="caret"></span></div>
+    <div class="pbox" id="k" data-state="good">Sam fixed the gate without being asked.<span class="caret"></span></div>
+    <div class="pkinds"><span class="pbtn" data-kind="quiet"><span data-icon="camera" data-size="20"></span>Photo</span><span class="pbtn" data-kind="quiet"><span data-icon="mic" data-size="20"></span>Record</span></div>
+
+    <p class="plbl">How does it feel? (optional)</p>
+    <div class="pfeel" role="group" aria-label="How does it feel? (optional)">
+      <span class="pfeelBtn" data-part="wound" aria-pressed="false"><span data-icon="wound" data-size="20"></span>Wound up</span>
+      <span class="pfeelBtn" data-part="lit" aria-pressed="false" data-state="text good"><span data-icon="lit" data-size="20"></span>Lit up</span>
+      <span class="pfeelBtn" data-part="lit" aria-pressed="true" data-state="feeling"><span data-icon="lit" data-size="20"></span>Lit up</span>
+      <span class="pfeelBtn" data-part="low" aria-pressed="false"><span data-icon="low" data-size="20"></span>Low</span>
+      <span class="pfeelBtn" data-part="settled" aria-pressed="false"><span data-icon="settled" data-size="20"></span>Settled</span>
+    </div>
+    <div data-state="feeling" style="display: flex; flex-direction: column; gap: 8px">
+      <p class="plbl">A word for it</p>
+      <div class="pwords"><span class="pword" data-part="lit" aria-checked="true">pleased</span><span class="pword" data-part="lit">cheerful</span><span class="pword" data-part="lit">hopeful</span><span class="pword" data-part="lit">excited</span></div>
+      <span class="pbtn" data-kind="link">More words…</span>
+    </div>
+
+    <div>
+      <div class="prow"><span><span data-icon="sun" data-size="20"></span><span>This is a good thing</span></span><span class="switch off" data-state="text feeling"></span><span class="switch" data-state="good"></span></div>
+    </div>
+    <p class="small">On your computer it will say “Kept from My phone”.</p>
+  </div>
+
+  <!-- Recording -->
+  <div data-state="voice" style="display: flex; flex-direction: column; gap: 14px">
+    <p class="ptitle">Keep a voice note</p>
+    <div class="precord"><span class="precDot"></span><span style="flex: 1">Recording · 0:24</span><span class="wave" style="max-width: 120px"></span></div>
+    <p class="plead">Say what happened. Nocturne writes down the words on your computer.</p>
+    <p class="plbl">How does it feel? (optional)</p>
+    <div class="pfeel">
+      <span class="pfeelBtn" data-part="wound"><span data-icon="wound" data-size="20"></span>Wound up</span>
+      <span class="pfeelBtn" data-part="lit"><span data-icon="lit" data-size="20"></span>Lit up</span>
+      <span class="pfeelBtn" data-part="low"><span data-icon="low" data-size="20"></span>Low</span>
+      <span class="pfeelBtn" data-part="settled"><span data-icon="settled" data-size="20"></span>Settled</span>
+    </div>
+  </div>
+
+  <!-- Photo -->
+  <div data-state="photo" style="display: flex; flex-direction: column; gap: 14px">
+    <p class="ptitle">Keep a photo</p>
+    <div class="photoBox pphoto"><span data-icon="image" data-size="28"></span></div>
+    <span class="meta">Photo · 2.1 MB</span>
+    <label class="plbl" for="n">Add a note (optional)</label>
+    <div class="pbox" id="n" style="min-height: 64px">The tomatoes are finally red.</div>
+    <div class="prow"><span><span data-icon="sun" data-size="20"></span><span>This is a good thing</span></span><span class="switch"></span></div>
+  </div>
+
+  <!-- Kept -->
+  <div data-state="kept waiting" style="display: flex; flex-direction: column; gap: 12px; padding-top: 24px">
+    <p class="ptitle" data-state="kept">Kept, with pleased.</p>
+    <p class="plead" data-state="kept">It’s on today’s journal. Your computer reads it shortly.</p>
+    <p class="meta" data-state="kept">Note · 1:12 pm · kept from My phone</p>
+    <p class="ptitle" data-state="waiting">Waiting.</p>
+    <p class="plead" data-state="waiting">It’s on this phone and goes across when your computer is back. You can leave this page.</p>
+    <p class="meta" data-state="waiting">Note · 1:12 pm · waiting on this phone</p>
+    <div class="pcard" data-state="kept" style="margin-top: 12px">
+      <span class="pcardTitle">Changed your mind? Until 1:22 pm</span>
+      <span class="pbtn" data-kind="quiet">Take back</span>
+    </div>
+  </div>
+
+  <div class="pfoot" data-state="text feeling good photo"><span class="pbtn" data-kind="primary">Keep</span></div>
+  <div class="pfoot" data-state="voice"><span class="pbtn" data-kind="primary">Keep</span><span class="pbtn" data-kind="quiet">Discard</span></div>
+  <div class="pfoot" data-state="kept waiting"><span class="pbtn" data-kind="primary">Keep another</span><span class="pbtn" data-kind="quiet" data-state="kept">Open today’s journal</span></div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>
