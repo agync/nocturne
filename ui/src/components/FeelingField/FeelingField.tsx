@@ -99,7 +99,6 @@ export function FeelingField({ point, onChange }: FeelingFieldProps) {
       <span className={styles.axis} data-edge="top">
         {t("feeling.axis.moreEnergy")}
       </span>
-      {/* biome-ignore lint/a11y/useSemanticElements: the four parts are the field itself, so a fieldset of native radios cannot be laid out as its quadrants */}
       <div
         ref={field}
         className={styles.field}
