@@ -240,6 +240,8 @@ export function CheckIn({
   const [words, setWords] = useState<string[]>([]);
   const [line, setLine] = useState("");
   const [sheet, setSheet] = useState(startPart !== undefined);
+  const [saving, setSaving] = useState(false);
+  const savingNow = useRef(false);
   const dragging = useRef(false);
   const arrow = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -266,7 +268,18 @@ export function CheckIn({
 
   const save = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (!feeling) return;
+    if (!feeling || savingNow.current) return;
+    savingNow.current = true;
+    setSaving(true);
+    try {
+      await keepOnce(feeling);
+    } finally {
+      savingNow.current = false;
+      setSaving(false);
+    }
+  };
+
+  const keepOnce = async (feeling: CheckInInput["feeling"]) => {
     const input: CheckInInput = {
       feeling,
       line: line.trim() || null,
@@ -521,7 +534,7 @@ export function CheckIn({
       </main>
       {mode === "list" ? (
         <footer className="ph-foot">
-          <Button kind="primary" disabled={!feeling} onClick={() => void save()}>
+          <Button kind="primary" disabled={!feeling || saving} onClick={() => void save()}>
             {t("journal.checkin.save")}
           </Button>
         </footer>
@@ -532,7 +545,7 @@ export function CheckIn({
           point={point}
           words={words}
           line={line}
-          working={false}
+          working={saving}
           onToggle={(w) => setWords(toggleWord(words, w))}
           onLine={setLine}
           onClose={closeSheet}

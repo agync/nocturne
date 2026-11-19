@@ -1362,4 +1362,30 @@ describe("journal on the phone, hardening", () => {
       vi.useRealTimers();
     }
   });
+
+  it("checkin.double_save: two quick taps on Save keep one check-in", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const base = createMockPhoneEngine({});
+    const keepCheckIn = vi.fn(async (...args: Parameters<PhoneEngine["keepCheckIn"]>) => {
+      await gate;
+      return base.keepCheckIn(...args);
+    });
+    const services = await open("s=checkIn", (s) => {
+      s.engineFor = () => engineWith({}, { keepCheckIn });
+    });
+    await userEvent.click(await screen.findByRole("radio", { name: "Settled" }));
+    const sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
+    await userEvent.click(within(sheet).getByRole("button", { name: "relieved" }));
+    const save = within(sheet).getByRole("button", { name: "Save" });
+    fireEvent.click(save);
+    fireEvent.click(save);
+    await waitFor(() => expect(keepCheckIn).toHaveBeenCalledTimes(1));
+    expect((await services.queue.list()).filter((k) => k.kind === "checkin")).toHaveLength(1);
+    release();
+    expect(await screen.findByRole("heading", { name: /^Saved\./ })).toBeInTheDocument();
+    expect(keepCheckIn).toHaveBeenCalledTimes(1);
+  });
 });
