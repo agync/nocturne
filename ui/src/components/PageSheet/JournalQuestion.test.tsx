@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JournalAsk, PageView, QuestionChoice } from "../../engine/bindings";
@@ -133,7 +133,9 @@ describe("answering on Today", () => {
     await userEvent.type(screen.getByLabelText("Anything to add? (optional)"), "Reading worry");
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
     expect(addLine).toHaveBeenCalledWith(expect.any(String), "Reading worry");
-    expect(await screen.findByText("“Reading worry” Added.")).toBeVisible();
+    const added = await screen.findByText("“Reading worry” Added.");
+    expect(added).toBeVisible();
+    await waitFor(() => expect(added).toHaveFocus());
 
     const day = await engine.getJournalDay();
     const row = day.rows.find((r) => r.kind === "answer");

@@ -27,7 +27,9 @@ export function JournalQuestion({
   const ask = question.journal;
   const [line, setLine] = useState("");
   const field = useRef<HTMLInputElement>(null);
+  const kept = useRef<HTMLParagraphElement>(null);
   const pressed = useRef(false);
+  const submitted = useRef(false);
   const answered = question.answered;
   const added = ask?.line ? ask.line : null;
 
@@ -37,6 +39,11 @@ export function JournalQuestion({
       pressed.current = false;
       field.current?.focus();
     }
+    // Add removes the form, so focus moves to the line that replaced it.
+    if (added && submitted.current) {
+      submitted.current = false;
+      kept.current?.focus();
+    }
   }, [answered, added]);
 
   if (!ask) return null;
@@ -44,6 +51,7 @@ export function JournalQuestion({
   const submit = () => {
     const clean = line.trim();
     if (clean === "") return;
+    submitted.current = true;
     onAddLine(clean);
   };
 
@@ -87,7 +95,9 @@ export function JournalQuestion({
           </p>
           {added ? (
             <>
-              <p className={styles.keptLine}>{t("journal.question.added", { line: added })}</p>
+              <p ref={kept} tabIndex={-1} className={styles.keptLine}>
+                {t("journal.question.added", { line: added })}
+              </p>
               <a className={`${styles.openJournal} hit`} href="#/journal">
                 {t("journal.question.open")}
               </a>
