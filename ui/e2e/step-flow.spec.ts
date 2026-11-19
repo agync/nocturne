@@ -191,10 +191,16 @@ test.describe("the side column", () => {
       await open(page, "/?mockOnline=off&mockCheckMs=150#/settings/online/setup?step=send");
       const aside = page.locator("aside").first();
       const main = aside.locator("xpath=preceding-sibling::section");
-      const [a, m] = await Promise.all([aside.boundingBox(), main.boundingBox()]);
-      expect(a && m).toBeTruthy();
-      if (!a || !m) return;
-      expect(a.y >= m.y + m.height - 1, `${width}`).toBe(below);
+      // The layout settles after the resize and the route change, so ask until it has.
+      await expect
+        .poll(
+          async () => {
+            const [a, m] = await Promise.all([aside.boundingBox(), main.boundingBox()]);
+            return a && m ? a.y >= m.y + m.height - 1 : null;
+          },
+          { message: `${width}` },
+        )
+        .toBe(below);
     }
   });
 });
