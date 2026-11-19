@@ -8,7 +8,7 @@ import { FeelingMark } from "../../journal/FeelingMark";
 import { PARTS } from "../../journal/feelings";
 import styles from "./Checkin.module.css";
 import { Help } from "./Help";
-import { sentence } from "./words";
+import { sentence } from "./selection";
 
 interface DoneProps {
   checkin: CheckIn;

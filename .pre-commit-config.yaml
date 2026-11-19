@@ -45,6 +45,13 @@ repos:
         types: [text]
         exclude: ^\.pre-commit-config\.yaml$
 
+      - id: forbid-case-collisions
+        name: Forbid paths that differ only by case
+        entry: scripts/check_case_collisions.py
+        language: script
+        always_run: true
+        pass_filenames: false
+
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all --check

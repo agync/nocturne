@@ -12,9 +12,9 @@ import { useEngine } from "../../engine/context";
 import { PART_ORDER, partOf, WORDS } from "../../journal/feelings";
 import styles from "./Checkin.module.css";
 import { Done } from "./Done";
+import { feelingOf, toggleWord } from "./selection";
 import { useCheckInToChange } from "./useCheckInToChange";
 import { FieldWords, ListWords, Meaning, useMeaning } from "./Words";
-import { feelingOf, toggleWord } from "./words";
 
 type Mode = "field" | "list";
 

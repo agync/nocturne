@@ -13,7 +13,7 @@ import {
   wordsFor,
 } from "../../journal/feelings";
 import styles from "./Checkin.module.css";
-import { MAX_WORDS } from "./words";
+import { MAX_WORDS } from "./selection";
 
 /** The word the pointer or the keyboard is on, so its meaning can be shown as plain text. */
 export function useMeaning() {

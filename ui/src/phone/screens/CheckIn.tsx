@@ -19,7 +19,7 @@ import {
   WORDS,
   wordsFor,
 } from "../../journal/feelings";
-import { feelingOf, MAX_WORDS, sentence, toggleWord } from "../../screens/checkin/words";
+import { feelingOf, MAX_WORDS, sentence, toggleWord } from "../../screens/checkin/selection";
 import {
   type Connection,
   ConnectionError,
