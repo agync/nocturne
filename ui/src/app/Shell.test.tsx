@@ -423,12 +423,27 @@ describe("keeping and asking from the bar", () => {
     expect(bar).toHaveValue("");
   });
 
+  it("offers Undo on a new note and takes it back", async () => {
+    const { engine } = renderApp();
+    const unkeep = vi.spyOn(engine, "unkeep");
+    const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
+    await userEvent.type(bar, "Ask Sam about Saturday{Enter}");
+    await screen.findByText("Kept.");
+    const kept = (await engine.listItems({ since: null, status: null, limit: 1 }))[0];
+    await userEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(unkeep).toHaveBeenCalledWith(kept?.id);
+    expect(await screen.findByText("Taken back. Nothing was kept.")).toBeInTheDocument();
+    const left = await engine.listItems({ since: null, status: null, limit: 5 });
+    expect(left.some((i) => i.id === kept?.id)).toBe(false);
+  });
+
   it("says kindly when it was already kept", async () => {
     const { engine } = renderApp();
     await engine.keepText("Bin day is Tuesday", "paste");
     const bar = await screen.findByRole("textbox", { name: "Keep something, or ask" });
     await userEvent.type(bar, "Bin day is Tuesday{Enter}");
     expect(await screen.findByText(/You already kept this note on/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Undo" })).toBeNull();
   });
 
   it("sends a question to the Ask screen", async () => {

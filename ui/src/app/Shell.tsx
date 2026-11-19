@@ -102,7 +102,23 @@ export function Shell({ children }: ShellProps) {
             }),
           });
         } else {
-          toast.show({ lead: t("capture.kept.lead"), message: t("journal.quick.keptMessage") });
+          const id = kept.item.id;
+          toast.show({
+            lead: t("capture.kept.lead"),
+            message: t("journal.quick.keptMessage"),
+            action: {
+              label: t("capture.undo"),
+              onAction: () => {
+                engine.unkeep(id).then(
+                  () => {
+                    refresh("items", "status", "page", "journal");
+                    toast.show({ message: t("capture.undone") });
+                  },
+                  () => toast.show({ message: t("bar.kept.error") }),
+                );
+              },
+            },
+          });
         }
         refresh("items", "status", "page");
       } catch (error) {
