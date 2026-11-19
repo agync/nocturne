@@ -27,3 +27,6 @@ Pages that changed with it:
   0015](/adr/0015-journal-privacy-class.md) for the journal privacy class.
 - [Evaluation](/design/evaluation.md): the journal check.
 - [Experience principles](/design/experience-principles.md): the one optional evening reminder.
+
+Renders of the built screens, desktop and phone, with the screens they changed as they were
+before, are in `docs/design/mockups/journaling/built/`.
