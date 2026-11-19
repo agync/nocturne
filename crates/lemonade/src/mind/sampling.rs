@@ -17,6 +17,7 @@ pub struct Presets {
     pub answer: Sampling,
     pub image: Sampling,
     pub headline: Sampling,
+    pub reflection: Sampling,
 }
 
 const TODAY: Presets = Presets {
@@ -24,6 +25,7 @@ const TODAY: Presets = Presets {
     answer: Sampling::temperature(0.2),
     image: Sampling::temperature(0.0),
     headline: Sampling::temperature(0.4),
+    reflection: Sampling::temperature(0.3),
 };
 
 #[derive(Default, Deserialize)]
@@ -41,6 +43,8 @@ struct Overrides {
     image: Sampling,
     #[serde(default)]
     headline: Sampling,
+    #[serde(default)]
+    reflection: Sampling,
 }
 
 impl Presets {
@@ -83,6 +87,7 @@ impl Presets {
             answer: self.answer.overlaid(&o.answer),
             image: self.image.overlaid(&o.image),
             headline: self.headline.overlaid(&o.headline),
+            reflection: self.reflection.overlaid(&o.reflection),
         })
     }
 }
@@ -105,6 +110,7 @@ mod tests {
                 (p.answer, 0.2),
                 (p.image, 0.0),
                 (p.headline, 0.4),
+                (p.reflection, 0.3),
             ] {
                 let b = body(&s);
                 assert_eq!(b["temperature"], serde_json::json!(t as f32), "{tier:?}");

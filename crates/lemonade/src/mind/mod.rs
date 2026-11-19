@@ -22,7 +22,7 @@ use nocturne_contract::{ComponentRole, EntityKind, PageView, Span, Tier};
 use nocturne_engine::coverage::{self, normalise};
 use nocturne_engine::{
     AnswerMeta, BoxFuture, Candidate, Clock, ExtractContext, Fact, Mind, MindError, Predicate,
-    Transcript, Understanding,
+    ReflectInput, Transcript, Understanding, WrittenSentence,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -730,7 +730,18 @@ impl LemonadeMind {
         messages: &[Message],
         step: &str,
     ) -> Result<String, MindError> {
-        let mut req = ChatRequest::new(model, messages.to_vec()).sampled(&self.sampling.answer);
+        self.reply_sampled(model, messages, step, &self.sampling.answer)
+            .await
+    }
+
+    async fn reply_sampled(
+        &self,
+        model: &str,
+        messages: &[Message],
+        step: &str,
+        sampling: &crate::client::Sampling,
+    ) -> Result<String, MindError> {
+        let mut req = ChatRequest::new(model, messages.to_vec()).sampled(sampling);
         req.max_tokens = Some(1024);
         let mut stream = match self.client.chat(&req).await {
             Ok(s) => s,
@@ -863,6 +874,30 @@ impl LemonadeMind {
             return Err(MindError::Failed("the headline came back empty".into()));
         }
         Ok((headline, dek))
+    }
+
+    async fn reflect_impl(&self, input: &ReflectInput) -> Result<Vec<WrittenSentence>, MindError> {
+        if input.items.is_empty() {
+            return Ok(Vec::new());
+        }
+        let nonce = prompts::nonce();
+        let system = prompts::reflect_system(self.tier, &nonce);
+        let user = prompts::reflect_user(self.tier, input, &nonce);
+        let (system, user) = (system.as_str(), user.as_str());
+        self.with_mind(
+            Work::Answering,
+            |_| true,
+            |m| {
+                Box::pin(async move {
+                    let messages = [Message::system(system), Message::user(user)];
+                    let reply = self
+                        .reply_sampled(&m, &messages, "reflect", &self.sampling.reflection)
+                        .await?;
+                    Ok(reflect::sentences(&reply, input.items.len(), system))
+                })
+            },
+        )
+        .await
     }
 
     async fn transcribe_impl(&self, audio: &Path) -> Result<Transcript, MindError> {
@@ -1538,6 +1573,13 @@ impl Mind for LemonadeMind {
         page: &'a PageView,
     ) -> BoxFuture<'a, Result<(String, String), MindError>> {
         Box::pin(self.headline_impl(page))
+    }
+
+    fn reflect<'a>(
+        &'a self,
+        input: &'a ReflectInput,
+    ) -> BoxFuture<'a, Result<Vec<WrittenSentence>, MindError>> {
+        Box::pin(self.reflect_impl(input))
     }
 
     fn speak<'a>(
