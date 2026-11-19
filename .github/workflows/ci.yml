@@ -181,18 +181,22 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust-platforms != 'false'
     runs-on: ${{ matrix.runs-on }}
-    # A cold build and every test take about fifteen minutes; a hung test fails the job soon after.
-    timeout-minutes: 30
+    # Linux and macOS take about fifteen minutes with a cold build; Windows takes about twenty with a
+    # warm cache and over thirty with a cold one. A hung test still fails the job soon after.
+    timeout-minutes: ${{ matrix.timeout }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: linux arm64
             runs-on: ubuntu-24.04-arm
+            timeout: 30
           - name: macos arm64
             runs-on: macos-15
+            timeout: 30
           - name: windows x64
             runs-on: windows-2022
+            timeout: 45
     defaults:
       run:
         shell: bash
