@@ -421,7 +421,7 @@ fn journal_sent(
             .query_row(
                 "SELECT json_extract(i.metadata, '$.journal_day') FROM memory_sources s \
                  JOIN items i ON i.id = s.item_id WHERE s.memory_id = ?1 \
-                 AND json_extract(i.metadata, '$.journal') IN ('entry', 'good') \
+                 AND json_extract(i.metadata, '$.journal') IN ('entry', 'good', 'answer') \
                  ORDER BY i.kept_at LIMIT 1",
                 [id],
                 |r| r.get(0),
