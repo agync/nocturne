@@ -126,7 +126,9 @@ describe("the journal day", () => {
         "Nothing kept today yet. Anything you keep, from here, the keep bar or your phone, shows up here.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("No check-ins today.")).toBeInTheDocument();
+    // The side column is hidden on an empty day, all but its Check in.
+    expect(screen.queryByText("No check-ins today.")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "How today felt" })).toBeNull();
     expect(screen.getAllByRole("link", { name: "Check in" })).toHaveLength(2);
     expect(
       screen.getByPlaceholderText("Write about today, or hold Space to talk."),

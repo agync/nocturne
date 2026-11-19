@@ -200,39 +200,47 @@ export function Side({
 
   return (
     <aside className={styles.side} aria-label={t("journal.day.eyebrow")}>
-      <section className={styles.block} aria-labelledby="side-felt">
-        <h2 className={styles.label} id="side-felt">
-          {t("journal.side.felt")}
-        </h2>
-        {data.checkins.length > 0 ? (
-          <>
-            <FeelingMap
-              checkins={data.checkins}
-              size={220}
-              onOpen={(c) => {
-                goTo(`/items/${c.id}`);
-              }}
-              dotLabel={dotLabel}
-            />
-            <ul className={styles.list}>
-              {data.checkins.map((c) => (
-                <li key={c.id} className={styles.feelRow}>
-                  <span className={styles.feel} data-part={c.feeling.part}>
-                    <FeelingMark mark={c.feeling.part} size={14} />
-                    {words(c)}
-                  </span>
-                  <span className={styles.meta}>{clock12(c.keptAt)}</span>
-                </li>
-              ))}
-            </ul>
-          </>
-        ) : (
-          <p className={styles.small}>{t("journal.side.feltEmpty")}</p>
-        )}
-        <a className={styles.secondary} href="#/journal/check-in">
-          {t("journal.side.checkIn")}
-        </a>
-      </section>
+      {emptyDay ? (
+        <div className={styles.block}>
+          <a className={styles.secondary} href="#/journal/check-in">
+            {t("journal.side.checkIn")}
+          </a>
+        </div>
+      ) : (
+        <section className={styles.block} aria-labelledby="side-felt">
+          <h2 className={styles.label} id="side-felt">
+            {t("journal.side.felt")}
+          </h2>
+          {data.checkins.length > 0 ? (
+            <>
+              <FeelingMap
+                checkins={data.checkins}
+                size={220}
+                onOpen={(c) => {
+                  goTo(`/items/${c.id}`);
+                }}
+                dotLabel={dotLabel}
+              />
+              <ul className={styles.list}>
+                {data.checkins.map((c) => (
+                  <li key={c.id} className={styles.feelRow}>
+                    <span className={styles.feel} data-part={c.feeling.part}>
+                      <FeelingMark mark={c.feeling.part} size={14} />
+                      {words(c)}
+                    </span>
+                    <span className={styles.meta}>{clock12(c.keptAt)}</span>
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p className={styles.small}>{t("journal.side.feltEmpty")}</p>
+          )}
+          <a className={styles.secondary} href="#/journal/check-in">
+            {t("journal.side.checkIn")}
+          </a>
+        </section>
+      )}
 
       {emptyDay && !adding ? null : (
         <section className={styles.block} aria-labelledby="side-good">
