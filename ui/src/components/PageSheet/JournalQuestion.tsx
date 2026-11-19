@@ -3,8 +3,8 @@ import { t } from "../../copy/t";
 import type { Question, QuestionChoice, Receipt } from "../../engine/bindings";
 import { Button } from "../Button/Button";
 import { ReceiptChip } from "../ReceiptChip/ReceiptChip";
-import { chipText, choiceText, opening } from "./journalQuestion";
 import styles from "./PageSheet.module.css";
+import { chipText, choiceText, opening } from "./questionWords";
 
 interface JournalQuestionProps {
   id: string;

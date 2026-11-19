@@ -4,7 +4,7 @@ import { useRoute } from "wouter";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { richText } from "../../components/PageLine/richText";
-import { opening } from "../../components/PageSheet/journalQuestion";
+import { opening } from "../../components/PageSheet/questionWords";
 import { receiptText } from "../../components/ReceiptChip/ReceiptChip";
 import { useToast } from "../../components/Toast/Toast";
 import { formatLongDay, formatTime } from "../../copy/format";

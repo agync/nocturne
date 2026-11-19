@@ -14,8 +14,8 @@ import { type LineAction, PageLine } from "../PageLine/PageLine";
 import { Progress } from "../Progress/Progress";
 import { ReceiptChip } from "../ReceiptChip/ReceiptChip";
 import { JournalQuestion } from "./JournalQuestion";
-import { choiceText } from "./journalQuestion";
 import styles from "./PageSheet.module.css";
+import { choiceText } from "./questionWords";
 
 export type SheetAction =
   | LineAction

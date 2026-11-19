@@ -1,4 +1,4 @@
-import { choiceText } from "../../components/PageSheet/journalQuestion";
+import { choiceText } from "../../components/PageSheet/questionWords";
 import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {

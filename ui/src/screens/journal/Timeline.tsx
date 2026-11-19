@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "../../components/Icon/Icon";
-import { choiceText } from "../../components/PageSheet/journalQuestion";
+import { choiceText } from "../../components/PageSheet/questionWords";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { CheckIn, DayPart, JournalDay, Mention, TimelineRow } from "../../engine/bindings";
