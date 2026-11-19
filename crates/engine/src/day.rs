@@ -89,10 +89,20 @@ pub fn journal_cutoff(page_hm: (i8, i8)) -> i64 {
 }
 
 /// The journal day an instant belongs to: a note kept at 12:40 am belongs to the evening before.
+/// It is the day whose bounds hold the instant, so it agrees with `journal_day_bounds` even
+/// where a cutoff falls in a clock change.
 pub fn journal_day_of(t: Timestamp, page_hm: (i8, i8), tz: &TimeZone) -> Result<Date> {
     let local = t.to_zoned(tz.clone()).datetime();
-    let shifted = local.checked_sub(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?;
-    Ok(shifted.date())
+    let near = local
+        .checked_sub(jiff::SignedDuration::from_mins(journal_cutoff(page_hm)))?
+        .date();
+    for day in [near, near.yesterday()?, near.tomorrow()?] {
+        let (start, end) = journal_day_bounds(day, page_hm, tz)?;
+        if start <= t && t < end {
+            return Ok(day);
+        }
+    }
+    Ok(near)
 }
 
 /// The instants a journal day runs between: `[start, end)`. On a DST night a day is 23 or 25
@@ -308,5 +318,42 @@ mod tests {
         let (next_start, _) = journal_day_bounds(d("2026-10-25"), (7, 0), &london).unwrap();
         assert_eq!(end, next_start);
         assert_eq!(end.duration_since(start).as_hours(), 25);
+    }
+
+    #[test]
+    fn a_cutoff_inside_a_spring_forward_gap_keeps_the_day_and_its_bounds_in_step() {
+        let paris = tz("Europe/Paris");
+        // Page time 3:00 puts the cutoff at 2:30, which does not exist on 29 March.
+        let (_, end) = journal_day_bounds(d("2026-03-28"), (3, 0), &paris).unwrap();
+        assert_eq!(end, ts("2026-03-29T01:30:00Z"));
+        let at = ts("2026-03-29T01:00:00Z");
+        assert_eq!(journal_day_of(at, (3, 0), &paris).unwrap(), d("2026-03-28"));
+        let after = ts("2026-03-29T01:30:00Z");
+        assert_eq!(
+            journal_day_of(after, (3, 0), &paris).unwrap(),
+            d("2026-03-29")
+        );
+    }
+
+    #[test]
+    fn a_journal_day_of_an_instant_always_holds_that_instant() {
+        for zone in ["Europe/London", "Europe/Paris"] {
+            let zone = tz(zone);
+            for page in [(2, 0), (3, 0), (7, 0)] {
+                for from in ["2026-03-27T00:00:00Z", "2026-10-23T00:00:00Z"] {
+                    let mut t = ts(from);
+                    let stop = t + jiff::SignedDuration::from_hours(5 * 24);
+                    while t < stop {
+                        let day = journal_day_of(t, page, &zone).unwrap();
+                        let (start, end) = journal_day_bounds(day, page, &zone).unwrap();
+                        assert!(
+                            start <= t && t < end,
+                            "{t} is not in {day} ({start} to {end}) at page time {page:?}"
+                        );
+                        t += jiff::SignedDuration::from_mins(10);
+                    }
+                }
+            }
+        }
     }
 }
