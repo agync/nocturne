@@ -435,6 +435,20 @@ describe("rows of the timeline", () => {
     );
   });
 
+  it("reaches a note's names from its menu and opens their card on the row", async () => {
+    await open();
+    const row = rowOf("Lunch with Priya, finally");
+    const link = within(row).getByRole("link", { name: /Lunch with Priya/ });
+    link.focus();
+    fireEvent.keyDown(link, { key: "F10", shiftKey: true });
+    const names = await screen.findAllByRole("menuitem");
+    expect(names.map((n) => n.textContent)).toContain("Priya");
+    await userEvent.click(screen.getByRole("menuitem", { name: "Priya" }));
+    expect(await screen.findByRole("dialog", { name: "Priya" })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(link).toHaveFocus());
+  });
+
   it("opens the menu from the keyboard without adding a tab stop", async () => {
     await open();
     const row = rowOf(

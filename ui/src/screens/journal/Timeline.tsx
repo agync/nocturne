@@ -66,17 +66,21 @@ function glyphOf(row: TimelineRow): GlyphName {
 
 const ITEMS = '[role="menuitem"], [role="menuitemcheckbox"]';
 
-/** A row's small menu: change, leave out, move. */
+/** A row's small menu: change, leave out, move, and each name it mentions. */
 function RowMenu({
   row,
+  mentions,
   link,
   open,
   setOpen,
+  openCard,
 }: {
   row: TimelineRow;
+  mentions: Mention[];
   link: React.RefObject<HTMLElement | null>;
   open: boolean;
   setOpen: (open: boolean) => void;
+  openCard: TimelineProps["openCard"];
 }) {
   const engine = useEngine();
   const refresh = useRefresh();
@@ -187,6 +191,21 @@ function RowMenu({
           {t("journal.timeline.moveTo", { weekday: weekdayOf(row.moveTo) })}
         </button>
       ) : null}
+      {mentions.map((m) => (
+        <button
+          key={m.id}
+          type="button"
+          role="menuitem"
+          aria-haspopup="dialog"
+          className={styles.menuItem}
+          onClick={() => {
+            setOpen(false);
+            if (link.current) openCard(m, link.current);
+          }}
+        >
+          {m.name}
+        </button>
+      ))}
     </div>
   );
 }
@@ -333,7 +352,16 @@ function Row({
           <Glyph name="more" />
         </button>
       ) : null}
-      {hasMenu ? <RowMenu row={row} link={link} open={menuOpen} setOpen={setMenuOpen} /> : null}
+      {hasMenu ? (
+        <RowMenu
+          row={row}
+          mentions={mentions}
+          link={link}
+          open={menuOpen}
+          setOpen={setMenuOpen}
+          openCard={openCard}
+        />
+      ) : null}
       {row.item.fromDevice || mentions.length > 0 ? (
         <div className={styles.sub}>
           {row.item.fromDevice ? (
