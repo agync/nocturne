@@ -71,6 +71,7 @@ import recorded from "./assets/spoken-today.json";
 import recordedUrl from "./assets/spoken-today.ogg";
 import { MockBackups, type MockBackupsScript } from "./backup";
 import { cite, helpView, matchGuide, mockGuide, writtenFor } from "./help";
+import { type JournalOptions, MockJournal, mockNowFromAddress } from "./journal";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
@@ -104,6 +105,8 @@ export interface MockOptions {
    * `?mockHelp=written` turns it on.
    */
   helpWritten?: boolean;
+  /** The journal's starting state; `?mockJournal=` picks it in the browser. */
+  journal?: JournalOptions;
 }
 
 /** `?mockHelp=written` writes help answers in the mock. */
@@ -352,12 +355,15 @@ export class MockEngine implements EngineClient {
   /** Backups and restores. Tests drive their next steps through `script`. */
   readonly backups: MockBackups;
   readonly script: MockBackupsScript;
+  /** The journal: its state and every journal method. */
+  readonly journal: MockJournal;
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
     this.helpWritten = options.helpWritten ?? helpFromAddress();
     this.emphasis = options.emphasis ?? true;
-    const raw = options.now ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
+    const raw =
+      options.now ?? mockNowFromAddress() ?? (import.meta.env.VITE_MOCK_NOW || DEFAULT_NOW);
     this.clock = new Date(raw);
     const seed = buildSeed(this.clock);
     this.items = seed.items;
@@ -396,6 +402,14 @@ export class MockEngine implements EngineClient {
       onProgress: (progress) => this.emit("backup-progress", progress),
     });
     this.script = this.backups.script;
+    this.journal = new MockJournal(
+      {
+        now: () => this.clock,
+        lookup: (id) => this.items.find((i) => i.id === id),
+        changed: (item) => this.emit("item-changed", item),
+      },
+      options.journal,
+    );
     this.refreshStatus();
   }
 
@@ -477,7 +491,7 @@ export class MockEngine implements EngineClient {
   // Status and setup
 
   async getStatus(): Promise<EngineStatus> {
-    return clone(this.status);
+    return clone(this.journal.adjustStatus(this.status));
   }
 
   async getSetup(): Promise<SetupView> {
@@ -762,7 +776,7 @@ export class MockEngine implements EngineClient {
   }
 
   async getItem(id: string): Promise<ItemView> {
-    const found = this.items.find((i) => i.id === id);
+    const found = this.items.find((i) => i.id === id) ?? this.journal.findItem(id);
     if (!found) throw new Error(`No item ${id}`);
     return clone(found);
   }
@@ -1482,12 +1496,58 @@ export class MockEngine implements EngineClient {
     for (const memory of this.waitingUnconfirmed()) {
       out.push({ type: "unconfirmed", memory: clone(memory), agreeingSources: 0, used: false });
     }
+    for (const question of this.journal.openQuestions()) out.push({ type: "sameName", question });
     return out;
   }
 
   async listFading(): Promise<MemoryView[]> {
     return clone(this.memories.filter((m) => m.status === "fading" || m.status === "letGo"));
   }
+
+  // The journal, held by `MockJournal`.
+  getJournalDay: EngineClient["getJournalDay"] = (day) => this.journal.getJournalDay(day);
+  listJournalDays: EngineClient["listJournalDays"] = () => this.journal.listJournalDays();
+  listPeriods: EngineClient["listPeriods"] = (kind) => this.journal.listPeriods(kind);
+  dismissJournalIntro: EngineClient["dismissJournalIntro"] = () =>
+    this.journal.dismissJournalIntro();
+  saveEntryText: EngineClient["saveEntryText"] = (day, itemId, block, text) =>
+    this.journal.saveEntryText(day, itemId, block, text);
+  placeInEntry: EngineClient["placeInEntry"] = (itemId, day, block) =>
+    this.journal.placeInEntry(itemId, day, block);
+  describePhoto: EngineClient["describePhoto"] = (itemId, text) =>
+    this.journal.describePhoto(itemId, text);
+  readEntryNow: EngineClient["readEntryNow"] = (day) => this.journal.readEntryNow(day);
+  keepNote: EngineClient["keepNote"] = (text, source, feeling, good) =>
+    this.journal.keepNote(text, source, feeling, good);
+  topFeelingWords: EngineClient["topFeelingWords"] = (part) => this.journal.topFeelingWords(part);
+  keepCheckIn: EngineClient["keepCheckIn"] = (input) => this.journal.keepCheckIn(input);
+  markTried: EngineClient["markTried"] = (checkinId, idea) =>
+    this.journal.markTried(checkinId, idea);
+  keepGoodThing: EngineClient["keepGoodThing"] = (day, text, photoItemId) =>
+    this.journal.keepGoodThing(day, text, photoItemId);
+  setLeftOut: EngineClient["setLeftOut"] = (itemId, leftOut) =>
+    this.journal.setLeftOut(itemId, leftOut);
+  moveToDay: EngineClient["moveToDay"] = (itemId, day) => this.journal.moveToDay(itemId, day);
+  confirmMention: EngineClient["confirmMention"] = (mentionId, role) =>
+    this.journal.confirmMention(mentionId, role);
+  removeMention: EngineClient["removeMention"] = (mentionId) =>
+    this.journal.removeMention(mentionId);
+  restoreMention: EngineClient["restoreMention"] = (mentionId) =>
+    this.journal.restoreMention(mentionId);
+  refileMention: EngineClient["refileMention"] = (mentionId, target) =>
+    this.journal.refileMention(mentionId, target);
+  answerSameName: EngineClient["answerSameName"] = async (questionId, answer) => {
+    const done = await this.journal.answerSameName(questionId, answer);
+    this.emit("needs-you-changed", this.status.needsYou);
+    return done;
+  };
+  entityJournalDays: EngineClient["entityJournalDays"] = (entityId) =>
+    this.journal.entityJournalDays(entityId);
+  getReflection: EngineClient["getReflection"] = (period) => this.journal.getReflection(period);
+  reflect: EngineClient["reflect"] = (period) => this.journal.reflect(period);
+  stopReflecting: EngineClient["stopReflecting"] = (period) => this.journal.stopReflecting(period);
+  deleteReflection: EngineClient["deleteReflection"] = (period) =>
+    this.journal.deleteReflection(period);
 
   // System
 
