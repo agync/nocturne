@@ -235,7 +235,7 @@ export function SameNameEntry({ question, onAnswer, onOpen, busy }: SameNameProp
   return (
     <section className={styles.entry} aria-labelledby={heading}>
       <div className={styles.entryHead}>
-        <span className={styles.badge} data-tone="marker">
+        <span className={styles.badge} data-tone="soft">
           {t("journal.people.badge")}
         </span>
         <h2 id={heading} className={styles.entryTitle}>
