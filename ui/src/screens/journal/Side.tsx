@@ -196,6 +196,7 @@ export function Side({
   const open = useRef<HTMLButtonElement>(null);
   const mentions = allMentions(data);
   const full = data.good.length >= MOST_GOOD_THINGS;
+  const emptyDay = data.entry.length === 0 && data.rows.length === 0;
 
   return (
     <aside className={styles.side} aria-label={t("journal.day.eyebrow")}>
@@ -233,38 +234,40 @@ export function Side({
         </a>
       </section>
 
-      <section className={styles.block} aria-labelledby="side-good">
-        <h2 className={styles.label} id="side-good">
-          {t("journal.side.good")}
-        </h2>
-        {data.good.length > 0 ? (
-          <ul className={styles.list}>
-            {data.good.map((g) => (
-              <GoodLine key={g.id} good={g} />
-            ))}
-          </ul>
-        ) : null}
-        {adding && !full ? (
-          <AddGood
-            data={data}
-            inputRef={addRef}
-            onDone={() => {
-              setAdding(false);
-              open.current?.focus();
-            }}
-          />
-        ) : full ? null : (
-          <button
-            ref={open}
-            type="button"
-            className={styles.secondary}
-            onClick={() => setAdding(true)}
-          >
-            <Glyph name="plus" />
-            {t("journal.side.addGood")}
-          </button>
-        )}
-      </section>
+      {emptyDay && !adding ? null : (
+        <section className={styles.block} aria-labelledby="side-good">
+          <h2 className={styles.label} id="side-good">
+            {t("journal.side.good")}
+          </h2>
+          {data.good.length > 0 ? (
+            <ul className={styles.list}>
+              {data.good.map((g) => (
+                <GoodLine key={g.id} good={g} />
+              ))}
+            </ul>
+          ) : null}
+          {adding && !full ? (
+            <AddGood
+              data={data}
+              inputRef={addRef}
+              onDone={() => {
+                setAdding(false);
+                open.current?.focus();
+              }}
+            />
+          ) : full ? null : (
+            <button
+              ref={open}
+              type="button"
+              className={styles.secondary}
+              onClick={() => setAdding(true)}
+            >
+              <Glyph name="plus" />
+              {t("journal.side.addGood")}
+            </button>
+          )}
+        </section>
+      )}
 
       {data.people.length > 0 ? (
         <section className={styles.block} aria-labelledby="side-people">

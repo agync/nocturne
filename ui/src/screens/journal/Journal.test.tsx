@@ -502,12 +502,19 @@ describe("rows of the timeline", () => {
 });
 
 describe("good things", () => {
-  it("adds one in the side column with a line and keeps it", async () => {
+  it("hides the block on an empty day until the toolbar asks for it", async () => {
+    await open("empty");
+    expect(screen.queryByRole("heading", { level: 2, name: "Good things" })).toBeNull();
+    const toolbar = screen.getByRole("button", { name: "Record" }).parentElement as HTMLElement;
+    await userEvent.click(within(toolbar).getByRole("button", { name: "Add a good thing" }));
+    expect(screen.getByRole("heading", { level: 2, name: "Good things" })).toBeInTheDocument();
+  });
+
+  it("adds one with a line and keeps it", async () => {
     const { engine } = await open("empty");
     const spy = vi.spyOn(engine, "keepGoodThing");
-    const side = screen.getByRole("heading", { level: 2, name: "Good things" })
-      .parentElement as HTMLElement;
-    await userEvent.click(within(side).getByRole("button", { name: "Add a good thing" }));
+    const toolbar = screen.getByRole("button", { name: "Record" }).parentElement as HTMLElement;
+    await userEvent.click(within(toolbar).getByRole("button", { name: "Add a good thing" }));
     const line = screen.getByPlaceholderText("Something good, big or small.");
     expect(line).toHaveFocus();
     await userEvent.type(line, "Sam fixed the gate");
