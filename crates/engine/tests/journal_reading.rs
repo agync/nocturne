@@ -1247,3 +1247,21 @@ fn a_recap_that_ended_yesterday_comes_before_the_day() {
     assert_eq!(line.kind, PeriodKind::Week);
     assert_eq!(line.start, "2026-11-07");
 }
+
+#[test]
+fn the_journal_day_carries_its_open_same_name_question() {
+    let f = fixture();
+    two_sams(&f);
+    let entry = journal_item(&f, SAM_ENTRY, "entry");
+    f.engine.apply(&entry, vec![sam_claim()]).unwrap();
+    let day = f.engine.journal_day("2026-11-12".parse().unwrap()).unwrap();
+    assert_eq!(day.same_name.len(), 1);
+    assert_eq!(day.same_name[0].receipt.item_id, entry);
+    assert!(
+        f.engine
+            .journal_day("2026-11-11".parse().unwrap())
+            .unwrap()
+            .same_name
+            .is_empty()
+    );
+}

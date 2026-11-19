@@ -339,6 +339,8 @@ pub(crate) fn build_day(
         &mentions,
     );
     let reading = items.iter().filter(|i| i.pending()).count() as u32;
+    let day_ids: Vec<String> = items.iter().map(|i| i.id().to_string()).collect();
+    let same_name = super::mentions::open_questions(conn, Some(&day_ids))?;
     let first_use: bool = conn.query_row(
         "SELECT NOT EXISTS(SELECT 1 FROM settings WHERE key = ?1)",
         [INTRO_KEY],
@@ -357,7 +359,7 @@ pub(crate) fn build_day(
         people: names,
         reflection: super::lookback::summary(conn, ctx, originals, day)?,
         reading,
-        same_name: Vec::new(),
+        same_name,
     })
 }
 
