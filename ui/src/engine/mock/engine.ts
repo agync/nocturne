@@ -494,14 +494,13 @@ export class MockEngine implements EngineClient {
     const page = this.todayPage();
     const n = this.needsTotal();
     page.moreNeedsYou = this.journal.openQuestions().length;
+    const words = ["Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten"];
     page.headline =
       n === 0
         ? "Nothing needs you today."
         : n === 1
           ? "One thing needs you today."
-          : n === 2
-            ? "Two things need you today."
-            : `${n} things need you today.`;
+          : `${words[n - 2] ?? n} things need you today.`;
   }
 
   private needsChanged(): void {

@@ -23,7 +23,7 @@ describe("Past pages", () => {
     expect(links[0]).toHaveAttribute("href", "#/pages/2026-11-13");
     expect(links[0]).toHaveTextContent("Today");
     expect(links[0]).toHaveTextContent("Fri 13 Nov");
-    expect(links[0]).toHaveTextContent("Two things need you today.");
+    expect(links[0]).toHaveTextContent("Three things need you today.");
     expect(links[0]).toHaveTextContent("Page 23");
     const dates = links.map((l) => l.getAttribute("href"));
     expect(dates).toEqual([...dates].sort().reverse());
@@ -37,7 +37,7 @@ describe("Past pages", () => {
 
   it("says how many pages still need you, in words, only where some do", async () => {
     await open();
-    const today = screen.getByRole("link", { name: /Two things need you today/ });
+    const today = screen.getByRole("link", { name: /Three things need you today/ });
     expect(within(today).getByText("2 still need you")).toBeInTheDocument();
     const quiet = screen.getAllByRole("link", { name: /A quiet night/ })[0] as HTMLElement;
     expect(within(quiet).queryByText(/still need/)).toBeNull();

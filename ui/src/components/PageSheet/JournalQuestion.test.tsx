@@ -151,7 +151,7 @@ describe("the page headline", () => {
     renderApp({ hash: "#/today", engine });
     const rail = await screen.findByRole("navigation", { name: "Main" });
     expect(
-      await screen.findByRole("heading", { level: 1, name: "3 things need you today." }),
+      await screen.findByRole("heading", { level: 1, name: "Three things need you today." }),
     ).toBeVisible();
     expect(within(rail).getByRole("link", { name: /Needs you/ })).toHaveTextContent("3");
     expect(screen.getByRole("link", { name: "1 more this week in Needs you" })).toBeVisible();

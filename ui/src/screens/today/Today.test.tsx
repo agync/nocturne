@@ -19,7 +19,7 @@ const toastEnds = () =>
 
 const open = async (engine = createMockEngine()) => {
   const view = renderApp({ hash: "#/today", engine });
-  await screen.findByRole("heading", { level: 1, name: "3 things need you today." });
+  await screen.findByRole("heading", { level: 1, name: "Three things need you today." });
   return { ...view, engine };
 };
 

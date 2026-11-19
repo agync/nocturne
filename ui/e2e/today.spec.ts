@@ -47,7 +47,9 @@ test.describe("screenshots of #/today", () => {
 test.describe("the page works", () => {
   test("choosing a dentist time resolves it and announces it politely", async ({ page }) => {
     await ready(page);
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText("3 things need you today.");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Three things need you today.",
+    );
     await page.getByRole("button", { name: /Thursday 19 Nov, 10:00/ }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two things need you today.");
     const status = page.getByRole("status").filter({ hasText: "set to" });

@@ -61,7 +61,7 @@ for (const scheme of ["light", "dark"] as const) {
 test.describe("using it", () => {
   test("every page is a link that the keyboard can reach and open", async ({ page }) => {
     await ready(page);
-    const first = page.getByRole("link", { name: /Two things need you today/ });
+    const first = page.getByRole("link", { name: /Three things need you today/ });
     await first.focus();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: /One thing needs you today/ })).toBeFocused();

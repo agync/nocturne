@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 const SCREENS: Array<[string, string]> = [
-  ["#/today", "3 things need you today."],
+  ["#/today", "Three things need you today."],
   ["#/pages/2026-11-12", "One thing needs you today."],
   ["#/needs-you", "3 things are waiting"],
   ["#/ask", "Ask about anything you’ve kept."],
@@ -34,7 +34,7 @@ const SCREENS: Array<[string, string]> = [
   ["#/privacy", "Only downloads you agreed to."],
   ["#/settings", "Settings"],
   ["#/settings/advanced", "Advanced details"],
-  ["#/listen/2026-11-13", "3 things need you today."],
+  ["#/listen/2026-11-13", "Three things need you today."],
   ["#/print/2026-11-13", "Print"],
 ];
 
