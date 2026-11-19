@@ -2,11 +2,22 @@
 """Fail when two tracked paths differ only by case.
 
 Linux keeps both files; Windows and macOS keep one, so a checkout there loses a file and the
-build breaks. Usage: scripts/check_case_collisions.py [PATH...]  (default: git ls-files)
+build breaks. Script modules also count without their extension: `words.ts` and `Words.tsx` are
+both imported as `./words` or `./Words`, which name one file on Windows and macOS. Usage: scripts/check_case_collisions.py [PATH...]  (default: git ls-files)
 """
 
 import subprocess
 import sys
+
+MODULE_EXTENSIONS = (".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs")
+
+
+def module_name(path):
+    """The path a script import names: without its extension for a script module."""
+    for ext in MODULE_EXTENSIONS:
+        if path.endswith(ext):
+            return path[: -len(ext)]
+    return path
 
 
 def collisions(paths):
@@ -17,7 +28,16 @@ def collisions(paths):
         for end in range(1, len(parts) + 1):
             name = "/".join(parts[:end])
             seen.setdefault(name.lower(), set()).add(name)
-    return sorted(sorted(names) for names in seen.values() if len(names) > 1)
+    modules = {}
+    for path in paths:
+        name = module_name(path)
+        if name != path:
+            modules.setdefault(name.lower(), set()).add(path)
+    for group in modules.values():
+        if len({module_name(p) for p in group}) > 1:
+            seen.setdefault("\0" + min(group).lower(), set()).update(group)
+    groups = {tuple(sorted(names)) for names in seen.values() if len(names) > 1}
+    return sorted(list(group) for group in groups)
 
 
 def main(argv):
