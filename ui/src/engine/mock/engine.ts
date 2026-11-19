@@ -74,6 +74,7 @@ import recordedUrl from "./assets/spoken-today.ogg";
 import { MockBackups, type MockBackupsScript } from "./backup";
 import { cite, helpView, matchGuide, mockGuide, writtenFor } from "./help";
 import { type JournalOptions, MockJournal, mockNowFromAddress } from "./journal";
+import { journalQuestionFromAddress, journalQuestionSeed } from "./journalQuestion";
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
@@ -109,6 +110,8 @@ export interface MockOptions {
   helpWritten?: boolean;
   /** The journal's starting state; `?mockJournal=` picks it in the browser. */
   journal?: JournalOptions;
+  /** Today's page asks a question from the journal; `?mockQuestion=journal` turns it on. */
+  journalQuestion?: boolean;
 }
 
 /** `?mockHelp=written` writes help answers in the mock. */
@@ -375,6 +378,12 @@ export class MockEngine implements EngineClient {
     this.memories = seed.memories;
     this.entities = seed.entities;
     this.pages = seed.pages;
+    if (options.journalQuestion ?? journalQuestionFromAddress()) {
+      const made = journalQuestionSeed(this.clock);
+      this.items.push(made.item);
+      const today = this.pages.find((p) => p.date === localDay(this.clock));
+      if (today) today.question = made.question;
+    }
     this.printStress = seed.printStress;
     this.settings = seed.settings;
     this.status = {
@@ -459,12 +468,18 @@ export class MockEngine implements EngineClient {
     );
   }
 
+  /** Everything waiting in Needs you: the page's lines, web pages to confirm, same-name questions. */
+  private needsTotal(): number {
+    return (
+      this.openNeeds() + this.waitingUnconfirmed().length + this.journal.openQuestions().length
+    );
+  }
+
   private refreshStatus(emit = false): void {
     const waiting = this.items.filter((i) => i.status === "kept" || i.status === "reading").length;
     this.status = {
       ...this.status,
-      needsYou:
-        this.openNeeds() + this.waitingUnconfirmed().length + this.journal.openQuestions().length,
+      needsYou: this.needsTotal(),
       waitingToRead: waiting,
     };
     if (this.status.state !== "paused") {
@@ -477,7 +492,8 @@ export class MockEngine implements EngineClient {
 
   private retitle(): void {
     const page = this.todayPage();
-    const n = this.openNeeds();
+    const n = this.needsTotal();
+    page.moreNeedsYou = this.journal.openQuestions().length;
     page.headline =
       n === 0
         ? "Nothing needs you today."
@@ -1040,6 +1056,7 @@ export class MockEngine implements EngineClient {
 
   async getPage(date?: string): Promise<PageView> {
     const day = date ?? this.today();
+    if (day === this.today()) this.retitle();
     const found = this.pages.find((p) => p.date === day);
     const journalLine = this.journal.pageLine(day);
     if (found) return { ...clone(found), ...(journalLine ? { journalLine } : {}) };
@@ -1093,6 +1110,14 @@ export class MockEngine implements EngineClient {
     const page = this.pages.find((p) => p.date === pageDate);
     if (!page?.question) return;
     page.question.answered = choice;
+    const asked = page.question.journal;
+    if (
+      asked &&
+      !asked.answerItemId &&
+      (choice === "fine" || choice === "notGreat" || choice === "notYet")
+    ) {
+      asked.answerItemId = this.journal.keepAnswer(choice, asked.itemId, page.question.text);
+    }
     const memoryId = page.question.memoryId;
     if (memoryId) {
       const m = this.memory(memoryId);
@@ -1109,7 +1134,10 @@ export class MockEngine implements EngineClient {
 
   async addAnswerLine(pageDate: string, line: string): Promise<void> {
     const question = this.pages.find((p) => p.date === pageDate)?.question;
-    if (question?.journal) question.journal.line = line;
+    const asked = question?.journal;
+    if (!asked) return;
+    asked.line = line;
+    if (asked.answerItemId) this.journal.setAnswerLine(asked.answerItemId, line);
   }
 
   async resolveWhich(conflictId: string, memoryId: string): Promise<WhichResolved> {

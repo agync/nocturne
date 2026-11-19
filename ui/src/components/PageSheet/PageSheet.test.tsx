@@ -27,7 +27,7 @@ const heading = (name: string | RegExp, level = 2) => screen.getByRole("heading"
 describe("PageSheet, a normal day", () => {
   it("leads with the headline and says what the night did", () => {
     render(<PageSheet page={today} onAction={vi.fn()} />);
-    expect(heading("Two things need you today.", 1)).toBeInTheDocument();
+    expect(heading("3 things need you today.", 1)).toBeInTheDocument();
     expect(
       screen.getByText(
         "Overnight Nocturne read 14 things you kept, noticed 3 changes and let 3 go.",

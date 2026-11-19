@@ -14,6 +14,7 @@ import type {
   GlanceKind,
   GoodThing,
   ItemView,
+  JournalAnswer,
   JournalDay,
   Kept,
   KeptCount,
@@ -23,6 +24,7 @@ import type {
   Period,
   PeriodKind,
   PeriodSummary,
+  QuestionChoice,
   Recap,
   Receipt,
   RefileTarget,
@@ -137,6 +139,8 @@ export class MockJournal {
   private readonly delayMs: number;
   private counter = 0;
   private writingStopped = false;
+  /** Answers to the page's question from the journal, kept on today. */
+  private answers: { itemId: string; answer: JournalAnswer }[] = [];
 
   constructor(
     private readonly host: JournalHost,
@@ -203,8 +207,33 @@ export class MockJournal {
   delete(id: string): boolean {
     if (!this.data.items.has(id)) return false;
     this.data.recs = this.data.recs.filter((rec) => this.recItemId(rec) !== id);
+    this.answers = this.answers.filter((a) => a.itemId !== id);
     this.data.items.delete(id);
     return true;
+  }
+
+  /** Keeps a choice on the page's question as an answer on today, and gives the item's id. */
+  keepAnswer(choice: QuestionChoice, about: string, sentence: string): string {
+    const id = this.nextId("j-answer");
+    const view = this.newItem(id, "text", this.host.now().toISOString(), {
+      title: sentence,
+      status: "understood",
+      text: "",
+    });
+    view.journal = "answer";
+    this.answers.push({ itemId: id, answer: { choice, line: null, about, sentence } });
+    return id;
+  }
+
+  /** Adds a line to a kept answer; the line is read like an entry. */
+  setAnswerLine(itemId: string, line: string): void {
+    const found = this.answers.find((a) => a.itemId === itemId);
+    const view = this.data.items.get(itemId);
+    if (!found || !view) return;
+    found.answer.line = line;
+    view.text = line;
+    view.title = line.slice(0, 60);
+    view.status = "kept";
   }
 
   /** Items this journal holds, for receipts and item pages. */
@@ -443,6 +472,23 @@ export class MockJournal {
         leftOut: false,
         moveTo: null,
       });
+    }
+    if (d === this.data.today) {
+      for (const { itemId, answer } of this.answers) {
+        const item = this.item(itemId);
+        rows.push({
+          kind: "answer",
+          part: partOfHour(item.keptAt),
+          item,
+          checkin: null,
+          good: null,
+          feeling: null,
+          mentions: [],
+          leftOut: false,
+          moveTo: null,
+          answer,
+        });
+      }
     }
     rows.sort((a, b) => a.item.keptAt.localeCompare(b.item.keptAt));
     const allRead = blocks.every((b) => b.item.status === "understood");

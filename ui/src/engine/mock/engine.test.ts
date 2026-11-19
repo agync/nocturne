@@ -356,7 +356,7 @@ describe("MockEngine page", () => {
     const page = await engine.getPage();
     expect(page.needsYou.find((l) => l.kind === "which")?.done).toBe(true);
     expect(counts.at(-1)).toBe(2);
-    expect(page.headline).toBe("One thing needs you today.");
+    expect(page.headline).toBe("Two things need you today.");
     const chosen = (
       await engine.listMemories({
         itemId: null,
