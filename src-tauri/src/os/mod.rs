@@ -1,6 +1,7 @@
 //! Where the app meets the desktop: tray, global shortcut, notification, start with the
-//! computer, the watched folder and the quick capture window. The shell calls these hooks at
-//! the edges of its life; each is safe when the part it serves is not running.
+//! computer, the watched folder, the quick capture window and the microphone in the web view.
+//! The shell calls these hooks at the edges of its life; each is safe when the part it serves is
+//! not running.
 
 use std::error::Error;
 
@@ -12,6 +13,8 @@ use crate::error::CommandError;
 pub mod autostart;
 pub mod copy;
 pub mod inbox;
+#[cfg(target_os = "linux")]
+pub mod media;
 pub mod notify;
 #[cfg(target_os = "linux")]
 pub mod portal;

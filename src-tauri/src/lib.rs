@@ -55,6 +55,10 @@ struct LogGuard(#[allow(dead_code)] Option<tracing_appender::non_blocking::Worke
 /// Install the commands, the window behaviour and the setup step on a builder. A test manages
 /// its own `AppState` first; otherwise setup opens the store (see [`state::resolve_data_dir`]).
 pub fn configure<R: Runtime>(builder: Builder<R>) -> Builder<R> {
+    // On Linux the web view asks the app before it asks the desktop, so the microphone is
+    // answered here for every page and every window (see [`os::media`]).
+    #[cfg(target_os = "linux")]
+    let builder = builder.on_permission_request(os::media::answer);
     builder
         .invoke_handler(invoke_handler())
         .on_window_event(|window, event| window::on_window_event(window, event))
@@ -88,6 +92,8 @@ fn setup<R: Runtime>(app: &AppHandle<R>) -> Result<(), Box<dyn std::error::Error
     }
     start_services(app);
     allow_originals_in_the_interface(app);
+    #[cfg(target_os = "linux")]
+    tracing::info!("the microphone answers the app's own pages");
     window::match_system_theme(app);
     window::show_after_grace(app);
     Ok(())
