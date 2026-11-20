@@ -210,6 +210,10 @@ The free-form daily entry. One per day, as long or short as the person likes.
   the voice note sits in the entry as a block with its length, a play button and, once read, its
   words under a "What was said" disclosure. Dropping or pasting a photo places it where the cursor
   is; once read, its description becomes its alternative text, which the person can change.
+- **The microphone.** Holding Space or the record button is what grants the microphone; Nocturne
+  asks nothing more for it. On Linux it settles the request itself for its own pages, while a page
+  from anywhere else, and the camera, are refused. macOS and Windows also show the system's
+  question once.
 - **Saving.** The entry saves as the person writes. Nothing is lost if the window closes. It is
   read when the person has stopped writing for ten minutes, when they leave the journal, or at
   night, whichever comes first. Each text block, voice note and photo is one item on the tape,
