@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.2](https://github.com/agync/nocturne/compare/v0.7.1...v0.7.2) (2026-11-20)
+
+
+### Bug Fixes
+
+* **linux:** answer the microphone request ([c2775e8](https://github.com/agync/nocturne/commit/c2775e81ff3b5c699ed60ded9860736f540212fc))
+
 ## [0.7.1](https://github.com/agync/nocturne/compare/v0.7.0...v0.7.1) (2026-11-19)
 
 
