@@ -1,0 +1,21 @@
+[
+  {
+    "cmd": "keepCheckIn",
+    "input": {
+      "feeling": {
+        "part": "settled",
+        "point": {
+          "pleasant": 0.5,
+          "energy": -0.25
+        },
+        "words": [
+          "calm"
+        ]
+      },
+      "line": "Tea with Sam",
+      "urge": null,
+      "replaces": null
+    },
+    "clientId": "c-0006"
+  }
+]

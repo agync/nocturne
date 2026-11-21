@@ -1,0 +1,31 @@
+[
+  {
+    "cmd": "sendReadings",
+    "batch": {
+      "syncId": "sync-0002",
+      "seq": 0,
+      "last": true,
+      "changes": [
+        {
+          "type": "upsert",
+          "reading": {
+            "phoneId": "r1",
+            "day": "2026-11-12",
+            "start": "2026-11-12T07:00:00+00:00",
+            "end": null,
+            "sourceDevice": null,
+            "value": {
+              "type": "steps",
+              "total": 8412
+            }
+          }
+        },
+        {
+          "type": "removed",
+          "phoneId": "r0",
+          "kind": "restingHeartRate"
+        }
+      ]
+    }
+  }
+]

@@ -179,6 +179,7 @@ impl Shell for TestShell {
             device_name: device.name.clone(),
             connection,
             min_phone_build: super::protocol::MIN_PHONE_BUILD,
+            max_phone_build: Some(super::protocol::PHONE_BUILD),
             version: "0.0.0".into(),
             features: Vec::new(),
         }

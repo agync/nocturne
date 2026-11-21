@@ -98,6 +98,7 @@ impl<R: Runtime> session::Shell for AppShell<R> {
             device_name: device.name.clone(),
             connection,
             min_phone_build: protocol::MIN_PHONE_BUILD,
+            max_phone_build: Some(protocol::PHONE_BUILD),
             version: self.app.package_info().version.to_string(),
             // A phone app offers the calendar and Health only to a computer that takes them.
             features: vec![PhoneFeature::Calendar, PhoneFeature::Health],
@@ -442,7 +443,7 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
 /// and the journal calls, which answer from the computer's own journal module. Answering the
 /// page's question from the journal is its own call, not `answer_question`: a phone answers no
 /// other question, and its answer is kept once per client id. A phone app also sends its
-/// calendar and health readings, which no window does.
+/// calendar and health readings, which no window does, and introduces itself first.
 pub const PHONE_ONLY_CALLS: &[&str] = &[
     "get_original",
     "disconnect",
@@ -451,6 +452,7 @@ pub const PHONE_ONLY_CALLS: &[&str] = &[
     "answer_journal_question",
     "send_calendar",
     "send_readings",
+    "introduce",
 ];
 
 #[cfg(test)]
@@ -458,8 +460,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use nocturne_contract::{
-        CalendarBatch, CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind,
-        QuestionChoice, ReadingBatch, RemoteCall, SameNameAnswer,
+        AppPlatform, CalendarBatch, CheckInInput, Feeling, FeelingPart, FeelingPoint, Period,
+        PeriodKind, PhoneAppIntro, QuestionChoice, ReadingBatch, RemoteCall, SameNameAnswer,
     };
 
     use super::*;
@@ -563,6 +565,14 @@ mod tests {
                     changes: Vec::new(),
                 },
             },
+            RemoteCall::Introduce {
+                app: PhoneAppIntro {
+                    platform: AppPlatform::Android,
+                    version: s(),
+                    min_build: 1,
+                    max_build: 1,
+                },
+            },
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -587,7 +597,8 @@ mod tests {
                 | RemoteCall::AnswerJournalQuestion { .. }
                 | RemoteCall::SeeOnlineChange
                 | RemoteCall::SendCalendar { .. }
-                | RemoteCall::SendReadings { .. } => {}
+                | RemoteCall::SendReadings { .. }
+                | RemoteCall::Introduce { .. } => {}
             }
         }
         let snake = |camel: &str| {

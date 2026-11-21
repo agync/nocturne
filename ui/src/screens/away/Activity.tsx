@@ -28,6 +28,7 @@ const WHAT: Record<RemoteAction, CopyId> = {
   readPage: "away.event.readPage",
   openedOriginal: "away.event.openedOriginal",
   tookNewAddress: "away.event.tookNewAddress",
+  needsNewerHere: "away.event.needsNewerHere",
   allowed: "away.event.allowed",
   refused: "away.event.refused",
   removed: "away.event.removed",

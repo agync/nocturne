@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay,
-    PageSummary, PageView, Period, PhoneFeature, QuestionChoice, ReadingBatch, ReflectionView,
-    SameNameAnswer, SameNameAnswered, SyncReceipt,
+    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind,
+    JournalDay, PageSummary, PageView, Period, PhoneFeature, QuestionChoice, ReadingBatch,
+    ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -208,6 +208,8 @@ pub enum RemoteAction {
     ReadPage,
     OpenedOriginal,
     TookNewAddress,
+    /// A phone with a newer Nocturne than this computer tried to connect.
+    NeedsNewerHere,
     Allowed,
     Refused,
     Removed,
@@ -300,12 +302,39 @@ pub struct PhoneHello {
     pub device_name: String,
     pub connection: RemoteConnection,
     pub version: String,
-    // The oldest phone build the computer accepts; an older phone must ask for a fresh link.
+    /// The oldest phone build the computer speaks.
     pub min_phone_build: u32,
+    /// The newest phone build the computer speaks. A computer from before the version window
+    /// leaves it out: it speaks `min_phone_build` only (see [`PhoneHello::newest_phone_build`]).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub max_phone_build: Option<u32>,
     /// What this computer takes from a phone app. A computer from before phone apps sends none.
     #[serde(default)]
     #[ts(as = "Option<Vec<PhoneFeature>>", optional)]
     pub features: Vec<PhoneFeature>,
+}
+
+impl PhoneHello {
+    /// The newest phone build the computer speaks.
+    pub fn newest_phone_build(&self) -> u32 {
+        self.max_phone_build
+            .unwrap_or(self.min_phone_build)
+            .max(self.min_phone_build)
+    }
+}
+
+/// What a phone app says of itself first (`introduce`): which app, its version, and the oldest
+/// and newest phone builds it speaks.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PhoneAppIntro {
+    pub platform: AppPlatform,
+    /// "Nocturne {version}" as the person sees it.
+    pub version: String,
+    pub min_build: u32,
+    pub max_build: u32,
 }
 
 /// What a phone may know of the computer's state. `needs_you` counts the public needs-you
@@ -365,6 +394,10 @@ pub enum PhoneError {
     /// The question would go online, but the person has not yet seen that Online answers now
     /// holds back only what they mark private. Nothing was started; the phone shows the notice.
     OnlineChanged,
+    /// The phone is older than the oldest build this computer speaks: update the phone.
+    TooOld,
+    /// The phone is newer than the newest build this computer speaks: update the computer.
+    Outdated,
 }
 
 /// Everything a phone may ask for: the allowed calls, the journal calls, the two phone verbs
@@ -496,6 +529,11 @@ pub enum RemoteCall {
     SendReadings {
         batch: ReadingBatch,
     },
+    /// A phone app's first call on a session: answered with the build both speak
+    /// (`Introduced`), or `TooOld` or `Outdated` when there is none.
+    Introduce {
+        app: PhoneAppIntro,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -528,6 +566,7 @@ pub enum RemoteAnswer {
     CheckIn { checkin: Box<CheckIn> },
     SameName { answered: SameNameAnswered },
     Synced { receipt: SyncReceipt },
+    Introduced { agreed: u32 },
     Done,
     Error { code: PhoneError },
     Revoked,

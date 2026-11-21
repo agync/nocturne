@@ -1,0 +1,9 @@
+[
+  {
+    "cmd": "keepRecording",
+    "mime": "audio/wav",
+    "size": 16,
+    "clientId": "c-0005",
+    "capturedAt": "2026-11-20T18:10:00+00:00"
+  }
+]

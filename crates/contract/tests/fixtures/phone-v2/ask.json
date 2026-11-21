@@ -1,0 +1,11 @@
+[
+  {
+    "cmd": "ask",
+    "question": "When is bin day?"
+  },
+  {
+    "cmd": "ask",
+    "question": "When is bin day?",
+    "place": "thisComputer"
+  }
+]

@@ -1,0 +1,10 @@
+[
+  {
+    "cmd": "getLookBack",
+    "period": {
+      "kind": "week",
+      "start": "2026-11-02",
+      "end": "2026-11-08"
+    }
+  }
+]

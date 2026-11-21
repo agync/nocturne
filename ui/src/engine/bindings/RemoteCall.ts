@@ -4,6 +4,7 @@ import type { CalendarBatch } from "./CalendarBatch";
 import type { CheckInInput } from "./CheckInInput";
 import type { Feeling } from "./Feeling";
 import type { Period } from "./Period";
+import type { PhoneAppIntro } from "./PhoneAppIntro";
 import type { QuestionChoice } from "./QuestionChoice";
 import type { ReadingBatch } from "./ReadingBatch";
 import type { SameNameAnswer } from "./SameNameAnswer";
@@ -25,4 +26,4 @@ web?: boolean, } | { "cmd": "keepBytes", mime: string, size: number, clientId: s
 /**
  * `thisComputer` when the person chose to have this question answered on the computer.
  */
-place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, } | { "cmd": "answerJournalQuestion", pageDate: string, choice: QuestionChoice, line?: string, clientId: string, } | { "cmd": "seeOnlineChange" } | { "cmd": "sendCalendar", batch: CalendarBatch, } | { "cmd": "sendReadings", batch: ReadingBatch, };
+place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, } | { "cmd": "answerJournalQuestion", pageDate: string, choice: QuestionChoice, line?: string, clientId: string, } | { "cmd": "seeOnlineChange" } | { "cmd": "sendCalendar", batch: CalendarBatch, } | { "cmd": "sendReadings", batch: ReadingBatch, } | { "cmd": "introduce", app: PhoneAppIntro, };

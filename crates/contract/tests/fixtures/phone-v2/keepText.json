@@ -1,0 +1,30 @@
+[
+  {
+    "cmd": "keepText",
+    "text": "Bin day moved to Thursday",
+    "clientId": "c-0001"
+  },
+  {
+    "cmd": "keepText",
+    "text": "A walk by the river",
+    "clientId": "c-0002",
+    "feeling": {
+      "part": "settled",
+      "point": {
+        "pleasant": 0.5,
+        "energy": -0.25
+      },
+      "words": [
+        "calm"
+      ]
+    },
+    "good": true,
+    "capturedAt": "2026-11-20T18:05:00+00:00"
+  },
+  {
+    "cmd": "keepText",
+    "text": "https://example.com/a-recipe",
+    "clientId": "c-0003",
+    "web": true
+  }
+]
