@@ -484,24 +484,19 @@ fn condition_6_a_safety_memory_is_not_asked() {
     }
 }
 
+/// Nocturne does not judge what a memory is about: a money, passport or insurance label is no
+/// reason to skip it.
 #[test]
-fn never_a_memory_labelled_health_money_or_id() {
-    for tag in ["money", "passport", "insurance"] {
+fn a_memory_labelled_money_or_id_is_asked() {
+    for tag in ["money", "passport", "insurance", "appointment"] {
         let w = world();
         sql(
             &w.f,
             "UPDATE memories SET tags = ?2 WHERE id = ?1",
             params![w.memory, format!("[\"{tag}\"]")],
         );
-        no_journal_question(&w);
+        assert!(asks_from_the_journal(&w), "{tag}");
     }
-    let w = world();
-    sql(
-        &w.f,
-        "UPDATE memories SET tags = '[\"appointment\"]' WHERE id = ?1",
-        [&w.memory],
-    );
-    assert!(asks_from_the_journal(&w), "a plain label is fine");
 }
 
 #[test]
@@ -548,8 +543,9 @@ fn never_anything_private_or_with_a_private_source() {
     no_journal_question(&w);
 }
 
+/// A memory or sentence about money or health is asked about like any other.
 #[test]
-fn never_a_memory_or_sentence_the_health_money_and_id_check_flags() {
+fn a_memory_or_sentence_about_money_or_health_is_asked() {
     let w = world();
     sql(
         &w.f,
@@ -557,19 +553,11 @@ fn never_a_memory_or_sentence_the_health_money_and_id_check_flags() {
          WHERE id = ?1",
         [&w.memory],
     );
-    no_journal_question(&w);
+    assert!(asks_from_the_journal(&w), "an amount of money");
 
     let text = "Parents evening at six. Then the doctor about my medication.";
     let w = world_with(text, "Parents evening at six. Then the doctor");
-    no_journal_question(&w);
-
-    let w = world();
-    sql(
-        &w.f,
-        "UPDATE memories SET suggest_private = 1 WHERE id = ?1",
-        [&w.memory],
-    );
-    no_journal_question(&w);
+    assert!(asks_from_the_journal(&w), "words about health");
 }
 
 #[test]

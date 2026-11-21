@@ -20,7 +20,6 @@ use crate::coverage;
 use crate::error::{Error, Result};
 use crate::memory::{chain, is_private_chain, words_of};
 use crate::rows::{MemRow, query_mems};
-use crate::sensitive;
 use crate::util::{enum_str, fmt_ts, parse_date, sha256_hex};
 
 /// How many saved pages before a page are looked at: a journal question is asked only when none
@@ -165,36 +164,6 @@ fn sources_of(conn: &Connection, memory_id: &str) -> Result<Vec<Source>> {
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
 
-/// Whether the health, money and ID check flags the memory, in any version of it.
-fn flagged(conn: &Connection, id: &str) -> Result<bool> {
-    let versions = chain(conn, id)?;
-    if versions.is_empty() {
-        return Ok(true);
-    }
-    let mut read = conn.prepare_cached(
-        "SELECT suggest_private, subject, object, sentence, tags FROM memories WHERE id = ?1",
-    )?;
-    for v in &versions {
-        let (suggested, subject, object, sentence, tags): (bool, String, String, String, String) =
-            read.query_row([v], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-            })?;
-        let labelled = match serde_json::from_str::<Vec<String>>(&tags) {
-            Ok(tags) => tags.iter().any(|t| sensitive::tag(t)),
-            Err(_) => true,
-        };
-        if suggested
-            || labelled
-            || [&subject, &object, &sentence]
-                .iter()
-                .any(|t| sensitive::text(t))
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
-}
-
 /// Whether the memory, in any version, was asked about on any page.
 fn asked_before(conn: &Connection, id: &str) -> Result<bool> {
     for v in chain(conn, id)? {
@@ -222,7 +191,7 @@ fn qualify(
     undated: bool,
     mut blocked: Option<&mut Vec<Blocked>>,
 ) -> Result<Option<(String, Chosen)>> {
-    if m.is_safety() || m.suggest_private || flagged(conn, &m.id)? {
+    if m.is_safety() {
         return Ok(None);
     }
     if is_private_chain(conn, &m.id)? || asked_before(conn, &m.id)? {
@@ -256,7 +225,7 @@ fn qualify(
             continue;
         };
         let words = sentence.split_whitespace().count();
-        if !(MIN_WORDS..=MAX_WORDS).contains(&words) || sensitive::text(&sentence) {
+        if !(MIN_WORDS..=MAX_WORDS).contains(&words) {
             continue;
         }
         if written_about(conn, m, &s.id, &s.kept_at, event_end)? {
