@@ -8,7 +8,7 @@ status: stable
 ---
 
 [Nocturne on Android and iPhone](/design/phone-apps.md) proposes native apps that replace the
-phone's browser page: install from the store, pair by scanning or typing the code inside the app,
+phone's browser page: install from the store, pair by scanning, or by typing the computer's address and then the code, inside the app,
 a bottom bar with Today, Journal and Ask, Keep one tap away and in every app's share menu, plain
 asks for the camera, microphone, calendar and health with a working no, and states for a computer
 that is away or on another version. The phone's calendar shows on the morning page and the

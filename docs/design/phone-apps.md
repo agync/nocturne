@@ -36,7 +36,7 @@ screen; it is not part of the design.
 
 | Screen | File and states | Renders |
 |---|---|---|
-| First run and pairing | `pair.html`: `welcome`, `scan`, `camera-off`, `type`, `words`, `allowed` | `pair-welcome-light.png`, `pair-welcome-dark.png`, `pair-scan-light.png`, `pair-camera-off-light.png`, `pair-words-light.png`, `pair-allowed-light.png` |
+| First run and pairing | `pair.html`: `welcome`, `scan`, `camera-off`, `type`, `type-name`, `type-wrong`, `type-lost`, `type-code`, `words`, `allowed` | `pair-welcome-light.png`, `pair-welcome-dark.png`, `pair-scan-light.png`, `pair-camera-off-light.png`, `pair-type-light.png`, `pair-type-name-light.png`, `pair-type-wrong-light.png`, `pair-type-lost-light.png`, `pair-type-code-light.png`, `pair-words-light.png`, `pair-allowed-light.png` |
 | Bringing the calendar | `calendar.html`: `offer`, `why`, `system`, `no`, `pick` | `calendar-offer-light.png`, `calendar-why-light.png`, `calendar-why-dark.png`, `calendar-system-light.png`, `calendar-no-light.png`, `calendar-pick-light.png` |
 | Today, the page | `today.html`: `page`, `away`, `update-phone`, `update-computer` | `today-page-light.png`, `today-page-dark.png`, `today-away-light.png`, `today-update-phone-light.png`, `today-update-computer-light.png` |
 | The journal | `journal.html`: `day` | `journal-day-light.png`, `journal-day-dark.png` |
@@ -112,10 +112,11 @@ flowchart TD
     S[Install Nocturne from the store] --> W[Welcome: Nocturne lives on your computer]
     W -->|Scan the code| C{Camera allowed?}
     C -->|Yes| SC[Scan the code on the computer]
-    C -->|No| T[Type the code]
+    C -->|No| T[Type the address]
     W -->|Type the code| T
+    T --> TC[Type the code]
+    TC --> N
     SC --> N[Name this phone]
-    T --> N
     N --> WD[Three words, Allow on the computer]
     WD --> A[Allowed]
     A --> O{Bring more from this phone?}
@@ -171,7 +172,7 @@ The app opens here until it is paired. One screen, two ways in.
 |---|---|
 | Mark and title | "Nocturne lives on your computer" |
 | Lead | "This app lets you keep things, ask and read your page while you’re out. It works with Nocturne on your computer." |
-| Steps | "1. On your computer, open Nocturne and choose {settings}, then {awayFromHome}, then {addAPhone}." / "2. Scan the code it shows, or type it." |
+| Steps | "1. On your computer, open Nocturne and choose {settings}, then {awayFromHome}, then {addAPhone}." / "2. Scan the code it shows, or type the address and the code." |
 | Main button | "Scan the code" |
 | Second button | "Type the code" |
 | Foot | "No account and no sign-in. This phone keeps no copy of your memory." |
@@ -200,8 +201,19 @@ type the code instead." with "Open phone settings" and "Type the code". On iPhon
 and on Android after two, only the phone's settings can turn it back on, so the first button is
 the way back.
 
-**Type.** "Type the code", the 24 characters in four groups of six, "Capitals don’t matter." and
-"Connect". The typed code carries the same secret as the scanned one.
+**Type.** A scanned code carries the computer's address; typing does not, and the app has no page
+address to borrow as the phone page does. So typing takes two screens, the address first.
+
+| Screen | What it asks | Copy |
+|---|---|---|
+| Address | One field, "Your computer’s address". Four words (Simple) or a full name (Most private), told apart by the dots in a name. Spaces, dashes and capitals are fine | Title "Your computer’s address". "On your computer, under the code, find the four words or the name. Type it here." Hint "Simple shows four words. Most private shows a name. Capitals don’t matter." Placeholder "Four words, or a name". Buttons "Next" and "Scan the code instead" |
+| Code | The 24 characters in four groups of six | Title "Type the code". "Now the 24 letters and numbers under the address on your computer." "Capitals don’t matter." Buttons "Connect" and "Scan the code instead" |
+
+"Next" stays dim until the field holds four words or something shaped like a name. On "Next" the
+app asks the address whether it answers, then moves to the code. The typed code carries the same
+secret as the scanned one. Wrong or unreachable addresses keep the person on the address screen
+with what they typed still in the field, and the message under it (see [States](#states)).
+The re-link path ("Type the four words") is unchanged.
 
 **Name and three words.** As on the phone page: "Name this phone", "Your computer shows this name in
 its list of phones, so pick one you’ll recognise.", then "Check your computer shows the same three
@@ -395,6 +407,8 @@ with "Open phone settings".
 |---|---|
 | Connecting | "Connecting to {name}…" (Phone page) in the status line; the tabs work from what is already open |
 | Computer asleep or unreachable | The phone page's banner, "{name} is asleep, switched off or has a new address.", on Today and Journal. Today reads "Today’s page is back when your computer is. This phone keeps no copy." Keep works and waits, with "{count} waiting". Calendar and health changes wait too, and only the latest version of each goes across |
+| Address incomplete, in the app | Under the field: "Type all four words, or the full name." "Next" stays dim |
+| Address did not answer, in the app | Under the field: "That address didn’t answer. Check the words, and that your computer is awake." (Most private: "That address didn’t answer. Check the name, and that Tailscale is on for this phone."). What was typed stays; nothing moves on |
 | New address (Simple) | The re-link banner, with "Scan the new code" and "Type the four words" |
 | Please update this phone | See [Please update](#please-update) |
 | Please update the computer | See [Please update](#please-update) |
@@ -469,11 +483,17 @@ unless the person chose otherwise ([decision 0011](/adr/0011-online-answers.md))
 ### Adding a phone
 
 The "Add a phone" step in Away from home gains one paragraph under the code, and its words change
-where they promised there was nothing to install.
+where they promised there was nothing to install. Under "Can’t scan?" it also shows what the app
+needs when typing: the address, then the code. The line for the browser stays, so the page path
+still works.
 
 | Part | Today | With the app |
 |---|---|---|
 | Under the code | "Scan it with your phone’s camera." | "Scan it with the Nocturne app on your phone. No app? Your phone’s camera opens Nocturne in its browser instead." |
+| Can’t scan, intro | "Can’t scan?" | "Can’t scan? In the app, choose Type the code, then type:" |
+| Can’t scan, address | | Simple: "The four words" and the words, such as "amber otter quiet river". Most private: "Your computer’s name" and the full name |
+| Can’t scan, code | "On your phone, open {address} and type this code:" and the code | "The code" and the code in four groups of six |
+| Can’t scan, browser | | "No app? In your phone’s browser, open {address} and type the code." The address is the full one in both modes |
 | A new line | | "Get the free Nocturne app: search for “Nocturne” in Google Play or the App Store. It has the same half-moon mark." |
 | Simple, what it needs | "Nothing to sign up for. Nothing to install on your phone." | "Nothing to sign up for. Use the Nocturne app, or your phone’s browser." |
 | Simple, what it sees | "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where, and it supplies the page your phone opens." | "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where. If you use the browser instead of the app, it also supplies the page your phone opens." |
@@ -616,13 +636,25 @@ New strings only; everything marked "Phone page" above is reused as it is.
 | Welcome, title | "Nocturne lives on your computer" |
 | Welcome, lead | "This app lets you keep things, ask and read your page while you’re out. It works with Nocturne on your computer." |
 | Welcome, step 1 | "On your computer, open Nocturne and choose {settings}, then {awayFromHome}, then {addAPhone}." |
-| Welcome, step 2 | "Scan the code it shows, or type it." |
+| Welcome, step 2 | "Scan the code it shows, or type the address and the code." |
 | Welcome, foot | "No account and no sign-in. This phone keeps no copy of your memory." |
 | Welcome, link | "No Nocturne on your computer yet?" |
 | Phone page, app line | "Got the Nocturne app? Open it and choose Scan the code instead." |
 | Camera off | "The camera is off for Nocturne." / "Allow it in your phone’s settings, or type the code instead." |
 | Open settings | "Open phone settings" |
+| Address, title | "Your computer’s address" |
+| Address, lead | "On your computer, under the code, find the four words or the name. Type it here." |
+| Address, hint | "Simple shows four words. Most private shows a name. Capitals don’t matter." |
+| Address, placeholder | "Four words, or a name" |
+| Address, incomplete | "Type all four words, or the full name." |
+| Address, no answer | "That address didn’t answer. Check the words, and that your computer is awake." / Most private: "That address didn’t answer. Check the name, and that Tailscale is on for this phone." |
+| Address, button | "Next" |
+| Code, lead | "Now the 24 letters and numbers under the address on your computer." |
 | Type, hint | "Capitals don’t matter." |
+| Computer, can’t scan | "Can’t scan? In the app, choose Type the code, then type:" |
+| Computer, address | "The four words" (Simple) / "Your computer’s name" (Most private) |
+| Computer, code | "The code" |
+| Computer, browser | "No app? In your phone’s browser, open {address} and type the code." |
 | Allowed, body | "Keep, ask and read your page from here." |
 | Allowed, button | "Continue" |
 | Offer, title | "Bring more from this phone?" |
@@ -756,5 +788,6 @@ things marked private.
 | 10 | Something removed on the phone (a cancelled appointment, a reading deleted in Health) | A: kept on the computer, marked as removed, left out of the page and charts, deleted only when the person chooses. B: deleted on the computer too | A never deletes silently and keeps the page honest about what changed. B mirrors the phone exactly but deletes data without the person asking | **A** |
 | 11 | How the computer's code opens the app | A: one code for both; the app scans it, and the phone's own camera opens the phone page. B: a link that opens the app straight from the phone's camera, which needs a verified address on the project's site | A needs nothing new and no site involvement. B is one step shorter, but ties pairing to the site staying up and lets the site see that someone tried to pair, though not the secret | **A** |
 | 12 | How far apart phone and computer may be | A: the same version only. B: each side keeps the previous phone version for six months after a change | A is simplest to build and test but shows "please update" after almost every release. B means a phone that updates now and then never sees the card, at the cost of testing two versions | **B** |
+| 13 | Typed pairing in the app asks for the address too | A: the app asks for the computer’s address (four words in Simple, the full name in Most private), then the code. B: fold the address into the typed code | A reuses the four words people already type to re-link, and the code stays the 24 characters it is. B makes one long string to type with nothing to check by eye, and changes the code the protocol already defines | **A** |
 
 Health decisions H1 to H8 are on [Health from the phone](phone-health.md#decisions-for-the-owner).
