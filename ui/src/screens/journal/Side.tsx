@@ -10,6 +10,7 @@ import { FeelingMark } from "../../journal/FeelingMark";
 import { PARTS } from "../../journal/feelings";
 import { MentionChip } from "../../journal/MentionChip";
 import { usePlatform } from "../../platform/context";
+import { FromHealth } from "./FromHealth";
 import { Glyph } from "./glyphs";
 import styles from "./Side.module.css";
 import { clock12 } from "./time";
@@ -241,6 +242,8 @@ export function Side({
           </a>
         </section>
       )}
+
+      {data.health ? <FromHealth health={data.health} day={data.day} isToday={data.today} /> : null}
 
       {emptyDay && !adding ? null : (
         <section className={styles.block} aria-labelledby="side-good">

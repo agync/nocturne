@@ -7,5 +7,14 @@
   "journal.timeline.emptyPast": "Nothing was kept on this day.",
   "journal.timeline.rowMenu": "More about this",
   "journal.timeline.openAbout": "Open what it was about",
-  "journal.good.photoChosen": "Photo from today: {name}"
+  "journal.good.photoChosen": "Photo from today: {name}",
+  "journal.timeline.woke": "Woke · {asleep} asleep",
+  "journal.timeline.workout": "{kind} · {length}",
+  "journal.timeline.workoutFar": "{kind} · {length} · {distance}",
+  "journal.timeline.afterSleep": "after {asleep} asleep",
+  "journal.timeline.fromCalendar": "from your calendar",
+  "journal.health.todayShort": "today",
+  "journal.health.asleep": "{asleep} asleep",
+  "journal.health.stepsToday": "{steps} today",
+  "journal.health.rangeSay": "{low} to {high} · mostly around {middle}"
 }

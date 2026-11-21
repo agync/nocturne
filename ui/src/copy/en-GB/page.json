@@ -69,5 +69,13 @@
   "page.loading": "Getting today’s page…",
   "page.action.failed": "That did not go through, so nothing was changed. Try again.",
   "page.error": "Nocturne couldn’t get this page. What you kept is safe.",
-  "page.error.retry": "Try again"
+  "page.error.retry": "Try again",
+  "page.section.calendarToday": "In your calendar today · {count}",
+  "page.calendar.allDay": "All day",
+  "page.calendar.more": "{count} more today",
+  "page.calendar.zone": "{time} in {place}",
+  "page.calendar.receipt": "Calendar · {calendar} · {phone}",
+  "page.lastNight.label": "Last night",
+  "page.lastNight.versus": "· {versus}",
+  "page.lastNight.receipt": "Sleep · Health · {phone}"
 }

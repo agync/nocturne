@@ -31,5 +31,7 @@
   "journal.deleteCheckin.body": "{feel} at {time}, and the line you wrote with it, go from this computer for good.",
   "journal.deleteCheckin.bodyBare": "{feel} at {time} goes from this computer for good.",
   "journal.deleteCheckin.button": "Delete check-in",
-  "journal.deleteCheckin.keep": "Keep it"
+  "journal.deleteCheckin.keep": "Keep it",
+  "journal.delete.group.calendar": "From your calendar",
+  "journal.delete.group.health": "From Health"
 }

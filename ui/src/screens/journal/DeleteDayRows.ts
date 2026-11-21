@@ -2,6 +2,7 @@ import { choiceText } from "../../components/PageSheet/questionWords";
 import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
+  BroughtItem,
   EntryBlock,
   FeelingPart,
   ForgetOriginal,
@@ -20,7 +21,7 @@ export interface DeleteRow {
   key: string;
   /** The row's own original first, then its earlier versions and the feeling tapped with it. */
   ids: string[];
-  section: "entry" | "day" | "other";
+  section: "entry" | "day" | "other" | "calendar" | "health";
   icon: RowIcon;
   time: string;
   tag: string | null;
@@ -135,8 +136,10 @@ export function blockRow(block: EntryBlock): DeleteRow {
   };
 }
 
+const PHONE_ROWS = new Set<TimelineRow["kind"]>(["calendar", "workout", "woke"]);
+
 export function timelineRow(row: TimelineRow): DeleteRow | null {
-  if (row.kind === "entry") return null;
+  if (row.kind === "entry" || PHONE_ROWS.has(row.kind)) return null;
   const { item } = row;
   const ids = [item.id, ...(row.feeling ? [row.feeling.id] : [])];
   const base = { key: `item:${item.id}`, ids, section: "day" as const, time: clock12(item.keptAt) };
@@ -191,6 +194,26 @@ export function dayRows(day: JournalDay): DeleteRow[] {
   const blocks = [...day.entry].sort((a, b) => a.block - b.block).map(blockRow);
   const rest = day.rows.flatMap((r) => timelineRow(r) ?? []);
   return [...blocks, ...rest];
+}
+
+/** The calendar entries and readings a phone brought for the day: unticked, because the phone brings them back. */
+export function phoneRows(day: JournalDay): { calendar: DeleteRow[]; health: DeleteRow[] } {
+  const row = (item: BroughtItem, section: "calendar" | "health"): DeleteRow => ({
+    key: `item:${item.itemId}`,
+    ids: [item.itemId],
+    section,
+    icon: section === "calendar" ? "calendar" : "workout",
+    time: "",
+    tag: null,
+    feel: null,
+    text: item.title,
+    tail: null,
+    changed: null,
+  });
+  return {
+    calendar: (day.fromPhones?.calendar ?? []).map((i) => row(i, "calendar")),
+    health: (day.fromPhones?.health ?? []).map((i) => row(i, "health")),
+  };
 }
 
 /** Group two: an original from another day, as the preview lists it. */

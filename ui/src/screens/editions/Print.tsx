@@ -3,11 +3,12 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { useRoute } from "wouter";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
+import { nightLine } from "../../components/health/sentence";
 import { richText } from "../../components/PageLine/richText";
 import { opening } from "../../components/PageSheet/questionWords";
 import { receiptText } from "../../components/ReceiptChip/ReceiptChip";
 import { useToast } from "../../components/Toast/Toast";
-import { formatLongDay, formatTime } from "../../copy/format";
+import { formatLongDay, formatTime, formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PageLine, PageView, Question } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
@@ -186,6 +187,14 @@ export function Sheet({ page, size, fitted, printedAt, sentNothing, sheetRef }: 
           {formatLongDay(page.date)} · {t("print.page", { number: page.pageNumber })}
         </p>
         <h2 className={styles.headline}>{page.headline}</h2>
+        {page.lastNight ? (
+          <p className={styles.dek}>
+            {t("page.lastNight.label")}: {nightLine(page.lastNight)}{" "}
+            <span className={styles.receipt}>
+              [{t("page.lastNight.receipt", { phone: page.lastNight.phone })}]
+            </span>
+          </p>
+        ) : null}
         <p className={styles.dek}>{page.dek}</p>
       </header>
       {fitted.needsYou.length > 0 ? (
@@ -201,6 +210,35 @@ export function Sheet({ page, size, fitted, printedAt, sentNothing, sheetRef }: 
         </Part>
       ) : null}
       {question ? <QuestionPart question={question} /> : null}
+      {page.calendarToday && page.calendarToday.length > 0 ? (
+        <Part title={t("print.calendarToday")}>
+          <ul className={styles.lines}>
+            {page.calendarToday.map((entry) => (
+              <li key={entry.itemId} className={styles.change}>
+                <span className={styles.dash} aria-hidden="true" />
+                <div className={styles.lineBody}>
+                  <p className={styles.lineText}>
+                    {entry.allDay ? t("page.calendar.allDay") : formatTime12(entry.start)}
+                    {" · "}
+                    {entry.title}
+                    {entry.place ? ` · ${entry.place}` : ""}{" "}
+                    <span className={styles.receipt}>
+                      [
+                      {t("page.calendar.receipt", { calendar: entry.calendar, phone: entry.phone })}
+                      ]
+                    </span>
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+          {(page.moreCalendarToday ?? 0) > 0 ? (
+            <p className={styles.more}>
+              {t("page.calendar.more", { count: page.moreCalendarToday ?? 0 })}
+            </p>
+          ) : null}
+        </Part>
+      ) : null}
       {fitted.changed.length > 0 ? (
         <Part title={t("print.changed")}>
           <ul className={styles.lines}>

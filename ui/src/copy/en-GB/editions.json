@@ -49,5 +49,6 @@
   "print.loading": "Getting the page ready to print…",
   "print.error": "Nocturne couldn’t get that page ready to print. What you kept is safe.",
   "print.missing": "There is no page for that day.",
-  "print.failed": "Nocturne couldn’t open printing. Nothing was lost."
+  "print.failed": "Nocturne couldn’t open printing. Nothing was lost.",
+  "print.calendarToday": "In your calendar today"
 }

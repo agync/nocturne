@@ -182,5 +182,16 @@
   "item.checkin.note": "Check-ins stay in your journal. Nocturne never makes memories from them, so they never fade and Ask never uses them.",
   "item.checkin.change": "Change",
   "item.checkin.bringBack": "Bring back into reflections",
-  "item.checkin.backIn": "Back in your reflections."
+  "item.checkin.backIn": "Back in your reflections.",
+  "item.calendar.when": "{day}, {span}",
+  "item.calendar.range": "{from} to {to}",
+  "item.calendar.allDay": "all day",
+  "item.calendar.repeats": "Repeats",
+  "item.calendar.invited": "Who’s invited",
+  "item.calendar.from": "From {phone}’s calendar · last updated {time}",
+  "item.calendar.removed": "Removed from your calendar",
+  "item.calendar.versions": "Earlier versions",
+  "item.calendar.was": "Was {when}",
+  "item.calendar.learned": "What Nocturne learned",
+  "item.calendar.back": "Calendar from {phone}"
 }
