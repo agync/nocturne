@@ -8,6 +8,7 @@ import type { MemoryView } from "./MemoryView";
 import type { NameRef } from "./NameRef";
 import type { PageLine } from "./PageLine";
 import type { Period } from "./Period";
+import type { RecapHealth } from "./RecapHealth";
 import type { Together } from "./Together";
 import type { Tried } from "./Tried";
 import type { WordCount } from "./WordCount";
@@ -40,4 +41,8 @@ stillOpen: Array<MemoryView>, linesRemoved: number,
 /**
  * Things from the period not yet read when it was put together.
  */
-stillReading?: number, };
+stillReading?: number, 
+/**
+ * "From Health" and what went together: worked out when the recap is opened, never stored.
+ */
+health?: RecapHealth, };
