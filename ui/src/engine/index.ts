@@ -12,7 +12,11 @@ export async function createEngine(
     // `?mockPhones=1` pairs two phones that bring a calendar and health, for design review.
     if (typeof location !== "undefined" && new URLSearchParams(location.search).has("mockPhones")) {
       const { withPhones } = await import("./mock/phones");
-      return withPhones(engine, import.meta.env.VITE_MOCK_NOW || "2026-11-13T07:02:00Z");
+      const { mockNowFromAddress } = await import("./mock/journal");
+      return withPhones(
+        engine,
+        mockNowFromAddress() ?? (import.meta.env.VITE_MOCK_NOW || "2026-11-13T07:02:00Z"),
+      );
     }
     return engine;
   }

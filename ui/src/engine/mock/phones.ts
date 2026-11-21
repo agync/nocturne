@@ -16,12 +16,14 @@ import type {
   PhoneSourcesView,
   ReadingKind,
   ReadingRow,
+  ReflectionView,
   RowKind,
   TimelineRow,
 } from "../bindings";
 import { type EngineClient, EngineError } from "../client";
 import type { MockEngine } from "./engine";
 import { buildDemo, type Demo } from "./phonesDemo";
+import { noticedOf, recapHealthOf } from "./recapHealth";
 
 /** The mock's phones that bring something. Empty: no app phone is paired. */
 export interface PhonesFixtures {
@@ -86,6 +88,10 @@ export class PhonesSim {
 
   setNoticing(on: boolean): void {
     this.noticing = on;
+  }
+
+  noticingOn(): boolean {
+    return this.noticing;
   }
 
   /** Newest first, the fixtures' own order within one send; the cursor is the time and the item. */
@@ -273,6 +279,8 @@ export function withPhones(
     listMemories: engine.listMemories.bind(engine),
     getRemote: engine.getRemote.bind(engine),
     removeDevice: engine.removeDevice.bind(engine),
+    getReflection: engine.getReflection.bind(engine),
+    reflect: engine.reflect.bind(engine),
   };
 
   const calendarLive = () => sim.taking("calendar") && !sim.removedCalendar;
@@ -303,6 +311,19 @@ export function withPhones(
   target.listReadings = async (kind, from, to) => sim.readings(kind, from, to);
   target.previewPhoneDelete = async (scope) => sim.previewDelete(scope);
   target.deletePhoneData = async (token, alsoStop) => sim.delete(token, alsoStop);
+
+  /** A recap carries "From Health" and what went together, worked out from the readings now. */
+  const withHealth = async (view: ReflectionView): Promise<ReflectionView> => {
+    if (view.type !== "recap" || !healthLive()) return view;
+    const health = recapHealthOf(sim, view.recap.period);
+    if (!health) return view;
+    const noticed = sim.noticingOn()
+      ? await noticedOf(sim, view.recap, today, (id) => target.getItem(id))
+      : [];
+    return { type: "recap", recap: { ...view.recap, health: { ...health, noticed } } };
+  };
+  target.getReflection = async (period) => withHealth(await base.getReflection(period));
+  target.reflect = async (period) => withHealth(await base.reflect(period));
 
   target.getRemote = async () => {
     const view = await base.getRemote();
