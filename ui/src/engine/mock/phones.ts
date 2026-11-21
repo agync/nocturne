@@ -19,7 +19,7 @@ import type {
   RowKind,
   TimelineRow,
 } from "../bindings";
-import { EngineError } from "../client";
+import { type EngineClient, EngineError } from "../client";
 import type { MockEngine } from "./engine";
 import { buildDemo, type Demo } from "./phonesDemo";
 
@@ -88,13 +88,26 @@ export class PhonesSim {
     this.noticing = on;
   }
 
-  cameIn(deviceId: string, source: PhoneSource, before: string | null, limit: number): CameInRow[] {
+  /** Newest first, the fixtures' own order within one send; the cursor is the time and the item. */
+  cameIn(
+    deviceId: string,
+    source: PhoneSource,
+    before: string | null,
+    limit: number,
+    beforeId: string | null = null,
+  ): CameInRow[] {
     this.phone(deviceId);
-    return clone(
-      (this.fixtures.cameIn[`${deviceId}/${source}`] ?? [])
-        .filter((row) => before === null || row.cameInAt < before)
-        .slice(0, limit),
+    const rows = [...(this.fixtures.cameIn[`${deviceId}/${source}`] ?? [])].sort((a, b) =>
+      b.cameInAt.localeCompare(a.cameInAt),
     );
+    const at = beforeId === null ? -1 : rows.findIndex((r) => r.itemId === beforeId);
+    const rest =
+      before === null
+        ? rows
+        : at >= 0
+          ? rows.slice(at + 1)
+          : rows.filter((r) => r.cameInAt < before);
+    return clone(rest.slice(0, limit));
   }
 
   series(kind: ReadingKind, from: string, to: string): HealthSeries {
@@ -282,8 +295,10 @@ export function withPhones(
     sim.setSource(deviceId, source, taking);
   target.setPhonePageOptions = async (opts) => sim.setPageOptions(opts);
   target.setNoticing = async (on) => sim.setNoticing(on);
-  target.listCameIn = async (deviceId, source, before, limit) =>
-    sim.cameIn(deviceId, source, before, limit);
+  // The mock engine file declares four arguments; the client interface has the cursor too.
+  const client: EngineClient = target;
+  client.listCameIn = async (deviceId, source, before, limit, beforeId) =>
+    sim.cameIn(deviceId, source, before, limit, beforeId ?? null);
   target.getHealthSeries = async (kind, from, to) => sim.series(kind, from, to);
   target.listReadings = async (kind, from, to) => sim.readings(kind, from, to);
   target.previewPhoneDelete = async (scope) => sim.previewDelete(scope);

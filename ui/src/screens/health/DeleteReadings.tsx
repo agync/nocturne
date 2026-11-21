@@ -40,9 +40,7 @@ export function DeleteReadings({
   onDeleted,
 }: DeleteReadingsProps) {
   const engine = useEngine();
-  const [deviceId, setDeviceId] = useState(
-    (single as (ReadingRow & { deviceId?: string }) | null)?.deviceId ?? first.deviceId,
-  );
+  const [deviceId, setDeviceId] = useState(single?.deviceId ?? first.deviceId);
   const phone = phones.find((p) => p.deviceId === deviceId) ?? first;
   const kinds = broughtKinds([phone]);
   const [chosen, setChosen] = useState<ReadingKind[]>([current]);

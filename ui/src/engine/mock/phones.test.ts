@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { EngineClient } from "../client";
 import { createMockEngine } from "./engine";
 import { withPhones } from "./phones";
 
@@ -49,11 +50,19 @@ describe("the mock's phones", () => {
   });
 
   it("lists what came in newest first, and pages it", async () => {
-    const engine = phones();
+    const engine: EngineClient = phones();
     const first = await engine.listCameIn("pixel", "calendar", null, 2);
     expect(first.map((r) => r.title)).toEqual(["Leo, swimming", "Book group"]);
-    const rest = await engine.listCameIn("pixel", "calendar", first[1]?.cameInAt ?? null, 10);
+    const rest = await engine.listCameIn(
+      "pixel",
+      "calendar",
+      first[1]?.cameInAt ?? null,
+      10,
+      first[1]?.itemId ?? null,
+    );
     expect(rest.length).toBeGreaterThan(0);
+    const seen = new Set([...first, ...rest].map((r) => r.itemId));
+    expect(seen.size).toBe(first.length + rest.length);
   });
 
   it("deletes what came in, and stops taking it when asked", async () => {

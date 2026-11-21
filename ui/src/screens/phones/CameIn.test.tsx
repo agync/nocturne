@@ -71,11 +71,35 @@ describe("what came in", () => {
     const list = vi.spyOn(engine, "listCameIn");
     await openPhones(PATH, "Calendar from Sam’s phone", engine);
     expect(await screen.findAllByRole("listitem")).toHaveLength(30);
-    expect(list).toHaveBeenCalledWith("pixel", "calendar", null, 30);
+    expect(list).toHaveBeenCalledWith("pixel", "calendar", null, 30, null);
     await userEvent.click(screen.getByRole("button", { name: "Load more" }));
     await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(35));
-    expect(list).toHaveBeenLastCalledWith("pixel", "calendar", many[29]?.cameInAt, 30);
+    expect(list).toHaveBeenLastCalledWith(
+      "pixel",
+      "calendar",
+      many[29]?.cameInAt,
+      30,
+      many[29]?.itemId,
+    );
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it("pages past rows that all came in at the same time", async () => {
+    const engine = phonesEngine();
+    const base = (engine.sim.fixtures.cameIn["pixel/calendar"] as CameInRow[])[0] as CameInRow;
+    engine.sim.fixtures.cameIn["pixel/calendar"] = Array.from({ length: 35 }, (_, i) => ({
+      ...base,
+      itemId: `item-${String(i).padStart(2, "0")}`,
+      title: `Entry ${i}`,
+      cameInAt: base.cameInAt,
+    }));
+    await openPhones(PATH, "Calendar from Sam’s phone", engine);
+    expect(await screen.findAllByRole("listitem")).toHaveLength(30);
+    await userEvent.click(screen.getByRole("button", { name: "Load more" }));
+    await waitFor(() => expect(screen.getAllByRole("listitem")).toHaveLength(35));
+    expect(
+      new Set(screen.getAllByRole("link").map((a) => a.getAttribute("href"))).size,
+    ).toBeGreaterThan(34);
   });
 
   it("says so when nothing came in", async () => {
