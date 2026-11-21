@@ -17,6 +17,7 @@ use nocturne_contract::{
     TidyProgress, TidyReport,
 };
 use nocturne_engine::day::page_instant;
+use nocturne_engine::decide::{Decider, MindDecider, Settled};
 use nocturne_engine::{BoxFuture, Clock, Engine, Error as EngineError};
 use tokio::sync::{Mutex, watch};
 
@@ -44,6 +45,18 @@ const CAREFUL_PER_NIGHT: usize = 8;
 /// Items kept this long before the page's end are looked at for a careful re-read: each is
 /// looked at on the night after it was kept.
 const CAREFUL_WINDOW: SignedDuration = SignedDuration::from_hours(24);
+
+/// Decisions asked in shadow in one night at most, so the night stays inside its time.
+const SHADOW_PER_NIGHT: usize = 40;
+/// One decision gets this long, and all of a night's together this long.
+const SHADOW_ASK_LIMIT: Duration = Duration::from_secs(20);
+const SHADOW_LIMIT: Duration = Duration::from_secs(3 * 60);
+/// Failures in a row after which the night's asking stops.
+const SHADOW_STRIKES: u32 = 3;
+/// Idle time that counts as nobody at the keyboard, the night tidy's own.
+const SHADOW_IDLE: Duration = Duration::from_secs(10 * 60);
+/// Memories recorded this long before the tidy began are checked for health, money and ID.
+const SHADOW_WINDOW: SignedDuration = SignedDuration::from_hours(24);
 
 /// Runs once the backlog is read and before the page is composed: the journal's looking back,
 /// which the page may then carry a line about.
@@ -338,13 +351,82 @@ impl Tidy {
         self.inner.finishing.store(true, Ordering::SeqCst);
         drop(slots);
         self.inner.reader.end_drain(&run.drain);
+        let (kind, date, started, deadline) = (run.kind, run.date, run.started, run.deadline);
         // The mind is asked for things now; the lock is free so pausing and status still work.
         let (step, watch) = self.finish(run).await;
         if watch.is_some() {
             self.inner.slots.lock().await.watch = watch;
         }
         self.inner.finishing.store(false, Ordering::SeqCst);
+        // Only a night's tidy, once its page is saved and the tidy no longer counts as running.
+        if kind == TidyKind::Night && matches!(step, TidyStep::Finished(_)) {
+            self.shadow_decisions(date, started, deadline).await;
+        }
         step
+    }
+
+    /// Asks the mind the decisions logged since the last night, in shadow (decision 0016): the
+    /// answers go to the decision log beside what the rules did, and change nothing. An error or
+    /// a slow answer is logged and the rule's outcome stands; after [`SHADOW_STRIKES`] failures
+    /// in a row, the rest wait for the next night. It asks only while the night tidy's own rules
+    /// hold (on mains, nobody at the keyboard) and stops well before the page time, so it never
+    /// competes with the person's first questions.
+    async fn shadow_decisions(&self, date: Date, started: Timestamp, page_at: Timestamp) {
+        let since = started - SHADOW_WINDOW;
+        let pending = self
+            .eng(move |e| {
+                e.queue_decisions(date, since)?;
+                e.pending_decisions(SHADOW_PER_NIGHT)
+            })
+            .await;
+        let pending = match pending {
+            Ok(p) => p,
+            Err(e) => {
+                tracing::warn!("could not queue the night's decisions: {e}");
+                return;
+            }
+        };
+        let Some(mind) = current_mind(&self.inner.slot) else {
+            return;
+        };
+        let decider = MindDecider(mind);
+        let began = std::time::Instant::now();
+        let mut strikes = 0;
+        let stop_at = page_at - SignedDuration::try_from(SHADOW_LIMIT).unwrap_or_default();
+        for p in pending {
+            if strikes >= SHADOW_STRIKES
+                || began.elapsed() >= SHADOW_LIMIT
+                || self.now() >= stop_at
+                || !self.nobody_here().await
+            {
+                break;
+            }
+            let asked = std::time::Instant::now();
+            let answer =
+                match tokio::time::timeout(SHADOW_ASK_LIMIT, decider.decide(&p.decision)).await {
+                    Ok(Ok(answer)) => {
+                        strikes = 0;
+                        Ok(answer)
+                    }
+                    Ok(Err(e)) => {
+                        strikes += 1;
+                        Err(e.to_string())
+                    }
+                    Err(_) => {
+                        strikes += 1;
+                        Err("took too long".to_string())
+                    }
+                };
+            let settled = Settled {
+                backend: decider.backend(),
+                answer,
+                ms: u64::try_from(asked.elapsed().as_millis()).unwrap_or(u64::MAX),
+            };
+            let id = p.id;
+            if let Err(e) = self.eng(move |e| e.settle_decision(&id, &settled)).await {
+                tracing::warn!("could not log a decision: {e}");
+            }
+        }
     }
 
     /// Write and save the page. The watch is set when items are still unread behind it.
@@ -515,6 +597,14 @@ impl Tidy {
             Ok(_) => {}
             Err(e) => tracing::warn!("could not look for items to read again: {e}"),
         }
+    }
+
+    /// On mains with nobody at the keyboard, as the night tidy starts. An unknown idle time
+    /// counts as away, as it does for the night tidy.
+    async fn nobody_here(&self) -> bool {
+        let ac = probe(&self.inner.host, |h| h.on_ac_power()).await;
+        let idle = probe(&self.inner.host, |h| h.idle_for()).await;
+        ac != Some(false) && idle.is_none_or(|d| d >= SHADOW_IDLE)
     }
 
     async fn compose(&self, date: Date, end: Timestamp) -> Option<PageView> {
