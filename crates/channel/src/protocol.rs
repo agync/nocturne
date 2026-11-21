@@ -462,6 +462,77 @@ mod tests {
         );
     }
 
+    /// Each shipped build: its number, the day it shipped, the version that first carried it
+    /// and the checksum of its fixtures.
+    fn shipped() -> Vec<(u32, String, String, String)> {
+        let v: serde_json::Value =
+            serde_json::from_str(include_str!("../protocol-history.json")).unwrap();
+        v["builds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|b| !b["released"].is_null())
+            .map(|b| {
+                let field = |k: &str| {
+                    b[k].as_str()
+                        .unwrap_or_else(|| panic!("a shipped build has {k}"))
+                        .to_string()
+                };
+                let build = u32::try_from(b["build"].as_u64().unwrap()).unwrap();
+                (
+                    build,
+                    field("released"),
+                    field("version"),
+                    field("fixtures"),
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn each_shipped_build_shipped_in_the_release_the_changelog_dates() {
+        let changelog = include_str!("../../../CHANGELOG.md");
+        for (build, day, version, _) in shipped() {
+            let heading = changelog.lines().find(|l| {
+                let rest = l.strip_prefix("## ").unwrap_or_default();
+                let rest = rest.strip_prefix('[').unwrap_or(rest);
+                rest.strip_prefix(version.as_str())
+                    .is_some_and(|r| r.starts_with(']') || r.starts_with(' '))
+            });
+            let heading = heading.unwrap_or_else(|| panic!("{version} is in the changelog"));
+            assert!(
+                heading.ends_with(&format!("({day})")),
+                "build {build} shipped in {version} on {day}: {heading}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_shipped_build_keeps_its_fixtures_as_they_shipped() {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../contract/tests/fixtures");
+        for (build, _, _, recorded) in shipped() {
+            let dir = root.join(format!("phone-v{build}"));
+            let mut files: Vec<_> = std::fs::read_dir(&dir)
+                .unwrap()
+                .map(|f| f.unwrap().path())
+                .collect();
+            files.sort();
+            let mut sum = Sha256::new();
+            for f in files {
+                sum.update(f.file_name().unwrap().as_encoded_bytes());
+                sum.update([0]);
+                sum.update(std::fs::read(&f).unwrap());
+                sum.update([0]);
+            }
+            assert_eq!(
+                hex::encode(&sum.finalize()),
+                recorded,
+                "the calls build {build} shipped with are kept as they were"
+            );
+        }
+    }
+
     #[test]
     fn raising_the_oldest_build_drops_only_builds_replaced_six_months_ago() {
         assert!(may_be_oldest(&history(), MIN_PHONE_BUILD, today()));
