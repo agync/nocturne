@@ -117,6 +117,8 @@ tauri = { workspace = true, features = ["test"] }
 reqwest.workspace = true
 http-body-util = "0.1"
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+# The phone app's own client, against the real listener (tests/phone_client.rs).
+nocturne-channel = { workspace = true, features = ["dev-loopback"] }
 
 [lints]
 workspace = true
