@@ -321,7 +321,8 @@ go?" The quote is two short sentences because the memory's span touches both.
 
 **Read aloud and the phone.** Read aloud, the page skips the question and ends with "Today’s
 question is on the page." (already designed). Printed, it prints like any question. The phone's
-page does not show the day's question today, and still does not.
+page shows it too, as [The journal question on the phone](phone-journal-question.md) designs; the
+other questions stay off the phone.
 
 | Key | Copy |
 |---|---|
@@ -447,6 +448,6 @@ Small, agreed, and not built yet:
    remembers", not Journal, and the small field there has no part labels.
 3. **The spoken page.** The mock's spoken-page `.ogg` still says "Two things need you today."
    beside the rail's three. Re-record it with the counted headline.
-4. **The journal question on the phone.** The phone reads the whole journal and its page data
-   already carries the question; the phone's page shows it once it is designed there
+4. **The journal question on the phone.** Designed and built in
+   [The journal question on the phone](phone-journal-question.md)
    ([#113](https://github.com/agync/nocturne/issues/113)).

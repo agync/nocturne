@@ -6,13 +6,14 @@
 <title>Phone · today’s journal · Nocturne</title>
 <link rel="stylesheet" href="mock.css">
 </head>
-<body data-frame="phone" data-back="Journal" data-states="day asleep empty">
+<body data-frame="phone" data-back="Journal" data-states="day asleep empty answer answerWaiting">
 <main id="content" class="pmain">
   <div style="display: flex; flex-direction: column; gap: 6px">
-    <p class="plbl">Today · Thursday 19 November</p>
+    <p class="plbl" data-state="day asleep empty">Today · Thursday 19 November</p>
+    <p class="plbl" data-state="answer answerWaiting">Today · Friday 20 November</p>
   </div>
 
-  <div class="pbanner" role="status" data-state="asleep">
+  <div class="pbanner" role="status" data-state="asleep answerWaiting">
     <span data-icon="moon" data-size="22"></span>
     <span><strong>Home computer can’t be reached.</strong>The journal is back when your computer is. This phone keeps no copy. What you keep now waits here.</span>
   </div>
@@ -48,13 +49,29 @@
     </ul>
   </section>
 
+  <section data-state="answer" aria-label="Through the day">
+    <p class="plbl" style="margin-bottom: 4px">Through the day</p>
+    <ul class="ptl">
+      <li><span class="t">7:31 am</span><span class="c">Leo’s swimming kit is in the boot.</span></li>
+      <li><span class="t">7:48 am</span><span class="c"><span><span class="choice">Not great</span> Mrs Okafor is worried about his reading.</span><span class="about">About: “Parents’ evening at six. Not looking forward to it.”</span><span class="meta">from My phone</span></span></li>
+    </ul>
+  </section>
+
+  <section data-state="answerWaiting" aria-label="Waiting on this phone">
+    <p class="plbl" style="margin-bottom: 4px">Waiting on this phone</p>
+    <ul class="ptl">
+      <li><span class="t">7:48 am</span><span class="c"><span><span class="choice">Not great</span> Mrs Okafor is worried about his reading.</span><span class="pwait">waiting on this phone</span></span></li>
+    </ul>
+  </section>
+
   <div data-state="empty" style="display: flex; flex-direction: column; gap: 8px; padding-top: 8px">
     <p class="ptext">Nothing kept today yet.</p>
     <p class="plead">Anything you keep, here or on your computer, shows up here.</p>
   </div>
 
   <div class="pfoot" data-state="day"><span class="pbtn" data-kind="primary">Reflect on today</span><span class="pbtn" data-kind="quiet">← Wednesday</span></div>
-  <div class="pfoot" data-state="asleep empty"><span class="pbtn" data-kind="primary">Keep something</span><span class="pbtn" data-kind="quiet" data-state="empty">Check in</span></div>
+  <div class="pfoot" data-state="answer"><span class="pbtn" data-kind="primary">Reflect on today</span><span class="pbtn" data-kind="quiet">← Thursday</span></div>
+  <div class="pfoot" data-state="asleep empty answerWaiting"><span class="pbtn" data-kind="primary">Keep something</span><span class="pbtn" data-kind="quiet" data-state="empty">Check in</span></div>
 </main>
 <script src="shell.js"></script>
 </body>
