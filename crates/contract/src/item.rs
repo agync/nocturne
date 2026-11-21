@@ -12,6 +12,10 @@ pub enum ItemKind {
     Web,
     /// A feelings check-in from the journal. It yields mentions only, never memories.
     Checkin,
+    /// An appointment from a paired phone's calendar.
+    Calendar,
+    /// A health reading from a paired phone. It yields no memories.
+    Reading,
 }
 
 /// Where an item came from. Decides its default trust.

@@ -8,8 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AskDelta, AskPlace, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay, PageSummary,
-    PageView, Period, QuestionChoice, ReflectionView, SameNameAnswer, SameNameAnswered,
+    AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay,
+    PageSummary, PageView, Period, PhoneFeature, QuestionChoice, ReadingBatch, ReflectionView,
+    SameNameAnswer, SameNameAnswered, SyncReceipt,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -200,6 +201,9 @@ pub enum RemoteAction {
     KeptVoiceNote,
     AnsweredName,
     AnsweredQuestion,
+    /// Counts only, never what the entries said.
+    SentCalendar,
+    SentReadings,
     TookBack,
     ReadPage,
     OpenedOriginal,
@@ -298,6 +302,10 @@ pub struct PhoneHello {
     pub version: String,
     // The oldest phone build the computer accepts; an older phone must ask for a fresh link.
     pub min_phone_build: u32,
+    /// What this computer takes from a phone app. A computer from before phone apps sends none.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<PhoneFeature>>", optional)]
+    pub features: Vec<PhoneFeature>,
 }
 
 /// What a phone may know of the computer's state. `needs_you` counts the public needs-you
@@ -359,8 +367,8 @@ pub enum PhoneError {
     OnlineChanged,
 }
 
-/// Everything a phone may ask for: the allowed calls, the journal calls and the two phone
-/// verbs.
+/// Everything a phone may ask for: the allowed calls, the journal calls, the two phone verbs
+/// and the two sends of a phone app.
 ///
 /// A keep may carry a feeling and a good-thing mark; both are optional and default to nothing,
 /// so a phone built before the journal still parses and keeps as it always did. It may also say
@@ -476,6 +484,14 @@ pub enum RemoteCall {
     /// The person has seen that Online answers now holds back only what they mark private.
     /// Answered with `Done`.
     SeeOnlineChange,
+    /// One batch of calendar changes from a phone app, answered with `Synced`.
+    SendCalendar {
+        batch: CalendarBatch,
+    },
+    /// One batch of health readings from a phone app, answered with `Synced`.
+    SendReadings {
+        batch: ReadingBatch,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -507,6 +523,7 @@ pub enum RemoteAnswer {
     LookBack { view: Box<ReflectionView> },
     CheckIn { checkin: Box<CheckIn> },
     SameName { answered: SameNameAnswered },
+    Synced { receipt: SyncReceipt },
     Done,
     Error { code: PhoneError },
     Revoked,

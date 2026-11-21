@@ -77,6 +77,10 @@ pub struct CheckIn {
     pub from_device: Option<String>,
     pub mentions: Vec<Mention>,
     pub left_out: bool,
+    /// "after {duration} asleep": on the day's first check-in, when last night has come in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub after_sleep_min: Option<u32>,
 }
 
 /// What an item is in the journal. Ordinary things kept have none.
@@ -192,6 +196,12 @@ pub enum RowKind {
     Entry,
     /// An answer to the page's question from the journal.
     Answer,
+    /// An appointment from a paired phone's calendar.
+    Calendar,
+    /// "Walk · 42 min · 3.1 km", at its start.
+    Workout,
+    /// "Woke · {duration} asleep", at the waking time.
+    Woke,
 }
 
 /// An answer to the page's question from the journal, as the timeline shows it: the choice, the
@@ -326,6 +336,10 @@ pub struct JournalDay {
     pub reading: u32,
     /// Open "Which {name} is this?" questions from this day's items.
     pub same_name: Vec<SameNameQuestion>,
+    /// "From Health", when a phone brings any health readings.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub health: Option<crate::DayHealth>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]

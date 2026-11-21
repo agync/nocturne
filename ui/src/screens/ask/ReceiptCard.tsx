@@ -19,6 +19,10 @@ function kindWord(receipt: Receipt): string {
       return t("kind.web");
     case "checkin":
       return t("kind.checkin");
+    case "calendar":
+      return t("kind.calendar");
+    case "reading":
+      return t("kind.reading");
     case "text":
       return receipt.source === "paste" ? t("kind.paste") : t("kind.text");
   }

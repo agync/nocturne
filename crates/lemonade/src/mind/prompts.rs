@@ -276,6 +276,8 @@ pub fn extraction_user(text: &str, cx: &ExtractContext, nonce: &str) -> String {
         ItemKind::Audio => "a voice recording transcript",
         ItemKind::Document => "a document",
         ItemKind::Web => "a web page",
+        ItemKind::Calendar => "an appointment from a calendar",
+        ItemKind::Reading => "a health reading",
     };
     let mut out = format!(
         "This is {kind}, kept on {}. Today is {}.\n",
@@ -698,6 +700,9 @@ mod tests {
             update: None,
             journal_line: None,
             journal_skipped: None,
+            calendar_today: Vec::new(),
+            more_calendar_today: 0,
+            last_night: None,
         }
     }
 

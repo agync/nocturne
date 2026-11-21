@@ -24,6 +24,10 @@ function kindLabel(item: ItemView): string {
       return t("kind.document");
     case "checkin":
       return t("kind.checkin");
+    case "calendar":
+      return t("kind.calendar");
+    case "reading":
+      return t("kind.reading");
   }
 }
 

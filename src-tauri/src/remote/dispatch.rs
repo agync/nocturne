@@ -390,6 +390,9 @@ impl<R: Runtime> Call<R> {
                 },
                 None => err(PhoneError::NotReady),
             },
+            RemoteCall::SendCalendar { .. } | RemoteCall::SendReadings { .. } => {
+                err(PhoneError::NotReady)
+            }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;

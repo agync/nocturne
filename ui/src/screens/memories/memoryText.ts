@@ -63,6 +63,8 @@ const KIND_WORD: Record<
   | "item.kind.document"
   | "item.kind.web"
   | "item.kind.checkin"
+  | "item.kind.calendar"
+  | "item.kind.reading"
 > = {
   text: "item.kind.text",
   image: "item.kind.image",
@@ -70,6 +72,8 @@ const KIND_WORD: Record<
   document: "item.kind.document",
   web: "item.kind.web",
   checkin: "item.kind.checkin",
+  calendar: "item.kind.calendar",
+  reading: "item.kind.reading",
 };
 
 export const kindWord = (kind: ItemKind): string => t(KIND_WORD[kind]);

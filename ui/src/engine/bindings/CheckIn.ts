@@ -17,4 +17,8 @@ about: string | null,
 /**
  * Ids of the ideas from "Something that might help" the person noted as tried, in order.
  */
-tried: Array<string>, fromDevice: string | null, mentions: Array<Mention>, leftOut: boolean, };
+tried: Array<string>, fromDevice: string | null, mentions: Array<Mention>, leftOut: boolean, 
+/**
+ * "after {duration} asleep": on the day's first check-in, when last night has come in.
+ */
+afterSleepMin?: number, };

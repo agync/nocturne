@@ -11,6 +11,8 @@ export function thumbCode(item: ItemView): string {
     document: "recent.badge.document",
     image: null,
     checkin: "recent.badge.checkin",
+    calendar: "recent.badge.calendar",
+    reading: "recent.badge.reading",
   };
   const id = word[item.kind];
   return id === null ? "" : t(id);
@@ -30,6 +32,10 @@ function kindWord(item: ItemView): string {
       return item.source === "drop" ? t("recent.kind.dropped") : t("kind.document");
     case "checkin":
       return t("kind.checkin");
+    case "calendar":
+      return t("kind.calendar");
+    case "reading":
+      return t("kind.reading");
   }
 }
 

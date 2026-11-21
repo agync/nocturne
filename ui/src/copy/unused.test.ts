@@ -31,6 +31,8 @@ const ITEM_KINDS: Record<ItemKind, true> = {
   document: true,
   web: true,
   checkin: true,
+  calendar: true,
+  reading: true,
 };
 const MARK_STATES: Record<MarkState, true> = {
   resting: true,

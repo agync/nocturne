@@ -560,6 +560,9 @@ fn compose(
         update: None,
         journal_line: None,
         journal_skipped: None,
+        calendar_today: Vec::new(),
+        more_calendar_today: 0,
+        last_night: None,
     })
 }
 
@@ -1437,6 +1440,9 @@ fn empty_like(page: &nocturne_contract::PageView) -> nocturne_contract::PageView
         update: None,
         journal_line: None,
         journal_skipped: None,
+        calendar_today: Vec::new(),
+        more_calendar_today: 0,
+        last_night: None,
     }
 }
 
@@ -1490,5 +1496,9 @@ pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract
         upcoming: page.upcoming,
         learned: page.learned,
         question: page.question,
+        // The person's own calendar and sleep, as on the computer's page.
+        calendar_today: page.calendar_today,
+        more_calendar_today: page.more_calendar_today,
+        last_night: page.last_night,
     })
 }
