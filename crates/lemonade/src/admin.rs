@@ -38,7 +38,8 @@ pub(crate) struct Keys {
 }
 
 impl Keys {
-    /// Refuses an empty key (the engine reads an empty admin key as "no check") and two equal ones.
+    /// Refuses an empty key and two equal ones: the engine reads an empty admin key as the API
+    /// key, which would open the admin routes to the inference client.
     pub(crate) fn new(api: String, admin: String) -> Result<Keys, RuntimeError> {
         if api.is_empty() || admin.is_empty() {
             return Err(RuntimeError::Start("an engine key was empty".into()));
