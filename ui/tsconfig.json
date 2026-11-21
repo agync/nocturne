@@ -21,6 +21,7 @@
     "src",
     "e2e",
     "e2e-away",
+    "e2e-phone-native",
     "interop",
     "scripts",
     "vite.config.ts",
@@ -28,6 +29,7 @@
     "vitest.interop.config.ts",
     "playwright.config.ts",
     "playwright.away.config.ts",
+    "playwright.phone-native.config.ts",
     "e2e-trials",
     "playwright.trials.config.ts"
   ],
