@@ -42,7 +42,9 @@ export function receiptText(receipt: Receipt): string {
       parts.push(t("kind.web"), date);
       break;
     case "calendar":
+      // "Calendar · Family · Sam’s phone": the calendar it came from, then the phone.
       parts.push(t("kind.calendar"));
+      if (receipt.calendar) parts.push(receipt.calendar);
       if (receipt.fromDevice) parts.push(receipt.fromDevice);
       break;
     case "reading":

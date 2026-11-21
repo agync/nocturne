@@ -1,6 +1,8 @@
 //! Row to view conversions shared by every module.
 
-use nocturne_contract::{Certainty, ItemView, MemoryStatus, MemoryView, Receipt, Span, Trust};
+use nocturne_contract::{
+    Certainty, ItemKind, ItemView, MemoryStatus, MemoryView, Receipt, Span, Trust,
+};
 use rusqlite::{Connection, Row};
 use std::path::Path;
 
@@ -116,9 +118,16 @@ pub(crate) fn receipts_for(conn: &Connection, memory_id: &str) -> Result<Vec<Rec
             span,
             unconfirmed: trust == Trust::Untrusted,
             from_device: r.get(8)?,
+            calendar: None,
         })
     })?;
-    Ok(rows.collect::<rusqlite::Result<_>>()?)
+    let mut receipts: Vec<Receipt> = rows.collect::<rusqlite::Result<_>>()?;
+    for r in &mut receipts {
+        if r.kind == ItemKind::Calendar {
+            r.calendar = crate::phones::read::calendar_of(conn, &r.item_id)?;
+        }
+    }
+    Ok(receipts)
 }
 
 /// The memory columns every loader selects, with the table aliased `m`.

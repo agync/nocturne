@@ -743,6 +743,7 @@ mod pure {
             span: None,
             unconfirmed: false,
             from_device: None,
+            calendar: None,
         }
     }
 
@@ -917,6 +918,7 @@ mod table {
             span: None,
             unconfirmed: false,
             from_device: None,
+            calendar: None,
         }
     }
 

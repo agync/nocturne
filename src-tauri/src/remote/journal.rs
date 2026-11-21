@@ -674,6 +674,7 @@ mod tests {
             span: None,
             unconfirmed: false,
             from_device: None,
+            calendar: None,
         };
         let line = |t: &str, id: &str| ReflectionLine {
             text: t.into(),
@@ -718,6 +719,7 @@ mod tests {
             span: None,
             unconfirmed: false,
             from_device: None,
+            calendar: None,
         };
         let point = |id: &str| SeriesPoint {
             day: "2026-11-19".into(),
