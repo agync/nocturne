@@ -111,6 +111,15 @@ export function bringsKey(phone: PhoneSources) {
   return null;
 }
 
+/** "{name} · an update is ready for it" or "{name} needs an update before it can connect". */
+export function updateLine(phone: PhoneSources): string | null {
+  const update = phone.app?.update;
+  if (!update) return null;
+  return t(update === "ready" ? "phones.update.ready" : "phones.update.needed", {
+    name: phone.name,
+  });
+}
+
 /** "Android app · Nocturne 1.2", "iPhone app · …" or "In the browser"; nothing when not known. */
 export function phoneKind(phone: PhoneSources): string | null {
   if (phone.inBrowser) return t("phones.kind.browser");

@@ -14,6 +14,7 @@ import type {
   PhoneSource,
   PhoneSources,
   PhoneSourcesView,
+  PhoneUpdate,
   ReadingKind,
   ReadingRow,
   ReflectionView,
@@ -267,9 +268,11 @@ const partOf = (instant: string): DayPart => {
 export function withPhones(
   engine: MockEngine,
   now: Date | string,
-  options: { empty?: boolean } = {},
+  options: { empty?: boolean; update?: PhoneUpdate } = {},
 ): MockEngine & { demo: Demo; sim: PhonesSim } {
   const demo = buildDemo(new Date(now));
+  for (const phone of demo.fixtures.phones)
+    if (phone.app && options.update) phone.app = { ...phone.app, update: options.update };
   const sim = new PhonesSim(options.empty ? emptyPhones() : demo.fixtures);
   const today = localDay(new Date(now));
   const base = {

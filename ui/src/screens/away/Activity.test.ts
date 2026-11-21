@@ -28,3 +28,10 @@ describe("the activity lines for what phones send", () => {
     expect(eventText(sent("sentReadings", 12))).toBe("Sam’s phone sent 12 readings");
   });
 });
+
+describe("the activity line for a phone newer than this computer", () => {
+  it("says the computer needs a newer Nocturne", () => {
+    const newer = { ...event(1), action: "needsNewerHere" } as RemoteEvent;
+    expect(eventText(newer)).toBe("Sam’s phone needs a newer Nocturne here");
+  });
+});

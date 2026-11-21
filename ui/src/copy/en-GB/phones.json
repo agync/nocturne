@@ -9,6 +9,8 @@
   "phones.kind.android": "Android app · Nocturne {version}",
   "phones.kind.ios": "iPhone app · Nocturne {version}",
   "phones.kind.browser": "In the browser",
+  "phones.update.ready": "{name} · an update is ready for it",
+  "phones.update.needed": "{name} needs an update before it can connect",
   "phones.brings.both": "Brings your calendar and health",
   "phones.brings.calendar": "Brings your calendar",
   "phones.brings.health": "Brings health",

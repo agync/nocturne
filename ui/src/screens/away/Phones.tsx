@@ -14,7 +14,7 @@ import type {
 } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
 import { DeleteRows } from "../phones/DeleteRows";
-import { bringsKey, phoneKind, usePhoneSources } from "../phones/usePhoneSources";
+import { bringsKey, phoneKind, updateLine, usePhoneSources } from "../phones/usePhoneSources";
 import styles from "./Away.module.css";
 import { Confirm, DeviceStatus, Frame } from "./parts";
 import { useRemoteAct } from "./useRemote";
@@ -42,11 +42,18 @@ interface RowProps {
   onRemove: () => void;
 }
 
-/** What kind of phone it is and what it brings, when the computer knows. */
+/** What kind of phone it is and what it brings, when the computer knows, and whether it
+ * should update. */
 function PhoneKind({ phone }: { phone: PhoneSources }) {
   const brings = bringsKey(phone);
   const line = [phoneKind(phone), brings ? t(brings) : null].filter(Boolean).join(" · ");
-  return line === "" ? null : <span className={styles.sub}>{line}</span>;
+  const update = updateLine(phone);
+  return (
+    <>
+      {line === "" ? null : <span className={styles.sub}>{line}</span>}
+      {update ? <span className={styles.sub}>{update}</span> : null}
+    </>
+  );
 }
 
 function PhoneRow({ device, brought, renaming, onRename, onDone, onRemove }: RowProps) {

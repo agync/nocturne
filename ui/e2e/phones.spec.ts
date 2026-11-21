@@ -88,6 +88,24 @@ for (const scheme of ["light", "dark"] as const) {
       await clean(page, "add a phone");
     });
 
+    test("The phones list says when the app on a phone should update", async ({ page }) => {
+      for (const [update, line] of [
+        ["ready", "Sam’s phone · an update is ready for it"],
+        ["needed", "Sam’s phone needs an update before it can connect"],
+      ] as const) {
+        await page.goto(`/?mockPhones=${update}&mockAway=on#/settings/away/phones`);
+        await page.getByRole("heading", { level: 1 }).first().waitFor();
+        const list = page.getByRole("list", { name: "Your phones" });
+        await expect(
+          list.getByText("Android app · Nocturne 1.2 · Brings your calendar and health"),
+        ).toBeVisible();
+        await expect(list.getByText(line)).toBeVisible();
+        await expect(list.getByText("In the browser")).toBeVisible();
+        await page.screenshot({ path: `${SHOTS}/phones-update-${update}-${scheme}.png` });
+        await clean(page, `phones list, update ${update}`);
+      }
+    });
+
     test("Removing a phone offers Also delete what it brought, unticked", async ({ page }) => {
       await ready(page, "#/settings/away/phones", true);
       await expect(page.getByText(/Android app · Nocturne 1.2/)).toBeVisible();

@@ -153,6 +153,36 @@ describe("phones that bring things", () => {
     expect(within(list).getAllByRole("link", { name: "From your phones" })).toHaveLength(1);
   });
 
+  it("says when the app on a phone should update", async () => {
+    const at = "2026-11-13T07:02:00Z";
+    await openAway(PHONES, "on", "Phones", withPhones(manualEngine("on"), at, { update: "ready" }));
+    const list = screen.getByRole("list", { name: "Your phones" });
+    expect(
+      await within(list).findByText("Sam’s phone · an update is ready for it"),
+    ).toBeInTheDocument();
+    expect(within(list).queryByText(/needs an update/)).toBeNull();
+  });
+
+  it("says when a phone cannot connect until it updates", async () => {
+    const at = "2026-11-13T07:02:00Z";
+    await openAway(
+      PHONES,
+      "on",
+      "Phones",
+      withPhones(manualEngine("on"), at, { update: "needed" }),
+    );
+    const list = screen.getByRole("list", { name: "Your phones" });
+    expect(
+      await within(list).findByText("Sam’s phone needs an update before it can connect"),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about updates for a current app", async () => {
+    await openAway(PHONES, "on", "Phones", withBrought());
+    await screen.findByText(/Android app/);
+    expect(screen.queryByText(/update/)).toBeNull();
+  });
+
   it("the remove dialog points to From your phones and offers to delete what it brought", async () => {
     const engine = withBrought();
     await openAway(PHONES, "on", "Phones", engine);
