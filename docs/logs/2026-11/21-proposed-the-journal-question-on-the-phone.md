@@ -15,3 +15,8 @@ the computer is away waits on the phone like a keep, and a retried answer is kep
 journal gains the answer row the computer already draws. [Journaling](/design/journaling.md) and
 [Journaling follow-ups](/design/journaling-follow-ups.md) point to it, and phone mockups in light
 and dark are in `docs/design/mockups/journaling/`.
+
+Built in the same change. The answer goes through the computer's own answer path, keyed by the
+phone's client id like a keep, and the computer's activity list notes it without its words.
+Renders of the built phone screens, before and after, are in
+`docs/design/mockups/journaling/built/`.
