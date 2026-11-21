@@ -2,12 +2,13 @@
 //! private key) and what the computer last said about itself. Each file is written private and
 //! whole: to a temporary file first, then renamed over the old one.
 
-use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use nocturne_channel::phone::PhoneIdentity;
-use nocturne_contract::RemoteConnection;
+use nocturne_contract::{PhoneFeature, RemoteConnection};
 use serde::{Deserialize, Serialize};
+
+use crate::sync::ledger::write_private;
 
 const IDENTITY: &str = "identity.json";
 const DEVICE: &str = "device.json";
@@ -21,6 +22,9 @@ pub struct Meta {
     pub version: Option<String>,
     pub paired_at: u64,
     pub last_connected_at: Option<u64>,
+    /// What the computer takes from this phone, from its last hello.
+    #[serde(default)]
+    pub features: Vec<PhoneFeature>,
 }
 
 /// The paired device as the screens read it. Never the private key.
@@ -49,39 +53,6 @@ impl DeviceInfo {
 
 pub struct Store {
     dir: PathBuf,
-}
-
-fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
-    let unique: String = nocturne_channel::crypto::random::<6>()
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    let tmp = path.with_file_name(format!(".{name}.{unique}.tmp"));
-    let mut options = std::fs::OpenOptions::new();
-    options.write(true).create_new(true);
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::OpenOptionsExt;
-        options.mode(0o600);
-    }
-    let written = (|| {
-        let mut f = options.open(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        drop(f);
-        std::fs::rename(&tmp, path)
-    })();
-    if written.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-        return written;
-    }
-    // The rename itself is kept only once the folder is on disk.
-    #[cfg(unix)]
-    if let Some(dir) = path.parent() {
-        std::fs::File::open(dir)?.sync_all()?;
-    }
-    Ok(())
 }
 
 impl Store {

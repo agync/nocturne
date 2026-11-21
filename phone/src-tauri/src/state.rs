@@ -2,12 +2,14 @@
 
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use nocturne_channel::client::{self, Connection, OnIdentity, Options, Phone, Router};
 use nocturne_channel::phone::{PhoneIdentity, PhonePairing};
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::store::{Meta, Store};
+use crate::sync::{LedgerFile, Syncer};
 use crate::uploads::Uploads;
 
 pub struct AppState {
@@ -17,6 +19,9 @@ pub struct AppState {
     pub pairing: Mutex<Option<PhonePairing>>,
     pub phone: Mutex<Option<Phone>>,
     pub uploads: Mutex<Uploads>,
+    pub syncer: Arc<Syncer>,
+    /// When the last send started.
+    pub last_send: Mutex<Option<Instant>>,
 }
 
 pub fn now_ms() -> u64 {
@@ -42,6 +47,8 @@ pub fn router() -> Router {
 impl AppState {
     pub fn new(dir: PathBuf) -> AppState {
         AppState {
+            syncer: Arc::new(Syncer::new(LedgerFile::open(&dir))),
+            last_send: Mutex::new(None),
             store: Arc::new(Store::new(dir)),
             router: router(),
             http: client::http_client(),
@@ -74,13 +81,17 @@ impl AppState {
 
     fn make_phone<R: Runtime>(&self, app: &AppHandle<R>, identity: PhoneIdentity) -> Phone {
         let store = self.store.clone();
+        let syncer = self.syncer.clone();
         let on_identity: OnIdentity = Arc::new(move |i: Option<&PhoneIdentity>| match i {
             Some(i) => {
                 if let Err(e) = store.save_identity(i) {
                     tracing::warn!("could not keep the new address: {e}");
                 }
             }
-            None => store.clear(),
+            None => {
+                store.clear();
+                syncer.ledger.forget_sends();
+            }
         });
         let phone = Phone::new(
             identity,
@@ -92,8 +103,10 @@ impl AppState {
         let store = self.store.clone();
         let app = app.clone();
         tauri::async_runtime::spawn(async move {
+            let mut was_connected = false;
             loop {
                 let state = states.borrow_and_update().clone();
+                let connected = matches!(state, Connection::Connected { .. });
                 if let Connection::Connected { hello } = &state
                     && store.identity().is_some()
                 {
@@ -102,10 +115,16 @@ impl AppState {
                         connection: Some(hello.connection),
                         version: Some(hello.version.clone()),
                         last_connected_at: Some(now_ms()),
+                        features: hello.features.clone(),
                         ..store.meta()
                     };
                     let _ = store.save_meta(&meta);
                 }
+                // The computer answers again: what waited goes.
+                if connected && !was_connected {
+                    crate::sources::start(&app);
+                }
+                was_connected = connected;
                 let _ = app.emit("connection", &state);
                 if states.changed().await.is_err() {
                     break;

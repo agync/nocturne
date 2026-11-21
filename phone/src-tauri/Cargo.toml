@@ -24,6 +24,10 @@ nocturne-contract.workspace = true
 tauri.workspace = true
 tauri-plugin-opener.workspace = true
 tauri-plugin-nocturne-system = { path = "../plugins/system" }
+tauri-plugin-nocturne-calendar = { path = "../plugins/calendar" }
+tauri-plugin-nocturne-health = { path = "../plugins/health" }
+jiff.workspace = true
+sha2.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

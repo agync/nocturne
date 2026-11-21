@@ -2,8 +2,12 @@
 //! person's computer in Rust. The web view reaches nothing on the network itself.
 
 pub mod commands;
+pub mod sources;
 pub mod state;
 pub mod store;
+pub mod sync;
+#[cfg(test)]
+mod sync_tests;
 pub mod uploads;
 
 use tauri::Manager;
@@ -12,7 +16,9 @@ use tauri::Manager;
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_nocturne_system::init());
+        .plugin(tauri_plugin_nocturne_system::init())
+        .plugin(tauri_plugin_nocturne_calendar::init())
+        .plugin(tauri_plugin_nocturne_health::init());
     #[cfg(mobile)]
     let builder = builder.plugin(tauri_plugin_barcode_scanner::init());
     builder
@@ -38,7 +44,28 @@ pub fn run() {
             commands::original,
             commands::relink,
             commands::disconnect,
+            sources::sources,
+            sources::calendar_status,
+            sources::calendar_request,
+            sources::calendar_list,
+            sources::calendar_settings,
+            sources::calendar_save,
+            sources::health_availability,
+            sources::health_older_available,
+            sources::health_request,
+            sources::health_settings,
+            sources::health_save,
+            sources::open_settings,
+            sources::sync_now,
+            sources::last_sent,
+            sources::launch_route,
         ])
-        .run(tauri::generate_context!())
-        .expect("the phone app runs");
+        .build(tauri::generate_context!())
+        .expect("the phone app runs")
+        .run(|app, event| {
+            // Back to the front: send what changed while away.
+            if let tauri::RunEvent::Resumed = event {
+                sources::start(app);
+            }
+        });
 }

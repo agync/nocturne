@@ -82,6 +82,8 @@ pub async fn pair_connect<R: Runtime>(
     if state.store.save_identity(&identity).is_err() || state.store.save_meta(&meta).is_err() {
         return Err(PairFailure::Spent);
     }
+    // What went across went to the computer before, if any.
+    state.syncer.ledger.forget_sends();
     state.adopt(&app, identity.clone());
     Ok(DeviceInfo::new(&identity, meta))
 }
@@ -229,6 +231,7 @@ pub async fn disconnect<R: Runtime>(
     };
     state.drop_phone();
     state.store.clear();
+    state.syncer.ledger.forget_sends();
     Ok(Disconnected { reached })
 }
 
