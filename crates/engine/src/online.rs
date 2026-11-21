@@ -194,9 +194,10 @@ fn store_state(conn: &Connection, s: &OnlineRow) -> Result<()> {
     Ok(())
 }
 
-/// Why a memory may not be sent, or `None` when it may. Fails closed: a memory the store does
-/// not know, or one being forgotten or let go, counts as private.
-fn verdict(conn: &Connection, id: &str, allow_sensitive: bool) -> Result<Option<LeftOut>> {
+/// Why a memory may not be sent, or `None` when it may. Only the person's own choices keep a
+/// memory here: marked private in any version, being forgotten or let go. Nothing about its
+/// words or labels does. Fails closed: a memory the store does not know counts as private.
+fn verdict(conn: &Connection, id: &str) -> Result<Option<LeftOut>> {
     let row: Option<(bool, Option<String>)> = conn
         .query_row(
             "SELECT forgetting, let_go_at FROM memories WHERE id = ?1",
@@ -210,42 +211,7 @@ fn verdict(conn: &Connection, id: &str, allow_sensitive: bool) -> Result<Option<
     if forgetting || let_go.is_some() || crate::memory::is_private_chain(conn, id)? {
         return Ok(Some(LeftOut::Private));
     }
-    if !allow_sensitive && sensitive_chain(conn, id)? {
-        return Ok(Some(LeftOut::Sensitive));
-    }
     Ok(None)
-}
-
-/// Whether any version of a memory is a health, money or ID detail: suggested private when it
-/// was kept, labelled so, or with words that hold one. Every version counts, because a line
-/// sent says what the memory was before. An unknown memory counts.
-fn sensitive_chain(conn: &Connection, id: &str) -> Result<bool> {
-    let versions = crate::memory::chain(conn, id)?;
-    if versions.is_empty() {
-        return Ok(true);
-    }
-    let mut read = conn.prepare_cached(
-        "SELECT suggest_private, subject, object, sentence, tags FROM memories WHERE id = ?1",
-    )?;
-    for v in &versions {
-        let (suggested, subject, object, sentence, tags): (bool, String, String, String, String) =
-            read.query_row([v], |r| {
-                Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
-            })?;
-        let labelled = match serde_json::from_str::<Vec<String>>(&tags) {
-            Ok(tags) => tags.iter().any(|t| crate::sensitive::tag(t)),
-            Err(_) => true,
-        };
-        if suggested
-            || labelled
-            || [&subject, &object, &sentence]
-                .iter()
-                .any(|t| crate::sensitive::text(t))
-        {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }
 
 /// The first instant of `now`'s calendar month in `tz`, and of the next one.
@@ -482,27 +448,18 @@ impl Engine {
     }
 
     /// Whether each memory may be sent online now. Unknown ids are `false`.
-    pub fn sendable(&self, ids: &[String], allow_sensitive: bool) -> Result<Vec<bool>> {
+    pub fn sendable(&self, ids: &[String]) -> Result<Vec<bool>> {
         Ok(self
-            .online_verdicts(ids, allow_sensitive)?
+            .online_verdicts(ids)?
             .into_iter()
             .map(|v| v.is_none())
             .collect())
     }
 
     /// For each memory, why it may not be sent online, or `None` when it may: private in any
-    /// version, let go, being forgotten or unknown (`Private`), or health, money or ID details
-    /// the person has not allowed (`Sensitive`).
-    pub fn online_verdicts(
-        &self,
-        ids: &[String],
-        allow_sensitive: bool,
-    ) -> Result<Vec<Option<LeftOut>>> {
-        self.read(|conn| {
-            ids.iter()
-                .map(|id| verdict(conn, id, allow_sensitive))
-                .collect()
-        })
+    /// version, let go, being forgotten or unknown (`Private`).
+    pub fn online_verdicts(&self, ids: &[String]) -> Result<Vec<Option<LeftOut>>> {
+        self.read(|conn| ids.iter().map(|id| verdict(conn, id)).collect())
     }
 
     /// Writes one attempt to the sent log and returns its id.

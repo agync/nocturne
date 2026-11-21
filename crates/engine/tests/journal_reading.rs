@@ -391,16 +391,14 @@ fn nothing_a_checkin_says_reaches_ask_or_the_online_path() {
         "no line of a check-in is offered as a source line"
     );
     let ids: Vec<String> = hits.iter().map(|h| h.memory.id.clone()).collect();
-    let sendable = f.engine.sendable(&ids, true).unwrap();
+    let sendable = f.engine.sendable(&ids).unwrap();
     for (h, ok) in hits.iter().zip(sendable) {
         if ok {
             assert!(h.memory.receipts.iter().all(|r| r.item_id != checkin));
         }
     }
     assert_eq!(
-        f.engine
-            .sendable(&["mem_nothing".to_string()], true)
-            .unwrap(),
+        f.engine.sendable(&["mem_nothing".to_string()]).unwrap(),
         vec![false]
     );
 }
@@ -449,7 +447,7 @@ fn a_journal_memory_may_go_online_like_any_other() {
         .created[0]
         .clone();
     assert!(journal_flag(&f, &id));
-    assert_eq!(f.engine.sendable(&[id], false).unwrap(), vec![true]);
+    assert_eq!(f.engine.sendable(&[id]).unwrap(), vec![true]);
 }
 
 fn memory_ids(f: &Fixture) -> Vec<String> {

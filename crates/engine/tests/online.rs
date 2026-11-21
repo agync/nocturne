@@ -133,9 +133,9 @@ fn sendable_fails_closed() {
     let f = fixture();
     let ok = memory(&f, "The bins go out on Tuesday");
     let ids = vec![ok.clone(), "mem_unknown".into(), String::new()];
-    assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true, false, false]);
+    assert_eq!(f.engine.sendable(&ids).unwrap(), [true, false, false]);
     assert_eq!(
-        f.engine.online_verdicts(&ids, true).unwrap(),
+        f.engine.online_verdicts(&ids).unwrap(),
         [None, Some(LeftOut::Private), Some(LeftOut::Private)]
     );
 }
@@ -158,7 +158,7 @@ fn private_in_any_version_not_sendable() {
         )
         .unwrap();
     assert_eq!(
-        f.engine.sendable(std::slice::from_ref(&new), true).unwrap(),
+        f.engine.sendable(std::slice::from_ref(&new)).unwrap(),
         [true]
     );
     exec(
@@ -167,27 +167,10 @@ fn private_in_any_version_not_sendable() {
         &id,
     );
     assert_eq!(
-        f.engine.sendable(&[id, new], true).unwrap(),
+        f.engine.sendable(&[id, new]).unwrap(),
         [false, false],
         "an earlier private version keeps the chain private"
     );
-}
-
-#[test]
-fn sensitive_needs_the_switch() {
-    let f = fixture();
-    let id = memory(&f, "Sam takes insulin at night");
-    exec(
-        f.dir.path(),
-        "UPDATE memories SET suggest_private = 1 WHERE id = ?1",
-        &id,
-    );
-    let ids = vec![id];
-    assert_eq!(
-        f.engine.online_verdicts(&ids, false).unwrap(),
-        [Some(LeftOut::Sensitive)]
-    );
-    assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true]);
 }
 
 fn correct(f: &Fixture, id: &str, object: &str, sentence: &str) -> String {
@@ -205,69 +188,44 @@ fn correct(f: &Fixture, id: &str, object: &str, sentence: &str) -> String {
         .unwrap()
 }
 
-/// Health, money and ID details are found in any version's words or labels, not only in what
-/// was suggested private when the current version was kept.
+/// Nothing about a memory's words or labels keeps it here: health, money and ID lines go like
+/// any other, in every version.
 #[test]
-fn sensitive_in_any_version_needs_the_switch() {
+fn health_money_and_id_lines_are_sendable() {
     let f = fixture();
-    let plain = memory(&f, "Ana visited the bakery on Sunday");
+    let insulin = memory(&f, "Sam takes insulin at night");
     let bank = memory(&f, "Rent goes to GB82 WEST 1234 5698 7654 32");
     let passport = memory(&f, "Ana renewed passport AB1234567");
     let pay = memory(&f, "Ana earns £52,000 as salary");
     let was_card = memory(&f, "Ana uses card 4111 1111 1111 1111");
     let now_plain = correct(&f, &was_card, "a new card", "Ana uses a new card");
-    let was_flagged = memory(&f, "Ana sees the nurse weekly");
-    exec(
-        f.dir.path(),
-        "UPDATE memories SET suggest_private = 1 WHERE id = ?1",
-        &was_flagged,
-    );
-    let flagged_now_plain = correct(&f, &was_flagged, "monthly", "Ana sees the nurse monthly");
+    let therapy = memory(&f, "Sam was diagnosed with depression");
     let labelled = memory(&f, "Ana sorted the paperwork");
     exec(
         f.dir.path(),
-        "UPDATE memories SET tags = '[\"Bank\"]' WHERE id = ?1",
+        "UPDATE memories SET tags = '[\"Bank\", \"health\"]' WHERE id = ?1",
         &labelled,
     );
-    let ids = vec![
-        plain,
-        bank,
-        passport,
-        pay,
-        now_plain,
-        flagged_now_plain,
-        labelled,
-    ];
-    let s = Some(LeftOut::Sensitive);
-    assert_eq!(
-        f.engine.online_verdicts(&ids, false).unwrap(),
-        [None, s, s, s, s, s, s]
-    );
-    assert_eq!(f.engine.sendable(&ids, true).unwrap(), [true; 7]);
+    let ids = vec![insulin, bank, passport, pay, now_plain, therapy, labelled];
+    assert_eq!(f.engine.online_verdicts(&ids).unwrap(), [None; 7]);
+    assert_eq!(f.engine.sendable(&ids).unwrap(), [true; 7]);
 }
 
-/// A health line the local model tagged as something else is still found by its words, also in
-/// an earlier version, and a plain line with an ordinary tag is not.
+/// What the person marked private stays here, whatever it is about.
 #[test]
-fn health_words_need_the_switch_whatever_the_tag() {
+fn a_marked_private_health_line_is_not_sendable() {
     let f = fixture();
-    let tagged = memory(&f, "Sam was diagnosed with depression");
+    let open = memory(&f, "Gran sees the nurse on Friday");
+    let marked = memory(&f, "Gran takes warfarin every evening");
     exec(
         f.dir.path(),
-        "UPDATE memories SET tags = '[\"family\"]' WHERE id = ?1",
-        &tagged,
+        "UPDATE memories SET private = 1 WHERE id = ?1",
+        &marked,
     );
-    let earlier = memory(&f, "Ana started therapy in May");
-    let later = correct(&f, &earlier, "a hobby", "Ana started pottery in May");
-    let plain = memory(&f, "Sam visited the bakery");
-    exec(
-        f.dir.path(),
-        "UPDATE memories SET tags = '[\"family\"]' WHERE id = ?1",
-        &plain,
+    assert_eq!(
+        f.engine.online_verdicts(&[open, marked]).unwrap(),
+        [None, Some(LeftOut::Private)]
     );
-    let ids = vec![tagged, later, plain];
-    let s = Some(LeftOut::Sensitive);
-    assert_eq!(f.engine.online_verdicts(&ids, false).unwrap(), [s, s, None]);
 }
 
 #[test]
@@ -285,10 +243,7 @@ fn let_go_and_forgetting_not_sendable() {
         "UPDATE memories SET forgetting = 1 WHERE id = ?1",
         &going,
     );
-    assert_eq!(
-        f.engine.sendable(&[gone, going], true).unwrap(),
-        [false, false]
-    );
+    assert_eq!(f.engine.sendable(&[gone, going]).unwrap(), [false, false]);
 }
 
 #[test]

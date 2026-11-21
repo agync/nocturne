@@ -333,7 +333,7 @@ fn here(reason: LocalReason) -> Option<AnsweredBy> {
     })
 }
 
-/// The dentist note, and a medicine the store suggests keeping private.
+/// The dentist note, and a medicine the person marked private.
 fn dentist_and_pills(l: &Lab) -> String {
     l.h.learn(
         "the dentist note",
@@ -349,7 +349,7 @@ fn dentist_and_pills(l: &Lab) -> String {
         0.9,
     );
     let id = l.h.learn_candidate("pills", c).1.remove(0);
-    assert!(l.h.memory(&id).suggest_private);
+    l.h.engine().set_private(&id, true).unwrap();
     id
 }
 
