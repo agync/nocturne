@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>This phone in each mode · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{ "*": { "tab": "", "action": false, "bar": "back", "title": "This phone", "back": "Today" } }
+</script>
+</head>
+<body data-frame="duo" data-states="alone guest member">
+<main id="content" style="gap: 20px">
+
+  <div class="group">
+    <p class="ghead">Your memory</p>
+    <div class="rows">
+      <div class="row"><span data-icon="phone" data-size="22"></span><span class="rowText"><span class="rowLabel">Where it is</span><span class="rowHint" data-state="alone guest">On this phone · 1.4 GB</span><span class="rowHint" data-state="member">On Hallway · 2.1 GB</span></span></div>
+      <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Its mind</span><span class="rowHint" data-state="alone">answers.example, online</span><span class="rowHint" data-state="guest">Hallway, at home</span><span class="rowHint" data-state="member">Hallway</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row" data-state="alone guest"><span data-icon="shield" data-size="22"></span><span class="rowText"><span class="rowLabel">A locked copy online</span><span class="rowHint">Last copy 9:32 am</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row" data-state="member"><span data-icon="refresh" data-size="22"></span><span class="rowText"><span class="rowLabel">Waiting to go across</span></span><span class="rowValue">Nothing waiting</span></div>
+      <div class="row" data-state="member"><span data-icon="book" data-size="22"></span><span class="rowText"><span class="rowLabel">Kept here to read when you’re away</span><span class="rowHint">Today’s page, the last week of pages, and your journal entries</span></span></div>
+    </div>
+  </div>
+
+  <div class="group" data-state="alone">
+    <p class="ghead">Nocturne’s mind online</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">What goes</span><span class="rowHint">Words of what you keep, and questions</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">This month</span><span class="rowHint">182 things read and answered · limit 400</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">See what was sent</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+  </div>
+
+  <div class="group" data-state="guest member">
+    <p class="ghead">Household</p>
+    <div class="rows">
+      <div class="row"><span data-icon="laptop" data-size="22"></span><span class="rowText"><span class="rowLabel">Hallway</span><span class="rowHint" data-state="guest">Run by Tom · borrows its mind</span><span class="rowHint" data-state="member">Run by Tom · keeps your memory</span></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">What Tom can see</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row" data-state="guest"><span class="rowText"><span class="rowLabel">This month</span><span class="rowHint">214 things read, 31 questions</span></span></div>
+      <div class="row" data-state="guest"><span class="rowText"><span class="rowLabel">Change how Hallway helps you…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row" data-state="member"><span class="rowText"><span class="rowLabel">Move my memory…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Leave this household…</span></span></div>
+    </div>
+  </div>
+
+  <div class="group">
+    <p class="ghead">What this phone brings</p>
+    <div class="rows">
+      <div class="row"><span data-icon="calendar" data-size="22"></span><span class="rowText"><span class="rowLabel">Your calendar</span></span><span class="rowValue">On · 3 calendars</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span data-icon="heart" data-size="22"></span><span class="rowText"><span class="rowLabel">Health</span></span><span class="rowValue">On · 4 kinds</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+  </div>
+
+  <div class="group" data-state="alone">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Move my memory…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Export a backup…</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Delete everything…</span></span></div>
+    </div>
+  </div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone alone · first run and Today · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "none" },
+  "today": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "ask": { "bar": "brand", "title": "Ask", "tab": "Ask", "keep": false, "action": true }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="welcome start today ask">
+<main id="content">
+
+  <!-- Welcome -->
+  <div class="hero" data-state="welcome" style="padding-top: 48px">
+    <span data-mark="40"></span>
+    <h1 class="heroTitle">Nocturne remembers your day</h1>
+    <p class="plead">Keep notes, photos and voice notes, write your journal, and see your calendar beside your days.</p>
+  </div>
+  <div class="foot plain" data-state="welcome">
+    <span class="btn" data-kind="primary">Start on this phone</span>
+    <span class="btn"><span data-icon="laptop" data-size="20"></span>Connect to my computer</span>
+    <span class="btn"><span data-icon="user" data-size="20"></span>Join a household</span>
+    <span class="link2" style="text-align: center; padding-top: 6px">I have a locked copy</span>
+    <p class="small" style="text-align: center">No account and no sign-in.</p>
+  </div>
+
+  <!-- Your memory lives on this phone -->
+  <div class="hero" data-state="start" style="padding-top: 28px">
+    <span data-icon="phone" data-size="32"></span>
+    <h1 class="stepH">Your memory lives on this phone</h1>
+  </div>
+  <p class="seeHead" data-state="start">Works now</p>
+  <ul class="see" data-state="start">
+    <li><span data-icon="check" data-size="18"></span><span>Keep notes, photos and voice notes</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>Write your journal and check in</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>See your calendar and health beside your days</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>Find anything you kept by its words</span></li>
+  </ul>
+  <p class="seeHead" data-state="start">Waits for a mind</p>
+  <ul class="see no" data-state="start">
+    <li><span data-icon="moon" data-size="18"></span><span>Reading photos</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Your morning page</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Answers</span></li>
+    <li><span data-icon="moon" data-size="18"></span><span>Reflections and recaps</span></li>
+  </ul>
+  <p class="small" data-state="start">Choose a mind any time: a computer at home, an online service, or your own computer.</p>
+  <p class="limit" data-state="start">If this phone is lost, what you kept goes with it, unless you keep a locked copy online. You can turn that on later.</p>
+  <div class="foot" data-state="start"><span class="btn" data-kind="primary">Start</span></div>
+
+  <!-- Today with no mind -->
+  <p class="pstatus" data-state="today"><span class="pdot"></span>Your memory is on this phone</p>
+  <p class="plbl" data-state="today">Saturday 21 November</p>
+  <div class="noMind" data-state="today">
+    <h2>Your page needs a mind to write it.</h2>
+    <p class="plead">A mind reads what you keep, writes this page each morning and answers your questions.</p>
+    <span class="btn" data-kind="tonal">Choose a mind</span>
+  </div>
+  <section class="hf" data-state="today" aria-label="Last night" style="padding: 12px 14px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule)">
+    <div class="hfHead"><span class="hfLabel">Last night</span><span class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Health</span></div>
+    <p class="hfValue"><span class="num">7 h 10 min</span> asleep</p>
+    <svg class="hfSvg" viewBox="0 0 340 30" role="img" aria-label="7 h 10 min asleep, from 11:20 pm to 6:40 am.">
+      <rect class="h-track" x="0" y="4" width="340" height="10" rx="5"/>
+      <rect class="h-bar" x="70" y="4" width="152" height="10" rx="3"/>
+      <text class="h-axis" x="42.5" y="28" text-anchor="middle">10 pm</text><text class="h-axis" x="127.5" y="28" text-anchor="middle">2 am</text><text class="h-axis" x="212.5" y="28" text-anchor="middle">6 am</text><text class="h-axis" x="297.5" y="28" text-anchor="middle">10 am</text>
+    </svg>
+  </section>
+  <section data-state="today" style="display: flex; flex-direction: column; gap: 4px">
+    <p class="plbl">In your calendar today · 2</p>
+    <ul class="agenda">
+      <li><span class="at">2:00 pm</span><span class="what">Late shift <span class="where">Ward 6</span><span><span class="rchip"><span data-icon="calendar" data-size="12"></span>Calendar · Rota</span></span></span></li>
+      <li><span class="at">7:30 pm</span><span class="what">Call Mum</span></li>
+    </ul>
+  </section>
+  <div data-state="today" style="display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule)"><span>How are you feeling?</span><span class="link2">Check in</span></div>
+  <section data-state="today" style="display: flex; flex-direction: column; gap: 4px">
+    <p class="plbl">Kept today · 3</p>
+    <ul class="kept">
+      <li><span class="at">7:05 am</span><span>Ask about the swap for the 28th</span></li>
+      <li><span class="at">8:12 am</span><span><span data-icon="mic" data-size="14"></span> Voice note · Swap the 28th with Jo, she said yes</span></li>
+      <li><span class="at">8:40 am</span><span><span data-icon="image" data-size="14"></span> Photo · <span class="wait">waiting to be read</span></span></li>
+    </ul>
+    <span class="link2">See today’s journal</span>
+  </section>
+
+  <!-- Ask with no mind: finding by words -->
+  <div class="fieldWrap" data-state="ask">
+    <div class="fieldInput"><span>swap</span><span data-icon="x" data-size="18"></span></div>
+  </div>
+  <p class="small" data-state="ask">Found by their words. Answers need a mind.</p>
+  <ul class="kept found" data-state="ask">
+    <li><span>Ask about the <span class="mark">swap</span> for the 28th</span><span class="meta">Today 7:05 am <span class="rchip"><span data-icon="file" data-size="12"></span>Note</span></span></li>
+    <li><span>Jo can <span class="mark">swap</span> earlies with me next week if Ward 6 agrees</span><span class="meta">Thursday 19 November <span class="rchip"><span data-icon="mic" data-size="12"></span>Voice note</span></span></li>
+    <li><span>Shift <span class="mark">swap</span> forms go to Priti by Friday</span><span class="meta">Monday 16 November <span class="rchip"><span data-icon="image" data-size="12"></span>Photo · its note</span></span></li>
+  </ul>
+  <span class="link2" data-state="ask">Choose a mind</span>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
