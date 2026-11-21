@@ -64,6 +64,13 @@ export function askCalendar(): Promise<CalendarAccess> {
   return invoke<CalendarAccess>("calendar_request").catch(() => "blocked" as const);
 }
 
+/** Whether this is an iPhone, as the app's Rust side was built for it. */
+export function onIphone(): Promise<boolean> {
+  return invoke<string>("phone_platform")
+    .then((os) => os === "ios")
+    .catch(() => false);
+}
+
 export function healthAvailability(): Promise<HealthAvailability> {
   return invoke<HealthAvailability>("health_availability");
 }

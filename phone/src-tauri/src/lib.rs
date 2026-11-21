@@ -59,6 +59,7 @@ pub fn run() {
             sources::sync_now,
             sources::last_sent,
             sources::launch_route,
+            sources::phone_platform,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")

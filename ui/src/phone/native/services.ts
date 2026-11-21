@@ -9,6 +9,7 @@ import type { RelinkResult } from "../relink";
 import { defaultScannerEnv } from "../scanner";
 import type { PairingLike, Services } from "../services";
 import { asError, createNativeEngine } from "./engine";
+import { onIphone } from "./sources";
 import { type DeviceInfo, fromInfo, type NativeKeyStore, nativeKeyStore } from "./store";
 
 /** How a pairing ended on the Rust side without a paired phone. */
@@ -85,6 +86,11 @@ export function nativeServices(): NativeServices {
     if (d) address = d.address;
   };
   void store.device().then(remember, () => undefined);
+  // The app's Rust side says which phone this is; until it answers, not an iPhone.
+  const platform = { ios: false, standalone: true, native: true };
+  void onIphone().then((ios) => {
+    platform.ios = ios;
+  });
   return {
     store,
     queue: idbQueue(),
@@ -107,7 +113,7 @@ export function nativeServices(): NativeServices {
     },
     scanner: defaultScannerEnv(),
     persist: () => Promise.resolve(true),
-    platform: { ios: false, standalone: true, native: true },
+    platform,
     get host() {
       return address;
     },
