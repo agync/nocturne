@@ -38,3 +38,39 @@ html.ph-native .ph-screen--fixed {
   text-decoration: underline;
   text-underline-offset: 3px;
 }
+
+/* Bringing the calendar and Health: Nocturne's own screens, then their settings. */
+
+.ph-bring {
+  gap: 14px;
+}
+
+.ph-bring-list {
+  display: grid;
+}
+
+.ph-bring-row {
+  padding: 10px 0;
+}
+
+.ph-bring-row .ph-switch-label {
+  display: grid;
+  gap: 2px;
+}
+
+.ph-bring-row[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ph-bring-dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--rule);
+}
+
+.ph-bring-hint {
+  font-size: 0.8125rem;
+}

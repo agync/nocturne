@@ -37,6 +37,12 @@ export interface LastSent {
   readings: number;
 }
 
+/** "Last sent {time} · {count} appointments" or "{count} readings", for one source. */
+export interface SourceSent {
+  at: string;
+  count: number;
+}
+
 /** What one send did, per source; null for a source that sent nothing. */
 export interface SyncReport {
   at: string;
@@ -51,8 +57,14 @@ export interface ThisPhoneSources {
   health: SourceStatus;
   kinds: number;
   lastSent: LastSent | null;
+  calendarLastSent: SourceSent | null;
+  healthLastSent: SourceSent | null;
+  /** The first day Health was read from (`YYYY-MM-DD`), once it has been. */
+  healthFrom: string | null;
   /** What the computer takes, from its hello. */
   computerTakes: PhoneFeature[];
+  /** The last send had more appointments than the computer takes at once. */
+  calendarTooMany: boolean;
 }
 
 /** The native side of calendar and health, as the screens call it. */

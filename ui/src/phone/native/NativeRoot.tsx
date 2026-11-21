@@ -5,7 +5,11 @@ import { Pair } from "../screens/Pair";
 import type { PairingLike } from "../services";
 import { AddressStep, CameraOff, CodeStep, NativeWelcome } from "./Entry";
 import { openAppSettings, scanCode } from "./scanner";
+import { CalendarConnect } from "./screens/CalendarConnect";
+import { HealthConnect } from "./screens/HealthConnect";
+import { Rationale } from "./screens/Rationale";
 import { checkAddress, type NativeServices, pairScanned, pairTyped } from "./services";
+import { nativeChannel, watchFront } from "./sources";
 
 /** The project's site, opened in the phone's browser from Welcome. */
 const SITE = "https://nocturne.is/";
@@ -19,6 +23,14 @@ type Screen =
   | { name: "pair"; pairing: PairingLike }
   | { name: "paired" };
 
+/** A page opened by its own address: from Health Connect, or from This phone. */
+type Route = "rationale" | "calendar" | "health";
+
+export function routeOf(hash: string): Route | null {
+  const r = hash.replace(/^#\/?/, "");
+  return r === "rationale" || r === "calendar" || r === "health" ? r : null;
+}
+
 /**
  * The phone app until it is paired: Welcome, scanning in the app, and typing the address then
  * the code. Once paired, the phone screens take over, and a pairing that goes away (removed,
@@ -27,6 +39,7 @@ type Screen =
 export function NativeRoot({ services }: { services: NativeServices }) {
   const [screen, setScreen] = useState<Screen>({ name: "loading" });
   const [waiting, setWaiting] = useState(0);
+  const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
 
   const home = useCallback(
     async (unreached = false) => {
@@ -42,6 +55,30 @@ export function NativeRoot({ services }: { services: NativeServices }) {
     void home();
     return services.store.subscribe(() => void home());
   }, [services, home]);
+
+  useEffect(() => {
+    const changed = () => setRoute(routeOf(location.hash));
+    window.addEventListener("hashchange", changed);
+    const stop = watchFront((r) => {
+      location.hash = `#/${r}`;
+    });
+    return () => {
+      window.removeEventListener("hashchange", changed);
+      stop();
+    };
+  }, []);
+
+  const leave = () => {
+    history.replaceState(null, "", location.pathname + location.search);
+    setRoute(null);
+  };
+
+  // The rationale reads without pairing; the calendar and Health need a computer to go to.
+  if (route === "rationale") return <Rationale onBack={leave} />;
+  if (screen.name === "paired" && route === "calendar")
+    return <CalendarConnect channel={nativeChannel} onDone={leave} />;
+  if (screen.name === "paired" && route === "health")
+    return <HealthConnect channel={nativeChannel} onDone={leave} />;
 
   const scan = async () => {
     const got = await scanCode();
