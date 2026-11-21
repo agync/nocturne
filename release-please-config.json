@@ -20,6 +20,20 @@
           "type": "json",
           "path": "ui/package.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "phone/src-tauri/gen/apple/project.yml"
+        },
+        {
+          "type": "xml",
+          "path": "phone/src-tauri/gen/apple/nocturne-phone_iOS/Info.plist",
+          "xpath": "//dict/key[text()='CFBundleShortVersionString']/following-sibling::string[1]"
+        },
+        {
+          "type": "xml",
+          "path": "phone/src-tauri/gen/apple/nocturne-phone_iOS/Info.plist",
+          "xpath": "//dict/key[text()='CFBundleVersion']/following-sibling::string[1]"
         }
       ]
     }
