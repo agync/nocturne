@@ -24,6 +24,7 @@
   "phone.app.update.phone.title": "Update Nocturne on this phone",
   "phone.app.update.phone.body": "Your computer has a newer Nocturne that this version can’t talk to. What you keep waits here until you update.",
   "phone.app.update.play": "Update in Google Play",
+  "phone.app.update.appStore": "Update in the App Store",
   "phone.app.update.computer.title": "Update Nocturne on your computer",
   "phone.app.update.computer.body": "This phone has a newer Nocturne than your computer. What you keep waits here until your computer is updated.",
   "phone.app.update.versions": "Your computer: Nocturne {computer} · This phone: Nocturne {phone}",
