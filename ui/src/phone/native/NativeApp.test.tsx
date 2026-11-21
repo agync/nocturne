@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { nativeMockServices } from "../testing/nativeMock";
 import type { ThisPhoneSources } from "./api";
 import { applyInsets } from "./insets";
-import { NativeApp } from "./NativeApp";
+import { NativeApp, updateFor } from "./NativeApp";
 import { NativeRoot } from "./NativeRoot";
 import { calendarValue, healthValue, Offer, offered } from "./screens/Offer";
 import { nativeChannel } from "./sources";
@@ -90,11 +90,32 @@ describe("the app's bar, Keep and This phone", () => {
   });
 
   it("asks this phone to update when the computer wants a newer app", async () => {
-    await app("s=outdated");
+    const services = await app("s=outdated");
     expect(
       await screen.findByRole("heading", { name: "Update Nocturne on this phone" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Update in Google Play" })).toBeInTheDocument();
+    expect(
+      screen.getByText(`Your computer: Nocturne 0.9.0 · This phone: Nocturne ${services.version}`),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keep" })).toBeInTheDocument();
+  });
+
+  it("asks for the computer to be updated when this app is newer", async () => {
+    const services = await app("s=computerOutdated");
+    expect(
+      await screen.findByRole("heading", { name: "Update Nocturne on your computer" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "This phone has a newer Nocturne than your computer. What you keep waits here until your computer is updated.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update in Google Play" })).toBeNull();
+    expect(
+      screen.getByText(`Your computer: Nocturne 0.1.0 · This phone: Nocturne ${services.version}`),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^Connecting to/)).toBeNull();
   });
 
   it("shows the removed screen when the computer removed this phone", async () => {
@@ -204,5 +225,37 @@ describe("insets", () => {
     expect(root.classList.contains("ph-keyboard")).toBe(true);
     applyInsets({ top: 24, right: 0, bottom: 16, left: 0 }, root);
     expect(root.classList.contains("ph-keyboard")).toBe(false);
+  });
+});
+
+describe("which side must update", () => {
+  const device = {
+    address: "amber-otter-lamp-quiet.trycloudflare.com",
+    deviceName: "Pixel",
+    version: "0.8.0",
+  } as Parameters<typeof updateFor>[1];
+
+  it("is nobody while connected or away", () => {
+    expect(updateFor({ kind: "asleep" }, device, "0.9.0")).toBeNull();
+    expect(updateFor({ kind: "connecting" }, device, "0.9.0")).toBeNull();
+  });
+
+  it("is this phone, with the computer's version from its hello or as last seen", () => {
+    expect(
+      updateFor({ kind: "outdated", minBuild: 3, computer: "1.2.0" }, device, "0.9.0"),
+    ).toEqual({ kind: "phone", computer: "1.2.0", phone: "0.9.0" });
+    expect(updateFor({ kind: "outdated", minBuild: 3 }, device, "0.9.0")).toEqual({
+      kind: "phone",
+      computer: "0.8.0",
+      phone: "0.9.0",
+    });
+  });
+
+  it("is the computer when this app is newer", () => {
+    expect(updateFor({ kind: "computerOutdated", computer: "0.7.2" }, device, "0.9.0")).toEqual({
+      kind: "computer",
+      computer: "0.7.2",
+      phone: "0.9.0",
+    });
   });
 });

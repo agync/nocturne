@@ -19,6 +19,7 @@ const SCENARIOS = [
   "cantConnect",
   "turnedOff",
   "outdated",
+  "computerOutdated",
   "removed",
   "welcome",
   "welcomeWaiting",
@@ -197,6 +198,7 @@ export async function mockServices(): Promise<Services> {
         ? "asleep"
         : scenario === "turnedOff" ||
             scenario === "outdated" ||
+            scenario === "computerOutdated" ||
             scenario === "asleep" ||
             scenario === "cantConnect" ||
             scenario === "connecting"
