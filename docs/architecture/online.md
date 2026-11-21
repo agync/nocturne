@@ -109,7 +109,8 @@ originals, transcripts, pages and everything else stay here. Before the request 
 
 - memories marked private, in any version, memories being forgotten or let go, and any memory the
   store does not know, are dropped;
-- memories about health, money or ID are dropped unless the person turned that on (off by default);
+- nothing else drops a memory: its words, labels and subject are not judged ([only what is marked
+  private is held back](/design/only-marked-private.md));
 - the first 12 left are kept, and that exact set is checked again against the store just before the
   request is built; any memory that fails is dropped.
 
@@ -133,7 +134,7 @@ answer that came back not sure is never sent again automatically.
 | The model name is not found | A problem state ("The name to use wasn't accepted") until a passed check; a 404 while a model download holds the window is not counted as this |
 | The monthly limit is reached | Answered here, one notice a month; the pause lifts on the 1st |
 | The reply is "not sure" | The reply is not shown; the closest memories are listed, with "Ask on this computer" |
-| The reply is "not sure" and something stayed here (a private or sensitive memory, or a line of an original) | This computer answers at once with what stayed here, marked "your provider wasn't sure" (`notSureOnline`), still linked to what was sent |
+| The reply is "not sure" and something stayed here (a private memory, or a line of an original) | This computer answers at once with what stayed here, marked "your provider wasn't sure" (`notSureOnline`), still linked to what was sent |
 
 Local failure never goes online. There is no monthly limit unless the person sets one. A limit can be
 a number of questions (the setup suggests 200) or an amount in US dollars, which holds only while the provider reports a cost on its replies (it

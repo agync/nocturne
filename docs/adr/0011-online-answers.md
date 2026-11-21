@@ -8,6 +8,10 @@ tags: [adr, online, privacy, engine]
 
 # 0011 Online answers, opt-in and through the engine
 
+Amended 2026-11-22: memories about health, money or ID are no longer kept back. The owner's rule is
+that Nocturne never judges a person's data, so only what the person marks private is held back
+([Only what you mark private is held back](/design/only-marked-private.md)).
+
 ## Context
 
 A small computer answers slowly and sometimes weakly. A person who already has an account with a
@@ -28,8 +32,9 @@ not make Nocturne depend on any one company.
   client to a provider.
 - **Only the last step.** Only Ask can reach the route. Reading, the overnight tidy and the page never
   do. What is sent is the question and at most 12 remembered sentences. Journal sentences, read from entries and good things, may be among the 12; check-ins, reflections and recaps never are. Private memories are never
-  sent. Memories about health, money or ID are left out unless the person turns that on, which is
-  off by default. Phones use the route only while Away from home is on and the person has left phones on in its settings.
+  sent, nor memories being forgotten or let go. Nothing else about a memory keeps it back: Nocturne
+  does not judge whether it is about health, money, ID or anything else, so a person keeps
+  something here by marking it private. Phones use the route only while Away from home is on and the person has left phones on in its settings.
 - **Bounded.** One request per question, no retry, a per-month limit that applies only if the person sets one, and a
   fallback to answering on this computer. Every answer says where it was written. Nothing ever goes
   from the computer to online automatically, and an answer that came back "not sure" is not sent
@@ -86,9 +91,10 @@ bump re-checks them.
   engine starts while Online answers is on.
 - The engine's environment, which system crash records can hold, never holds the key; it is in the
   engine's memory only. Rotate the key at the provider if you think it was exposed.
-- Sensitive details: a memory with health, money or ID signals, checked in every version of it, is
-  left out unless the person allows them. The check errs towards leaving a memory out, and it can
-  still miss some, so it is a best effort and not a guarantee.
+- What the person has not marked private may go when it answers a question, whatever it is about.
+  Until 2026-11-22 a check left out memories that looked like health, money or ID details unless
+  the person allowed them; it was removed because it judged the person's data, and a best effort
+  that could miss some promised more than it held.
 
 ## Consequences
 
