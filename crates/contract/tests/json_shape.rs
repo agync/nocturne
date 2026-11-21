@@ -273,11 +273,11 @@ fn the_page_journal_and_check_in_read_without_the_phone_fields() {
             "leftOut":false}"#,
     )
     .unwrap();
-    assert_eq!(check_in.after_sleep_min, None);
+    assert_eq!(check_in.after_sleep, None);
     assert!(
         !serde_json::to_string(&check_in)
             .unwrap()
-            .contains("afterSleepMin")
+            .contains("afterSleep")
     );
     let day: JournalDay = serde_json::from_str(
         r#"{"day":"2026-11-20","today":true,"firstUse":false,"entry":[],"entrySavedAt":null,
