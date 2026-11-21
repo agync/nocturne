@@ -2,7 +2,7 @@
 type: Design
 title: Nocturne on Android and iPhone
 description: Proposal for native phone apps on Android and iPhone that replace the phone's browser page, with install and first run, pairing by in-app scan or typed code, plain permission asks with a working no, the page, the journal, keeping, what the phone brings, update and offline states, the phone's calendar on the computer's page and journal, and the store disclosures.
-status: draft
+status: stable
 tags: [proposal, ux, phone, away-from-home, calendar, copy, privacy]
 ---
 
@@ -20,9 +20,9 @@ own conventions. It adds two things the browser could never do, both optional an
 bringing the phone's calendar and its health readings to the computer, where they show on the
 morning page and beside the journal. Health has its own page, [Health from the phone](phone-health.md).
 
-Status: proposal. Nothing here is built. A feasibility build showed that Tauri 2 runs the existing
+Status: approved. The owner accepted every recommendation on 2026-11-21. Nothing here is built yet. A feasibility build showed that Tauri 2 runs the existing
 phone screens unchanged on Android, and that a small native piece reads the phone's calendar on
-Android and the calendar on a Mac. The owner's answers go in [Decisions for the owner](#decisions-for-the-owner).
+Android and the calendar on a Mac. See [Decisions for the owner](#decisions-for-the-owner).
 
 ## Mockups
 
@@ -737,8 +737,10 @@ Made with the build, not in this proposal.
 
 ## Decisions for the owner
 
-Each row is a question this design cannot settle alone. The recommendation is the design's
-default where the owner does not choose.
+The owner accepted every recommendation on 2026-11-21: the Recommendation column is the decision.
+Nocturne has one person and their own data, so nothing in this design restricts content beyond the
+rules that already apply: online answers, reading aloud, notifications, the tray, a lock screen and
+things marked private.
 
 | # | Question | Options | Trade-offs | Recommendation |
 |---|---|---|---|---|

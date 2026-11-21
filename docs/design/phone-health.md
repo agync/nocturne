@@ -2,7 +2,7 @@
 type: Design
 title: Health from the phone
 description: Proposal for bringing sleep, heart rate, resting heart rate, blood pressure, steps and workouts from Apple Health or Health Connect to the computer, shown beside the journal and on the page in plain visual forms with the person's own usual range, gentle noticing with receipts, no medical claims, and the same privacy, keeping and deletion rules as everything else.
-status: draft
+status: stable
 tags: [proposal, ux, phone, health, journal, copy, privacy]
 ---
 
@@ -18,8 +18,8 @@ Nocturne is not a health app. It shows the person's own numbers next to their ow
 own words. It never says what a number means for their health, never compares them to a norm, and
 never advises.
 
-Status: proposal, with the [phone apps](phone-apps.md). Nothing here is built. Decisions are in
-[Decisions for the owner](#decisions-for-the-owner).
+Status: approved, with the [phone apps](phone-apps.md). The owner accepted every recommendation on
+2026-11-21 ([Decisions for the owner](#decisions-for-the-owner)). Nothing here is built yet.
 
 ## Mockups
 
@@ -462,6 +462,8 @@ Check each rule again at submission; store rules change.
 - Readings from a watch or scale that does not go through Apple Health or Health Connect.
 
 ## Decisions for the owner
+
+The owner accepted every recommendation on 2026-11-21: the Recommendation column is the decision.
 
 | # | Question | Options | Trade-offs | Recommendation |
 |---|---|---|---|---|
