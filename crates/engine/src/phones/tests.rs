@@ -1200,6 +1200,18 @@ fn a_private_entry_stays_private_when_it_changes() {
 }
 
 #[test]
+fn an_appointments_receipt_names_its_calendar() {
+    let f = fx();
+    f.engine
+        .take_calendar(&f.phone, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    let item = record_item(&f, "ev1");
+    let mem = f.engine.get_memory(&current_memory(&f, &item)).unwrap();
+    let receipt = mem.receipts.iter().find(|r| r.item_id == item).unwrap();
+    assert_eq!(receipt.calendar.as_deref(), Some("Home"));
+}
+
+#[test]
 fn deleting_keeps_what_the_persons_own_keeps_also_say() {
     let f = fx();
     f.engine

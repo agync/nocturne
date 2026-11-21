@@ -79,6 +79,7 @@ pub(crate) fn reading_receipt(s: &Stored, label: &str, tz: &TimeZone) -> Option<
         span: None,
         unconfirmed: false,
         from_device: (!s.phone.is_empty()).then(|| s.phone.clone()),
+        calendar: None,
     })
 }
 

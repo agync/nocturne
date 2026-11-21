@@ -796,6 +796,7 @@ fn line_source_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<LineSource> {
             span: None,
             unconfirmed: false,
             from_device: r.get(8)?,
+            calendar: None,
         },
     })
 }
@@ -916,6 +917,7 @@ mod tests {
                     span: None,
                     unconfirmed: false,
                     from_device: None,
+                    calendar: None,
                 },
             },
             0,

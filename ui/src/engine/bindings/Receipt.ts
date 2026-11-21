@@ -14,4 +14,8 @@ label: string, keptAt: string, durationMs: number | null, span: Span | null, unc
 /**
  * The paired phone the item was kept from, by name.
  */
-fromDevice: string | null, };
+fromDevice: string | null, 
+/**
+ * For an appointment from a phone's calendar: the calendar's name, as the phone names it.
+ */
+calendar?: string, };

@@ -704,6 +704,28 @@ pub(crate) fn repeat_words(rule: &str) -> Option<String> {
     })
 }
 
+/// The name of the calendar an appointment came from, as its phone names it.
+pub(crate) fn calendar_of(conn: &Connection, item_id: &str) -> Result<Option<String>> {
+    let row: Option<(String, String)> = conn
+        .query_row(
+            "SELECT metadata, json_extract(metadata, '$.phone.device') FROM items \
+             WHERE id = ?1 AND kind = 'calendar'",
+            [item_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((meta, device)) = row else {
+        return Ok(None);
+    };
+    let meta: Value = serde_json::from_str(&meta)?;
+    let mut names = HashMap::new();
+    Ok(
+        cal_entry(conn, item_id, &meta, &device, String::new(), &mut names)?
+            .map(|c| c.calendar)
+            .filter(|name| !name.is_empty()),
+    )
+}
+
 /// An appointment's own page: its calendar and phone, what it was before, and whether it was
 /// removed on the phone.
 pub(crate) fn calendar_detail(

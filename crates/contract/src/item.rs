@@ -170,4 +170,8 @@ pub struct Receipt {
     pub unconfirmed: bool,
     /// The paired phone the item was kept from, by name.
     pub from_device: Option<String>,
+    /// For an appointment from a phone's calendar: the calendar's name, as the phone names it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub calendar: Option<String>,
 }

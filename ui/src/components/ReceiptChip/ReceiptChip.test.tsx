@@ -23,6 +23,19 @@ describe("ReceiptChip", () => {
     expect(container.querySelector('[data-kind="audio"]')).not.toBeNull();
   });
 
+  it("names an appointment's calendar, then its phone", () => {
+    const appointment: Receipt = {
+      ...base,
+      kind: "calendar",
+      source: "phone",
+      durationMs: null,
+      fromDevice: "Sam’s phone",
+      calendar: "Family",
+    };
+    render(<ReceiptChip receipt={appointment} onOpen={() => undefined} />);
+    expect(screen.getByText("Calendar · Family · Sam’s phone")).toBeInTheDocument();
+  });
+
   it("is named by the words on it, then says it is a source", () => {
     render(<ReceiptChip receipt={base} onOpen={() => undefined} />);
     expect(

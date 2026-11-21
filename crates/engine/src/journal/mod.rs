@@ -137,6 +137,7 @@ impl JItem {
             span: None,
             unconfirmed: !self.trusted,
             from_device: self.view.from_device.clone(),
+            calendar: None,
         }
     }
 }

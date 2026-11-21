@@ -598,6 +598,7 @@ pub(crate) fn open_questions(
                 span: Some(Span::Quote { text: quote }),
                 unconfirmed: trust == "untrusted",
                 from_device: dev,
+                calendar: None,
             },
             options: live,
         });
