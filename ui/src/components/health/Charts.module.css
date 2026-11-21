@@ -1,0 +1,145 @@
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.track {
+  fill: var(--rule);
+  opacity: 0.55;
+}
+
+.band {
+  fill: var(--accent-soft);
+}
+
+.bar {
+  fill: var(--accent);
+}
+
+.bar[data-tone="soft"] {
+  fill: var(--ink3);
+  opacity: 0.7;
+}
+
+.bar[data-tone="ink"] {
+  fill: var(--ink);
+}
+
+.line {
+  fill: none;
+  stroke: var(--ink);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dot {
+  fill: var(--ink);
+}
+
+.ring {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.tick {
+  stroke: var(--ink3);
+  stroke-width: 1;
+}
+
+.usual {
+  stroke: var(--accent);
+  stroke-width: 1.5;
+}
+
+.mid {
+  stroke: var(--sheet);
+  stroke-width: 2;
+}
+
+.axis {
+  fill: var(--ink3);
+  font: 400 10px / 1 var(--font-mono);
+}
+
+.value {
+  fill: var(--ink);
+  font: 500 11px / 1 var(--font-mono);
+}
+
+.entry {
+  fill: var(--ink3);
+}
+
+.pair {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+}
+
+.say {
+  margin: 0;
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.45 var(--font-sans);
+}
+
+.toggle {
+  display: inline;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font: 400 0.875rem / 1.4 var(--font-sans);
+}
+
+.table caption {
+  text-align: left;
+  color: var(--ink2);
+  padding-bottom: 6px;
+}
+
+.table th,
+.table td {
+  padding: 6px 12px 6px 0;
+  text-align: left;
+  border-bottom: 1px solid var(--rule);
+  font-weight: 400;
+}
+
+.table th {
+  color: var(--ink3);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table a {
+  color: var(--accent);
+}
+
+.removed td {
+  color: var(--ink2);
+}
