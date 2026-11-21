@@ -21,6 +21,13 @@ export interface Platform {
   ios: boolean;
   /** Opened from the home screen. */
   standalone: boolean;
+  /** The phone app, not the page in a browser. */
+  native?: boolean;
+}
+
+/** Inside the phone app: Tauri's bridge is on the page. */
+export function isNative(): boolean {
+  return "__TAURI_INTERNALS__" in globalThis;
 }
 
 export interface Services {
@@ -82,5 +89,6 @@ export async function loadServices(): Promise<Services> {
   if (import.meta.env.VITE_ENGINE === "phone-mock") {
     return (await import("./testing/mockServices")).mockServices();
   }
+  if (isNative()) return (await import("./native/services")).nativeServices();
   return realServices();
 }
