@@ -614,3 +614,23 @@ async fn on_the_gpu_alone_items_are_read_by_the_gpu_mind() {
     assert_eq!(readings(&r).await, [(own_mind().to_string(), true, false)]);
     assert_eq!(r.npu.models_per_kind(), 1);
 }
+
+/// A decision asked in shadow changes nothing: when the NPU's mind cannot answer it, that is no
+/// strike against it, and the GPU mind is not loaded to answer instead.
+#[tokio::test]
+async fn a_decision_the_npu_cannot_answer_is_no_strike() {
+    use nocturne_engine::decide::Kind;
+    let r = placed("npu=broken,downloaded=all", Placement::Split).await;
+    let decision = nocturne_engine::decide::Decision {
+        state: "Memory: Sam likes tea.".into(),
+        question: Kind::Sensitive.question(),
+    };
+    for _ in 0..=npu::STRIKES {
+        assert!(r.mind.decide(&decision).await.is_err());
+    }
+    assert_eq!(r.npu.model_for(Work::Reading), Some(npu::MIND.model));
+    assert!(
+        r.seen_loads().await.iter().all(|(m, _)| m != own_mind()),
+        "the GPU mind was not loaded for a decision"
+    );
+}

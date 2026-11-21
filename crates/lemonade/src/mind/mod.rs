@@ -2,6 +2,7 @@
 
 mod audio;
 mod cite;
+mod decide;
 mod documents;
 mod guard;
 pub mod online;
@@ -1583,6 +1584,13 @@ impl Mind for LemonadeMind {
         input: &'a ReflectInput,
     ) -> BoxFuture<'a, Result<Reflected, MindError>> {
         Box::pin(self.reflect_impl(input))
+    }
+
+    fn decide<'a>(
+        &'a self,
+        decision: &'a nocturne_engine::decide::Decision,
+    ) -> BoxFuture<'a, Result<nocturne_engine::decide::Answer, MindError>> {
+        Box::pin(self.decide_impl(decision))
     }
 
     fn speak<'a>(
