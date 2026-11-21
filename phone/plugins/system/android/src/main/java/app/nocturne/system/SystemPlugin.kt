@@ -3,23 +3,39 @@ package app.nocturne.system
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.webkit.WebView
+import androidx.core.content.IntentCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import app.tauri.annotation.Command
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
+import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import java.io.File
 
 /**
  * The app draws edge to edge, and the web view reports no safe area for the system bars. This
- * puts the bars and cut-outs on the page as CSS variables each time they change.
+ * puts the bars, cut-outs and keyboard on the page as CSS variables each time they change. It
+ * also holds what the app was opened for from outside: a shortcut on its icon, or something
+ * another app shared, until the screens take it.
  */
 @TauriPlugin
 class SystemPlugin(private val activity: Activity) : Plugin(activity) {
     private var insets = CssInsets(0.0, 0.0, 0.0, 0.0)
+    @Volatile private var route: String? = null
+    @Volatile private var share: Intent? = null
+
+    companion object {
+        /** The largest file kept from a share, as the computer takes at most. */
+        const val MAX_FILE = 52_428_800L
+        /** The most files and bytes kept from one share. */
+        const val MAX_FILES = 10
+        const val MAX_TOTAL = 4 * MAX_FILE
+    }
 
     override fun load(webView: WebView) {
         super.load(webView)
@@ -30,12 +46,38 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
             val ime = all.getInsets(WindowInsetsCompat.Type.ime())
             val density = view.resources.displayMetrics.density
             insets = CssInsets.fromDevice(
-                bars.top, bars.right, maxOf(bars.bottom, ime.bottom), bars.left, density
+                bars.top, bars.right, bars.bottom, bars.left, density, ime.bottom
             )
             webView.evaluateJavascript(insets.script(), null)
             all
         }
         ViewCompat.requestApplyInsets(webView)
+        // Shares from an earlier run that were never kept.
+        File(activity.cacheDir, "shared").deleteRecursively()
+        take(activity.intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        take(intent)
+    }
+
+    /**
+     * Takes what an intent opened the app for, once: an app opened again from Recents carries
+     * its first intent, which must not keep twice or start the recorder again.
+     */
+    private fun take(intent: Intent?) {
+        if (intent == null) return
+        if (intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return
+        val taken = when (intent.action) {
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> {
+                share = intent
+                true
+            }
+            Intent.ACTION_VIEW -> Shares.route(intent.data?.scheme, intent.data?.host)
+                ?.also { route = it } != null
+            else -> false
+        }
+        if (taken) activity.intent = Intent(Intent.ACTION_MAIN)
     }
 
     @Command
@@ -45,6 +87,7 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         out.put("right", insets.right)
         out.put("bottom", insets.bottom)
         out.put("left", insets.left)
+        out.put("keyboard", insets.keyboard)
         invoke.resolve(out)
     }
 
@@ -65,5 +108,104 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         activity.startActivity(intent)
         invoke.resolve()
+    }
+
+    /** The shortcut the app was opened from, once. */
+    @Command
+    fun takeLaunch(invoke: Invoke) {
+        val out = JSObject().put("route", route)
+        route = null
+        invoke.resolve(out)
+    }
+
+    /**
+     * What another app shared, once: its text, and each file copied into this app's own space,
+     * because the other app's permission to read it lasts only while this screen is open.
+     */
+    @Command
+    fun takeShared(invoke: Invoke) {
+        val intent = share
+        share = null
+        if (intent == null) return invoke.resolve(JSObject().put("shared", null))
+        Thread {
+            try {
+                invoke.resolve(JSObject().put("shared", copy(intent)))
+            } catch (e: Exception) {
+                invoke.reject(e.message ?: "failed")
+            }
+        }.start()
+    }
+
+    private fun uris(intent: Intent): List<Uri> {
+        val found = mutableListOf<Uri>()
+        if (intent.action == Intent.ACTION_SEND_MULTIPLE) {
+            IntentCompat.getParcelableArrayListExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?.let { found.addAll(it) }
+        } else {
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+                ?.let { found.add(it) }
+        }
+        val clip = intent.clipData
+        if (found.isEmpty() && clip != null) {
+            for (i in 0 until clip.itemCount) clip.getItemAt(i).uri?.let { found.add(it) }
+        }
+        return found.filter { it.scheme == "content" }
+    }
+
+    private fun copy(intent: Intent): JSObject {
+        // A folder of its own, so a second share never touches the files of the first.
+        val dir = File(File(activity.cacheDir, "shared"), System.nanoTime().toString())
+        dir.mkdirs()
+        val files = JSArray()
+        var total = 0L
+        for ((index, uri) in uris(intent).take(MAX_FILES).withIndex()) {
+            val resolver = activity.contentResolver
+            var name: String? = null
+            var size = -1L
+            resolver.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    val s = c.getColumnIndex(OpenableColumns.SIZE)
+                    if (n >= 0) name = c.getString(n)
+                    if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
+                }
+            }
+            if (size > MAX_FILE || total + maxOf(size, 0L) > MAX_TOTAL) continue
+            val kept = Shares.fileName(index, name)
+            val target = File(dir, kept)
+            val written = resolver.openInputStream(uri)?.use { input ->
+                target.outputStream().use { output -> copyCapped(input, output) }
+            } ?: continue
+            if (written < 0 || total + written > MAX_TOTAL) {
+                target.delete()
+                continue
+            }
+            total += written
+            files.put(
+                JSObject()
+                    .put("name", kept)
+                    .put("shown", Shares.shownName(kept))
+                    .put("mime", resolver.getType(uri) ?: intent.type ?: "application/octet-stream")
+                    .put("size", written)
+            )
+        }
+        return JSObject()
+            .put("text", intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString())
+            .put("subject", intent.getStringExtra(Intent.EXTRA_SUBJECT))
+            .put("dir", dir.absolutePath)
+            .put("files", files)
+    }
+
+    /** Bytes copied, or -1 when the file is larger than the computer takes. */
+    private fun copyCapped(input: java.io.InputStream, output: java.io.OutputStream): Long {
+        val buffer = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = input.read(buffer)
+            if (n < 0) return total
+            total += n
+            if (total > MAX_FILE) return -1
+            output.write(buffer, 0, n)
+        }
     }
 }
