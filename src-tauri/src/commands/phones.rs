@@ -6,11 +6,19 @@ use nocturne_contract::{
     CameInRow, HealthSeries, PhoneDeletePreview, PhoneDeleteScope, PhonePageOptions, PhoneSource,
     PhoneSourcesView, ReadingKind, ReadingRow,
 };
+use nocturne_engine::PhoneBuilds;
 use tauri::{AppHandle, Manager, Runtime};
 
 use super::{change, read};
 use crate::error::CommandError;
+use crate::remote::protocol::{MIN_PHONE_BUILD, PHONE_BUILD};
 use crate::state::AppState;
+
+/// The phone builds this computer speaks, for the phones list's update lines.
+const BUILDS: PhoneBuilds = PhoneBuilds {
+    oldest: MIN_PHONE_BUILD,
+    newest: PHONE_BUILD,
+};
 
 /// The most rows "What came in" lists at once.
 const MAX_CAME_IN: u32 = 200;
@@ -24,7 +32,7 @@ fn day(s: &str) -> Result<Date, CommandError> {
 pub async fn get_phone_sources<R: Runtime>(
     app: AppHandle<R>,
 ) -> Result<PhoneSourcesView, CommandError> {
-    read(app, |e| e.phone_sources()).await
+    read(app, |e| e.phone_sources_for(BUILDS)).await
 }
 
 /// Stop or start taking one source from one phone. Stopping deletes nothing.
@@ -37,7 +45,7 @@ pub async fn set_phone_source<R: Runtime>(
 ) -> Result<PhoneSourcesView, CommandError> {
     change(app, move |e| {
         e.set_source_taking(&device_id, source, taking)?;
-        e.phone_sources()
+        e.phone_sources_for(BUILDS)
     })
     .await
 }
@@ -49,7 +57,7 @@ pub async fn set_phone_page_options<R: Runtime>(
 ) -> Result<PhoneSourcesView, CommandError> {
     change(app, move |e| {
         e.set_phone_page_options(options)?;
-        e.phone_sources()
+        e.phone_sources_for(BUILDS)
     })
     .await
 }

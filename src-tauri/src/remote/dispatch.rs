@@ -13,9 +13,9 @@ use std::time::Duration;
 use jiff::Timestamp;
 use nocturne_contract::{
     AskDelta, AskPhase, AskPlace, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, Period,
-    PeriodKind, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice,
-    QuestionKind, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall, RemoteResult,
-    SameNameAnswer, Source, SyncReceipt,
+    PeriodKind, PhoneAppIntro, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus,
+    QuestionChoice, QuestionKind, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall,
+    RemoteResult, SameNameAnswer, Source, SyncReceipt,
 };
 use nocturne_engine::{DeviceRow, Engine, KeepPlace};
 use tauri::{AppHandle, Manager, Runtime};
@@ -36,6 +36,9 @@ const UPLOAD_WAIT: Duration = Duration::from_secs(300);
 
 /// The longest word of a feeling a phone may send. Nocturne's own words are far shorter.
 const MAX_FEELING_WORD: usize = 40;
+
+/// The longest app version a phone may send.
+const MAX_APP_VERSION: usize = 32;
 
 pub struct AppDispatch<R: Runtime> {
     pub app: AppHandle<R>,
@@ -431,7 +434,7 @@ impl<R: Runtime> Call<R> {
                 })
                 .await
             }
-            RemoteCall::Introduce { .. } => err(PhoneError::NotReady),
+            RemoteCall::Introduce { app } => self.introduce(app).await,
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;
@@ -481,6 +484,41 @@ impl<R: Runtime> Call<R> {
             }
             Err(e) => err(phone_code(&e)),
         }
+    }
+
+    /// A phone app says which app and version it runs and which phone builds it speaks: the
+    /// newest build both speak, or which side must update. What it said is noted for the
+    /// phones list either way; a phone newer than this computer is noted in the activity list.
+    async fn introduce(&self, app: PhoneAppIntro) -> Option<RemoteAnswer> {
+        if !version_ok(&app.version) || app.min_build > app.max_build {
+            return err(PhoneError::Invalid);
+        }
+        let agreed = app.max_build.min(PHONE_BUILD);
+        let answer = if app.min_build > PHONE_BUILD {
+            self.audit(RemoteAction::NeedsNewerHere, RemoteResult::Ok, 0.0);
+            RemoteAnswer::Error {
+                code: PhoneError::Outdated,
+            }
+        } else if agreed < MIN_PHONE_BUILD {
+            RemoteAnswer::Error {
+                code: PhoneError::TooOld,
+            }
+        } else {
+            RemoteAnswer::Introduced { agreed }
+        };
+        // The answer goes even while the store is away: the phone waits on it to open.
+        if let Some(e) = self.engine() {
+            let device = self.device.id.clone();
+            let noted =
+                blocking(move || e.set_phone_app(&device, app.platform, &app.version, agreed))
+                    .await;
+            match noted {
+                Ok(true) => self.core.shell.changed(),
+                Ok(false) => {}
+                Err(_) => tracing::warn!("could not note which app a phone runs"),
+            }
+        }
+        Some(answer)
     }
 
     async fn status(&self) -> RemoteAnswer {
@@ -1504,6 +1542,15 @@ fn feeling_ok(f: &Feeling) -> bool {
         && f.words
             .iter()
             .all(|w| (1..=MAX_FEELING_WORD).contains(&w.chars().count()))
+}
+
+/// "Nocturne {version}" as a phone app sends it: short, and only digits, letters, dots, dashes
+/// and plus signs.
+fn version_ok(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= MAX_APP_VERSION
+        && v.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+'))
 }
 
 /// A send's id is an id, its batch holds at most `MAX_SYNC_BATCH` changes and fits
