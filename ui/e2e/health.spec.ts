@@ -48,6 +48,20 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("img").first()).toBeVisible();
     });
 
+    test("a day's chart point and list value lead to that day, and the day is marked", async ({
+      page,
+    }) => {
+      await ready(page, "steps");
+      await page.locator('[data-chart="bars"] + svg a').nth(3).click();
+      await expect(page).toHaveURL(/#\/journal\/health\/steps\?day=\d{4}-\d{2}-\d{2}$/);
+      await expect(page.locator('li[aria-current="true"]')).toHaveCount(1);
+      await page.getByRole("button", { name: "Show as a list" }).click();
+      await expect(page.locator('tr[aria-current="true"]')).toHaveCount(1);
+      const results = await runAxe(page, (b) => b.withTags(TAGS));
+      expect(results.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
+      await page.screenshot({ path: `${SHOTS}/health-day-${scheme}.png` });
+    });
+
     test("a reading removed in Health is not in the charts", async ({ page }) => {
       await ready(page, "sleep");
       await expect(page.getByText("Removed in Health · not in charts")).toBeVisible();

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import {
   BandLine,
+  beatsText,
   between,
   clock,
   DayBars,
@@ -52,6 +53,10 @@ export interface ViewInput {
   series: HealthSeries | null;
   /** The workouts of the day the heart rate chart shows. */
   workouts: readonly ReadingRow[];
+  /** The day the page was opened on, from a receipt. */
+  selected?: string | null;
+  /** The address of a day's readings: where a chart's point or a list's value leads. */
+  receipt: (day: string) => string;
 }
 
 const columns = () =>
@@ -61,6 +66,8 @@ const labelsOf = (from: string, to: string) => [
   { day: from, text: formatDayMonth(from) },
   { day: to, text: formatDayMonth(to) },
 ];
+
+const link = (text: string, href: string) => <a href={href}>{text}</a>;
 
 const hourOf = (instant: string) => new Date(instant).getHours();
 
@@ -78,7 +85,7 @@ function hoursOfWorkout(row: ReadingRow): number[] {
 }
 
 function sleepView(input: ViewInput): KindView | null {
-  const { readings, series, from, to, today, long } = input;
+  const { readings, series, from, to, today, long, selected, receipt } = input;
   const journalDays = series?.journalDays ?? [];
   if (!long) {
     const nights = nightsOf(readings, journalDays);
@@ -92,11 +99,24 @@ function sleepView(input: ViewInput): KindView | null {
     return {
       sentence,
       waiting: usual === null,
-      chart: <NightsStrip nights={nights} usual={usual} sentence={sentence} current={last.day} />,
+      chart: (
+        <NightsStrip
+          nights={nights}
+          usual={usual}
+          sentence={sentence}
+          current={nights.some((n) => n.day === selected) ? (selected ?? last.day) : last.day}
+          href={receipt}
+        />
+      ),
       columns: columns(),
       rows: [...nights].reverse().map((n) => ({
         key: n.day,
-        cells: [dayLabel(n.day), duration(n.asleepMin), between(clock(n.from), clock(n.to))],
+        current: n.day === selected,
+        cells: [
+          dayLabel(n.day),
+          link(duration(n.asleepMin), receipt(n.day)),
+          between(clock(n.from), clock(n.to)),
+        ],
       })),
     };
   }
@@ -128,12 +148,15 @@ function sleepView(input: ViewInput): KindView | null {
         format={duration}
         sentence={sentence}
         labels={labelsOf(from, to)}
+        ring={selected ?? undefined}
+        href={receipt}
       />
     ),
     columns: [t("health.list.day"), t("health.list.value")],
     rows: [...points].reverse().map((p) => ({
       key: p.day,
-      cells: [formatDay(p.day), duration(p.value)],
+      current: p.day === selected,
+      cells: [formatDay(p.day), link(duration(p.value), receipt(p.day))],
     })),
   };
 }
@@ -166,7 +189,7 @@ function heartView(input: ViewInput): KindView | null {
         <HourBars hours={hours} workoutHours={workoutHours} sentence={byHour} />
       </>
     ),
-    columns: [t("health.list.time"), t("health.list.value")],
+    columns: [t("health.list.time"), t("health.list.value.beats")],
     rows: [...hours]
       .sort((a, b) => a.start.localeCompare(b.start))
       .map((h) => ({
@@ -180,7 +203,7 @@ function lineView(
   input: ViewInput,
   floor: (values: number[], band: Band | null) => [number, number],
 ) {
-  const { kind, series, from, to, today } = input;
+  const { kind, series, from, to, today, selected, receipt } = input;
   const points = series?.points ?? [];
   const last = points[points.length - 1];
   if (!last) return null;
@@ -194,7 +217,7 @@ function lineView(
   );
   const sentence = lineSentence({
     label: kindName(kind),
-    value: format(last.value),
+    value: kind === "restingHeartRate" ? beatsText(last.value) : format(last.value),
     day: last.day,
     today,
     band,
@@ -215,17 +238,24 @@ function lineView(
         format={format}
         sentence={sentence}
         labels={labelsOf(from, to)}
+        ring={selected ?? undefined}
+        href={receipt}
       />
     ),
-    columns: [t("health.list.day"), t("health.list.value")],
-    rows: [...points]
-      .reverse()
-      .map((p) => ({ key: p.day, cells: [formatDay(p.day), format(p.value)] })),
+    columns: [
+      t("health.list.day"),
+      t(kind === "restingHeartRate" ? "health.list.value.beats" : "health.list.value"),
+    ],
+    rows: [...points].reverse().map((p) => ({
+      key: p.day,
+      current: p.day === selected,
+      cells: [formatDay(p.day), link(format(p.value), receipt(p.day))],
+    })),
   } satisfies KindView;
 }
 
 function pressureView(input: ViewInput): KindView | null {
-  const { readings, from, to, today, series } = input;
+  const { readings, from, to, today, series, selected, receipt } = input;
   const points = readings.flatMap((r) =>
     r.value.type === "bloodPressure"
       ? [{ day: r.day, at: r.start, top: r.value.top, bottom: r.value.bottom }]
@@ -253,21 +283,23 @@ function pressureView(input: ViewInput): KindView | null {
         bandTop={bandTop}
         bandBottom={bandBottom}
         journalDays={series?.journalDays ?? []}
-        ring={latest.day}
+        ring={points.some((p) => p.day === selected) ? (selected ?? latest.day) : latest.day}
         labels={labelsOf(from, to)}
         sentence={sentence}
+        href={receipt}
       />
     ),
     columns: columns(),
     rows: points.map((p) => ({
       key: `${p.at}`,
-      cells: [formatDay(p.day), pressureText(p.top, p.bottom), clock(p.at)],
+      current: p.day === selected,
+      cells: [formatDay(p.day), link(pressureText(p.top, p.bottom), receipt(p.day)), clock(p.at)],
     })),
   };
 }
 
 function stepsView(input: ViewInput): KindView | null {
-  const { series, from, to, today } = input;
+  const { series, from, to, today, selected, receipt } = input;
   const points = series?.points ?? [];
   if (points.length === 0) return null;
   const focus = points.find((p) => p.day === today) ?? points[points.length - 1];
@@ -288,15 +320,18 @@ function stepsView(input: ViewInput): KindView | null {
         points={points}
         from={from}
         to={to}
-        at={focus.day}
+        at={points.some((p) => p.day === selected) ? (selected ?? focus.day) : focus.day}
         journalDays={series?.journalDays ?? []}
         sentence={sentence}
+        href={receipt}
       />
     ),
-    columns: [t("health.list.day"), t("health.list.value")],
-    rows: [...points]
-      .reverse()
-      .map((p) => ({ key: p.day, cells: [formatDay(p.day), num(p.value)] })),
+    columns: [t("health.list.day"), t("health.list.value.steps")],
+    rows: [...points].reverse().map((p) => ({
+      key: p.day,
+      current: p.day === selected,
+      cells: [formatDay(p.day), link(num(p.value), receipt(p.day))],
+    })),
   };
 }
 

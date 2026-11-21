@@ -8,6 +8,8 @@ export interface ListRow {
   cells: ReactNode[];
   /** A reading removed in Health: in the secondary ink. */
   removed?: boolean;
+  /** The day being looked at, when the page was opened on one. */
+  current?: boolean;
 }
 
 interface ShowAsListProps {
@@ -41,7 +43,11 @@ export function ShowAsList({ sentence, chart, columns, rows, children }: ShowAsL
           </thead>
           <tbody>
             {rows.map((row) => (
-              <tr key={row.key} className={row.removed ? styles.removed : undefined}>
+              <tr
+                key={row.key}
+                className={row.removed ? styles.removed : undefined}
+                aria-current={row.current ? "true" : undefined}
+              >
                 {row.cells.map((cell, i) => (
                   <td key={i}>{cell}</td>
                 ))}

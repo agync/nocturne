@@ -1,6 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
+import { formatDay } from "../../copy/format";
+import { EngineError } from "../../engine/client";
 import { createMockEngine } from "../../engine/mock/engine";
 import { withPhones } from "../../engine/mock/phones";
 import type { FakePlatform } from "../../test/render";
@@ -104,11 +106,11 @@ describe("the health kind pages", () => {
     await open("heart-rate");
     expect(
       await screen.findByRole("img", {
-        name: /^Heart rate today, \d+ to \d+, mostly around \d+\.$/,
+        name: /^Heart rate today, \d+ to \d+ beats a minute, mostly around \d+\.$/,
       }),
     ).toHaveAttribute("data-chart", "range");
     expect(
-      screen.getByRole("img", {
+      await screen.findByRole("img", {
         name: /^Heart rate by hour today\. Highest between .*, during a walk\.$/,
       }),
     ).toHaveAttribute("data-chart", "hours");
@@ -120,7 +122,7 @@ describe("the health kind pages", () => {
     await open("resting-heart-rate");
     expect(
       await screen.findByRole("img", {
-        name: /^Resting heart rate, \d+ today\. Your usual is \d+ to \d+\.$/,
+        name: /^Resting heart rate, \d+ beats a minute today\. Your usual is \d+ to \d+\.$/,
       }),
     ).toHaveAttribute("data-chart", "line");
     expect(screen.queryByText("Your usual shows after two weeks of readings.")).toBeNull();
@@ -133,7 +135,9 @@ describe("the health kind pages", () => {
     series.points = series.points.slice(-5);
     series.usual = null;
     await open("resting-heart-rate", engine);
-    const chart = await screen.findByRole("img", { name: /^Resting heart rate, \d+ today\.$/ });
+    const chart = await screen.findByRole("img", {
+      name: /^Resting heart rate, \d+ beats a minute today\.$/,
+    });
     expect(chart.getAttribute("aria-label")).not.toContain("usual");
     expect(screen.getByText("Your usual shows after two weeks of readings.")).toBeInTheDocument();
   });
@@ -149,7 +153,7 @@ describe("the health kind pages", () => {
   it("draws steps as day bars with today's total", async () => {
     await open("steps");
     const chart = await screen.findByRole("img", {
-      name: /^[\d,]+ steps today\. [\d,]+ on an average day this month\.$/,
+      name: /^[\d,]+ steps today\. [\d,]+ on an average day in the last 30 days\.$/,
     });
     expect(chart).toHaveAttribute("data-chart", "bars");
   });
@@ -310,5 +314,250 @@ describe("Delete for one reading", () => {
         name: "128 over 82 this morning. Your usual is 118 to 126 over 76 to 82.",
       }),
     ).toBeInTheDocument();
+  });
+});
+
+const failing = async () => {
+  throw new Error("down");
+};
+
+describe("when the readings do not load", () => {
+  it("says so with Try again when the phones do not load, and recovers", async () => {
+    const engine = phoneEngine();
+    const real = engine.getPhoneSources.bind(engine);
+    engine.getPhoneSources = failing;
+    setViewport(1280);
+    renderApp({ hash: "#/journal/health/sleep", engine });
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t open your readings. What you kept is safe.",
+    );
+    engine.getPhoneSources = real;
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Sleep" })).toBeInTheDocument();
+  });
+
+  it("shows an error, not an empty page, when the readings fail", async () => {
+    const engine = phoneEngine();
+    const real = engine.listReadings.bind(engine);
+    engine.listReadings = failing;
+    await open("steps", engine);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Nocturne couldn’t open your readings.");
+    expect(screen.queryByText("No readings in this range.")).toBeNull();
+    engine.listReadings = real;
+    await userEvent.click(within(alert).getByRole("button", { name: "Try again" }));
+    await screen.findByRole("img", { name: /steps today/ });
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows an error when the series fails", async () => {
+    const engine = phoneEngine();
+    engine.getHealthSeries = failing;
+    await open("steps", engine);
+    expect(await screen.findByRole("alert")).toHaveTextContent("couldn’t open your readings");
+    expect(screen.queryByText("No readings in this range.")).toBeNull();
+  });
+});
+
+describe("Delete readings, when things go wrong", () => {
+  it("says when the list could not be got ready, and keeps Delete off", async () => {
+    const engine = phoneEngine();
+    engine.previewPhoneDelete = failing;
+    await open("sleep", engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t get the list ready. Nothing has been deleted.",
+    );
+    expect(within(dialog).getByRole("button", { name: "Delete" })).toBeDisabled();
+  });
+
+  it("says when the delete did not go through, and can be tried again", async () => {
+    const { engine } = await open("sleep");
+    const real = engine.deletePhoneData.bind(engine);
+    engine.deletePhoneData = failing;
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("31 readings of sleep from Sam’s phone");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      "That didn’t go through. Nothing was deleted.",
+    );
+    expect(engine.sim.fixtures.readings.sleep?.length).toBe(31);
+    engine.deletePhoneData = real;
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(engine.sim.fixtures.readings.sleep).toEqual([]);
+  });
+
+  it("previews again and says so when the answer has expired", async () => {
+    const { engine } = await open("sleep");
+    const real = engine.deletePhoneData.bind(engine);
+    let first = true;
+    engine.deletePhoneData = async (token, stop) => {
+      if (first) {
+        first = false;
+        throw new EngineError("tokenExpired", "preview again");
+      }
+      return real(token, stop);
+    };
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("31 readings of sleep from Sam’s phone");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    expect(
+      await within(dialog).findByText(
+        "That list was out of date, so Nocturne refreshed it. Check it, then delete.",
+      ),
+    ).toBeInTheDocument();
+    expect(engine.sim.fixtures.readings.sleep?.length).toBe(31);
+    await within(dialog).findByText("31 readings of sleep from Sam’s phone");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(engine.sim.fixtures.readings.sleep).toEqual([]);
+  });
+
+  it("ignores a preview answer that comes after a newer choice", async () => {
+    const { engine } = await open("sleep");
+    const real = engine.previewPhoneDelete.bind(engine);
+    const held: Array<() => void> = [];
+    engine.previewPhoneDelete = (scope) =>
+      new Promise((resolve) => {
+        held.push(() => void real(scope).then(resolve));
+      });
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Steps" }));
+    await waitFor(() => expect(held.length).toBe(2));
+    held[1]?.();
+    await within(dialog).findByText("45 readings of sleep and steps from Sam’s phone");
+    held[0]?.();
+    await new Promise((r) => setTimeout(r, 20));
+    expect(
+      within(dialog).getByText("45 readings of sleep and steps from Sam’s phone"),
+    ).toBeInTheDocument();
+  });
+
+  it("brings focus back to the button that opened it, kept or deleted", async () => {
+    await open("steps");
+    const foot = await screen.findByRole("button", { name: "Delete readings…" });
+    await userEvent.click(foot);
+    await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+    await waitFor(() => expect(foot).toHaveFocus());
+
+    const more = (await screen.findAllByRole("button", { name: /^More about the reading on/ }))[1];
+    await userEvent.click(more as HTMLElement);
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete…" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep them" }));
+    await waitFor(() => expect(more).toHaveFocus());
+
+    await userEvent.click(more as HTMLElement);
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete…" }));
+    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText("1 reading of steps from Sam’s phone");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Delete readings…" })).toHaveFocus(),
+    );
+  });
+});
+
+describe("receipts and the selected day", () => {
+  it("makes each value in the list a link to that day's readings", async () => {
+    await open("steps");
+    await userEvent.click(await screen.findByRole("button", { name: "Show as a list" }));
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Steps" })).toBeInTheDocument();
+    const cells = within(table).getAllByRole("link");
+    expect(cells.length).toBeGreaterThan(10);
+    expect(cells[0]?.getAttribute("href")).toBe("#/journal/health/steps?day=2026-11-13");
+  });
+
+  it("draws a link for each day on the charts", async () => {
+    await open("steps");
+    const chart = await screen.findByRole("img", { name: /steps today/ });
+    const links = [...(chart.parentElement?.querySelectorAll("a") ?? [])];
+    expect(links.length).toBeGreaterThan(10);
+    expect(links[0]?.getAttribute("tabindex")).toBe("-1");
+    expect(links.map((a) => a.getAttribute("href"))).toContain(
+      "#/journal/health/steps?day=2026-11-13",
+    );
+  });
+
+  it("marks the selected day in the list, the table and the chart", async () => {
+    await open("sleep?day=2026-11-10");
+    await screen.findByRole("img", { name: /^30 nights/ });
+    const current = document.querySelectorAll('li[aria-current="true"]');
+    expect(current).toHaveLength(1);
+    expect(current[0]).toHaveTextContent(formatDay("2026-11-10"));
+    const inked = document.querySelectorAll('rect[data-tone="ink"]');
+    expect(inked.length).toBeGreaterThan(0);
+    await userEvent.click(screen.getByRole("button", { name: "Show as a list" }));
+    const row = within(screen.getByRole("table"))
+      .getAllByRole("row")
+      .find((r) => r.getAttribute("aria-current") === "true");
+    expect(row).toBeDefined();
+  });
+
+  it("ignores a day that is not a day, and keeps the day and phone moving between tabs", async () => {
+    await open("steps?day=nonsense");
+    await screen.findByRole("img", { name: /steps today/ });
+    expect(document.querySelector('[aria-current="true"][class*=row]')).toBeNull();
+  });
+
+  it("keeps the day and the phone when moving between kinds", async () => {
+    await open("steps?day=2026-11-10&phone=pixel");
+    await screen.findByRole("img", { name: /steps today/ });
+    const tab = within(screen.getByRole("navigation", { name: "Health" })).getByRole("link", {
+      name: "Sleep",
+    });
+    expect(tab.getAttribute("href")).toBe("#/journal/health/sleep?day=2026-11-10&phone=pixel");
+  });
+});
+
+describe("more than one phone brings health", () => {
+  const second = (engine: ReturnType<typeof phoneEngine>) => {
+    const sam = engine.sim.fixtures.phones[0];
+    if (!sam?.health) throw new Error("fixture");
+    engine.sim.fixtures.phones.push({
+      ...sam,
+      deviceId: "phone-kit",
+      name: "Kit’s phone",
+      health: { ...sam.health, kinds: ["sleep", "weight"] },
+    });
+    return sam.deviceId;
+  };
+
+  it("lets the person choose the phone to delete from, and only then", async () => {
+    const lone = await open("sleep");
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    expect(screen.queryByRole("group", { name: "Which phone" })).toBeNull();
+    lone.unmount();
+
+    const engine = phoneEngine();
+    second(engine);
+    await open("sleep", engine);
+    await userEvent.click(await screen.findByRole("button", { name: "Delete readings…" }));
+    const dialog = await screen.findByRole("dialog");
+    const which = within(dialog).getByRole("group", { name: "Which phone" });
+    expect(within(which).getByRole("button", { name: "Sam’s phone" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent.click(within(which).getByRole("button", { name: "Kit’s phone" }));
+    expect(
+      await within(dialog).findByText("31 readings of sleep from Kit’s phone"),
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByRole("button", { name: "Steps" })).toBeNull();
+    expect(within(dialog).getByRole("button", { name: "Weight" })).toBeInTheDocument();
+  });
+
+  it("drives the tabs from the phone in the address", async () => {
+    const engine = phoneEngine();
+    second(engine);
+    await open("sleep?phone=phone-kit", engine);
+    const tabs = within(screen.getByRole("navigation", { name: "Health" }));
+    expect(tabs.getAllByRole("link").map((a) => a.textContent)).toEqual(["Sleep", "Weight"]);
   });
 });
