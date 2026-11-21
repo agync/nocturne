@@ -982,6 +982,29 @@ describe("the engine's calls", () => {
       engine.close();
     });
 
+    it("the page’s question from the journal is answered once however often it is sent", async () => {
+      const { computer, device } = await paired();
+      const engine = await engineOn(computer, device);
+      expect((await engine.getPage()).question?.kind).toBe("journal");
+      const first = await engine.answerJournalQuestion("2026-11-13", "notGreat", "c-q");
+      const again = await engine.answerJournalQuestion("2026-11-13", "notGreat", "c-q");
+      expect(first.question?.answered).toBe("notGreat");
+      expect(again.question?.answered).toBe("notGreat");
+      const lined = await engine.answerJournalQuestion("2026-11-13", "notGreat", "c-q", " Long. ");
+      expect(lined.question?.journal?.line).toBe("Long.");
+      expect(computer.answer.kept).toBe(1);
+      for (const [date, choice, id] of [
+        ["2026-11-13", "yes", "c-q2"],
+        ["soon", "fine", "c-q3"],
+        ["2026-11-13", "fine", "bad id"],
+      ] as const) {
+        await expect(engine.answerJournalQuestion(date, choice, id)).rejects.toMatchObject({
+          code: "invalid",
+        });
+      }
+      engine.close();
+    });
+
     it("answers which Sam, and the answer names who it was filed under", async () => {
       const { computer, device } = await paired();
       const engine = await engineOn(computer, device);

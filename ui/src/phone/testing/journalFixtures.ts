@@ -413,6 +413,42 @@ export function yesterdayDay(): JournalDay {
   };
 }
 
+/** Today with an answer to the page's question from the journal, given on this phone. */
+export function answeredDay(): JournalDay {
+  const day = emptyDay(TODAY, true);
+  const note = itemView({
+    id: "item-kit",
+    kind: "text",
+    source: "phone",
+    keptAt: at(TODAY, "07:31"),
+    text: "Leo’s swimming kit is in the boot.",
+    fromDevice: "Pixel",
+  });
+  const answer = itemView({
+    id: "item-answer",
+    kind: "text",
+    keptAt: at(TODAY, "07:48"),
+    title: "Not great",
+    text: "Mrs Okafor is worried about his reading.",
+    journal: "answer",
+    fromDevice: "Pixel",
+  });
+  return {
+    ...day,
+    rows: [
+      row("note", "morning", note, {}),
+      row("answer", "morning", answer, {
+        answer: {
+          choice: "notGreat",
+          line: "Mrs Okafor is worried about his reading.",
+          about: "item-entry-18",
+          sentence: "Parents’ evening at six. Not looking forward to it.",
+        },
+      }),
+    ],
+  };
+}
+
 export function emptyDay(day: string, today: boolean): JournalDay {
   return {
     day,

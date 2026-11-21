@@ -225,6 +225,53 @@ describe("the waiting queue", () => {
     expect(result).toMatchObject({ sent: 2, failed: 1, remaining: 1 });
   });
 
+  const answer = (id: string, at: number, line: string | null = null) => ({
+    clientId: id,
+    kind: "answer" as const,
+    answer: { pageDate: "2026-11-13", choice: "notGreat" as const, line },
+    size: 0,
+    createdAt: at,
+  });
+
+  it("an answer whose question is gone is let go, and the keeps after it still go", async () => {
+    for (const code of ["notFound", "invalid", "tooLate"] as const) {
+      const queue = memoryQueue();
+      await queue.add(answer("c-a", 1));
+      await queue.add(keep("c-2", 2));
+      const sent: string[] = [];
+      const engine = {
+        answerJournalQuestion: async () => {
+          throw new PhoneRequestError(code);
+        },
+        keepText: async (_text: string, id: string) => {
+          sent.push(id);
+          return {} as never;
+        },
+      } as unknown as PhoneEngine;
+      const result = await queue.flush(engine);
+      expect(sent, code).toEqual(["c-2"]);
+      expect(result, code).toMatchObject({ sent: 1, remaining: 0 });
+    }
+  });
+
+  it("a line added while its answer is going across stays to go after it", async () => {
+    const queue = memoryQueue();
+    await queue.add(answer("c-a", 1));
+    const lines: Array<string | undefined> = [];
+    const engine = {
+      answerJournalQuestion: async (_d: string, _c: string, _id: string, line?: string) => {
+        lines.push(line);
+        if (lines.length === 1) await queue.add(answer("c-a", 1, "Long queue."));
+        return {} as never;
+      },
+    } as unknown as PhoneEngine;
+    await queue.flush(engine);
+    expect(await queue.count()).toBe(1);
+    await queue.flush(engine);
+    expect(lines).toEqual([undefined, "Long queue."]);
+    expect(await queue.count()).toBe(0);
+  });
+
   it("clear removes everything waiting", async () => {
     const queue = idbQueue(fakeIndexedDb());
     await queue.add(keep("c-1", 1));

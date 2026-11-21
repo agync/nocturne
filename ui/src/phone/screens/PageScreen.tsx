@@ -4,7 +4,8 @@ import { receiptLabel, receiptText } from "../../components/ReceiptChip/ReceiptC
 import { formatLongDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PageLine, PageSummary, PageView, Receipt } from "../../engine/bindings";
-import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
+import { ConnectionError, type PhoneEngine, PhoneRequestError, type Queue } from "../engine";
+import { PageQuestion } from "./PageQuestion";
 import { BackBar, Button, Page } from "./ui";
 
 const chipFormat = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric" });
@@ -54,12 +55,27 @@ function Lines({ lines, onOpen }: { lines: PageLine[]; onOpen(r: Receipt): void 
 
 interface PageProps {
   engine: PhoneEngine;
+  queue: Queue;
+  connected: boolean;
+  now(): number;
+  onQueued(): void;
   onOpen(r: Receipt): void;
+  /** Opens a day of the journal; today when none is given. */
+  onJournal(day: string | null): void;
   onBack(): void;
 }
 
 /** P4: today's page in the phone edition, with the seven pages before it. */
-export function PageScreen({ engine, onOpen, onBack }: PageProps) {
+export function PageScreen({
+  engine,
+  queue,
+  connected,
+  now,
+  onQueued,
+  onOpen,
+  onJournal,
+  onBack,
+}: PageProps) {
   const [date, setDate] = useState<string | undefined>(undefined);
   const [load, setLoad] = useState<Load>({ name: "loading" });
   const [earlier, setEarlier] = useState<PageSummary[]>([]);
@@ -166,6 +182,21 @@ export function PageScreen({ engine, onOpen, onBack }: PageProps) {
             )}
             {load.page.needsYou.length === 0 && load.page.changed.length === 0 && (
               <p className="ph-body">{t("phone.page.quiet")}</p>
+            )}
+            {load.page.question?.kind === "journal" && load.page.question.journal && (
+              <PageQuestion
+                key={load.page.date}
+                engine={engine}
+                queue={queue}
+                connected={connected}
+                pageDate={load.page.date}
+                question={load.page.question}
+                latest={!earlier.some((p) => p.date > load.page.date)}
+                now={now}
+                onQueued={onQueued}
+                onOpenDay={(day) => onJournal(day)}
+                onOpenJournal={() => onJournal(null)}
+              />
             )}
             {load.page.pending > 0 && (
               <p className="ph-hint">{t("phone.page.pending", { count: load.page.pending })}</p>

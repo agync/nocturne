@@ -9,6 +9,8 @@ import type {
   PhoneHello,
   PhoneItem,
   PhoneKept,
+  Question,
+  QuestionChoice,
   Receipt,
   ReflectionView,
 } from "../engine/bindings";
@@ -39,6 +41,10 @@ export interface MockScript {
   noPage?: boolean;
   /** Keeps fail as if the computer went to sleep mid-way. */
   keepFails?: boolean;
+  /** The computer answered the page's question with Fine before the phone's answer arrived. */
+  answeredElsewhere?: boolean;
+  /** The computer refuses an answer to the page's question. */
+  answerRefused?: boolean;
   now?: () => number;
 }
 
@@ -188,7 +194,39 @@ const lines = (items: Array<[string, string, Receipt[], PageLine["kind"]?]>): Pa
     lastUsed: null,
   }));
 
-function page(date: string, headline: string): PageView {
+/** The page of the 13th asks about a plan written in the entry of the 12th. */
+export const QUESTION_PAGE = "2026-11-13";
+export const QUESTION_TEXT = "Parents’ evening at six. Not looking forward to it.";
+
+export interface AnswerState {
+  choice: QuestionChoice | null;
+  line: string | null;
+  clients: Set<string>;
+}
+
+export function journalQuestion(answer: AnswerState): Question {
+  return {
+    kind: "journal",
+    text: QUESTION_TEXT,
+    memoryId: "mem-parents-evening",
+    receipt: receipt("item-entry-12", "text", "Entry", "2026-11-12", {
+      source: "journal",
+      keptAt: "2026-11-12T20:12:00.000Z",
+    }),
+    lastAsked: null,
+    answered: answer.choice,
+    journal: {
+      itemId: "item-entry-12",
+      voice: false,
+      writtenOn: "2026-11-12",
+      eventDay: "2026-11-12",
+      answerItemId: answer.choice ? "item-answer" : null,
+      line: answer.line,
+    },
+  };
+}
+
+export function page(date: string, headline: string): PageView {
   return {
     date,
     pageNumber: 42,
@@ -266,6 +304,14 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
   };
   let stopped = false;
   let kept = 0;
+  const answer: AnswerState = { choice: null, line: null, clients: new Set() };
+  const pageOf = (date: string | undefined): PageView => {
+    if (date === "2026-11-12") return page("2026-11-12", "A quiet Wednesday.");
+    return {
+      ...page(QUESTION_PAGE, "Two things need you today."),
+      question: journalQuestion(answer),
+    };
+  };
 
   const keptAnswer = (title: string, kind: PhoneItem["kind"]): PhoneKept => {
     if (script.keepFails) throw new ConnectionError("asleep");
@@ -423,9 +469,21 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     async getPage(date) {
       gate();
       if (script.noPage) throw new PhoneRequestError("notFound");
-      return date === "2026-11-12"
-        ? page("2026-11-12", "A quiet Wednesday.")
-        : page("2026-11-13", "Two things need you today.");
+      return pageOf(date);
+    },
+    async answerJournalQuestion(pageDate, choice, clientId, line) {
+      if (script.keepFails) throw new ConnectionError("asleep");
+      gate();
+      if (script.answerRefused) throw new PhoneRequestError("invalid");
+      if (pageDate !== QUESTION_PAGE) throw new PhoneRequestError("notFound");
+      if (script.answeredElsewhere && answer.choice === null) answer.choice = "fine";
+      if (!answer.clients.has(clientId)) {
+        answer.clients.add(clientId);
+        answer.choice ??= choice;
+      }
+      const said = line?.trim();
+      if (said && answer.choice === choice && answer.line === null) answer.line = said;
+      return pageOf(pageDate);
     },
     async listPages() {
       gate();

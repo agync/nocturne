@@ -273,6 +273,10 @@
   "phone.page.loading": "Opening today’s page…",
   "phone.page.failed": "That didn’t open. Your computer may be asleep. Try again in a moment.",
   "phone.page.pending": "{count, plural, one {# thing is} other {# things are}} still waiting to be read.",
+  "phone.page.question.waiting": "{choice}. Waiting on this phone.",
+  "phone.page.question.lineWaiting": "“{line}” Waiting on this phone.",
+  "phone.page.question.elsewhere": "Already answered, on your computer or another phone.",
+  "phone.page.question.replaced": "A new page has arrived, so this answer stays as it is.",
 
   "phone.journal.tile.title": "Journal",
   "phone.journal.tile.hint": "Today so far, and looking back.",

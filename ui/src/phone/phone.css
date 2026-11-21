@@ -2223,3 +2223,109 @@ body {
   border-top: 1px solid var(--rule);
   background: var(--bg);
 }
+
+/* The page's question from the journal, and its answer on the journal */
+
+.ph-jq {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  padding: 18px 16px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.ph-jq h3 {
+  margin: 0;
+}
+
+.ph-jq-text {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.ph-jq-text[data-quiet] {
+  font-size: 1.0625rem;
+  color: var(--ink2);
+}
+
+.ph-jq .ph-src {
+  align-self: flex-start;
+}
+
+.ph-choices {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ph-choice {
+  height: 48px;
+  padding: 0 8px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.9375rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ph-jq-kept {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ph-jq-done {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.1875rem;
+  line-height: 1.4;
+}
+
+.ph-jq-note {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  color: var(--ink2);
+}
+
+.ph-jq-add {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ph-jq-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ph-input--line {
+  flex: 1;
+  min-width: 0;
+  height: 48px;
+  padding: 0 14px;
+  font-size: 1rem;
+}
+
+.ph-btn--add {
+  flex: none;
+  width: 76px;
+  height: 48px;
+}
+
+.ph-error-title {
+  display: block;
+  font-weight: 500;
+}
+
+.ph-answer-choice {
+  font-weight: 500;
+}
