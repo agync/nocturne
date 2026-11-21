@@ -9,13 +9,19 @@ export async function createEngine(
   if (import.meta.env.VITE_ENGINE === "mock") {
     const { createMockEngine } = await import("./mock/engine");
     const engine = createMockEngine();
-    // `?mockPhones=1` pairs two phones that bring a calendar and health, for design review.
-    if (typeof location !== "undefined" && new URLSearchParams(location.search).has("mockPhones")) {
+    // `?mockPhones=1` pairs two phones that bring a calendar and health, for design review;
+    // `ready` or `needed` says the app phone should update.
+    const phones =
+      typeof location !== "undefined"
+        ? new URLSearchParams(location.search).get("mockPhones")
+        : null;
+    if (phones !== null) {
       const { withPhones } = await import("./mock/phones");
       const { mockNowFromAddress } = await import("./mock/journal");
       return withPhones(
         engine,
         mockNowFromAddress() ?? (import.meta.env.VITE_MOCK_NOW || "2026-11-13T07:02:00Z"),
+        { update: phones === "ready" || phones === "needed" ? phones : undefined },
       );
     }
     return engine;
