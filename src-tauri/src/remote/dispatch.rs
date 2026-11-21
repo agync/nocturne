@@ -497,7 +497,7 @@ impl<R: Runtime> Call<R> {
         let answer = if app.min_build > PHONE_BUILD {
             self.audit(RemoteAction::NeedsNewerHere, RemoteResult::Ok, 0.0);
             RemoteAnswer::Error {
-                code: PhoneError::Outdated,
+                code: PhoneError::ComputerOutdated,
             }
         } else if agreed < MIN_PHONE_BUILD {
             RemoteAnswer::Error {

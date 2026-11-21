@@ -144,7 +144,7 @@ fn an_introduction_and_its_answers_are_tagged() {
     );
     for (code, text) in [
         (PhoneError::TooOld, "tooOld"),
-        (PhoneError::Outdated, "outdated"),
+        (PhoneError::ComputerOutdated, "computerOutdated"),
     ] {
         assert_eq!(
             serde_json::to_value(RemoteAnswer::Error { code }).unwrap()["code"],

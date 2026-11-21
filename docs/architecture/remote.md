@@ -102,9 +102,10 @@ A phone app and the computer update apart, so each speaks a window of phone buil
 computer's hello gives the oldest and newest build it speaks; a computer from before the window
 gives only the oldest, and speaks that one alone. A phone app's first call on each session,
 `introduce`, says which app it is, its version and the builds it speaks. The computer answers with
-the newest build both speak, or `too_old` when the phone must update and `outdated` when the
-computer must. It notes the app, the version and that build for its phones list, and a phone newer
-than it in the activity list. The phone page in a browser introduces itself too, as the browser.
+the newest build both speak, or `too_old` when the phone must update and `computer_outdated` when
+the computer must. It notes the app, the version and that build for its phones list, and a phone
+newer than it in the activity list. The phone page in a browser introduces itself too, as the
+browser.
 
 `crates/channel/protocol-history.json` lists each build and the day it shipped. The oldest build
 spoken rises only once the build after it has been out for six months, and a test holds the tree

@@ -396,8 +396,9 @@ pub enum PhoneError {
     OnlineChanged,
     /// The phone is older than the oldest build this computer speaks: update the phone.
     TooOld,
-    /// The phone is newer than the newest build this computer speaks: update the computer.
-    Outdated,
+    /// The phone is newer than the newest build this computer speaks, or a call needs a newer
+    /// build than the two agreed: update the computer.
+    ComputerOutdated,
 }
 
 /// Everything a phone may ask for: the allowed calls, the journal calls, the two phone verbs
@@ -530,7 +531,7 @@ pub enum RemoteCall {
         batch: ReadingBatch,
     },
     /// A phone app's first call on a session: answered with the build both speak
-    /// (`Introduced`), or `TooOld` or `Outdated` when there is none.
+    /// (`Introduced`), or `TooOld` or `ComputerOutdated` when there is none.
     Introduce {
         app: PhoneAppIntro,
     },

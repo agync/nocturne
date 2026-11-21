@@ -405,7 +405,7 @@ impl Phone {
             match call_once(s, RemoteCall::Introduce { app }).await {
                 Ok(RemoteAnswer::Introduced { agreed }) => found = Overlap::Agreed(agreed),
                 Err(Fault::Phone(PhoneError::TooOld)) => found = Overlap::UpdatePhone,
-                Err(Fault::Phone(PhoneError::Outdated)) => found = Overlap::UpdateComputer,
+                Err(Fault::Phone(PhoneError::ComputerOutdated)) => found = Overlap::UpdateComputer,
                 Err(Fault::Phone(PhoneError::Revoked)) => {
                     self.forget();
                     return Err(gone(Reach::Removed));
