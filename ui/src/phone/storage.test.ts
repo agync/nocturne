@@ -31,12 +31,12 @@ async function device(): Promise<PairedDevice> {
 describe("the key store", () => {
   it("keys.private_key_not_extractable: what is stored cannot be read out", async () => {
     const d = await device();
-    expect(d.privateKey.extractable).toBe(false);
-    await expect(crypto.subtle.exportKey("pkcs8", d.privateKey)).rejects.toThrow();
+    expect(d.privateKey?.extractable).toBe(false);
+    await expect(crypto.subtle.exportKey("pkcs8", d.privateKey as CryptoKey)).rejects.toThrow();
     const store = idbKeyStore(fakeIndexedDb());
     await store.save(d);
     const back = await store.device();
-    expect(back?.privateKey.extractable).toBe(false);
+    expect(back?.privateKey?.extractable).toBe(false);
     await expect(crypto.subtle.exportKey("jwk", back?.privateKey as CryptoKey)).rejects.toThrow();
   });
 

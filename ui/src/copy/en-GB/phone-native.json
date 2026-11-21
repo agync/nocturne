@@ -1,1 +1,27 @@
-{}
+{
+  "phone.native.welcome.title": "Nocturne lives on your computer",
+  "phone.native.welcome.lead": "This app lets you keep things, ask and read your page while you’re out. It works with Nocturne on your computer.",
+  "phone.native.welcome.step1": "On your computer, open Nocturne and choose {settings}, then {awayFromHome}, then {addAPhone}.",
+  "phone.native.welcome.step2": "Scan the code it shows, or type the address and the code.",
+  "phone.native.welcome.scan": "Scan the code",
+  "phone.native.welcome.type": "Type the code",
+  "phone.native.welcome.foot": "No account and no sign-in. This phone keeps no copy of your memory.",
+  "phone.native.welcome.link": "No Nocturne on your computer yet?",
+  "phone.native.cameraOff.title": "The camera is off for Nocturne.",
+  "phone.native.cameraOff.body": "Allow it in your phone’s settings, or type the code instead.",
+  "phone.native.cameraOff.settings": "Open phone settings",
+  "phone.native.cameraOff.type": "Type the code",
+  "phone.native.address.title": "Your computer’s address",
+  "phone.native.address.lead": "On your computer, under the code, find the four words or the name. Type it here.",
+  "phone.native.address.hint": "Simple shows four words. Most private shows a name. Capitals don’t matter.",
+  "phone.native.address.placeholder": "Four words, or a name",
+  "phone.native.address.incomplete": "Type all four words, or the full name.",
+  "phone.native.address.noAnswer.simple": "That address didn’t answer. Check the words, and that your computer is awake.",
+  "phone.native.address.noAnswer.private": "That address didn’t answer. Check the name, and that Tailscale is on for this phone.",
+  "phone.native.address.next": "Next",
+  "phone.native.scanInstead": "Scan the code instead",
+  "phone.native.code.title": "Type the code",
+  "phone.native.code.lead": "Now the 24 letters and numbers under the address on your computer.",
+  "phone.native.code.hint": "Capitals don’t matter.",
+  "phone.native.code.connect": "Connect"
+}

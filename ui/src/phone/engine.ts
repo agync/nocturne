@@ -106,11 +106,14 @@ export interface ConnectionHandle {
 
 export type ConnectedEngine = PhoneEngine & ConnectionHandle;
 
-/** Everything the phone keeps for one pairing. Never session material. */
+/**
+ * Everything the phone keeps for one pairing. Never session material. In the phone app the keys
+ * stay in its native side, so only the fields the screens read are here.
+ */
 export interface PairedDevice {
   deviceId: Bytes;
-  /** The long-term key D: not extractable, usable only to derive bits. */
-  privateKey: CryptoKey;
+  /** The long-term key D: not extractable, usable only to derive bits. Absent in the app. */
+  privateKey?: CryptoKey;
   publicKey: Bytes;
   /** The computer's long-term public key, as scanned or answered at pairing. */
   cpub: Bytes;

@@ -4,6 +4,8 @@
 const GUARD = "nocturne-shell-reloaded";
 
 export async function refreshShellOnce(version: string): Promise<void> {
+  // The phone app's files come with the app from the store: there is no shell to refresh.
+  if ("__TAURI_INTERNALS__" in globalThis) return;
   try {
     // Only the version that was already tried is kept, so a shell that stays stale cannot loop.
     if (sessionStorage.getItem(GUARD) === version) return;
@@ -22,7 +24,7 @@ export async function refreshShellOnce(version: string): Promise<void> {
 }
 
 export function registerWorker(): void {
-  if (!("serviceWorker" in navigator)) return;
+  if (!("serviceWorker" in navigator) || "__TAURI_INTERNALS__" in globalThis) return;
   const register = () => {
     navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch(() => undefined);
   };

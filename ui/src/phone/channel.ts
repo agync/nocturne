@@ -538,9 +538,11 @@ export class Session {
       throw e;
     };
     try {
+      const d = device.privateKey;
+      if (!d) return fail(new OpenError("refused"));
       const e = await generateSessionKey();
       const on = randomBytes(P.OPEN_NONCE_LEN);
-      const kd = await deviceKey(await ecdh(device.privateKey, device.cpub), device.deviceId);
+      const kd = await deviceKey(await ecdh(d, device.cpub), device.deviceId);
       const open = await sealSessionOpen(device.deviceId, e.publicKey, on, kd);
       try {
         await link.send(open);
@@ -577,7 +579,7 @@ export class Session {
       }
 
       link.setSid(accepted.sid);
-      const keys = await phoneSessionKeys(e.privateKey, device.privateKey, {
+      const keys = await phoneSessionKeys(e.privateKey, d, {
         deviceId: device.deviceId,
         epub: e.publicKey,
         openNonce: on,

@@ -1,0 +1,40 @@
+/* The phone app draws edge to edge: the screens keep clear of the system bars and cut-outs,
+   which the native side gives as --ph-inset-* variables. */
+
+html.ph-native .ph-screen {
+  padding-top: var(--ph-inset-top, 0px);
+  padding-right: var(--ph-inset-right, 0px);
+  padding-bottom: var(--ph-inset-bottom, 0px);
+  padding-left: var(--ph-inset-left, 0px);
+}
+
+html.ph-native .ph-screen--fixed {
+  height: 100dvh;
+}
+
+.ph-native-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-native-steps li {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.ph-native-link {
+  align-self: flex-start;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

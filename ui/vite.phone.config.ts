@@ -29,26 +29,30 @@ function shellFiles(): Plugin {
 
 // The phone app: a second entry, built into dist/phone beside the desktop interface and served
 // by the computer to paired phones. Nothing is inlined, so its policy needs no inline script or
-// style. Tests use the scripted phone engine.
+// style. Tests use the scripted phone engine. `--mode native` builds the same screens for the
+// phone app into dist/phone-native: no service worker, since the files come with the app.
 export default defineConfig(({ mode }) => {
   const engine =
     mode === "test" || process.env.VITE_ENGINE === "phone-mock" ? "phone-mock" : "phone";
+  const native = mode === "native";
+  const input: Record<string, string> = { index: here("./phone/index.html") };
+  if (!native) input.sw = here("./src/phone/sw.ts");
   return {
     root: "phone",
     base: "/",
-    plugins: [react(), shellFiles()],
+    plugins: native ? [react()] : [react(), shellFiles()],
     define: {
       "import.meta.env.VITE_ENGINE": JSON.stringify(engine),
       __APP_VERSION__: JSON.stringify(version),
     },
     build: {
-      outDir: process.env.PHONE_OUT_DIR ?? "../dist/phone",
+      outDir: process.env.PHONE_OUT_DIR ?? (native ? "../dist/phone-native" : "../dist/phone"),
       emptyOutDir: true,
       assetsInlineLimit: 0,
       target: "es2022",
       sourcemap: false,
       rollupOptions: {
-        input: { index: here("./phone/index.html"), sw: here("./src/phone/sw.ts") },
+        input,
         output: {
           entryFileNames: (chunk) => (chunk.name === "sw" ? "sw.js" : "assets/[name]-[hash].js"),
         },
