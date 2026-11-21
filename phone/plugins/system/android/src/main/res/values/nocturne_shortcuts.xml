@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nocturne_shortcut_keep_short">Keep</string>
+    <string name="nocturne_shortcut_keep">Keep a note</string>
+    <string name="nocturne_shortcut_record_short">Record</string>
+    <string name="nocturne_shortcut_record">Record a voice note</string>
+    <string name="nocturne_shortcut_checkin_short">Check in</string>
+    <string name="nocturne_shortcut_checkin">Check in</string>
+</resources>

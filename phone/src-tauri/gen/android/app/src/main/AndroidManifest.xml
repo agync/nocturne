@@ -21,7 +21,46 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- The shortcuts on the icon: Keep a note, Record a voice note, Check in. -->
+            <meta-data
+                android:name="android.app.shortcuts"
+                android:resource="@xml/nocturne_shortcuts" />
         </activity>
+        <!-- "Nocturne" in other apps' share menus, for what it keeps: text and links, photos,
+             PDFs and voice memos. They open the app, which offers to keep them. -->
+        <activity-alias
+            android:name=".ShareIntake"
+            android:targetActivity=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/heic" />
+                <data android:mimeType="image/heif" />
+                <data android:mimeType="image/webp" />
+                <data android:mimeType="application/pdf" />
+                <data android:mimeType="audio/mpeg" />
+                <data android:mimeType="audio/mp4" />
+                <data android:mimeType="audio/ogg" />
+                <data android:mimeType="audio/webm" />
+                <data android:mimeType="audio/wav" />
+                <data android:mimeType="audio/x-wav" />
+                <data android:mimeType="audio/aac" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/heic" />
+                <data android:mimeType="image/heif" />
+                <data android:mimeType="image/webp" />
+                <data android:mimeType="application/pdf" />
+            </intent-filter>
+        </activity-alias>
         <!-- Health Connect's link to how Nocturne uses readings opens the app on that page,
              readable without pairing. Android 13 and older. -->
         <activity-alias

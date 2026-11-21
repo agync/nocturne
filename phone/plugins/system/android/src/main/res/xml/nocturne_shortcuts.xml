@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="keep"
+        android:enabled="true"
+        android:icon="@drawable/nocturne_shortcut_keep"
+        android:shortcutShortLabel="@string/nocturne_shortcut_keep_short"
+        android:shortcutLongLabel="@string/nocturne_shortcut_keep">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="nocturne://keep"
+            android:targetPackage="app.nocturne.phone"
+            android:targetClass="app.nocturne.phone.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="record"
+        android:enabled="true"
+        android:icon="@drawable/nocturne_shortcut_record"
+        android:shortcutShortLabel="@string/nocturne_shortcut_record_short"
+        android:shortcutLongLabel="@string/nocturne_shortcut_record">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="nocturne://record"
+            android:targetPackage="app.nocturne.phone"
+            android:targetClass="app.nocturne.phone.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="checkin"
+        android:enabled="true"
+        android:icon="@drawable/nocturne_shortcut_checkin"
+        android:shortcutShortLabel="@string/nocturne_shortcut_checkin_short"
+        android:shortcutLongLabel="@string/nocturne_shortcut_checkin">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="nocturne://checkin"
+            android:targetPackage="app.nocturne.phone"
+            android:targetClass="app.nocturne.phone.MainActivity" />
+    </shortcut>
+</shortcuts>

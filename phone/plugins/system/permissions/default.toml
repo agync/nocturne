@@ -1,5 +1,13 @@
 "$schema" = "schemas/schema.json"
 
 [default]
-description = "Read the screen insets and the phone's name, and open this app's settings."
-permissions = ["allow-insets", "allow-device-name", "allow-open-app-settings"]
+description = "Read the screen insets and the phone's name, open this app's settings, and take what the app was opened for from its icon or another app's share menu."
+permissions = [
+  "allow-insets",
+  "allow-device-name",
+  "allow-open-app-settings",
+  "allow-take-launch",
+  "allow-take-shared",
+  "allow-shared-file",
+  "allow-shared-done",
+]

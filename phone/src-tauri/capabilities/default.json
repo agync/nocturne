@@ -8,7 +8,10 @@
     "nocturne-system:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "https://nocturne.is/*" }]
+      "allow": [
+        { "url": "https://nocturne.is/*" },
+        { "url": "https://play.google.com/store/apps/details?id=app.nocturne.phone" }
+      ]
     }
   ],
   "platforms": ["linux", "macOS", "windows", "android", "iOS"]
