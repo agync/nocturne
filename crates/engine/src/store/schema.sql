@@ -385,3 +385,8 @@ ALTER TABLE remote_devices ADD COLUMN app_version TEXT;
 -- Earlier versions are found by what replaced them.
 CREATE INDEX items_replaces ON items(json_extract(metadata, '$.replaces'))
   WHERE json_extract(metadata, '$.replaces') IS NOT NULL;
+
+-- migration 17
+-- The newest phone build a phone and this computer both spoke when it last introduced itself;
+-- below the oldest this computer speaks, the phone must update before it can connect.
+ALTER TABLE remote_devices ADD COLUMN agreed_build INTEGER;

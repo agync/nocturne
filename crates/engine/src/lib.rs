@@ -61,7 +61,7 @@ pub use mind::{FAKE_DIM, FakeMind, Gate, hash_embedding};
 pub use online::{NewSend, OnlineRow};
 pub use page::{HEAVY_ITEMS, PAGE_LINE_CAP, needs_you_count, phone_view};
 pub use phones::read::CALENDAR_TODAY_ROWS;
-pub use phones::{CALENDAR_PER_SEND, READINGS_PER_SEND, usual};
+pub use phones::{CALENDAR_PER_SEND, PhoneBuilds, READINGS_PER_SEND, usual};
 pub use reindex::ReindexRow;
 pub use remote::{DeviceRow, RemoteRow};
 pub use retrieve::{SOURCE_LINE, is_source_line, reranked};
