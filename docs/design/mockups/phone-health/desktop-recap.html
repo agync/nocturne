@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your week, with health and noticing · Nocturne</title>
+<link rel="stylesheet" href="../phone-apps/mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="week">
+<div id="content" class="sheet">
+  <div style="display: flex; flex-direction: column; gap: var(--s-5); max-width: 760px; margin: 0 auto">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Journal</a>
+    <div>
+      <p class="eyebrow">Your week</p>
+      <h1 class="title">16 to 22 November</h1>
+    </div>
+
+    <section class="rsection">
+      <h2 class="rlabel">How it felt</h2>
+      <p class="muted">7 check-ins. Low or tired early in the week, settled by the weekend.</p>
+      <ul class="rchips"><li class="rchip">Check-in · Mon 16</li><li class="rchip">Check-in · Tue 17</li><li class="rchip">+5</li></ul>
+      <div class="section">
+        <h3 class="label">What tended to go together</h3>
+        <p class="together newRow">On the 3 nights before days you wrote about the Hendersons’ quote, you slept 1 h 10 min less than on other nights.</p>
+        <ul class="rchips"><li class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Mon 16</li><li class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Tue 17</li><li class="rchip">+1</li><li class="rchip"><span data-icon="pen" data-size="12"></span>Entry · Tue 17</li><li class="rchip"><span data-icon="pen" data-size="12"></span>Entry · Wed 18</li><li class="rchip">+1</li></ul>
+        <p class="together newRow">On 3 of the 4 days you walked for more than half an hour, you checked in as settled.</p>
+        <ul class="rchips"><li class="rchip"><span data-icon="walk" data-size="12"></span>Walk · Thu 19</li><li class="rchip"><span data-icon="walk" data-size="12"></span>Walk · Fri 20</li><li class="rchip">+2</li><li class="rchip">Check-in · Fri 20</li><li class="rchip">+2</li></ul>
+        <p class="small">Shown only when it held at least three times. It says what went together, never why.</p>
+      </div>
+    </section>
+
+    <section class="rsection newRow">
+      <h2 class="rlabel">From Health</h2>
+      <div class="hf">
+        <div class="hfHead"><span class="oLabel">Sleep</span><span class="hfSay">6 h 50 min on an average night</span></div>
+        <span data-chart="nights" data-args='{"w":760,"usual":["23:15","07:00"],"rows":[{"d":"Mon 16","bed":"23:40","wake":"06:50","entry":true},{"d":"Tue 17","bed":"00:30","wake":"06:10","entry":true},{"d":"Wed 18","bed":"00:50","wake":"05:55","entry":true},{"d":"Thu 19","bed":"22:50","wake":"07:10","entry":true},{"d":"Fri 20","bed":"23:50","wake":"07:05","gaps":[["03:10","03:25"]],"entry":true},{"d":"Sat 21","bed":"23:30","wake":"08:15"},{"d":"Sun 22","bed":"22:50","wake":"07:40","entry":true}]}' data-say="7 nights. Asleep 6 h 50 min on an average night, between 5 h 05 min and 8 h 50 min."></span>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-5)">
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Steps</span><span class="hfSay">7,000 on an average day</span></div>
+          <span data-chart="bars" data-args='{"w":360,"h":80,"max":14000,"values":[4100,3900,7800,6900,8412,11900,6100],"at":5,"entries":[0,1,2,3,4,6],"labels":["M","T","W","T","F","S","S"]}' data-say="Steps this week. 7,000 on an average day, most on Saturday."></span>
+        </div>
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Resting heart rate</span><span class="hfSay">your usual is 55 to 61</span></div>
+          <span data-chart="line" data-args='{"w":360,"h":80,"min":40,"max":80,"band":[55,61],"values":[59,62,63,61,58,57,58],"at":6,"entries":[0,1,2,3,4,6]}' data-say="Resting heart rate this week, between 57 and 63. Your usual is 55 to 61."></span>
+        </div>
+      </div>
+      <p class="muted">4 walks, 1 swim.</p>
+      <ul class="rchips"><li class="rchip"><span data-icon="walk" data-size="12"></span>Walk · Thu 19</li><li class="rchip"><span data-icon="walk" data-size="12"></span>Walk · Fri 20</li><li class="rchip">+3</li></ul>
+    </section>
+    <p class="small">A dashed outline marks what is new; it is not part of the design.</p>
+  </div>
+</div>
+<script src="charts.js"></script>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

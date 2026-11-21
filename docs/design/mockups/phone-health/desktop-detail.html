@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health · one kind over time · Nocturne</title>
+<link rel="stylesheet" href="../phone-apps/mock.css">
+<style>
+.kindTabs { display: flex; flex-wrap: wrap; gap: 4px; padding-bottom: var(--s-2); border-bottom: 1px solid var(--rule); }
+.kindTabs span { padding: 6px 12px; border-radius: var(--r-md); color: var(--ink2); font-size: 0.875rem; }
+.kindTabs span[aria-current] { background: var(--bg); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--rule); }
+.ranges { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--r-md); background: var(--bg); box-shadow: 0 0 0 1px var(--rule); }
+.ranges span { padding: 4px 10px; border-radius: 6px; font-size: 0.8125rem; color: var(--ink2); }
+.ranges span[aria-current] { background: var(--sheet); color: var(--ink); font-weight: 500; box-shadow: 0 0 0 1px var(--rule); }
+.readList { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--rule); }
+.readList li { display: grid; grid-template-columns: 110px 160px minmax(0, 1fr) auto auto; gap: var(--s-4); align-items: baseline; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 0.9375rem; }
+.readList .d { color: var(--ink3); font: 400 0.75rem / 1.5 var(--font-mono); }
+.readList .src { color: var(--ink2); font-size: 0.8125rem; }
+.readList li.gone { color: var(--ink2); }
+</style>
+</head>
+<body data-frame="app" data-section="Journal" data-states="sleep pressure delete">
+<div id="content" class="sheet">
+  <div style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 860px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Journal</a>
+    <div class="kindTabs">
+      <span data-state="sleep delete" aria-current="page">Sleep</span><span data-state="pressure">Sleep</span>
+      <span>Heart rate</span><span>Resting heart rate</span>
+      <span data-state="pressure" aria-current="page">Blood pressure</span><span data-state="sleep delete">Blood pressure</span>
+      <span>Steps</span><span>Workouts</span>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: var(--s-4)">
+      <h1 class="stepTitle" data-state="sleep delete">Sleep</h1>
+      <h1 class="stepTitle" data-state="pressure">Blood pressure</h1>
+      <span class="ranges"><span aria-current="true">Last 30 days</span><span>Last 90 days</span><span>This year</span></span>
+    </div>
+
+    <div data-state="sleep delete" class="hf">
+      <span data-chart="nights" data-args='{"w":860,"rh":22,"usual":["23:15","07:00"],"rows":[{"d":"Sat 7","bed":"23:20","wake":"07:30","entry":true},{"d":"Sun 8","bed":"22:40","wake":"07:15"},{"d":"Mon 9","bed":"23:10","wake":"06:40","entry":true},{"d":"Tue 10","bed":"23:40","wake":"06:50","entry":true},{"d":"Wed 11","bed":"23:05","wake":"07:00","entry":true},{"d":"Thu 12","bed":"23:30","wake":"07:05"},{"d":"Fri 13","bed":"00:10","wake":"07:40","entry":true},{"d":"Sat 14","bed":"23:50","wake":"08:30"},{"d":"Sun 15","bed":"22:50","wake":"07:10","entry":true},{"d":"Mon 16","bed":"23:40","wake":"06:50","entry":true},{"d":"Tue 17","bed":"00:30","wake":"06:10","entry":true},{"d":"Wed 18","bed":"00:50","wake":"05:55","entry":true},{"d":"Thu 19","bed":"22:50","wake":"07:10","entry":true},{"d":"Fri 20","bed":"23:50","wake":"07:05","gaps":[["03:10","03:25"]],"mark":true,"entry":true}]}' data-say="14 nights. Asleep 7 h 10 min on an average night, between 5 h 05 min and 8 h 40 min."></span>
+      <p class="hfSay">14 nights shown. Asleep 7 h 10 min on an average night, between 5 h 05 min and 8 h 40 min. <span class="hfMore">Show as a list</span></p>
+    </div>
+    <div data-state="pressure" class="hf">
+      <span data-chart="bp" data-args='{"w":860,"h":200,"days":30,"bandTop":[118,126],"bandBottom":[76,82],"readings":[{"d":1,"top":121,"bottom":78},{"d":3,"top":124,"bottom":80},{"d":4,"top":119,"bottom":77},{"d":7,"top":122,"bottom":79},{"d":9,"top":126,"bottom":81},{"d":11,"top":120,"bottom":78},{"d":14,"top":123,"bottom":80},{"d":16,"top":125,"bottom":79},{"d":18,"top":118,"bottom":76},{"d":21,"top":122,"bottom":79},{"d":23,"top":124,"bottom":81},{"d":25,"top":121,"bottom":78},{"d":27,"top":125,"bottom":80},{"d":29,"top":128,"bottom":82,"ring":true}],"entries":[1,3,4,9,11,14,16,21,23,25,27,29],"labels":[[0,"22 Oct"],[15,"6 Nov"],[29,"today"]]}' data-say="14 readings. 128 over 82 this morning. Your usual is 118 to 126 over 76 to 82."></span>
+      <p class="hfSay">14 readings. 128 over 82 this morning; your usual is 118 to 126 over 76 to 82. <span class="hfMore">Show as a list</span></p>
+    </div>
+
+    <p class="small">Nocturne can’t tell what your numbers mean for your health. A doctor or nurse can.</p>
+
+    <ul class="readList" data-state="sleep delete">
+      <li><span class="d">Fri 20 Nov</span><span>6 h 40 min</span><span class="src">11:50 pm to 7:05 am · Watch, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+      <li><span class="d">Thu 19 Nov</span><span>8 h 20 min</span><span class="src">10:50 pm to 7:10 am · Watch, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+      <li class="gone"><span class="d">Wed 18 Nov</span><span>2 h 10 min</span><span class="src">Removed in Health · not in charts</span><span></span><span data-icon="more" data-size="18"></span></li>
+      <li><span class="d">Wed 18 Nov</span><span>5 h 05 min</span><span class="src">12:50 am to 5:55 am · Watch, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+    </ul>
+    <ul class="readList" data-state="pressure">
+      <li><span class="d">Fri 20 Nov</span><span>128 over 82</span><span class="src">7:40 am · Blood pressure monitor, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+      <li><span class="d">Wed 18 Nov</span><span>125 over 80</span><span class="src">7:35 am · Blood pressure monitor, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+      <li><span class="d">Mon 16 Nov</span><span>121 over 78</span><span class="src">7:45 am · Blood pressure monitor, through Health on Sam’s phone</span><span class="hfMore">Journal ›</span><span data-icon="more" data-size="18"></span></li>
+    </ul>
+    <div class="buttons"><span class="button" data-variant="secondary"><span data-icon="print" data-size="16"></span>Print these readings</span><span class="button" data-variant="forget">Delete readings…</span></div>
+  </div>
+</div>
+
+<div id="overlay" data-state="delete">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="dt" style="width: min(100%, 580px)">
+      <h2 id="dt" class="dialogTitle">Delete readings?</h2>
+      <div class="oRow" style="border: 0; padding: 0; justify-content: flex-start; gap: 8px">
+        <span class="chip" aria-pressed="true">Sleep</span><span class="chip">Heart rate</span><span class="chip">Resting heart rate</span><span class="chip">Blood pressure</span><span class="chip">Steps</span><span class="chip">Workouts</span>
+      </div>
+      <div class="oRow" style="border: 0; padding: 0; justify-content: flex-start; gap: 8px">
+        <span class="chip" aria-pressed="true">All of them</span><span class="chip">Before a date…</span>
+      </div>
+      <ul class="alsoGoes">
+        <li><span>212 readings of sleep from Sam’s phone</span></li>
+        <li><span>3 lines in your reflections and recaps cite them and will be taken out.</span></li>
+        <li><span>1 sentence about what went together will be worked out again.</span></li>
+      </ul>
+      <p class="small">Health on your phone isn’t touched. Readings you delete here aren’t sent again. Anything you exported or printed is out of reach. Nocturne can’t delete it.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep them</span>
+        <span class="button" data-variant="forget" data-filled>Delete</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="charts.js"></script>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

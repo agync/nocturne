@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · connecting Health · Nocturne</title>
+<link rel="stylesheet" href="../phone-apps/mock.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "Health", "back": "Back" },
+  "kinds": { "title": "Which kinds" },
+  "rationale": { "title": "Privacy policy" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="why kinds system done quiet rationale missing">
+<main id="content">
+
+  <!-- Why, first -->
+  <div class="hero" data-state="why" style="padding-top: 4px; gap: 10px">
+    <span class="plbl">Health</span>
+    <h1 class="ptitle" style="font-size: 1.75rem">Bring health readings to your computer?</h1>
+  </div>
+  <ul class="whyList" data-state="why">
+    <li><span data-icon="heart" data-size="22"></span><span>Nocturne reads the kinds you choose from <span data-os="android">Health Connect</span><span data-os="ios">Apple Health</span>: sleep, heart rate, resting heart rate, blood pressure, steps and workouts. From the last 30 days, then each new reading.</span></li>
+    <li><span data-icon="laptop" data-size="22"></span><span>Only to your computer, in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else.</span></li>
+    <li><span data-icon="book" data-size="22"></span><span>Your journal shows how you slept and moved beside what you wrote, and your page can show last night’s sleep.</span></li>
+    <li><span data-icon="info" data-size="22"></span><span>Nocturne never adds or changes anything in Health. It can’t tell what your numbers mean for your health. A doctor or nurse can.</span></li>
+  </ul>
+  <p class="small" data-state="why">Next, choose which kinds. Then your phone asks you to confirm.</p>
+  <div class="foot" data-state="why"><span class="btn" data-kind="primary">Continue</span><span class="btn">Not now</span><span class="link2" style="text-align: center; padding-top: 4px">Privacy policy</span></div>
+
+  <!-- Which kinds -->
+  <div class="group" data-state="kinds">
+    <div class="rows">
+      <div class="row"><span data-icon="moon" data-size="22"></span><span class="rowText"><span class="rowLabel">Sleep</span><span class="rowHint">Beside your morning check-in, and on your page.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="heart" data-size="22"></span><span class="rowText"><span class="rowLabel">Heart rate</span><span class="rowHint">The day’s range, beside your journal.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="heart" data-size="22"></span><span class="rowText"><span class="rowLabel">Resting heart rate</span><span class="rowHint">One number a day, as a line over the weeks.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="gauge" data-size="22"></span><span class="rowText"><span class="rowLabel">Blood pressure</span><span class="rowHint">Your readings by day, if you measure at home.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="steps" data-size="22"></span><span class="rowText"><span class="rowLabel">Steps</span><span class="rowHint">How much you moved each day.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="walk" data-size="22"></span><span class="rowText"><span class="rowLabel">Workouts</span><span class="rowHint">Walks, runs and swims on your day’s timeline.</span></span><span class="sw"></span></div>
+      <div class="row"><span data-icon="scale" data-size="22"></span><span class="rowText"><span class="rowLabel">Weight</span><span class="rowHint">A line over the months. Never on your page.</span></span><span class="sw off"></span></div>
+    </div>
+  </div>
+  <div class="foot" data-state="kinds"><span class="btn" data-kind="primary">Continue</span><p class="small" style="text-align: center">You can change these any time in <span class="cc"><span data-icon="settings" data-size="14"></span>This phone</span>.</p></div>
+
+  <!-- The system's own screen -->
+  <div class="hero" data-state="system" style="padding-top: 4px; gap: 10px; opacity: 0.4">
+    <span class="plbl">Health</span>
+    <h1 class="ptitle" style="font-size: 1.75rem">Which kinds</h1>
+  </div>
+  <div class="over bottom" data-state="system" data-os="android">
+    <div class="sheetUp" style="font-family: Roboto, system-ui, sans-serif; border-radius: 28px 28px 0 0; padding-top: 20px">
+      <span data-icon="heart" data-size="28" style="align-self: center; color: var(--accent)"></span>
+      <p style="font-size: 1.375rem; text-align: center; line-height: 1.3">Allow Nocturne to access Health Connect?</p>
+      <div class="group"><div class="rows">
+        <div class="row" style="min-height: 48px; padding: 4px 0"><span class="rowText"><span class="rowLabel" style="font-weight: 500">Allow all</span></span><span class="sw"></span></div>
+        <p class="ghead" style="padding-top: 6px">Allow “Nocturne” to read</p>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Sleep</span></span><span class="sw"></span></div>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Heart rate</span></span><span class="sw"></span></div>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Resting heart rate</span></span><span class="sw"></span></div>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Blood pressure</span></span><span class="sw"></span></div>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Steps</span></span><span class="sw"></span></div>
+        <div class="row" style="min-height: 44px; padding: 2px 0"><span class="rowText"><span class="rowLabel">Exercise</span></span><span class="sw"></span></div>
+      </div></div>
+      <div style="display: flex; justify-content: flex-end; gap: 20px; color: var(--accent); font-weight: 500; padding-top: 4px"><span>Cancel</span><span>Allow</span></div>
+      <p class="sysNote">Health Connect’s own screen</p>
+    </div>
+  </div>
+  <div class="over bottom" data-state="system" data-os="ios">
+    <div class="sheetUp" style="font-family: -apple-system, system-ui, sans-serif; background: var(--bg); padding-top: 16px">
+      <div style="display: flex; justify-content: space-between; color: var(--accent); font-size: 1.0625rem"><span>Don’t Allow</span><span style="color: var(--ink); font-weight: 600">Health Access</span><span style="font-weight: 600">Allow</span></div>
+      <p style="font-size: 0.875rem; line-height: 1.4; color: var(--ink2)">Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health.</p>
+      <div class="group"><div class="rows"><div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--accent)">Turn On All</span></span></div></div></div>
+      <div class="group"><p class="ghead">Allow “Nocturne” to read</p><div class="rows">
+        <div class="row"><span class="rowText"><span class="rowLabel">Blood Pressure</span></span><span class="sw"></span></div>
+        <div class="row"><span class="rowText"><span class="rowLabel">Heart Rate</span></span><span class="sw"></span></div>
+        <div class="row"><span class="rowText"><span class="rowLabel">Resting Heart Rate</span></span><span class="sw"></span></div>
+        <div class="row"><span class="rowText"><span class="rowLabel">Sleep</span></span><span class="sw"></span></div>
+        <div class="row"><span class="rowText"><span class="rowLabel">Steps</span></span><span class="sw"></span></div>
+        <div class="row"><span class="rowText"><span class="rowLabel">Workouts</span></span><span class="sw"></span></div>
+      </div></div>
+      <p class="sysNote">Apple Health’s own sheet, with Nocturne’s words</p>
+    </div>
+  </div>
+
+  <!-- The answer -->
+  <div class="hero" data-state="done" style="padding-top: 48px">
+    <span data-icon="check" data-size="36"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem"><span data-os="android">Bringing sleep, heart rate, resting heart rate, blood pressure, steps and workouts.</span><span data-os="ios">Done.</span></h1>
+    <p class="plead"><span data-os="android">Readings show on your computer as they go across. The first 30 days can take a minute.</span><span data-os="ios">Readings show on your computer as they go across.</span></p>
+    <p class="small" data-os="ios">iPhone never tells an app which kinds it may read, so this says the same whatever you chose.</p>
+  </div>
+  <div class="foot" data-state="done"><span class="btn" data-kind="primary">OK</span></div>
+
+  <!-- Refused on Android; nothing came in on iPhone (This phone, Health) -->
+  <div class="hero" data-state="quiet" data-os="android" style="padding-top: 48px">
+    <span data-icon="heart" data-size="36" style="color: var(--ink3)"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem">Health stays on this phone.</h1>
+    <p class="plead">Nocturne works just the same without it. You can bring it later in <span class="cc"><span data-icon="settings" data-size="14"></span>This phone</span>.</p>
+  </div>
+  <div class="foot" data-state="quiet" data-os="android"><span class="btn" data-kind="primary">OK</span></div>
+  <div class="group" data-state="quiet" data-os="ios">
+    <div class="rows"><div class="row"><span class="rowText"><span class="rowLabel">Bring health readings</span></span><span class="sw"></span></div></div>
+  </div>
+  <div class="pbanner" data-state="quiet" data-os="ios" style="background: var(--accent-soft)">
+    <span data-icon="info" data-size="22" style="color: var(--accent)"></span>
+    <span><strong>Nothing has come in from Health yet.</strong>If you turned kinds off, you can turn them on in the Health app: open your profile, then Apps, then Nocturne.</span>
+  </div>
+  <p class="small" data-state="quiet" data-os="ios">Nocturne can’t tell what your numbers mean for your health. A doctor or nurse can.</p>
+
+  <!-- How Nocturne uses your health readings -->
+  <div class="hero" data-state="rationale" style="padding-top: 4px; gap: 10px">
+    <h1 class="ptitle" style="font-size: 1.75rem">How Nocturne uses your health readings</h1>
+  </div>
+  <ul class="whyList" data-state="rationale">
+    <li><span data-icon="heart" data-size="22"></span><span><strong>What</strong>Nocturne reads only the kinds you allow: sleep, heart rate, resting heart rate, blood pressure, steps, workouts and, if you turn it on, weight. It never writes to <span data-os="android">Health Connect</span><span data-os="ios">Health</span>.</span></li>
+    <li><span data-icon="book" data-size="22"></span><span><strong>Why</strong>To show your readings beside your journal and last night’s sleep on your morning page, on your own computer.</span></li>
+    <li><span data-icon="laptop" data-size="22"></span><span><strong>Where</strong>Readings go only to the computer you paired, in locked messages only it can open. Nobody else receives them, including the people who make Nocturne. Nocturne has no account, no ads and no analytics.</span></li>
+    <li><span data-icon="trash" data-size="22"></span><span><strong>Keeping and stopping</strong>Your computer keeps readings until you delete them there. Turn Health off in Nocturne’s <span class="cc">This phone</span>, or take the permission back in <span data-os="android">Health Connect</span><span data-os="ios">the Health app</span>. To delete what went across, use <span class="cc">From your phones</span> on your computer.</span></li>
+  </ul>
+  <span class="link2" data-state="rationale">Read the full privacy policy</span>
+
+  <!-- Health Connect missing (Android 13 and older) -->
+  <div class="hero" data-state="missing" data-os="android" style="padding-top: 48px">
+    <span data-icon="download" data-size="36" style="color: var(--ink3)"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem">Health Connect is needed</h1>
+    <p class="plead">On this phone, health readings come through Health Connect, Google’s free app. Get it, then come back here.</p>
+  </div>
+  <div class="foot" data-state="missing" data-os="android"><span class="btn" data-kind="primary">Get Health Connect</span><span class="btn" data-kind="quiet">Not now</span></div>
+  <p class="plead" data-state="missing" data-os="ios" style="padding-top: 48px">Not needed on iPhone: Apple Health is part of the phone.</p>
+</main>
+<script src="charts.js"></script>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
