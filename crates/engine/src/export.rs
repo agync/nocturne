@@ -26,6 +26,8 @@ memories.md        one line per memory, with where it came from\n\
 pages/             one file per morning page, named by date\n\
 originals/         copies of the photos, recordings and files you kept\n\
 nocturne.json      all of it as data, including earlier versions of memories\n\
+calendar/          one calendar file for each phone that brought its calendar\n\
+health/            one table for each kind of health reading your phones brought\n\
 \n\
 Memories you marked private are included here, because this is your own copy. They are marked.\n\
 Anything you asked Nocturne to forget completely is not here.\n";
@@ -670,6 +672,7 @@ impl Engine {
             write_new(&dir.join("nocturne.json"), serde_json::to_string_pretty(&data)?.as_bytes())?;
             step();
             crate::online::export_section(conn, dir)?;
+            crate::phones::export::export_section(conn, dir, &self.clock().tz())?;
             Ok(ExportReport {
                 memories: current,
                 pages: dates.len() as u32,
@@ -705,6 +708,8 @@ impl Engine {
         self.bump_forget();
         let wrote = self.write(|tx| {
             for table in [
+                "phone_records",
+                "phone_sources",
                 "online_sends",
                 "online_state",
                 "embeddings_next",
