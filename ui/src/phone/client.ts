@@ -515,11 +515,13 @@ function sent(marks: KeepMarks | undefined): {
   feeling?: Feeling;
   good?: boolean;
   capturedAt?: string;
+  web?: boolean;
 } {
-  const out: { feeling?: Feeling; good?: boolean; capturedAt?: string } = {};
+  const out: { feeling?: Feeling; good?: boolean; capturedAt?: string; web?: boolean } = {};
   if (marks?.feeling) out.feeling = marks.feeling;
   if (marks?.good !== undefined) out.good = marks.good;
   if (marks?.capturedAt) out.capturedAt = marks.capturedAt;
+  if (marks?.web) out.web = true;
   return out;
 }
 

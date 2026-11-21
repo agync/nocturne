@@ -227,6 +227,8 @@ export class FakeComputer {
       good?: boolean | null;
       /** When the phone said it was made, as it sent it. */
       capturedAt?: string | null;
+      /** Shared from a web page or a link. */
+      web?: boolean;
     }
   >();
   /** Check-ins kept, by client id, so a repeat is answered with the first. */
@@ -773,6 +775,7 @@ export class FakeComputer {
             feeling: call.feeling ?? null,
             good: call.good ?? null,
             capturedAt: call.capturedAt ?? null,
+            web: call.web ?? false,
           });
         return ctx.reply(keptAnswer(itemId, call.text.slice(0, 40), !!existing, this.now()));
       }

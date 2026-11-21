@@ -137,6 +137,7 @@ fn keep_text(c: &mut PhoneClient, text: &str, client_id: &str) -> RemoteAnswer {
             feeling: None,
             good: None,
             captured_at: None,
+            web: false,
         },
     )
 }
@@ -836,6 +837,28 @@ fn keep_text_is_phone_trusted_and_labelled() {
 }
 
 #[test]
+fn text_shared_from_the_web_is_kept_untrusted() {
+    let p = on();
+    let (_, mut c) = p.session("Pixel");
+    let id = kept_id(&call(
+        &mut c,
+        RemoteCall::KeepText {
+            text: "https://example.org/letter".into(),
+            client_id: "c-web".into(),
+            feeling: None,
+            good: None,
+            captured_at: None,
+            web: true,
+        },
+    ));
+    let item = p.h.engine().get_item(&id).unwrap();
+    assert_eq!(item.source, Source::PastedWeb);
+    assert_eq!(item.kind, nocturne_contract::ItemKind::Web);
+    assert_eq!(item.trust, Trust::Untrusted);
+    assert_eq!(item.from_device.as_deref(), Some("Pixel"));
+}
+
+#[test]
 fn argument_caps() {
     let p = on();
     let (_, mut c) = p.session("Pixel");
@@ -854,6 +877,7 @@ fn argument_caps() {
                 feeling: None,
                 good: None,
                 captured_at: None,
+                web: false,
             },
             PhoneError::Invalid,
         ),
@@ -864,6 +888,7 @@ fn argument_caps() {
                 feeling: None,
                 good: None,
                 captured_at: None,
+                web: false,
             },
             PhoneError::Invalid,
         ),
@@ -2280,6 +2305,7 @@ fn a_phone_keep_with_a_feeling_makes_a_check_in_about_the_note() {
             feeling: Some(glad()),
             good: None,
             captured_at: None,
+            web: false,
         },
     );
     let note = kept_id(&a);
@@ -2334,6 +2360,7 @@ fn bad_feelings_are_refused_before_anything_is_kept() {
                 feeling: Some(f.clone()),
                 good: None,
                 captured_at: None,
+                web: false,
             },
         );
         assert_eq!(error_of(&a), Some(PhoneError::Invalid));
@@ -2367,6 +2394,7 @@ fn a_text_kept_as_a_good_thing_is_a_good_thing() {
             feeling: None,
             good: Some(true),
             captured_at: None,
+            web: false,
         },
     );
     let id = kept_id(&a);
@@ -2385,6 +2413,7 @@ fn a_text_kept_as_a_good_thing_is_a_good_thing() {
             feeling: None,
             good: Some(true),
             captured_at: None,
+            web: false,
         },
     );
     assert_eq!(error_of(&fourth), Some(PhoneError::Invalid), "three a day");
@@ -2399,6 +2428,7 @@ fn keep_good(c: &mut PhoneClient, text: &str, client_id: &str) {
             feeling: None,
             good: Some(true),
             captured_at: None,
+            web: false,
         },
     );
     kept_id(&a);
@@ -2525,6 +2555,7 @@ fn a_note_the_computer_already_has_still_gets_its_feeling_once() {
                 feeling: Some(glad()),
                 good: None,
                 captured_at: None,
+                web: false,
             },
         );
         assert!(matches!(a, RemoteAnswer::Kept { .. }), "{a:?}");
@@ -2656,6 +2687,7 @@ fn a_keep_that_waited_belongs_to_the_day_it_was_made() {
             feeling: Some(glad()),
             good: None,
             captured_at: Some(LAST_NIGHT.into()),
+            web: false,
         },
     ));
     let photo = kept_id(&keep_bytes_marked(
@@ -2751,6 +2783,7 @@ fn a_capture_instant_is_never_in_the_future_nor_over_a_week_old_and_a_bad_one_is
                 feeling: Some(glad()),
                 good: None,
                 captured_at: Some(at.into()),
+                web: false,
             },
         );
         let id = kept_id(&a);

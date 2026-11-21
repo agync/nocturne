@@ -905,6 +905,9 @@ describe("the engine's calls", () => {
       const text = (id: string) => [...computer.items.values()].find((i) => i.clientId === id);
       expect(text("c-t1")).toMatchObject({ capturedAt: made });
       expect(text("c-t2")).toMatchObject({ capturedAt: null });
+      await engine.keepText("https://example.org", "c-w1", { web: true });
+      expect(text("c-w1")).toMatchObject({ web: true });
+      expect(text("c-t2")).toMatchObject({ web: false });
       const jpeg = new Uint8Array(100);
       jpeg.set([0xff, 0xd8, 0xff, 0xe0]);
       await engine.keepBytes(new Blob([jpeg], { type: "image/jpeg" }), "c-t3", "Moon", {
