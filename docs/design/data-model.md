@@ -19,7 +19,7 @@ The tape is append-only. An event is what arrived, not what it means.
 | Field | Type | Meaning |
 |---|---|---|
 | `id` | text | `evt_` plus 16 hex characters |
-| `kind` | text | `text`, `image`, `audio`, `page`, `note`, or `checkin` |
+| `kind` | text | `text`, `image`, `audio`, `page`, `note`, `checkin`, `calendar` or `reading` |
 | `source` | text | The capture surface: quick capture, drop, watched folder, MCP, or an app name |
 | `content` | text | The text, or the transcription, or a description |
 | `captured_at` | text | ISO 8601 UTC |
@@ -35,6 +35,44 @@ A `checkin` is a feelings check-in from the journal. It holds a part, a point (t
 mentions only, never facts: reading its lines, the urge included, finds names and writes
 [mentions](#mentions), so a check-in never enters the fact graph, never fades, and never reaches
 Ask or goes online.
+
+## What phones bring
+
+A paired phone app brings its calendar and health readings
+([phone apps](phone-apps.md), [health](phone-health.md)). Each entry or reading is an item on the
+tape, trusted, with the phone as its source.
+
+| Kind | One item per | What it yields |
+|---|---|---|
+| `calendar` | Appointment on one day (a repeating entry is one per day it falls on) | One `scheduled` fact made from its own fields, due on its day. The mind reads its title for mentions only |
+| `reading` | Night, day of heart rate, resting heart rate or steps, one blood pressure or weight reading, or one workout | Nothing: no facts, no mentions. Never read by the mind, never in Ask, never online |
+
+`metadata` holds:
+
+| Key | Meaning |
+|---|---|
+| `phone` | `device`, `source` (`calendar` or `health`), `phoneId` (the phone's own id) and `hash` (of what the phone sent) |
+| `entry`, `calendarName`, `calendarColour`, `calendarKind` | A calendar entry as the phone sent it, and the calendar it is in |
+| `reading`, `start`, `end`, `sourceDevice` | A reading's value by kind, its time and the app or device Health names |
+| `day` | The day it is on: an appointment's day in the computer's time, a reading's journal day (a night belongs to the day it ends on) |
+| `replaces` | The earlier version a changed entry or reading replaces |
+
+Two tables sit beside the tape. `phone_sources` holds, per phone and source, whether the person
+still takes it, when it last came in, the phone's calendars and the count of the send under way.
+`phone_records` names, per phone, source and phone id, the item that holds the current version and
+when it was removed on the phone.
+
+| What arrives | What is kept |
+|---|---|
+| The same entry again | Nothing new: the hash matches the current version |
+| A changed entry | A new item that `replaces` the earlier one. The earlier version's fact becomes history of the new one, never a question |
+| A cancelled or deleted entry, inside the window the phone read | `removed_at` is set and the fact's valid time ends on that day. The item stays until the person deletes it |
+| A reading deleted in Health | `removed_at` is set. It is left out of charts, lines and sentences, and listed as removed |
+| More than 500 calendar changes or 5,000 readings in one send | Only the first ones up to the cap |
+
+Calendar entries and readings are not things kept: they are left out of Recently kept, the
+journal's kept items and the page's kept count. The journal day shows appointments, workouts and
+the night as rows of their own, and "From Health" beside the day.
 
 ## Fact graph
 
@@ -234,6 +272,7 @@ is added here and never sent or logged, and the answer is marked as having kept 
 | Pasted web content | untrusted |
 | A file in the watched folder | trusted |
 | Another app through MCP | untrusted |
+| A paired phone's calendar or Health | trusted |
 
 ## Forgetting
 
@@ -246,3 +285,4 @@ Forgetting is explicit and confirmed, and it is not undoable. The interface call
 | The source event and its original file | Removed when the person chooses, the default when no other fact depends on it |
 | Lines on past pages that cite the fact | Redacted to "(forgotten)" |
 | Exports and printed pages already made | Out of reach; the confirmation says so |
+| What a phone brought ("Delete what came in") | Its items, earlier versions and the facts they said, through the same preview and token; optionally its source is stopped too |

@@ -9,9 +9,14 @@
 //! phone and source, whether the person still takes it and when it last came in.
 
 pub(crate) mod calendar;
+pub(crate) mod delete;
+pub(crate) mod export;
 pub(crate) mod read;
 pub(crate) mod readings;
 pub mod usual;
+
+#[cfg(test)]
+mod tests;
 
 use std::collections::BTreeSet;
 
