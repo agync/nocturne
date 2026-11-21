@@ -59,6 +59,7 @@ async fn run(s: Value) -> Result<Value, String> {
             feeling: None,
             good: None,
             captured_at: None,
+            web: false,
         })
         .await
         .map_err(|e| format!("{e:?}"))?;

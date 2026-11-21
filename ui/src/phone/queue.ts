@@ -50,6 +50,7 @@ function build(backing: Backing): Queue {
     feeling: keep.feeling,
     good: keep.good,
     capturedAt: madeAt(keep),
+    web: keep.web,
   });
 
   async function send(engine: PhoneEngine, keep: PendingKeep, out: FlushResult) {

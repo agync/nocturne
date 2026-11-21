@@ -17,7 +17,11 @@ import type { SameNameAnswer } from "./SameNameAnswer";
  * when it was made (`captured_at`, RFC 3339): a keep that waited on the phone belongs to the
  * day it was made, not the day it arrived.
  */
-export type RemoteCall = { "cmd": "getStatus" } | { "cmd": "keepText", text: string, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepBytes", mime: string, size: number, clientId: string, caption: string | null, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepRecording", mime: string, size: number, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "unkeep", id: string, } | { "cmd": "ask", question: string, 
+export type RemoteCall = { "cmd": "getStatus" } | { "cmd": "keepText", text: string, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, 
+/**
+ * Shared from a web page or a link: kept as pasted web content, untrusted.
+ */
+web?: boolean, } | { "cmd": "keepBytes", mime: string, size: number, clientId: string, caption: string | null, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepRecording", mime: string, size: number, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "unkeep", id: string, } | { "cmd": "ask", question: string, 
 /**
  * `thisComputer` when the person chose to have this question answered on the computer.
  */

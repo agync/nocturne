@@ -212,6 +212,7 @@ fn keep_text(text: &str, id: &str) -> RemoteCall {
         feeling: None,
         good: None,
         captured_at: None,
+        web: false,
     }
 }
 

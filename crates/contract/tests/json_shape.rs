@@ -34,6 +34,7 @@ fn remote_calls_are_tagged_by_cmd() {
             feeling: None,
             good: None,
             captured_at: None,
+            web: false,
         },
     };
     assert_eq!(
@@ -53,6 +54,7 @@ fn remote_calls_are_tagged_by_cmd() {
         }),
         good: Some(true),
         captured_at: None,
+        web: false,
     };
     assert_eq!(
         serde_json::to_string(&marked).unwrap(),
@@ -71,6 +73,14 @@ fn remote_calls_are_tagged_by_cmd() {
             ..
         }
     ));
+    let shared: RemoteCall =
+        serde_json::from_str(r#"{"cmd":"keepText","text":"x","clientId":"c","web":true}"#).unwrap();
+    assert!(matches!(shared, RemoteCall::KeepText { web: true, .. }));
+    assert!(
+        serde_json::to_string(&shared)
+            .unwrap()
+            .ends_with(r#""web":true}"#)
+    );
     let waited: RemoteCall = serde_json::from_str(
         r#"{"cmd":"keepText","text":"x","clientId":"c","capturedAt":"2026-11-12T22:50:00Z"}"#,
     )

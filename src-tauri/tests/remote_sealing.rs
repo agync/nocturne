@@ -162,6 +162,7 @@ fn run(path: u8) {
             feeling: None,
             good: None,
             captured_at: None,
+            web: false,
         }))
         .unwrap();
         assert!(matches!(kept, RemoteAnswer::Kept { .. }));

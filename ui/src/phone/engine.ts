@@ -33,6 +33,8 @@ export interface KeepMarks {
   feeling?: Feeling;
   good?: boolean;
   capturedAt?: string;
+  /** Text shared from a web page or a link: the computer keeps it as untrusted web content. */
+  web?: boolean;
 }
 
 export interface PhoneEngine {
@@ -151,6 +153,8 @@ export interface PendingKeep {
   /** How it feels, kept with the keep so a keep that waits does not lose it. */
   feeling?: Feeling;
   good?: boolean;
+  /** Shared from a web page or a link. */
+  web?: boolean;
   /** A check-in kept while the computer was out of reach. */
   checkIn?: CheckInInput;
   /** An answer to the page's question given while the computer was out of reach. */

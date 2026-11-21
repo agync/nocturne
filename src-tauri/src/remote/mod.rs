@@ -483,6 +483,7 @@ mod tests {
                 feeling: None,
                 good: None,
                 captured_at: None,
+                web: false,
             },
             RemoteCall::KeepBytes {
                 mime: s(),

@@ -391,6 +391,10 @@ pub enum RemoteCall {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
         captured_at: Option<String>,
+        /// Shared from a web page or a link: kept as pasted web content, untrusted.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[ts(optional, as = "Option<bool>")]
+        web: bool,
     },
     KeepBytes {
         mime: String,

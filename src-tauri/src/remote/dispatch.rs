@@ -254,6 +254,7 @@ impl<R: Runtime> Call<R> {
                 feeling,
                 good,
                 captured_at,
+                web,
             } => {
                 if crypto::check_id(&client_id).is_err()
                     || text.trim().is_empty()
@@ -284,7 +285,13 @@ impl<R: Runtime> Call<R> {
                         day: Some(e.capture_day(captured_at.as_deref())?),
                         phone: Some((&device, &client)),
                     };
-                    let kept = e.keep_note_item(&text, Source::Phone, good, &place)?;
+                    // Something shared from a web page is kept as pasted web content: untrusted.
+                    let source = if web {
+                        Source::PastedWeb
+                    } else {
+                        Source::Phone
+                    };
+                    let kept = e.keep_note_item(&text, source, good, &place)?;
                     let marks = match feeling {
                         Some(f) => e.feel_kept(&kept, f, Source::Phone, &place).map(drop),
                         None => Ok(()),
