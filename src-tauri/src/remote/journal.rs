@@ -12,9 +12,10 @@
 use std::collections::HashSet;
 
 use nocturne_contract::{
-    CheckIn, DayCount, DayReflection, EarlierVersion, EntryBlock, Glance, GoodThing, Highlight,
-    ItemStatus, ItemView, JournalDay, MemoryView, NameRef, PageLine, Recap, Receipt,
-    ReflectionLine, ReflectionView, SameNameQuestion, TimelineRow, Together,
+    CheckIn, DayCount, DayReflection, EarlierVersion, EntryBlock, Glance, GoodThing, HealthSeries,
+    Highlight, ItemStatus, ItemView, JournalDay, MemoryView, NameRef, Noticed, NoticedTopic,
+    PageLine, Recap, RecapHealth, Receipt, ReflectionLine, ReflectionView, SameNameQuestion,
+    TimelineRow, Together,
 };
 
 use super::crypto;
@@ -98,6 +99,20 @@ pub fn view_ids(view: &ReflectionView, add: &mut dyn FnMut(&str)) {
             for t in &r.together {
                 name_ids(&t.with, add);
                 receipt_ids(&t.receipts, add);
+            }
+            if let Some(h) = &r.health {
+                for n in &h.noticed {
+                    if let NoticedTopic::Name { with } = &n.topic {
+                        name_ids(with, add);
+                    }
+                    receipt_ids(&n.body, add);
+                    receipt_ids(&n.journal, add);
+                }
+                receipt_ids(&h.workouts, add);
+                h.nights.iter().for_each(|n| add(&n.item_id));
+                for s in h.sleep.iter().chain(&h.steps).chain(&h.resting) {
+                    s.points.iter().for_each(|p| add(&p.item_id));
+                }
             }
             r.good.iter().for_each(|g| good_ids(g, add));
             r.people.iter().for_each(|d| name_ids(&d.with, add));
@@ -361,6 +376,47 @@ fn glance(g: Glance, w: &Withheld) -> Glance {
     }
 }
 
+/// What a recap says about Health for a phone: a sentence that rests on anything withheld is
+/// dropped, and so is a name only withheld things mentioned.
+fn scrub_health(h: RecapHealth, w: &Withheld) -> RecapHealth {
+    let series = |s: Option<HealthSeries>| {
+        s.map(|mut s| {
+            s.points.retain(|p| !w.contains(&p.item_id));
+            s
+        })
+        .filter(|s| !s.points.is_empty())
+    };
+    RecapHealth {
+        nights: h
+            .nights
+            .into_iter()
+            .filter(|n| !w.contains(&n.item_id))
+            .collect(),
+        sleep: series(h.sleep),
+        steps: series(h.steps),
+        resting: series(h.resting),
+        workouts: h
+            .workouts
+            .into_iter()
+            .filter(|r| !w.contains(&r.item_id))
+            .collect(),
+        noticed: h
+            .noticed
+            .into_iter()
+            .filter(|n: &Noticed| receipts_ok(&n.body, w) && receipts_ok(&n.journal, w))
+            .filter_map(|n| {
+                let topic = match n.topic {
+                    NoticedTopic::Name { with } => NoticedTopic::Name {
+                        with: name(with, w)?,
+                    },
+                    other => other,
+                };
+                Some(Noticed { topic, ..n })
+            })
+            .collect(),
+    }
+}
+
 /// A look back for a phone: lines, highlights, names and open promises that rest on anything
 /// withheld are dropped; the rest is as written.
 pub fn scrub_view(view: ReflectionView, w: &Withheld) -> ReflectionView {
@@ -400,6 +456,7 @@ pub fn scrub_view(view: ReflectionView, w: &Withheld) -> ReflectionView {
                         Some(Together { with, ..t })
                     })
                     .collect(),
+                health: r.health.map(|h| Box::new(scrub_health(*h, w))),
                 good: r.good.into_iter().map(|g| good(g, w)).collect(),
                 people: r
                     .people
@@ -647,5 +704,82 @@ mod tests {
         let w: Withheld = ["itm_secret".to_string()].into();
         let out = scrub_view(ReflectionView::Written { reflection: r }, &w);
         assert_eq!(first_sentence(&out).as_deref(), Some("A walk."));
+    }
+
+    #[test]
+    fn a_recaps_health_leaves_out_withheld_readings_and_the_sentences_citing_them() {
+        let reading = |id: &str| Receipt {
+            item_id: id.into(),
+            kind: ItemKind::Reading,
+            source: Source::Phone,
+            label: "Sleep".into(),
+            kept_at: "2026-11-19T12:00:00Z".into(),
+            duration_ms: None,
+            span: None,
+            unconfirmed: false,
+            from_device: None,
+        };
+        let point = |id: &str| SeriesPoint {
+            day: "2026-11-19".into(),
+            value: 400.0,
+            item_id: id.into(),
+        };
+        let series = |kind, ids: &[&str]| HealthSeries {
+            kind,
+            from: "2026-11-16".into(),
+            to: "2026-11-22".into(),
+            points: ids.iter().map(|i| point(i)).collect(),
+            usual: None,
+            journal_days: Vec::new(),
+            pressure_usual: None,
+            usual_bed: None,
+            usual_wake: None,
+        };
+        let night = |id: &str| ReadingRow {
+            item_id: id.into(),
+            day: "2026-11-19".into(),
+            start: "2026-11-18T23:00:00Z".into(),
+            end: None,
+            value: ReadingValue::Steps { total: 1 },
+            source_device: None,
+            phone: "Pixel".into(),
+            removed: false,
+            device_id: String::new(),
+        };
+        let line = |body: &str, journal: &str| Noticed {
+            measure: NoticedMeasure::Sleep,
+            topic: NoticedTopic::Good,
+            days: 3,
+            held: 3,
+            other_days: 3,
+            difference: 40,
+            more: false,
+            body: vec![reading(body)],
+            journal: vec![reading(journal)],
+        };
+        let health = RecapHealth {
+            nights: vec![night("itm_secret"), night("itm_ok")],
+            sleep: Some(series(ReadingKind::Sleep, &["itm_secret", "itm_ok"])),
+            steps: Some(series(ReadingKind::Steps, &["itm_secret"])),
+            resting: Some(series(ReadingKind::RestingHeartRate, &["itm_ok"])),
+            workouts: vec![reading("itm_secret"), reading("itm_ok")],
+            noticed: vec![
+                line("itm_secret", "itm_ok"),
+                line("itm_ok", "itm_secret"),
+                line("itm_ok", "itm_ok"),
+            ],
+        };
+        let w: Withheld = ["itm_secret".to_string()].into();
+        let out = scrub_health(health, &w);
+        assert_eq!(out.nights.len(), 1);
+        assert_eq!(out.sleep.unwrap().points.len(), 1);
+        assert!(out.steps.is_none(), "a series with nothing left is gone");
+        assert!(out.resting.is_some());
+        assert_eq!(out.workouts.len(), 1);
+        assert_eq!(
+            out.noticed.len(),
+            1,
+            "a sentence citing either side is dropped"
+        );
     }
 }
