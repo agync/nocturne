@@ -12,6 +12,10 @@ screen follows, the data model, and how quality is measured.
 - [Only what you mark private is held back](only-marked-private.md) - Nocturne no longer decides that something is about health, money or ID: only what the person marks private is held back.
 - [Nocturne on Android and iPhone](phone-apps.md) - Native phone apps: install, pairing inside the app, plain permission asks with a working no, native navigation, keeping from other apps, update and offline states, and the phone's calendar on the computer's page and journal.
 - [Health from the phone](phone-health.md) - Sleep, heart rate, blood pressure, steps and workouts from Apple Health or Health Connect beside the journal and on the page, with plain charts, your own usual range, noticing with receipts and no medical claims.
+- [Phone and computer as equal starting points](phone-parity.md) - Roadmap proposal: a phone alone, a locked copy online and an online mind, a household computer, and a computer of one's own, with personas, journeys, who sees what, rule changes, phasing and decisions.
+- [Nocturne on a phone of its own](phone-first.md) - Proposal for a phone with its own memory and no computer, a locked copy online and choosing a mind, with consent screens and copy.
+- [A household computer](household-server.md) - Proposal for a computer at home that lends its mind or keeps memories for several people's phones, what the person who runs it can and cannot see, and the household screen.
+- [Moving your memory](moving-memory.md) - Proposal for moving a memory between a phone, a household computer and a computer of one's own, one home at a time.
 - [Back up and restore](backup-and-restore.md) - One file with everything, locked with a passphrase the person chooses, and the way back from it.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
