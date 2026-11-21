@@ -24,7 +24,8 @@ type State =
   | { name: "compose" }
   | { name: "sending" }
   | { name: "kept" }
-  | { name: "waiting" }
+  /** `newer`: it waits until the computer has a newer Nocturne. */
+  | { name: "waiting"; newer?: boolean }
   | { name: "problem"; kind: Problem };
 
 const PROBLEM = {
@@ -184,6 +185,7 @@ export function ShareSheet({
     void sharedDone();
     if (connection.kind !== "connected") return setState({ name: "waiting" });
     let sent = 0;
+    let newer = false;
     for (const k of keeps) {
       try {
         await withKeepLock(() =>
@@ -197,7 +199,10 @@ export function ShareSheet({
         sent += 1;
       } catch (e) {
         if (e instanceof ConnectionError) break;
-        if (e instanceof PhoneRequestError && WAIT_CODES.has(e.code)) break;
+        if (e instanceof PhoneRequestError && WAIT_CODES.has(e.code)) {
+          newer = e.code === "computerOutdated";
+          break;
+        }
         // The computer will never take it: it does not wait on the phone either.
         await queue.remove(k.clientId);
         onQueued();
@@ -211,7 +216,7 @@ export function ShareSheet({
       }
     }
     onQueued();
-    setState(sent === keeps.length ? { name: "kept" } : { name: "waiting" });
+    setState(sent === keeps.length ? { name: "kept" } : { name: "waiting", newer });
   };
 
   const done = state.name === "kept" || state.name === "waiting" || state.name === "problem";
@@ -234,7 +239,11 @@ export function ShareSheet({
         {done ? (
           <>
             <p className="ph-body" role="status">
-              {state.name === "kept" ? t("phone.journal.keep.body") : t("phone.keep.waiting.body")}
+              {state.name === "kept"
+                ? t("phone.journal.keep.body")
+                : state.name === "waiting" && state.newer
+                  ? t("phone.app.value.needsNewer")
+                  : t("phone.keep.waiting.body")}
             </p>
             <Button kind="primary" onClick={close}>
               {t("phone.done")}

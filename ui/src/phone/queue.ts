@@ -115,6 +115,10 @@ function build(backing: Backing): Queue {
           out.failed += 1;
           continue;
         }
+        if (e instanceof PhoneRequestError && e.code === "computerOutdated") {
+          // It waits until the computer has a newer Nocturne; the rest can still go.
+          continue;
+        }
         if (e instanceof PhoneRequestError && (e.code === "invalid" || e.code === "tooLarge")) {
           // The computer will never take this one; it stays visible rather than vanishing.
           rejected.add(keep.clientId);

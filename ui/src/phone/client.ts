@@ -105,6 +105,8 @@ export function createPhoneEngine(
   let session: Session | null = null;
   let opening: Promise<Session> | null = null;
   let state: Connection = { kind: "connecting" };
+  // The newest build this page and the computer both speak, from the last open.
+  let agreed: number = P.PHONE_BUILD;
   let stickyPoll = options.preferPoll ?? false;
   let closed = false;
   // Set while disconnect runs: an open that is still racing it must not save the device again.
@@ -155,11 +157,16 @@ export function createPhoneEngine(
         set({ kind: "outdated", minBuild: needed, computer: opened.hello.version });
         throw new ConnectionError("outdated");
       }
-      if (options.app && (opened.hello.maxPhoneBuild ?? needed) >= P.INTRODUCE_BUILD) {
+      // A computer from before the version window speaks its oldest build only.
+      let speaks = Math.min(P.PHONE_BUILD, opened.hello.maxPhoneBuild ?? needed);
+      if (options.app && speaks >= P.INTRODUCE_BUILD) {
         const said = await opened
           .request({ cmd: "introduce", app: options.app }, type("introduced"))
           .result.then(
-            () => null,
+            (a) => {
+              speaks = a.agreed;
+              return null;
+            },
             (e: unknown) => (e instanceof PhoneRequestError ? e.code : null),
           );
         // A page kept from before the computer last updated: the same as an old app.
@@ -199,7 +206,8 @@ export function createPhoneEngine(
           version: opened.hello.version,
           lastConnectedAt: env.now(),
         });
-      set({ kind: "connected", hello: opened.hello });
+      agreed = speaks;
+      set({ kind: "connected", hello: opened.hello, agreed });
       return opened;
     } catch (e) {
       if (e instanceof OpenError) {
@@ -249,6 +257,18 @@ export function createPhoneEngine(
       }
     }
   }
+
+  /** A call newer than the agreed build waits on the phone until the computer speaks it. */
+  async function needs(build: number) {
+    await ensure();
+    if (agreed < build) throw new PhoneRequestError("computerOutdated");
+  }
+
+  /** Below the build that answers the page's question from the journal, no such question. */
+  const within = (page: PageView): PageView =>
+    agreed < P.JOURNAL_ANSWER_BUILD && page.question?.kind === "journal"
+      ? { ...page, question: null }
+      : page;
 
   const once = <A extends RemoteAnswer["type"]>(call_: RemoteCall, kind: A, retry = true) =>
     call((s) => s.request(call_, type(kind)).result, retry);
@@ -322,6 +342,7 @@ export function createPhoneEngine(
       if (size > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
       checkClientId(clientId);
       checkMarks(marks);
+      if (marks?.web) await needs(P.WEB_KEEP_BUILD);
       return (await once({ cmd: "keepText", text, clientId, ...sent(marks) }, "kept")).kept;
     },
     async keepBytes(blob, clientId, caption, marks) {
@@ -393,6 +414,7 @@ export function createPhoneEngine(
         throw new PhoneRequestError("invalid");
       const said = (line ?? "").trim();
       if (utf8(said).length > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
+      await needs(P.JOURNAL_ANSWER_BUILD);
       const request: RemoteCall = {
         cmd: "answerJournalQuestion",
         pageDate,
@@ -442,7 +464,7 @@ export function createPhoneEngine(
       await once({ cmd: "cancelAsk", askId }, "done");
     },
     async getPage(date): Promise<PageView> {
-      return (await once({ cmd: "getPage", date: date ?? null }, "page")).page;
+      return within((await once({ cmd: "getPage", date: date ?? null }, "page")).page);
     },
     async listPages(): Promise<PageSummary[]> {
       return (await once({ cmd: "listPages" }, "pages")).pages;

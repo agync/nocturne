@@ -128,7 +128,10 @@ describe("browser support", () => {
   });
 });
 
-function engineThatSends(failOn: string | null, how: "connection" | "invalid" = "connection") {
+function engineThatSends(
+  failOn: string | null,
+  how: "connection" | "invalid" | "computerOutdated" = "connection",
+) {
   const sent: string[] = [];
   const reply = (id: string) => ({
     item: {
@@ -149,9 +152,7 @@ function engineThatSends(failOn: string | null, how: "connection" | "invalid" = 
   const engine = {
     async keepText(text: string, clientId: string) {
       if (clientId === failOn) {
-        throw how === "connection"
-          ? new ConnectionError("asleep")
-          : new PhoneRequestError("invalid");
+        throw how === "connection" ? new ConnectionError("asleep") : new PhoneRequestError(how);
       }
       sent.push(`${clientId}:${text}`);
       return reply(clientId);
@@ -223,6 +224,19 @@ describe("the waiting queue", () => {
     const result = await queue.flush(engine);
     expect(sent).toEqual(["c-1:note c-1", "c-3:note c-3"]);
     expect(result).toMatchObject({ sent: 2, failed: 1, remaining: 1 });
+  });
+
+  it("one the computer is too old for waits, and the rest go", async () => {
+    const queue = memoryQueue();
+    for (const [i, id] of ["c-1", "c-2", "c-3"].entries()) await queue.add(keep(id, i));
+    const { engine, sent } = engineThatSends("c-2", "computerOutdated");
+    const result = await queue.flush(engine);
+    expect(sent).toEqual(["c-1:note c-1", "c-3:note c-3"]);
+    expect(result).toMatchObject({ sent: 2, failed: 0, remaining: 1 });
+    expect((await queue.list()).map((k) => k.clientId)).toEqual(["c-2"]);
+    const later = engineThatSends(null);
+    await queue.flush(later.engine);
+    expect(later.sent).toEqual(["c-2:note c-2"]);
   });
 
   const answer = (id: string, at: number, line: string | null = null) => ({
