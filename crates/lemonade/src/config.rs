@@ -27,7 +27,7 @@ pub fn llamacpp_args(tier: Tier) -> &'static str {
 /// machine's own addresses are allowed. Any non-empty list is authoritative and drops that
 /// default, so this one names an origin under the reserved `.invalid` top level (RFC 2606),
 /// which no page can have. The engine still lets loopback and desktop-app origins through
-/// whatever is set (`is_origin_allowed`, layer 1, in lemonade v2026.46.2); the key is what
+/// whatever is set (`is_origin_allowed`, layer 1, in lemonade v2026.47.1); the key is what
 /// stops those. Never `null` (it admits sandboxed frames) and never `*`.
 pub const ALLOWED_ORIGINS: &str = "https://none.invalid";
 

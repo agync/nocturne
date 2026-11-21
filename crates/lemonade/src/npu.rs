@@ -116,7 +116,7 @@ pub fn readiness(info: &SystemInfo, pci_xdna2: bool) -> Readiness {
 }
 
 /// The causes in an engine error about the NPU. The engine joins the sentences `flm validate`
-/// gives (lemonade v2026.46.2, `run_flm_validate`), so every one found is returned; an error
+/// gives (lemonade v2026.47.1, `run_flm_validate`), so every one found is returned; an error
 /// with none of them is [`NpuCause::Failed`].
 pub fn causes_of(message: &str) -> Vec<NpuCause> {
     const KNOWN: &[(&str, NpuCause)] = &[
