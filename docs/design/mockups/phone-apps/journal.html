@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · the journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{ "*": { "bar": "brand", "title": "Journal", "tab": "Journal", "keep": true } }
+</script>
+</head>
+<body data-frame="duo" data-states="day">
+<main id="content">
+  <p class="plbl">Today · Friday 20 November</p>
+
+  <div class="pcard">
+    <span class="plbl">Today’s entry</span>
+    <p class="quote">The dentist was quicker than I feared. Walked to the allotment after and pulled the last of the beans…</p>
+    <span class="pbtn" data-kind="link" style="height: 36px">Read it all</span>
+  </div>
+
+  <section aria-label="Through the day">
+    <p class="plbl" style="margin-bottom: 4px">Through the day</p>
+    <ul class="ptl">
+      <li style="outline: 2px dashed var(--marker); outline-offset: -2px"><span class="t">7:05 am</span><span class="c"><span class="calTag" style="color: var(--ink)"><span data-icon="moon" data-size="16"></span>Woke · 6 h 40 min asleep</span></span></li>
+      <li><span class="t">8:05 am</span><span class="c"><span><span class="feel" data-part="low">Low · tired</span></span>“Slow start.”<span class="meta" style="outline: 2px dashed var(--marker); outline-offset: 2px; align-self: flex-start">after 6 h 40 min asleep</span></span></li>
+      <li class="cal" style="outline: 2px dashed var(--marker); outline-offset: -2px"><span class="t">9:00 am</span><span class="c">Dentist, check-up<span class="calTag"><span data-icon="calendar" data-size="14"></span>from your calendar</span></span></li>
+      <li style="outline: 2px dashed var(--marker); outline-offset: -2px"><span class="t">10:20 am</span><span class="c"><span class="calTag" style="color: var(--ink)"><span data-icon="walk" data-size="16"></span>Walk · 42 min · 3.1 km</span></span></li>
+      <li><span class="t">11:15 am</span><span class="c" style="flex-direction: row; gap: 10px; align-items: center"><span class="photoBox small"><span data-icon="image" data-size="16"></span></span>The last of the beans.</span></li>
+      <li class="cal" style="outline: 2px dashed var(--marker); outline-offset: -2px"><span class="t">4:30 pm</span><span class="c">Leo, swimming<span class="calTag"><span data-icon="calendar" data-size="14"></span>from your calendar</span></span></li>
+    </ul>
+  </section>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

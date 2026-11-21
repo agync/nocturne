@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · keeping · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false },
+  "keep": { "bar": "modal", "title": "Keep", "back": "Cancel" },
+  "share": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="keep share">
+<main id="content">
+  <!-- Keep, opened from the floating button -->
+  <div data-state="keep" style="display: flex; flex-direction: column; gap: 14px">
+    <label class="plbl" for="k">Type something to keep</label>
+    <div class="pbox" id="k">Leo’s swimming is Fridays at 4:30 now<span class="caret"></span></div>
+    <div class="pkinds"><span class="btn"><span data-icon="camera" data-size="20"></span>Photo</span><span class="btn"><span data-icon="mic" data-size="20"></span>Record</span></div>
+    <p class="plbl">How does it feel? (optional)</p>
+    <div class="pfeel">
+      <span class="pfeelBtn" data-part="wound"><span data-icon="wound" data-size="20"></span>Wound up</span>
+      <span class="pfeelBtn" data-part="lit"><span data-icon="lit" data-size="20"></span>Lit up</span>
+      <span class="pfeelBtn" data-part="low"><span data-icon="low" data-size="20"></span>Low</span>
+      <span class="pfeelBtn" data-part="settled"><span data-icon="settled" data-size="20"></span>Settled</span>
+    </div>
+    <div class="group"><div class="rows"><div class="row"><span data-icon="sun" data-size="20"></span><span class="rowText"><span class="rowLabel">This is a good thing</span></span><span class="sw off"></span></div></div></div>
+  </div>
+  <div class="foot" data-state="keep"><span class="btn" data-kind="primary">Keep</span></div>
+
+  <!-- Another app behind the share sheet -->
+  <div data-state="share" style="display: flex; flex-direction: column; gap: 12px; padding-top: 12px; opacity: 0.9">
+    <p class="plbl">Another app</p>
+    <div class="photoBox pphoto" style="aspect-ratio: 4 / 3"><span data-icon="image" data-size="28"></span></div>
+    <div style="height: 14px; width: 70%; border-radius: 7px; background: var(--rule)"></div>
+    <div style="height: 14px; width: 45%; border-radius: 7px; background: var(--rule)"></div>
+  </div>
+  <div class="over bottom" data-state="share">
+    <div class="sheetUp">
+      <span class="pgrab"></span>
+      <div style="display: flex; align-items: center; justify-content: space-between"><span style="font-size: 1.125rem; font-weight: 500">Keep in Nocturne</span><span data-mark="22"></span></div>
+      <div style="display: flex; gap: 12px; align-items: center"><span class="photoBox small" style="width: 96px"><span data-icon="image" data-size="18"></span></span><span class="meta">Photo · 2.4 MB<br>School letter, Year 4 trip</span></div>
+      <label class="plbl" for="n">Add a note (optional)</label>
+      <div class="pbox" id="n" style="min-height: 56px">Trip form, due back Monday<span class="caret"></span></div>
+      <p class="plbl">How does it feel? (optional)</p>
+      <div class="pfeel">
+        <span class="pfeelBtn" data-part="wound"><span data-icon="wound" data-size="20"></span>Wound up</span>
+        <span class="pfeelBtn" data-part="lit"><span data-icon="lit" data-size="20"></span>Lit up</span>
+        <span class="pfeelBtn" data-part="low"><span data-icon="low" data-size="20"></span>Low</span>
+        <span class="pfeelBtn" data-part="settled"><span data-icon="settled" data-size="20"></span>Settled</span>
+      </div>
+      <span class="btn" data-kind="primary">Keep</span>
+    </div>
+  </div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

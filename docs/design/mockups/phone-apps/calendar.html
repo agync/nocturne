@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · bringing the calendar · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false },
+  "offer": { "bar": "none" },
+  "why": { "bar": "back", "title": "Your calendar", "back": "Back" },
+  "system": { "bar": "back", "title": "Your calendar", "back": "Back" },
+  "no": { "bar": "back", "title": "Your calendar", "back": "Back" },
+  "pick": { "bar": "back", "title": "Your calendar", "back": "Back", "done": "Done" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="offer why system no pick">
+<main id="content">
+
+  <!-- The offer after pairing -->
+  <div class="hero" data-state="offer" style="padding-top: 36px">
+    <h1 class="heroTitle">Bring more from this phone?</h1>
+    <p class="plead">Your computer can show what’s in this phone’s calendar and health readings, on your page and beside your journal. Both are optional. You can change your mind any time in <span class="cc"><span data-icon="settings" data-size="14"></span>This phone</span>.</p>
+  </div>
+  <div class="group" data-state="offer">
+    <div class="rows">
+      <div class="row"><span data-icon="calendar" data-size="24"></span><span class="rowText"><span class="rowLabel">Your calendar</span><span class="rowHint">What’s on today and the next two weeks, on your page.</span></span><span class="rowValue">Choose</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span data-icon="heart" data-size="24"></span><span class="rowText"><span class="rowLabel">Health</span><span class="rowHint">Sleep, heart rate and a few more, beside your journal.</span></span><span class="rowValue">Choose</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+  </div>
+  <div class="foot" data-state="offer"><span class="btn" data-kind="primary">Done</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- Why, first -->
+  <div class="hero" data-state="why system" style="padding-top: 4px; gap: 10px">
+    <span class="plbl">Your calendar</span>
+    <h1 class="ptitle" style="font-size: 1.75rem">Bring your calendar to your computer?</h1>
+  </div>
+  <ul class="whyList" data-state="why system">
+    <li><span data-icon="calendar" data-size="22"></span><span>Nocturne reads what’s in this phone’s calendar: each appointment’s title, time, place and who’s invited, from two days ago to two weeks ahead.</span></li>
+    <li><span data-icon="laptop" data-size="22"></span><span>It goes only to your computer, the same way as everything this phone keeps: in locked messages only your computer can open. Nocturne has no account and keeps nothing anywhere else.</span></li>
+    <li><span data-icon="file" data-size="22"></span><span>Your page shows what’s on today and this week, and Ask can answer “When is the dentist?” Each line shows which calendar it came from.</span></li>
+    <li><span data-icon="pen" data-size="22"></span><span>Nocturne never adds, changes or deletes anything in your calendar.</span></li>
+  </ul>
+  <p class="small" data-state="why system">Next, your phone asks if Nocturne may see your calendar.</p>
+  <div class="foot" data-state="why system">
+    <span class="btn" data-kind="primary">Continue</span>
+    <span class="btn">Not now</span>
+    <span class="link2" style="text-align: center; padding-top: 4px">Privacy policy</span>
+  </div>
+
+  <!-- The system's prompt -->
+  <div class="over" data-state="system" data-os="android">
+    <div class="sysDialog">
+      <span class="sdIcon" data-icon="calendar" data-size="26"></span>
+      <p class="sdTitle">Allow <strong>Nocturne</strong> to access your calendar?</p>
+      <div class="sdBtns"><span class="sdBtn">Allow</span><span class="sdBtn">Don’t allow</span></div>
+    </div>
+    <p class="sysNote" style="color: #fff; padding-top: 12px">The phone’s own prompt</p>
+  </div>
+  <div class="over" data-state="system" data-os="ios">
+    <div class="sysDialog">
+      <p class="sdTitle">“Nocturne” Would Like Full Access to Your Calendar</p>
+      <p class="sdBody">Nocturne reads your calendar so your computer can show what’s on today on your morning page. It never changes your calendar.</p>
+      <div class="sdBtns"><span class="sdBtn">Don’t Allow</span><span class="sdBtn" data-strong>Allow Full Access</span></div>
+    </div>
+    <p class="sysNote" style="color: #fff; padding-top: 12px">The phone’s own prompt, with Nocturne’s words</p>
+  </div>
+
+  <!-- Refused -->
+  <div class="hero" data-state="no" style="padding-top: 48px">
+    <span data-icon="calendar" data-size="36" style="color: var(--ink3)"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem">Your calendar stays on this phone.</h1>
+    <p class="plead">Nocturne works just the same without it. You can bring it later in <span class="cc"><span data-icon="settings" data-size="14"></span>This phone</span>.</p>
+  </div>
+  <div class="foot" data-state="no"><span class="btn" data-kind="primary">OK</span></div>
+
+  <!-- Which calendars -->
+  <div class="group" data-state="pick">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Bring my calendar</span><span class="rowHint">Two days back to two weeks ahead, read only.</span></span><span class="sw"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="pick">
+    <p class="ghead">Which calendars</p>
+    <div class="rows">
+      <div class="row"><span class="cdot" style="background: #3B7556"></span><span class="rowText"><span class="rowLabel">Family</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #2C4BCF"></span><span class="rowText"><span class="rowLabel">Work</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #8A6A12"></span><span class="rowText"><span class="rowLabel">School term dates</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #A8402A"></span><span class="rowText"><span class="rowLabel">Holidays in England</span></span><span class="sw off"></span></div>
+      <div class="row"><span class="cdot" style="background: #66645E"></span><span class="rowText"><span class="rowLabel">Birthdays</span></span><span class="sw off"></span></div>
+    </div>
+    <p class="gfoot">Holidays and birthdays start off, because they fill the page without saying much.</p>
+  </div>
+  <div class="group" data-state="pick">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Notes on each appointment</span><span class="rowHint">Usually call links and dial-in numbers. Off keeps your page tidy.</span></span><span class="sw off"></span></div>
+    </div>
+    <p class="gfoot">Last sent 7:42 am · 23 appointments</p>
+  </div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

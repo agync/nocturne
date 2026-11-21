@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · this phone · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "Your calendar", "back": "This phone" },
+  "phone": { "title": "This phone", "back": "Today" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="phone calendar stopped revoked">
+<main id="content" style="gap: 20px">
+
+  <!-- This phone -->
+  <div class="group" data-state="phone">
+    <p class="ghead">Connected to</p>
+    <div class="rows"><div class="row"><span data-icon="laptop" data-size="22"></span><span class="rowText"><span class="rowLabel">Home computer</span><span class="rowHint">Simple, through Cloudflare</span></span></div></div>
+  </div>
+  <div class="group" data-state="phone" style="outline: 2px dashed var(--marker); outline-offset: 4px">
+    <p class="ghead">What this phone brings</p>
+    <div class="rows">
+      <div class="row"><span data-icon="calendar" data-size="22"></span><span class="rowText"><span class="rowLabel">Your calendar</span></span><span class="rowValue">On · 3 calendars</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span data-icon="heart" data-size="22"></span><span class="rowText"><span class="rowLabel">Health</span></span><span class="rowValue">On · 6 kinds</span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+    </div>
+    <p class="gfoot">Last sent 7:42 am · 4 calendar changes, 18 readings</p>
+  </div>
+  <div class="group" data-state="phone" style="outline: 2px dashed var(--marker); outline-offset: 4px">
+    <p class="ghead">When it sends</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">While Nocturne is open</span><span class="rowHint">And when you open it.</span></span><span class="rowValue">Always</span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Also a few times a day</span><span class="rowHint">So last night’s sleep reaches your page before you open the app. Uses a little battery.</span></span><span class="sw off"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="phone">
+    <p class="ghead">This phone</p>
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Name</span><span class="rowHint">Rename it on your computer</span></span><span class="rowValue">Sam’s phone</span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel">Version</span><span class="rowHint">Your computer: Nocturne 1.2</span></span><span class="rowValue">Nocturne 1.2</span></div>
+    </div>
+  </div>
+  <div class="group" data-state="phone">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Privacy policy</span></span><span class="rowChev" data-icon="chevron-right" data-size="18"></span></div>
+      <div class="row"><span class="rowText"><span class="rowLabel" style="color: var(--ember)">Disconnect this phone…</span></span></div>
+    </div>
+  </div>
+
+  <!-- Notices on the calendar screen -->
+  <div class="pbanner" data-state="stopped" style="background: var(--accent-soft)">
+    <span data-icon="laptop" data-size="22" style="color: var(--accent)"></span>
+    <span><strong>Your computer isn’t taking your calendar from this phone.</strong>Turn it back on there, under <span class="cc">From your phones</span>.</span>
+  </div>
+  <div class="pbanner" data-state="revoked">
+    <span data-icon="calendar" data-size="22"></span>
+    <span><strong>Calendar is off in your phone’s settings.</strong>Nothing is read until you turn it back on there.</span>
+  </div>
+  <span class="btn" data-kind="primary" data-state="revoked">Open phone settings</span>
+
+  <!-- Your calendar -->
+  <div class="group" data-state="calendar stopped revoked">
+    <div class="rows">
+      <div class="row"><span class="rowText"><span class="rowLabel">Bring my calendar</span><span class="rowHint">Two days back to two weeks ahead, read only.</span></span><span class="sw" data-state="calendar stopped"></span><span class="sw off" data-state="revoked"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="calendar stopped">
+    <p class="ghead">Which calendars</p>
+    <div class="rows">
+      <div class="row"><span class="cdot" style="background: #3B7556"></span><span class="rowText"><span class="rowLabel">Family</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #2C4BCF"></span><span class="rowText"><span class="rowLabel">Work</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #8A6A12"></span><span class="rowText"><span class="rowLabel">School term dates</span></span><span class="sw"></span></div>
+      <div class="row"><span class="cdot" style="background: #A8402A"></span><span class="rowText"><span class="rowLabel">Holidays in England</span></span><span class="sw off"></span></div>
+    </div>
+  </div>
+  <div class="group" data-state="calendar">
+    <div class="rows"><div class="row"><span class="rowText"><span class="rowLabel">Notes on each appointment</span><span class="rowHint">Usually call links and dial-in numbers. Off keeps your page tidy.</span></span><span class="sw off"></span></div></div>
+    <p class="gfoot">Last sent 7:42 am · 23 appointments</p>
+  </div>
+  <p class="small" data-state="calendar stopped revoked">What already went across stays on your computer. To delete it, use <span class="cc">From your phones</span> there.</p>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

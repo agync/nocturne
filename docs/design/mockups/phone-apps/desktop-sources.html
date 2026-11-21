@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From your phones · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Settings" data-states="sources came-in item delete remove add-phone">
+<div id="content" class="sheet">
+
+  <!-- From your phones -->
+  <div data-state="sources delete" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
+    <h1 class="stepTitle">From your phones</h1>
+    <p class="lead">What your phones bring to this computer. Your phones read it; nothing here changes it on the phone.</p>
+
+    <div class="phoneHead"><h2>Sam’s phone</h2><span class="small">Android app · Nocturne 1.2</span></div>
+    <ul class="oRows">
+      <li class="oRow">
+        <span class="oText"><span class="oLabel"><span data-icon="calendar" data-size="18"></span>Calendar</span><span class="oHint">3 calendars · last came in 7:42 am</span><span class="oHint">23 appointments in the next two weeks</span></span>
+        <span class="oActs"><span class="button" data-variant="secondary">See what came in</span><span class="button" data-variant="quiet">Stop taking it…</span></span>
+      </li>
+      <li class="oRow">
+        <span class="oText"><span class="oLabel"><span data-icon="heart" data-size="18"></span>Health</span><span class="oHint">Sleep, heart rate, resting heart rate, blood pressure, steps, workouts · last came in 7:42 am</span></span>
+        <span class="oActs"><span class="button" data-variant="secondary">See readings</span><span class="button" data-variant="quiet">Stop taking it…</span></span>
+      </li>
+      <li class="oRow">
+        <span class="oText"><span class="oLabel">Notice what goes together</span><span class="oHint">A sentence in your recaps when sleep, steps or workouts went with something in your journal, with its receipts.</span></span>
+        <span class="switch"></span>
+      </li>
+      <li class="oRow"><span class="oText"><span class="oLabel" style="color: var(--ember)">Delete what came in…</span><span class="oHint">From the calendar, from Health, or both.</span></span></li>
+    </ul>
+
+    <div class="phoneHead"><h2>Ana’s phone</h2><span class="small">In the browser</span></div>
+    <p class="small">A phone in the browser can’t bring its calendar or health. The Nocturne app can.</p>
+
+    <div class="section" style="padding-top: var(--s-4)">
+      <h2 class="label">On your page</h2>
+      <ul class="oRows">
+        <li class="oRow"><span class="oText"><span class="oLabel">Your calendar today</span><span class="oHint">What’s on today, from every phone that brings its calendar.</span></span><span class="switch"></span></li>
+        <li class="oRow"><span class="oText"><span class="oLabel">Sleep last night</span><span class="oHint">One line under the page’s title, once the night has come in. Never read aloud.</span></span><span class="switch"></span></li>
+      </ul>
+    </div>
+    <p class="small">Calendar and health come only through Away from home, in locked messages. Nothing else is downloaded or sent.</p>
+  </div>
+
+  <!-- What came in -->
+  <div data-state="came-in" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 760px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> From your phones</a>
+    <h1 class="stepTitle">Calendar from Sam’s phone</h1>
+    <p class="lead">Newest change first. Each one opens its own page.</p>
+    <ul class="inList">
+      <li><span class="when">Today 7:42 am</span><span class="what"><span>Leo, swimming</span><small>Friday 20 November, 4:30 pm · Family</small></span><span class="tagNew">changed</span></li>
+      <li><span class="when">Today 7:42 am</span><span class="what"><span>Book group</span><small>Friday 20 November, 7:00 pm · Family</small></span><span class="tagNew">new</span></li>
+      <li><span class="when">Today 7:42 am</span><span class="what"><span>Team lunch</span><small>Thursday 26 November, 12:30 pm · Work</small></span><span class="tagGone">removed from your calendar</span></li>
+      <li><span class="when">Yesterday 9:10 pm</span><span class="what"><span>Dentist, check-up</span><small>Friday 20 November, 9:00 am · Family</small></span><span class="tagNew">new</span></li>
+      <li><span class="when">Yesterday 9:10 pm</span><span class="what"><span>Inset day, no school</span><small>Monday 30 November, all day · School term dates</small></span><span class="tagNew">new</span></li>
+      <li><span class="when">Wed 7:58 am</span><span class="what"><span>Gran, eye test</span><small>Tuesday 24 November, 10:15 am · Family</small></span><span class="tagNew">new</span></li>
+    </ul>
+  </div>
+
+  <!-- A calendar entry's own page -->
+  <div data-state="item" class="itemPage" style="margin: calc(-1 * var(--s-6)); min-height: 40rem">
+    <div class="itemPreview">
+      <span data-icon="calendar" data-size="48" style="color: var(--ink3)"></span>
+      <p class="quote">Leo, swimming</p>
+      <p class="small">Friday 20 November · 4:30 pm to 5:15 pm</p>
+    </div>
+    <div class="itemSide">
+      <a class="back" href="#"><span aria-hidden="true">←</span> Calendar from Sam’s phone</a>
+      <p class="eyebrow">Calendar · Family · Sam’s phone</p>
+      <h1 class="title">Leo, swimming</h1>
+      <ul class="rules">
+        <li>Friday 20 November, 4:30 pm to 5:15 pm<small>Every Friday</small></li>
+        <li>Riverside pool</li>
+        <li>Sam, Leo<small>Who’s invited</small></li>
+      </ul>
+      <p class="small">From Sam’s phone’s calendar · last updated 7:42 am</p>
+      <section class="section">
+        <h2 class="label">Earlier versions</h2>
+        <p class="muted">Was Wednesday 18 November, 4:30 pm</p>
+      </section>
+      <section class="section">
+        <h2 class="label">What Nocturne learned</h2>
+        <p>Leo has swimming on Fridays at 4:30 pm.</p>
+      </section>
+      <div class="buttons"><span class="button" data-variant="secondary">Mark private</span><span class="button" data-variant="forget">Delete…</span></div>
+    </div>
+  </div>
+
+  <!-- Away from home: phones, behind the remove dialog -->
+  <div data-state="remove" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
+    <h1 class="stepTitle">Away from home</h1>
+    <h2 class="label">Phones · 2</h2>
+    <ul class="oRows">
+      <li class="oRow"><span class="oText"><span class="oLabel">Sam’s phone</span><span class="oHint newRow">Android app · Nocturne 1.2 · Brings your calendar and health</span></span><span class="button" data-variant="quiet">Remove…</span></li>
+      <li class="oRow"><span class="oText"><span class="oLabel">Ana’s phone</span><span class="oHint newRow">In the browser</span></span><span class="button" data-variant="quiet">Remove…</span></li>
+    </ul>
+  </div>
+
+  <!-- Away from home: add a phone -->
+  <div data-state="add-phone" style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Away from home</a>
+    <h1 class="stepTitle">Add a phone</h1>
+    <div style="display: flex; gap: var(--s-6); align-items: flex-start">
+      <span class="qrBox"><span data-qr="200"></span></span>
+      <div style="display: flex; flex-direction: column; gap: var(--s-3)">
+        <p class="newRow">Scan it with the Nocturne app on your phone. No app? Your phone’s camera opens Nocturne in its browser instead.</p>
+        <p class="small">Can’t scan? Type this code in the app:</p>
+        <p class="codeLine">K7QM2A X9DPLR 4TWB8N H3VC6E</p>
+        <p class="small">The code lasts five minutes and works once.</p>
+        <div class="newRow" style="display: flex; flex-direction: column; gap: var(--s-2)">
+          <p class="small">Get the free Nocturne app: search for “Nocturne” in Google Play or the App Store. It has the same half-moon mark.</p>
+
+        </div>
+      </div>
+    </div>
+    <p class="small">A dashed outline marks what is new; it is not part of the design.</p>
+  </div>
+</div>
+
+<div id="overlay" data-state="delete">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="dt" style="width: min(100%, 560px)">
+      <h2 id="dt" class="dialogTitle">Delete the calendar from Sam’s phone?</h2>
+      <p class="muted">It goes from this computer for good.</p>
+      <ul class="alsoGoes">
+        <li><span>41 appointments from Sam’s phone’s calendar, and their earlier versions</span></li>
+        <li><span>What Nocturne learned from them</span></li>
+        <li><span>6 lines on your past pages cite them and will say (forgotten).</span></li>
+      </ul>
+      <div class="oRow" style="border: 0; padding: 0; justify-content: flex-start; flex-wrap: nowrap; align-items: flex-start">
+        <span class="tick" data-on></span>
+        <span class="oText"><span class="oLabel">Also stop taking the calendar from Sam’s phone</span><span class="oHint">If you leave this off, the next two weeks come back the next time Sam’s phone sends.</span></span>
+      </div>
+      <p class="small">Your phone’s calendar isn’t touched. Anything you exported or printed is out of reach. Nocturne can’t delete it.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep them</span>
+        <span class="button" data-variant="forget" data-filled>Delete</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay2" data-state="remove">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="rt" style="width: min(100%, 560px)">
+      <h2 id="rt" class="dialogTitle">Remove Sam’s phone?</h2>
+      <p class="muted">It stops working at once. What it kept is already here and stays.</p>
+      <p class="newRow">Calendar entries and health readings it brought stay too. To delete them, use <span class="cc" style="display: inline-flex; padding: 0 6px; border-radius: 4px; box-shadow: 0 0 0 1px var(--rule)">From your phones</span>.</p>
+      <div class="oRow newRow" style="border: 0; padding: 0; justify-content: flex-start; flex-wrap: nowrap">
+        <span class="tick"></span><span class="oLabel">Also delete what it brought</span>
+      </div>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary" style="box-shadow: 0 0 0 2px var(--sheet), 0 0 0 4px var(--accent)">Keep it</span>
+        <span class="button" data-variant="forget" data-filled>Remove</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="shell.js"></script>
+<script>
+  const o2 = document.getElementById("overlay2");
+  if (o2) document.body.appendChild(o2);
+</script>
+</body>
+</html>
