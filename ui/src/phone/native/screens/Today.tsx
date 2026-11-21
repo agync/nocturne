@@ -126,7 +126,7 @@ export function Today(p: TodayProps) {
               </p>
             </div>
           </div>
-        ) : kind === "outdated" ? null : (
+        ) : kind === "outdated" || kind === "computerOutdated" ? null : (
           <p className="ph-status" role="status">
             <span className={`ph-dot${connected ? "" : " ph-dot--breathe"}`} aria-hidden="true" />
             {connected ? t("phone.home.connected", { name }) : t("phone.home.connecting", { name })}

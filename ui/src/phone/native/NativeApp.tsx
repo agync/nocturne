@@ -10,7 +10,7 @@ import {
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
 import { t } from "../../copy/t";
 import type { FeelingPart, PeriodKind, Receipt, SameNameQuestion } from "../../engine/bindings";
-import type { PairedDevice } from "../engine";
+import type { Connection, PairedDevice } from "../engine";
 import { addressFromRelinkText, addressFromWords } from "../relink";
 import { Ask, useAskSession } from "../screens/Ask";
 import { CheckIn } from "../screens/CheckIn";
@@ -56,6 +56,19 @@ type View =
   | { name: "relinkWords"; busy: boolean; error: boolean };
 
 const TODAY: View = { name: "tab", tab: "today" };
+
+/** Which side must update, from the connection, with both versions for the card. */
+export function updateFor(
+  conn: Connection,
+  device: PairedDevice,
+  phone: string,
+): UpdateNeeded | null {
+  const known = device.version ?? "";
+  if (conn.kind === "outdated") return { kind: "phone", computer: conn.computer ?? known, phone };
+  if (conn.kind === "computerOutdated")
+    return { kind: "computer", computer: conn.computer || known, phone };
+  return null;
+}
 const RETRY_MS = 30_000;
 
 /** Views live in the history entries, so the phone's back gesture steps back through the app. */
@@ -438,12 +451,7 @@ export function NativeApp({
             waiting={waiting}
             sentJustNow={sent}
             now={services.now()}
-            update={
-              update ??
-              (conn.kind === "outdated"
-                ? { kind: "phone", computer: device.version ?? "", phone: services.version }
-                : null)
-            }
+            update={update ?? updateFor(conn, device, services.version)}
             bar={bar("today")}
             onQueued={refreshWaiting}
             onOpen={open}

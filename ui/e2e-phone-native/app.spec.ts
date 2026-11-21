@@ -148,5 +148,41 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("button", { name: "Keep" })).toBeVisible();
       await clean(page);
     });
+
+    test("update this phone", async ({ page }) => {
+      await page.goto("/?s=outdated");
+      await expect(
+        page.getByRole("heading", { name: "Update Nocturne on this phone" }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "Your computer has a newer Nocturne that this version can’t talk to. What you keep waits here until you update.",
+        ),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Update in Google Play" })).toBeVisible();
+      await expect(
+        page.getByText(/^Your computer: Nocturne 0\.9\.0 · This phone: Nocturne /),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Keep" })).toBeVisible();
+      await clean(page);
+    });
+
+    test("update the computer", async ({ page }) => {
+      await page.goto("/?s=computerOutdated");
+      await expect(
+        page.getByRole("heading", { name: "Update Nocturne on your computer" }),
+      ).toBeVisible();
+      await expect(
+        page.getByText(
+          "This phone has a newer Nocturne than your computer. What you keep waits here until your computer is updated.",
+        ),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Update in Google Play" })).toHaveCount(0);
+      await expect(
+        page.getByText(/^Your computer: Nocturne 0\.1\.0 · This phone: Nocturne /),
+      ).toBeVisible();
+      await expect(page.getByRole("button", { name: "Keep" })).toBeVisible();
+      await clean(page);
+    });
   });
 }

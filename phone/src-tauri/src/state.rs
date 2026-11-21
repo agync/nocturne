@@ -6,6 +6,8 @@ use std::time::Instant;
 
 use nocturne_channel::client::{self, Connection, OnIdentity, Options, Phone, Router};
 use nocturne_channel::phone::{PhoneIdentity, PhonePairing};
+use nocturne_channel::protocol::{MIN_PHONE_BUILD, PHONE_BUILD};
+use nocturne_contract::{AppPlatform, PhoneAppIntro};
 use tauri::{AppHandle, Emitter, Runtime};
 
 use crate::store::{Meta, Store};
@@ -42,6 +44,21 @@ pub fn router() -> Router {
     }
     #[cfg(not(feature = "dev-loopback"))]
     client::https_router()
+}
+
+/// What this app says of itself to its computer: which app, its version and the phone builds
+/// it speaks.
+pub fn intro(version: &str) -> PhoneAppIntro {
+    PhoneAppIntro {
+        platform: if cfg!(target_os = "ios") {
+            AppPlatform::Ios
+        } else {
+            AppPlatform::Android
+        },
+        version: version.to_string(),
+        min_build: MIN_PHONE_BUILD,
+        max_build: PHONE_BUILD,
+    }
 }
 
 impl AppState {
@@ -93,12 +110,11 @@ impl AppState {
                 syncer.ledger.forget_sends();
             }
         });
-        let phone = Phone::new(
-            identity,
-            self.router.clone(),
-            Options::default(),
-            on_identity,
-        );
+        let options = Options {
+            app: Some(intro(&app.package_info().version.to_string())),
+            ..Options::default()
+        };
+        let phone = Phone::new(identity, self.router.clone(), options, on_identity);
         let mut states = phone.connection();
         let store = self.store.clone();
         let app = app.clone();
