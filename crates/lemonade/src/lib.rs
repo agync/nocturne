@@ -6,6 +6,7 @@ pub mod bundle;
 mod children;
 pub mod client;
 pub mod config;
+pub mod decision_models;
 mod error;
 pub mod fit;
 pub mod fit_table;

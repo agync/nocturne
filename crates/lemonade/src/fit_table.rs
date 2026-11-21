@@ -111,6 +111,12 @@ pub const TABLE: &[Entry] = &[
     row("gemma4-it-e4b-FLM", 980, true, true),
     // Reading aloud: the voice speaking alone, whatever its size.
     row("kokoro-v1", 340, true, true),
+    // Answering a decision. Untested; each is the download plus a cache for an 8192-token
+    // context: about 0.3 GB for the 1B-class d3-lite, 0.2 GB for the 2B d1-Omni, whose
+    // convolution layers keep no cache, and compute buffers on top.
+    row("d3-lite-FLM", 110, false, false),
+    row("user.d1-Omni-2B", 220, false, false),
+    row("user.vllm-d3-lite", 140, false, false),
     // Finding memories.
     finding("nomic-embed-text-v1-GGUF", 40, false, false, 768),
     finding("nomic-embed-text-v2-moe-GGUF", 120, false, false, 768),
