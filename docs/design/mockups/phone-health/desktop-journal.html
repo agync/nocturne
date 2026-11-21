@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journal with health and the calendar · Nocturne</title>
+<link rel="stylesheet" href="../phone-apps/mock.css">
+</head>
+<body data-frame="app" data-section="Journal" data-states="day">
+<div id="content" class="sheet">
+  <div class="head">
+    <div class="headText">
+      <p class="eyebrow">Journal</p>
+      <h1 class="title">Friday 20 November</h1>
+      <div class="daynav"><span>← Thursday</span><span><span data-icon="calendar" data-size="16"></span>Choose a day</span></div>
+    </div>
+    <div class="buttons"><span class="button" data-variant="primary">Reflect on today</span></div>
+  </div>
+
+  <div class="cols">
+    <div class="mainCol">
+      <section class="entry" aria-label="Today's entry">
+        <div class="sectionHead"><span class="label">Today’s entry</span><span class="meta">Saved 9:02 pm</span></div>
+        <p class="entryText">The dentist was quicker than I feared. Walked to the allotment after and pulled the last of the beans. The deadline for the Hendersons’ quote is Monday and I keep putting it off.</p>
+      </section>
+
+      <section class="section" aria-labelledby="through">
+        <h2 class="label" id="through">Through the day</h2>
+        <div class="timeline">
+          <div class="tgroup">
+            <p class="tgroupLabel">Morning</p>
+            <ul class="trows">
+              <li class="trow newRow"><span class="ttime">7:05 am</span>
+                <div class="tline"><span data-icon="moon" data-size="16"></span><span class="ttext">Woke · 6 h 40 min asleep</span></div>
+                <div class="tsub"><span class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Health · Sam’s phone</span></div>
+              </li>
+              <li class="trow" data-part="low"><span class="ttime">8:05 am</span>
+                <div class="tline"><span class="feel" data-part="low">Low · tired</span><span class="ttext">“Slow start.”</span></div>
+                <div class="tsub"><span class="meta newRow">after 6 h 40 min asleep</span></div>
+              </li>
+              <li class="trow compact newRow"><span class="ttime">9:00 am</span>
+                <div class="tline"><span data-icon="calendar" data-size="16"></span><span class="ttext">Dentist, check-up · Bridge Street Surgery</span><span class="meta">from your calendar</span></div>
+              </li>
+              <li class="trow newRow"><span class="ttime">10:20 am</span>
+                <div class="tline"><span data-icon="walk" data-size="16"></span><span class="ttext">Walk · 42 min · 3.1 km</span></div>
+                <div class="tsub"><span class="meta">Watch, through Health on Sam’s phone</span></div>
+              </li>
+              <li class="trow"><span class="ttime">11:15 am</span>
+                <div class="tline"><span class="photoBox small"><span data-icon="image" data-size="16"></span></span><span class="ttext">The last of the beans.</span></div>
+                <div class="tsub"><span class="meta">from Sam’s phone</span></div>
+              </li>
+            </ul>
+          </div>
+          <div class="tgroup">
+            <p class="tgroupLabel">Afternoon</p>
+            <ul class="trows">
+              <li class="trow compact newRow"><span class="ttime">4:30 pm</span>
+                <div class="tline"><span data-icon="calendar" data-size="16"></span><span class="ttext">Leo, swimming · Riverside pool</span><span class="meta">from your calendar</span></div>
+              </li>
+              <li class="trow" data-part="settled"><span class="ttime">6:10 pm</span>
+                <div class="tline"><span class="feel" data-part="settled">Settled · calm</span><span class="ttext">“Quote half done.”</span></div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="sideCol" aria-label="About today">
+      <div class="sblock">
+        <h2 class="label">How today felt</h2>
+        <ul class="slist">
+          <li><span class="feel" data-part="low">tired</span><span class="meta">8:05 am</span></li>
+          <li><span class="feel" data-part="settled">calm</span><span class="meta">6:10 pm</span></li>
+        </ul>
+      </div>
+
+      <div class="sblock newRow">
+        <h2 class="label">From Health</h2>
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Last night</span><span class="hfSay">6 h 40 min asleep</span></div>
+          <span data-chart="night" data-args='{"w":300,"compact":true,"thick":10,"bed":"23:50","wake":"07:05","gaps":[["03:10","03:25"]],"usual":["23:15","07:00"]}' data-say="6 h 40 min asleep, from 11:50 pm to 7:05 am, awake once."></span>
+        </div>
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Resting heart rate</span><span class="hfSay">58 · your usual is 55 to 61</span></div>
+          <span data-chart="line" data-args='{"w":300,"h":84,"min":40,"max":80,"band":[55,61],"values":[57,58,56,59,60,58,57,56,58,59,61,60,58,57,56,57,58,59,62,63,61,59,58,57,58,60,59,58,57,58],"entries":[2,5,6,9,12,13,16,19,20,22,25,27,29]}' data-say="Resting heart rate, 58 today. Your usual is 55 to 61."></span>
+        </div>
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Steps</span><span class="hfSay">8,412 today</span></div>
+          <span data-chart="bars" data-args='{"w":300,"h":70,"max":14000,"values":[6200,4100,3900,7800,8412,11900,5200,6800,7300,4400,9100,6900,5800,8412],"at":13,"entries":[0,1,2,3,4,6,8,10,11,13]}' data-say="8,412 steps today. 6,900 on an average day this fortnight."></span>
+        </div>
+        <div class="hf">
+          <div class="hfHead"><span class="oLabel">Heart rate</span><span class="hfSay">52 to 148 · mostly around 74</span></div>
+          <span data-chart="range" data-args='{"w":300,"lo":52,"hi":148,"mid":74}' data-say="Heart rate today, 52 to 148, mostly around 74."></span>
+        </div>
+        <div class="hfHead"><span class="oLabel">Blood pressure</span><span class="hfSay">128 over 82 · 7:40 am</span></div>
+        <span class="hfMore">See more ›</span>
+      </div>
+
+      <div class="sblock">
+        <h2 class="label">Good things</h2>
+        <ul class="slist"><li><span data-icon="sun" data-size="16"></span><span>The last of the beans.</span></li></ul>
+      </div>
+    </aside>
+  </div>
+  <p class="small" style="padding-top: var(--s-5)">A dashed outline marks what is new; it is not part of the design.</p>
+</div>
+<script src="charts.js"></script>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

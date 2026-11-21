@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Health · the visual forms · Nocturne</title>
+<link rel="stylesheet" href="../phone-apps/mock.css">
+<style>
+.formsPage { display: flex; flex-direction: column; gap: 28px; max-width: 1180px; margin: 0 auto; padding: 40px 32px 48px; }
+.formsGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.fcard { display: flex; flex-direction: column; gap: 10px; padding: 22px 24px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.fcard .use { color: var(--ink2); font-size: 0.8125rem; padding-top: 6px; border-top: 1px solid var(--rule); }
+.rulesBox { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.rulesBox li { font-size: 0.875rem; line-height: 1.5; }
+</style>
+</head>
+<body>
+<main class="formsPage">
+  <div style="display: flex; flex-direction: column; gap: 8px">
+    <p class="eyebrow">Health from the phone</p>
+    <h1 class="stepTitle">The visual forms</h1>
+    <p class="lead">One colour, the person’s own usual as a band, and a sentence for every chart. Fictional readings.</p>
+  </div>
+
+  <div class="formsGrid">
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Night bar</span><span class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Health · Sam’s phone</span></div>
+      <p class="hfValue">6 h 40 min asleep</p>
+      <span data-chart="night" data-args='{"bed":"23:50","wake":"07:05","gaps":[["03:10","03:25"]],"usual":["23:15","07:00"]}' data-say="6 h 40 min asleep, from 11:50 pm to 7:05 am, awake once."></span>
+      <p class="hfSay">From 11:50 pm to 7:05 am, awake once. The two upright marks are your usual bedtime and waking time.</p>
+      <p class="use">Last night, on the page, in the journal, on the phone.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Nights strip</span><span class="hfMore">Show as a list</span></div>
+      <p class="hfValue">6 h 50 min on an average night</p>
+      <span data-chart="nights" data-args='{"usual":["23:15","07:00"],"rows":[{"d":"Mon 16","bed":"23:40","wake":"06:50","entry":true},{"d":"Tue 17","bed":"00:30","wake":"06:10","entry":true},{"d":"Wed 18","bed":"00:50","wake":"05:55","entry":true},{"d":"Thu 19","bed":"23:20","wake":"07:00","entry":true},{"d":"Fri 20","bed":"23:50","wake":"07:05","gaps":[["03:10","03:25"]],"mark":true,"entry":true},{"d":"Sat 21","bed":"23:30","wake":"08:15"},{"d":"Sun 22","bed":"22:50","wake":"07:10","entry":true}]}' data-say="7 nights. Asleep 6 h 50 min on an average night, between 5 h 05 min and 8 h 20 min."></span>
+      <p class="hfSay">The shaded band is where your usual night falls. A dot at the right marks a day with a journal entry.</p>
+      <p class="use">A week or a month of nights, in recaps and on the sleep page.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Line with your usual band</span><span class="rchip"><span data-icon="heart" data-size="12"></span>Resting heart rate · Health</span></div>
+      <p class="hfValue">58 today <span class="hfSay">· your usual is 55 to 61</span></p>
+      <span data-chart="line" data-args='{"min":40,"max":80,"h":130,"band":[55,61],"values":[57,58,56,59,60,58,57,56,58,59,61,60,58,57,56,57,58,59,62,63,61,59,58,57,58,60,59,58,57,58],"entries":[2,5,6,9,12,13,16,19,20,22,25,27,29],"labels":[[0,"22 Oct"],[14,"5 Nov"],[29,"today"]]}' data-say="Resting heart rate, 58 today. Your usual is 55 to 61."></span>
+      <p class="hfSay">Ticks under the line are days with a journal entry. Nothing is said while today sits inside the band.</p>
+      <p class="use">Resting heart rate, sleep length, and weight when it is on, over 14, 30 or 90 days.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Day range bar</span><span class="rchip"><span data-icon="heart" data-size="12"></span>Heart rate · Health</span></div>
+      <p class="hfValue">52 to 148 <span class="hfSay">· mostly around 74</span></p>
+      <span data-chart="range" data-args='{"lo":52,"hi":148,"mid":74}' data-say="Heart rate today, 52 to 148, mostly around 74."></span>
+      <p class="hfSay">The bar runs from the day’s lowest to its highest; the light mark is where most readings sat.</p>
+      <p class="use">Heart rate for one day, beside the journal.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Hour bars</span><span class="hfMore">Show as a list</span></div>
+      <p class="hfValue">Highest between 10 and 11 am, during a walk</p>
+      <span data-chart="hours" data-args='{"workout":[10],"rows":[[52,58,55],[51,56,53],[50,55,52],[50,57,53],[51,56,53],[52,60,55],[54,72,62],[60,84,70],[64,92,74],[62,88,72],[88,148,121],[66,96,78],[64,90,74],[62,86,72],[60,84,70],[62,88,72],[64,92,74],[66,98,76],[64,90,72],[62,86,70],[60,80,68],[58,74,64],[56,68,60],[54,62,57]]}' data-say="Heart rate by hour today. Highest between 10 and 11 am, during a walk."></span>
+      <p class="hfSay">One bar per hour on the same scale. An hour with a workout is drawn in the ink colour and says so.</p>
+      <p class="use">Heart rate on its own page.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Readings strip</span><span class="rchip"><span data-icon="gauge" data-size="12"></span>Blood pressure · Health</span></div>
+      <p class="hfValue">128 over 82 <span class="hfSay">· this morning, 7:40 am</span></p>
+      <span data-chart="bp" data-args='{"days":14,"bandTop":[118,126],"bandBottom":[76,82],"readings":[{"d":0,"top":121,"bottom":78},{"d":2,"top":124,"bottom":80},{"d":3,"top":119,"bottom":77},{"d":5,"top":122,"bottom":79},{"d":7,"top":126,"bottom":81},{"d":8,"top":120,"bottom":78},{"d":10,"top":123,"bottom":80},{"d":12,"top":125,"bottom":79},{"d":13,"top":128,"bottom":82,"ring":true}],"entries":[1,2,5,6,9,12,13],"labels":[[0,"7 Nov"],[13,"today"]]}' data-say="128 over 82 this morning. Your usual is 118 to 126 over 76 to 82."></span>
+      <p class="hfSay">Each reading is an upright line from the bottom number to the top. The two bands are your usual for each number. No categories, no colours for high or low.</p>
+      <p class="use">Blood pressure on its own page and beside the journal day it was taken.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Day bars</span><span class="rchip"><span data-icon="steps" data-size="12"></span>Steps · Health</span></div>
+      <p class="hfValue">8,412 steps today</p>
+      <span data-chart="bars" data-args='{"max":14000,"values":[6200,4100,3900,7800,8412,11900,5200,6800,7300,4400,9100,6900,5800,8412],"at":13,"entries":[0,1,2,3,4,6,8,10,11,13],"labels":["M","T","W","T","F","S","S","M","T","W","T","F","S","S"]}' data-say="8,412 steps today. 6,900 on an average day this fortnight."></span>
+      <p class="hfSay">Today in the accent, the rest in a quiet grey. A dot under a day marks a journal entry.</p>
+      <p class="use">Steps over 7 or 14 days.</p>
+    </section>
+
+    <section class="fcard">
+      <div class="hfHead"><span class="hfLabel">Workout row</span></div>
+      <ul class="ptl">
+        <li><span class="t">10:20 am</span><span class="c"><span class="calTag" style="color: var(--ink)"><span data-icon="walk" data-size="16"></span>Walk · 42 min · 3.1 km</span><span class="calTag">Watch, through Health on Sam’s phone</span></span></li>
+        <li><span class="t">6:00 pm</span><span class="c"><span class="calTag" style="color: var(--ink)"><span data-icon="swim" data-size="16"></span>Swim · 35 min</span></span></li>
+      </ul>
+      <p class="use">Workouts on the day’s timeline; never the route.</p>
+    </section>
+  </div>
+
+  <section class="fcard">
+    <span class="hfLabel">Rules for every form</span>
+    <ul class="rulesBox" style="margin: 0; padding-left: 18px">
+      <li>No red, amber or green, no arrows, no targets, goals, scores or rings.</li>
+      <li>No “normal”, reference ranges or categories, including for blood pressure.</li>
+      <li>Every number and every dot is a receipt that opens its readings.</li>
+      <li>Your usual is the middle half of your own last 60 days, after two weeks of readings.</li>
+      <li>Every chart has a sentence and “Show as a list”.</li>
+      <li>Nocturne can’t tell what your numbers mean for your health. A doctor or nurse can.</li>
+    </ul>
+  </section>
+</main>
+<script src="charts.js"></script>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
