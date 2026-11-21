@@ -118,7 +118,7 @@ async fn make<R: Runtime>(
             });
         }
         let page = page.ok_or_else(|| CommandError::not_found(format!("page {day}")))?;
-        let script = audio_script(&page);
+        let script = audio_script(&page, &engine.clock().tz());
         if script.is_empty() {
             return Err(CommandError::not_found("nothing to read"));
         }

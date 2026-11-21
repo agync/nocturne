@@ -3,6 +3,7 @@
 //! Built from the audio edition of the page, which already has every line about a private
 //! memory removed. Forgotten lines are skipped, and the interface's emphasis marks are dropped.
 
+use jiff::tz::TimeZone;
 use nocturne_contract::{LineKind, PageLine, PageView, QuestionKind, SpokenKind};
 
 /// How many lines of "what changed" and "coming up" are read.
@@ -78,6 +79,37 @@ fn section(kind: SpokenKind, lines: impl IntoIterator<Item = String>) -> Option<
     (!text.is_empty()).then_some(Section { kind, text, parts })
 }
 
+/// "In your calendar today: Dentist at 9:00 and Swim at 18:00." Read like any page line, in
+/// the computer's time; the audio edition has already left out what is private. Health is
+/// never read, so last night is not here.
+pub fn calendar_today(page: &PageView, tz: &TimeZone) -> String {
+    let mut said: Vec<String> = page
+        .calendar_today
+        .iter()
+        .map(|l| {
+            let title = plain(&l.title);
+            if l.all_day {
+                return format!("{title}, all day");
+            }
+            match l.start.parse::<jiff::Timestamp>() {
+                Ok(t) => {
+                    let z = t.to_zoned(tz.clone());
+                    format!("{title} at {}:{:02}", z.hour(), z.minute())
+                }
+                Err(_) => title,
+            }
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    if said.is_empty() {
+        return String::new();
+    }
+    if page.more_calendar_today > 0 {
+        said.push(format!("{} more", page.more_calendar_today));
+    }
+    format!("In your calendar today: {}.", joined(&said, "and"))
+}
+
 /// What the reading says in place of a question from the journal.
 pub const JOURNAL_QUESTION_NOTE: &str = "Today\u{2019}s question is on the page.";
 
@@ -97,11 +129,15 @@ fn close_with(out: &mut Vec<Section>, note: String) {
 /// what is coming up, what was let go (one sentence), and the question. A question from the
 /// journal is not read: the last section ends by saying it is on the page. When lines from the
 /// journal were left out, it also ends by saying how many.
-pub fn audio_script(page: &PageView) -> Vec<Section> {
+pub fn audio_script(page: &PageView, tz: &TimeZone) -> Vec<Section> {
     let mut out = Vec::new();
     out.extend(section(
         SpokenKind::Opening,
-        [plain(&page.headline), plain(&page.dek)],
+        [
+            plain(&page.headline),
+            plain(&page.dek),
+            calendar_today(page, tz),
+        ],
     ));
     out.extend(section(
         SpokenKind::NeedsYou,
@@ -237,7 +273,7 @@ mod tests {
             answered: None,
             journal: None,
         });
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         assert_eq!(
             kinds(&script),
             [
@@ -281,10 +317,13 @@ mod tests {
         );
         let mut p = page();
         p.journal_skipped = Some(0);
-        assert_eq!(audio_script(&p)[0].text, "Good morning. One thing today.");
+        assert_eq!(
+            audio_script(&p, &TimeZone::UTC)[0].text,
+            "Good morning. One thing today."
+        );
         p.journal_skipped = Some(2);
         p.let_go = vec![line(LineKind::LetGo, "Old coupon")];
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         let last = script.last().unwrap();
         assert_eq!(last.kind, SpokenKind::LetGo);
         assert_eq!(
@@ -300,6 +339,47 @@ mod tests {
     }
 
     #[test]
+    fn todays_calendar_is_read_with_the_opening_and_the_night_never() {
+        let mut p = page();
+        let line = |title: &str, start: &str, all_day: bool| nocturne_contract::CalendarLine {
+            item_id: "itm".into(),
+            start: start.into(),
+            end: start.into(),
+            all_day,
+            title: title.into(),
+            place: None,
+            calendar: "Home".into(),
+            phone: "Pixel".into(),
+            zone: None,
+        };
+        p.calendar_today = vec![
+            line("Day off", "2026-11-20", true),
+            line("Dentist", "2026-11-20T09:00:00Z", false),
+        ];
+        p.more_calendar_today = 2;
+        p.last_night = Some(nocturne_contract::NightLine {
+            item_id: "itm_n".into(),
+            asleep_min: 400,
+            from: "2026-11-19T23:00:00Z".into(),
+            to: "2026-11-20T06:00:00Z".into(),
+            awake_count: 0,
+            periods: Vec::new(),
+            versus: None,
+            usual_bed: None,
+            usual_wake: None,
+            phone: "Pixel".into(),
+        });
+        let london = TimeZone::get("Europe/London").unwrap();
+        let script = audio_script(&p, &london);
+        assert_eq!(
+            script[0].parts.last().unwrap(),
+            "In your calendar today: Day off, all day, Dentist at 9:00 and 2 more."
+        );
+        let words: String = script.iter().map(|s| s.text.as_str()).collect();
+        assert!(!words.contains("asleep") && !words.contains("400"));
+    }
+
+    #[test]
     fn empty_sections_are_left_out_and_an_answered_question_is_not_read() {
         let mut p = page();
         p.question = Some(Question {
@@ -311,13 +391,16 @@ mod tests {
             answered: Some(nocturne_contract::QuestionChoice::Yes),
             journal: None,
         });
-        assert_eq!(kinds(&audio_script(&p)), [SpokenKind::Opening]);
+        assert_eq!(
+            kinds(&audio_script(&p, &TimeZone::UTC)),
+            [SpokenKind::Opening]
+        );
         p.let_go = vec![line(LineKind::LetGo, "One thing")];
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         assert_eq!(script[1].text, "Nocturne let go of One thing.");
         p.let_go.push(line(LineKind::LetGo, "Another"));
         assert_eq!(
-            audio_script(&p)[1].text,
+            audio_script(&p, &TimeZone::UTC)[1].text,
             "Nocturne let go of One thing and Another."
         );
     }
@@ -339,7 +422,7 @@ mod tests {
         let mut p = page();
         p.let_go = vec![line(LineKind::LetGo, "Old coupon")];
         p.question = Some(journal_question(None));
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         assert_eq!(
             kinds(&script),
             [SpokenKind::Opening, SpokenKind::LetGo],
@@ -358,7 +441,7 @@ mod tests {
 
         // The count of the journal's own lines comes after it.
         p.journal_skipped = Some(2);
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         let parts = &script.last().unwrap().parts;
         assert_eq!(
             parts[parts.len() - 2..],
@@ -371,7 +454,7 @@ mod tests {
         // With nothing after the opening it closes the opening.
         p.let_go.clear();
         p.journal_skipped = None;
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         assert_eq!(kinds(&script), [SpokenKind::Opening]);
         assert_eq!(
             script[0].text,
@@ -394,12 +477,12 @@ mod tests {
             journal: None,
         });
         assert!(
-            audio_script(&p)
+            audio_script(&p, &TimeZone::UTC)
                 .iter()
                 .any(|s| s.kind == SpokenKind::Question)
         );
         assert!(
-            audio_script(&p)
+            audio_script(&p, &TimeZone::UTC)
                 .iter()
                 .all(|s| !s.text.contains("question is on the page"))
         );
@@ -427,7 +510,7 @@ mod tests {
         which.choices = vec![choice("Thursday at **10:00**"), choice("Friday at 9:00")];
         p.needs_you = vec![which];
         assert_eq!(
-            audio_script(&p)[1].text,
+            audio_script(&p, &TimeZone::UTC)[1].text,
             "Two dates for the dentist. Was it Thursday at 10:00, or Friday at 9:00?"
         );
     }
@@ -438,7 +521,7 @@ mod tests {
         p.changed = (0..9)
             .map(|i| line(LineKind::Changed, &format!("Change {i}.")))
             .collect();
-        let script = audio_script(&p);
+        let script = audio_script(&p, &TimeZone::UTC);
         assert!(script[1].text.contains("Change 5.") && !script[1].text.contains("Change 6."));
     }
 
@@ -452,7 +535,7 @@ mod tests {
         p.let_go = (0..9)
             .map(|i| line(LineKind::LetGo, &format!("Item {i}")))
             .collect();
-        let words: usize = audio_script(&p)
+        let words: usize = audio_script(&p, &TimeZone::UTC)
             .iter()
             .map(|s| s.text.split_whitespace().count())
             .sum();
