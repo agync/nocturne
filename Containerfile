@@ -49,7 +49,8 @@ RUN scripts/fetch-lemonade.sh \
     && cp -a vendor/lemonade/linux-*/. /out/ \
     && rm -f /out/.sha256
 
-# Ubuntu 26.04, because the engine's Linux build needs its C library (glibc 2.43).
+# Ubuntu 26.04. The engine's Linux build needs glibc 2.38 since 2026.47.1 (2.43 before); moving
+# the base image is a decision of its own.
 FROM docker.io/library/ubuntu:resolute-20261105.1@sha256:66b8084a0d45bd4877992bd38e04b51bfa99bd57293364cb6391fb674771846e
 # Only what is loaded at run time: the toolkit the server links (libgtk-3-0t64, libdbus-1-3), the
 # engine's libraries (libstdc++6, libssl3t64, zlib1g, libzstd1, libdrm2, libdrm-amdgpu1), the

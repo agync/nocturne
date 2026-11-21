@@ -179,8 +179,10 @@ token kept in the data folder, built `--release` and shipped only as a container
 `ui/dist-server`), the server (`cargo build --release --features server --bin nocturne-server`),
 the engine (`scripts/fetch-lemonade.sh`, checked against `lemonade.lock`), and an Ubuntu 26.04
 runtime with only the libraries the server and the engine load, `ffmpeg`, a `nocturne` user (uid
-10001) and the `/data` volume. The runtime is Ubuntu because the engine's Linux build needs its C
-library (glibc 2.43); Debian 13 has an older one. Every base image is pinned by digest; bump the digest and its tag comment together.
+10001) and the `/data` volume. The runtime is Ubuntu 26.04 because the engine's Linux build needed
+glibc 2.43 before 2026.47.1; the pinned engine needs 2.38, so an older base would now do, and moving
+it is a decision of its own. Every base image is pinned by digest; bump the digest and its tag
+comment together.
 
 ```bash
 make server/build                      # the server and ui/dist-server, without a container

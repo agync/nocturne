@@ -1,6 +1,6 @@
 app-id: is.nocturne.Nocturne
 runtime: org.gnome.Platform
-# The pinned engine is built against glibc 2.43; GNOME 50 has 2.42, GNOME 51 has 2.44.
+# The pinned engine needs glibc 2.38 (2.43 before 2026.47.1); GNOME 51 has 2.44.
 runtime-version: '51'
 sdk: org.gnome.Sdk
 sdk-extensions:
@@ -102,14 +102,14 @@ modules:
       - type: archive
         only-arches:
           - x86_64
-        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.46.2/lemonade-embeddable-2026.46.2-ubuntu-x64.tar.gz
-        sha256: 67869b1a4fb128dfeb636d50417fee54bf25a7f61a7c97e8be234f1fe2444eaf
+        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.47.1/lemonade-embeddable-2026.47.1-ubuntu-x64.tar.gz
+        sha256: ce6e044b8fa81040a9b0a7fdd8b41054629bdba905cb8a864fe04b0c9aa289a1
         dest: lemonade-bundle
       - type: archive
         only-arches:
           - aarch64
-        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.46.2/lemonade-embeddable-2026.46.2-ubuntu-arm64.tar.gz
-        sha256: 894b88864c29e63c9104ed40ac75548d4b5babf7298b234324d69481d3140f0a
+        url: https://github.com/lemonade-sdk/lemonade/releases/download/v2026.47.1/lemonade-embeddable-2026.47.1-ubuntu-arm64.tar.gz
+        sha256: d44c2dde0bb985c90439135affce35a2b99326419ced3e394ebef2003a28c4df
         dest: lemonade-bundle
       # Written by scripts/flatpak-sources.sh from Cargo.lock and ui/package-lock.json.
       - generated/cargo-sources.json
