@@ -2,7 +2,7 @@
 
 .PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/e2e-phone-native ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
-	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test \
+	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test phone/ios-sim phone/ios-test \
 	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
@@ -208,6 +208,22 @@ phone/lint: ## Clippy for the phone app and its plugins, on this machine
 phone/test: ## Test the phone app's Rust side on this machine
 	cargo test -p nocturne-phone -p tauri-plugin-nocturne-system -p tauri-plugin-nocturne-calendar \
 	  -p tauri-plugin-nocturne-health
+
+##@ Phone app (iPhone)
+
+# macOS with Xcode only, and for the Simulator only: no signing yet. Xcode comes from
+# DEVELOPER_DIR or xcode-select; see docs/contribution/building.md.
+IOS_SIMULATOR ?= iPhone 18 Pro
+
+phone/ios-sim: ui/node_modules ## Build the iPhone app for the Simulator on Apple silicon
+	cd ui && npm run build:phone-native
+	$(PHONE_TAURI) ios build --debug --target aarch64-sim --ci
+
+phone/ios-test: phone/ios-sim ## The iPhone plugins' Swift tests in a Simulator (IOS_SIMULATOR=name)
+	for p in calendar health; do \
+	  (cd phone/plugins/$$p/ios && xcodebuild test -scheme tauri-plugin-nocturne-$$p \
+	    -destination "platform=iOS Simulator,name=$(IOS_SIMULATOR)") || exit 1; \
+	done
 
 ##@ Utilities
 
