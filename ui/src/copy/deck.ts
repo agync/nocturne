@@ -8,6 +8,7 @@ import editions from "./en-GB/editions.json";
 import fading from "./en-GB/fading.json";
 import feelings from "./en-GB/feelings.json";
 import guide from "./en-GB/guide.json";
+import health from "./en-GB/health.json";
 import journal from "./en-GB/journal.json";
 import journalCheckin from "./en-GB/journal-checkin.json";
 import journalDay from "./en-GB/journal-day.json";
@@ -21,6 +22,10 @@ import notice from "./en-GB/notice.json";
 import online from "./en-GB/online.json";
 import page from "./en-GB/page.json";
 import phone from "./en-GB/phone.json";
+import phoneApp from "./en-GB/phone-app.json";
+import phoneHealth from "./en-GB/phone-health.json";
+import phoneNative from "./en-GB/phone-native.json";
+import phones from "./en-GB/phones.json";
 import privacy from "./en-GB/privacy.json";
 import recent from "./en-GB/recent.json";
 import sent from "./en-GB/sent.json";
@@ -52,6 +57,11 @@ export const enGB = {
   ...editions,
   ...away,
   ...phone,
+  ...phoneNative,
+  ...phoneApp,
+  ...phoneHealth,
+  ...phones,
+  ...health,
   ...online,
   ...sent,
   ...models,
