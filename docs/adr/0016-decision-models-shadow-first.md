@@ -8,13 +8,15 @@ tags: [adr, decisions, models, evaluation, npu]
 
 # 0016 Decision models, shadow first
 
-Status: accepted. Date: 2026-11-21.
+Status: accepted. Date: 2026-11-21. Amended 2026-11-22: the health, money and ID question is
+removed with the check it shadowed, because Nocturne never judges a person's data
+([Only what you mark private is held back](/design/only-marked-private.md)).
 
 ## Context
 
 Nocturne decides many small things with hand-written rules and English word lists: whether a note
-moved or cancelled a kept appointment, whether a memory is a health, money or ID detail, and
-whether the person already wrote how a planned thing went. The word lists break in other languages
+moved or cancelled a kept appointment, and whether the person already wrote how a planned thing
+went. Until 2026-11-22 it also decided whether a memory was a health, money or ID detail. The word lists break in other languages
 and miss plain wordings ("feeling low, seeing a counsellor").
 
 A decision model takes a short text and a typed question (yes or no, one of a list, a score) and
@@ -32,9 +34,10 @@ is replacing word lists with questions; a second model is optional.
   model behind `/v1/systemone` (`SystemOneDecider`) answers through the same seam.
 - **Shadow only.** The rules still act. What they said is logged beside what the decider said, in
   a local, derived decision log that goes with the items and memories it is about and with Delete
-  everything. Three kinds are asked: a moved or cancelled appointment, the health, money and ID
-  check (record only; it may one day add marks, never remove them), and "already wrote how it
-  went" for the page question.
+  everything. Two kinds are asked: a moved or cancelled appointment, and "already wrote how it
+  went" for the page question. A third, the health, money and ID check, was asked until
+  2026-11-22 and is gone with the check: Nocturne does not ask whether a memory is about health,
+  money or identity.
 - **Overnight only.** The night's tidy asks once its page is saved, while nobody is at the
   keyboard and the computer is on mains, stopping well before the page time, bounded in count
   and time. An error or a timeout is logged and the rule's outcome stands; three failures in a row
