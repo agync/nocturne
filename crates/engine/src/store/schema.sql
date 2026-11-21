@@ -353,3 +353,26 @@ CREATE INDEX decision_items_item ON decision_items(item_id);
 CREATE TRIGGER decision_items_ad AFTER DELETE ON decision_items BEGIN
   DELETE FROM decisions WHERE id = old.decision_id;
 END;
+
+-- migration 16
+-- What paired phone apps bring (docs/design/phone-apps.md, phone-health.md). Calendar entries
+-- and health readings are items (kinds `calendar` and `reading`); what they hold lives in
+-- items.metadata (`phone`, `calendar`, `reading`, `day`, `replaces`). Each source of each phone
+-- has a row here, and each entry or reading the phone's own id for it and the item holding its
+-- current version, so a resend is kept once and a change is a new version.
+CREATE TABLE phone_sources(
+  device_id TEXT NOT NULL, source TEXT NOT NULL, taking INTEGER NOT NULL DEFAULT 1,
+  stopped_at TEXT, last_in_at TEXT, last_count INTEGER NOT NULL DEFAULT 0,
+  calendars TEXT NOT NULL DEFAULT '[]', sync_id TEXT, sync_taken INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(device_id, source));
+CREATE TABLE phone_records(
+  device_id TEXT NOT NULL, source TEXT NOT NULL, phone_id TEXT NOT NULL,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE, version INTEGER NOT NULL,
+  removed_at TEXT, came_in_at TEXT NOT NULL, UNIQUE(device_id, source, phone_id));
+CREATE INDEX phone_records_item ON phone_records(item_id);
+CREATE INDEX items_reading_day ON items(json_extract(metadata, '$.reading.type'),
+  json_extract(metadata, '$.day')) WHERE kind = 'reading';
+CREATE INDEX items_phone_source ON items(json_extract(metadata, '$.phone.source'))
+  WHERE json_extract(metadata, '$.phone.source') IS NOT NULL;
+-- What a phone delete covers, so applying it can also stop that source.
+ALTER TABLE forget_tokens ADD COLUMN phone_scope TEXT;
