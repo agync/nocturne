@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · today · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{ "*": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true } }
+</script>
+</head>
+<body data-frame="duo" data-states="page away update-phone update-computer">
+<main id="content">
+  <p class="pstatus" data-state="page"><span class="pdot"></span>Connected to Home computer</p>
+
+  <div class="pbanner" role="status" data-state="away">
+    <span data-icon="moon" data-size="22"></span>
+    <span><strong>Home computer is asleep, switched off or has a new address.</strong>Things you keep now wait on this phone and go across when it’s back.</span>
+  </div>
+
+  <div class="card2" data-state="update-phone">
+    <span data-icon="refresh" data-size="26"></span>
+    <h2>Update Nocturne on this phone</h2>
+    <p class="plead">Your computer has a newer Nocturne that this version can’t talk to. What you keep waits here until you update.</p>
+    <span class="btn" data-kind="primary"><span data-os="android">Update in Google Play</span><span data-os="ios">Update in the App Store</span></span>
+    <p class="versions">Your computer: Nocturne 1.4 · This phone: Nocturne 1.1</p>
+  </div>
+
+  <div class="card2" data-state="update-computer">
+    <span data-icon="laptop" data-size="26"></span>
+    <h2>Update Nocturne on your computer</h2>
+    <p class="plead">This phone has a newer Nocturne than your computer. What you keep waits here until your computer is updated.</p>
+    <p class="versions">Your computer: Nocturne 1.1 · This phone: Nocturne 1.4</p>
+  </div>
+
+  <div data-state="away update-phone update-computer" style="display: flex; flex-direction: column; gap: 8px">
+    <p class="plead">Today’s page is back when your computer is. This phone keeps no copy.</p>
+    <p class="pstatus"><span class="pdot" style="background: var(--ember)"></span>2 waiting · Last connected 7:42 am · tries again by itself</p>
+  </div>
+
+  <!-- The page, phone edition -->
+  <div data-state="page" style="display: flex; flex-direction: column; gap: 14px">
+    <p class="plbl">Friday 20 November</p>
+    <h1 class="ptitle">Nothing needs you today.</h1>
+    <p class="plead" style="font-family: var(--font-serif); font-style: italic; font-size: 1.0625rem">Overnight Nocturne read 9 things you kept and noticed 1 change.</p>
+  </div>
+
+  <section class="hf" data-state="page" aria-label="Last night" style="padding: 12px 14px; border-radius: 12px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule)">
+    <div class="hfHead"><span class="hfLabel">Last night</span><span class="rchip"><span data-icon="moon" data-size="12"></span>Sleep · Health</span></div>
+    <p class="hfValue"><span class="num">6 h 40 min</span> asleep</p>
+    <svg class="hfSvg" viewBox="0 0 340 30" role="img" aria-label="6 h 40 min asleep, from 11:50 pm to 7:05 am, awake once.">
+      <rect class="h-track" x="0" y="4" width="340" height="10" rx="5"/>
+      <rect class="h-bar" x="81.5" y="4" width="70.8" height="10" rx="3"/>
+      <rect class="h-bar" x="157.6" y="4" width="77.9" height="10" rx="3"/>
+      <line class="h-usual" x1="69" y1="1" x2="69" y2="17"/><line class="h-usual" x1="233.8" y1="1" x2="233.8" y2="17"/>
+      <text class="h-axis" x="42.5" y="28" text-anchor="middle">10 pm</text><text class="h-axis" x="127.5" y="28" text-anchor="middle">2 am</text><text class="h-axis" x="212.5" y="28" text-anchor="middle">6 am</text><text class="h-axis" x="297.5" y="28" text-anchor="middle">10 am</text>
+    </svg>
+    <p class="hfSay">11:50 pm to 7:05 am, awake once.</p>
+  </section>
+
+  <section data-state="page" aria-labelledby="cal" style="display: flex; flex-direction: column; gap: 4px">
+    <p class="plbl" id="cal" style="outline: 2px dashed var(--marker); outline-offset: 3px; align-self: flex-start">In your calendar today · 3</p>
+    <ul class="agenda">
+      <li><span class="at">9:00 am</span><span class="what">Dentist, check-up <span class="where">Bridge Street Surgery</span><span><span class="rchip"><span data-icon="calendar" data-size="12"></span>Calendar · Family</span></span></span></li>
+      <li><span class="at">4:30 pm</span><span class="what">Leo, swimming <span class="where">Riverside pool</span><span><span class="rchip"><span data-icon="calendar" data-size="12"></span>Calendar · Family</span></span></span></li>
+      <li><span class="at">7:00 pm</span><span class="what">Book group <span class="where">Priya’s</span><span><span class="rchip"><span data-icon="calendar" data-size="12"></span>Calendar · Family</span></span></span></li>
+    </ul>
+  </section>
+
+  <section data-state="page" style="display: flex; flex-direction: column; gap: 8px">
+    <p class="plbl">What changed · 1</p>
+    <p class="quote" style="font-size: 1.0625rem">Leo’s swimming moved from Wednesday to <strong>Friday</strong>, in your calendar.</p>
+    <span><span class="rchip"><span data-icon="calendar" data-size="12"></span>Calendar · Family</span></span>
+  </section>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

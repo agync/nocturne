@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The morning page with the phone's calendar · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="app" data-section="Today" data-states="page">
+<div id="content" class="sheet">
+  <div class="pageMock">
+    <p class="eyebrow">Friday 20 November</p>
+    <h1 class="pageTitle">Nothing needs you today.</h1>
+
+    <div class="lastNight newRow">
+      <div style="display: flex; flex-direction: column; gap: 6px">
+        <span class="label">Last night</span>
+        <p>6 h 40 min asleep, 11:50 pm to 7:05 am</p>
+        <ul class="rchips"><li class="rchip"><span data-icon="moon" data-size="14"></span>Sleep · Health · Sam’s phone</li></ul>
+      </div>
+      <svg class="hfSvg" viewBox="0 0 280 32" role="img" aria-label="6 h 40 min asleep, from 11:50 pm to 7:05 am, awake once.">
+        <rect class="h-track" x="0" y="6" width="280" height="10" rx="5"/>
+        <rect class="h-bar" x="67.1" y="6" width="58.3" height="10" rx="3"/>
+        <rect class="h-bar" x="129.8" y="6" width="64.2" height="10" rx="3"/>
+        <line class="h-usual" x1="56.9" y1="3" x2="56.9" y2="19"/><line class="h-usual" x1="192.5" y1="3" x2="192.5" y2="19"/>
+        <text class="h-axis" x="35" y="30" text-anchor="middle">10 pm</text><text class="h-axis" x="105" y="30" text-anchor="middle">2 am</text><text class="h-axis" x="175" y="30" text-anchor="middle">6 am</text><text class="h-axis" x="245" y="30" text-anchor="middle">10 am</text>
+      </svg>
+    </div>
+
+    <p class="pageDeck">Overnight Nocturne read 9 things you kept and noticed 1 change.</p>
+
+    <section class="section newRow">
+      <h2 class="label">In your calendar today · 3</h2>
+      <ul class="pageAgenda">
+        <li><span class="at">9:00 am</span><span><span class="what">Dentist, check-up</span> <span class="where">Bridge Street Surgery</span><span style="display: flex; margin-top: 6px"><span class="rchip"><span data-icon="calendar" data-size="14"></span>Calendar · Family · Sam’s phone</span></span></span></li>
+        <li><span class="at">4:30 pm</span><span><span class="what">Leo, swimming</span> <span class="where">Riverside pool</span><span style="display: flex; margin-top: 6px"><span class="rchip"><span data-icon="calendar" data-size="14"></span>Calendar · Family · Sam’s phone</span></span></span></li>
+        <li><span class="at">7:00 pm</span><span><span class="what">Book group</span> <span class="where">Priya’s</span><span style="display: flex; margin-top: 6px"><span class="rchip"><span data-icon="calendar" data-size="14"></span>Calendar · Family · Sam’s phone</span></span></span></li>
+      </ul>
+    </section>
+
+    <section class="section">
+      <h2 class="label">What changed · 1</h2>
+      <p class="pageLine">Leo’s swimming moved from Wednesday to <strong>Friday</strong>, same time, <span class="newRow">in your calendar</span>.</p>
+      <ul class="rchips"><li class="rchip"><span data-icon="calendar" data-size="14"></span>Calendar · Family · Sam’s phone</li></ul>
+    </section>
+
+    <section class="section">
+      <h2 class="label">This week</h2>
+      <p class="pageLine">Year 4 trip form due back on <strong>Monday</strong>.</p>
+      <ul class="rchips"><li class="rchip"><span data-icon="image" data-size="14"></span>Photo · Thu 19 Nov</li><li class="rchip newRow"><span data-icon="calendar" data-size="14"></span>Calendar · School term dates</li></ul>
+      <p class="pageLine">Gran’s eye test, <strong>Tuesday</strong> at 10:15 am.</p>
+      <ul class="rchips"><li class="rchip"><span data-icon="mic" data-size="14"></span>Voice note · Mon 16 Nov</li></ul>
+    </section>
+
+    <section class="qbox" aria-label="One question">
+      <p class="label">One question</p>
+      <p class="qtext">Is Leo’s swimming still on Fridays at 4:30 pm?</p>
+      <div class="qchoices"><span class="qchoice">Yes</span><span class="qchoice">No</span><span class="qchoice">Not sure</span></div>
+    </section>
+
+    <p class="small">A dashed outline marks what is new; it is not part of the design.</p>
+  </div>
+</div>
+<script src="shell.js"></script>
+</body>
+</html>

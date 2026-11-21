@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone app · first run and pairing · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false },
+  "welcome": { "bar": "none" },
+  "scan": { "bar": "modal", "title": "Scan the code", "back": "Cancel" },
+  "camera-off": { "bar": "modal", "title": "Scan the code", "back": "Cancel" },
+  "type": { "bar": "back", "title": "Type the code", "back": "Welcome" },
+  "words": { "bar": "none" },
+  "allowed": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="welcome scan camera-off type words allowed">
+<main id="content">
+
+  <!-- Welcome -->
+  <div class="hero" data-state="welcome" style="padding-top: 40px">
+    <span data-mark="40"></span>
+    <h1 class="heroTitle">Nocturne lives on your computer</h1>
+    <p class="plead">This app lets you keep things, ask and read your page while you’re out. It works with Nocturne on your computer.</p>
+  </div>
+  <ol class="steps" data-state="welcome">
+    <li><span>On your computer, open Nocturne and choose <span class="cc">Settings</span>, then <span class="cc">Away from home</span>, then <span class="cc">Add a phone</span>.</span></li>
+    <li><span>Scan the code it shows, or type it.</span></li>
+  </ol>
+  <div class="foot" data-state="welcome">
+    <span class="btn" data-kind="primary"><span data-icon="scan" data-size="20"></span>Scan the code</span>
+    <span class="btn"><span data-icon="keyboard" data-size="20"></span>Type the code</span>
+    <p class="small" style="text-align: center; padding-top: 8px">No account and no sign-in. This phone keeps no copy of your memory.</p>
+    <span class="link2" style="text-align: center">No Nocturne on your computer yet?</span>
+  </div>
+
+  <!-- Scan -->
+  <div class="camera" data-state="scan" style="margin-top: -20px">
+    <div class="frameBox" style="display: flex; align-items: center; justify-content: center"><span data-qr="170"></span></div>
+  </div>
+  <p class="pstatus" data-state="scan"><span class="pdot pulse"></span>Looking for the code…</p>
+  <p class="plead" data-state="scan">Point at the code on your computer’s screen, under <span class="cc">Add a phone</span>.</p>
+  <p class="small" data-state="scan">Nocturne uses the camera only while this is open, and keeps no pictures.</p>
+  <div class="foot" data-state="scan"><span class="btn" data-kind="quiet">Type the code instead</span></div>
+
+  <!-- Camera refused -->
+  <div class="camera" data-state="camera-off" style="margin-top: -20px; height: 300px; background: var(--sheet); box-shadow: inset 0 -1px 0 var(--rule)">
+    <span data-icon="camera" data-size="48" style="color: var(--ink3)"></span>
+  </div>
+  <h1 class="ptitle" data-state="camera-off" style="font-size: 1.625rem">The camera is off for Nocturne.</h1>
+  <p class="plead" data-state="camera-off">Allow it in your phone’s settings, or type the code instead.</p>
+  <div class="foot" data-state="camera-off">
+    <span class="btn" data-kind="primary">Open phone settings</span>
+    <span class="btn">Type the code</span>
+  </div>
+
+  <!-- Type -->
+  <p class="plead" data-state="type">The 24 letters and numbers under the code on your computer.</p>
+  <div class="codeGroups" data-state="type"><span>K7QM2A</span><span>X9DPLR</span><span>4TWB8N</span><span style="color: var(--ink3)">______</span></div>
+  <p class="small" data-state="type">Capitals don’t matter.</p>
+  <div class="foot" data-state="type"><span class="btn" data-kind="primary" style="opacity: 0.45">Connect</span><span class="btn" data-kind="quiet">Scan the code instead</span></div>
+
+  <!-- Three words -->
+  <div class="hero" data-state="words" style="padding-top: 28px">
+    <span class="plbl">Adding Sam’s phone</span>
+    <h1 class="ptitle" style="font-size: 1.625rem">Check your computer shows the same three words.</h1>
+  </div>
+  <ul class="wordsBig" data-state="words"><li>lantern</li><li>orchard</li><li>pebble</li></ul>
+  <p class="plead" data-state="words">If they match, choose <span class="cc">Allow</span> on your computer. If they don’t, choose <span class="cc">Don’t allow</span> there and start again.</p>
+  <p class="small" data-state="words">If your computer asks to allow a phone and this phone isn’t showing three words, someone else is trying to pair. Refuse it.</p>
+  <p class="pstatus" data-state="words" style="color: var(--ink)"><span class="pdot"></span>Waiting for your computer…</p>
+  <div class="foot" data-state="words"><span class="btn">Cancel</span></div>
+
+  <!-- Allowed -->
+  <div class="hero" data-state="allowed" style="padding-top: 56px">
+    <span data-icon="check" data-size="40"></span>
+    <h1 class="heroTitle">Sam’s phone can now use Nocturne.</h1>
+    <p class="plead">Keep, ask and read your page from here.</p>
+  </div>
+  <div class="foot" data-state="allowed"><span class="btn" data-kind="primary">Continue</span></div>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>
