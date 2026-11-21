@@ -767,7 +767,7 @@ fn forget_in_pages(tx: &Transaction<'_>, kept_at: &str, was_pending: bool) -> Re
         view.dek = template_dek(view.kept_count, needs, view.let_go_count);
         tx.execute(
             "UPDATE pages SET body = ?2, dek = ?3 WHERE date = ?1",
-            params![date, serde_json::to_string(&view)?, view.dek],
+            params![date, crate::page::stored_body(&view)?, view.dek],
         )?;
     }
     Ok(())
@@ -959,7 +959,12 @@ fn redact_pages(
         view.dek = template_dek(view.kept_count, needs, view.let_go_count);
         tx.execute(
             "UPDATE pages SET body = ?2, headline = ?3, dek = ?4 WHERE date = ?1",
-            params![date, serde_json::to_string(&view)?, view.headline, view.dek],
+            params![
+                date,
+                crate::page::stored_body(&view)?,
+                view.headline,
+                view.dek
+            ],
         )?;
     }
     Ok(())

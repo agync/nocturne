@@ -357,7 +357,27 @@ pub(crate) fn build_day(
             },
         ));
     }
+    let health = crate::phones::read::day_health(conn, &ctx.tz, day)?;
+    rows.extend(phone_rows(conn, ctx, originals, day, health.as_ref())?);
     rows.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
+    // Last night beside the day's first check-in, with its receipt.
+    let after_sleep =
+        health
+            .as_ref()
+            .and_then(|h| h.night.as_ref())
+            .map(|n| nocturne_contract::AfterSleep {
+                minutes: n.asleep_min,
+                item_id: n.item_id.clone(),
+            });
+    let mut checkins = checkins;
+    if let (Some(a), Some(first)) = (&after_sleep, checkins.first_mut()) {
+        first.after_sleep = Some(a.clone());
+        for (_, _, row) in rows.iter_mut() {
+            if let Some(c) = row.checkin.as_mut().filter(|c| c.id == first.id) {
+                c.after_sleep = Some(a.clone());
+            }
+        }
+    }
 
     let names = names_in(
         items.iter().copied().filter(|i| !is_background(i)),
@@ -385,14 +405,76 @@ pub(crate) fn build_day(
         reflection: super::lookback::summary(conn, ctx, originals, day)?,
         reading,
         same_name,
-        health: None,
+        health,
     })
+}
+
+/// What phones brought for the day, as quiet rows: appointments from the calendar at their
+/// time (they are plans, not things kept), workouts at their start, and "Woke" when last night
+/// ended.
+fn phone_rows(
+    conn: &Connection,
+    ctx: &Ctx,
+    originals: &Path,
+    day: Date,
+    health: Option<&nocturne_contract::DayHealth>,
+) -> Result<Vec<(String, String, TimelineRow)>> {
+    let mut wanted: Vec<(String, String, RowKind)> = Vec::new();
+    for c in crate::phones::read::calendar_entries(conn, day)? {
+        let at = if c.entry.all_day {
+            crate::util::fmt_ts(day.to_zoned(ctx.tz.clone())?.timestamp())
+        } else {
+            crate::util::fmt_ts(parse_ts(&c.entry.start)?)
+        };
+        wanted.push((at, c.item_id, RowKind::Calendar));
+    }
+    if let Some(h) = health {
+        for w in &h.workouts {
+            wanted.push((
+                crate::util::fmt_ts(parse_ts(&w.start)?),
+                w.item_id.clone(),
+                RowKind::Workout,
+            ));
+        }
+        if let Some(n) = &h.night {
+            wanted.push((
+                crate::util::fmt_ts(parse_ts(&n.to)?),
+                n.item_id.clone(),
+                RowKind::Woke,
+            ));
+        }
+    }
+    let mut out = Vec::new();
+    for (at, id, kind) in wanted {
+        let Some(view) = crate::rows::get_item_view(conn, originals, &id)? else {
+            continue;
+        };
+        out.push((
+            at.clone(),
+            id,
+            TimelineRow {
+                kind,
+                part: day_part(ctx, day, &at)?,
+                item: view,
+                checkin: None,
+                good: None,
+                feeling: None,
+                mentions: Vec::new(),
+                left_out: false,
+                move_to: None,
+                answer: None,
+            },
+        ));
+    }
+    Ok(out)
 }
 
 /// Every journal day with something kept on it, newest first.
 pub(crate) fn days_with_items(conn: &Connection, ctx: &Ctx) -> Result<Vec<Date>> {
-    let mut stmt =
-        conn.prepare("SELECT json_extract(metadata, '$.journal_day'), kept_at FROM items")?;
+    let mut stmt = conn.prepare(
+        "SELECT json_extract(metadata, '$.journal_day'), kept_at FROM items \
+             WHERE kind NOT IN ('calendar', 'reading')",
+    )?;
     let mut days: BTreeSet<Date> = BTreeSet::new();
     let rows = stmt.query_map([], |r| {
         Ok((r.get::<_, Option<String>>(0)?, r.get::<_, String>(1)?))

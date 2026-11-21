@@ -314,14 +314,16 @@ fn compose(
     let screen = edition == Edition::Screen;
     let mut skipped = 0u32;
 
+    // What phones bring from their calendar and Health is not something kept.
     let kept_count: u32 = conn.query_row(
-        "SELECT COUNT(*) FROM items WHERE kept_at >= ?1 AND kept_at < ?2",
+        "SELECT COUNT(*) FROM items WHERE kept_at >= ?1 AND kept_at < ?2 \
+         AND kind NOT IN ('calendar', 'reading')",
         [&start, &end],
         |r| r.get(0),
     )?;
     let pending: u32 = conn.query_row(
         "SELECT COUNT(*) FROM items WHERE kept_at >= ?1 AND kept_at < ?2 \
-         AND status IN ('kept', 'reading')",
+         AND status IN ('kept', 'reading') AND kind NOT IN ('calendar', 'reading')",
         [&start, &end],
         |r| r.get(0),
     )?;
@@ -427,6 +429,12 @@ fn compose(
         } else {
             LineKind::Learned
         };
+        let mut line = memory_line(kind, &view);
+        if m.was.is_some()
+            && let Some(text) = calendar_moved(conn, m)?
+        {
+            line.text = text;
+        }
         changes.push((
             freq.get(&m.subject_key).copied().unwrap_or(0),
             m.recorded_at.clone(),
@@ -434,7 +442,29 @@ fn compose(
             m.was.is_some(),
             Planned {
                 private: view.private,
-                line: memory_line(kind, &view),
+                line,
+            },
+        ));
+    }
+    for (m, text) in calendar_cancelled(conn, &start, &end)? {
+        if needs_ids.contains(&m.id) {
+            continue;
+        }
+        let view = mem_view(conn, &m)?;
+        if !screen && view.private {
+            skipped += 1;
+            continue;
+        }
+        let mut line = memory_line(LineKind::Changed, &view);
+        line.text = text;
+        changes.push((
+            freq.get(&m.subject_key).copied().unwrap_or(0),
+            m.recorded_at.clone(),
+            m.id.clone(),
+            true,
+            Planned {
+                private: view.private,
+                line,
             },
         ));
     }
@@ -470,6 +500,8 @@ fn compose(
     let gone = query_mems(
         conn,
         "m.let_go_at >= ?1 AND m.let_go_at < ?2 AND m.superseded_at IS NULL \
+         AND NOT EXISTS (SELECT 1 FROM memory_sources s JOIN items i ON i.id = s.item_id \
+                         WHERE s.memory_id = m.id AND i.kind = 'calendar') \
          ORDER BY m.let_go_at DESC, m.id",
         [&start, &end],
     )?;
@@ -498,6 +530,7 @@ fn compose(
         "m.predicate = 'scheduled' AND m.superseded_at IS NULL AND m.done = 0 \
          AND m.status IN ('active', 'fading') AND COALESCE(m.due, m.valid_from) >= ?1 \
          AND COALESCE(m.due, m.valid_from) <= ?2 \
+         AND (m.valid_to IS NULL OR m.valid_to > COALESCE(m.due, m.valid_from)) \
          ORDER BY COALESCE(m.due, m.valid_from), m.id",
         [day.to_string(), until.to_string()],
     )?;
@@ -534,7 +567,7 @@ fn compose(
     };
 
     let needs_total = ny_total as u32 + name_questions;
-    Ok(nocturne_contract::PageView {
+    let mut page = nocturne_contract::PageView {
         date: day.to_string(),
         page_number: number,
         edition,
@@ -563,7 +596,132 @@ fn compose(
         calendar_today: Vec::new(),
         more_calendar_today: 0,
         last_night: None,
-    })
+    };
+    fill_phone_lines(conn, tz, &mut page)?;
+    Ok(page)
+}
+
+/// A page's body as stored: what phones bring is read when the page is, never kept with it, so
+/// a phone delete or a stopped page option leaves nothing behind.
+pub(crate) fn stored_body(page: &nocturne_contract::PageView) -> Result<String> {
+    let mut page = page.clone();
+    page.calendar_today = Vec::new();
+    page.more_calendar_today = 0;
+    page.last_night = None;
+    Ok(serde_json::to_string(&page)?)
+}
+
+/// "In your calendar today" and "Last night" for the page's day and edition, read now. Every
+/// edition but the screen leaves out an entry that is private, or that a private memory came
+/// from, and recounts "{count} more" from what remains. Audio never carries the night.
+pub(crate) fn fill_phone_lines(
+    conn: &Connection,
+    tz: &TimeZone,
+    page: &mut nocturne_contract::PageView,
+) -> Result<()> {
+    page.calendar_today = Vec::new();
+    page.more_calendar_today = 0;
+    page.last_night = None;
+    let day: Date = page.date.parse()?;
+    let options = crate::phones::page_options(conn)?;
+    if options.calendar_today {
+        let mut lines = Vec::new();
+        for c in crate::phones::read::calendar_entries(conn, day)? {
+            if page.edition != Edition::Screen
+                && crate::remote::withheld_from_phones(conn, &c.item_id)?
+            {
+                continue;
+            }
+            lines.push(crate::phones::read::calendar_line(&c, tz));
+        }
+        (page.calendar_today, page.more_calendar_today) = crate::phones::read::cap_lines(lines);
+    }
+    if options.sleep_last_night && page.edition != Edition::Audio {
+        page.last_night = crate::phones::read::night_line(conn, tz, day)?;
+        if page.edition != Edition::Screen
+            && let Some(n) = &page.last_night
+            && crate::remote::withheld_from_phones(conn, &n.item_id)?
+        {
+            page.last_night = None;
+        }
+    }
+    Ok(())
+}
+
+/// The calendar's own words for an appointment it moved: "Dentist moved from Wednesday 25
+/// November to Thursday 26 November, in your calendar." None when the move was not the
+/// calendar's.
+fn calendar_moved(conn: &Connection, m: &MemRow) -> Result<Option<String>> {
+    let from_calendar: bool = conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM memory_sources s JOIN items i ON i.id = s.item_id \
+         WHERE s.memory_id = ?1 AND i.kind = 'calendar')",
+        [&m.id],
+        |r| r.get(0),
+    )?;
+    if !from_calendar {
+        return Ok(None);
+    }
+    let old: Option<(String, Option<String>)> = conn
+        .query_row(
+            "SELECT object, due FROM memories WHERE superseded_by = ?1 \
+             ORDER BY superseded_at DESC, id LIMIT 1",
+            [&m.id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((old_object, old_due)) = old else {
+        return Ok(None);
+    };
+    let time = |o: &str| o.split_once(" at ").map(|(_, t)| t.to_string());
+    let (from, to) = if old_due.is_some() && old_due == m.due {
+        match (time(&old_object), time(&m.object)) {
+            (Some(a), Some(b)) => (a, b),
+            _ => (old_object.clone(), m.object.clone()),
+        }
+    } else {
+        let day = |d: &Option<String>, o: &str| {
+            d.as_deref()
+                .and_then(|d| d.parse::<Date>().ok())
+                .map(crate::phones::calendar::day_words)
+                .unwrap_or_else(|| o.to_string())
+        };
+        (day(&old_due, &old_object), day(&m.due, &m.object))
+    };
+    Ok(Some(format!(
+        "{} moved from {from} to {to}, in your calendar.",
+        m.subject
+    )))
+}
+
+/// Appointments the calendar cancelled in the window: "Dentist on Thursday 26 November was
+/// cancelled in your calendar."
+fn calendar_cancelled(conn: &Connection, start: &str, end: &str) -> Result<Vec<(MemRow, String)>> {
+    let ids: Vec<String> = conn
+        .prepare(
+            "SELECT DISTINCT s.memory_id FROM phone_records r \
+             JOIN memory_sources s ON s.item_id = r.item_id \
+             WHERE r.source = 'calendar' AND r.removed_at >= ?1 AND r.removed_at < ?2",
+        )?
+        .query_map([start, end], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut out = Vec::new();
+    for id in ids {
+        let Some(m) = crate::rows::load_mem(conn, &id)? else {
+            continue;
+        };
+        if m.superseded_at.is_some() || m.valid_to.is_none() {
+            continue;
+        }
+        let on = m
+            .due
+            .as_deref()
+            .and_then(|d| d.parse::<Date>().ok())
+            .map(crate::phones::calendar::day_words)
+            .unwrap_or_else(|| m.object.clone());
+        let text = format!("{} on {on} was cancelled in your calendar.", m.subject);
+        out.push((m, text));
+    }
+    Ok(out)
 }
 
 impl Engine {
@@ -712,7 +870,7 @@ impl Engine {
                     enum_str(&page.variant),
                     page.tidied_from,
                     page.tidied_to,
-                    serde_json::to_string(page)?,
+                    stored_body(page)?,
                 ],
             )?;
             let sections: [(&str, &Vec<PageLine>); 5] = [
@@ -801,7 +959,14 @@ impl Engine {
 
     /// A saved page (screen edition), or the latest when `day` is `None`.
     pub fn page(&self, day: Option<Date>) -> Result<Option<nocturne_contract::PageView>> {
-        self.read(|conn| load_page(conn, day))
+        let tz = self.clock().tz();
+        self.read(|conn| {
+            let mut page = load_page(conn, day)?;
+            if let Some(p) = page.as_mut() {
+                fill_phone_lines(conn, &tz, p)?;
+            }
+            Ok(page)
+        })
     }
 
     /// A saved page for an edition. Every edition but the screen drops lines about memories
@@ -811,7 +976,8 @@ impl Engine {
         day: Option<Date>,
         edition: Edition,
     ) -> Result<Option<nocturne_contract::PageView>> {
-        self.read(|conn| edition_page(conn, day, edition))
+        let tz = self.clock().tz();
+        self.read(|conn| edition_page(conn, &tz, day, edition))
     }
 
     /// Every saved page, newest first, as an edition sees it. Every edition but the screen
@@ -821,6 +987,7 @@ impl Engine {
         if edition == Edition::Screen {
             return self.pages();
         }
+        let tz = self.clock().tz();
         self.read(|conn| {
             let dates: Vec<String> = conn
                 .prepare("SELECT date FROM pages ORDER BY date DESC")?
@@ -828,7 +995,7 @@ impl Engine {
                 .collect::<rusqlite::Result<_>>()?;
             let mut out = Vec::with_capacity(dates.len());
             for date in dates {
-                if let Some(page) = edition_page(conn, Some(date.parse()?), edition)? {
+                if let Some(page) = edition_page(conn, &tz, Some(date.parse()?), edition)? {
                     out.push(PageSummary {
                         needs_you: needs_you_count(&page),
                         date: page.date,
@@ -1233,6 +1400,7 @@ pub fn needs_you_count(page: &nocturne_contract::PageView) -> u32 {
 /// A saved page for an edition, inside a read.
 fn edition_page(
     conn: &Connection,
+    tz: &TimeZone,
     day: Option<Date>,
     edition: Edition,
 ) -> Result<Option<nocturne_contract::PageView>> {
@@ -1240,6 +1408,7 @@ fn edition_page(
         return Ok(None);
     };
     page.edition = edition;
+    fill_phone_lines(conn, tz, &mut page)?;
     if edition == Edition::Screen {
         return Ok(Some(page));
     }
@@ -1496,9 +1665,18 @@ pub fn phone_view(page: nocturne_contract::PageView) -> Result<nocturne_contract
         upcoming: page.upcoming,
         learned: page.learned,
         question: page.question,
-        // The person's own calendar and sleep, as on the computer's page.
-        calendar_today: page.calendar_today,
-        more_calendar_today: page.more_calendar_today,
+        // The person's own calendar and sleep, as on the computer's page. The calendar lines of
+        // any other edition are not known to leave out what is private.
+        calendar_today: if page.edition == Edition::Phone {
+            page.calendar_today
+        } else {
+            Vec::new()
+        },
+        more_calendar_today: if page.edition == Edition::Phone {
+            page.more_calendar_today
+        } else {
+            0
+        },
         last_night: page.last_night,
     })
 }

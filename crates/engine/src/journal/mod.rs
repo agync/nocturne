@@ -180,7 +180,8 @@ pub(crate) fn load_item(conn: &Connection, originals: &Path, id: &str) -> Result
 }
 
 /// Everything that belongs to the journal days `start` to `end`, both included: items with a
-/// journal day in range, and items with none that were kept inside the range.
+/// journal day in range, and items with none that were kept inside the range. What phones bring
+/// from their calendar and Health is not kept: the day reads it apart (see `day::build_day`).
 pub(crate) fn items_in_days(
     conn: &Connection,
     ctx: &Ctx,
@@ -193,8 +194,9 @@ pub(crate) fn items_in_days(
     load_items(
         conn,
         originals,
-        "(json_extract(i.metadata, '$.journal_day') BETWEEN ?1 AND ?2) \
-         OR (json_extract(i.metadata, '$.journal_day') IS NULL AND i.kept_at >= ?3 AND i.kept_at < ?4)",
+        "i.kind NOT IN ('calendar', 'reading') AND \
+         ((json_extract(i.metadata, '$.journal_day') BETWEEN ?1 AND ?2) \
+         OR (json_extract(i.metadata, '$.journal_day') IS NULL AND i.kept_at >= ?3 AND i.kept_at < ?4))",
         &[start.to_string(), end.to_string(), from, to],
     )
 }
