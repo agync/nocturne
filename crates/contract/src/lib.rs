@@ -17,6 +17,7 @@ mod memory;
 mod models;
 mod online;
 mod page;
+mod phones;
 mod remote;
 mod system;
 
@@ -29,5 +30,6 @@ pub use memory::*;
 pub use models::*;
 pub use online::*;
 pub use page::*;
+pub use phones::*;
 pub use remote::*;
 pub use system::*;

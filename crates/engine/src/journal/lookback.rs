@@ -162,7 +162,7 @@ fn glance_kind(item: &JItem) -> GlanceKind {
     match item.view.kind {
         ItemKind::Audio => GlanceKind::Voice,
         ItemKind::Image => GlanceKind::Photo,
-        ItemKind::Document => GlanceKind::Document,
+        ItemKind::Document | ItemKind::Calendar | ItemKind::Reading => GlanceKind::Document,
         ItemKind::Web => GlanceKind::Web,
         ItemKind::Text | ItemKind::Checkin => GlanceKind::Note,
     }

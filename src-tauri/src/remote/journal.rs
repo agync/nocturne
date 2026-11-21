@@ -470,6 +470,7 @@ mod tests {
             reflection: None,
             reading: 2,
             same_name: Vec::new(),
+            health: None,
         }
     }
 
@@ -509,6 +510,7 @@ mod tests {
             from_device: None,
             mentions: Vec::new(),
             left_out: false,
+            after_sleep_min: None,
         };
         let w: Withheld = ["itm_secret".to_string()].into();
         assert_eq!(checkin(c.clone(), &w).about, None);

@@ -212,3 +212,78 @@ fn model_types_are_tagged() {
         r#"{"type":"downloading","received":1.0,"total":2.0,"paused":false}"#
     );
 }
+
+#[test]
+fn phone_sends_are_tagged_and_read_by_older_shapes() {
+    let call = RemoteCall::SendReadings {
+        batch: ReadingBatch {
+            sync_id: "s1".into(),
+            seq: 0,
+            last: true,
+            changes: vec![
+                ReadingChange::Upsert {
+                    reading: Reading {
+                        phone_id: "r1".into(),
+                        day: "2026-11-20".into(),
+                        start: "2026-11-20T07:00:00+00:00".into(),
+                        end: None,
+                        source_device: None,
+                        value: ReadingValue::Steps { total: 8412 },
+                    },
+                },
+                ReadingChange::Removed {
+                    phone_id: "r0".into(),
+                    kind: ReadingKind::RestingHeartRate,
+                },
+            ],
+        },
+    };
+    assert_eq!(
+        serde_json::to_string(&call).unwrap(),
+        r#"{"cmd":"sendReadings","batch":{"syncId":"s1","seq":0,"last":true,"changes":[{"type":"upsert","reading":{"phoneId":"r1","day":"2026-11-20","start":"2026-11-20T07:00:00+00:00","end":null,"sourceDevice":null,"value":{"type":"steps","total":8412}}},{"type":"removed","phoneId":"r0","kind":"restingHeartRate"}]}}"#
+    );
+    let synced = RemoteAnswer::Synced {
+        receipt: SyncReceipt {
+            taken: 1,
+            unchanged: 0,
+            refused: 0,
+            stopped: false,
+            too_many: false,
+        },
+    };
+    assert_eq!(
+        serde_json::to_string(&synced).unwrap(),
+        r#"{"type":"synced","receipt":{"taken":1,"unchanged":0,"refused":0,"stopped":false,"tooMany":false}}"#
+    );
+
+    // A computer from before phone apps says hello without features.
+    let hello: PhoneHello = serde_json::from_str(
+        r#"{"computerName":"c","deviceName":"d","connection":"simple","version":"0.7.2","minPhoneBuild":1}"#,
+    )
+    .unwrap();
+    assert!(hello.features.is_empty());
+}
+
+#[test]
+fn the_page_journal_and_check_in_read_without_the_phone_fields() {
+    let check_in: CheckIn = serde_json::from_str(
+        r#"{"id":"i","keptAt":"2026-11-20T08:00:00+00:00","day":"2026-11-20",
+            "feeling":{"part":"settled","point":{"pleasant":0,"energy":0},"words":[]},
+            "line":null,"urge":null,"about":null,"tried":[],"fromDevice":null,"mentions":[],
+            "leftOut":false}"#,
+    )
+    .unwrap();
+    assert_eq!(check_in.after_sleep_min, None);
+    assert!(
+        !serde_json::to_string(&check_in)
+            .unwrap()
+            .contains("afterSleepMin")
+    );
+    let day: JournalDay = serde_json::from_str(
+        r#"{"day":"2026-11-20","today":true,"firstUse":false,"entry":[],"entrySavedAt":null,
+            "entryReadAt":null,"rows":[],"checkins":[],"good":[],"people":[],"reflection":null,
+            "reading":0,"sameName":[]}"#,
+    )
+    .unwrap();
+    assert_eq!(day.health, None);
+}

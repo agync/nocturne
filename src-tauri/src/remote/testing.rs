@@ -260,6 +260,7 @@ impl Shell for TestShell {
             connection,
             min_phone_build: super::protocol::MIN_PHONE_BUILD,
             version: "0.0.0".into(),
+            features: Vec::new(),
         }
     }
 

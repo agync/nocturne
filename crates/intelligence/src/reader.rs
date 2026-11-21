@@ -946,7 +946,7 @@ impl Reader {
                         .await?;
                     return Ok(Outcome::Understood);
                 }
-                ItemKind::Text | ItemKind::Web => {
+                ItemKind::Text | ItemKind::Web | ItemKind::Calendar | ItemKind::Reading => {
                     return self
                         .fail(&id, &lease, CouldntReadReason::Unsupported, reread)
                         .await;

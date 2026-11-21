@@ -22,6 +22,8 @@ const WHAT: Record<RemoteAction, CopyId> = {
   keptVoiceNote: "away.event.keptVoiceNote",
   answeredName: "away.event.answeredName",
   answeredQuestion: "away.event.answeredQuestion",
+  sentCalendar: "away.event.sentCalendar",
+  sentReadings: "away.event.sentReadings",
   tookBack: "away.event.tookBack",
   readPage: "away.event.readPage",
   openedOriginal: "away.event.openedOriginal",

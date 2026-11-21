@@ -47,6 +47,7 @@ pub(crate) fn checkin_view(
         from_device: item.view.from_device.clone(),
         mentions: mentions.get(item.id()).cloned().unwrap_or_default(),
         left_out: item.left_out,
+        after_sleep_min: None,
     })
 }
 
@@ -384,6 +385,7 @@ pub(crate) fn build_day(
         reflection: super::lookback::summary(conn, ctx, originals, day)?,
         reading,
         same_name,
+        health: None,
     })
 }
 

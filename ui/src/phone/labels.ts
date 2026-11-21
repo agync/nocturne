@@ -20,6 +20,10 @@ export function receiptMeta(receipt: Receipt): string {
       return [t("kind.web"), date].join(" · ");
     case "checkin":
       return [t("kind.checkin"), date].join(" · ");
+    case "calendar":
+      return [t("kind.calendar"), date].join(" · ");
+    case "reading":
+      return [t("kind.reading"), date].join(" · ");
     case "text":
       return [receipt.source === "paste" ? t("kind.paste") : t("kind.text"), date].join(" · ");
   }

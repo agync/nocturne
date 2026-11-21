@@ -202,6 +202,9 @@ mod tests {
             update: None,
             journal_line: None,
             journal_skipped: None,
+            calendar_today: Vec::new(),
+            more_calendar_today: 0,
+            last_night: None,
         }
     }
 

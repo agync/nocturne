@@ -33,6 +33,8 @@
   "item.kind.document": "Document",
   "item.kind.web": "Web page",
   "item.kind.checkin": "Check-in",
+  "item.kind.calendar": "Calendar",
+  "item.kind.reading": "Health",
   "item.source.quickCapture": "Quick keep",
   "item.source.drop": "Dropped in",
   "item.source.paste": "Pasted",

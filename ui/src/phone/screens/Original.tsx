@@ -30,6 +30,8 @@ const KIND = {
   document: "kind.document",
   web: "kind.web",
   checkin: "kind.checkin",
+  calendar: "kind.calendar",
+  reading: "kind.reading",
 } as const;
 
 interface OriginalProps {

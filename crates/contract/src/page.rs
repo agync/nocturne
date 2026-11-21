@@ -183,6 +183,19 @@ pub struct PageView {
     #[serde(default)]
     #[ts(optional)]
     pub journal_skipped: Option<u32>,
+    /// "In your calendar today", from paired phones, when the person turned it on. Read time,
+    /// never stored with the page.
+    #[serde(default)]
+    #[ts(as = "Option<Vec<crate::CalendarLine>>", optional)]
+    pub calendar_today: Vec<crate::CalendarLine>,
+    /// "{count} more today".
+    #[serde(default)]
+    #[ts(as = "Option<u32>", optional)]
+    pub more_calendar_today: u32,
+    /// "Last night", under the title. Never read aloud.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub last_night: Option<crate::NightLine>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

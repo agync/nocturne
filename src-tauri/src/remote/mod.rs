@@ -99,6 +99,7 @@ impl<R: Runtime> session::Shell for AppShell<R> {
             connection,
             min_phone_build: protocol::MIN_PHONE_BUILD,
             version: self.app.package_info().version.to_string(),
+            features: Vec::new(),
         }
     }
 
@@ -430,13 +431,16 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
 /// What a phone may do that no window command does: fetch a cited original, end its session,
 /// and the journal calls, which answer from the computer's own journal module. Answering the
 /// page's question from the journal is its own call, not `answer_question`: a phone answers no
-/// other question, and its answer is kept once per client id.
+/// other question, and its answer is kept once per client id. A phone app also sends its
+/// calendar and health readings, which no window does.
 pub const PHONE_ONLY_CALLS: &[&str] = &[
     "get_original",
     "disconnect",
     "get_look_back",
     "look_back",
     "answer_journal_question",
+    "send_calendar",
+    "send_readings",
 ];
 
 #[cfg(test)]
@@ -444,8 +448,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     use nocturne_contract::{
-        CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind, QuestionChoice,
-        RemoteCall, SameNameAnswer,
+        CalendarBatch, CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind,
+        QuestionChoice, ReadingBatch, RemoteCall, SameNameAnswer,
     };
 
     use super::*;
@@ -529,6 +533,25 @@ mod tests {
                 client_id: s(),
             },
             RemoteCall::SeeOnlineChange,
+            RemoteCall::SendCalendar {
+                batch: CalendarBatch {
+                    sync_id: s(),
+                    seq: 0,
+                    last: true,
+                    window_from: s(),
+                    window_to: s(),
+                    calendars: Vec::new(),
+                    changes: Vec::new(),
+                },
+            },
+            RemoteCall::SendReadings {
+                batch: ReadingBatch {
+                    sync_id: s(),
+                    seq: 0,
+                    last: true,
+                    changes: Vec::new(),
+                },
+            },
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -551,7 +574,9 @@ mod tests {
                 | RemoteCall::KeepCheckIn { .. }
                 | RemoteCall::AnswerSameName { .. }
                 | RemoteCall::AnswerJournalQuestion { .. }
-                | RemoteCall::SeeOnlineChange => {}
+                | RemoteCall::SeeOnlineChange
+                | RemoteCall::SendCalendar { .. }
+                | RemoteCall::SendReadings { .. } => {}
             }
         }
         let snake = |camel: &str| {
