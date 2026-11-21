@@ -799,10 +799,39 @@ pub struct SystemOneQuestion {
     #[serde(rename = "type")]
     pub kind: SystemOneKind,
     pub instructions: String,
-    /// For a choice, an object of option to description (or null); for a score, an array of
-    /// levels, lowest first; for `noul`, optionally `{"true": "...", "false": "..."}`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub criteria: Option<Value>,
+    pub criteria: Option<Criteria>,
+}
+
+/// What a question is judged against: for a choice, each option with its description (or none),
+/// sent as an object in this order, since the engine passes the order on and the answers depend
+/// on it; for a score, the levels, lowest first.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Criteria {
+    Options(Vec<(String, Option<String>)>),
+    Levels(Vec<String>),
+}
+
+impl Serialize for Criteria {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{SerializeMap, SerializeSeq};
+        match self {
+            Criteria::Options(options) => {
+                let mut map = s.serialize_map(Some(options.len()))?;
+                for (option, description) in options {
+                    map.serialize_entry(option, description)?;
+                }
+                map.end()
+            }
+            Criteria::Levels(levels) => {
+                let mut seq = s.serialize_seq(Some(levels.len()))?;
+                for level in levels {
+                    seq.serialize_element(level)?;
+                }
+                seq.end()
+            }
+        }
+    }
 }
 
 /// Questions about one state, as `POST /v1/systemone` takes them.
