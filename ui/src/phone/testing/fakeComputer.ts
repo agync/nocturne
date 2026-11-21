@@ -6,6 +6,7 @@
 import type {
   CheckIn,
   Feeling,
+  PhoneAppIntro,
   ReflectionView,
   RemoteAnswer,
   RemoteConnection,
@@ -149,6 +150,8 @@ export interface ComputerOptions {
   version?: string;
   computerName?: string;
   minPhoneBuild?: number;
+  /** Null: a computer from before the version window, whose hello leaves it out. */
+  maxPhoneBuild?: number | null;
   cKey?: { privateKey: CryptoKey; publicKey: Bytes };
   now?: () => number;
 }
@@ -209,6 +212,9 @@ export class FakeComputer {
   readonly version: string;
   readonly computerName: string;
   readonly minPhoneBuild: number | undefined;
+  readonly maxPhoneBuild: number | null;
+  /** What each phone said of itself, in turn. */
+  readonly introduced: PhoneAppIntro[] = [];
   readonly cpub: Bytes;
   readonly devices = new Map<string, FakeDevice>();
   readonly sessions = new Map<string, FakeSession>();
@@ -284,6 +290,7 @@ export class FakeComputer {
     this.version = o.version ?? "0.1.0";
     this.computerName = o.computerName ?? "Home computer";
     this.minPhoneBuild = o.minPhoneBuild;
+    this.maxPhoneBuild = o.maxPhoneBuild === undefined ? P.PHONE_BUILD : o.maxPhoneBuild;
     this.now = o.now ?? (() => Date.now());
   }
 
@@ -675,6 +682,7 @@ export class FakeComputer {
           connection: this.connection,
           version: this.version,
           minPhoneBuild: this.minPhoneBuild ?? P.MIN_PHONE_BUILD,
+          ...(this.maxPhoneBuild === null ? {} : { maxPhoneBuild: this.maxPhoneBuild }),
         },
       }),
     );
@@ -868,6 +876,14 @@ export class FakeComputer {
         }
         if (call.line && a.choice === call.choice && a.line === null) a.line = call.line;
         return ctx.reply({ type: "page", page: this.questionPage() });
+      }
+      case "introduce": {
+        this.introduced.push(call.app);
+        const oldest = this.minPhoneBuild ?? P.MIN_PHONE_BUILD;
+        const newest = this.maxPhoneBuild ?? oldest;
+        if (call.app.minBuild > newest) return ctx.reply({ type: "error", code: "outdated" });
+        if (call.app.maxBuild < oldest) return ctx.reply({ type: "error", code: "tooOld" });
+        return ctx.reply({ type: "introduced", agreed: Math.min(call.app.maxBuild, newest) });
       }
       case "listPages":
         return ctx.reply({

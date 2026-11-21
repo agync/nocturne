@@ -8,7 +8,7 @@ import type { PairedDevice } from "./engine";
 import { ConnectionError, PhoneRequestError } from "./engine";
 import { offerFromFragment, Pairing } from "./pairing";
 import * as P from "./protocol";
-import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, PHONE_BUILD } from "./protocol";
+import { HTTP_NOT_FOUND, HTTP_OFF, HTTP_REFUSED, MIN_PHONE_BUILD, PHONE_BUILD } from "./protocol";
 import { delta, FakeComputer } from "./testing/fakeComputer";
 import { DAY_PERIOD, WEEK_PERIOD, YESTERDAY, YESTERDAY_PERIOD } from "./testing/journalFixtures";
 import { memoryKeyStore } from "./testing/memoryStore";
@@ -598,7 +598,7 @@ describe("an old phone app", () => {
     const store = memoryKeyStore(device);
     const engine = createPhoneEngine(store, () => host(computer), { env: computer.env });
     const state = await engine.connect();
-    expect(state).toEqual({ kind: "outdated", minBuild: PHONE_BUILD + 1 });
+    expect(state).toEqual({ kind: "outdated", minBuild: PHONE_BUILD + 1, computer: "0.1.0" });
     expect(store.current()).toEqual(before);
     await expect(engine.status()).rejects.toBeInstanceOf(ConnectionError);
     engine.close();
@@ -614,6 +614,55 @@ describe("an old phone app", () => {
       expect((await engine.connect()).kind).toBe("connected");
       engine.close();
     }
+  });
+});
+
+describe("the page says it is the phone page in a browser", () => {
+  const app = {
+    platform: "browser" as const,
+    version: "0.8.0",
+    minBuild: MIN_PHONE_BUILD,
+    maxBuild: PHONE_BUILD,
+  };
+
+  it("introduces itself first to a computer that listens, and connects", async () => {
+    const computer = await FakeComputer.create();
+    const { device } = await paired({ computer });
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+      app,
+    });
+    expect((await engine.connect()).kind).toBe("connected");
+    expect(computer.introduced).toEqual([app]);
+    engine.close();
+  });
+
+  it("says nothing to a computer from before the version window", async () => {
+    const computer = await FakeComputer.create({ maxPhoneBuild: null });
+    const { device } = await paired({ computer });
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+      app,
+    });
+    expect((await engine.connect()).kind).toBe("connected");
+    expect(computer.introduced).toEqual([]);
+    engine.close();
+  });
+
+  it("a page kept from before the computer updated is told to update", async () => {
+    const computer = await FakeComputer.create();
+    const { device } = await paired({ computer });
+    const old = { ...app, minBuild: 0, maxBuild: 0 };
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+      app: old,
+    });
+    expect(await engine.connect()).toEqual({
+      kind: "outdated",
+      minBuild: MIN_PHONE_BUILD,
+      computer: "0.1.0",
+    });
+    engine.close();
   });
 });
 

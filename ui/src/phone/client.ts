@@ -11,6 +11,7 @@ import type {
   PageSummary,
   PageView,
   Period,
+  PhoneAppIntro,
   PhoneHello,
   PhoneItem,
   PhoneKept,
@@ -53,6 +54,8 @@ export interface EngineOptions {
   onRevoked?: () => void;
   /** Open a replacement session this long before the old one lapses. */
   renewMarginMs?: number;
+  /** What this page says of itself first on each session, to a computer that listens. */
+  app?: PhoneAppIntro;
 }
 
 const type =
@@ -149,8 +152,22 @@ export function createPhoneEngine(
       if (needed > P.PHONE_BUILD) {
         // This phone's app is older than the computer wants: keys stay, nothing is saved.
         opened.close("outdated");
-        set({ kind: "outdated", minBuild: needed });
+        set({ kind: "outdated", minBuild: needed, computer: opened.hello.version });
         throw new ConnectionError("outdated");
+      }
+      if (options.app && (opened.hello.maxPhoneBuild ?? needed) >= P.INTRODUCE_BUILD) {
+        const said = await opened
+          .request({ cmd: "introduce", app: options.app }, type("introduced"))
+          .result.then(
+            () => null,
+            (e: unknown) => (e instanceof PhoneRequestError ? e.code : null),
+          );
+        // A page kept from before the computer last updated: the same as an old app.
+        if (said === "tooOld") {
+          opened.close("outdated");
+          set({ kind: "outdated", minBuild: needed, computer: opened.hello.version });
+          throw new ConnectionError("outdated");
+        }
       }
       if (opened.linkKind === "poll" && env.WebSocket) stickyPoll = true;
       const previous = session;
