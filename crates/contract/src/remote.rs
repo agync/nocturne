@@ -399,6 +399,9 @@ pub enum PhoneError {
     /// The phone is newer than the newest build this computer speaks, or a call needs a newer
     /// build than the two agreed: update the computer.
     ComputerOutdated,
+    /// A reply this phone could not read, from a newer computer: the call failed, the session
+    /// goes on. Never sent by a computer.
+    Unknown,
 }
 
 /// Everything a phone may ask for: the allowed calls, the journal calls, the two phone verbs

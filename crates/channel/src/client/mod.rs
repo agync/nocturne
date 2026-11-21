@@ -593,6 +593,7 @@ async fn call_once(s: &Session, call: RemoteCall) -> Result<RemoteAnswer, Fault>
     match out? {
         Down::Answer(a) => Ok(a),
         Down::Chunk(_) => Err(Fault::Closed),
+        Down::Unreadable => Err(Fault::Phone(PhoneError::Unknown)),
     }
 }
 
@@ -647,6 +648,7 @@ async fn upload_once(s: &Session, call: RemoteCall, bytes: &[u8]) -> Result<Remo
     match out? {
         Down::Answer(a) => Ok(a),
         Down::Chunk(_) => Err(Fault::Closed),
+        Down::Unreadable => Err(Fault::Phone(PhoneError::Unknown)),
     }
 }
 

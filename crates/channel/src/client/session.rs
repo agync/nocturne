@@ -70,6 +70,8 @@ fn failure_for(end: LinkEnd) -> OpenError {
 pub(crate) enum Down {
     Answer(RemoteAnswer),
     Chunk(Chunk),
+    /// A reply to the request that this build cannot read.
+    Unreadable,
 }
 
 /// Why a request on a session did not get its answer.
@@ -294,13 +296,22 @@ impl Session {
     }
 }
 
-/// The next thing down for a request; an error answer becomes a fault.
+/// The next thing down for a request; an error answer, or one this build cannot read, becomes
+/// a fault.
 pub(crate) async fn next(rx: &mut mpsc::UnboundedReceiver<Down>) -> Result<Down, Fault> {
     match rx.recv().await {
         None => Err(Fault::Closed),
         Some(Down::Answer(RemoteAnswer::Error { code })) => Err(Fault::Phone(code)),
+        Some(Down::Unreadable) => Err(Fault::Phone(PhoneError::Unknown)),
         Some(d) => Ok(d),
     }
+}
+
+/// A reply this build cannot read: its request fails, and the session stays open. Without an
+/// id it names no request, and is dropped.
+fn unreadable(body: &[u8]) -> Option<(u32, Down)> {
+    let id = serde_json::from_slice::<serde_json::Value>(body).ok()?["id"].as_u64()?;
+    Some((u32::try_from(id).ok()?, Down::Unreadable))
 }
 
 async fn pump(mut inbox: Inbox, channel: Arc<Mutex<Channel>>, shared: Arc<Shared>, on_end: OnEnd) {
@@ -320,7 +331,10 @@ async fn pump(mut inbox: Inbox, channel: Arc<Mutex<Channel>>, shared: Arc<Shared
                     break;
                 }
                 Ok(r) => (r.id, Down::Answer(r.answer)),
-                Err(_) => break,
+                Err(_) => match unreadable(&body) {
+                    Some(got) => got,
+                    None => continue,
+                },
             },
             Ok(Envelope::Chunk(c)) => (c.call_id, Down::Chunk(c)),
             Err(_) => break,
@@ -331,4 +345,40 @@ async fn pump(mut inbox: Inbox, channel: Arc<Mutex<Channel>>, shared: Arc<Shared
     }
     shared.close();
     on_end();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_answer_or_error_from_a_newer_computer_is_unreadable_but_has_its_id() {
+        for body in [
+            br#"{"id":4,"answer":{"type":"somethingNew","extra":1}}"#.as_slice(),
+            br#"{"id":4,"answer":{"type":"error","code":"somethingNew"}}"#,
+            br#"{"id":4,"answer":{"type":"status","status":1}}"#,
+        ] {
+            assert!(serde_json::from_slice::<RemoteReply>(body).is_err());
+            let (id, down) = unreadable(body).unwrap();
+            assert_eq!(id, 4);
+            assert!(matches!(down, Down::Unreadable));
+        }
+        assert!(unreadable(b"not json").is_none());
+        assert!(unreadable(br#"{"answer":{}}"#).is_none());
+    }
+
+    #[tokio::test]
+    async fn an_unreadable_reply_is_a_failed_call_and_the_next_one_reads() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        tx.send(Down::Unreadable).unwrap();
+        tx.send(Down::Answer(RemoteAnswer::Done)).unwrap();
+        assert!(matches!(
+            next(&mut rx).await,
+            Err(Fault::Phone(PhoneError::Unknown))
+        ));
+        assert!(matches!(
+            next(&mut rx).await,
+            Ok(Down::Answer(RemoteAnswer::Done))
+        ));
+    }
 }
