@@ -1142,3 +1142,145 @@ async fn the_night_tidy_clears_every_entry_hold_so_the_night_reads_held_blocks()
     read_all(&w).await;
     assert_eq!(status(&w, &block.item.id), ItemStatus::Understood);
 }
+
+// ---- decisions in shadow ----
+
+const NOTES: [(&str, &str, &str); 4] = [
+    ("Gran lives in Leeds", "Gran", "Leeds"),
+    ("Priya lives in York", "Priya", "York"),
+    ("Sam lives in Hull", "Sam", "Hull"),
+    ("Leo lives in Bath", "Leo", "Bath"),
+];
+
+fn lives(subject: &str, place: &str) -> nocturne_engine::Candidate {
+    nocturne_engine::Candidate::new(
+        subject,
+        nocturne_engine::Predicate::LivesIn,
+        place,
+        &format!("{subject} lives in {place}."),
+        0.8,
+    )
+}
+
+/// Four notes kept in the evening, each read into its own memory, and the clock at 03:00.
+fn world_of_notes(mind: FakeMind) -> World {
+    let mut mind = mind.with_headline("A quiet night", "Four things kept.");
+    for (text, subject, place) in NOTES {
+        mind = mind.with_extract(text, vec![lives(subject, place)]);
+    }
+    let w = world_at("2026-11-12T20:00:00Z", mind);
+    for (text, _, _) in NOTES {
+        keep(&w, text);
+    }
+    at(&w, "2026-11-13T03:00:00Z");
+    w
+}
+
+#[tokio::test]
+async fn the_night_tidy_asks_the_mind_in_shadow_once_the_page_is_saved() {
+    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    let log = w.engine.decision_log().unwrap();
+    assert_eq!(log.len(), 4, "{log:?}");
+    for row in &log {
+        assert!(!row.rule, "the rules see no health, money or ID detail");
+        assert_eq!(row.label.as_deref(), Some("no"));
+        assert_eq!(row.verdict, Some(false));
+        assert!(row.asked_at.is_some());
+        assert!(row.error.is_none());
+    }
+    assert_eq!(w.mind.call_count("decide"), 4);
+    let page = w.engine.page(Some(date("2026-11-13"))).unwrap().unwrap();
+    assert_eq!(page.headline, "A quiet night");
+}
+
+#[tokio::test]
+async fn a_failing_decider_stops_for_the_night_after_three_and_the_page_stands() {
+    let w = world_of_notes(FakeMind::new());
+    w.mind
+        .fail_always("decide", MindError::Failed("no answer".into()));
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    assert_eq!(
+        w.mind.call_count("decide"),
+        3,
+        "three failures end the night's asking"
+    );
+    let log = w.engine.decision_log().unwrap();
+    let failed: Vec<_> = log.iter().filter(|r| r.error.is_some()).collect();
+    assert_eq!(failed.len(), 3, "{log:?}");
+    assert!(failed.iter().all(|r| r.verdict.is_none()));
+    assert_eq!(
+        w.engine.pending_decisions(10).unwrap().len(),
+        1,
+        "one waits for the next night"
+    );
+    assert!(w.engine.page(Some(date("2026-11-13"))).unwrap().is_some());
+    for (text, ..) in NOTES {
+        let id = w
+            .engine
+            .items(nocturne_contract::ItemFilter::default())
+            .unwrap()
+            .into_iter()
+            .find(|i| i.text.as_deref() == Some(text))
+            .unwrap()
+            .id;
+        assert_eq!(
+            status(&w, &id),
+            ItemStatus::Understood,
+            "reading is never skipped"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_catch_up_tidy_asks_no_decider() {
+    let w = world_three_days_off();
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::CatchUp)
+    );
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    assert_eq!(w.mind.call_count("decide"), 0);
+}
+
+#[tokio::test]
+async fn shadow_asking_waits_for_another_night_when_the_person_is_back() {
+    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    w.host.set_idle(Some(Duration::from_secs(30)));
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    assert_eq!(w.mind.call_count("decide"), 0, "someone is at the keyboard");
+    assert_eq!(w.engine.pending_decisions(10).unwrap().len(), 4);
+}
+
+#[tokio::test]
+async fn shadow_asking_stops_short_of_the_page_time() {
+    let w = world_of_notes(FakeMind::new().with_decision("lives in", "no"));
+    at(&w, "2026-11-13T06:57:00Z");
+    assert_eq!(
+        w.scheduler.tick().await,
+        SchedStep::Started(TidyKind::Night)
+    );
+    let steps = pump(&w, 4).await;
+    assert!(finished(&steps), "{steps:?}");
+    assert_eq!(
+        w.mind.call_count("decide"),
+        0,
+        "the person may open the page soon"
+    );
+}
