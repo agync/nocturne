@@ -865,71 +865,79 @@ impl Engine {
     /// great or Not yet: each keeps an answer on today's journal, and Fine and Not great count
     /// as use of the memory, as a yes does.
     pub fn answer_question(&self, day: Date, choice: QuestionChoice) -> Result<()> {
-        let now = fmt_ts(self.clock().now());
-        let today = self.today();
-        let date = day.to_string();
-        self.write(|tx| {
-            let ctx = Ctx::load(tx, self.clock())?;
-            let row = saved_question(tx, &date)?;
-            let row = match row {
-                Some(row) => Some(row),
-                None => unsaved_question(tx, &ctx, day, &today, &now)?,
-            };
-            let row = row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
-            if row.answer.is_some() {
-                return Err(Error::invalid("that question has already been answered"));
-            }
-            let kind: QuestionKind = parse_enum(&row.kind)?;
-            match (kind, choice, &row.memory_id) {
-                (QuestionKind::YesNo, QuestionChoice::Yes, Some(id)) => {
-                    confirm_tx(tx, id, true, &now, &today)?
-                }
-                (QuestionKind::YesNo, QuestionChoice::No, Some(id)) => {
-                    confirm_tx(tx, id, false, &now, &today)?
-                }
-                (QuestionKind::YesNo, QuestionChoice::NotSure, _) => {}
-                (QuestionKind::PageTime, QuestionChoice::Right, _) => {}
-                (
-                    QuestionKind::PageTime,
-                    c @ (QuestionChoice::Earlier | QuestionChoice::Later),
-                    _,
-                ) => {
-                    let (h, m) = parse_page_time(&read_settings(tx)?.page_time)?;
-                    let minutes = i32::from(h) * 60 + i32::from(m);
-                    let shifted = if c == QuestionChoice::Earlier {
-                        minutes - 30
-                    } else {
-                        minutes + 30
-                    };
-                    let shifted = shifted.clamp(0, 23 * 60 + 30);
-                    set_page_time(tx, (shifted / 60) as i8, (shifted % 60) as i8)?;
-                }
-                (
-                    QuestionKind::Journal,
-                    c @ (QuestionChoice::Fine | QuestionChoice::NotGreat | QuestionChoice::NotYet),
-                    Some(id),
-                ) => {
-                    let ask: JournalAsk = serde_json::from_str(
-                        row.journal
-                            .as_deref()
-                            .ok_or_else(|| Error::invalid("that question has no block"))?,
-                    )?;
-                    journal_question::keep_answer_tx(tx, &ctx, &date, &ask, &row.text, c)?;
-                    if c != QuestionChoice::NotYet {
-                        mark_used_tx(tx, id, &now)?;
-                    }
-                }
-                _ => return Err(Error::invalid("that answer does not fit this question")),
-            }
-            tx.execute(
-                "UPDATE questions SET answer = ?2, answered_at = ?3 WHERE page_date = ?1",
-                params![date, enum_str(&choice), now],
-            )?;
-            Ok(())
-        })?;
+        self.write(|tx| answer_tx(tx, self.clock(), day, choice))?;
         self.bump_audio();
         Ok(())
     }
+}
+
+/// The body of `answer_question`, inside the caller's transaction. Returns the item kept on
+/// today's journal when the question is from the journal.
+pub(crate) fn answer_tx(
+    tx: &rusqlite::Transaction<'_>,
+    clock: &dyn crate::Clock,
+    day: Date,
+    choice: QuestionChoice,
+) -> Result<Option<String>> {
+    let now = fmt_ts(clock.now());
+    let today = clock.now().to_zoned(clock.tz()).date().to_string();
+    let date = day.to_string();
+    let ctx = Ctx::load(tx, clock)?;
+    let row = saved_question(tx, &date)?;
+    let row = match row {
+        Some(row) => Some(row),
+        None => unsaved_question(tx, &ctx, day, &today, &now)?,
+    };
+    let row = row.ok_or_else(|| Error::not_found(format!("a question on {date}")))?;
+    if row.answer.is_some() {
+        return Err(Error::invalid("that question has already been answered"));
+    }
+    let kind: QuestionKind = parse_enum(&row.kind)?;
+    let mut kept = None;
+    match (kind, choice, &row.memory_id) {
+        (QuestionKind::YesNo, QuestionChoice::Yes, Some(id)) => {
+            confirm_tx(tx, id, true, &now, &today)?
+        }
+        (QuestionKind::YesNo, QuestionChoice::No, Some(id)) => {
+            confirm_tx(tx, id, false, &now, &today)?
+        }
+        (QuestionKind::YesNo, QuestionChoice::NotSure, _) => {}
+        (QuestionKind::PageTime, QuestionChoice::Right, _) => {}
+        (QuestionKind::PageTime, c @ (QuestionChoice::Earlier | QuestionChoice::Later), _) => {
+            let (h, m) = parse_page_time(&read_settings(tx)?.page_time)?;
+            let minutes = i32::from(h) * 60 + i32::from(m);
+            let shifted = if c == QuestionChoice::Earlier {
+                minutes - 30
+            } else {
+                minutes + 30
+            };
+            let shifted = shifted.clamp(0, 23 * 60 + 30);
+            set_page_time(tx, (shifted / 60) as i8, (shifted % 60) as i8)?;
+        }
+        (
+            QuestionKind::Journal,
+            c @ (QuestionChoice::Fine | QuestionChoice::NotGreat | QuestionChoice::NotYet),
+            Some(id),
+        ) => {
+            let ask: JournalAsk = serde_json::from_str(
+                row.journal
+                    .as_deref()
+                    .ok_or_else(|| Error::invalid("that question has no block"))?,
+            )?;
+            kept = Some(journal_question::keep_answer_tx(
+                tx, &ctx, &date, &ask, &row.text, c,
+            )?);
+            if c != QuestionChoice::NotYet {
+                mark_used_tx(tx, id, &now)?;
+            }
+        }
+        _ => return Err(Error::invalid("that answer does not fit this question")),
+    }
+    tx.execute(
+        "UPDATE questions SET answer = ?2, answered_at = ?3 WHERE page_date = ?1",
+        params![date, enum_str(&choice), now],
+    )?;
+    Ok(kept)
 }
 
 /// A saved question: its memory, kind, words, answer and, from the journal, where it came from.
