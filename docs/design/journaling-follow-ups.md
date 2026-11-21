@@ -255,7 +255,7 @@ A memory qualifies when every line holds:
 | 3 | It was read from a block of a day's entry, text or voice, kept within the 30 days before that date |
 | 4 | The sentences the memory's span touches, taken whole, are 3 to 20 words together, and are in the newest version of the block |
 | 5 | Nothing kept after that block, up to the end of the event's day, mentions the memory's subject. If the person already wrote about how it went, Nocturne does not ask |
-| 6 | It is active, not a safety memory, and not asked about before, on any page |
+| 6 | It is active, and not asked about before, on any page. What it is about plays no part: if it is private, the person marks it so |
 
 What never qualifies, whatever the rest says:
 
@@ -267,7 +267,6 @@ What never qualifies, whatever the rest says:
 | A photo in the entry | The words would be Nocturne's description, not the person's |
 | Anything left out of reflections | The person asked for it to stay out of looking back |
 | Anything private, or a memory with any private source | Private stays private |
-| A memory or sentence the health, money and ID check flags | A morning page may be seen by someone else at the screen |
 | A memory with a promise or due date (`promised`, `due`) | Needs you already follows those up |
 
 ### When it is asked

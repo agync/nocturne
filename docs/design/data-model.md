@@ -201,9 +201,9 @@ where it went, with the old value as what it was and the note as its receipt. Th
 move sentence or the one right after it and names the appointment or says "it". The note must be
 about this appointment: filed under it or naming it, naming no other owner ("Mum's", "her",
 another person's name, also as its first word), and saying nothing else ("Sam moved to Leeds" is
-no move), and it is kept with the same care as the appointment (private, or a health, money or
-ID detail). When more than one dated appointment is filed under the same name, found by the
-search or not, the note could be about any of them and is no move. A phone gets the memory that
+no move), and it is kept with the same care as the appointment (both private or neither). When
+more than one dated appointment is filed under the same name, found by the search or not, the
+note could be about any of them and is no move. A phone gets the memory that
 says it moved instead of the line, with the old value only when the old memory may go to a
 phone. The old value never goes online: an online question gets the memory as it is kept, so the
 Sent log shows exactly what left.

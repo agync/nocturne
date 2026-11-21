@@ -28,6 +28,7 @@ before anything is turned on. All of it is in the interface.
 | Button order | The main button goes first, on the left, everywhere. First-run setup changes to match |
 | The line in the bar | Kept: "Nothing is turned on until the last step." on Online answers steps 1 to 4 |
 | Narrow windows | Below 720 pixels wide, the keep or ask bar is hidden while a step flow is open |
+| Health, money and ID details (2026-11-22) | Removed from every step: Nocturne never judges a person's data, and only what they mark private is held back ([Only what you mark private is held back](only-marked-private.md)) |
 | Online answers step 1 | Lightened: three short true lines, one expander holding the full detail, the side column folded into it |
 | Online answers step 5 | Gains a "What changes" section and a corrected lead, so everything step 1 folds away is shown in full before the person agrees |
 | Away from home step 1 | Lightened the same way, now, with the full detail repeated before anything is downloaded or turned on |
@@ -126,7 +127,7 @@ with the button even when the field it is about has scrolled away.
 | What is sent | Your question, and the few things you kept that answer it, as short sentences. |
 | Disclosure | What exactly is sent? (opens the eye test example) |
 | What changes | Your questions are answered online by the service you set up. Answers may take a few seconds longer. |
-| Never sent | Photos, recordings and documents stay here. Things you marked private are never sent. Nocturne also keeps back lines that look like health, money or ID details unless you choose otherwise. It can miss some, so mark anything you never want sent as private. |
+| Never sent | Photos, recordings and documents stay here. Things you marked private are never sent. Nocturne doesn’t guess what is private, so mark anything you never want sent as private. |
 | Who sees it | The service you choose can see each question and what goes with it. Every answer says it was written there. |
 | What it costs | Most services charge a little for each question, on your account with them. You choose how many questions a month may go online. |
 | What you need | An account with an online service. Its details are added under Advanced details, where Nocturne checks that they work. |
@@ -145,7 +146,7 @@ not be used:
 |---|---|
 | Answers come from searching the web | Untrue. Nothing searches the web. A service the person chooses writes the answer from the lines Nocturne sends. |
 | Only the question is sent | Untrue. The few lines from what they kept that answer it go too, with Nocturne's standard instructions. |
-| Private information is never sent | Untrue. The lines that go are personal by nature. Only things marked private are never sent, and the health, money and ID check can miss some. |
+| Private information is never sent | Untrue. The lines that go are personal by nature. Only things marked private are never sent. |
 | The service is a third party of your choice | True, but "third party" is not a word people use. Nocturne says "the service you choose". |
 | Setting up takes some effort, because you need an account with the service | True, and the most useful part: it warns about the effort. Kept, made concrete, and moved to the top. |
 
@@ -171,7 +172,7 @@ Behind the expander, in this order, with today's words unchanged:
 
 1. What is sent, followed straight away by the eye test example in full (no second disclosure inside
    the first).
-2. Never sent, with the health, money and ID check and its warning that it can miss some.
+2. Never sent, with the advice to mark anything never to be sent as private.
 3. Who sees it.
 4. What changes.
 5. What it costs.
@@ -195,8 +196,7 @@ Why each short line is true:
   "only". The standard instructions also go; they are not the person's, and the expander says so.
 - **Never sent.** "Themselves" matters: the photo, recording or document never leaves, though a short
   line read from it can, which the Sent line already says. Things marked private never go, whatever
-  the settings. The health, money and ID check is not claimed here, because it can miss some; it is
-  explained behind the expander and at step 5.
+  the settings.
 - **You need.** Connect always asks for three details (address, key, and which one to use). "Most
   charge" stays true for a service on the person's own network that charges nothing.
 
@@ -214,7 +214,7 @@ full, on screen, not behind an expander.
 | Fact from step 1 | On step 5 today | After |
 |---|---|---|
 | What is sent, with an example | Yes | Unchanged |
-| Never sent, with the health, money and ID warning | Yes | Unchanged |
+| Never sent, with the advice to mark things private | Yes | Unchanged |
 | Who sees it | Yes, more fully, naming the service | Unchanged |
 | Finding and checking stay here | Yes, in "Where it goes" | Unchanged |
 | Keeping, reading, the tidy and your page stay here | Yes, in "Never sent": "Everything else you kept, your pages and your name" | Unchanged |
