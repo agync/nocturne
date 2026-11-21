@@ -37,6 +37,7 @@ mod util;
 
 pub mod coverage;
 pub mod day;
+pub mod decide;
 pub mod private;
 pub mod process;
 pub mod store;

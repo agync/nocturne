@@ -323,3 +323,33 @@ ALTER TABLE questions ADD COLUMN journal TEXT;
 -- A reflection or recap the person deleted: not written again until they ask for it.
 CREATE TABLE reflections_declined(
   kind TEXT NOT NULL, start TEXT NOT NULL, declined_at TEXT NOT NULL, PRIMARY KEY(kind, start));
+
+-- migration 15
+-- The decision log (decision 0016): what a rule said and what a decider said about the same
+-- thing, side by side, for the evaluation to compare. Derived and local: a row goes with the item
+-- or memories it is about, and with Delete everything.
+CREATE TABLE decisions(
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL,
+  item_id TEXT REFERENCES items(id) ON DELETE CASCADE,
+  memory_id TEXT REFERENCES memories(id) ON DELETE CASCADE,
+  other_id TEXT REFERENCES memories(id) ON DELETE CASCADE,
+  state TEXT NOT NULL, rule INTEGER NOT NULL, rule_detail TEXT, created_at TEXT NOT NULL,
+  asked_at TEXT, decider TEXT, label TEXT, probabilities TEXT, p REAL, verdict INTEGER,
+  ms INTEGER, error TEXT);
+CREATE UNIQUE INDEX decisions_key
+  ON decisions(kind, COALESCE(item_id, ''), COALESCE(memory_id, ''), COALESCE(other_id, ''));
+CREATE INDEX decisions_item ON decisions(item_id);
+CREATE INDEX decisions_memory ON decisions(memory_id);
+CREATE INDEX decisions_other ON decisions(other_id);
+CREATE INDEX decisions_waiting ON decisions(created_at) WHERE asked_at IS NULL;
+CREATE INDEX decisions_created ON decisions(created_at);
+-- Every item whose words a row's state copies. When one goes (forgotten, undone, an earlier
+-- version replaced), the row goes with it.
+CREATE TABLE decision_items(
+  decision_id TEXT NOT NULL REFERENCES decisions(id) ON DELETE CASCADE,
+  item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+  PRIMARY KEY(decision_id, item_id));
+CREATE INDEX decision_items_item ON decision_items(item_id);
+CREATE TRIGGER decision_items_ad AFTER DELETE ON decision_items BEGIN
+  DELETE FROM decisions WHERE id = old.decision_id;
+END;

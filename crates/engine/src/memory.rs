@@ -1653,6 +1653,9 @@ fn apply_one(
     let mut to_close: Vec<String> = Vec::new();
     let mut to_replace: Vec<String> = Vec::new();
     let mut in_conflict: Vec<String> = Vec::new();
+    // What the move rule said of each kept appointment in the slot, logged in shadow once the
+    // new memory is stored: (kept id, kept sentence, moved, how the rule acted).
+    let mut moves_seen: Vec<(String, String, bool, &'static str)> = Vec::new();
     if status == MemoryStatus::Active {
         let elsewhere = if predicate == "scheduled" {
             appointments_elsewhere(tx, c, &values, &subject_key, item.private, &current)?
@@ -1692,6 +1695,15 @@ fn apply_one(
             } else {
                 None
             };
+            if let Some(meets) = &meets {
+                let detail = match meets {
+                    Meets::Separate => "separate",
+                    Meets::Replaces => "replaces",
+                    Meets::Asks => "asks",
+                };
+                let moved = says_moved(c) || quote_cancels(c, e);
+                moves_seen.push((e.id.clone(), e.sentence.clone(), moved, detail));
+            }
             if closes_old_value(&predicate) && later_start && still_open {
                 to_close.push(e.id.clone());
             } else if let Some(meets) = meets {
@@ -1750,6 +1762,13 @@ fn apply_one(
         "INSERT INTO memory_sources(memory_id, item_id, span) VALUES (?1, ?2, ?3)",
         params![id, item_id, span],
     )?;
+    let note = match &c.span {
+        Some(Span::Quote { text }) => text.as_str(),
+        _ => c.sentence.as_str(),
+    };
+    for (other, kept, moved, detail) in &moves_seen {
+        crate::decide::log::record_moved(tx, item_id, &id, other, kept, note, *moved, detail, now)?;
+    }
     for old in &to_close {
         tx.execute(
             "UPDATE memories SET valid_to = ?2, superseded_by = ?3 WHERE id = ?1",
