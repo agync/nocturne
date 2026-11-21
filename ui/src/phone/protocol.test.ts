@@ -50,7 +50,7 @@ describe("phone protocol", () => {
     expect(new Set(protocol.WORDS).size).toBe(2048);
     const text = `${protocol.WORDS.join("\n")}\n`;
     expect(createHash("sha256").update(text).digest("hex")).toBe(ref.words.sha256);
-    const shell = readFileSync(resolve(process.cwd(), "../src-tauri/src/remote/words.txt"), "utf8");
+    const shell = readFileSync(resolve(process.cwd(), "../crates/channel/src/words.txt"), "utf8");
     expect(shell).toBe(text);
   });
 

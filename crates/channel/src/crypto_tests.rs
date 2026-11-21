@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
-use super::super::protocol::reference::{self, Vector, Vectors, hex};
 use super::*;
+use crate::protocol::reference::{self, Vector, Vectors, hex};
 
 fn arr<const N: usize>(b: &[u8]) -> [u8; N] {
     b.try_into().expect("fixed length")
@@ -450,7 +450,7 @@ fn negative(v: &Vectors, n: &Vector<'_>) -> Refusal {
     .expect_err(n.name)
 }
 
-use super::super::frame;
+use crate::frame;
 
 #[test]
 fn vectors_match_reference() {
@@ -862,23 +862,4 @@ fn open_proof_nonce_is_random() {
         .map(|_| w.open_frame(&epub).0[HEADER_LEN + DEVICE_ID_LEN + PUBKEY_LEN..][..12].to_vec())
         .collect();
     assert_eq!(seen.len(), 16);
-}
-
-#[test]
-fn computer_key_owner_only() {
-    let dir = tempfile::tempdir().unwrap();
-    let remote = dir.path().join("remote");
-    assert!(!remote.join(COMPUTER_KEY_FILE).exists());
-    let a = load_or_create_computer_key(&remote).unwrap();
-    let b = load_or_create_computer_key(&remote).unwrap();
-    assert_eq!(a.to_bytes(), b.to_bytes(), "made on first use only");
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
-        assert_eq!(mode(&remote.join(COMPUTER_KEY_FILE)), 0o600);
-        assert_eq!(mode(&remote), 0o700);
-    }
-    let c = replace_computer_key(&remote).unwrap();
-    assert_ne!(a.to_bytes(), c.to_bytes());
 }

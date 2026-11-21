@@ -1,14 +1,14 @@
 //! Typed access to the reference vectors for the phone channel
-//! (`tests/fixtures/remote-vectors.json`, written by `scripts/remote_vectors.py`).
+//! (`src-tauri/tests/fixtures/remote-vectors.json`, written by `scripts/remote_vectors.py`).
 //!
-//! Shared by the shell's unit tests (through `remote::protocol`) and its integration tests.
+//! Read by the crate's unit tests through `protocol::reference`.
 //! Bytes in the fixture are lowercase hex. A positive vector has `inputs`, `intermediate` and
 //! `output`; a negative one has `inputs` and the refusal it must get in `expect`.
 #![allow(dead_code)]
 
 use serde_json::{Map, Value};
 
-const FIXTURE: &str = include_str!("../fixtures/remote-vectors.json");
+const FIXTURE: &str = include_str!("../../../../src-tauri/tests/fixtures/remote-vectors.json");
 
 pub mod hex {
     pub fn decode(s: &str) -> Vec<u8> {

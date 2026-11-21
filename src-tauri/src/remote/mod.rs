@@ -27,6 +27,7 @@ pub mod frame;
 pub mod incoming;
 pub mod journal;
 pub mod keepawake;
+pub mod keyfile;
 pub mod limits;
 pub mod listener;
 pub mod name;
