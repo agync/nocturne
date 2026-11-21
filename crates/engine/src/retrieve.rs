@@ -534,21 +534,11 @@ fn names_other_owner(sentence: &str, old: &MemRow) -> bool {
     })
 }
 
-/// Whether two memories are kept with the same care: both private (in any version) or neither,
-/// and both a health, money or ID detail or neither. The answer gives one with the other's
-/// value, so one may never carry what the other keeps back.
+/// Whether two memories are kept with the same care: both private (in any version) or
+/// neither. The answer gives one with the other's value, so one may never carry what the other
+/// keeps back.
 fn same_care(conn: &Connection, a: &MemRow, b: &MemRow) -> Result<bool> {
-    let sensitive = |m: &MemRow| {
-        m.suggest_private
-            || m.tags.iter().any(|t| crate::sensitive::tag(t))
-            || [&m.subject, &m.object, &m.sentence]
-                .iter()
-                .any(|t| crate::sensitive::text(t))
-    };
-    Ok(
-        is_private_chain(conn, &a.id)? == is_private_chain(conn, &b.id)?
-            && sensitive(a) == sensitive(b),
-    )
+    Ok(is_private_chain(conn, &a.id)? == is_private_chain(conn, &b.id)?)
 }
 
 /// How many current dated appointments and deadlines are filed under any of `subjects`: a note
