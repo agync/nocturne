@@ -3673,17 +3673,15 @@ dependencies = [
 name = "nocturne-app"
 version = "0.7.2"
 dependencies = [
- "aes-gcm 0.11.1",
  "age",
  "axum",
- "base64 0.23.1",
  "dunce",
  "futures-util",
  "getrandom 0.4.3",
- "hkdf 0.13.0",
  "http-body-util",
  "jiff",
  "keyring",
+ "nocturne-channel",
  "nocturne-contract",
  "nocturne-engine",
  "nocturne-helpers",
@@ -3696,7 +3694,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.11.1",
- "subtle",
  "sysinfo",
  "tar",
  "tauri",
@@ -3718,6 +3715,23 @@ dependencies = [
  "tracing-subscriber",
  "url",
  "zbus 6.2.1",
+ "zeroize",
+]
+
+[[package]]
+name = "nocturne-channel"
+version = "0.7.2"
+dependencies = [
+ "aes-gcm 0.11.1",
+ "base64 0.23.1",
+ "getrandom 0.4.3",
+ "hkdf 0.13.0",
+ "nocturne-contract",
+ "p256 0.14.0",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
  "zeroize",
 ]
 

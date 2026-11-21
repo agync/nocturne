@@ -10,6 +10,7 @@ tags: [architecture, layout, contract]
 
 | Path | Crate or package | Responsibility |
 |---|---|---|
+| `crates/channel/` | `nocturne-channel` | The sealed channel's pure steps: constants, keys, pairing, session and frames; shared by the computer and the phone app |
 | `crates/contract/` | `nocturne-contract` | Types that cross the boundary between engine, app shell and interface; exported to TypeScript |
 | `crates/engine/` | `nocturne-engine` | Store, capture, memories, forgetting policy, the page, retrieval, export; the `Mind` trait |
 | `crates/intelligence/` | `nocturne-intelligence` | Reading what was kept, the overnight tidy and the scheduler that runs them |
@@ -30,6 +31,7 @@ flowchart LR
     LEM --> ENG
     ENG --> C[contract]
     APP --> C
+    APP --> CH[channel]
     B -. generated from .-> C
 ```
 

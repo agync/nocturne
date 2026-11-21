@@ -28,8 +28,9 @@ declare -A areas=(
     [rust]="^($rust_side|ui/|scripts/(bindings|away-integration|away-test-programs)\.sh$)"
     # The Windows job starts the real engine that scripts/fetch-lemonade.sh fetches.
     [rust-platforms]="^($rust_side|scripts/fetch-lemonade\.sh$)"
-    # The interface's tests import scripts/build-tokens.mjs and read src-tauri/.
-    [ui]='^(ui/|src-tauri/|scripts/(build-tokens\.mjs|check_ui_dist\.py|check_tree\.py)$)'
+    # The interface's tests import scripts/build-tokens.mjs and read src-tauri/ and the channel's
+    # word list.
+    [ui]='^(ui/|src-tauri/|crates/channel/|scripts/(build-tokens\.mjs|check_ui_dist\.py|check_tree\.py)$)'
     [ui-platforms]='^(ui/|scripts/build-tokens\.mjs$)'
     # The scripts' tests read the bundle configuration, the Flatpak files and their doc, and list
     # the licences of every crate and npm package.

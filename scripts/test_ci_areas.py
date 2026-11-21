@@ -24,6 +24,7 @@ CASES = (
     ("crates/engine/src/lib.rs", RUST),
     ("crates/engine/tests/round2.rs", RUST),
     ("crates/helpers/fixtures/help/tailnet/1.104.6/help.txt", RUST),
+    ("crates/channel/src/words.txt", RUST | {"ui"}),
     ("src-tauri/src/remote/mod.rs", RUST | {"ui"}),
     ("src-tauri/tests/ipc.rs", RUST | {"ui"}),
     ("src-tauri/bundle/macos.json", RUST | PACKAGE | {"ui"}),

@@ -1,4 +1,4 @@
-// The sealed channel's constants, shared with the computer (`src-tauri/src/remote/protocol.rs`).
+// The sealed channel's constants, shared with the computer (`crates/channel/src/protocol.rs`).
 //
 // Plan 12 "Sealed channel" is the normative description; `scripts/remote_vectors.py` is the
 // independent reference and `src-tauri/tests/fixtures/remote-vectors.json` its output. The drift

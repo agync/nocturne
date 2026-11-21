@@ -1,0 +1,26 @@
+[package]
+name = "nocturne-channel"
+description = "The sealed channel between Nocturne and the person's paired phones"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+p256.workspace = true
+hkdf = "0.13"
+aes-gcm = "0.11"
+subtle = "2"
+zeroize.workspace = true
+sha2.workspace = true
+base64.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+getrandom.workspace = true
+
+[dev-dependencies]
+# The vectors seal a real remote answer.
+nocturne-contract.workspace = true
+
+[lints]
+workspace = true

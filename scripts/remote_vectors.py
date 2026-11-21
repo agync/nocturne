@@ -3,7 +3,7 @@
 
 An independent implementation of the channel in plan 12 ("Sealed channel"), written with the
 Python `cryptography` package only, from fixed scalars, secrets, nonces, names and hosts. It
-writes src-tauri/tests/fixtures/remote-vectors.json, which the Rust shell and the phone app
+writes src-tauri/tests/fixtures/remote-vectors.json, which the Rust channel crate and the phone app
 test against. Every entry records its inputs, the intermediate values and the output; bytes
 are lowercase hex. Negative entries name the refusal the receiving side must give.
 
@@ -32,7 +32,7 @@ from cryptography.exceptions import InvalidTag
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FIXTURE = os.path.join(ROOT, "src-tauri", "tests", "fixtures", "remote-vectors.json")
-WORDS_FILE = os.path.join(ROOT, "src-tauri", "src", "remote", "words.txt")
+WORDS_FILE = os.path.join(ROOT, "crates", "channel", "src", "words.txt")
 # bip-0039/english.txt from github.com/bitcoin/bips at b34d9f751791d4feb22feff4f2ed00bcac83961b.
 WORDS_SHA256 = "2f5eed53a4727b4bf8880d8f3f199efc90e58503646d9ff8eff3a2ed3b24dbda"
 
