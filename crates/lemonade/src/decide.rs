@@ -9,9 +9,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use nocturne_engine::decide::{Answer, Ask, Backend, Decider, Decision};
 use nocturne_engine::{BoxFuture, MindError};
 
-use serde_json::{Value, json};
-
-use crate::client::{Client, SystemOneAnswer, SystemOneKind, SystemOneQuestion, SystemOneRequest};
+use crate::client::{
+    Client, Criteria, SystemOneAnswer, SystemOneKind, SystemOneQuestion, SystemOneRequest,
+};
 
 /// The one question's id in each call.
 const QID: &str = "q";
@@ -86,17 +86,17 @@ fn question_for(decision: &Decision) -> SystemOneQuestion {
         Ask::Choice(options) => SystemOneQuestion {
             kind: SystemOneKind::Choice,
             instructions: q.instructions.clone(),
-            criteria: Some(Value::Object(
+            criteria: Some(Criteria::Options(
                 options
                     .iter()
-                    .map(|(option, description)| (option.clone(), json!(description)))
+                    .map(|(option, description)| (option.clone(), Some(description.clone())))
                     .collect(),
             )),
         },
         Ask::Score(levels) => SystemOneQuestion {
             kind: SystemOneKind::Score,
             instructions: q.instructions.clone(),
-            criteria: Some(json!(levels)),
+            criteria: Some(Criteria::Levels(levels.clone())),
         },
     }
 }

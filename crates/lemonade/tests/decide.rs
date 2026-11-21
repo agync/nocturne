@@ -9,7 +9,7 @@ use common::Fake;
 use nocturne_contract::Tier;
 use nocturne_engine::decide::{Ask, Backend, Decider, Decision, Question};
 use nocturne_engine::{Mind, MindError};
-use nocturne_lemonade::client::{SystemOneKind, SystemOneQuestion, SystemOneRequest};
+use nocturne_lemonade::client::{Criteria, SystemOneKind, SystemOneQuestion, SystemOneRequest};
 use nocturne_lemonade::decide::SystemOneDecider;
 use nocturne_lemonade::{LemonadeMind, RuntimeError, Supervisor, SupervisorOptions};
 use serde_json::{Value, json};
@@ -67,7 +67,10 @@ async fn systemone_sends_the_questions_as_the_engine_takes_them() {
             SystemOneQuestion {
                 kind: SystemOneKind::Choice,
                 instructions: "What happened?".into(),
-                criteria: Some(json!({"moved": "Now at another time", "same": null})),
+                criteria: Some(Criteria::Options(vec![
+                    ("moved".into(), Some("Now at another time".into())),
+                    ("same".into(), None),
+                ])),
             },
         )]
         .into(),
@@ -90,6 +93,36 @@ async fn systemone_sends_the_questions_as_the_engine_takes_them() {
     let a = &reply.answers["q"];
     assert_eq!(a.choice.as_deref(), Some("moved"));
     assert_eq!(a.probabilities.as_ref().unwrap()["moved"], 0.6);
+}
+
+/// The engine passes a choice's options on in the order they come, and the answers depend on it,
+/// so they go out in the order the question lists them, not sorted.
+#[test]
+fn choice_options_go_out_in_the_order_the_question_lists_them() {
+    let q = SystemOneQuestion {
+        kind: SystemOneKind::Choice,
+        instructions: "What happened?".into(),
+        criteria: Some(Criteria::Options(vec![
+            ("same".into(), None),
+            ("moved".into(), Some("Now at another time".into())),
+            ("cancelled".into(), None),
+        ])),
+    };
+    let body = serde_json::to_string(&q).unwrap();
+    let at = |word: &str| body.find(&format!("\"{word}\"")).unwrap();
+    assert!(
+        at("same") < at("moved") && at("moved") < at("cancelled"),
+        "{body}"
+    );
+    let levels = SystemOneQuestion {
+        kind: SystemOneKind::Score,
+        instructions: "How urgent?".into(),
+        criteria: Some(Criteria::Levels(vec!["low".into(), "high".into()])),
+    };
+    assert_eq!(
+        serde_json::to_value(&levels).unwrap()["criteria"],
+        json!(["low", "high"])
+    );
 }
 
 #[tokio::test]
