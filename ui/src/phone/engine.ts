@@ -94,7 +94,10 @@ export type Connection =
   | { kind: "asleep" }
   | { kind: "cantConnect" }
   | { kind: "turnedOff" }
-  | { kind: "outdated"; minBuild: number }
+  /** This phone is older than the computer speaks; `computer` is the computer's version. */
+  | { kind: "outdated"; minBuild: number; computer?: string }
+  /** The computer is older than this phone speaks. */
+  | { kind: "computerOutdated"; computer: string }
   | { kind: "removed" };
 
 export interface ConnectionHandle {

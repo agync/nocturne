@@ -7,6 +7,7 @@ import { createPhoneEngine } from "./client";
 import type { ConnectedEngine, KeyStore, Queue } from "./engine";
 import { idbKeyStore, requestPersistence } from "./keys";
 import { Pairing, type PairingResult } from "./pairing";
+import { MIN_PHONE_BUILD, PHONE_BUILD } from "./protocol";
 import { idbQueue } from "./queue";
 import { type RelinkResult, relink } from "./relink";
 import { defaultScannerEnv, type ScannerEnv } from "./scanner";
@@ -68,10 +69,17 @@ export function realServices(): Services {
   const env: Env = defaultEnv();
   const store = idbKeyStore();
   const ctx = () => ({ env, host: location.host, origin: location.origin, store });
+  const version = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "development";
+  const app = {
+    platform: "browser" as const,
+    version,
+    minBuild: MIN_PHONE_BUILD,
+    maxBuild: PHONE_BUILD,
+  };
   return {
     store,
     queue: idbQueue(),
-    engineFor: (address) => createPhoneEngine(store, address, { env }),
+    engineFor: (address) => createPhoneEngine(store, address, { env, app }),
     pairFromLink: (offer) => Pairing.fromLink(offer, ctx()),
     pairFromCode: (typed) => Pairing.fromCode(typed, ctx()),
     relink: (address) => relink(store, address, env),
@@ -81,7 +89,7 @@ export function realServices(): Services {
     host: location.host,
     origin: location.origin,
     now: () => Date.now(),
-    version: typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "development",
+    version,
     scripted: false,
     location: { pathname: location.pathname, hash: location.hash, search: location.search },
   };
