@@ -199,10 +199,12 @@ phone/android-release: ui/node_modules phone/env ## Build the release APK and bu
 	  -name '*-release*.apk' -o -name '*-release*.aab')
 
 phone/lint: ## Clippy for the phone app and its plugins, on this machine
-	cargo clippy -p nocturne-phone -p tauri-plugin-nocturne-system --all-targets -- -D warnings
+	cargo clippy -p nocturne-phone -p tauri-plugin-nocturne-system -p tauri-plugin-nocturne-calendar \
+	  -p tauri-plugin-nocturne-health --all-targets -- -D warnings
 
 phone/test: ## Test the phone app's Rust side on this machine
-	cargo test -p nocturne-phone -p tauri-plugin-nocturne-system
+	cargo test -p nocturne-phone -p tauri-plugin-nocturne-system -p tauri-plugin-nocturne-calendar \
+	  -p tauri-plugin-nocturne-health
 
 ##@ Utilities
 
