@@ -9,4 +9,9 @@ export type CalendarEntry = { phoneId: string, calendarId: string, title: string
 /**
  * The entry's IANA time zone, when the phone knows it.
  */
-timeZone: string | null, allDay: boolean, place: string | null, people: Array<string>, repeats: boolean, notes: string | null, };
+timeZone: string | null, allDay: boolean, place: string | null, people: Array<string>, repeats: boolean, notes: string | null, 
+/**
+ * How it repeats, as the phone's calendar holds it (an iCalendar `RRULE`, such as
+ * `FREQ=WEEKLY;BYDAY=FR`), when it does.
+ */
+repeatRule?: string, };

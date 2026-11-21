@@ -486,7 +486,7 @@ impl Engine {
             let jctx = crate::journal::Ctx::load(conn, self.clock())?;
             let mut journal_days = Vec::new();
             for day in crate::journal::day::days_with_items(conn, &jctx)?.into_iter().rev() {
-                let view = crate::journal::day::build_day(conn, &jctx, &originals_src, day)?;
+                let view = crate::journal::day::build_day(conn, &jctx, &originals_src, day, false)?;
                 if !(view.entry.is_empty() && view.checkins.is_empty() && view.good.is_empty()) {
                     journal_days.push(view);
                 }

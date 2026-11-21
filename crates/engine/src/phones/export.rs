@@ -271,13 +271,14 @@ pub(crate) fn export_section(conn: &Connection, dir: &Path, tz: &TimeZone) -> Re
         else {
             continue;
         };
+        let calendar = super::read::phone_calendars(conn, &device)?
+            .into_iter()
+            .find(|c| c.id == entry.calendar_id)
+            .map(|c| c.name)
+            .unwrap_or_default();
         let event = Event {
             item_id,
-            calendar: meta
-                .get("calendarName")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
+            calendar,
             entry,
             came_in,
             removed,

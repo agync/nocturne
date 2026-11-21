@@ -3,4 +3,9 @@
 /**
  * What a delete would remove, and the token that applies it.
  */
-export type PhoneDeletePreview = { token: string, items: number, versions: number, memories: number, pageLines: number, recapLines: number, noticing: number, };
+export type PhoneDeletePreview = { token: string, items: number, versions: number, memories: number, pageLines: number, recapLines: number, noticing: number, 
+/**
+ * What Nocturne learned from them that something the person kept also says: kept, with
+ * only the phone's receipt taken off.
+ */
+sharedMemories?: number, };

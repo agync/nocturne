@@ -350,6 +350,11 @@ pub struct JournalDay {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub health: Option<crate::DayHealth>,
+    /// What phones brought for the day, for "Delete this day": "From your calendar" and "From
+    /// Health", both unticked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub from_phones: Option<crate::DayFromPhones>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]

@@ -6,4 +6,9 @@ import type { ReadingKind } from "./ReadingKind";
  * What to delete from one phone: one source, optionally some kinds, optionally only before a
  * day.
  */
-export type PhoneDeleteScope = { deviceId: string, source: PhoneSource, kinds: Array<ReadingKind> | null, before: string | null, };
+export type PhoneDeleteScope = { deviceId: string, source: PhoneSource, kinds: Array<ReadingKind> | null, before: string | null, 
+/**
+ * One reading or entry alone ("Delete…" in a reading's menu); `kinds` and `before` then
+ * do not apply.
+ */
+itemId?: string, };

@@ -195,6 +195,20 @@ impl Engine {
         also: &[String],
         only_also: bool,
     ) -> Result<ForgetPreview> {
+        self.preview_delete_with(ids, include_originals, also, only_also, &[])
+    }
+
+    /// [`Engine::preview_delete`] that keeps the `unlink` memories: something outside `also`
+    /// says them too, so applying it only takes their links to the deleted items off, and those
+    /// items still go.
+    pub(crate) fn preview_delete_with(
+        &self,
+        ids: &[String],
+        include_originals: bool,
+        also: &[String],
+        only_also: bool,
+        unlink: &[String],
+    ) -> Result<ForgetPreview> {
         let now = self.clock().now();
         let expires = now
             .checked_add(jiff::SignedDuration::from_mins(TOKEN_MINUTES))
@@ -219,6 +233,8 @@ impl Engine {
             }
             memories.sort();
             let mut originals = Vec::new();
+            let mut counted = all.clone();
+            counted.extend(unlink.iter().cloned());
             let mut listed = source_items(tx, &all)?;
             for item in also {
                 if !listed.contains(item) {
@@ -232,7 +248,7 @@ impl Engine {
                         [&item],
                         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                     )?;
-                let others = other_memories(tx, &item, &all)?;
+                let others = other_memories(tx, &item, &counted)?;
                 originals.push(ForgetOriginal {
                     removable: others == 0,
                     item_id: item,
@@ -262,8 +278,8 @@ impl Engine {
                 crate::journal::store::count_lines(tx, &doomed)?;
             let token = new_id_hex();
             tx.execute(
-                "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at, items) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO forget_tokens(token, ids, include_originals, stamp, expires_at, items, \
+                 unlink) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 params![
                     token,
                     serde_json::to_string(ids)?,
@@ -271,6 +287,9 @@ impl Engine {
                     stamp(tx, &all, &gone)?,
                     fmt_ts(expires),
                     serde_json::to_string(&gone)?,
+                    (!unlink.is_empty())
+                        .then(|| serde_json::to_string(unlink))
+                        .transpose()?,
                 ],
             )?;
             Ok(ForgetPreview {
@@ -321,16 +340,25 @@ impl Engine {
         let now = self.clock().now();
         let stamp_now = fmt_ts(now);
         let (job, pages_redacted, files) = self.write(|tx| {
-            type TokenRow = (String, bool, String, String, Option<String>);
+            type TokenRow = (String, bool, String, String, Option<String>, Option<String>);
             let row: Option<TokenRow> = tx
                 .query_row(
-                    "SELECT ids, include_originals, stamp, expires_at, items FROM forget_tokens \
-                     WHERE token = ?1",
+                    "SELECT ids, include_originals, stamp, expires_at, items, unlink \
+                     FROM forget_tokens WHERE token = ?1",
                     [token],
-                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                        ))
+                    },
                 )
                 .optional()?;
-            let Some((ids, include_originals, saved_stamp, expires, gone)) = row else {
+            let Some((ids, include_originals, saved_stamp, expires, gone, unlink)) = row else {
                 return Err(Error::StaleToken);
             };
             if parse_ts(&expires)? <= now {
@@ -347,6 +375,24 @@ impl Engine {
                 return Err(Error::StaleToken);
             }
             tx.execute("DELETE FROM forget_tokens WHERE token = ?1", [token])?;
+            // Memories something else also says keep everything but their links to what goes.
+            let unlink: Vec<String> = match unlink {
+                Some(u) => serde_json::from_str(&u)?,
+                None => Vec::new(),
+            };
+            if !unlink.is_empty() {
+                for g in &gone {
+                    let mut versions = vec![g.clone()];
+                    versions.extend(crate::journal::keep::earlier_versions(tx, g)?);
+                    for v in &versions {
+                        tx.execute(
+                            "DELETE FROM memory_sources WHERE item_id = ?1 \
+                             AND memory_id IN (SELECT value FROM json_each(?2))",
+                            params![v, serde_json::to_string(&unlink)?],
+                        )?;
+                    }
+                }
+            }
             let sources = source_items(tx, &all)?;
             // With originals, exactly those the preview listed as going; otherwise the sources,
             // as before.
@@ -669,7 +715,7 @@ impl Engine {
                    SELECT id FROM entities WHERE merged_into IS NULL \
                      AND (id IN (SELECT entity_id FROM memories WHERE entity_id IS NOT NULL) \
                        OR id IN (SELECT n.entity_id FROM mentions n JOIN items i ON i.id = n.item_id \
-                                 WHERE i.kind = 'checkin')) \
+                                 WHERE i.kind IN ('checkin', 'calendar'))) \
                    UNION SELECT e.id FROM entities e JOIN keep k ON e.merged_into = k.id) \
                  DELETE FROM entities WHERE id NOT IN (SELECT id FROM keep)",
                 [],

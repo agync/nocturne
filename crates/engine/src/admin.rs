@@ -152,7 +152,7 @@ impl Engine {
             let same_name = crate::journal::mentions::open_questions(conn, None)?.len() as u32;
             let waiting_to_read = count(
                 "SELECT COUNT(*) FROM items WHERE status IN ('kept', 'reading') \
-                 AND NOT EXISTS (SELECT 1 FROM forget_jobs \
+                 AND kind != 'calendar' AND NOT EXISTS (SELECT 1 FROM forget_jobs \
                                  WHERE instr(items, '\"' || items.id || '\"') > 0)",
                 &[],
             )?;
