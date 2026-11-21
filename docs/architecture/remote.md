@@ -95,6 +95,22 @@ Calendar entries reach the phone's page and journal day like any other line: an 
 private is left out before the page leaves, and the outbound filter holds back any page that
 still names one. The activity list counts what each send brought, never what it was.
 
+## Phone and computer versions
+
+A phone app and the computer update apart, so each speaks a window of phone builds
+([Nocturne on Android and iPhone](/design/phone-apps.md#please-update), decision 12). The
+computer's hello gives the oldest and newest build it speaks; a computer from before the window
+gives only the oldest, and speaks that one alone. A phone app's first call on each session,
+`introduce`, says which app it is, its version and the builds it speaks. The computer answers with
+the newest build both speak, or `too_old` when the phone must update and `outdated` when the
+computer must. It notes the app, the version and that build for its phones list, and a phone newer
+than it in the activity list. The phone page in a browser introduces itself too, as the browser.
+
+`crates/channel/protocol-history.json` lists each build and the day it shipped. The oldest build
+spoken rises only once the build after it has been out for six months, and a test holds the tree
+to that. `crates/contract/tests/fixtures/phone-v{n}/` holds every call of build `n` as that build
+sent it: each still parses, and the app dispatches each one for every build it still speaks.
+
 ## Limits
 
 Separate rate buckets apply to requests without the helper key, pairing frames, failed session
