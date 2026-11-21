@@ -552,6 +552,10 @@ pub struct ReadingRow {
     pub source_device: Option<String>,
     pub phone: String,
     pub removed: bool,
+    /// The phone it came from, to delete it through.
+    #[serde(default)]
+    #[ts(as = "Option<String>", optional)]
+    pub device_id: String,
 }
 
 /// What to delete from one phone: one source, optionally some kinds, optionally only before a

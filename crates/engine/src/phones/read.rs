@@ -157,6 +157,7 @@ pub(crate) struct Stored {
     pub value: ReadingValue,
     pub source_device: Option<String>,
     pub phone: String,
+    pub device_id: String,
     pub removed: bool,
 }
 
@@ -169,7 +170,7 @@ pub(crate) fn readings_of(
     with_removed: bool,
 ) -> Result<Vec<Stored>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT i.id, i.metadata, r.removed_at IS NOT NULL, COALESCE(d.name, '') \
+        "SELECT i.id, i.metadata, r.removed_at IS NOT NULL, COALESCE(d.name, ''), r.device_id \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
          LEFT JOIN remote_devices d ON d.id = r.device_id \
          WHERE r.source = 'health' AND i.kind = 'reading' \
@@ -177,13 +178,13 @@ pub(crate) fn readings_of(
          AND json_extract(i.metadata, '$.day') BETWEEN ?2 AND ?3 \
          AND (?4 OR r.removed_at IS NULL)",
     )?;
-    let rows: Vec<(String, String, bool, String)> = stmt
+    let rows: Vec<(String, String, bool, String, String)> = stmt
         .query_map(params![enum_str(&kind), from, to, with_removed], |r| {
-            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
         })?
         .collect::<rusqlite::Result<_>>()?;
     let mut out = Vec::new();
-    for (item_id, meta, removed, phone) in rows {
+    for (item_id, meta, removed, phone, device_id) in rows {
         let meta: Value = serde_json::from_str(&meta)?;
         let Some(value) = meta
             .get("reading")
@@ -200,6 +201,7 @@ pub(crate) fn readings_of(
             source_device: text("sourceDevice"),
             value,
             phone,
+            device_id,
             removed,
         });
     }
@@ -590,6 +592,7 @@ impl Engine {
                         source_device: r.source_device,
                         phone: r.phone,
                         removed: r.removed,
+                        device_id: r.device_id,
                     })
                     .collect();
             rows.reverse();

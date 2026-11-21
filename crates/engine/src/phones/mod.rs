@@ -555,12 +555,15 @@ impl Engine {
     }
 
     /// "What came in" from one source of one phone, newest first: each version as new or
-    /// changed when it came in, and each removal when it came in.
+    /// changed when it came in, and each removal when it came in. A page after the last row
+    /// shown starts before its `came_in_at` and, with `before_id`, after its item id, since
+    /// every row of one send came in at the same time.
     pub fn came_in(
         &self,
         device_id: &str,
         source: PhoneSource,
         before: Option<&str>,
+        before_id: Option<&str>,
         limit: u32,
     ) -> Result<Vec<CameInRow>> {
         let before = before
@@ -578,21 +581,25 @@ impl Engine {
                  SELECT i.id, r.removed_at, i.title, json_extract(i.metadata, '$.day'), 0, 1, \
                  i.metadata FROM phone_records r JOIN items i ON i.id = r.item_id \
                  WHERE r.device_id = ?1 AND r.source = ?2 AND r.removed_at IS NOT NULL) \
-                 WHERE ?3 IS NULL OR at < ?3 ORDER BY at DESC, id LIMIT ?4",
+                 WHERE ?3 IS NULL OR at < ?3 OR (at = ?3 AND ?5 IS NOT NULL AND id > ?5) \
+                 ORDER BY at DESC, id LIMIT ?4",
             )?;
             type Raw = (String, String, String, Option<String>, bool, bool, String);
             let rows: Vec<Raw> = stmt
-                .query_map(params![device_id, source_str(source), before, limit], |r| {
-                    Ok((
-                        r.get(0)?,
-                        r.get(1)?,
-                        r.get(2)?,
-                        r.get(3)?,
-                        r.get(4)?,
-                        r.get(5)?,
-                        r.get(6)?,
-                    ))
-                })?
+                .query_map(
+                    params![device_id, source_str(source), before, limit, before_id],
+                    |r| {
+                        Ok((
+                            r.get(0)?,
+                            r.get(1)?,
+                            r.get(2)?,
+                            r.get(3)?,
+                            r.get(4)?,
+                            r.get(5)?,
+                            r.get(6)?,
+                        ))
+                    },
+                )?
                 .collect::<rusqlite::Result<_>>()?;
             let calendars = if source == PhoneSource::Calendar {
                 read::phone_calendars(conn, device_id)?

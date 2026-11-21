@@ -257,7 +257,7 @@ fn a_changed_entry_replaces_and_the_page_says_it_moved() {
     );
     let came = f
         .engine
-        .came_in(&f.phone, PhoneSource::Calendar, None, 10)
+        .came_in(&f.phone, PhoneSource::Calendar, None, None, 10)
         .unwrap();
     let tags: Vec<CameInTag> = came.iter().map(|c| c.tag).collect();
     assert_eq!(tags, vec![CameInTag::Changed, CameInTag::New]);
@@ -294,7 +294,7 @@ fn a_removed_entry_closes_its_memory_and_stays() {
     assert!(f.engine.get_item(&item).is_ok(), "the item stays");
     let came = f
         .engine
-        .came_in(&f.phone, PhoneSource::Calendar, None, 10)
+        .came_in(&f.phone, PhoneSource::Calendar, None, None, 10)
         .unwrap();
     assert_eq!(came[0].tag, CameInTag::Removed);
     let (today, _) = f.engine.calendar_today(date("2026-11-26")).unwrap();
@@ -1448,7 +1448,7 @@ fn the_entrys_own_page_and_what_came_in() {
     assert!(!c.removed);
     let came = f
         .engine
-        .came_in(&f.phone, PhoneSource::Calendar, None, 1)
+        .came_in(&f.phone, PhoneSource::Calendar, None, None, 1)
         .unwrap();
     assert_eq!(came.len(), 1);
     assert_eq!(came[0].start.as_deref(), Some("2026-11-26T09:00:00Z"));
@@ -1459,6 +1459,7 @@ fn the_entrys_own_page_and_what_came_in() {
             &f.phone,
             PhoneSource::Calendar,
             Some(&came[0].came_in_at),
+            None,
             10,
         )
         .unwrap();
@@ -1540,4 +1541,70 @@ fn delete_this_day_lists_what_phones_brought() {
     assert_eq!(b.calendar[0].title, "Swim");
     assert_eq!(b.health[0].title, "Steps");
     assert_eq!(b.health[0].phone, "Pixel");
+}
+
+#[test]
+fn what_came_in_pages_through_one_big_send() {
+    let f = fx();
+    let changes = (0..7)
+        .map(|n| {
+            upsert(entry(
+                &format!("p{n}"),
+                &format!("Thing {n}"),
+                "2026-11-21T10:00:00Z",
+                "2026-11-21T11:00:00Z",
+            ))
+        })
+        .collect();
+    f.engine
+        .take_calendar(&f.phone, batch("s1", changes))
+        .unwrap();
+    let mut seen = Vec::new();
+    let mut cursor: Option<(String, String)> = None;
+    loop {
+        let page = f
+            .engine
+            .came_in(
+                &f.phone,
+                PhoneSource::Calendar,
+                cursor.as_ref().map(|c| c.0.as_str()),
+                cursor.as_ref().map(|c| c.1.as_str()),
+                3,
+            )
+            .unwrap();
+        if page.is_empty() {
+            break;
+        }
+        let last = page.last().unwrap();
+        cursor = Some((last.came_in_at.clone(), last.item_id.clone()));
+        seen.extend(page.into_iter().map(|r| r.item_id));
+    }
+    assert_eq!(seen.len(), 7, "every row of the send, each once");
+    seen.sort();
+    seen.dedup();
+    assert_eq!(seen.len(), 7);
+}
+
+#[test]
+fn a_reading_names_the_phone_it_came_from() {
+    let f = fx();
+    f.engine
+        .take_readings(
+            &f.phone,
+            readings(
+                "h1",
+                vec![reading(
+                    "st1",
+                    "2026-11-19",
+                    "2026-11-19T00:00:00Z",
+                    ReadingValue::Steps { total: 5 },
+                )],
+            ),
+        )
+        .unwrap();
+    let rows = f
+        .engine
+        .readings(ReadingKind::Steps, date("2026-11-19"), date("2026-11-19"))
+        .unwrap();
+    assert_eq!(rows[0].device_id, f.phone);
 }
