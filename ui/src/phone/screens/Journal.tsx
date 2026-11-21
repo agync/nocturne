@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { choiceText } from "../../components/PageSheet/questionWords";
 import { formatDuration, formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
@@ -146,6 +147,23 @@ function Row({ row, onOpen }: { row: TimelineRow; onOpen(id: string): void }) {
       </span>
     ) : row.kind === "elsewhere" ? (
       <span className="ph-dim">{lineOf(row)}</span>
+    ) : row.answer ? (
+      <>
+        <span>
+          <span className="ph-answer-choice">{choiceText(row.answer.choice)}</span>
+          {row.answer.line ? ` ${row.answer.line}` : ""}
+        </span>
+        {row.answer.sentence ? (
+          <span className="ph-dim">
+            {t("journal.timeline.about", { sentence: row.answer.sentence })}
+          </span>
+        ) : null}
+        {row.item.fromDevice ? (
+          <span className="ph-rc">
+            {t("journal.timeline.fromDevice", { phone: row.item.fromDevice })}
+          </span>
+        ) : null}
+      </>
     ) : (
       <>
         <span>
@@ -202,6 +220,12 @@ function Waiting({ keeps }: { keeps: readonly PendingKeep[] }) {
               <span className="ph-tbody">
                 {feeling ? <Feel part={feeling.part} words={feeling.words} /> : null}
                 {text ? <span>{text}</span> : null}
+                {k.answer ? (
+                  <span>
+                    <span className="ph-answer-choice">{choiceText(k.answer.choice)}</span>
+                    {k.answer.line ? ` ${k.answer.line}` : ""}
+                  </span>
+                ) : null}
                 <span className="ph-waiting">{t("phone.journal.waiting.tag")}</span>
               </span>
             </li>

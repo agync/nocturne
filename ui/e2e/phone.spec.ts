@@ -123,6 +123,8 @@ const SCENARIOS: Array<[string, string]> = [
   ["lookBackWeek", "9 to 15 November"],
   ["lookBackToday", "Thursday 19 November"],
   ["whichGone", "Nothing to answer here now."],
+  ["pageQuestion", "One question · from your journal"],
+  ["journalAnswer", "About: “Parents’ evening at six. Not looking forward to it.”"],
 ];
 
 async function axeClean(page: Page) {
@@ -137,8 +139,8 @@ for (const scheme of ["light", "dark"] as const) {
     page,
     phoneUrl,
   }) => {
-    // Twenty-two screens, each with an accessibility scan: slow on a shared machine.
-    test.setTimeout(150_000);
+    // Twenty-four screens, each with an accessibility scan: slow on a shared machine.
+    test.setTimeout(165_000);
     const seen = await watch(page, new URL(phoneUrl).origin);
     await page.emulateMedia({ colorScheme: scheme });
     for (const [scenario, text] of SCENARIOS) {
@@ -411,6 +413,48 @@ test("today’s page: the phone edition, earlier days, and an original from a so
   ).toBeVisible();
   await expect(page.locator("mark")).toContainText("Packed lunch");
   await axeClean(page);
+});
+
+test("today’s page: the question from the journal, answered with a line", async ({
+  page,
+  phoneUrl,
+}) => {
+  await page.goto(`${phoneUrl}/?s=pageQuestion`);
+  const box = page.getByRole("region", { name: /Yesterday you wrote/ });
+  await expect(box).toContainText("“Parents’ evening at six. Not looking forward to it.”");
+  await axeClean(page);
+  await box.getByRole("button", { name: "Not great" }).click();
+  await expect(box.getByText("Not great. Kept on today’s journal.")).toBeVisible();
+  const field = box.getByLabel("Anything to add? (optional)");
+  await expect(field).toBeFocused();
+  await axeClean(page);
+  await field.fill("Mrs Okafor is worried about his reading.");
+  await box.getByRole("button", { name: "Add" }).click();
+  await expect(box.getByText("“Mrs Okafor is worried about his reading.” Added.")).toBeVisible();
+  await axeClean(page);
+  const width = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+  expect(width).toBeLessThanOrEqual(0);
+  await box.getByRole("button", { name: "Open today’s journal ›" }).click();
+  await expect(page.getByRole("heading", { name: "Journal" })).toBeVisible();
+});
+
+test("today’s page: the question answered first elsewhere, waiting, and refused", async ({
+  page,
+  phoneUrl,
+}) => {
+  for (const [scenario, choice, text] of [
+    ["pageElsewhere", "Not great", "Already answered, on your computer or another phone."],
+    ["pageWaiting", "Not great", "Not great. Waiting on this phone."],
+    ["pageRefused", "Fine", "That didn’t go across."],
+  ] as const) {
+    await page.goto(`${phoneUrl}/?s=${scenario}`);
+    const box = page.getByRole("region", { name: /Yesterday you wrote/ });
+    await box.getByRole("button", { name: choice }).click();
+    await expect(box.getByText(text), scenario).toBeVisible();
+    await axeClean(page);
+  }
 });
 
 test("today’s page: none yet says so", async ({ page, phoneUrl }) => {

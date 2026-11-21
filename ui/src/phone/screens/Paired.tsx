@@ -319,7 +319,20 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
       />
     );
   }
-  if (view.name === "page") return <PageScreen engine={engine} onOpen={open} onBack={back} />;
+  if (view.name === "page") {
+    return (
+      <PageScreen
+        engine={engine}
+        queue={services.queue}
+        connected={connected}
+        now={services.now}
+        onQueued={refreshWaiting}
+        onOpen={open}
+        onJournal={(day) => go({ name: "journal", day, today: null })}
+        onBack={back}
+      />
+    );
+  }
   if (view.name === "original") {
     return <Original engine={engine} itemId={view.id} quote={quote.current} onBack={back} />;
   }

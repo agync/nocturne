@@ -8,7 +8,7 @@ import type { PairingResult } from "../pairing";
 import { memoryQueue } from "../queue";
 import type { PairingLike, Services } from "../services";
 import { detectPlatform } from "../services";
-import { emptyDay, stamp, TODAY, WEEK_PERIOD, YESTERDAY } from "./journalFixtures";
+import { answeredDay, emptyDay, stamp, TODAY, WEEK_PERIOD, YESTERDAY } from "./journalFixtures";
 import { memoryKeyStore } from "./memoryStore";
 
 const SCENARIOS = [
@@ -42,6 +42,11 @@ const SCENARIOS = [
   "lookBackWeek",
   "lookBackToday",
   "whichGone",
+  "pageQuestion",
+  "pageElsewhere",
+  "pageWaiting",
+  "pageRefused",
+  "journalAnswer",
 ] as const;
 export type Scenario = (typeof SCENARIOS)[number];
 
@@ -73,6 +78,13 @@ function startView(scenario: Scenario): object | null {
       };
     case "whichGone":
       return { name: "which", id: "snq-gone", day: TODAY, today: TODAY };
+    case "pageQuestion":
+    case "pageElsewhere":
+    case "pageWaiting":
+    case "pageRefused":
+      return { name: "page" };
+    case "journalAnswer":
+      return { name: "journal", day: null, today: TODAY };
     case "lookBackToday":
       return { name: "lookback", kind: "day", start: TODAY, end: TODAY, write: true, today: TODAY };
     default:
@@ -193,6 +205,9 @@ export async function mockServices(): Promise<Services> {
   const script: MockScript = {
     connection,
     noPage: scenario === "noPage",
+    keepFails: scenario === "pageWaiting",
+    answeredElsewhere: scenario === "pageElsewhere",
+    answerRefused: scenario === "pageRefused",
     pace: Number(params.get("pace") ?? 60),
     hello: { connection: scenario === "asleepMostPrivate" ? "mostPrivate" : "simple" },
   };
@@ -233,6 +248,7 @@ export async function mockServices(): Promise<Services> {
     engineFor: () => ({
       ...createMockPhoneEngine(script),
       ...(scenario === "journalEmpty" ? { getJournalDay: async () => emptyDay(TODAY, true) } : {}),
+      ...(scenario === "journalAnswer" ? { getJournalDay: async () => answeredDay() } : {}),
       disconnect: async () => {
         await store.clear();
         return { reached: scenario !== "asleep" && scenario !== "cantConnect" };

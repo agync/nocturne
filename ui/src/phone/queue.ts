@@ -2,6 +2,7 @@
 // plain, not sealed at rest: the phone is the person's own, and the page does not claim more.
 // Each has a client id, so the computer keeps it once however often it arrives.
 
+import type { PhoneError } from "../engine/bindings";
 import type { FlushResult, PendingKeep, PhoneEngine, Queue } from "./engine";
 import { ConnectionError, PhoneRequestError } from "./engine";
 import { openDb, run, STORE_QUEUE } from "./idb";
@@ -14,6 +15,9 @@ interface Backing {
 }
 
 const KEEP_LOCK = "nocturne-keep";
+
+/** What the computer answers when a waiting answer to the page's question can never be given. */
+const ANSWER_GONE: ReadonlySet<PhoneError> = new Set(["notFound", "invalid", "tooLate"]);
 
 /**
  * Runs `fn` while no other tab is sending a keep, so at most one upload is in flight across the
@@ -67,7 +71,28 @@ function build(backing: Backing): Queue {
         if (!keep.checkIn) throw new PhoneRequestError("invalid");
         out.checkIns.push(await engine.keepCheckIn(keep.checkIn, keep.clientId, madeAt(keep)));
         return;
+      case "answer": {
+        const a = keep.answer;
+        if (!a) throw new PhoneRequestError("invalid");
+        await engine.answerJournalQuestion(
+          a.pageDate,
+          a.choice,
+          keep.clientId,
+          a.line ?? undefined,
+        );
+        return;
+      }
     }
+  }
+
+  /**
+   * A line added to an answer while the answer was going across replaces its entry under the same
+   * id. That entry stays, to go next time: the computer keeps the answer once and adds the line.
+   */
+  async function lineAddedSince(sent: PendingKeep): Promise<boolean> {
+    if (sent.kind !== "answer") return false;
+    const now = (await backing.all()).find((k) => k.clientId === sent.clientId);
+    return (now?.answer?.line ?? null) !== (sent.answer?.line ?? null);
   }
 
   async function flushOnce(engine: PhoneEngine): Promise<FlushResult> {
@@ -79,9 +104,16 @@ function build(backing: Backing): Queue {
       }
       try {
         await send(engine, keep, out);
+        if (await lineAddedSince(keep)) continue;
         await backing.remove(keep.clientId);
         out.sent += 1;
       } catch (e) {
+        if (keep.kind === "answer" && e instanceof PhoneRequestError && ANSWER_GONE.has(e.code)) {
+          // The question is gone or the answer can no longer be given: nothing is left to send.
+          await backing.remove(keep.clientId);
+          out.failed += 1;
+          continue;
+        }
         if (e instanceof PhoneRequestError && (e.code === "invalid" || e.code === "tooLarge")) {
           // The computer will never take this one; it stays visible rather than vanishing.
           rejected.add(keep.clientId);

@@ -16,6 +16,7 @@ import type {
   PhoneItem,
   PhoneKept,
   PhoneStatus,
+  QuestionChoice,
   ReflectionView,
   RemoteConnection,
   SameNameAnswer,
@@ -48,8 +49,18 @@ export interface PhoneEngine {
   getLookBack(period: Period): Promise<ReflectionView>;
   /** Asks the computer to write it ("Reflect on today"), then answers as `getLookBack` does. */
   lookBack(period: Period): Promise<ReflectionView>;
-  /** "Which {name} is this?": the one change a phone makes beyond keeping. */
+  /** "Which {name} is this?": a change a phone makes beyond keeping. */
   answerSameName(questionId: string, answer: SameNameAnswer): Promise<SameNameAnswered>;
+  /**
+   * The page's question from the journal: the choice, and the line when one was written before
+   * the answer went across. Kept once per client id; answers with the page as it stands after.
+   */
+  answerJournalQuestion(
+    pageDate: string,
+    choice: QuestionChoice,
+    clientId: string,
+    line?: string,
+  ): Promise<PageView>;
   unkeep(id: string): Promise<void>;
   ask(question: string, onDelta: (delta: AskDelta) => void): Promise<string>;
   cancelAsk(askId: string): Promise<void>;
@@ -111,9 +122,16 @@ export interface KeyStore {
   clear(): Promise<void>;
 }
 
+/** An answer to the page's question from the journal, waiting with the line written for it. */
+export interface PendingAnswer {
+  pageDate: string;
+  choice: QuestionChoice;
+  line: string | null;
+}
+
 export interface PendingKeep {
   clientId: string;
-  kind: "text" | "photo" | "recording" | "checkin";
+  kind: "text" | "photo" | "recording" | "checkin" | "answer";
   text?: string;
   blob?: Blob;
   caption?: string;
@@ -122,6 +140,8 @@ export interface PendingKeep {
   good?: boolean;
   /** A check-in kept while the computer was out of reach. */
   checkIn?: CheckInInput;
+  /** An answer to the page's question given while the computer was out of reach. */
+  answer?: PendingAnswer;
   /** Bytes of the text, or the blob's size; a check-in counts its words. */
   size: number;
   createdAt: number;

@@ -369,6 +369,22 @@ export function createPhoneEngine(
       checkAnswer(answer);
       return (await once({ cmd: "answerSameName", questionId, answer }, "sameName")).answered;
     },
+    async answerJournalQuestion(pageDate, choice, clientId, line): Promise<PageView> {
+      checkClientId(clientId);
+      checkDate(pageDate);
+      if (choice !== "fine" && choice !== "notGreat" && choice !== "notYet")
+        throw new PhoneRequestError("invalid");
+      const said = (line ?? "").trim();
+      if (utf8(said).length > P.MAX_TEXT) throw new PhoneRequestError("tooLarge");
+      const request: RemoteCall = {
+        cmd: "answerJournalQuestion",
+        pageDate,
+        choice,
+        clientId,
+        ...(said ? { line: said } : {}),
+      };
+      return (await once(request, "page")).page;
+    },
     async unkeep(id) {
       checkItemId(id);
       await once({ cmd: "unkeep", id }, "done");

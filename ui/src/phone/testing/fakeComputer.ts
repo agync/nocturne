@@ -27,6 +27,7 @@ import {
 } from "../bytes";
 import type { Env, WebSocketLike } from "../channel";
 import * as C from "../crypto";
+import { type AnswerState, journalQuestion, page, QUESTION_PAGE } from "../mock";
 import * as P from "../protocol";
 import {
   emptyDay,
@@ -230,6 +231,13 @@ export class FakeComputer {
   >();
   /** Check-ins kept, by client id, so a repeat is answered with the first. */
   readonly checkIns = new Map<string, CheckIn>();
+  /** The answer to the page's question from the journal, and the client ids that sent one. */
+  readonly answer: AnswerState & { kept: number } = {
+    choice: null,
+    line: null,
+    clients: new Set(),
+    kept: 0,
+  };
   opens = 0;
   refusals: string[] = [];
   /** Set to make every request go to this instead of the default. */
@@ -736,6 +744,14 @@ export class FakeComputer {
     await this.defaultHandler(ctx);
   }
 
+  /** Today's page, which asks about a plan from the journal, as the answer stands. */
+  questionPage() {
+    return {
+      ...page(QUESTION_PAGE, "Two things need you today."),
+      question: journalQuestion(this.answer),
+    };
+  }
+
   async defaultHandler(ctx: CallContext): Promise<void> {
     const call = ctx.request.call;
     const id = ctx.request.id;
@@ -833,6 +849,21 @@ export class FakeComputer {
             ? (SAME_NAME.options.find((o) => o.entityId === answer.entityId)?.role ?? null)
             : null;
         return ctx.reply({ type: "sameName", answered: { name: "Sam", role } });
+      }
+      case "getPage":
+        return ctx.reply({ type: "page", page: this.questionPage() });
+      case "answerJournalQuestion": {
+        if (call.pageDate !== QUESTION_PAGE) return ctx.reply({ type: "error", code: "notFound" });
+        const a = this.answer;
+        if (!a.clients.has(call.clientId)) {
+          a.clients.add(call.clientId);
+          if (a.choice === null) {
+            a.choice = call.choice;
+            a.kept += 1;
+          }
+        }
+        if (call.line && a.choice === call.choice && a.line === null) a.line = call.line;
+        return ctx.reply({ type: "page", page: this.questionPage() });
       }
       case "listPages":
         return ctx.reply({

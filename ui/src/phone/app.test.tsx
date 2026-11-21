@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PhoneKept } from "../engine/bindings";
+import type { PhoneKept, Receipt } from "../engine/bindings";
 import { FakeAudioContext, installFakeAudio, speak } from "../test/fakeAudio";
 import { chipsIn, sentence } from "../test/sentence";
 import { App } from "./App";
@@ -878,9 +878,31 @@ describe("originals", () => {
   });
 });
 
+interface PageOptions {
+  queue?: ReturnType<typeof memoryQueue>;
+  connected?: boolean;
+  onOpen?: (r: Receipt) => void;
+  onJournal?: (day: string | null) => void;
+}
+
+function renderPage(engine: PhoneEngine, o: PageOptions = {}) {
+  return render(
+    <PageScreen
+      engine={engine}
+      queue={o.queue ?? memoryQueue()}
+      connected={o.connected ?? true}
+      now={() => Date.parse("2026-11-13T14:05:00")}
+      onQueued={() => undefined}
+      onOpen={o.onOpen ?? (() => undefined)}
+      onJournal={o.onJournal ?? (() => undefined)}
+      onBack={() => undefined}
+    />,
+  );
+}
+
 describe("today’s page", () => {
   it("page.phone_edition_label", async () => {
-    render(<PageScreen engine={engineWith()} onOpen={() => undefined} onBack={() => undefined} />);
+    renderPage(engineWith());
     expect(
       await screen.findByRole("heading", { name: "Two things need you today." }),
     ).toBeInTheDocument();
@@ -895,42 +917,158 @@ describe("today’s page", () => {
       headline: "A day.",
       needsYou: 0,
     }));
-    render(
-      <PageScreen
-        engine={engineWith({}, { listPages: async () => days })}
-        onOpen={() => undefined}
-        onBack={() => undefined}
-      />,
-    );
+    renderPage(engineWith({}, { listPages: async () => days }));
     const nav = await screen.findByRole("navigation", { name: "Earlier pages" });
     expect(within(nav).getAllByRole("button")).toHaveLength(7);
     expect(within(nav).getByRole("button", { name: "Thu 12" })).toBeInTheDocument();
   });
 
   it("page.none_yet", async () => {
-    render(
-      <PageScreen
-        engine={engineWith({ noPage: true })}
-        onOpen={() => undefined}
-        onBack={() => undefined}
-      />,
-    );
+    renderPage(engineWith({ noPage: true }));
     expect(await screen.findByRole("heading", { name: "No page yet." })).toBeInTheDocument();
   });
 
   it("a source opens the original", async () => {
     const opened: string[] = [];
-    render(
-      <PageScreen
-        engine={engineWith()}
-        onOpen={(r) => opened.push(r.itemId)}
-        onBack={() => undefined}
-      />,
-    );
+    renderPage(engineWith(), { onOpen: (r) => opened.push(r.itemId) });
     await userEvent.click(
       await screen.findByRole("button", { name: /Message you pasted · Thu 12 Nov/ }),
     );
     expect(opened).toEqual(["item-chat"]);
+  });
+});
+
+describe("the page’s question from the journal", () => {
+  const question = () => screen.findByRole("region", { name: /Yesterday you wrote/ });
+
+  it("asks in the computer’s words, keeps a choice, then a line, on today’s journal", async () => {
+    const engine = engineWith();
+    const answer = vi.spyOn(engine, "answerJournalQuestion");
+    renderPage(engine);
+    const box = await question();
+    expect(within(box).getByText("One question · from your journal")).toBeInTheDocument();
+    expect(box).toHaveTextContent(
+      "Yesterday you wrote: “Parents’ evening at six. Not looking forward to it.” How did it go?",
+    );
+    for (const choice of ["Fine", "Not great", "Not yet"]) {
+      expect(within(box).getByRole("button", { name: choice })).toBeInTheDocument();
+    }
+    await userEvent.click(within(box).getByRole("button", { name: "Not great" }));
+    expect(await within(box).findByText("Not great. Kept on today’s journal.")).toBeInTheDocument();
+    const field = within(box).getByLabelText("Anything to add? (optional)");
+    expect(field).toHaveAttribute("placeholder", "A line, if you like.");
+    await waitFor(() => expect(field).toHaveFocus());
+    await userEvent.type(field, "Mrs Okafor is worried about his reading.");
+    await userEvent.click(within(box).getByRole("button", { name: "Add" }));
+    expect(
+      await within(box).findByText("“Mrs Okafor is worried about his reading.” Added."),
+    ).toBeInTheDocument();
+    expect(within(box).queryByLabelText("Anything to add? (optional)")).toBeNull();
+    expect(within(box).getByRole("button", { name: "Open today’s journal ›" })).toBeInTheDocument();
+    const [first, second] = answer.mock.calls;
+    expect(first?.slice(0, 2)).toEqual(["2026-11-13", "notGreat"]);
+    expect(first?.[3]).toBeUndefined();
+    expect(second?.[1]).toBe("notGreat");
+    expect(second?.[3]).toBe("Mrs Okafor is worried about his reading.");
+  });
+
+  it("the receipt opens the day the block was kept on, and Open today’s journal opens today", async () => {
+    const opened: Array<string | null> = [];
+    renderPage(engineWith(), { onJournal: (day) => opened.push(day) });
+    const box = await question();
+    await userEvent.click(within(box).getByRole("button", { name: /^Entry · Thu 12 Nov · / }));
+    await userEvent.click(within(box).getByRole("button", { name: "Fine" }));
+    await userEvent.type(within(box).getByLabelText("Anything to add? (optional)"), "Fine.");
+    await userEvent.click(within(box).getByRole("button", { name: "Add" }));
+    await userEvent.click(
+      await within(box).findByRole("button", { name: "Open today’s journal ›" }),
+    );
+    expect(opened).toEqual(["2026-11-12", null]);
+  });
+
+  it("shows the answer the computer kept first", async () => {
+    renderPage(engineWith({ answeredElsewhere: true }));
+    const box = await question();
+    await userEvent.click(within(box).getByRole("button", { name: "Not great" }));
+    expect(await within(box).findByText("Fine. Kept on today’s journal.")).toBeInTheDocument();
+    expect(
+      within(box).getByText("Already answered, on your computer or another phone."),
+    ).toBeInTheDocument();
+  });
+
+  it("an answer while the computer is away waits on the phone, with its line, and goes across once", async () => {
+    const queue = memoryQueue();
+    const away = engineWith({ keepFails: true });
+    const { unmount } = renderPage(away, { queue });
+    const box = await question();
+    await userEvent.click(within(box).getByRole("button", { name: "Not great" }));
+    expect(await within(box).findByText("Not great. Waiting on this phone.")).toBeInTheDocument();
+    expect(
+      within(box).getByText(
+        "It’s on this phone and goes across when your computer is back. You can leave this page.",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.type(within(box).getByLabelText("Anything to add? (optional)"), "Long queue.");
+    await userEvent.click(within(box).getByRole("button", { name: "Add" }));
+    expect(
+      await within(box).findByText("“Long queue.” Waiting on this phone."),
+    ).toBeInTheDocument();
+    const waiting = await queue.list();
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0]?.answer).toEqual({
+      pageDate: "2026-11-13",
+      choice: "notGreat",
+      line: "Long queue.",
+    });
+    unmount();
+
+    const back = engineWith();
+    const answer = vi.spyOn(back, "answerJournalQuestion");
+    const result = await queue.flush(back);
+    expect(result.sent).toBe(1);
+    await queue.flush(back);
+    expect(answer).toHaveBeenCalledTimes(1);
+    const page = await back.getPage();
+    expect(page.question?.answered).toBe("notGreat");
+    expect(page.question?.journal?.line).toBe("Long queue.");
+  });
+
+  it("a refused answer says so and keeps the choices", async () => {
+    renderPage(engineWith({ answerRefused: true }));
+    const box = await question();
+    await userEvent.click(within(box).getByRole("button", { name: "Fine" }));
+    expect(await within(box).findByRole("alert")).toHaveTextContent(
+      "That didn’t go across. Nothing was kept. Try again in a moment.",
+    );
+    expect(within(box).getByRole("button", { name: "Fine" })).toBeInTheDocument();
+  });
+
+  it("on an earlier page the choices work and no line can be added", async () => {
+    const later = [{ date: "2026-11-14", pageNumber: 43, headline: "Later.", needsYou: 0 }];
+    renderPage(engineWith({}, { listPages: async () => later }));
+    const box = await question();
+    await screen.findByRole("navigation", { name: "Earlier pages" });
+    await userEvent.click(within(box).getByRole("button", { name: "Not yet" }));
+    expect(await within(box).findByText("Not yet. Kept on today’s journal.")).toBeInTheDocument();
+    expect(within(box).queryByLabelText("Anything to add? (optional)")).toBeNull();
+  });
+
+  it("only a question from the journal shows", async () => {
+    const base = await engineWith().getPage();
+    const asked = base.question;
+    if (!asked) throw new Error("the scripted page asks a question");
+    const yesNo = { ...base, question: { ...asked, kind: "yesNo" as const, journal: undefined } };
+    renderPage(engineWith({}, { getPage: async () => yesNo }));
+    await screen.findByRole("heading", { name: "Two things need you today." });
+    expect(screen.queryByText("One question · from your journal")).toBeNull();
+  });
+
+  it("the phone’s journal draws the answer as the computer does", async () => {
+    await open("s=journalAnswer");
+    const row = (await screen.findByText("Not great")).closest("li");
+    expect(row).toHaveTextContent("Not great Mrs Okafor is worried about his reading.");
+    expect(row).toHaveTextContent("About: “Parents’ evening at six. Not looking forward to it.”");
+    expect(row).toHaveTextContent("from Pixel");
   });
 });
 
