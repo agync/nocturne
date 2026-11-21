@@ -9,6 +9,7 @@
 //! phone and source, whether the person still takes it and when it last came in.
 
 pub(crate) mod calendar;
+pub(crate) mod read;
 pub(crate) mod readings;
 pub mod usual;
 
