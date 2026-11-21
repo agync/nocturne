@@ -60,13 +60,15 @@ pub async fn set_noticing<R: Runtime>(app: AppHandle<R>, on: bool) -> Result<(),
     change(app, move |e| e.set_noticing(on)).await
 }
 
-/// "What came in" from one source of one phone, newest first, before `before` when given.
+/// "What came in" from one source of one phone, newest first. Load more passes the last row's
+/// `cameInAt` as `before` and its `itemId` as `beforeId`; `before` alone still works.
 #[tauri::command]
 pub async fn list_came_in<R: Runtime>(
     app: AppHandle<R>,
     device_id: String,
     source: PhoneSource,
     before: Option<String>,
+    before_id: Option<String>,
     limit: u32,
 ) -> Result<Vec<CameInRow>, CommandError> {
     read(app, move |e| {
@@ -74,6 +76,7 @@ pub async fn list_came_in<R: Runtime>(
             &device_id,
             source,
             before.as_deref(),
+            before_id.as_deref(),
             limit.min(MAX_CAME_IN),
         )
     })

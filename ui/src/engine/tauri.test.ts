@@ -246,9 +246,9 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["setNoticing", [false], "set_noticing", ["on"]],
   [
     "listCameIn",
-    ["d1", "health", null, 50],
+    ["d1", "health", null, 50, "itm_1"],
     "list_came_in",
-    ["deviceId", "source", "before", "limit"],
+    ["deviceId", "source", "before", "beforeId", "limit"],
   ],
   [
     "getHealthSeries",

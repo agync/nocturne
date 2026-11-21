@@ -5,4 +5,8 @@ import type { ReadingValue } from "./ReadingValue";
  * One reading in "Show as a list" and on a kind's own page. `removed`: deleted in Health,
  * kept here until the person deletes it.
  */
-export type ReadingRow = { itemId: string, day: string, start: string, end: string | null, value: ReadingValue, sourceDevice: string | null, phone: string, removed: boolean, };
+export type ReadingRow = { itemId: string, day: string, start: string, end: string | null, value: ReadingValue, sourceDevice: string | null, phone: string, removed: boolean, 
+/**
+ * The phone it came from, to delete it through.
+ */
+deviceId?: string, };

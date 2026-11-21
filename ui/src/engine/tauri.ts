@@ -299,8 +299,8 @@ export class TauriEngine implements EngineClient {
   setPhonePageOptions: EngineClient["setPhonePageOptions"] = (options) =>
     this.call("set_phone_page_options", { options });
   setNoticing: EngineClient["setNoticing"] = (on) => this.call("set_noticing", { on });
-  listCameIn: EngineClient["listCameIn"] = (deviceId, source, before, limit) =>
-    this.call("list_came_in", { deviceId, source, before, limit });
+  listCameIn: EngineClient["listCameIn"] = (deviceId, source, before, limit, beforeId) =>
+    this.call("list_came_in", { deviceId, source, before, beforeId: beforeId ?? null, limit });
   getHealthSeries: EngineClient["getHealthSeries"] = (kind, from, to) =>
     this.call("get_health_series", { kind, from, to });
   listReadings: EngineClient["listReadings"] = (kind, from, to) =>

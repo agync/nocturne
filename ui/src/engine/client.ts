@@ -430,12 +430,16 @@ export interface EngineClient {
   setPhonePageOptions(options: PhonePageOptions): Promise<PhoneSourcesView>;
   /** "Notice what goes together". */
   setNoticing(on: boolean): Promise<void>;
-  /** "What came in", newest first, before `before` when given. */
+  /**
+   * "What came in", newest first. Load more passes the last row's `cameInAt` as `before` and
+   * its `itemId` as `beforeId`: every row of one send came in at the same time.
+   */
   listCameIn(
     deviceId: string,
     source: PhoneSource,
     before: string | null,
     limit: number,
+    beforeId?: string | null,
   ): Promise<CameInRow[]>;
   /** One kind over days, `from` to `to` both included. */
   getHealthSeries(kind: ReadingKind, from: string, to: string): Promise<HealthSeries>;
