@@ -9,6 +9,7 @@ import {
   healthAvailability,
   healthOlderAvailable,
   KINDS,
+  onIphone,
   openHealth,
 } from "../sources";
 import { openPolicy, places, placesRich, Switch, sentAt, useHeading } from "./parts";
@@ -18,6 +19,7 @@ type Step =
   | { name: "why" }
   | { name: "kinds" }
   | { name: "done"; kinds: ReadingKind[] }
+  | { name: "doneIos" }
   | { name: "none" }
   | { name: "missing" }
   | { name: "settings" };
@@ -43,27 +45,33 @@ export function kindList(kinds: ReadingKind[]): string {
 }
 
 /**
- * Bringing Health: Nocturne's own screen, then which kinds, then Health Connect's own screen to
- * confirm, then what it allowed. Once brought, the same screen is Health's settings.
+ * Bringing Health: Nocturne's own screen, then which kinds, then the phone's own screen to
+ * confirm (Health Connect's, or Apple Health's sheet), then what it allowed. An iPhone never says
+ * what was allowed, so it answers "Done." Once brought, the same screen is Health's settings.
  */
 export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onDone(): void }) {
   const [step, setStep] = useState<Step>({ name: "loading" });
   const [kinds, setKinds] = useState<ReadingKind[]>(DEFAULT_KINDS);
+  const [ios, setIos] = useState(false);
 
   useEffect(() => {
     let gone = false;
-    void Promise.all([healthAvailability(), channel.healthSettings(), channel.sources()]).then(
-      ([available, settings, sources]) => {
-        if (gone) return;
-        setKinds(settings.kinds);
-        if (available !== "available") return setStep({ name: "missing" });
-        setStep(
-          settings.bring && sources.health !== "notBrought"
-            ? { name: "settings" }
-            : { name: "why" },
-        );
-      },
-    );
+    void Promise.all([
+      healthAvailability(),
+      channel.healthSettings(),
+      channel.sources(),
+      onIphone(),
+    ]).then(([available, settings, sources, iphone]) => {
+      if (gone) return;
+      setKinds(settings.kinds);
+      setIos(iphone);
+      // Health Connect is the one that can be missing; without Health, an iPhone keeps it.
+      if (available !== "available")
+        return setStep(iphone ? { name: "none" } : { name: "missing" });
+      setStep(
+        settings.bring && sources.health !== "notBrought" ? { name: "settings" } : { name: "why" },
+      );
+    });
     return () => {
       gone = true;
     };
@@ -72,10 +80,10 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
   const confirm = async () => {
     const allowed = await askHealth(kinds, false);
     const brought = kinds.filter((k) => allowed.kinds.includes(k));
-    if (brought.length === 0) return setStep({ name: "none" });
+    if (brought.length === 0 && !ios) return setStep({ name: "none" });
     const settings = await channel.healthSettings();
     await channel.setHealthSettings({ ...settings, bring: true, kinds });
-    setStep({ name: "done", kinds: brought });
+    setStep(ios ? { name: "doneIos" } : { name: "done", kinds: brought });
   };
 
   switch (step.name) {
@@ -84,6 +92,7 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
     case "why":
       return (
         <HealthWhy
+          ios={ios}
           onContinue={() => setStep({ name: "kinds" })}
           onNotNow={() => setStep({ name: "none" })}
         />
@@ -98,6 +107,14 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
           onOk={onDone}
         />
       );
+    case "doneIos":
+      return (
+        <HealthAnswer
+          title={t("phone.health.doneIos.title")}
+          body={t("phone.health.doneIos.body")}
+          onOk={onDone}
+        />
+      );
     case "none":
       return (
         <HealthAnswer
@@ -109,11 +126,19 @@ export function HealthConnect({ channel, onDone }: { channel: NativeChannel; onD
     case "missing":
       return <HealthMissing onGet={() => void openHealth("healthStore")} onBack={onDone} />;
     case "settings":
-      return <HealthSettingsScreen channel={channel} onBack={onDone} />;
+      return <HealthSettingsScreen channel={channel} ios={ios} onBack={onDone} />;
   }
 }
 
-export function HealthWhy({ onContinue, onNotNow }: { onContinue(): void; onNotNow(): void }) {
+export function HealthWhy({
+  ios = false,
+  onContinue,
+  onNotNow,
+}: {
+  ios?: boolean;
+  onContinue(): void;
+  onNotNow(): void;
+}) {
   const heading = useHeading("healthWhy");
   return (
     <Page bar={<Bar />}>
@@ -122,7 +147,11 @@ export function HealthWhy({ onContinue, onNotNow }: { onContinue(): void; onNotN
         <h1 className="ph-h1" tabIndex={-1} ref={heading}>
           {t("phone.health.why.title")}
         </h1>
-        <p className="ph-body">{t("phone.health.why.what")}</p>
+        <p className="ph-body">
+          {t("phone.health.why.what", {
+            source: t(ios ? "phone.health.source.ios" : "phone.health.source.android"),
+          })}
+        </p>
         <p className="ph-body">{t("phone.health.why.far")}</p>
         <p className="ph-body">{t("phone.health.why.where")}</p>
         <p className="ph-body">{t("phone.health.why.for")}</p>
@@ -259,9 +288,11 @@ export function fromDay(day: string | null, older: boolean, now = new Date()): s
 /** Health on This phone: the switch, the kinds, how far back, and what went last. */
 export function HealthSettingsScreen({
   channel,
+  ios = false,
   onBack,
 }: {
   channel: NativeChannel;
+  ios?: boolean;
   onBack(): void;
 }) {
   const [settings, setSettings] = useState<HealthSettings | null>(null);
@@ -290,17 +321,24 @@ export function HealthSettingsScreen({
     setStatus(await channel.setHealthSettings(next));
   };
 
-  // A kind turned on, or older readings, needs Health Connect's own yes first.
+  // A kind turned on, or older readings, needs the phone's own yes first.
   const ask = async (next: HealthSettings) => {
     const allowed = await askHealth(next.kinds, next.olderReadings);
     await save({ ...next, olderReadings: next.olderReadings && allowed.history });
   };
 
   const lastSent = status?.healthLastSent;
+  // An iPhone never says a kind was turned off: nothing at all after the first read says it.
+  const quiet = ios && settings.bring && status?.healthFrom != null && !lastSent?.count;
   return (
     <Page bar={<BackBar title={t("phone.health.label")} onBack={onBack} />}>
       <main className="ph-main ph-bring">
-        {status?.health === "offInSettings" && (
+        {quiet && (
+          <div className="ph-card" role="status">
+            <p className="ph-hint">{t("phone.health.quietIos")}</p>
+          </div>
+        )}
+        {!ios && status?.health === "offInSettings" && (
           <div className="ph-card" role="status">
             <p className="ph-card-title">{t("phone.health.takenBack.title")}</p>
             <p className="ph-hint">{t("phone.health.takenBack.body")}</p>

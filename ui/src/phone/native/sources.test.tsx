@@ -189,6 +189,54 @@ describe("bringing Health", () => {
     expect(screen.getByRole("button", { name: "Get Health Connect" })).toBeTruthy();
   });
 
+  it("on iPhone names Apple Health and answers Done, since it never says what was allowed", async () => {
+    mockIPC((cmd) => {
+      if (cmd === "phone_platform") return "ios";
+      if (cmd === "health_availability") return "available";
+      if (cmd === "health_settings")
+        return { bring: false, kinds: ["sleep", "steps"], olderReadings: false };
+      if (cmd === "sources") return sources;
+      if (cmd === "health_request") return { kinds: [], history: true };
+      if (cmd === "health_save") return sources;
+    });
+    render(<HealthConnect channel={nativeChannel} onDone={() => undefined} />);
+    expect(await screen.findByText(/from Apple Health:/)).toBeTruthy();
+    expect(screen.queryByText(/Health Connect/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Done."),
+    );
+    expect(screen.getByText("Readings show on your computer as they go across.")).toBeTruthy();
+  });
+
+  it("on iPhone says when nothing came in, never that Health Connect is off", async () => {
+    mockIPC((cmd) => {
+      if (cmd === "phone_platform") return "ios";
+      if (cmd === "health_availability") return "available";
+      if (cmd === "health_settings") return { bring: true, kinds: ["sleep"], olderReadings: false };
+      if (cmd === "sources")
+        return { ...sources, health: "offInSettings", healthFrom: "2026-10-23" };
+      if (cmd === "health_older_available") return true;
+    });
+    render(<HealthConnect channel={nativeChannel} onDone={() => undefined} />);
+    expect(await screen.findByText(/Nothing has come in from Health yet/)).toBeTruthy();
+    expect(screen.queryByText(/Health Connect/)).toBeNull();
+  });
+
+  it("on iPhone without Health keeps it on the phone", async () => {
+    mockIPC((cmd) => {
+      if (cmd === "phone_platform") return "ios";
+      if (cmd === "health_availability") return "missing";
+      if (cmd === "health_settings") return { bring: false, kinds: [], olderReadings: false };
+      if (cmd === "sources") return sources;
+    });
+    render(<HealthConnect channel={nativeChannel} onDone={() => undefined} />);
+    expect((await screen.findByRole("heading", { level: 1 })).textContent).toBe(
+      "Health stays on this phone.",
+    );
+  });
+
   it("says the first day read, with the year when it is a year back", () => {
     const now = new Date("2026-11-21T10:00:00");
     expect(fromDay("2026-10-23", false, now)).toBe("23 October");

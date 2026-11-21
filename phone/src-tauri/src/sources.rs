@@ -359,3 +359,9 @@ pub fn last_sent(state: State<'_, AppState>) -> Option<LastSent> {
 pub fn launch_route<R: Runtime>(app: AppHandle<R>) -> Option<String> {
     app.health().take_route()
 }
+
+/// The phone's system, `ios` or `android`, for the words that differ between them.
+#[tauri::command]
+pub fn phone_platform() -> &'static str {
+    std::env::consts::OS
+}
