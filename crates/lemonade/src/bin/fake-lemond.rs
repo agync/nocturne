@@ -1046,7 +1046,7 @@ fn kind_of(name: &str) -> &'static str {
     .map_or("llm", |(_, kind)| kind)
 }
 
-/// Loads `name` as the real engine does (lemonade v2026.46.2, `Router::load_model`): a model of
+/// Loads `name` as the real engine does (lemonade v2026.47.1, `Router::load_model`): a model of
 /// its kind on the NPU is evicted first, since FastFlowLM holds one of each kind, and then the
 /// one used longest ago of its kind while `max_loaded_models` of them are loaded, whatever their
 /// device.

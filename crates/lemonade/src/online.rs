@@ -7,7 +7,7 @@
 //! Handing over the key makes the engine read the provider's list of models once, and drops the
 //! static row from its model list (`CloudRows::refresh`). So the row's model is loaded first: a
 //! loaded model is served without the list, and reads the key on every request
-//! (`model_loader.cpp:33-48`, `cloud_server.cpp:382-386, 407-431` in lemonade v2026.46.2).
+//! (`model_loader.cpp:33-48`, `cloud_server.cpp:382-386, 407-431` in lemonade v2026.47.1).
 //!
 //! The engine posts to the provider without following redirects (`utils/http_client.cpp:798`
 //! passes `follow_redirects = false` to `apply_http_security_policy`, `:645`), so a redirect
