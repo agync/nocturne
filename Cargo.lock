@@ -6534,6 +6534,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "tauri-plugin-nocturne-health"
+version = "0.7.2"
+dependencies = [
+ "nocturne-contract",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-plugin",
+]
+
+[[package]]
 name = "tauri-plugin-nocturne-system"
 version = "0.7.2"
 dependencies = [
