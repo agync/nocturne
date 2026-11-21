@@ -45,7 +45,7 @@ export interface SyncReport {
 }
 
 /** What This phone shows under "What this phone brings". */
-export interface PhoneSources {
+export interface ThisPhoneSources {
   calendar: SourceStatus;
   calendars: number;
   health: SourceStatus;
@@ -57,13 +57,13 @@ export interface PhoneSources {
 
 /** The native side of calendar and health, as the screens call it. */
 export interface NativeChannel {
-  sources(): Promise<PhoneSources>;
+  sources(): Promise<ThisPhoneSources>;
   /** The phone's calendars, as the phone names them. */
   calendars(): Promise<PhoneCalendar[]>;
   calendarSettings(): Promise<CalendarSettings>;
-  setCalendarSettings(settings: CalendarSettings): Promise<PhoneSources>;
+  setCalendarSettings(settings: CalendarSettings): Promise<ThisPhoneSources>;
   healthSettings(): Promise<HealthSettings>;
-  setHealthSettings(settings: HealthSettings): Promise<PhoneSources>;
+  setHealthSettings(settings: HealthSettings): Promise<ThisPhoneSources>;
   /** Sends what changed since the last send. */
   syncNow(): Promise<SyncReport>;
 }
