@@ -1,7 +1,7 @@
 import { t } from "../../copy/t";
 import type { Band, SeriesPoint } from "../../engine/bindings";
 import styles from "./Charts.module.css";
-import { DayMarkers, DayRing } from "./DayMarkers";
+import { DayLink, DayMarkers, DayRing } from "./DayMarkers";
 import { dayIndex } from "./derive";
 
 interface BandLineProps {
@@ -25,6 +25,8 @@ interface BandLineProps {
   height?: number;
   /** Labels under the axis: the first day, the middle and today. */
   labels?: ReadonlyArray<{ day: string; text: string }>;
+  /** Each day's point opens its readings for a pointer; the list holds the same receipts. */
+  href?: (day: string) => string;
 }
 
 const PAD = 8;
@@ -45,6 +47,7 @@ export function BandLine({
   width = 520,
   height = 110,
   labels = [],
+  href,
 }: BandLineProps) {
   const days = Math.max(1, dayIndex(from, to));
   const bottom = height - 22;
@@ -55,59 +58,77 @@ export function BandLine({
   const focus = sorted.find((p) => p.day === at) ?? sorted[sorted.length - 1];
   const journal = journalDays.filter((d) => d >= from && d <= to);
   return (
-    <svg
-      className={styles.svg}
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-label={sentence}
-      data-chart="line"
-    >
-      {band ? (
-        <>
-          <rect
-            className={styles.band}
-            x={PAD}
-            y={Y(band.high)}
-            width={width - PAD * 2}
-            height={Math.max(1, Y(band.low) - Y(band.high))}
-            rx={3}
+    <div className={styles.frame}>
+      <svg
+        className={styles.svg}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={sentence}
+        data-chart="line"
+      >
+        {band ? (
+          <>
+            <rect
+              className={styles.band}
+              x={PAD}
+              y={Y(band.high)}
+              width={width - PAD * 2}
+              height={Math.max(1, Y(band.low) - Y(band.high))}
+              rx={3}
+            />
+            <text className={styles.axis} x={PAD + 4} y={Y(band.high) - 4}>
+              {t("health.usual.axis")}
+            </text>
+          </>
+        ) : null}
+        {sorted.length > 1 ? (
+          <polyline
+            className={styles.line}
+            points={sorted.map((p) => `${X(p.day)},${Y(p.value)}`).join(" ")}
           />
-          <text className={styles.axis} x={PAD + 4} y={Y(band.high) - 4}>
-            {t("health.usual.axis")}
+        ) : null}
+        <DayMarkers at={journal.map(X)} baseline={bottom} />
+        {focus ? (
+          <>
+            <circle className={styles.dot} cx={X(focus.day)} cy={Y(focus.value)} r={4} />
+            <text
+              className={styles.value}
+              x={X(focus.day) - 8}
+              y={Y(focus.value) - 9}
+              textAnchor="end"
+            >
+              {format(focus.value)}
+            </text>
+          </>
+        ) : null}
+        {ring
+          ? (() => {
+              const p = sorted.find((q) => q.day === ring);
+              return p ? <DayRing x={X(p.day)} y={Y(p.value)} /> : null;
+            })()
+          : null}
+        {labels.map((l) => (
+          <text key={l.day} className={styles.axis} x={X(l.day)} y={height - 2} textAnchor="middle">
+            {l.text}
           </text>
-        </>
+        ))}
+      </svg>
+      {href ? (
+        <svg
+          className={styles.overlay}
+          viewBox={`0 0 ${width} ${height}`}
+          aria-hidden="true"
+          focusable="false"
+        >
+          {href
+            ? sorted.map((p) => (
+                <DayLink key={p.day} href={href(p.day)} day={p.day}>
+                  <circle className={styles.hit} cx={X(p.day)} cy={Y(p.value)} r={9} />
+                </DayLink>
+              ))
+            : null}
+        </svg>
       ) : null}
-      {sorted.length > 1 ? (
-        <polyline
-          className={styles.line}
-          points={sorted.map((p) => `${X(p.day)},${Y(p.value)}`).join(" ")}
-        />
-      ) : null}
-      <DayMarkers at={journal.map(X)} baseline={bottom} />
-      {focus ? (
-        <>
-          <circle className={styles.dot} cx={X(focus.day)} cy={Y(focus.value)} r={4} />
-          <text
-            className={styles.value}
-            x={X(focus.day) - 8}
-            y={Y(focus.value) - 9}
-            textAnchor="end"
-          >
-            {format(focus.value)}
-          </text>
-        </>
-      ) : null}
-      {ring
-        ? (() => {
-            const p = sorted.find((q) => q.day === ring);
-            return p ? <DayRing x={X(p.day)} y={Y(p.value)} /> : null;
-          })()
-        : null}
-      {labels.map((l) => (
-        <text key={l.day} className={styles.axis} x={X(l.day)} y={height - 2} textAnchor="middle">
-          {l.text}
-        </text>
-      ))}
-    </svg>
+    </div>
   );
 }

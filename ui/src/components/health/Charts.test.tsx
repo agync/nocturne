@@ -13,14 +13,17 @@ import {
   ShowAsList,
 } from "./index";
 import {
+  beatsText,
   hoursSentence,
   lineSentence,
   nightSentence,
   nightsSentence,
   pressureSentence,
   rangeSentence,
+  stepsPeriod,
   stepsSentence,
   usualText,
+  workoutsSentence,
 } from "./sentence";
 
 const night: NightLine = {
@@ -69,7 +72,7 @@ describe("the sentences", () => {
     ).toBe("Resting heart rate, 58 today.");
     expect(
       rangeSentence({ low: 52, high: 148, middle: 74, day: "2026-11-13", today: "2026-11-13" }),
-    ).toBe("Heart rate today, 52 to 148, mostly around 74.");
+    ).toBe("Heart rate today, 52 to 148 beats a minute, mostly around 74.");
     expect(
       hoursSentence({ day: "2026-11-13", today: "2026-11-13", highest: 10, workout: "walk" }),
     ).toBe("Heart rate by hour today. Highest between 10 and 11 am, during a walk.");
@@ -94,6 +97,36 @@ describe("the sentences", () => {
         days: 14,
       }),
     ).toBe("8,412 steps today. 6,900 on an average day this fortnight.");
+  });
+
+  it("spells the unit the first time a number is read", () => {
+    expect(beatsText(58)).toBe("58 beats a minute");
+    expect(
+      lineSentence({
+        label: "Resting heart rate",
+        value: beatsText(58),
+        day: "2026-11-13",
+        today: "2026-11-13",
+        band: { low: 55, high: 61 },
+      }),
+    ).toBe("Resting heart rate, 58 beats a minute today. Your usual is 55 to 61.");
+    expect(
+      stepsSentence({ steps: 1, day: "2026-11-13", today: "2026-11-13", average: 900, days: 14 }),
+    ).toBe("1 step today. 900 on an average day this fortnight.");
+  });
+
+  it("names the steps period by the days it covers", () => {
+    expect(stepsPeriod(14)).toBe("this fortnight");
+    expect(stepsPeriod(30)).toBe("in the last 30 days");
+    expect(stepsPeriod(90)).toBe("in the last 90 days");
+  });
+
+  it("counts workouts by kind through the plural rules, and the rest as workouts", () => {
+    expect(workoutsSentence(["Walk", "Walk", "Swim", "Walk", "Walk"])).toBe("4 walks, 1 swim.");
+    expect(workoutsSentence(["Run", "Cycle", "Hike", "Hike"])).toBe("1 run, 1 cycle, 2 hikes.");
+    expect(workoutsSentence(["Yoga", "Walk", "Rowing"])).toBe("2 workouts, 1 walk.");
+    expect(workoutsSentence(["Yoga"])).toBe("1 workout.");
+    expect(workoutsSentence([])).toBe("");
   });
 
   it("rounds the usual to whole numbers", () => {
@@ -180,6 +213,55 @@ describe("the charts", () => {
       />,
     );
     expect(container.querySelector("rect[class*=band]")).toBeNull();
+  });
+});
+
+describe("receipts in the charts", () => {
+  const points = [
+    { day: "2026-11-12", value: 57, itemId: "a" },
+    { day: "2026-11-13", value: 58, itemId: "b" },
+  ];
+  const href = (day: string) => `#/journal/health/x?day=${day}`;
+
+  it("give each day's point a link for a pointer, out of the tab order", () => {
+    const { container } = render(
+      <div>
+        <BandLine
+          points={points}
+          from="2026-11-12"
+          to="2026-11-13"
+          band={null}
+          min={40}
+          max={80}
+          sentence="s"
+          href={href}
+        />
+        <DayBars points={points} from="2026-11-12" to="2026-11-13" sentence="s" href={href} />
+      </div>,
+    );
+    const links = [...container.querySelectorAll("a")];
+    expect(links.map((a) => a.getAttribute("href"))).toEqual([
+      "#/journal/health/x?day=2026-11-12",
+      "#/journal/health/x?day=2026-11-13",
+      "#/journal/health/x?day=2026-11-12",
+      "#/journal/health/x?day=2026-11-13",
+    ]);
+    expect(links.every((a) => a.getAttribute("tabindex") === "-1")).toBe(true);
+  });
+
+  it("leave a chart without links when it is given no address", () => {
+    const { container } = render(
+      <BandLine
+        points={points}
+        from="2026-11-12"
+        to="2026-11-13"
+        band={null}
+        min={40}
+        max={80}
+        sentence="s"
+      />,
+    );
+    expect(container.querySelector("a")).toBeNull();
   });
 });
 

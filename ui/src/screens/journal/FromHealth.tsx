@@ -134,7 +134,7 @@ export function FromHealth({
             journalDays={resting.journalDays}
             sentence={lineSentence({
               label: kindName("restingHeartRate"),
-              value: String(restingNow.value),
+              value: t("health.beats", { value: restingNow.value }),
               day: restingNow.day,
               today,
               band: resting.usual,

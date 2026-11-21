@@ -54,13 +54,17 @@ describe("the journal day with a phone's calendar and health", () => {
       }),
     ).toBeInTheDocument();
     expect(
-      side.getByRole("img", { name: "Resting heart rate, 58 today. Your usual is 55 to 61." }),
+      side.getByRole("img", {
+        name: "Resting heart rate, 58 beats a minute today. Your usual is 55 to 61.",
+      }),
     ).toBeInTheDocument();
     expect(
       side.getByRole("img", { name: "8,412 steps today. 6,900 on an average day this fortnight." }),
     ).toBeInTheDocument();
     expect(
-      side.getByRole("img", { name: "Heart rate today, 52 to 148, mostly around 74." }),
+      side.getByRole("img", {
+        name: "Heart rate today, 52 to 148 beats a minute, mostly around 74.",
+      }),
     ).toBeInTheDocument();
     expect(side.getByText("128 over 82 · 7:40 am")).toBeInTheDocument();
     const more = side.getAllByRole("link", { name: /See more/ });
@@ -105,7 +109,9 @@ describe("From Health on a day that is not today", () => {
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/today/i);
     expect(
-      screen.getByRole("img", { name: /^Resting heart rate, 58 on Thursday 12 November\./ }),
+      screen.getByRole("img", {
+        name: /^Resting heart rate, 58 beats a minute on Friday 13 November\./,
+      }),
     ).toBeInTheDocument();
   });
 });

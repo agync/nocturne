@@ -1,6 +1,6 @@
 import type { SeriesPoint } from "../../engine/bindings";
 import styles from "./Charts.module.css";
-import { DayMarkers } from "./DayMarkers";
+import { DayLink, DayMarkers } from "./DayMarkers";
 import { dayIndex } from "./derive";
 import { num } from "./sentence";
 
@@ -18,6 +18,8 @@ interface DayBarsProps {
   sentence: string;
   width?: number;
   height?: number;
+  /** Each day's bar opens its readings for a pointer; the list holds the same receipts. */
+  href?: (day: string) => string;
 }
 
 /** One bar per day, today in the accent and the rest in a quiet grey, with the value above today. */
@@ -32,6 +34,7 @@ export function DayBars({
   sentence,
   width = 520,
   height = 90,
+  href,
 }: DayBarsProps) {
   const n = Math.max(1, dayIndex(from, to) + 1);
   const step = width / n;
@@ -43,48 +46,72 @@ export function DayBars({
   const focus = at ?? points[points.length - 1]?.day;
   const cx = (day: string) => dayIndex(from, day) * step + step / 2;
   return (
-    <svg
-      className={styles.svg}
-      viewBox={`0 0 ${width} ${height}`}
-      role="img"
-      aria-label={sentence}
-      data-chart="bars"
-    >
-      {points.map((p) => (
-        <g key={p.day}>
-          <rect
-            className={styles.bar}
-            data-tone={p.day === focus ? undefined : "soft"}
-            x={cx(p.day) - bw / 2}
-            y={Y(p.value)}
-            width={bw}
-            height={Math.max(0, bottom - Y(p.value))}
-            rx={Math.min(3, bw / 2)}
-          />
-          {label && n <= 16 ? (
-            <text className={styles.axis} x={cx(p.day)} y={height - 2} textAnchor="middle">
-              {label(p.day)}
-            </text>
-          ) : null}
-        </g>
-      ))}
-      {points
-        .filter((p) => p.day === focus)
-        .map((p) => (
-          <text
-            key={p.day}
-            className={styles.value}
-            x={cx(p.day)}
-            y={Y(p.value) - 5}
-            textAnchor="middle"
-          >
-            {num(p.value)}
-          </text>
+    <div className={styles.frame}>
+      <svg
+        className={styles.svg}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={sentence}
+        data-chart="bars"
+      >
+        {points.map((p) => (
+          <g key={p.day}>
+            <rect
+              className={styles.bar}
+              data-tone={p.day === focus ? undefined : "soft"}
+              x={cx(p.day) - bw / 2}
+              y={Y(p.value)}
+              width={bw}
+              height={Math.max(0, bottom - Y(p.value))}
+              rx={Math.min(3, bw / 2)}
+            />
+            {label && n <= 16 ? (
+              <text className={styles.axis} x={cx(p.day)} y={height - 2} textAnchor="middle">
+                {label(p.day)}
+              </text>
+            ) : null}
+          </g>
         ))}
-      <DayMarkers
-        at={journalDays.filter((d) => d >= from && d <= to).map(cx)}
-        baseline={bottom - 4}
-      />
-    </svg>
+        {points
+          .filter((p) => p.day === focus)
+          .map((p) => (
+            <text
+              key={p.day}
+              className={styles.value}
+              x={cx(p.day)}
+              y={Y(p.value) - 5}
+              textAnchor="middle"
+            >
+              {num(p.value)}
+            </text>
+          ))}
+        <DayMarkers
+          at={journalDays.filter((d) => d >= from && d <= to).map(cx)}
+          baseline={bottom - 4}
+        />
+      </svg>
+      {href ? (
+        <svg
+          className={styles.overlay}
+          viewBox={`0 0 ${width} ${height}`}
+          aria-hidden="true"
+          focusable="false"
+        >
+          {href
+            ? points.map((p) => (
+                <DayLink key={p.day} href={href(p.day)} day={p.day}>
+                  <rect
+                    className={styles.hit}
+                    x={cx(p.day) - step / 2}
+                    y={topY - 12}
+                    width={step}
+                    height={bottom - topY + 12}
+                  />
+                </DayLink>
+              ))
+            : null}
+        </svg>
+      ) : null}
+    </div>
   );
 }

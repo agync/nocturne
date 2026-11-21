@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { between, clock, duration, num, pressureText, workoutText } from "../../components/health";
+import {
+  beatsText,
+  between,
+  clock,
+  duration,
+  num,
+  pressureText,
+  stepsText,
+  workoutText,
+} from "../../components/health";
 import { formatDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { ReadingRow } from "../../engine/bindings";
@@ -10,7 +19,7 @@ const minutesOf = (row: ReadingRow): number =>
     ? row.value.asleep.reduce((sum, p) => sum + (Date.parse(p.to) - Date.parse(p.from)) / 60_000, 0)
     : 0;
 
-/** The bold value of a row, by kind: "6 h 40 min", "52 to 148", "128 over 82". */
+/** The bold value of a row, by kind: "6 h 40 min", "52 to 148 beats a minute", "128 over 82". */
 export function valueText(row: ReadingRow): string {
   const v = row.value;
   switch (v.type) {
@@ -18,16 +27,18 @@ export function valueText(row: ReadingRow): string {
       return duration(minutesOf(row));
     case "heartRate":
       if (v.hours.length === 0) return "";
-      return between(
-        num(Math.min(...v.hours.map((h) => h.low))),
-        num(Math.max(...v.hours.map((h) => h.high))),
-      );
+      return t("health.beats.range", {
+        range: between(
+          num(Math.min(...v.hours.map((h) => h.low))),
+          num(Math.max(...v.hours.map((h) => h.high))),
+        ),
+      });
     case "restingHeartRate":
-      return num(v.bpm);
+      return beatsText(v.bpm);
     case "bloodPressure":
       return pressureText(v.top, v.bottom);
     case "steps":
-      return num(v.total);
+      return stepsText(v.total);
     case "workout":
       return workoutText(v.kind, v.lengthS, v.distanceM);
     case "weight":
@@ -58,8 +69,10 @@ const sourceText = (row: ReadingRow): string =>
     ? t("health.source", { device: row.sourceDevice, phone: row.phone })
     : t("health.source.noDevice", { phone: row.phone });
 
+export type OnDelete = (row: ReadingRow, opener: HTMLElement | null) => void;
+
 /** A reading's small menu: Delete… alone, which opens the delete dialog for that reading. */
-function RowMenu({ row, onDelete }: { row: ReadingRow; onDelete: (row: ReadingRow) => void }) {
+function RowMenu({ row, onDelete }: { row: ReadingRow; onDelete: OnDelete }) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLSpanElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -109,7 +122,7 @@ function RowMenu({ row, onDelete }: { row: ReadingRow; onDelete: (row: ReadingRo
             className={styles.menuItem}
             onClick={() => {
               setOpen(false);
-              onDelete(row);
+              onDelete(row, trigger.current);
             }}
           >
             {t("health.row.delete")}
@@ -124,14 +137,30 @@ function RowMenu({ row, onDelete }: { row: ReadingRow; onDelete: (row: ReadingRo
 export function ReadingsList({
   rows,
   onDelete,
+  selected = null,
 }: {
   rows: readonly ReadingRow[];
-  onDelete?: (row: ReadingRow) => void;
+  onDelete?: OnDelete;
+  /** The day the page was opened on from a receipt: marked, and brought into view. */
+  selected?: string | null;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+  const first = rows.find((r) => r.day === selected)?.itemId;
+  useEffect(() => {
+    if (first === undefined) return;
+    list.current
+      ?.querySelector<HTMLElement>('[aria-current="true"]')
+      ?.scrollIntoView?.({ block: "center" });
+  }, [first]);
   return (
-    <ul className={styles.list}>
+    <ul ref={list} className={styles.list}>
       {rows.map((row) => (
-        <li key={row.itemId} className={styles.row} data-removed={row.removed}>
+        <li
+          key={row.itemId}
+          className={styles.row}
+          data-removed={row.removed}
+          aria-current={row.day === selected ? "true" : undefined}
+        >
           <span className={styles.rowDay}>{formatDay(row.day)}</span>
           <span className={styles.rowValue}>{valueText(row)}</span>
           <span className={styles.rowSource}>

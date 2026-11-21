@@ -201,12 +201,17 @@ export function pressureSentence(opts: {
   })}`;
 }
 
-/** "this fortnight", "this month" or "over these 90 days". */
+/** "this fortnight" or "in the last 30 days". */
 export function stepsPeriod(days: number): string {
   if (days <= 14) return t("health.steps.period.fortnight");
-  if (days <= 31) return t("health.steps.period.month");
   return t("health.steps.period.days", { count: days });
 }
+
+/** "58 beats a minute": the unit spelt out, for the first time a number is read. */
+export const beatsText = (value: number): string => t("health.beats", { value: num(value) });
+
+/** "8,412 steps" or "1 step". */
+export const stepsText = (count: number): string => t("health.steps.count", { count });
 
 /** "8,412 steps today. 6,900 on an average day this fortnight." */
 export function stepsSentence(opts: {
@@ -217,7 +222,7 @@ export function stepsSentence(opts: {
   days: number;
 }): string {
   return t("health.steps.sentence", {
-    steps: num(opts.steps),
+    steps: stepsText(opts.steps),
     when: whenText(opts.day, opts.today),
     average: num(Math.round(opts.average / 100) * 100),
     period: stepsPeriod(opts.days),
@@ -238,12 +243,27 @@ export function workoutText(kind: string, lengthS: number, distanceM: number | n
   return t("health.workout.distance", { kind, length, distance: t("health.distance", { km }) });
 }
 
-/** "4 walks, 1 swim", counted by kind in the order each first appears. */
+const WORKOUT_COUNTS = {
+  walk: "health.workouts.walk",
+  run: "health.workouts.run",
+  swim: "health.workouts.swim",
+  cycle: "health.workouts.cycle",
+  hike: "health.workouts.hike",
+  other: "health.workouts.other",
+} as const satisfies Record<string, CopyId>;
+
+/** "4 walks, 1 swim", counted by kind in the order each first appears; kinds without a word of their own count as workouts. */
 export function workoutsSentence(kinds: readonly string[]): string {
-  const counts = new Map<string, number>();
-  for (const kind of kinds)
-    counts.set(kind.toLowerCase(), (counts.get(kind.toLowerCase()) ?? 0) + 1);
+  const counts = new Map<keyof typeof WORKOUT_COUNTS, number>();
+  for (const kind of kinds) {
+    const lower = kind.toLowerCase();
+    const key =
+      lower in WORKOUT_COUNTS && lower !== "other"
+        ? (lower as keyof typeof WORKOUT_COUNTS)
+        : "other";
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
   if (counts.size === 0) return "";
-  const list = [...counts].map(([kind, count]) => t("health.workouts.count", { count, kind }));
+  const list = [...counts].map(([key, count]) => t(WORKOUT_COUNTS[key], { count }));
   return t("health.workouts.sentence", { counts: list.join(", ") });
 }
