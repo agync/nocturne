@@ -137,6 +137,10 @@ export const PHONE_BUILD = 2;
 export const MIN_PHONE_BUILD = 1;
 /** The first build in which a phone introduces itself (`introduce`). */
 export const INTRODUCE_BUILD = 2;
+/** The first build that answers the page's question from the journal (`answerJournalQuestion`). */
+export const JOURNAL_ANSWER_BUILD = 2;
+/** The first build that keeps a shared web page as untrusted (`keepText` with `web`). */
+export const WEB_KEEP_BUILD = 2;
 
 /** HTTP statuses between the listener and the phone. */
 /** Away from home is off. */

@@ -131,6 +131,9 @@ pub struct TestShell {
     pub engine: Engine,
     pub clock: Arc<ManualClock>,
     pub shown: Mutex<Vec<Shown>>,
+    /// Leave the newest phone build out of the hello, as a computer from before the version
+    /// window did.
+    pub before_window: std::sync::atomic::AtomicBool,
 }
 
 impl TestShell {
@@ -140,6 +143,7 @@ impl TestShell {
             engine: Engine::open(&dir.join("store"), clock.clone()).unwrap(),
             clock,
             shown: Mutex::new(Vec::new()),
+            before_window: std::sync::atomic::AtomicBool::new(false),
         })
     }
 
@@ -179,7 +183,8 @@ impl Shell for TestShell {
             device_name: device.name.clone(),
             connection,
             min_phone_build: super::protocol::MIN_PHONE_BUILD,
-            max_phone_build: Some(super::protocol::PHONE_BUILD),
+            max_phone_build: (!self.before_window.load(std::sync::atomic::Ordering::SeqCst))
+                .then_some(super::protocol::PHONE_BUILD),
             version: "0.0.0".into(),
             features: Vec::new(),
         }

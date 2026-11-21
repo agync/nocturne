@@ -17,7 +17,8 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
 
 use nocturne_contract::{
-    AskDelta, AskPhase, AskPlace, PhoneAppIntro, PhoneError, PhoneHello, RemoteAnswer, RemoteCall,
+    AskDelta, AskPhase, AskPlace, PhoneAppIntro, PhoneError, PhoneHello, QuestionKind,
+    RemoteAnswer, RemoteCall,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -45,8 +46,10 @@ use session::{Down, Fault, OpenFailure, OpenInit, Session};
 )]
 pub enum Connection {
     Connecting,
+    /// `agreed`: the newest phone build both sides speak; calls and answers keep to it.
     Connected {
         hello: PhoneHello,
+        agreed: u32,
     },
     Asleep,
     CantConnect,
@@ -72,6 +75,36 @@ pub enum Overlap {
     Agreed(u32),
     UpdatePhone,
     UpdateComputer,
+}
+
+/// The oldest build that has `call` as it is: a newer call, or a newer field of an older one,
+/// is never sent to a computer that would not read it as meant.
+pub fn needs_build(call: &RemoteCall) -> u32 {
+    match call {
+        RemoteCall::Introduce { .. } => INTRODUCE_BUILD,
+        RemoteCall::AnswerJournalQuestion { .. } => JOURNAL_ANSWER_BUILD,
+        RemoteCall::KeepText { web: true, .. } => WEB_KEEP_BUILD,
+        // The sends are offered only to a computer whose hello lists them.
+        _ => MIN_PHONE_BUILD,
+    }
+}
+
+/// An answer as the agreed build has it: below the build that answers the page's question from
+/// the journal, the page shows no such question.
+pub fn within(answer: RemoteAnswer, agreed: u32) -> RemoteAnswer {
+    match answer {
+        RemoteAnswer::Page { mut page }
+            if agreed < JOURNAL_ANSWER_BUILD
+                && page
+                    .question
+                    .as_ref()
+                    .is_some_and(|q| q.kind == QuestionKind::Journal) =>
+        {
+            page.question = None;
+            RemoteAnswer::Page { page }
+        }
+        other => other,
+    }
 }
 
 /// The overlap of the builds the computer says it speaks and `min_build..=max_build`. A computer
@@ -384,6 +417,7 @@ impl Phone {
         }
         self.set(Connection::Connected {
             hello: s.hello.clone(),
+            agreed,
         });
         Ok(s)
     }
@@ -493,8 +527,15 @@ impl Phone {
         }
         for again in [true, false] {
             let s = self.ensure().await?;
+            let agreed = self.agreed_build();
+            if needs_build(&call) > agreed {
+                // It waits on the phone until the computer speaks a build that has it.
+                return Err(CallError::Phone {
+                    code: PhoneError::ComputerOutdated,
+                });
+            }
             match call_once(&s, call.clone()).await {
-                Ok(a) => return Ok(a),
+                Ok(a) => return Ok(within(a, agreed)),
                 Err(f) => self.after(&s, f, again).await?,
             }
         }
@@ -749,6 +790,58 @@ mod tests {
         assert!(
             old.newest_phone_build() < INTRODUCE_BUILD,
             "it is not sent an introduction it cannot read"
+        );
+    }
+
+    fn page_asking(kind: &str) -> RemoteAnswer {
+        let page = serde_json::json!({
+            "date": "2026-11-13", "pageNumber": 42, "edition": "phone", "variant": "normal",
+            "headline": "", "dek": "", "needsYou": [], "changed": [], "letGo": [],
+            "upcoming": [], "learned": [],
+            "question": {"kind": kind, "text": "", "memoryId": null, "receipt": null,
+                "lastAsked": null, "answered": null},
+            "moreNeedsYou": 0, "moreChanged": 0, "keptCount": 0, "changesCount": 0,
+            "letGoCount": 0, "catchUpDays": 0, "privateSkipped": 0, "pending": 0,
+            "tidiedFrom": null, "tidiedTo": null, "update": null
+        });
+        RemoteAnswer::Page {
+            page: Box::new(serde_json::from_value(page).unwrap()),
+        }
+    }
+
+    fn asks(a: &RemoteAnswer) -> bool {
+        matches!(a, RemoteAnswer::Page { page } if page.question.is_some())
+    }
+
+    #[test]
+    fn a_call_newer_than_the_agreed_build_is_not_sent() {
+        let keep = |web| RemoteCall::KeepText {
+            text: "a page".into(),
+            client_id: "c-1".into(),
+            feeling: None,
+            good: None,
+            captured_at: None,
+            web,
+        };
+        assert_eq!(needs_build(&keep(false)), MIN_PHONE_BUILD);
+        assert_eq!(needs_build(&keep(true)), WEB_KEEP_BUILD);
+        let answer = RemoteCall::AnswerJournalQuestion {
+            page_date: "2026-11-13".into(),
+            choice: nocturne_contract::QuestionChoice::Fine,
+            line: None,
+            client_id: "c-2".into(),
+        };
+        assert_eq!(needs_build(&answer), JOURNAL_ANSWER_BUILD);
+        assert_eq!(needs_build(&RemoteCall::GetStatus), MIN_PHONE_BUILD);
+    }
+
+    #[test]
+    fn below_the_journal_build_the_page_asks_no_journal_question() {
+        assert!(!asks(&within(page_asking("journal"), 1)));
+        assert!(asks(&within(page_asking("journal"), JOURNAL_ANSWER_BUILD)));
+        assert!(
+            asks(&within(page_asking("yesNo"), 1)),
+            "other questions stay"
         );
     }
 

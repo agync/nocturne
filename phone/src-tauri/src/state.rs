@@ -123,7 +123,7 @@ impl AppState {
             loop {
                 let state = states.borrow_and_update().clone();
                 let connected = matches!(state, Connection::Connected { .. });
-                if let Connection::Connected { hello } = &state
+                if let Connection::Connected { hello, .. } = &state
                     && store.identity().is_some()
                 {
                     let meta = Meta {

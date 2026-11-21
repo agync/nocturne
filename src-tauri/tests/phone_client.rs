@@ -229,7 +229,10 @@ fn pairs_scanned_and_uses_the_computer() {
     let (phone, _) = c.phone(back, Options::default());
 
     match block(phone.connect()) {
-        Connection::Connected { hello } => assert_eq!(hello.device_name, NAME),
+        Connection::Connected { hello, agreed } => {
+            assert_eq!(hello.device_name, NAME);
+            assert_eq!(agreed, nocturne_channel::protocol::PHONE_BUILD);
+        }
         other => panic!("{other:?}"),
     }
     let RemoteAnswer::Status { status } = block(phone.call(RemoteCall::GetStatus)).unwrap() else {

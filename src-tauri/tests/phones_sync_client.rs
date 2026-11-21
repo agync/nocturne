@@ -117,7 +117,7 @@ impl Computer {
         let identity: PhoneIdentity = block(run).unwrap().unwrap();
         let on: OnIdentity = Arc::new(|_| {});
         let phone = Phone::new(identity, self.router.clone(), Options::default(), on);
-        let Connection::Connected { hello } = block(phone.connect()) else {
+        let Connection::Connected { hello, .. } = block(phone.connect()) else {
             panic!("no session")
         };
         assert_eq!(
