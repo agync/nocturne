@@ -1,10 +1,15 @@
 import {
+  Activity,
   AudioLines,
   BookOpen,
+  Calendar,
   ChevronDown,
   EyeOff,
   FileText,
   FolderInput,
+  Footprints,
+  Gauge,
+  Heart,
   Image,
   Lock,
   type LucideIcon,
@@ -20,6 +25,7 @@ import {
   SkipForward,
   Sun,
   Trash,
+  Waves,
   X,
 } from "lucide-react";
 
@@ -46,6 +52,12 @@ const ICONS = {
   "chevron-down": ChevronDown,
   paperclip: Paperclip,
   "book-open": BookOpen,
+  calendar: Calendar,
+  heart: Heart,
+  footprints: Footprints,
+  waves: Waves,
+  gauge: Gauge,
+  activity: Activity,
 } satisfies Record<string, LucideIcon>;
 
 export type IconName = keyof typeof ICONS;
