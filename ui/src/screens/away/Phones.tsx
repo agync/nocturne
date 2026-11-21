@@ -5,8 +5,15 @@ import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { TextInput } from "../../components/TextInput/TextInput";
 import { useToast } from "../../components/Toast/Toast";
 import { t, tParts } from "../../copy/t";
-import type { DeviceView, PhoneSources, RemoteView } from "../../engine/bindings";
+import type {
+  DeviceView,
+  PhoneDeletePreview,
+  PhoneSource,
+  PhoneSources,
+  RemoteView,
+} from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
+import { DeleteRows } from "../phones/DeleteRows";
 import { bringsKey, phoneKind, usePhoneSources } from "../phones/usePhoneSources";
 import styles from "./Away.module.css";
 import { Confirm, DeviceStatus, Frame } from "./parts";
@@ -14,6 +21,10 @@ import { useRemoteAct } from "./useRemote";
 import { whenText } from "./when";
 
 const MAX_NAME_BYTES = 40;
+
+type Previews =
+  | { state: "idle" | "loading" | "failed" }
+  | { state: "ready"; rows: { source: PhoneSource; preview: PhoneDeletePreview }[] };
 
 function nameProblem(name: string): "away.phones.name.empty" | "away.phones.name.long" | null {
   const clean = name.trim();
@@ -156,24 +167,41 @@ export function Phones({ view }: { view: RemoteView }) {
   const [alsoDelete, setAlsoDelete] = useState(false);
   const { phones, reread } = usePhoneSources();
   const brought = phones ?? [];
-  const [appointments, setAppointments] = useState<number | null>(null);
   const bringing = removing ? brought.find((p) => p.deviceId === removing.id) : undefined;
   const brings = bringing ? bringsKey(bringing) !== null : false;
 
-  const listCalendar = alsoDelete && bringing?.calendar != null;
+  const listing = alsoDelete && bringing !== undefined && brings;
   const removingId = removing?.id;
+  const sourcesBrought = (["calendar", "health"] as const).filter((s) => bringing?.[s] != null);
+  const sourcesKey = sourcesBrought.join(",");
+  const [previews, setPreviews] = useState<Previews>({ state: "idle" });
+  const latest = useRef(0);
   useEffect(() => {
-    setAppointments(null);
-    if (!listCalendar || !removingId) return;
-    let live = true;
-    engine
-      .previewPhoneDelete({ deviceId: removingId, source: "calendar", kinds: null, before: null })
-      .then((preview) => live && setAppointments(preview.items))
-      .catch(() => undefined);
-    return () => {
-      live = false;
-    };
-  }, [engine, listCalendar, removingId]);
+    const request = ++latest.current;
+    if (!listing || !removingId || sourcesKey === "") {
+      setPreviews({ state: "idle" });
+      return;
+    }
+    setPreviews({ state: "loading" });
+    const sources = sourcesKey.split(",") as PhoneSource[];
+    Promise.all(
+      sources.map((source) =>
+        engine.previewPhoneDelete({ deviceId: removingId, source, kinds: null, before: null }),
+      ),
+    ).then(
+      (answers) => {
+        if (request !== latest.current) return;
+        setPreviews({
+          state: "ready",
+          rows: sources.map((source, i) => ({ source, preview: answers[i] as PhoneDeletePreview })),
+        });
+      },
+      () => {
+        if (request === latest.current) setPreviews({ state: "failed" });
+      },
+    );
+  }, [engine, listing, removingId, sourcesKey]);
+  const waiting = alsoDelete && brings && previews.state !== "ready";
 
   const remove = async () => {
     if (!removing) return;
@@ -243,6 +271,7 @@ export function Phones({ view }: { view: RemoteView }) {
           keep={t("away.remove.keep")}
           destructive
           busy={busy}
+          blocked={waiting}
           onClose={() => setRemoving(null)}
           onConfirm={() => void remove()}
         >
@@ -263,14 +292,23 @@ export function Phones({ view }: { view: RemoteView }) {
                 disabled={busy}
                 label={t("phones.remove.alsoDelete")}
               />
-              {appointments !== null && removing ? (
-                <p>
-                  {t("phones.delete.rows.calendar", {
-                    count: appointments,
-                    phone: removing.name,
-                  })}
-                </p>
+              {alsoDelete && previews.state === "loading" ? (
+                <p role="status">{t("phones.delete.loading")}</p>
               ) : null}
+              {alsoDelete && previews.state === "failed" ? (
+                <p role="alert">{t("phones.delete.error")}</p>
+              ) : null}
+              {previews.state === "ready" && alsoDelete
+                ? previews.rows.map(({ source, preview }) => (
+                    <DeleteRows
+                      key={source}
+                      source={source}
+                      preview={preview}
+                      phoneName={removing.name}
+                      kinds={bringing?.health?.kinds ?? []}
+                    />
+                  ))
+                : null}
             </>
           ) : null}
         </Confirm>

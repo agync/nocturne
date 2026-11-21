@@ -93,9 +93,12 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByText(/Android app · Nocturne 1.2/)).toBeVisible();
       await page.getByRole("button", { name: "Remove Sam’s phone" }).click();
       const dialog = page.getByRole("dialog", { name: "Remove Sam’s phone?" });
-      await expect(
-        dialog.getByRole("checkbox", { name: "Also delete what it brought" }),
-      ).not.toBeChecked();
+      const tick = dialog.getByRole("checkbox", { name: "Also delete what it brought" });
+      await expect(tick).not.toBeChecked();
+      await dialog.getByText("Also delete what it brought").click();
+      await expect(tick).toBeChecked();
+      await expect(dialog.getByText(/appointments from Sam’s phone’s calendar/)).toBeVisible();
+      await expect(dialog.getByText(/readings of .* from Sam’s phone/)).toBeVisible();
       await page.screenshot({ path: `${SHOTS}/phones-remove-${scheme}.png` });
       await clean(page, "remove");
     });

@@ -91,6 +91,8 @@ interface ConfirmProps {
   confirm: string;
   keep: string;
   busy?: boolean;
+  /** The confirm button waits, for example while a list is still being prepared. */
+  blocked?: boolean;
   /** Turning something off or removing it for good: the confirm button is ember, like Delete. */
   destructive?: boolean;
   onConfirm: () => void;
@@ -104,6 +106,7 @@ export function Confirm({
   confirm,
   keep,
   busy,
+  blocked,
   destructive,
   onConfirm,
   onClose,
@@ -120,7 +123,7 @@ export function Confirm({
             variant={destructive ? "forget" : "primary"}
             confirming={destructive}
             onClick={onConfirm}
-            disabled={busy}
+            disabled={busy || blocked}
           >
             {confirm}
           </Button>
