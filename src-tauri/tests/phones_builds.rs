@@ -203,7 +203,7 @@ fn an_app_newer_than_this_computer_is_noted_in_the_activity() {
     assert_eq!(
         a,
         RemoteAnswer::Error {
-            code: PhoneError::Outdated
+            code: PhoneError::ComputerOutdated
         }
     );
     assert!(c.activity().contains(&RemoteAction::NeedsNewerHere));

@@ -881,7 +881,8 @@ export class FakeComputer {
         this.introduced.push(call.app);
         const oldest = this.minPhoneBuild ?? P.MIN_PHONE_BUILD;
         const newest = this.maxPhoneBuild ?? oldest;
-        if (call.app.minBuild > newest) return ctx.reply({ type: "error", code: "outdated" });
+        if (call.app.minBuild > newest)
+          return ctx.reply({ type: "error", code: "computerOutdated" });
         if (call.app.maxBuild < oldest) return ctx.reply({ type: "error", code: "tooOld" });
         return ctx.reply({ type: "introduced", agreed: Math.min(call.app.maxBuild, newest) });
       }
