@@ -1,8 +1,10 @@
-//! Health Connect, read only: the kinds the person allows, read as Nocturne keeps them (a night
-//! with its asleep periods, a day of heart rate by the hour, a day's steps, each blood pressure
-//! reading, workout and weight). The first read covers a number of days back and hands a changes
-//! token; later reads bring only what changed, until the token lapses. The app's Rust side calls
-//! it; the screens never do. On a computer Health Connect is missing.
+//! Health Connect on Android and Apple Health on iPhone, read only: the kinds the person allows,
+//! read as Nocturne keeps them (a night with its asleep periods, a day of heart rate by the hour,
+//! a day's steps, each blood pressure reading, workout and weight). The first read covers a
+//! number of days back and hands a changes token; later reads bring only what changed, until the
+//! token lapses. On iPhone every kind asked about reads as allowed, because Health never says
+//! which it refused. The app's Rust side calls it; the screens never do. On a computer Health is
+//! missing.
 
 use nocturne_contract::{Reading, ReadingKind};
 use serde::{Deserialize, Serialize};
@@ -36,6 +38,10 @@ pub struct Granted {
     /// Workouts carry their distance only when it is allowed too.
     #[serde(default)]
     pub distance: bool,
+    /// Health never says which kinds it refused (iPhone): a reading missing from a read may be
+    /// refused, not deleted, so only Health's own deletions remove anything.
+    #[serde(default)]
+    pub refusals_hidden: bool,
 }
 
 /// Everything in the kinds asked for since `days` ago, and the token for what changes next.
@@ -58,8 +64,8 @@ pub struct Changes {
     pub removed: Vec<String>,
     pub token: Option<String>,
     pub expired: bool,
-    /// The days read again whole for each daily kind (heart rate, resting heart rate, steps): a
-    /// day sent before and missing now was deleted in Health.
+    /// The days read again whole, by kind: a reading of that kind sent before for one of those
+    /// days and missing now was deleted in Health.
     #[serde(default)]
     pub refreshed: std::collections::HashMap<ReadingKind, Vec<String>>,
 }
@@ -206,12 +212,17 @@ impl<R: Runtime, T: Manager<R>> HealthExt<R> for T {
     }
 }
 
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_nocturne_health);
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("nocturne-health")
         .setup(|app, _api| {
             #[cfg(target_os = "android")]
             let handle = Some(_api.register_android_plugin("app.nocturne.health", "HealthPlugin")?);
-            #[cfg(not(target_os = "android"))]
+            #[cfg(target_os = "ios")]
+            let handle = Some(_api.register_ios_plugin(init_plugin_nocturne_health)?);
+            #[cfg(not(mobile))]
             let handle: Option<PluginHandle<R>> = None;
             app.manage(Health(handle));
             Ok(())

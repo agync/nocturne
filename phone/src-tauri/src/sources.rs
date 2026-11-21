@@ -59,6 +59,7 @@ fn granted(g: health::Granted) -> Granted {
         kinds: g.kinds,
         history: g.history,
         distance: g.distance,
+        refusals_hidden: g.refusals_hidden,
     }
 }
 

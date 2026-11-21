@@ -7,7 +7,7 @@ use std::time::Duration;
 use nocturne_channel::client::{CallError, Reach};
 use nocturne_contract::{
     CalendarChange, CalendarEntry, CalendarKind, PhoneCalendar, PhoneError, PhoneFeature, Reading,
-    ReadingChange, ReadingKind, ReadingValue, RemoteAnswer, RemoteCall, SyncReceipt,
+    ReadingChange, ReadingKind, ReadingValue, RemoteAnswer, RemoteCall, SyncReceipt, TimeSpan,
 };
 
 use crate::sync::ledger::SentEntry;
@@ -73,6 +73,23 @@ fn pressure(id: &str, day: &str) -> Reading {
     }
 }
 
+fn night(day: &str) -> Reading {
+    Reading {
+        phone_id: format!("night-{day}"),
+        day: day.into(),
+        start: format!("{day}T00:00:00Z"),
+        end: Some(format!("{day}T07:00:00Z")),
+        source_device: Some("Watch".into()),
+        value: ReadingValue::Sleep {
+            asleep: vec![TimeSpan {
+                from: format!("{day}T00:00:00Z"),
+                to: format!("{day}T07:00:00Z"),
+            }],
+            in_bed_only: false,
+        },
+    }
+}
+
 struct FakeDevice {
     access: Mutex<Access>,
     calendars: Mutex<Vec<PhoneCalendar>>,
@@ -101,6 +118,7 @@ impl FakeDevice {
                 kinds: vec![ReadingKind::Steps, ReadingKind::BloodPressure],
                 history: false,
                 distance: false,
+                refusals_hidden: false,
             }),
             readings: Mutex::new(vec![]),
             changes: Mutex::new(None),
@@ -1046,4 +1064,76 @@ fn each_source_says_when_it_last_sent() {
     let st = s.sources(&d, &BOTH);
     assert_eq!(st.calendar_last_sent.unwrap().count, 1);
     assert_eq!(st.health_last_sent.unwrap().count, 2);
+}
+
+#[test]
+fn nights_read_again_remove_only_nights() {
+    let (_dir, s) = syncer();
+    bring_health(&s);
+    let d = FakeDevice::new();
+    d.granted.lock().unwrap().kinds.push(ReadingKind::Sleep);
+    *d.readings.lock().unwrap() = vec![
+        steps("2026-11-20", 4000),
+        night("2026-11-20"),
+        night("2026-11-21"),
+    ];
+    let link = FakeLink::new(Mode::Take);
+    assert_eq!(sync(&s, &d, &link).health.unwrap().taken, 3);
+    // The night ending on the 20th went in Health; the nights of both days were read again.
+    *d.changes.lock().unwrap() = Some(Changes {
+        readings: vec![night("2026-11-21")],
+        token: Some("t5".into()),
+        refreshed: [(
+            ReadingKind::Sleep,
+            vec!["2026-11-20".to_string(), "2026-11-21".to_string()],
+        )]
+        .into(),
+        ..Changes::default()
+    });
+    link.clear();
+    sync(&s, &d, &link);
+    assert_eq!(
+        link.reading_changes(),
+        vec![ReadingChange::Removed {
+            phone_id: "night-2026-11-20".into(),
+            kind: ReadingKind::Sleep
+        }]
+    );
+}
+
+#[test]
+fn where_refusals_are_hidden_a_missing_reading_is_not_removed() {
+    let (_dir, s) = syncer();
+    bring_health(&s);
+    let d = FakeDevice::new();
+    d.granted.lock().unwrap().refusals_hidden = true;
+    *d.readings.lock().unwrap() = vec![steps("2026-11-20", 4000), pressure("bp-1", "2026-11-20")];
+    let link = FakeLink::new(Mode::Take);
+    sync(&s, &d, &link);
+    // Blood pressure turned off in Health reads as nothing: a full read finds it missing.
+    d.readings.lock().unwrap().pop();
+    *d.changes.lock().unwrap() = Some(Changes {
+        expired: true,
+        ..Changes::default()
+    });
+    link.clear();
+    sync(&s, &d, &link);
+    assert_eq!(*d.reads.lock().unwrap(), vec![30, 30]);
+    assert!(link.reading_changes().is_empty());
+    // A deletion Health reports still goes, and one matching nothing reads nothing again.
+    *d.changes.lock().unwrap() = Some(Changes {
+        removed: vec!["bp-1".into(), "never-sent".into()],
+        token: Some("t5".into()),
+        ..Changes::default()
+    });
+    link.clear();
+    sync(&s, &d, &link);
+    assert_eq!(*d.reads.lock().unwrap(), vec![30, 30]);
+    assert_eq!(
+        link.reading_changes(),
+        vec![ReadingChange::Removed {
+            phone_id: "bp-1".into(),
+            kind: ReadingKind::BloodPressure
+        }]
+    );
 }

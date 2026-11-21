@@ -133,20 +133,23 @@ fn forget_older_than_a_year(h: &mut HealthLedger, today: &str) {
     }
 }
 
-/// A full read: what changed, and what went across from the days read but is gone now.
+/// A full read: what changed, and what went across from the days read but is gone now. Where
+/// Health hides refusals, a missing reading may only be refused, so nothing is removed.
 pub fn take_full(
     h: &mut HealthLedger,
     read: super::FullRead,
     kinds: &[ReadingKind],
+    granted: &super::Granted,
     older: bool,
-    distance: bool,
 ) {
     let seen = upserts(h, read.readings, kinds);
-    gone_since(h, &seen, &read.from_day, kinds);
+    if !granted.refusals_hidden {
+        gone_since(h, &seen, &read.from_day, kinds);
+    }
     h.token = Some(read.token);
     h.token_kinds = kinds.to_vec();
     h.token_older = older;
-    h.token_distance = distance;
+    h.token_distance = granted.distance;
     h.from_day = Some(read.from_day);
     forget_older_than_a_year(h, &jiff::Zoned::now().date().to_string());
 }
@@ -158,25 +161,33 @@ pub fn take_days(h: &mut HealthLedger, read: super::FullRead, kinds: &[ReadingKi
 }
 
 /// What changed since the token. A deleted reading comes as an id alone; the kind is the one it
-/// went across as. A day of a daily kind read again and now empty went in Health. Answers
-/// whether a deletion matched nothing known, which for a daily kind means some day changed.
+/// went across as. A reading of a kind read again over some days, sent before for one of those
+/// days and missing now, went in Health. Answers whether a deletion matched nothing known, which
+/// for a daily kind means some day changed.
 pub fn take_changes(h: &mut HealthLedger, changes: super::Changes, kinds: &[ReadingKind]) -> bool {
     let seen = upserts(h, changes.readings, kinds);
     for (kind, days) in &changes.refreshed {
-        if !kinds.contains(kind) || !daily(*kind) {
+        if !kinds.contains(kind) {
             continue;
         }
-        for day in days {
-            let k = key(*kind, day);
-            if !seen.contains(&k) && h.sent.contains_key(&k) {
-                h.pending.insert(
-                    k,
-                    ReadingChange::Removed {
-                        phone_id: day.clone(),
-                        kind: *kind,
-                    },
-                );
-            }
+        let days: BTreeSet<&str> = days.iter().map(String::as_str).collect();
+        let gone: Vec<(String, String)> = h
+            .sent
+            .iter()
+            .filter(|(k, s)| !seen.contains(*k) && days.contains(s.day.as_str()))
+            .filter_map(|(k, _)| {
+                let (of, id) = split(k)?;
+                (of == *kind).then(|| (k.clone(), id.to_string()))
+            })
+            .collect();
+        for (k, phone_id) in gone {
+            h.pending.insert(
+                k,
+                ReadingChange::Removed {
+                    phone_id,
+                    kind: *kind,
+                },
+            );
         }
     }
     let known: BTreeMap<&str, Vec<String>> = h
@@ -294,10 +305,12 @@ pub async fn sync(
             Ok(c) if c.expired => true,
             Ok(c) => {
                 let unmatched = ledger.update(|l| take_changes(&mut l.health, c, &kinds));
-                // A deletion in a daily kind says only an id: read those kinds again.
+                // A deletion in a daily kind says only an id: read those kinds again. Where
+                // Health hides refusals, it reads the days again itself and says which.
                 let per_day: Vec<ReadingKind> =
                     kinds.iter().copied().filter(|k| daily(*k)).collect();
                 if unmatched
+                    && !granted.refusals_hidden
                     && !per_day.is_empty()
                     && let Ok(read) = device.health_read(&per_day, HEALTH_DAYS)
                 {
@@ -310,7 +323,7 @@ pub async fn sync(
         }
     };
     if whole && let Ok(read) = device.health_read(&kinds, days) {
-        ledger.update(|l| take_full(&mut l.health, read, &kinds, older, granted.distance));
+        ledger.update(|l| take_full(&mut l.health, read, &kinds, &granted, older));
     }
     let changes = in_order(ledger.get().health.pending.into_values().collect());
     if changes.is_empty() {

@@ -212,6 +212,7 @@ impl Device for Stand {
             ],
             history: false,
             distance: false,
+            refusals_hidden: false,
         })
     }
     fn health_read(&self, _kinds: &[ReadingKind], _days: u32) -> Result<FullRead, SourceError> {
