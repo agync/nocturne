@@ -373,7 +373,11 @@ impl Engine {
     pub fn items(&self, filter: ItemFilter) -> Result<Vec<ItemView>> {
         let originals = self.originals_dir();
         self.read(|conn| {
-            let mut sql = format!("SELECT {ITEM_COLS} FROM items i WHERE 1=1");
+            // What phones bring from their calendar and Health is not something kept: it is
+            // never in Recently kept, and never read again.
+            let mut sql = format!(
+                "SELECT {ITEM_COLS} FROM items i WHERE i.kind NOT IN ('calendar', 'reading')"
+            );
             let mut args: Vec<String> = Vec::new();
             if let Some(since) = &filter.since {
                 let since = since
