@@ -16,6 +16,6 @@ journal's timeline with receipts, and the computer gains From your phones to see
 what phones bring. [Health from the phone](/design/phone-health.md) proposes sleep, heart rate,
 resting heart rate, blood pressure, steps and workouts beside the journal and last night's sleep on
 the page, drawn against the person's own usual range, with noticing in recaps that cites both
-sides and no medical claims. Both pages end with decisions for the owner. Mockups for Android,
+sides and no medical claims. Both pages end with decisions; the owner accepted every recommendation. Mockups for Android,
 iPhone and the computer, light and dark, are in `docs/design/mockups/phone-apps/` and
 `docs/design/mockups/phone-health/`.
