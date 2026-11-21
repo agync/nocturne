@@ -80,7 +80,7 @@ to is public, the address counts as public and plain `http://` is refused as not
 never a provider, it is refused. For an `http://` address of the second
 class, and only then, the provider entry sets the engine's `allow_insecure_http`; the engine then
 takes the key for it and reaches it over plain HTTP for both the list of models and the chats
-(`cloud_auth.cpp`, `cloud_server.cpp` in lemonade v2026.46.2). Without that flag the engine refuses
+(`cloud_auth.cpp`, `cloud_server.cpp` in lemonade v2026.47.1). Without that flag the engine refuses
 the key with `insecure_http_requires_opt_in`, so the route fails closed. Nocturne does not resolve
 names, so a public name that resolves to a private address is judged as public and needs
 `https://`. Builds with the `online-stand-in` feature only mark a route as the stand-in's in the

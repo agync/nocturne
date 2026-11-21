@@ -422,8 +422,11 @@ async fn main() {
         .unwrap_or_default();
     let modes = parse_modes(&mode_str);
     let key = std::env::var("LEMONADE_API_KEY").unwrap_or_default();
-    // Like the real engine, the admin key is the API key when it is not given.
-    let admin_key = std::env::var("LEMONADE_ADMIN_API_KEY").unwrap_or_else(|_| key.clone());
+    // Like the real engine, the admin key is the API key when it is not given or empty.
+    let admin_key = std::env::var("LEMONADE_ADMIN_API_KEY")
+        .ok()
+        .filter(|k| !k.is_empty())
+        .unwrap_or_else(|| key.clone());
 
     let counter_path = cache.join("fake-launches");
     let launches = std::fs::read_to_string(&counter_path)
@@ -1043,7 +1046,7 @@ fn kind_of(name: &str) -> &'static str {
     .map_or("llm", |(_, kind)| kind)
 }
 
-/// Loads `name` as the real engine does (lemonade v2026.46.2, `Router::load_model`): a model of
+/// Loads `name` as the real engine does (lemonade v2026.47.1, `Router::load_model`): a model of
 /// its kind on the NPU is evicted first, since FastFlowLM holds one of each kind, and then the
 /// one used longest ago of its kind while `max_loaded_models` of them are loaded, whatever their
 /// device.
