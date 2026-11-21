@@ -1,0 +1,21 @@
+[package]
+name = "tauri-plugin-nocturne-health"
+description = "Health Connect, read only: the kinds the person allows, as Nocturne keeps them"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+links = "tauri-plugin-nocturne-health"
+publish = false
+
+[dependencies]
+nocturne-contract.workspace = true
+tauri.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true
