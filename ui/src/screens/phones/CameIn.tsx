@@ -27,6 +27,12 @@ function entryLine(row: CameInRow): string {
 }
 
 /** #/settings/phones/came-in/:deviceId/:source: what one phone sent, newest change first. */
+/** Every row of one send came in at the same time, so a page ends at a time and an item. */
+interface Cursor {
+  at: string;
+  id: string;
+}
+
 export function CameIn({ deviceId, source }: { deviceId: string; source: string }) {
   const engine = useEngine();
   const sources = usePhoneSources();
@@ -34,11 +40,13 @@ export function CameIn({ deviceId, source }: { deviceId: string; source: string 
   const known = source === "calendar";
   const query = useInfiniteQuery({
     queryKey: ["phoneCameIn", deviceId, source],
-    initialPageParam: null as string | null,
+    initialPageParam: null as Cursor | null,
     queryFn: async ({ pageParam }) =>
-      (await engine.listCameIn(deviceId, "calendar", pageParam, PAGE)) as CameInRow[],
-    getNextPageParam: (last) =>
-      last.length === PAGE ? (last[last.length - 1]?.cameInAt ?? undefined) : undefined,
+      engine.listCameIn(deviceId, "calendar", pageParam?.at ?? null, PAGE, pageParam?.id ?? null),
+    getNextPageParam: (last): Cursor | undefined => {
+      const end = last[last.length - 1];
+      return last.length === PAGE && end ? { at: end.cameInAt, id: end.itemId } : undefined;
+    },
     enabled: known && phone !== undefined,
   });
 

@@ -564,6 +564,16 @@ export function buildDemo(now: Date): Demo {
     ],
   };
 
+  const readings = {
+    sleep: sleepRows,
+    heartRate: heartRows,
+    restingHeartRate: restingRows,
+    bloodPressure: bpRows,
+    steps: stepRows,
+    workout: workoutRows,
+  };
+  for (const rows of Object.values(readings)) for (const row of rows) row.deviceId = SAM.id;
+
   return {
     brought,
     fixtures: {
@@ -575,14 +585,7 @@ export function buildDemo(now: Date): Demo {
         steps,
         bloodPressure: pressureSeries,
       },
-      readings: {
-        sleep: sleepRows,
-        heartRate: heartRows,
-        restingHeartRate: restingRows,
-        bloodPressure: bpRows,
-        steps: stepRows,
-        workout: workoutRows,
-      },
+      readings,
     },
     calendarToday,
     lastNight,
