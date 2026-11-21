@@ -503,26 +503,13 @@ impl Engine {
             return Err(Error::invalid("a line to add cannot be empty"));
         }
         let date = day.to_string();
-        let title = text_title(line);
         self.write(|tx| {
-            let kind: Option<String> = tx
-                .query_row(
-                    "SELECT kind FROM questions WHERE page_date = ?1",
-                    [&date],
-                    |r| r.get(0),
-                )
-                .optional()?;
-            if kind.as_deref() != Some("journal") {
+            if question_kind(tx, &date)?.as_deref() != Some("journal") {
                 return Err(Error::not_found(format!(
                     "a question from the journal on {date}"
                 )));
             }
-            let replaced: bool = tx.query_row(
-                "SELECT EXISTS(SELECT 1 FROM pages WHERE date > ?1)",
-                [&date],
-                |r| r.get(0),
-            )?;
-            if replaced {
+            if page_replaced(tx, &date)? {
                 return Err(Error::invalid("that page has been replaced"));
             }
             let Some((id, existing)) = answer_of(tx, &date)? else {
@@ -531,20 +518,134 @@ impl Engine {
             if existing.is_some() {
                 return Err(Error::invalid("that answer already has a line"));
             }
-            tx.execute(
-                "UPDATE items SET text = ?2, title = ?3, sha256 = ?4, status = 'kept', \
-                 hold_until = NULL, metadata = json_remove(metadata, '$.read_at') WHERE id = ?1",
-                params![
-                    id,
-                    line,
-                    title,
-                    sha256_hex(format!("{line}\0{id}").as_bytes())
-                ],
-            )?;
-            bump_priority(tx, &id)?;
-            Ok(())
+            set_line(tx, &id, line)
         })
     }
+
+    /// A phone answers the journal question on `day`'s page, with the line written before it
+    /// went across, if any. The same path as the computer, kept once per `client_id`: the same
+    /// id again keeps nothing more. An answer given elsewhere first stands, and the line goes on
+    /// it only when it was written for the same choice, once, and while the page is the latest.
+    /// Returns the answer's item when this call kept the answer or its line, so the computer can
+    /// show it; `None` when nothing changed.
+    pub fn answer_from_phone(
+        &self,
+        day: Date,
+        choice: QuestionChoice,
+        line: Option<&str>,
+        device_id: &str,
+        client_id: &str,
+    ) -> Result<Option<String>> {
+        if !matches!(
+            choice,
+            QuestionChoice::Fine | QuestionChoice::NotGreat | QuestionChoice::NotYet
+        ) {
+            return Err(Error::invalid(
+                "a phone answers only a question from the journal",
+            ));
+        }
+        let line = line.map(str::trim).filter(|l| !l.is_empty());
+        let date = day.to_string();
+        let changed = self.write(|tx| {
+            let mut changed = None;
+            let earlier: Option<String> = tx
+                .query_row(
+                    "SELECT item_id FROM remote_keeps WHERE device_id = ?1 AND client_id = ?2",
+                    [device_id, client_id],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            if earlier.is_none() {
+                let stored: Option<(String, Option<String>)> = tx
+                    .query_row(
+                        "SELECT kind, answer FROM questions WHERE page_date = ?1",
+                        [&date],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()?;
+                match stored {
+                    Some((kind, _)) if kind != "journal" => {
+                        return Err(Error::not_found(format!(
+                            "a question from the journal on {date}"
+                        )));
+                    }
+                    Some((_, Some(_))) => {}
+                    _ => {
+                        let Some(id) = crate::page::answer_tx(tx, self.clock(), day, choice)?
+                        else {
+                            return Err(Error::not_found(format!(
+                                "a question from the journal on {date}"
+                            )));
+                        };
+                        tx.execute(
+                            "INSERT INTO remote_keeps(item_id, device_id, client_id, kept_at) \
+                             VALUES (?1, ?2, ?3, ?4)",
+                            params![id, device_id, client_id, fmt_ts(self.clock().now())],
+                        )?;
+                        changed = Some(id);
+                    }
+                }
+            }
+            if let Some(line) = line {
+                let stored: Option<String> = tx
+                    .query_row(
+                        "SELECT answer FROM questions WHERE page_date = ?1",
+                        [&date],
+                        |r| r.get(0),
+                    )
+                    .optional()?
+                    .flatten();
+                let same = stored.as_deref() == Some(enum_str(&choice).as_str());
+                if same
+                    && !page_replaced(tx, &date)?
+                    && let Some((id, None)) = answer_of(tx, &date)?
+                {
+                    set_line(tx, &id, line)?;
+                    changed = Some(id);
+                }
+            }
+            Ok(changed)
+        })?;
+        if changed.is_some() {
+            self.bump_audio();
+        }
+        Ok(changed)
+    }
+}
+
+fn question_kind(conn: &Connection, date: &str) -> Result<Option<String>> {
+    Ok(conn
+        .query_row(
+            "SELECT kind FROM questions WHERE page_date = ?1",
+            [date],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
+/// A later page has been written, so this one is no longer the latest.
+fn page_replaced(conn: &Connection, date: &str) -> Result<bool> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pages WHERE date > ?1)",
+        [date],
+        |r| r.get(0),
+    )?)
+}
+
+/// The answer becomes a note to read, with the line as its words.
+fn set_line(tx: &Transaction<'_>, id: &str, line: &str) -> Result<()> {
+    tx.execute(
+        "UPDATE items SET text = ?2, title = ?3, sha256 = ?4, status = 'kept', \
+         hold_until = NULL, metadata = json_remove(metadata, '$.read_at') WHERE id = ?1",
+        params![
+            id,
+            line,
+            text_title(line),
+            sha256_hex(format!("{line}\0{id}").as_bytes())
+        ],
+    )?;
+    bump_priority(tx, id)?;
+    Ok(())
 }
 
 #[cfg(test)]

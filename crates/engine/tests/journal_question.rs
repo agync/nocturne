@@ -1542,3 +1542,201 @@ fn a_forgotten_yes_no_question_is_still_dropped() {
         .unwrap();
     assert_eq!(left, 0);
 }
+
+fn phone(f: &Fixture) -> String {
+    f.engine
+        .add_device(
+            "Pixel",
+            &[4u8; 65],
+            "https://home.example",
+            nocturne_contract::RemoteConnection::Simple,
+            "addr-a",
+        )
+        .unwrap()
+        .id
+}
+
+fn answered(f: &Fixture) -> (Option<QuestionChoice>, Option<String>) {
+    let q = f
+        .engine
+        .page(Some(date(PAGE)))
+        .unwrap()
+        .unwrap()
+        .question
+        .unwrap();
+    (q.answered, q.journal.unwrap().line)
+}
+
+#[test]
+fn an_answer_from_a_phone_is_kept_once_however_often_it_is_sent() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    let kept =
+        w.f.engine
+            .answer_from_phone(date(PAGE), QuestionChoice::NotGreat, None, &me, "c1")
+            .unwrap()
+            .expect("kept now");
+    for _ in 0..2 {
+        assert_eq!(
+            w.f.engine
+                .answer_from_phone(date(PAGE), QuestionChoice::NotGreat, None, &me, "c1")
+                .unwrap(),
+            None,
+            "a retry keeps nothing more"
+        );
+    }
+    let items = answer_items(&w.f);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].0, kept);
+    assert_eq!(answered(&w.f), (Some(QuestionChoice::NotGreat), None));
+    assert_eq!(
+        w.f.engine.remote_keep(&me, "c1").unwrap().as_deref(),
+        Some(kept.as_str())
+    );
+    assert!(
+        last_used(&w.f, &w.memory).is_some(),
+        "Not great counts as use"
+    );
+    let day = w.f.engine.journal_day(date(PAGE)).unwrap();
+    let row = day.rows.iter().find(|r| r.kind == RowKind::Answer).unwrap();
+    assert_eq!(row.item.from_device.as_deref(), Some("Pixel"));
+}
+
+#[test]
+fn an_answer_from_a_phone_with_a_line_goes_across_whole() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    let line = Some("  Long queue.  ");
+    let first =
+        w.f.engine
+            .answer_from_phone(date(PAGE), QuestionChoice::Fine, line, &me, "c1")
+            .unwrap();
+    assert!(first.is_some());
+    assert_eq!(
+        w.f.engine
+            .answer_from_phone(date(PAGE), QuestionChoice::Fine, line, &me, "c1")
+            .unwrap(),
+        None
+    );
+    let items = answer_items(&w.f);
+    assert_eq!(items.len(), 1);
+    assert_eq!(
+        (items[0].1.as_str(), items[0].2.as_str()),
+        ("kept", "Long queue.")
+    );
+    assert_eq!(
+        answered(&w.f),
+        (Some(QuestionChoice::Fine), Some("Long queue.".into()))
+    );
+}
+
+#[test]
+fn a_line_from_a_phone_goes_on_the_answer_given_elsewhere_once() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    w.f.engine
+        .answer_question(date(PAGE), QuestionChoice::Fine)
+        .unwrap();
+    let added =
+        w.f.engine
+            .answer_from_phone(
+                date(PAGE),
+                QuestionChoice::Fine,
+                Some("Priya came."),
+                &me,
+                "c2",
+            )
+            .unwrap();
+    assert!(added.is_some(), "the line goes on the computer's answer");
+    for (line, client) in [("Priya came.", "c2"), ("Something else.", "c3")] {
+        assert_eq!(
+            w.f.engine
+                .answer_from_phone(date(PAGE), QuestionChoice::Fine, Some(line), &me, client)
+                .unwrap(),
+            None,
+            "a line goes on once"
+        );
+    }
+    assert_eq!(answer_items(&w.f).len(), 1);
+    assert_eq!(
+        answered(&w.f),
+        (Some(QuestionChoice::Fine), Some("Priya came.".into()))
+    );
+}
+
+#[test]
+fn an_answer_given_elsewhere_stands_and_a_line_for_another_choice_is_not_added() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    w.f.engine
+        .answer_question(date(PAGE), QuestionChoice::Fine)
+        .unwrap();
+    assert_eq!(
+        w.f.engine
+            .answer_from_phone(
+                date(PAGE),
+                QuestionChoice::NotGreat,
+                Some("Awful."),
+                &me,
+                "c1"
+            )
+            .unwrap(),
+        None
+    );
+    assert_eq!(answer_items(&w.f).len(), 1);
+    assert_eq!(answered(&w.f), (Some(QuestionChoice::Fine), None));
+    assert_eq!(w.f.engine.remote_keep(&me, "c1").unwrap(), None);
+}
+
+#[test]
+fn a_line_from_a_phone_is_not_added_once_the_page_is_replaced() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    w.f.engine
+        .answer_from_phone(date(PAGE), QuestionChoice::NotYet, None, &me, "c1")
+        .unwrap();
+    w.f.clock.set_str("2026-11-15T07:00:00Z");
+    save_day(&w.f, "2026-11-15");
+    assert_eq!(
+        w.f.engine
+            .answer_from_phone(
+                date(PAGE),
+                QuestionChoice::NotYet,
+                Some("Too late."),
+                &me,
+                "c1"
+            )
+            .unwrap(),
+        None
+    );
+    assert_eq!(answered(&w.f), (Some(QuestionChoice::NotYet), None));
+}
+
+#[test]
+fn a_phone_answers_only_a_question_from_the_journal_with_its_choices() {
+    let w = world();
+    save_day(&w.f, PAGE);
+    let me = phone(&w.f);
+    assert!(
+        w.f.engine
+            .answer_from_phone(date(PAGE), QuestionChoice::Yes, None, &me, "c1")
+            .is_err()
+    );
+    let f = fixture();
+    save_day(&f, "2026-11-10");
+    let me = phone(&f);
+    for choice in [QuestionChoice::Fine, QuestionChoice::Right] {
+        assert!(
+            f.engine
+                .answer_from_phone(date("2026-11-10"), choice, None, &me, "c1")
+                .is_err(),
+            "{choice:?} on the page-time question"
+        );
+    }
+    assert!(answer_items(&w.f).is_empty());
+}
