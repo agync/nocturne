@@ -31,17 +31,12 @@ export function CameIn({ deviceId, source }: { deviceId: string; source: string 
   const engine = useEngine();
   const sources = usePhoneSources();
   const phone = sources.phones?.find((p) => p.deviceId === deviceId);
-  const known = source === "calendar" || source === "health";
+  const known = source === "calendar";
   const query = useInfiniteQuery({
     queryKey: ["phoneCameIn", deviceId, source],
     initialPageParam: null as string | null,
     queryFn: async ({ pageParam }) =>
-      (await engine.listCameIn(
-        deviceId,
-        source === "health" ? "health" : "calendar",
-        pageParam,
-        PAGE,
-      )) as CameInRow[],
+      (await engine.listCameIn(deviceId, "calendar", pageParam, PAGE)) as CameInRow[],
     getNextPageParam: (last) =>
       last.length === PAGE ? (last[last.length - 1]?.cameInAt ?? undefined) : undefined,
     enabled: known && phone !== undefined,

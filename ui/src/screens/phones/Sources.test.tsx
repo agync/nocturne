@@ -51,7 +51,7 @@ describe("from your phones", () => {
     );
     expect(sam.getByRole("link", { name: /See readings/ })).toHaveAttribute(
       "href",
-      "#/journal/health",
+      "#/journal/health?phone=pixel",
     );
   });
 
@@ -112,6 +112,24 @@ describe("from your phones", () => {
         "Calendar and health come only through Away from home, in locked messages. Nothing else is downloaded or sent.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("shows Notice what goes together once, however many phones bring health", async () => {
+    const engine = phonesEngine();
+    const first = engine.sim.fixtures.phones[0];
+    if (!first) throw new Error("fixture");
+    engine.sim.fixtures.phones.push({ ...structuredClone(first), deviceId: "second", name: "Mia" });
+    await openPhones(PATH, "From your phones", engine);
+    await screen.findByText("Mia");
+    expect(screen.getAllByRole("switch", { name: "Notice what goes together" })).toHaveLength(1);
+  });
+
+  it("leaves out Notice what goes together when no phone brings health", async () => {
+    const engine = phonesEngine();
+    for (const phone of engine.sim.fixtures.phones) phone.health = null;
+    await openPhones(PATH, "From your phones", engine);
+    expect(screen.queryByRole("switch", { name: "Notice what goes together" })).toBeNull();
+    expect(screen.getByRole("switch", { name: "Your calendar today" })).toBeInTheDocument();
   });
 
   it("leaves out the page group when only a browser phone is paired", async () => {

@@ -8,8 +8,9 @@ import { t } from "../../copy/t";
 import type { PhoneDeletePreview, PhoneSource, PhoneSources } from "../../engine/bindings";
 import { EngineError } from "../../engine/client";
 import { useEngine, useRefresh } from "../../engine/context";
+import { DeleteRows } from "./DeleteRows";
 import styles from "./Phones.module.css";
-import { kindsInline, PHONE_SOURCES_KEY } from "./usePhoneSources";
+import { PHONE_SOURCES_KEY } from "./usePhoneSources";
 
 interface Props {
   phone: PhoneSources;
@@ -25,7 +26,10 @@ export function DeleteDialog({ phone, source: first, onClose }: Props) {
   const refresh = useRefresh();
   const toast = useToast();
   const [source, setSource] = useState<PhoneSource>(first);
-  const [preview, setPreview] = useState<PhoneDeletePreview | null>(null);
+  const [loaded, setLoaded] = useState<{ source: PhoneSource; preview: PhoneDeletePreview } | null>(
+    null,
+  );
+  const latest = useRef(0);
   const [failed, setFailed] = useState(false);
   const [refreshed, setRefreshed] = useState(false);
   const [alsoStop, setAlsoStop] = useState(true);
@@ -35,19 +39,19 @@ export function DeleteDialog({ phone, source: first, onClose }: Props) {
   const kinds = phone.health?.kinds ?? [];
 
   const load = useCallback(async () => {
-    setPreview(null);
+    const request = ++latest.current;
+    setLoaded(null);
     setFailed(false);
     try {
-      setPreview(
-        await engine.previewPhoneDelete({
-          deviceId: phone.deviceId,
-          source,
-          kinds: null,
-          before: null,
-        }),
-      );
+      const preview = await engine.previewPhoneDelete({
+        deviceId: phone.deviceId,
+        source,
+        kinds: null,
+        before: null,
+      });
+      if (request === latest.current) setLoaded({ source, preview });
     } catch {
-      setFailed(true);
+      if (request === latest.current) setFailed(true);
     }
   }, [engine, phone.deviceId, source]);
 
@@ -60,11 +64,12 @@ export function DeleteDialog({ phone, source: first, onClose }: Props) {
     buttons.current?.querySelector("button")?.focus();
   }, []);
 
+  const preview = loaded && loaded.source === source ? loaded : null;
   const remove = async () => {
     if (!preview) return;
     setBusy(true);
     try {
-      await engine.deletePhoneData(preview.token, source === "calendar" && alsoStop);
+      await engine.deletePhoneData(preview.preview.token, source === "calendar" && alsoStop);
       void client.invalidateQueries({ queryKey: PHONE_SOURCES_KEY });
       refresh("page", "journal", "items", "status");
       toast.show({ message: t("phones.delete.done") });
@@ -121,45 +126,12 @@ export function DeleteDialog({ phone, source: first, onClose }: Props) {
                 {t("phones.delete.refreshed")}
               </p>
             ) : null}
-            <ul className={styles.deleteList} aria-label={t("forget.list.label")}>
-              {calendar ? (
-                <>
-                  <li>
-                    {t("phones.delete.rows.calendar", { count: preview.items, phone: phone.name })}
-                  </li>
-                  {preview.memories > 0 ? <li>{t("phones.delete.learned")}</li> : null}
-                  {(preview.sharedMemories ?? 0) > 0 ? (
-                    <li>{t("phones.delete.shared", { count: preview.sharedMemories ?? 0 })}</li>
-                  ) : null}
-                  {preview.pageLines > 0 ? (
-                    <li>{t("phones.delete.lines.calendar", { count: preview.pageLines })}</li>
-                  ) : null}
-                </>
-              ) : (
-                <>
-                  <li>
-                    {t("phones.delete.rows.health", {
-                      count: preview.items,
-                      kinds: kindsInline(kinds),
-                      phone: phone.name,
-                    })}
-                  </li>
-                  {preview.pageLines + preview.recapLines > 0 ? (
-                    <li>
-                      {t("phones.delete.lines.health", {
-                        count: preview.pageLines + preview.recapLines,
-                      })}
-                    </li>
-                  ) : null}
-                  {(preview.sharedMemories ?? 0) > 0 ? (
-                    <li>{t("phones.delete.shared", { count: preview.sharedMemories ?? 0 })}</li>
-                  ) : null}
-                  {preview.noticing > 0 ? (
-                    <li>{t("phones.delete.noticing", { count: preview.noticing })}</li>
-                  ) : null}
-                </>
-              )}
-            </ul>
+            <DeleteRows
+              source={source}
+              preview={preview.preview}
+              phoneName={phone.name}
+              kinds={kinds}
+            />
           </>
         )}
         {calendar ? (

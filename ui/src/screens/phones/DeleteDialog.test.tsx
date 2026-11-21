@@ -138,4 +138,52 @@ describe("delete what came in", () => {
     ).toBeInTheDocument();
     expect(dialog.queryByRole("checkbox")).toBeNull();
   });
+
+  it("keeps the Health list and token when the calendar answer arrives late", async () => {
+    const engine = phonesEngine();
+    const apply = vi.spyOn(engine, "deletePhoneData");
+    const real = engine.previewPhoneDelete.bind(engine);
+    const tokens: Record<string, string> = {};
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(engine, "previewPhoneDelete").mockImplementation(async (request) => {
+      const answer = await real(request);
+      tokens[request.source] = answer.token;
+      if (request.source === "calendar") await gate;
+      return answer;
+    });
+    const dialog = await open(engine);
+    await userEvent.click(dialog.getByRole("radio", { name: "Health" }));
+    await dialog.findByText(/readings of sleep, heart rate/);
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(dialog.getByText(/readings of sleep, heart rate/)).toBeInTheDocument();
+    expect(dialog.queryByText(/appointments from/)).toBeNull();
+    await userEvent.click(dialog.getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(apply).toHaveBeenCalledTimes(1));
+    expect(tokens.health).toBeDefined();
+    expect(apply).toHaveBeenCalledWith(tokens.health, false);
+  });
+
+  it("holds Delete while the list for the chosen source is still coming", async () => {
+    const engine = phonesEngine();
+    const real = engine.previewPhoneDelete.bind(engine);
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    vi.spyOn(engine, "previewPhoneDelete").mockImplementation(async (request) => {
+      if (request.source === "health") await gate;
+      return real(request);
+    });
+    const dialog = await open(engine);
+    await dialog.findByText(/41 appointments/);
+    await userEvent.click(dialog.getByRole("radio", { name: "Health" }));
+    expect(dialog.getByRole("button", { name: "Delete" })).toBeDisabled();
+    release();
+    await dialog.findByText(/readings of sleep/);
+    expect(dialog.getByRole("button", { name: "Delete" })).toBeEnabled();
+  });
 });

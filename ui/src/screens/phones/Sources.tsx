@@ -55,7 +55,7 @@ function SourceRow({ phone, source, state, onStop, onAgain }: RowProps) {
               href={
                 calendar
                   ? `#/settings/phones/came-in/${phone.deviceId}/calendar`
-                  : "#/journal/health"
+                  : `#/journal/health?phone=${phone.deviceId}`
               }
               aria-label={t(
                 calendar ? "phones.calendar.seeCameIn.named" : "phones.health.seeReadings.named",
@@ -98,8 +98,6 @@ function PhoneBlock({ phone }: { phone: PhoneSources }) {
   const block = useRef<HTMLLIElement>(null);
   const kind = phoneKind(phone);
   const brings = (["calendar", "health"] as const).filter((s) => phone[s] !== null);
-  const hasHealth = phone.health !== null;
-  const view = sources.data;
 
   // After the row changes, the button that opened the dialog is gone; keep the keyboard in the row.
   useEffect(() => {
@@ -115,14 +113,6 @@ function PhoneBlock({ phone }: { phone: PhoneSources }) {
       await sources.setSource(phone.deviceId, source, true);
     } catch {
       refocus.current = null;
-      toast.show({ message: t("phones.failed") });
-    }
-  };
-
-  const noticing = async (on: boolean) => {
-    try {
-      await sources.setNoticing(on);
-    } catch {
       toast.show({ message: t("phones.failed") });
     }
   };
@@ -150,16 +140,6 @@ function PhoneBlock({ phone }: { phone: PhoneSources }) {
               />
             ) : null;
           })}
-          {hasHealth && view ? (
-            <li>
-              <Toggle
-                checked={view.noticing}
-                onChange={(on) => void noticing(on)}
-                label={t("phones.noticing.label")}
-                hint={t("phones.noticing.hint")}
-              />
-            </li>
-          ) : null}
           {brings.length > 0 ? (
             <li className={styles.deleteLink}>
               <Button
@@ -235,6 +215,14 @@ export function Sources() {
     }
   };
   const anyApp = phones.some((p) => !p.inBrowser);
+  const anyHealth = phones.some((p) => !p.inBrowser && p.health !== null);
+  const noticing = async (on: boolean) => {
+    try {
+      await sources.setNoticing(on);
+    } catch {
+      toast.show({ message: t("phones.failed") });
+    }
+  };
 
   return (
     <ScreenSheet>
@@ -257,6 +245,16 @@ export function Sources() {
               {t("phones.page.heading")}
             </h2>
             <ul className={styles.rows}>
+              {anyHealth ? (
+                <li>
+                  <Toggle
+                    checked={data.noticing}
+                    onChange={(on) => void noticing(on)}
+                    label={t("phones.noticing.label")}
+                    hint={t("phones.noticing.hint")}
+                  />
+                </li>
+              ) : null}
               <li>
                 <Toggle
                   checked={data.page.calendarToday}

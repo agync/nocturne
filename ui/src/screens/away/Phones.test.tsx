@@ -181,6 +181,64 @@ describe("phones that bring things", () => {
     await waitFor(() => expect(remove).toHaveBeenCalledWith("pixel", true));
   });
 
+  it("lists both calendar and health when a phone brings both, and waits for the list", async () => {
+    const engine = withBrought();
+    await openAway(PHONES, "on", "Phones", engine);
+    await screen.findByText(/Android app/);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Sam’s phone" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Remove Sam’s phone?" }));
+    await userEvent.click(dialog.getByRole("checkbox", { name: "Also delete what it brought" }));
+    expect(
+      await dialog.findByText(/readings of sleep, heart rate.* from Sam’s phone$/),
+    ).toBeVisible();
+    expect(dialog.getByText(/41 appointments/)).toBeVisible();
+    expect(dialog.getByText("What Nocturne learned from them")).toBeVisible();
+    expect(dialog.getByText(/2 things Nocturne learned also come from/)).toBeVisible();
+    expect(dialog.getByRole("button", { name: "Remove" })).toBeEnabled();
+  });
+
+  it("lists the health readings for a phone that brings only health", async () => {
+    const engine = withBrought();
+    const phone = engine.sim.fixtures.phones[0];
+    if (!phone) throw new Error("fixture");
+    phone.calendar = null;
+    const preview = vi.spyOn(engine, "previewPhoneDelete");
+    const remove = vi.spyOn(engine, "removeDevice");
+    await openAway(PHONES, "on", "Phones", engine);
+    await screen.findByText(/Android app/);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Sam’s phone" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Remove Sam’s phone?" }));
+    await userEvent.click(dialog.getByRole("checkbox", { name: "Also delete what it brought" }));
+    expect(
+      await dialog.findByText(/readings of sleep, heart rate.* from Sam’s phone$/),
+    ).toBeVisible();
+    expect(dialog.queryByText(/appointments/)).toBeNull();
+    expect(preview).toHaveBeenCalledTimes(1);
+    expect(preview.mock.calls[0]?.[0]).toMatchObject({ source: "health" });
+    await userEvent.click(dialog.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("pixel", true));
+  });
+
+  it("says when the list failed and keeps Remove off while it is ticked", async () => {
+    const engine = withBrought();
+    vi.spyOn(engine, "previewPhoneDelete").mockRejectedValue(new Error("no"));
+    const remove = vi.spyOn(engine, "removeDevice");
+    await openAway(PHONES, "on", "Phones", engine);
+    await screen.findByText(/Android app/);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Sam’s phone" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Remove Sam’s phone?" }));
+    expect(dialog.getByRole("button", { name: "Remove" })).toBeEnabled();
+    await userEvent.click(dialog.getByRole("checkbox", { name: "Also delete what it brought" }));
+    expect(
+      await dialog.findByText("Nocturne couldn’t get the list ready. Nothing has been deleted."),
+    ).toBeVisible();
+    expect(dialog.getByRole("button", { name: "Remove" })).toBeDisabled();
+    await userEvent.click(dialog.getByRole("checkbox", { name: "Also delete what it brought" }));
+    expect(dialog.getByRole("button", { name: "Remove" })).toBeEnabled();
+    await userEvent.click(dialog.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("pixel"));
+  });
+
   it("a phone in the browser has no tick to delete what it brought", async () => {
     await openAway(PHONES, "on", "Phones", withBrought());
     await screen.findByText(/Android app/);
