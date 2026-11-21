@@ -5,6 +5,7 @@ import type {
   BackupProgress,
   BackupReport,
   BackupsView,
+  CameInRow,
   ChangePreview,
   CheckIn,
   CheckInInput,
@@ -23,6 +24,7 @@ import type {
   ForgetReport,
   GoodThing,
   GuideView,
+  HealthSeries,
   ItemFilter,
   ItemView,
   Job,
@@ -47,8 +49,15 @@ import type {
   Period,
   PeriodKind,
   PeriodSummary,
+  PhoneDeletePreview,
+  PhoneDeleteScope,
+  PhonePageOptions,
+  PhoneSource,
+  PhoneSourcesView,
   PrivacyView,
   QuestionChoice,
+  ReadingKind,
+  ReadingRow,
   Refiled,
   RefileTarget,
   ReflectionView,
@@ -309,7 +318,8 @@ export interface EngineClient {
   decidePairing(pairingId: string, allow: boolean): Promise<void>;
   cancelPairing(): Promise<void>;
   renameDevice(id: string, name: string): Promise<DeviceView>;
-  removeDevice(id: string): Promise<void>;
+  /** `alsoDeleteBrought` also deletes the calendar and health readings it brought. */
+  removeDevice(id: string, alsoDeleteBrought?: boolean): Promise<void>;
   listRemoteEvents(limit: number): Promise<RemoteEvent[]>;
   /** A new `connection` unpairs every phone. */
   updateRemoteSettings(patch: RemoteSettingsPatch): Promise<RemoteView>;
@@ -412,6 +422,28 @@ export interface EngineClient {
   stopReflecting(period: Period): Promise<void>;
   /** "Delete this reflection": removes only the writing. */
   deleteReflection(period: Period): Promise<void>;
+
+  /** From your phones: what paired phone apps bring. Main window only. */
+  getPhoneSources(): Promise<PhoneSourcesView>;
+  /** Stops or starts taking one source from one phone; stopping deletes nothing. */
+  setPhoneSource(deviceId: string, source: PhoneSource, taking: boolean): Promise<PhoneSourcesView>;
+  setPhonePageOptions(options: PhonePageOptions): Promise<PhoneSourcesView>;
+  /** "Notice what goes together". */
+  setNoticing(on: boolean): Promise<void>;
+  /** "What came in", newest first, before `before` when given. */
+  listCameIn(
+    deviceId: string,
+    source: PhoneSource,
+    before: string | null,
+    limit: number,
+  ): Promise<CameInRow[]>;
+  /** One kind over days, `from` to `to` both included. */
+  getHealthSeries(kind: ReadingKind, from: string, to: string): Promise<HealthSeries>;
+  /** "Show as a list": every reading of one kind, `from` to `to` both included. */
+  listReadings(kind: ReadingKind, from: string, to: string): Promise<ReadingRow[]>;
+  previewPhoneDelete(scope: PhoneDeleteScope): Promise<PhoneDeletePreview>;
+  /** Applies a previewed delete; `alsoStop` stops taking that source from the phone too. */
+  deletePhoneData(token: string, alsoStop: boolean): Promise<void>;
 
   /** Subscribes. The returned function unsubscribes at once, even before the listener is attached. */
   on<E extends EngineEventName>(name: E, cb: (payload: EngineEvents[E]) => void): Unsubscribe;

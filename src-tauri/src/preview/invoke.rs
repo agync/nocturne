@@ -11,7 +11,7 @@ pub const RAW: &[&str] = &["keep_recording", "keep_bytes"];
 
 /// Commands that reach for the desktop (dialogs, the file manager, the printer, the shell) or
 /// for a folder named by the caller. A browser has none of that. Away from home is never
-/// driven from the preview either.
+/// driven from the preview either, nor what its phones bring.
 pub const UNAVAILABLE: &[&str] = &[
     "pick_folder",
     "pick_files",
@@ -41,6 +41,15 @@ pub const UNAVAILABLE: &[&str] = &[
     "update_remote_settings",
     "open_remote_sign_in",
     "new_computer_key",
+    "get_phone_sources",
+    "set_phone_source",
+    "set_phone_page_options",
+    "set_noticing",
+    "list_came_in",
+    "get_health_series",
+    "list_readings",
+    "preview_phone_delete",
+    "delete_phone_data",
     "make_backup",
     "probe_backup",
     "estimate_backup",

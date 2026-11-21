@@ -323,7 +323,8 @@ export class HttpEngine implements EngineClient {
   cancelPairing: EngineClient["cancelPairing"] = () => this.call("cancel_pairing");
   renameDevice: EngineClient["renameDevice"] = (id, name) =>
     this.call("rename_device", { id, name });
-  removeDevice: EngineClient["removeDevice"] = (id) => this.call("remove_device", { id });
+  removeDevice: EngineClient["removeDevice"] = (id, alsoDeleteBrought = false) =>
+    this.call("remove_device", { id, alsoDeleteBrought });
   listRemoteEvents: EngineClient["listRemoteEvents"] = (limit) =>
     this.call("list_remote_events", { limit });
   updateRemoteSettings: EngineClient["updateRemoteSettings"] = (patch) =>
@@ -406,4 +407,21 @@ export class HttpEngine implements EngineClient {
     this.call("stop_reflecting", { period });
   deleteReflection: EngineClient["deleteReflection"] = (period) =>
     this.call("delete_reflection", { period });
+
+  getPhoneSources: EngineClient["getPhoneSources"] = () => this.call("get_phone_sources");
+  setPhoneSource: EngineClient["setPhoneSource"] = (deviceId, source, taking) =>
+    this.call("set_phone_source", { deviceId, source, taking });
+  setPhonePageOptions: EngineClient["setPhonePageOptions"] = (options) =>
+    this.call("set_phone_page_options", { options });
+  setNoticing: EngineClient["setNoticing"] = (on) => this.call("set_noticing", { on });
+  listCameIn: EngineClient["listCameIn"] = (deviceId, source, before, limit) =>
+    this.call("list_came_in", { deviceId, source, before, limit });
+  getHealthSeries: EngineClient["getHealthSeries"] = (kind, from, to) =>
+    this.call("get_health_series", { kind, from, to });
+  listReadings: EngineClient["listReadings"] = (kind, from, to) =>
+    this.call("list_readings", { kind, from, to });
+  previewPhoneDelete: EngineClient["previewPhoneDelete"] = (scope) =>
+    this.call("preview_phone_delete", { scope });
+  deletePhoneData: EngineClient["deletePhoneData"] = (token, alsoStop) =>
+    this.call("delete_phone_data", { token, alsoStop });
 }

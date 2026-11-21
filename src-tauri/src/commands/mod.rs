@@ -25,6 +25,7 @@ mod needs;
 mod online;
 mod os;
 pub(crate) mod page;
+mod phones;
 mod reflect;
 mod remote;
 mod settings;
@@ -177,6 +178,15 @@ pub const COMMAND_NAMES: &[&str] = &[
     "reflect",
     "stop_reflecting",
     "delete_reflection",
+    "get_phone_sources",
+    "set_phone_source",
+    "set_phone_page_options",
+    "set_noticing",
+    "list_came_in",
+    "get_health_series",
+    "list_readings",
+    "preview_phone_delete",
+    "delete_phone_data",
 ];
 
 /// The handler for every command above, behind the per-window guard (see
@@ -330,6 +340,15 @@ pub fn invoke_handler<R: Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + 
         reflect::reflect,
         reflect::stop_reflecting,
         reflect::delete_reflection,
+        phones::get_phone_sources,
+        phones::set_phone_source,
+        phones::set_phone_page_options,
+        phones::set_noticing,
+        phones::list_came_in,
+        phones::get_health_series,
+        phones::list_readings,
+        phones::preview_phone_delete,
+        phones::delete_phone_data,
     ]);
     move |invoke| {
         let from = invoke.message.webview_ref().label();
