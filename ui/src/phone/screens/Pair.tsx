@@ -49,7 +49,24 @@ interface PairProps {
 export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
   const [step, setStep] = useState<Step>({ name: "name" });
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
+  const typed = useRef(false);
   const install = useInstallPrompt();
+  const native = services.platform.native === true;
+
+  // The phone's own name, where the app can read it, unless the person has typed already.
+  useEffect(() => {
+    let gone = false;
+    services.deviceName?.().then(
+      (own) => {
+        const clean = own ? cleanDeviceName(own.trim()) : "";
+        if (!gone && !typed.current && clean !== "") setName(clean);
+      },
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [services]);
   const device = useRef<PairedDevice | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
 
@@ -108,7 +125,10 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
                 spellCheck={false}
                 aria-invalid={step.error ? true : undefined}
                 aria-describedby={step.error ? "pname-error" : undefined}
-                onChange={(e) => setName(cleanDeviceName(e.target.value.trimStart()))}
+                onChange={(e) => {
+                  typed.current = true;
+                  setName(cleanDeviceName(e.target.value.trimStart()));
+                }}
               />
               {step.error && (
                 <p id="pname-error" className="ph-error" role="alert">
@@ -121,6 +141,7 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
             </Button>
           </form>
           <p className="ph-hint">{t("phone.pair.next")}</p>
+          {native ? null : <p className="ph-hint">{t("phone.pair.app")}</p>}
           <div className="ph-spacer" />
           <PrivacyLine id="phone.pair.private" />
         </main>
@@ -159,6 +180,30 @@ export function Pair({ services, pairing, onPaired, onExit }: PairProps) {
           <div className="ph-spacer" />
           <Button kind="quiet" onClick={onExit}>
             {t("phone.cancel")}
+          </Button>
+        </main>
+      </Page>
+    );
+  }
+
+  if (step.name === "allowed" && native) {
+    return (
+      <Page bar={<Bar />}>
+        <main className="ph-main">
+          <span
+            className="ph-icon-box ph-icon-box--round"
+            aria-hidden="true"
+            style={{ borderRadius: "50%" }}
+          >
+            <Icon name="check" size={26} />
+          </span>
+          <h1 className="ph-h1 ph-h1--big" tabIndex={-1} ref={heading}>
+            {t("phone.allowed.title", { name: step.label })}
+          </h1>
+          <p className="ph-body">{t("phone.app.allowed.body")}</p>
+          <div className="ph-spacer" />
+          <Button kind="primary" onClick={() => onPaired(device.current)}>
+            {t("phone.app.allowed.continue")}
           </Button>
         </main>
       </Page>

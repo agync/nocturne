@@ -1,4 +1,6 @@
 {
+  "phone.app.allowed.body": "Keep, ask and read your page from here.",
+  "phone.app.allowed.continue": "Continue",
   "phone.app.receipt.calendar": "Calendar · {calendar}",
   "phone.app.checkin.lastNight": "Last night: {asleep} asleep",
   "phone.app.today.night.when": "{count, plural, =0 {{from} to {to}.} one {{from} to {to}, awake once.} other {{from} to {to}, awake # times.}}",

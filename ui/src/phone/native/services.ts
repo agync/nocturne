@@ -118,5 +118,6 @@ export function nativeServices(): NativeServices {
     version: typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "development",
     scripted: false,
     location: { pathname: "/", hash: "", search: "" },
+    deviceName: () => invoke<string | null>("plugin:nocturne-system|device_name").catch(() => null),
   };
 }
