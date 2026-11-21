@@ -908,9 +908,9 @@ that help answer it, at most twelve, shown afterwards in "See what was sent". Th
 when Online answers is set up and on its settings page (see [Online answers, said
 openly](#online-answers-said-openly)). There is no per-entry exception, and because entries and
 good things cannot be marked private, the usual advice to "mark anything you never want sent as
-private" does not hold for them; the Online answers screens say so in as many words. The health,
-money and ID check applies to journal sentences as it does to everything else, so "Gran’s scan
-came back clear" stays here unless the person chose to send such lines.
+private" does not hold for them; the Online answers screens say so in as many words. Nocturne does
+not judge what a sentence is about: "Gran’s scan came back clear" may go like any other line
+([Only what you mark private is held back](only-marked-private.md)).
 
 **What never goes online.** Reflections, recaps and check-ins, including the words, points and
 lines of a check-in and any summary of them. They are written on this computer, even when Online answers is
@@ -960,7 +960,7 @@ The Online answers page in Settings (mockup `online-settings.html`):
 | New row, hint | "A line from an entry or a good thing may go with a question it helps answer. They can’t be marked private. Check-ins, reflections and recaps never go." |
 | New row, value | "Entries and good things, when they help" |
 | "Always stays here", a new line | "Your check-ins, reflections and recaps" |
-| "Always stays here", after the health, money and ID line | "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer." |
+| "Always stays here", after "Nocturne doesn’t guess what is private. Mark anything you never want sent as private." | "Journal entries and good things can’t be marked private, so while this is on, a line from one can go with a question it helps answer." |
 | "See what was sent", beside a journal line | "from your journal, {day}" |
 
 ## Receipts

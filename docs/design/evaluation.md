@@ -52,7 +52,7 @@ before building more.
 | Away from home on: outbound traffic | Only from the helper process, never from the app or the engine; any-interface UDP only from the Tailscale helper |
 | Online answers off: the engine's providers, keys and outbound traffic | None; zero provider traffic in the network check with a key stored |
 | Online answers on: outbound traffic | Only from the engine, only to the one entered address, only while a question is asked, at most once per question; never from the app, never while idle, never after turning off (`online` mode of the network check) |
-| Private and sensitive markers in captured online traffic | 0 |
+| Private markers in captured online traffic | 0 |
 | Online answer accuracy against the Tiny tier on the same questions | Measured (S1b), see below; no target is set |
 | Plaintext in a relay recording after a scanned pairing | 0 bytes |
 | Bytes sent to phones | Counted at the listener and shown on Privacy |
@@ -112,8 +112,9 @@ glance" and the line "On this computer, Nocturne lists the day rather than writi
 Nocturne asks a few typed questions about a short text and logs what a decider would answer beside
 what today's rules and word lists did; nothing acts on the answer yet. Whether a decider may one
 day act is decided by the check below, kind by kind. The kinds are: did a new note move or cancel a
-kept appointment, is a note a health, money or identity detail, and has the person already
-written how a planned thing went.
+kept appointment, and has the person already written how a planned thing went. Nocturne does not
+ask whether a note is about health, money or identity: it never judges a person's data
+([Only what you mark private is held back](only-marked-private.md)).
 
 Each decision is asked of every arm, once, on the same seeded text:
 
@@ -126,7 +127,7 @@ Each decision is asked of every arm, once, on the same seeded text:
 | Metric | Meaning |
 |---|---|
 | Accuracy | Verdicts that equal the label, over all cases |
-| Losing errors | Verdicts on the side that loses something: a wrong move closes the kept appointment, a missed health detail could go online, a wrong "already written" drops the page question |
+| Losing errors | Verdicts on the side that loses something: a wrong move closes the kept appointment, a wrong "already written" drops the page question |
 | Losing-error rate | Losing errors over the cases whose label is not the losing side |
 | Band | Answers with no side at the kind's threshold, so no verdict |
 | Errors | Failures and timeouts; the rule's outcome stands |
@@ -139,7 +140,7 @@ for that kind, each labelled by two people, with accuracy at least 5 points high
 losing errors than the rule. Until then it stays in shadow. The gain looked for is mostly in other
 languages, where English word lists break.
 
-The set today has 17 moved, 18 sensitive and 16 followed-up cases, mostly English with some
+The set today has 17 moved and 16 followed-up cases, mostly English with some
 German, Spanish, French and Dutch. It is made up and labelled by one person, so it checks that the
 wiring and the scoring work and shows where the rules go wrong; it cannot promote anything. The
 set and the scoring are in `src-tauri/tests/eval/decisions.rs`. Each case is kept and applied
