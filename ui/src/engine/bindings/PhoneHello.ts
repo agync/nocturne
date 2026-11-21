@@ -2,7 +2,16 @@
 import type { PhoneFeature } from "./PhoneFeature";
 import type { RemoteConnection } from "./RemoteConnection";
 
-export type PhoneHello = { computerName: string, deviceName: string, connection: RemoteConnection, version: string, minPhoneBuild: number, 
+export type PhoneHello = { computerName: string, deviceName: string, connection: RemoteConnection, version: string, 
+/**
+ * The oldest phone build the computer speaks.
+ */
+minPhoneBuild: number, 
+/**
+ * The newest phone build the computer speaks. A computer from before the version window
+ * leaves it out: it speaks `min_phone_build` only (see [`PhoneHello::newest_phone_build`]).
+ */
+maxPhoneBuild?: number, 
 /**
  * What this computer takes from a phone app. A computer from before phone apps sends none.
  */

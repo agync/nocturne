@@ -1,0 +1,42 @@
+[
+  {
+    "cmd": "sendCalendar",
+    "batch": {
+      "syncId": "sync-0001",
+      "seq": 0,
+      "last": true,
+      "windowFrom": "2026-11-11",
+      "windowTo": "2026-11-27",
+      "calendars": [
+        {
+          "id": "cal-1",
+          "name": "Home",
+          "colour": "#3f7cac",
+          "kind": "ordinary"
+        }
+      ],
+      "changes": [
+        {
+          "type": "upsert",
+          "entry": {
+            "phoneId": "ev-1",
+            "calendarId": "cal-1",
+            "title": "Dentist",
+            "start": "2026-11-18T09:30:00+00:00",
+            "end": "2026-11-18T10:00:00+00:00",
+            "timeZone": "Europe/London",
+            "allDay": false,
+            "place": "High Street",
+            "people": [],
+            "repeats": false,
+            "notes": null
+          }
+        },
+        {
+          "type": "removed",
+          "phoneId": "ev-0"
+        }
+      ]
+    }
+  }
+]

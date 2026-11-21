@@ -1,0 +1,10 @@
+[
+  {
+    "cmd": "getJournalDay",
+    "date": null
+  },
+  {
+    "cmd": "getJournalDay",
+    "date": "2026-11-12"
+  }
+]

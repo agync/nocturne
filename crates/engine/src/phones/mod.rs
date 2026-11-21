@@ -22,8 +22,8 @@ mod tests;
 use std::collections::BTreeSet;
 
 use nocturne_contract::{
-    CameInRow, CameInTag, PhoneApp, PhonePageOptions, PhoneSource, PhoneSources, PhoneSourcesView,
-    ReadingKind, SourceState, SyncReceipt,
+    AppPlatform, CameInRow, CameInTag, PhoneApp, PhonePageOptions, PhoneSource, PhoneSources,
+    PhoneSourcesView, ReadingKind, SourceState, SyncReceipt,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::Value;
@@ -471,8 +471,12 @@ impl Engine {
                     name,
                     calendar,
                     health,
-                    app: match (platform, version) {
-                        (Some(platform), Some(version)) => Some(PhoneApp { platform, version }),
+                    app: match (platform.as_deref().and_then(AppPlatform::parse), version) {
+                        (Some(platform), Some(version)) => Some(PhoneApp {
+                            platform,
+                            version,
+                            update: None,
+                        }),
                         _ => None,
                     },
                 });

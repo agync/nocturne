@@ -1,0 +1,11 @@
+[
+  {
+    "cmd": "introduce",
+    "app": {
+      "platform": "android",
+      "version": "0.8.0",
+      "minBuild": 1,
+      "maxBuild": 2
+    }
+  }
+]

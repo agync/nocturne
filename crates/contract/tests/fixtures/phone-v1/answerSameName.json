@@ -1,0 +1,9 @@
+[
+  {
+    "cmd": "answerSameName",
+    "questionId": "question-unknown",
+    "answer": {
+      "type": "leave"
+    }
+  }
+]

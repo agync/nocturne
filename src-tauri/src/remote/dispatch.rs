@@ -431,6 +431,7 @@ impl<R: Runtime> Call<R> {
                 })
                 .await
             }
+            RemoteCall::Introduce { .. } => err(PhoneError::NotReady),
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;

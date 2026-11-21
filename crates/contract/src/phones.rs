@@ -273,14 +273,56 @@ pub struct PhoneSources {
     pub app: Option<PhoneApp>,
 }
 
+/// Where a phone runs Nocturne: one of the apps, or the phone page in a browser.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum AppPlatform {
+    Android,
+    Ios,
+    Browser,
+}
+
+impl AppPlatform {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            AppPlatform::Android => "android",
+            AppPlatform::Ios => "ios",
+            AppPlatform::Browser => "browser",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<AppPlatform> {
+        match s {
+            "android" => Some(AppPlatform::Android),
+            "ios" => Some(AppPlatform::Ios),
+            "browser" => Some(AppPlatform::Browser),
+            _ => None,
+        }
+    }
+}
+
+/// Whether a phone should update: `ready`, a newer build is here and the phone still connects
+/// ("{name} · an update is ready for it"); `needed`, it cannot connect until it updates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum PhoneUpdate {
+    Ready,
+    Needed,
+}
+
 /// "Android app · Nocturne {version}".
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct PhoneApp {
-    /// `android` or `ios`.
-    pub platform: String,
+    pub platform: AppPlatform,
     pub version: String,
+    /// None when the phone is on the build this computer speaks newest.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub update: Option<PhoneUpdate>,
 }
 
 /// `calendars` and `upcoming` count for the calendar, `kinds` for health.
