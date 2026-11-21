@@ -1,5 +1,6 @@
 import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { FeelingField, middleOf } from "../../components/FeelingField/FeelingField";
+import { duration } from "../../components/health/sentence";
 import { formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
@@ -63,6 +64,8 @@ interface CheckInProps {
   part?: FeelingPart;
   onBack(): void;
   onQueued(): void;
+  /** The app: "Last night: {asleep} asleep" above the field, once the night has come in. */
+  lastNight?: boolean;
 }
 
 /** A light tap of vibration, only where the phone has one and the person has not asked for less motion. */
@@ -233,6 +236,7 @@ export function CheckIn({
   part: startPart,
   onBack,
   onQueued,
+  lastNight = false,
 }: CheckInProps) {
   const [state, setState] = useState<State>({ name: "compose" });
   const [mode, setMode] = useState<Mode>("field");
@@ -246,6 +250,23 @@ export function CheckIn({
   const arrow = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   const connected = connection.kind === "connected";
+  const [asleep, setAsleep] = useState<number | null>(null);
+
+  // "Last night: {asleep} asleep", once the night has come in. Context only: nothing waits on it.
+  useEffect(() => {
+    if (!connected || !lastNight) return;
+    let gone = false;
+    engine.getJournalDay().then(
+      (day) => {
+        const night = day.today ? day.health?.night : null;
+        if (!gone && night) setAsleep(night.asleepMin);
+      },
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [engine, connected, lastNight]);
 
   const key = state.name;
   useEffect(() => {
@@ -470,6 +491,11 @@ export function CheckIn({
                   {t("phone.journal.checkin.lead")}
                 </p>
               </>
+            ) : null}
+            {asleep !== null ? (
+              <p className="ph-hint ph-hint--ink2">
+                {t("phone.app.checkin.lastNight", { asleep: duration(asleep) })}
+              </p>
             ) : null}
             <div
               className={`ph-ci-field${sheet && point ? " ph-ci-field--small" : ""}`}

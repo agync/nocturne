@@ -1,1 +1,7 @@
-{}
+{
+  "phone.app.receipt.calendar": "Calendar · {calendar}",
+  "phone.app.checkin.lastNight": "Last night: {asleep} asleep",
+  "phone.app.today.night.when": "{count, plural, =0 {{from} to {to}.} one {{from} to {to}, awake once.} other {{from} to {to}, awake # times.}}",
+  "phone.app.receipt.sleep": "Sleep · Health",
+  "phone.app.calendar.row": "{time}, {title}{place, select, none {} other {, at {place}}}, from your {calendar} calendar"
+}

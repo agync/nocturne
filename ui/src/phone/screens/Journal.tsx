@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { duration, workoutText } from "../../components/health/sentence";
 import { choiceText } from "../../components/PageSheet/questionWords";
 import { formatDuration, formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -21,6 +22,7 @@ import {
   type Queue,
 } from "../engine";
 import { afterSheet, BottomSheet } from "./Dialog";
+import { FromHealthCard } from "./FromHealthCard";
 import { Button, Icon, Page } from "./ui";
 
 /** How many days "Choose a day" lists, today first. */
@@ -49,6 +51,13 @@ interface JournalProps {
   onReflection(day: string, today: string | null): void;
   onKeep(): void;
   onCheckIn(): void;
+  /**
+   * In the app's Journal tab: its own top bar, given "Choose a day" when it applies. The day's
+   * buttons then sit at the end of the page, and Keep is the app's floating button.
+   */
+  tabBar?: (action: ReactNode | null) => ReactNode;
+  /** The app: what the phone brought (the night, workouts, From Health) shows on the day. */
+  phone?: boolean;
 }
 
 function entryParagraphs(blocks: readonly EntryBlock[]): string[] {
@@ -122,16 +131,56 @@ function lineOf(row: TimelineRow): string {
   }
 }
 
-function Row({ row, onOpen }: { row: TimelineRow; onOpen(id: string): void }) {
+/** "Woke · 6 h 40 min asleep", or "Walk · 42 min · 3.1 km": what the phone brought for the day. */
+function healthText(row: TimelineRow, day: JournalDay): string {
+  if (row.kind === "woke") {
+    const night = day.health?.night;
+    return night && night.itemId === row.item.id
+      ? t("journal.timeline.woke", { asleep: duration(night.asleepMin) })
+      : row.item.title;
+  }
+  const w = day.health?.workouts.find((x) => x.itemId === row.item.id);
+  return w ? workoutText(w.kind, w.lengthS, w.distanceM) : row.item.title;
+}
+
+function Row({
+  row,
+  day,
+  phone,
+  afterSleep,
+  onOpen,
+}: {
+  row: TimelineRow;
+  day: JournalDay;
+  /** In the app, appointments read as plans and the night and workouts as Health. */
+  phone: boolean;
+  /** The day's first check-in, after the night: "after {asleep} asleep". */
+  afterSleep: string | null;
+  onOpen(id: string): void;
+}) {
   const time = formatTime12(row.item.keptAt);
   const checkin = row.checkin;
   const quote = checkin?.line ? `“${checkin.line}”` : null;
   const body =
-    row.kind === "checkin" ? (
+    phone && row.kind === "calendar" ? (
+      <span className="ph-calrow">
+        <span>{row.item.title}</span>
+        <span className="ph-caltag">
+          <Icon name="calendar" size={14} />
+          {t("journal.timeline.fromCalendar")}
+        </span>
+      </span>
+    ) : phone && (row.kind === "woke" || row.kind === "workout") ? (
+      <span className="ph-caltag ph-caltag--ink">
+        <Icon name={row.kind === "woke" ? "moon" : "walk"} size={16} />
+        {healthText(row, day)}
+      </span>
+    ) : row.kind === "checkin" ? (
       <>
         {checkin ? <Feel part={checkin.feeling.part} words={checkin.feeling.words} named /> : null}
         {quote ? <span>{quote}</span> : null}
         <Names mentions={row.mentions} />
+        {afterSleep ? <span className="ph-rc">{afterSleep}</span> : null}
       </>
     ) : row.kind === "good" ? (
       <span className="ph-goodline">
@@ -334,7 +383,11 @@ export function Journal(p: JournalProps) {
   const data = load.name === "ready" ? load.data : null;
   const shown = data?.day ?? day;
   const known = data?.today ? data.day : today;
-  const rows = data?.rows.filter((r) => r.kind !== "entry") ?? [];
+  // The phone page in a browser brings no health (decision 4): its timeline leaves those out.
+  const rows =
+    data?.rows.filter(
+      (r) => r.kind !== "entry" && (p.phone || (r.kind !== "woke" && r.kind !== "workout")),
+    ) ?? [];
   const entry = data ? entryParagraphs(data.entry) : [];
   const lead = firstLines(entry);
   const isToday = data?.today ?? day === null;
@@ -342,7 +395,16 @@ export function Journal(p: JournalProps) {
 
   const goTo = (d: string) => p.onDay(d, known);
 
-  const bar = (
+  const choose =
+    known && !asleep ? (
+      <button type="button" className="ph-ib ph-ib--accent" onClick={() => setChoosing(true)}>
+        {t("journal.day.choose")}
+      </button>
+    ) : null;
+  const inTab = p.tabBar !== undefined;
+  const bar = p.tabBar ? (
+    p.tabBar(choose)
+  ) : (
     <header className="ph-bar ph-bar--back">
       <button
         type="button"
@@ -353,11 +415,7 @@ export function Journal(p: JournalProps) {
         <Icon name="back" />
       </button>
       <h1 className="ph-bar-title">{t("journal.day.eyebrow")}</h1>
-      {known && !asleep ? (
-        <button type="button" className="ph-ib ph-ib--accent" onClick={() => setChoosing(true)}>
-          {t("journal.day.choose")}
-        </button>
-      ) : null}
+      {choose}
     </header>
   );
 
@@ -365,7 +423,7 @@ export function Journal(p: JournalProps) {
 
   if (load.name === "loading") {
     return (
-      <Page bar={bar}>
+      <Page bar={bar} className={inTab ? "ph-tabbed" : undefined}>
         <main className="ph-main" aria-busy="true">
           <p className="ph-status" role="status" style={{ fontSize: "1rem" }}>
             <span className="ph-dot ph-dot--breathe" aria-hidden="true" />
@@ -378,7 +436,7 @@ export function Journal(p: JournalProps) {
 
   if (load.name === "failed") {
     return (
-      <Page bar={bar}>
+      <Page bar={bar} className={inTab ? "ph-tabbed" : undefined}>
         <main className="ph-main">
           <h1 className="ph-h1 ph-h1--small" role="alert">
             {t("journal.timeline.error")}
@@ -395,7 +453,7 @@ export function Journal(p: JournalProps) {
 
   if (load.name === "asleep") {
     return (
-      <Page bar={bar}>
+      <Page bar={bar} className={inTab ? "ph-tabbed" : undefined}>
         <main className="ph-main ph-main--tight" style={{ gap: 18 }}>
           <p className="ph-lbl">{eyebrow}</p>
           <div className="ph-banner" role="status">
@@ -407,21 +465,62 @@ export function Journal(p: JournalProps) {
           </div>
           <Waiting keeps={waiting} />
         </main>
-        <footer className="ph-foot">
-          <Button kind="primary" onClick={p.onKeep}>
-            {t("phone.off.keep")}
-          </Button>
-        </footer>
+        {inTab ? null : (
+          <footer className="ph-foot">
+            <Button kind="primary" onClick={p.onKeep}>
+              {t("phone.off.keep")}
+            </Button>
+          </footer>
+        )}
       </Page>
     );
   }
 
   const { data: day0 } = load;
   const reflection = day0.reflection;
-  const empty = rows.length === 0 && entry.length === 0 && day0.checkins.length === 0;
+  // In the app, appointments are plans, not things kept: a day with only those is still empty.
+  const kept = p.phone
+    ? rows.filter((r) => r.kind !== "calendar" && r.kind !== "workout" && r.kind !== "woke")
+    : rows;
+  const empty = kept.length === 0 && entry.length === 0 && day0.checkins.length === 0;
+  const night = (p.phone && day0.health?.night) || null;
+  const afterSleep = night
+    ? t("journal.timeline.afterSleep", { asleep: duration(night.asleepMin) })
+    : null;
+  const firstCheckIn = rows.find((r) => r.kind === "checkin")?.item.id ?? null;
+  const footButtons = (
+    <>
+      {empty && day0.today ? (
+        <>
+          <Button kind="primary" onClick={p.onKeep}>
+            {t("phone.off.keep")}
+          </Button>
+          <Button kind="quiet" onClick={p.onCheckIn}>
+            {t("journal.side.checkIn")}
+          </Button>
+        </>
+      ) : (
+        <>
+          {!reflection && !empty ? (
+            <Button kind="primary" onClick={() => p.onReflect(day0.day, known)}>
+              {day0.today ? t("journal.day.reflect") : t("journal.day.reflectPast")}
+            </Button>
+          ) : null}
+          <Button kind="quiet" onClick={() => goTo(addDays(day0.day, -1))}>
+            {t("journal.day.previous", { weekday: weekdayOf(addDays(day0.day, -1)) })}
+          </Button>
+          {!day0.today && known ? (
+            <Button kind="quiet" onClick={() => goTo(known)}>
+              {t("phone.journal.today")}
+            </Button>
+          ) : null}
+        </>
+      )}
+    </>
+  );
 
   return (
-    <Page bar={bar} className="ph-journal">
+    <Page bar={bar} className={inTab ? "ph-journal ph-tabbed" : "ph-journal"}>
       <main className="ph-main ph-main--tight" style={{ gap: 14 }}>
         <p className="ph-lbl">{eyebrow}</p>
         {load.notReady ? (
@@ -498,10 +597,20 @@ export function Journal(p: JournalProps) {
             </h2>
             <ul className="ph-tl">
               {rows.map((row) => (
-                <Row key={`${row.kind}-${row.item.id}`} row={row} onOpen={p.onOpen} />
+                <Row
+                  key={`${row.kind}-${row.item.id}`}
+                  row={row}
+                  day={day0}
+                  phone={p.phone === true}
+                  afterSleep={row.item.id === firstCheckIn && night ? afterSleep : null}
+                  onOpen={p.onOpen}
+                />
               ))}
             </ul>
           </section>
+        ) : null}
+        {p.phone && day0.health ? (
+          <FromHealthCard health={day0.health} day={day0.day} isToday={day0.today} onDay={goTo} />
         ) : null}
         {empty ? (
           <div className="ph-stack" style={{ gap: 8, paddingTop: 8 }}>
@@ -511,35 +620,9 @@ export function Journal(p: JournalProps) {
             {day0.today ? <p className="ph-body">{t("phone.journal.empty.body")}</p> : null}
           </div>
         ) : null}
+        {inTab ? <div className="ph-stack ph-tab-foot">{footButtons}</div> : null}
       </main>
-      <footer className="ph-foot">
-        {empty && day0.today ? (
-          <>
-            <Button kind="primary" onClick={p.onKeep}>
-              {t("phone.off.keep")}
-            </Button>
-            <Button kind="quiet" onClick={p.onCheckIn}>
-              {t("journal.side.checkIn")}
-            </Button>
-          </>
-        ) : (
-          <>
-            {!reflection && !empty ? (
-              <Button kind="primary" onClick={() => p.onReflect(day0.day, known)}>
-                {day0.today ? t("journal.day.reflect") : t("journal.day.reflectPast")}
-              </Button>
-            ) : null}
-            <Button kind="quiet" onClick={() => goTo(addDays(day0.day, -1))}>
-              {t("journal.day.previous", { weekday: weekdayOf(addDays(day0.day, -1)) })}
-            </Button>
-            {!day0.today && known ? (
-              <Button kind="quiet" onClick={() => goTo(known)}>
-                {t("phone.journal.today")}
-              </Button>
-            ) : null}
-          </>
-        )}
-      </footer>
+      {inTab ? null : <footer className="ph-foot">{footButtons}</footer>}
       {choosing && known ? (
         <ChooseDay
           today={known}
