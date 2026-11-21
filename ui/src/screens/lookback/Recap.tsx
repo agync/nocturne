@@ -100,7 +100,7 @@ function HighlightCard({ highlight: h }: { highlight: Highlight }) {
         {first ? (
           <a
             className={styles.hday}
-            href={itemHref(first.itemId)}
+            href={`#${receiptPath(first)}`}
             aria-label={t("journal.lookback.highlights.entry", {
               day: `${day.weekday} ${day.day}`,
             })}
