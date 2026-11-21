@@ -1,6 +1,7 @@
 import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { Receipt } from "../../engine/bindings";
+import type { IconName } from "../Icon/Icon";
 import { Thumb } from "../Thumb/Thumb";
 import styles from "./ReceiptChip.module.css";
 
@@ -12,6 +13,8 @@ interface ReceiptChipProps {
   onOpen?: (receipt: Receipt) => void;
   /** The words on the chip, for a screen that words it its own way (the journal's "Entry · …"). */
   text?: string;
+  /** The small picture before the words, when the kind's own does not say it (sleep is a moon). */
+  icon?: IconName;
 }
 
 function page(receipt: Receipt): number | null {
@@ -38,6 +41,14 @@ export function receiptText(receipt: Receipt): string {
     case "web":
       parts.push(t("kind.web"), date);
       break;
+    case "calendar":
+      parts.push(t("kind.calendar"));
+      if (receipt.fromDevice) parts.push(receipt.fromDevice);
+      break;
+    case "reading":
+      parts.push(t("kind.reading"));
+      if (receipt.fromDevice) parts.push(receipt.fromDevice);
+      break;
     case "image":
       parts.push(receipt.label || t("kind.image"), date);
       break;
@@ -61,7 +72,13 @@ export function receiptLabel(receipt: Receipt): string {
 }
 
 /** The signature component: every claim points at where it came from. */
-export function ReceiptChip({ receipt, playing = false, onOpen, text: given }: ReceiptChipProps) {
+export function ReceiptChip({
+  receipt,
+  playing = false,
+  onOpen,
+  text: given,
+  icon,
+}: ReceiptChipProps) {
   const text = given ?? receiptText(receipt);
   const common = {
     className: `${styles.chip} hit ${receipt.unconfirmed ? styles.unconfirmed : ""}`.trim(),
@@ -71,7 +88,7 @@ export function ReceiptChip({ receipt, playing = false, onOpen, text: given }: R
   };
   const inner = (
     <>
-      <Thumb kind={receipt.kind} size={receipt.kind === "image" ? 18 : 14} />
+      <Thumb kind={receipt.kind} size={receipt.kind === "image" ? 18 : 14} icon={icon} />
       <span>{text}</span>
     </>
   );

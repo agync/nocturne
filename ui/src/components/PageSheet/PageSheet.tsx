@@ -15,6 +15,7 @@ import { Progress } from "../Progress/Progress";
 import { ReceiptChip } from "../ReceiptChip/ReceiptChip";
 import { JournalQuestion } from "./JournalQuestion";
 import styles from "./PageSheet.module.css";
+import { CalendarToday, LastNight } from "./PhoneSections";
 import { choiceText } from "./questionWords";
 
 export type SheetAction =
@@ -187,6 +188,12 @@ export function PageSheet({
                 : t("page.eyebrow", { date })}
             </span>
             <h1 className={styles.headline}>{page.headline}</h1>
+            {page.lastNight ? (
+              <LastNight
+                night={page.lastNight}
+                onOpen={(receipt) => onAction({ type: "open", receipt })}
+              />
+            ) : null}
             <p className={styles.dek}>
               {page.dek ||
                 (page.variant === "catchUp"
@@ -265,6 +272,15 @@ export function PageSheet({
                 </a>
               ) : null}
             </Section>
+          ) : null}
+
+          {page.calendarToday && page.calendarToday.length > 0 ? (
+            <CalendarToday
+              lines={page.calendarToday}
+              more={page.moreCalendarToday ?? 0}
+              day={page.date}
+              onOpen={(receipt) => onAction({ type: "open", receipt })}
+            />
           ) : null}
 
           {page.changed.length > 0 ? (

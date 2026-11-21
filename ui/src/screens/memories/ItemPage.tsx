@@ -11,6 +11,7 @@ import { t } from "../../copy/t";
 import type { CouldntReadReason } from "../../engine/bindings";
 import { useEngine, useEngineEvent, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
+import { CalendarFacts, CalendarPreview } from "./CalendarItem";
 import { CheckinPage } from "./CheckinPage";
 import styles from "./Item.module.css";
 import { kindWord } from "./memoryText";
@@ -79,6 +80,7 @@ export function ItemPage({ id }: { id: string }) {
   }
 
   const it = item.data;
+  const calendar = it.kind === "calendar" ? (it.calendar ?? null) : null;
   if (it.journal === "checkin" && it.checkin) {
     return page(<CheckinPage item={it} checkin={it.checkin} />);
   }
@@ -110,36 +112,52 @@ export function ItemPage({ id }: { id: string }) {
     <ScreenSheet flush>
       <div className={styles.card}>
         <div className={styles.original}>
-          <Original item={it} highlights={highlights} />
+          {calendar ? (
+            <CalendarPreview title={it.title} detail={calendar} />
+          ) : (
+            <Original item={it} highlights={highlights} />
+          )}
         </div>
         <div className={styles.details}>
-          <BackLink to="/memories" label={t("screen.memories.title")} />
+          {calendar ? (
+            <BackLink
+              to={`/settings/phones/came-in/${calendar.deviceId}/calendar`}
+              label={t("item.calendar.back", { phone: calendar.phone })}
+            />
+          ) : (
+            <BackLink to="/memories" label={t("screen.memories.title")} />
+          )}
           <p className={`t-section ${styles.meta}`}>
-            {t("item.meta", {
-              kind: kindWord(it.kind),
-              day: formatDay(it.keptAt),
-              time: formatTime(it.keptAt),
-            })}
+            {calendar
+              ? t("page.calendar.receipt", { calendar: calendar.calendar, phone: calendar.phone })
+              : t("item.meta", {
+                  kind: kindWord(it.kind),
+                  day: formatDay(it.keptAt),
+                  time: formatTime(it.keptAt),
+                })}
           </p>
           <h1 ref={heading} tabIndex={-1} className={`t-item-title ${styles.title}`}>
             {it.title}
           </h1>
-          <div className={styles.status}>
-            {it.status === "unconfirmed" ? <StatusLabel status="unconfirmed" /> : null}
-            {seconds !== null && it.status !== "partlyUnderstood" ? (
-              <span className={styles.understood}>
-                <span className={styles.check} aria-hidden="true" />
-                {t("item.understood", { count: seconds })}
-              </span>
-            ) : it.status === "unconfirmed" ? null : (
-              <StatusLabel status={it.status} tonight={it.status === "kept"} />
-            )}
-          </div>
+          {calendar ? <CalendarFacts detail={calendar} /> : null}
+          {calendar ? null : (
+            <div className={styles.status}>
+              {it.status === "unconfirmed" ? <StatusLabel status="unconfirmed" /> : null}
+              {seconds !== null && it.status !== "partlyUnderstood" ? (
+                <span className={styles.understood}>
+                  <span className={styles.check} aria-hidden="true" />
+                  {t("item.understood", { count: seconds })}
+                </span>
+              ) : it.status === "unconfirmed" ? null : (
+                <StatusLabel status={it.status} tonight={it.status === "kept"} />
+              )}
+            </div>
+          )}
           {it.status === "couldntRead" && it.reason ? (
             <p className={styles.reason}>{t(REASON[it.reason])}</p>
           ) : null}
 
-          {it.summary || it.text ? (
+          {!calendar && (it.summary || it.text) ? (
             <section className={styles.says} aria-labelledby="says">
               <h2 id="says" className="t-section">
                 {t(it.kind === "audio" ? "item.says.audio" : "item.says")}
@@ -150,7 +168,7 @@ export function ItemPage({ id }: { id: string }) {
 
           <section className={styles.from} aria-labelledby="from">
             <h2 id="from" className="t-section">
-              {t("item.memories", { count: list.length })}
+              {calendar ? t("item.calendar.learned") : t("item.memories", { count: list.length })}
             </h2>
             {list.length === 0 ? (
               <p className={styles.none}>{t("item.memories.none")}</p>
@@ -188,31 +206,35 @@ export function ItemPage({ id }: { id: string }) {
                 {t("item.action.private")}
               </Button>
             )}
-            <Button
-              variant="secondary"
-              aria-pressed={keptForever}
-              disabled={busy || list.length === 0}
-              onClick={() =>
-                void run(
-                  () => engine.setItemKeepForever(id, !keptForever),
-                  t(keptForever ? "item.keepForever.off" : "item.keepForever.on"),
-                )
-              }
-            >
-              {t("item.action.keepForever")}
-            </Button>
-            <Button
-              variant="quiet"
-              disabled={busy || it.status === "reading"}
-              onClick={() =>
-                void run(
-                  () => (it.status === "couldntRead" ? engine.retryItem(id) : engine.readNow(id)),
-                  t("item.readAgain.started"),
-                )
-              }
-            >
-              {t("item.action.readAgain")}
-            </Button>
+            {calendar ? null : (
+              <Button
+                variant="secondary"
+                aria-pressed={keptForever}
+                disabled={busy || list.length === 0}
+                onClick={() =>
+                  void run(
+                    () => engine.setItemKeepForever(id, !keptForever),
+                    t(keptForever ? "item.keepForever.off" : "item.keepForever.on"),
+                  )
+                }
+              >
+                {t("item.action.keepForever")}
+              </Button>
+            )}
+            {calendar ? null : (
+              <Button
+                variant="quiet"
+                disabled={busy || it.status === "reading"}
+                onClick={() =>
+                  void run(
+                    () => (it.status === "couldntRead" ? engine.retryItem(id) : engine.readNow(id)),
+                    t("item.readAgain.started"),
+                  )
+                }
+              >
+                {t("item.action.readAgain")}
+              </Button>
+            )}
             {it.hasOriginal && it.originalPath ? (
               <Button
                 variant="quiet"

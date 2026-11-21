@@ -14,7 +14,7 @@ import { toEngineError } from "../../engine/client";
 import { useEngine } from "../../engine/context";
 import { FeelingMark } from "../../journal/FeelingMark";
 import styles from "./DeleteDay.module.css";
-import { cut, type DeleteRow, dayRows, otherRow, rowName } from "./DeleteDayRows";
+import { cut, type DeleteRow, dayRows, otherRow, phoneRows, rowName } from "./DeleteDayRows";
 import { Glyph } from "./glyphs";
 import { dayWords } from "./time";
 
@@ -181,9 +181,12 @@ function Group({
   onToggleGroup,
   onToggleRow,
   subheads,
+  section = "other",
 }: {
   title: string;
   note?: string;
+  /** The one section a group without subheads lists. */
+  section?: DeleteRow["section"];
   rows: DeleteRow[];
   ticked: Set<string>;
   cannot: Set<string>;
@@ -200,7 +203,7 @@ function Group({
         ["entry", t("journal.delete.group.entry")],
         ["day", t("journal.delete.group.day")],
       ] as const)
-    : ([["other", ""]] as const);
+    : ([[section, ""]] as const);
   return (
     <section className={styles.group} aria-label={title}>
       <div className={styles.groupHead}>
@@ -255,7 +258,9 @@ export function DeleteDay({ data, onClose, onDone }: DeleteDayProps) {
   const engine = useEngine();
   const keep = useRef<HTMLElement | null>(null);
   const mine = useMemo(() => dayRows(data), [data]);
-  const mineIds = useMemo(() => new Set(mine.flatMap((r) => r.ids)), [mine]);
+  const phone = useMemo(() => phoneRows(data), [data]);
+  const ofDay = useMemo(() => [...mine, ...phone.calendar, ...phone.health], [mine, phone]);
+  const mineIds = useMemo(() => new Set(ofDay.flatMap((r) => r.ids)), [ofDay]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [listing, setListing] = useState<ForgetPreview | null>(null);
   const [prepared, setPrepared] = useState<Prepared | null>(null);
@@ -280,14 +285,14 @@ export function DeleteDay({ data, onClose, onDone }: DeleteDayProps) {
     };
   }, []);
 
-  const rowsAll = useMemo(() => [...mine, ...others], [mine, others]);
+  const rowsAll = useMemo(() => [...ofDay, ...others], [ofDay, others]);
   const cannot = useMemo(() => {
     const out = new Set<string>();
     if (!listing) return out;
     const stays = new Set(listing.originals.filter((o) => !o.removable).map((o) => o.itemId));
-    for (const row of mine) if (row.ids.some((id) => stays.has(id))) out.add(row.key);
+    for (const row of ofDay) if (row.ids.some((id) => stays.has(id))) out.add(row.key);
     return out;
-  }, [listing, mine]);
+  }, [listing, ofDay]);
 
   const prepare = useCallback(
     async (keys: Set<string>) => {
@@ -360,7 +365,7 @@ export function DeleteDay({ data, onClose, onDone }: DeleteDayProps) {
     if (!prepared || phase !== "ready") return;
     setPhase("working");
     setFailed(false);
-    const rows = mine.filter((r) => ticked.has(r.key) && !cannot.has(r.key)).length;
+    const rows = ofDay.filter((r) => ticked.has(r.key) && !cannot.has(r.key)).length;
     const others = rowsAll.filter((r) => r.section === "other" && !ticked.has(r.key)).length;
     const chosen = rows + rowsAll.filter((r) => r.section === "other" && ticked.has(r.key)).length;
     try {
@@ -468,6 +473,30 @@ export function DeleteDay({ data, onClose, onDone }: DeleteDayProps) {
             onToggleGroup={(on) => toggleGroup(mine, on)}
             onToggleRow={toggleRow}
           />
+          {phone.calendar.length > 0 ? (
+            <Group
+              title={t("journal.delete.group.calendar")}
+              rows={phone.calendar}
+              section="calendar"
+              ticked={ticked}
+              cannot={cannot}
+              disabled={phase === "working"}
+              onToggleGroup={(on) => toggleGroup(phone.calendar, on)}
+              onToggleRow={toggleRow}
+            />
+          ) : null}
+          {phone.health.length > 0 ? (
+            <Group
+              title={t("journal.delete.group.health")}
+              rows={phone.health}
+              section="health"
+              ticked={ticked}
+              cannot={cannot}
+              disabled={phase === "working"}
+              onToggleGroup={(on) => toggleGroup(phone.health, on)}
+              onToggleRow={toggleRow}
+            />
+          ) : null}
           {others.length > 0 ? (
             <Group
               title={t("journal.delete.group.other")}

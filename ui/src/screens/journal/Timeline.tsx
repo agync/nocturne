@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { goTo } from "../../app/query";
+import { duration } from "../../components/health/sentence";
 import { Icon } from "../../components/Icon/Icon";
 import { choiceText } from "../../components/PageSheet/questionWords";
+import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { CheckIn, DayPart, JournalDay, Mention, TimelineRow } from "../../engine/bindings";
@@ -35,9 +38,41 @@ interface TimelineProps {
 const words = (c: CheckIn) => c.feeling.words.join(", ");
 const unread = (row: TimelineRow) => row.item.status === "kept" || row.item.status === "reading";
 
+/** "3.1 km", from metres. */
+const kilometres = (metres: number): string =>
+  `${new Intl.NumberFormat("en-GB", { maximumFractionDigits: 1 }).format(metres / 1000)} km`;
+
+/** "Walk · 42 min · 3.1 km": a workout of the day's health, by its item. */
+function workoutText(row: TimelineRow, data: JournalDay): string {
+  const w = data.health?.workouts.find((x) => x.itemId === row.item.id);
+  if (!w) return row.item.title;
+  const length = duration(Math.round(w.lengthS / 60));
+  return w.distanceM !== null
+    ? t("journal.timeline.workoutFar", { kind: w.kind, length, distance: kilometres(w.distanceM) })
+    : t("journal.timeline.workout", { kind: w.kind, length });
+}
+
+/** "Woke · 6 h 40 min asleep": the night that ended this day. */
+function wokeText(row: TimelineRow, data: JournalDay): string {
+  const night = data.health?.night;
+  return night && night.itemId === row.item.id
+    ? t("journal.timeline.woke", { asleep: duration(night.asleepMin) })
+    : row.item.title;
+}
+
+const PHONE_KINDS = new Set(["calendar", "workout", "woke"]);
+
 /** What a row says: the words, the voice note's words, or what was seen in a photo. */
-function lineOf(row: TimelineRow): string {
+function lineOf(row: TimelineRow, data: JournalDay): string {
   switch (row.kind) {
+    case "woke":
+      return wokeText(row, data);
+    case "workout":
+      return workoutText(row, data);
+    case "calendar": {
+      const place = row.item.calendar?.place ?? row.item.summary;
+      return place ? `${row.item.title} · ${place}` : row.item.title;
+    }
     case "checkin":
       return row.checkin?.line ? `“${row.checkin.line}”` : "";
     case "good":
@@ -55,7 +90,14 @@ function lineOf(row: TimelineRow): string {
   }
 }
 
-function glyphOf(row: TimelineRow): GlyphName {
+function glyphOf(row: TimelineRow, data: JournalDay): GlyphName {
+  if (row.kind === "calendar") return "calendar";
+  if (row.kind === "woke") return "moon";
+  if (row.kind === "workout") {
+    const kind = data.health?.workouts.find((x) => x.itemId === row.item.id)?.kind.toLowerCase();
+    if (kind?.includes("swim")) return "swim";
+    return kind?.includes("walk") || kind?.includes("hike") ? "walk" : "workout";
+  }
   if (row.kind === "voice") return "mic";
   if (row.kind === "elsewhere") {
     if (row.item.kind === "web") return "web";
@@ -237,10 +279,16 @@ function Row({
   const timeText =
     row.part === "afterMidnight" ? t("journal.timeline.afterMidnight", { time }) : time;
   const mentions = row.mentions.filter((m) => m.state !== "removed");
-  const text = lineOf(row);
+  const text = lineOf(row, data);
+  const phoneRow = PHONE_KINDS.has(row.kind);
+  const after = row.checkin?.afterSleep ?? null;
   const reading =
-    unread(row) && row.kind !== "entry" && row.kind !== "checkin" && row.kind !== "answer";
-  const hasMenu = row.kind !== "entry";
+    unread(row) &&
+    row.kind !== "entry" &&
+    row.kind !== "checkin" &&
+    row.kind !== "answer" &&
+    !phoneRow;
+  const hasMenu = row.kind !== "entry" && !phoneRow;
   const photo = row.kind === "photo";
   const src = row.item.originalPath ? platform.originalSrc(row.item.originalPath) : null;
 
@@ -269,7 +317,7 @@ function Row({
         </span>
       )
     ) : row.kind === "checkin" ? null : (
-      <Glyph name={glyphOf(row)} />
+      <Glyph name={glyphOf(row, data)} />
     );
 
   const body = (
@@ -292,6 +340,9 @@ function Row({
         ) : (
           <span className={styles.text}>{text}</span>
         )}
+        {row.kind === "calendar" ? (
+          <span className={styles.tag}>{t("journal.timeline.fromCalendar")}</span>
+        ) : null}
         {reading ? <span className={styles.status}>{t("item.status.reading")}</span> : null}
         {row.leftOut ? (
           <span className={styles.leftOut}>
@@ -374,7 +425,41 @@ function Row({
           openCard={openCard}
         />
       ) : null}
-      {row.item.fromDevice || mentions.length > 0 || row.answer?.sentence ? (
+      {row.kind === "woke" && data.health?.night ? (
+        <div className={styles.sub}>
+          <ReceiptChip
+            receipt={{
+              itemId: row.item.id,
+              kind: "reading",
+              source: "phone",
+              label: row.item.title,
+              keptAt: row.item.keptAt,
+              durationMs: null,
+              span: null,
+              unconfirmed: false,
+              fromDevice: data.health.night.phone,
+            }}
+            text={t("page.lastNight.receipt", { phone: data.health.night.phone })}
+            icon="moon"
+            onOpen={(receipt) => goTo(`/items/${receipt.itemId}`)}
+          />
+        </div>
+      ) : null}
+      {after ? (
+        <div className={styles.sub}>
+          {after.itemId ? (
+            <a className={styles.meta} href={`#/items/${after.itemId}`} tabIndex={-1}>
+              {t("journal.timeline.afterSleep", { asleep: duration(after.minutes) })}
+            </a>
+          ) : (
+            <span className={styles.meta}>
+              {t("journal.timeline.afterSleep", { asleep: duration(after.minutes) })}
+            </span>
+          )}
+        </div>
+      ) : null}
+      {(!phoneRow || row.kind === "workout") &&
+      (row.item.fromDevice || mentions.length > 0 || row.answer?.sentence) ? (
         <div className={styles.sub}>
           {row.answer?.sentence ? (
             <a className={styles.about} href={`#/items/${row.answer.about}`} tabIndex={-1}>

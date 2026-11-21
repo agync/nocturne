@@ -1,0 +1,89 @@
+.label {
+  margin: 0;
+  color: var(--ink3);
+}
+
+.night {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-4) var(--s-6);
+}
+
+.nightText {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+
+.nightLine {
+  margin: 0;
+  font: 400 1.0625rem / 1.45 var(--font-serif);
+  font-variant-numeric: oldstyle-nums;
+}
+
+.versus {
+  color: var(--ink2);
+}
+
+.nightBar {
+  flex: 0 1 280px;
+  min-width: 200px;
+}
+
+.agenda {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 5.5rem minmax(0, 1fr);
+  gap: var(--s-4);
+  align-items: baseline;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.at {
+  color: var(--ink2);
+  font: 400 0.8125rem / 1.5 var(--font-mono);
+}
+
+.what {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.title {
+  font: 400 1.25rem / 1.4 var(--font-serif);
+  font-variant-numeric: oldstyle-nums;
+  text-wrap: pretty;
+}
+
+.place {
+  color: var(--ink2);
+  font: 400 0.9375rem / 1.4 var(--font-sans);
+}
+
+.chip {
+  display: flex;
+}
+
+.more {
+  padding: 10px 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}

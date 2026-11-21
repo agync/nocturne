@@ -347,3 +347,14 @@
 .about:hover {
   color: var(--ink);
 }
+
+.tag {
+  margin-left: auto;
+  color: var(--ink2);
+  font: 400 0.75rem / 1.5 var(--font-mono);
+}
+
+.row[data-kind="calendar"] {
+  padding-top: var(--s-1);
+  padding-bottom: var(--s-2);
+}

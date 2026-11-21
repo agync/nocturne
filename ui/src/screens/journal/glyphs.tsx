@@ -1,13 +1,17 @@
 import {
+  Activity,
   Calendar,
   Ellipsis,
   FileText,
+  Footprints,
   Globe,
   Image,
   Mic,
+  Moon,
   Pencil,
   Plus,
   Smartphone,
+  Waves,
 } from "lucide-react";
 
 const GLYPHS = {
@@ -20,6 +24,10 @@ const GLYPHS = {
   pen: Pencil,
   plus: Plus,
   phone: Smartphone,
+  moon: Moon,
+  walk: Footprints,
+  swim: Waves,
+  workout: Activity,
 } as const;
 
 export type GlyphName = keyof typeof GLYPHS;
