@@ -3850,13 +3850,17 @@ dependencies = [
 name = "nocturne-phone"
 version = "0.7.2"
 dependencies = [
+ "jiff",
  "nocturne-channel",
  "nocturne-contract",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-barcode-scanner",
+ "tauri-plugin-nocturne-calendar",
+ "tauri-plugin-nocturne-health",
  "tauri-plugin-nocturne-system",
  "tauri-plugin-opener",
  "tempfile",
