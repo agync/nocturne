@@ -107,6 +107,14 @@ export const MAX_LONG_POLL_BATCH = 8;
 export const MAX_CONNECTIONS = 16;
 /** Live sessions; pending ones do not count. */
 export const MAX_SESSIONS_PER_DEVICE = 3;
+/**
+ * A phone app's calendar or health send: changes in one batch, the batch's JSON in bytes, and the
+ * changes taken under one sync id.
+ */
+export const MAX_SYNC_BATCH = 100;
+export const MAX_SYNC_JSON = 65536;
+export const MAX_CALENDAR_PER_SEND = 500;
+export const MAX_READINGS_PER_SEND = 5000;
 
 /** Per minute. */
 export const LIMIT_NO_KEY = 20;
@@ -118,6 +126,8 @@ export const LIMIT_SESSION_OPENS_PER_DEVICE = 6;
 export const LIMIT_REQUESTS = 60;
 export const LIMIT_ASKS = 10;
 export const LIMIT_KEEPS = 30;
+/** Calendar and health sends from a phone app, per device. */
+export const LIMIT_SYNCS = 12;
 export const PAGES_BACK = 7;
 export const EVENTS_KEPT_DAYS = 90;
 
