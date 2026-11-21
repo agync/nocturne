@@ -62,11 +62,13 @@ export function updateFor(
   conn: Connection,
   device: PairedDevice,
   phone: string,
+  ios = false,
 ): UpdateNeeded | null {
   const known = device.version ?? "";
-  if (conn.kind === "outdated") return { kind: "phone", computer: conn.computer ?? known, phone };
+  if (conn.kind === "outdated")
+    return { kind: "phone", computer: conn.computer ?? known, phone, ios };
   if (conn.kind === "computerOutdated")
-    return { kind: "computer", computer: conn.computer || known, phone };
+    return { kind: "computer", computer: conn.computer || known, phone, ios };
   return null;
 }
 const RETRY_MS = 30_000;
@@ -172,7 +174,10 @@ export function NativeApp({
     };
   }, [engine]);
   useEffect(() => {
-    if (conn.kind === "connected" || conn.kind === "removed") return;
+    // One side must update: trying again on a timer changes nothing. Coming back to the app or
+    // to the network still tries.
+    const settled = ["connected", "removed", "outdated", "computerOutdated"];
+    if (settled.includes(conn.kind)) return;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void engine.connect();
     }, RETRY_MS);
@@ -451,7 +456,7 @@ export function NativeApp({
             waiting={waiting}
             sentJustNow={sent}
             now={services.now()}
-            update={update ?? updateFor(conn, device, services.version)}
+            update={update ?? updateFor(conn, device, services.version, services.platform.ios)}
             bar={bar("today")}
             onQueued={refreshWaiting}
             onOpen={open}

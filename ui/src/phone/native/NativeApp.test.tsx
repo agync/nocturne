@@ -7,6 +7,7 @@ import { applyInsets } from "./insets";
 import { NativeApp, updateFor } from "./NativeApp";
 import { NativeRoot } from "./NativeRoot";
 import { calendarValue, healthValue, Offer, offered } from "./screens/Offer";
+import { UpdateCard } from "./screens/UpdateCard";
 import { nativeChannel } from "./sources";
 
 afterEach(() => {
@@ -243,11 +244,12 @@ describe("which side must update", () => {
   it("is this phone, with the computer's version from its hello or as last seen", () => {
     expect(
       updateFor({ kind: "outdated", minBuild: 3, computer: "1.2.0" }, device, "0.9.0"),
-    ).toEqual({ kind: "phone", computer: "1.2.0", phone: "0.9.0" });
+    ).toEqual({ kind: "phone", computer: "1.2.0", phone: "0.9.0", ios: false });
     expect(updateFor({ kind: "outdated", minBuild: 3 }, device, "0.9.0")).toEqual({
       kind: "phone",
       computer: "0.8.0",
       phone: "0.9.0",
+      ios: false,
     });
   });
 
@@ -256,6 +258,18 @@ describe("which side must update", () => {
       kind: "computer",
       computer: "0.7.2",
       phone: "0.9.0",
+      ios: false,
     });
+  });
+
+  it("sends an iPhone to the App Store, and is said politely as it appears", () => {
+    const update = updateFor({ kind: "outdated", minBuild: 3 }, device, "0.9.0", true);
+    expect(update?.ios).toBe(true);
+    render(<UpdateCard update={update as NonNullable<typeof update>} />);
+    expect(screen.getByRole("button", { name: "Update in the App Store" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Update in Google Play" })).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Update Nocturne on this phone" }).closest("section"),
+    ).toHaveAttribute("aria-live", "polite");
   });
 });
