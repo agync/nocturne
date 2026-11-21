@@ -10,6 +10,8 @@ screen follows, the data model, and how quality is measured.
 - [Journaling follow-ups](journaling-follow-ups.md) - What the journal still needed, approved by the owner: deleting a day, a check-in's own page, deleting a recap, the page question from the journal, recaps on every computer, and settled copy.
 - [The journal question on the phone](phone-journal-question.md) - The morning page's question from the journal on a paired phone: the three answers and the line, answers from either device, waiting on the phone and errors.
 - [Only what you mark private is held back](only-marked-private.md) - Nocturne no longer decides that something is about health, money or ID: only what the person marks private is held back.
+- [Nocturne on Android and iPhone](phone-apps.md) - Proposal for native phone apps: install, pairing inside the app, plain permission asks with a working no, native navigation, keeping from other apps, update and offline states, and the phone's calendar on the computer's page and journal.
+- [Health from the phone](phone-health.md) - Proposal for sleep, heart rate, blood pressure, steps and workouts from Apple Health or Health Connect beside the journal and on the page, with plain charts, your own usual range, noticing with receipts and no medical claims.
 - [Back up and restore](backup-and-restore.md) - One file with everything, locked with a passphrase the person chooses, and the way back from it.
 - [Evaluation](evaluation.md) - How memory quality, trust and privacy are measured.
 - [Quick keep shortcut through the desktop, copy](shortcut-portal-copy.md) - The approved words for the shortcut where the desktop holds it.
