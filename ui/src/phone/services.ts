@@ -52,6 +52,8 @@ export interface Services {
   unsupported?: string[];
   /** What the address bar held when the page opened (path and fragment). */
   location: { pathname: string; hash: string; search: string };
+  /** The phone's own name, where the app can read it, for "Name this phone". */
+  deviceName?(): Promise<string | null>;
 }
 
 export function detectPlatform(): Platform {

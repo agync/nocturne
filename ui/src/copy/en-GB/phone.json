@@ -60,6 +60,7 @@
   "phone.pair.connect": "Connect",
   "phone.pair.connecting": "Connecting…",
   "phone.pair.next": "Next, this phone and your computer each show three words. You check they match, then allow it on the computer.",
+  "phone.pair.app": "Got the Nocturne app? Open it and choose Scan the code instead.",
   "phone.pair.private": "This phone keeps no copy of your memory. It only shows things while you look at them.",
   "phone.pair.badName": "Use up to 40 letters and numbers, with nothing hidden or special.",
 
