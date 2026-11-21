@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.8.0](https://github.com/agync/nocturne/compare/v0.7.2...v0.8.0) (2026-11-21)
+
+
+### Features
+
+* **engine:** answer journal question by phone ([866e673](https://github.com/agync/nocturne/commit/866e67318c4ca0193471947a8c4b54ea1f484ec8))
+* **phone:** show journal question on the page ([ed51b60](https://github.com/agync/nocturne/commit/ed51b608c02f1152d6d998adb8ab033ba272a881))
+* **remote:** answer journal question by phone ([fc63419](https://github.com/agync/nocturne/commit/fc63419c5ec433a686e4188b1a8158e8ee96f395))
+
 ## [0.7.2](https://github.com/agync/nocturne/compare/v0.7.1...v0.7.2) (2026-11-20)
 
 
