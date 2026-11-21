@@ -59,7 +59,7 @@ export function clientId(): string {
 const encoder = new TextEncoder();
 const capped = (text: string, max: number) => [...text].slice(0, max).join("");
 
-const WAIT_CODES: ReadonlySet<PhoneError> = new Set([
+export const WAIT_CODES: ReadonlySet<PhoneError> = new Set([
   "busy",
   "tooMany",
   "notReady",
@@ -81,6 +81,11 @@ interface KeepProps {
   draft?: { current: string };
   /** For a scripted build that has no microphone. */
   recorder?: RecorderFactory;
+  /**
+   * "Record a voice note" from the app icon: Keep opens with Record ready and in focus, and
+   * the microphone starts only when it is tapped.
+   */
+  recording?: boolean;
 }
 
 export interface Recording {
@@ -137,8 +142,13 @@ export function Keep({
   onMoreWords,
   draft,
   recorder = browserRecorder,
+  recording = false,
 }: KeepProps) {
   const [state, setState] = useState<State>({ name: "compose" });
+  const record = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (recording) record.current?.focus();
+  }, [recording]);
   const [text, setTextNow] = useState(draft?.current ?? "");
   const setText = (next: string) => {
     setTextNow(next);
@@ -346,8 +356,9 @@ export function Keep({
                 {t("phone.keep.choose")}
               </button>
               <button
+                ref={record}
                 type="button"
-                className="ph-source"
+                className={`ph-source${recording ? " ph-source--ready" : ""}`}
                 onClick={() => {
                   setMicError(null);
                   setState({ name: "recording" });

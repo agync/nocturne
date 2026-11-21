@@ -10,7 +10,11 @@ import { registerWorker } from "./shell";
  * where its files come with the app and there is no service worker.
  */
 async function start() {
-  const services = await loadServices();
+  // The browser tests' build of the app: its native side is answered in the page.
+  const services =
+    import.meta.env.VITE_NATIVE_MOCK === "1"
+      ? await (await import("./testing/nativeMock")).nativeMockServices()
+      : await loadServices();
   const root = document.getElementById("root");
   if (services.platform.native) {
     const [{ NativeRoot }, { startInsets }] = await Promise.all([

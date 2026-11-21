@@ -74,3 +74,488 @@ html.ph-native .ph-screen--fixed {
 .ph-bring-hint {
   font-size: 0.8125rem;
 }
+
+/* The status bar is see-through: a strip of the page's own colour keeps scrolled content from
+   showing under the clock. Sheets keep clear of the gesture bar, which the web view does not
+   report as a safe area. */
+
+html.ph-native body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 50;
+  height: var(--ph-inset-top, 0px);
+  background: var(--bg);
+  pointer-events: none;
+}
+
+/* Sheets open over the bar at the bottom and the Keep button. */
+.ph-scrim {
+  z-index: 40;
+}
+
+.ph-sheet,
+.ph-sheet.ph-sheet--solid {
+  z-index: 41;
+}
+
+html.ph-native .ph-sheet {
+  max-height: calc(92dvh - var(--ph-inset-top, 0px));
+  padding-bottom: calc(22px + max(var(--ph-inset-bottom, 0px), var(--ph-inset-keyboard, 0px)));
+}
+
+html.ph-native .ph-sheet-foot {
+  bottom: calc(-22px - var(--ph-inset-bottom, 0px));
+  margin-bottom: calc(-22px - var(--ph-inset-bottom, 0px));
+  padding-bottom: calc(20px + var(--ph-inset-bottom, 0px));
+}
+
+/* While the keyboard is up the page grows by its height, so the field being typed in can
+   scroll above it. */
+html.ph-native.ph-keyboard .ph-screen {
+  padding-bottom: var(--ph-inset-keyboard, 0px);
+}
+
+html.ph-native.ph-keyboard .ph-screen--fixed {
+  height: 100dvh;
+}
+
+/* The tabs: a top app bar with This phone, the bar at the bottom, and Keep floating above it. */
+
+.ph-appbar {
+  height: 64px;
+  padding: 0 4px 0 20px;
+  border-bottom: 0;
+}
+
+.ph-appbar-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.375rem;
+  font-weight: 400;
+}
+
+.ph-appbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ph-ib--round {
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  border-radius: 50%;
+}
+
+:root {
+  --ph-nav: 84px;
+}
+
+.ph-tabbed {
+  padding-bottom: calc(var(--ph-nav) + var(--ph-inset-bottom, 0px));
+}
+
+html.ph-native .ph-tabbed {
+  padding-bottom: calc(var(--ph-nav) + var(--ph-inset-bottom, 0px));
+}
+
+.ph-tabbed .ph-main {
+  padding-bottom: 96px;
+}
+
+.ph-tabbed.ph-screen--fixed .ph-main {
+  padding-bottom: 0;
+}
+
+.ph-nav {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  justify-content: space-around;
+  max-width: 520px;
+  height: calc(var(--ph-nav) + var(--ph-inset-bottom, 0px));
+  margin: 0 auto;
+  padding: 12px 0 calc(16px + var(--ph-inset-bottom, 0px));
+  background: var(--sheet);
+  box-shadow: 0 -1px 0 var(--rule);
+}
+
+.ph-nav-tab {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ph-nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 32px;
+  border-radius: 16px;
+}
+
+.ph-nav-tab[aria-current="page"] {
+  color: var(--ink);
+}
+
+.ph-nav-tab[aria-current="page"] .ph-nav-icon {
+  background: var(--accent-soft);
+}
+
+.ph-fab {
+  position: fixed;
+  right: max(16px, calc((100vw - 520px) / 2 + 16px));
+  bottom: calc(96px + var(--ph-inset-bottom, 0px));
+  z-index: 21;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  height: 56px;
+  padding: 0 20px 0 16px;
+  border: 0;
+  border-radius: 16px;
+  background: var(--ink);
+  color: var(--sheet);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 6px 16px -6px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+html.ph-keyboard .ph-nav,
+html.ph-keyboard .ph-fab {
+  display: none;
+}
+
+.ph-tab-foot {
+  gap: 8px;
+  padding-top: 8px;
+}
+
+/* Today: the page on the app's own paper, last night and the calendar. */
+
+.ph-today h2:not(.ph-h1):not(.ph-card-title):not(.ph-update-title) {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 400;
+  font-size: 2rem;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+}
+
+.ph-dot--ember {
+  background: var(--ember);
+}
+
+.ph-night {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.ph-night-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ph-night-head h3 {
+  margin: 0;
+}
+
+.ph-night-value {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.ph-chipsrc {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  gap: 6px;
+  min-height: 28px;
+  padding: 2px 8px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: var(--raised);
+  color: var(--ink2);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.ph-agenda {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ph-agenda li + li {
+  border-top: 1px solid var(--rule);
+}
+
+.ph-agenda-row {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 12px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ph-agenda-at {
+  color: var(--ink2);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+.ph-agenda-what {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ph-agenda-title {
+  font-family: var(--font-serif);
+  font-size: 1.0625rem;
+  line-height: 1.4;
+}
+
+.ph-agenda-where {
+  color: var(--ink2);
+  font-size: 0.875rem;
+}
+
+.ph-update {
+  gap: 12px;
+  padding: 18px;
+}
+
+.ph-update-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+/* The journal: appointments as quiet rows, workouts and the night, and From Health. */
+
+.ph-calrow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--ink2);
+}
+
+.ph-caltag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink3);
+  font-size: 0.8125rem;
+}
+
+.ph-caltag--ink {
+  color: var(--ink);
+  font-size: 0.9375rem;
+}
+
+.ph-health {
+  gap: 14px;
+}
+
+.ph-health-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ph-health-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ph-health-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.ph-health-say {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  text-align: right;
+}
+
+/* Settings: full-width rows under headings, as Android groups them. */
+
+.ph-settings {
+  gap: 20px;
+}
+
+.ph-offer {
+  gap: 18px;
+}
+
+.ph-sgroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.ph-sghead {
+  margin: 0;
+  padding: 0 0 6px;
+  color: var(--accent);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.ph-srows {
+  display: flex;
+  flex-direction: column;
+}
+
+.ph-srow {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  min-height: 56px;
+  padding: 10px 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+
+button.ph-srow {
+  cursor: pointer;
+}
+
+.ph-srow > svg {
+  flex: none;
+  color: var(--ink2);
+}
+
+.ph-srow-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ph-srow-label {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.ph-srow-label--danger {
+  color: var(--ember);
+}
+
+.ph-srow-hint {
+  color: var(--ink2);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.ph-srow-value {
+  color: var(--ink2);
+  font-size: 0.9375rem;
+  text-align: right;
+}
+
+.ph-sgfoot {
+  margin: 0;
+  padding: 6px 0 0;
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+/* Keeping from another app. */
+
+.ph-share h2 {
+  font-family: var(--font-sans);
+  font-size: 1.125rem;
+  font-weight: 500;
+}
+
+.ph-share-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.ph-share-thumb {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 72px;
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: 0 0 0 1px var(--rule);
+  color: var(--ink3);
+  object-fit: cover;
+}
+
+.ph-share-text {
+  margin: 0;
+  max-height: 7.5em;
+  overflow: hidden;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ph-share-note {
+  min-height: 56px;
+  resize: none;
+}
+
+/* "Record a voice note" from the icon: Record is ready, waiting for a tap. */
+.ph-source--ready {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}

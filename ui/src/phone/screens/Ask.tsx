@@ -1,4 +1,4 @@
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { type FormEvent, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { tc } from "../../components/ControlChip/copy";
 import { richText } from "../../components/PageLine/richText";
 import { t } from "../../copy/t";
@@ -231,6 +231,8 @@ interface AskProps {
   onSeeChange(): void;
   /** "Answer on your computer", from the same notice. */
   onAskHere(): void;
+  /** In the app's Ask tab: its own top bar in place of the back bar. */
+  tabBar?: ReactNode;
 }
 
 export function Ask({
@@ -242,6 +244,7 @@ export function Ask({
   onBack,
   onSeeChange,
   onAskHere,
+  tabBar,
 }: AskProps) {
   const [draft, setDraft] = useState("");
   const working =
@@ -278,7 +281,11 @@ export function Ask({
     done && receipts.length > 0 ? t("phone.ask.from", { count: receipts.length }) : undefined;
 
   return (
-    <Page bar={<BackBar title={t("phone.ask.title")} onBack={onBack} note={note} />} fixed>
+    <Page
+      bar={tabBar ?? <BackBar title={t("phone.ask.title")} onBack={onBack} note={note} />}
+      fixed
+      className={tabBar ? "ph-tabbed" : undefined}
+    >
       <main
         className="ph-main ph-main--tight"
         style={{ flex: 1, overflowY: "auto", padding: "22px 20px" }}
