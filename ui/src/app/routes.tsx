@@ -30,6 +30,8 @@ const restore = lazy(() => import("../screens/restore"));
 const settings = lazy(() => import("../screens/settings"));
 const editions = lazy(() => import("../screens/editions"));
 const away = lazy(() => import("../screens/away"));
+const phones = lazy(() => import("../screens/phones"));
+const health = lazy(() => import("../screens/health"));
 const online = lazy(() => import("../screens/online"));
 const models = lazy(() => import("../screens/models"));
 const guide = lazy(() => import("../screens/guide"));
@@ -64,6 +66,20 @@ export const routes: readonly AppRoute[] = [
     title: "screen.lookback.title",
     shell: true,
     Component: lookback,
+  },
+  {
+    path: "/journal/health",
+    folder: "health",
+    title: "screen.health.title",
+    shell: true,
+    Component: health,
+  },
+  {
+    path: "/journal/health/:kind",
+    folder: "health",
+    title: "screen.health.title",
+    shell: true,
+    Component: health,
   },
   {
     path: "/journal/:day",
@@ -199,6 +215,20 @@ export const routes: readonly AppRoute[] = [
     title: "screen.away.activity.title",
     shell: true,
     Component: away,
+  },
+  {
+    path: "/settings/phones",
+    folder: "phones",
+    title: "screen.phones.title",
+    shell: true,
+    Component: phones,
+  },
+  {
+    path: "/settings/phones/came-in/:deviceId/:source",
+    folder: "phones",
+    title: "screen.phones.cameIn.title",
+    shell: true,
+    Component: phones,
   },
   {
     path: "/settings/online",

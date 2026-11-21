@@ -24,6 +24,7 @@ import { useRemote } from "../away/useRemote";
 import { guideHref } from "../guide/links";
 import { useModels } from "../models/useModels";
 import { useOnline } from "../online/useOnline";
+import { usePhoneSources } from "../phones/usePhoneSources";
 import { FasterNote } from "./FasterNote";
 import { patch } from "./patch";
 import styles from "./Settings.module.css";
@@ -182,6 +183,7 @@ export function Settings() {
   const query = useSettings();
   const away = useRemote().data;
   const online = useOnline().data;
+  const phones = usePhoneSources().data;
   const models = useModels().data;
   const [saved, setSaved] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -441,6 +443,21 @@ export function Settings() {
                 aria-label={t("away.row.open", { value: awayValue(away) })}
               >
                 {awayValue(away)} ›
+              </a>
+            )}
+          </Row>
+        ) : null}
+
+        {phones?.phones.some((phone) => !phone.inBrowser) ? (
+          <Row label={t("screen.phones.title")} hint={t("phones.row.hint")}>
+            {(hint) => (
+              <a
+                className={`${styles.value} hit`}
+                href="#/settings/phones"
+                aria-describedby={hint}
+                aria-label={t("phones.row.open")}
+              >
+                {t("phones.row.value")} ›
               </a>
             )}
           </Row>

@@ -1,11 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { Children, useEffect, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { Checkbox } from "../../components/Checkbox/Checkbox";
 import { TextInput } from "../../components/TextInput/TextInput";
 import { useToast } from "../../components/Toast/Toast";
-import { t } from "../../copy/t";
-import type { DeviceView, RemoteView } from "../../engine/bindings";
+import { t, tParts } from "../../copy/t";
+import type { DeviceView, PhoneSources, RemoteView } from "../../engine/bindings";
 import { useEngine } from "../../engine/context";
+import { bringsKey, phoneKind, usePhoneSources } from "../phones/usePhoneSources";
 import styles from "./Away.module.css";
 import { Confirm, DeviceStatus, Frame } from "./parts";
 import { useRemoteAct } from "./useRemote";
@@ -22,13 +24,21 @@ function nameProblem(name: string): "away.phones.name.empty" | "away.phones.name
 
 interface RowProps {
   device: DeviceView;
+  brought?: PhoneSources;
   renaming: boolean;
   onRename: () => void;
   onDone: () => void;
   onRemove: () => void;
 }
 
-function PhoneRow({ device, renaming, onRename, onDone, onRemove }: RowProps) {
+/** What kind of phone it is and what it brings, when the computer knows. */
+function PhoneKind({ phone }: { phone: PhoneSources }) {
+  const brings = bringsKey(phone);
+  const line = [phoneKind(phone), brings ? t(brings) : null].filter(Boolean).join(" · ");
+  return line === "" ? null : <span className={styles.sub}>{line}</span>;
+}
+
+function PhoneRow({ device, brought, renaming, onRename, onDone, onRemove }: RowProps) {
   const engine = useEngine();
   const act = useRemoteAct();
   const [draft, setDraft] = useState(device.name);
@@ -101,6 +111,7 @@ function PhoneRow({ device, renaming, onRename, onDone, onRemove }: RowProps) {
             <span className={styles.sub}>
               <DeviceStatus device={device} />
             </span>
+            {brought ? <PhoneKind phone={brought} /> : null}
           </>
         )}
       </div>
@@ -109,6 +120,11 @@ function PhoneRow({ device, renaming, onRename, onDone, onRemove }: RowProps) {
       </span>
       {renaming ? null : (
         <span className={styles.buttonsInline} ref={actions}>
+          {brought && bringsKey(brought) ? (
+            <a className="hit" href="#/settings/phones">
+              {t("screen.phones.title")}
+            </a>
+          ) : null}
           <Button
             variant="quiet"
             aria-label={t("away.phones.rename.named", { name: device.name })}
@@ -137,12 +153,38 @@ export function Phones({ view }: { view: RemoteView }) {
   const [renaming, setRenaming] = useState<string | null>(null);
   const [removing, setRemoving] = useState<DeviceView | null>(null);
   const [busy, setBusy] = useState(false);
+  const [alsoDelete, setAlsoDelete] = useState(false);
+  const { phones, reread } = usePhoneSources();
+  const brought = phones ?? [];
+  const [appointments, setAppointments] = useState<number | null>(null);
+  const bringing = removing ? brought.find((p) => p.deviceId === removing.id) : undefined;
+  const brings = bringing ? bringsKey(bringing) !== null : false;
+
+  const listCalendar = alsoDelete && bringing?.calendar != null;
+  const removingId = removing?.id;
+  useEffect(() => {
+    setAppointments(null);
+    if (!listCalendar || !removingId) return;
+    let live = true;
+    engine
+      .previewPhoneDelete({ deviceId: removingId, source: "calendar", kinds: null, before: null })
+      .then((preview) => live && setAppointments(preview.items))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [engine, listCalendar, removingId]);
 
   const remove = async () => {
     if (!removing) return;
     setBusy(true);
     const name = removing.name;
-    if (await act(() => engine.removeDevice(removing.id))) {
+    const withBrought = brings && alsoDelete;
+    const done = await act(() =>
+      withBrought ? engine.removeDevice(removing.id, true) : engine.removeDevice(removing.id),
+    );
+    if (done) {
+      void reread();
       toast.show({ message: t("away.phones.removed", { name }) });
     }
     setBusy(false);
@@ -170,10 +212,14 @@ export function Phones({ view }: { view: RemoteView }) {
             <PhoneRow
               key={device.id}
               device={device}
+              brought={brought.find((p) => p.deviceId === device.id)}
               renaming={renaming === device.id}
               onRename={() => setRenaming(device.id)}
               onDone={() => setRenaming(null)}
-              onRemove={() => setRemoving(device)}
+              onRemove={() => {
+                setAlsoDelete(false);
+                setRemoving(device);
+              }}
             />
           ))}
         </ul>
@@ -202,6 +248,31 @@ export function Phones({ view }: { view: RemoteView }) {
         >
           <p>{t("away.remove.body")}</p>
           <p>{t("away.remove.kept")}</p>
+          {brings ? (
+            <>
+              <p>
+                {Children.toArray(
+                  tParts("phones.remove.adds", {
+                    fromYourPhones: <a href="#/settings/phones">{t("screen.phones.title")}</a>,
+                  }) as React.ReactNode[],
+                )}
+              </p>
+              <Checkbox
+                checked={alsoDelete}
+                onChange={setAlsoDelete}
+                disabled={busy}
+                label={t("phones.remove.alsoDelete")}
+              />
+              {appointments !== null && removing ? (
+                <p>
+                  {t("phones.delete.rows.calendar", {
+                    count: appointments,
+                    phone: removing.name,
+                  })}
+                </p>
+              ) : null}
+            </>
+          ) : null}
         </Confirm>
       ) : null}
     </Frame>

@@ -57,6 +57,7 @@
   "privacy.phones.amount": "{size}",
   "privacy.phones.counted": "Counted by Nocturne as it leaves this computer",
   "privacy.away.heading": "Away from home",
+  "privacy.away.phonesBring": "Your phones can bring their calendar and health readings, in the same locked messages.",
   "privacy.away.on.simple": "Away from home is on. Your phones reach this computer through Cloudflare. What you ask and keep is locked so Cloudflare can’t read it. Cloudflare can see when, from where and how much. Nothing goes anywhere else.",
   "privacy.away.on.mostPrivate": "Away from home is on. Your phones reach this computer through Tailscale. What you ask and keep is locked so Tailscale can’t read it. Tailscale can see that they connect, and when. Nothing goes anywhere else.",
   "privacy.away.off": "Away from home is off.",

@@ -359,6 +359,19 @@
   border-radius: var(--r-sm);
 }
 
+.typedField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.codeLine {
+  color: var(--ink);
+  font: 400 1rem / 1.5 var(--font-mono);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
 .codeGroups {
   display: flex;
   margin: 0;
