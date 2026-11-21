@@ -41,5 +41,22 @@
   "journal.lookback.recap.after.week": "Look back on this week",
   "journal.lookback.recap.after.month": "Look back on this month",
   "journal.lookback.recap.after.year": "Look back on this year",
-  "journal.lookback.together": "On {count} of the {total} days with {name} in your journal, you checked in as {what}."
+  "journal.lookback.together": "On {count} of the {total} days with {name} in your journal, you checked in as {what}.",
+  "journal.lookback.noticed.sleep.name": "On the {days} nights before days you wrote about {name}, you slept {difference} {direction, select, more {more} other {less}} than on other nights.",
+  "journal.lookback.noticed.sleep.felt": "On the {days} nights before days you checked in as {what}, you slept {difference} {direction, select, more {more} other {less}} than on other nights.",
+  "journal.lookback.noticed.sleep.good": "On the {days} nights before days you wrote down a good thing, you slept {difference} {direction, select, more {more} other {less}} than on other nights.",
+  "journal.lookback.noticed.steps.name": "You took about {difference} {direction, select, more {more} other {fewer}} steps on the {days} days with {name} in your journal.",
+  "journal.lookback.noticed.steps.felt": "You took about {difference} {direction, select, more {more} other {fewer}} steps on the {days} days you checked in as {what}.",
+  "journal.lookback.noticed.steps.good": "You took about {difference} {direction, select, more {more} other {fewer}} steps on the {days} days you wrote down a good thing.",
+  "journal.lookback.noticed.workout.felt": "On {held} of the {days} days you did a workout, you checked in as {what}.",
+  "journal.lookback.noticed.note": "Shown only when it held at least three times. It says what went together, never why.",
+  "journal.lookback.health.sleepSay": "{average} on an average night",
+  "journal.lookback.health.stepsSay": "{average} on an average day",
+  "journal.lookback.chips.more": "+{count}, show {count} more",
+  "journal.lookback.health.stepsSentence.week": "Steps this week. {average} on an average day, most on {day}.",
+  "journal.lookback.health.stepsSentence.month": "Steps this month. {average} on an average day.",
+  "journal.lookback.health.stepsSentence.year": "Steps by month this year. {average} on an average day.",
+  "journal.lookback.health.restingSentence.week": "Resting heart rate this week, between {low} and {high}.",
+  "journal.lookback.health.restingSentence.month": "Resting heart rate this month, between {low} and {high}.",
+  "journal.lookback.health.restingSentence.year": "Resting heart rate this year, between {low} and {high}."
 }

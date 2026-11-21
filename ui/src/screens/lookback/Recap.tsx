@@ -25,8 +25,10 @@ import { useEngine } from "../../engine/context";
 import { FeelingMark } from "../../journal/FeelingMark";
 import { usePlatform } from "../../platform/context";
 import { CheckinTable, MonthChart, WeekChart, YearChart } from "./Charts";
+import { HealthSection } from "./Health";
 import styles from "./Lookback.module.css";
 import { NameMark } from "./NameMark";
+import { NoticedLines } from "./Noticed";
 import { Chips, SpanText, useActiveReceipt } from "./Receipts";
 import {
   clock,
@@ -264,9 +266,33 @@ function compareLine(recap: Recap): string | null {
   return t(id, { count: c.count, difference, period });
 }
 
+/** "What tended to go together": the check-in lines, then what sleep, steps or workouts went with. */
+function TogetherBlock({ recap }: { recap: Recap }) {
+  const receipt = useActiveReceipt();
+  const noticed = recap.health?.noticed ?? [];
+  if (recap.together.length === 0 && noticed.length === 0) return null;
+  return (
+    <div className={styles.block}>
+      <h3 className={styles.label}>{t("journal.lookback.togetherHeading")}</h3>
+      {recap.together.map((item) => (
+        <div
+          key={`${item.with.entityId}-${item.part}-${item.word}`}
+          className={styles.togetherBlock}
+        >
+          <p className={styles.together}>{togetherLine(item)}</p>
+          <Chips receipts={item.receipts} receipt={receipt} withDay="weekday" />
+        </div>
+      ))}
+      <NoticedLines items={noticed} period={recap.period.kind as "week" | "month" | "year"} />
+      {noticed.length > 0 ? (
+        <p className={styles.meta}>{t("journal.lookback.noticed.note")}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function Felt({ recap }: { recap: Recap }) {
   const kind = recap.period.kind;
-  const receipt = useActiveReceipt();
   if (kind === "day") return null;
   const none = recap.checkins.length === 0;
   const top = recap.words.slice(0, 8);
@@ -278,7 +304,10 @@ function Felt({ recap }: { recap: Recap }) {
         {t("journal.recap.section.felt")}
       </h2>
       {none ? (
-        <p className={styles.prose}>{t(`journal.recap.noCheckins.${kind}`)}</p>
+        <>
+          <p className={styles.prose}>{t(`journal.recap.noCheckins.${kind}`)}</p>
+          <TogetherBlock recap={recap} />
+        </>
       ) : (
         <>
           {kind === "week" ? <WeekChart period={recap.period} checkins={recap.checkins} /> : null}
@@ -304,20 +333,7 @@ function Felt({ recap }: { recap: Recap }) {
               </div>
             </div>
             <div className={styles.block}>
-              {recap.together.length > 0 ? (
-                <>
-                  <h3 className={styles.label}>{t("journal.lookback.togetherHeading")}</h3>
-                  {recap.together.map((item) => (
-                    <div
-                      key={`${item.with.entityId}-${item.part}-${item.word}`}
-                      className={styles.togetherBlock}
-                    >
-                      <p className={styles.together}>{togetherLine(item)}</p>
-                      <Chips receipts={item.receipts} receipt={receipt} withDay="weekday" />
-                    </div>
-                  ))}
-                </>
-              ) : null}
+              <TogetherBlock recap={recap} />
               {compare ? <p className={styles.meta}>{compare}</p> : null}
             </div>
           </div>
@@ -521,6 +537,7 @@ export function RecapView({
       ) : null}
       <Highlights recap={recap} />
       <Felt recap={recap} />
+      <HealthSection recap={recap} />
       <Good recap={recap} />
       <PeopleAndNew recap={recap} />
 

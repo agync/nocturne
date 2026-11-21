@@ -175,6 +175,9 @@ export function useReflection(period: Period | null) {
       return engine.getReflection(period);
     },
     enabled: period !== null,
+    // From Health and what went together are worked out from what is kept now, which a sync, a
+    // removal in Health or the noticing switch changes without a word.
+    staleTime: 0,
   });
 }
 

@@ -1,5 +1,5 @@
-import { Fragment, type ReactNode, useCallback, useRef, useState } from "react";
-import { receiptPath } from "../../components/ReceiptChip/receiptPath";
+import { Fragment, type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { readingDay, receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { formatDayMonth, formatDuration } from "../../copy/format";
 import type { CopyId } from "../../copy/t";
 import { t, tParts } from "../../copy/t";
@@ -35,6 +35,13 @@ export function chipText(receipt: Receipt, withDay: DayStyle): string {
   if (receipt.kind === "audio") {
     const at = receipt.span?.type === "time" ? receipt.span.startMs : (receipt.durationMs ?? 0);
     return t("journal.lookback.chip.voice", { duration: formatDuration(at) });
+  }
+  if (receipt.kind === "reading") {
+    const day = readingDay(receipt.keptAt);
+    return t("journal.lookback.chip.day", {
+      day: withDay === "date" ? formatDayMonth(day) : weekdayDay(day),
+      kind: receipt.label,
+    });
   }
   const isEntry = /entry$/i.test(receipt.label);
   const kind = isEntry ? "entry" : t(`kind.${receipt.kind}.spoken` as CopyId);
@@ -115,11 +122,24 @@ export function Chips({
   receipts,
   receipt,
   withDay = false,
+  most,
 }: {
   receipts: readonly Receipt[];
   receipt: ActiveReceipt;
   withDay?: DayStyle;
+  /** Shows this many, then "+{count}" to show the rest. */
+  most?: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const firstHidden = useRef<string | null>(null);
+  // Once the rest is shown, focus moves to the first of it, so the button that was pressed is
+  // not left behind.
+  useEffect(() => {
+    if (open && firstHidden.current !== null) {
+      receipt.jump(firstHidden.current);
+      firstHidden.current = null;
+    }
+  }, [open, receipt]);
   const seen = new Set<string>();
   const unique = receipts.filter((r) => {
     const key = receiptKey(r);
@@ -128,9 +148,10 @@ export function Chips({
     return true;
   });
   if (unique.length === 0) return null;
+  const hidden = most !== undefined && !open ? Math.max(0, unique.length - most) : 0;
   return (
     <ul className={styles.chipRow} aria-label={t("journal.lookback.chips")}>
-      {unique.map((r) => {
+      {(hidden > 0 ? unique.slice(0, most) : unique).map((r) => {
         const key = receiptKey(r);
         return (
           <li key={key}>
@@ -150,6 +171,22 @@ export function Chips({
           </li>
         );
       })}
+      {hidden > 0 ? (
+        <li>
+          <button
+            type="button"
+            className={styles.receiptChip}
+            aria-label={t("journal.lookback.chips.more", { count: hidden })}
+            onClick={() => {
+              const next = unique[most ?? 0];
+              firstHidden.current = next ? receiptKey(next) : null;
+              setOpen(true);
+            }}
+          >
+            {`+${hidden}`}
+          </button>
+        </li>
+      ) : null}
     </ul>
   );
 }
