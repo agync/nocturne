@@ -57,14 +57,17 @@ pub enum AnsweredBy {
     Online { host: String },
 }
 
-/// What was kept back from an online question.
+/// What was kept back from an online question. Only `Private` is written now: what the person
+/// marked private, or a memory being forgotten or let go.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub enum LeftOut {
     Private,
-    /// Health, money or identity details the person has not allowed to be sent.
+    /// Written by earlier versions, which kept back health, money or ID details; read, never
+    /// written.
     Sensitive,
+    /// Written by earlier versions: private things and such details; read, never written.
     Both,
 }
 

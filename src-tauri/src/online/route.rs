@@ -39,7 +39,6 @@ pub enum RouteChoice {
     Online {
         mind: Arc<OnlineMind>,
         host: String,
-        send_sensitive: bool,
         /// Counted against the month's limit until dropped.
         reservation: super::controller::Reservation,
     },

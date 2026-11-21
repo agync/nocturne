@@ -90,7 +90,7 @@ impl Lab {
             .collect()
     }
 
-    fn turn_on(&self, phones: bool, send_sensitive: bool, questions: u32) {
+    fn turn_on(&self, phones: bool, questions: u32) {
         let out = self.h.ok(
             "check_online",
             json!({"form": {"baseUrl": "https://api.example.com/v1", "key": KEY,
@@ -99,7 +99,7 @@ impl Lab {
         assert_eq!(out["type"], "works", "{out}");
         let view = self.h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": phones, "sendSensitive": send_sensitive,
+            json!({"settings": {"phones": phones, "sendSensitive": false,
                                 "limit": {"kind": "questions", "questions": questions, "usd": null}}}),
         );
         assert_eq!(view["state"]["type"], "on", "{view}");
@@ -131,8 +131,8 @@ fn dentist(l: &Lab) -> String {
     .1
 }
 
-/// A memory the store suggests keeping private: a medicine.
-fn sensitive(l: &Lab, note: &str, sentence: &str) -> String {
+/// A memory about a medicine, which earlier versions kept here as a health detail.
+fn medicine(l: &Lab, note: &str, sentence: &str) -> String {
     let c = nocturne_engine::Candidate::new(
         "Dentist",
         nocturne_engine::Predicate::Takes,
@@ -140,9 +140,7 @@ fn sensitive(l: &Lab, note: &str, sentence: &str) -> String {
         sentence,
         0.9,
     );
-    let id = l.h.learn_candidate(note, c).1.remove(0);
-    assert!(l.h.memory(&id).suggest_private);
-    id
+    l.h.learn_candidate(note, c).1.remove(0)
 }
 
 fn last(d: &[AskDelta]) -> &AskDelta {
@@ -183,7 +181,7 @@ fn off_never_builds_an_online_request() {
 fn an_online_answer_streams_whole_and_cites_what_was_sent() {
     let l = lab();
     let mem = dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"reply": "The dentist is on **Thursday** [m1]."}));
     let d = l.ask("When is the dentist?", None);
     assert_eq!(
@@ -217,7 +215,7 @@ fn an_online_answer_streams_whole_and_cites_what_was_sent() {
 fn a_help_answer_is_always_written_on_this_computer() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.h.state().help.set_writes(Some(true));
     let sent = |l: &Lab| {
         l.h.ok("list_online_sends", json!({"limit": 50, "before": null}))
@@ -261,7 +259,7 @@ fn a_help_answer_is_always_written_on_this_computer() {
 fn asking_for_the_guides_answer_stays_on_this_computer() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let asked = l.questions().len();
     let seen = l.h.ask_deltas();
     let id =
@@ -286,7 +284,7 @@ fn asking_for_the_guides_answer_stays_on_this_computer() {
 fn this_computer_override_once() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let d = l.ask("When is the dentist?", Some("thisComputer"));
     assert_eq!(last(&d).answered_by, here(LocalReason::Chosen));
     assert!(l.questions().is_empty());
@@ -333,7 +331,7 @@ fn phone_ask(l: &Lab, question: &str) -> Vec<AskDelta> {
 fn phones_follow_the_setting() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let d = phone_ask(&l, "When is the dentist?");
     assert_eq!(last(&d).answered_by, online(), "the phone carries the mark");
     assert_eq!(l.questions().len(), 1);
@@ -347,8 +345,10 @@ fn phones_follow_the_setting() {
     assert_eq!(l.questions().len(), 1, "a phone question stays here");
 }
 
+/// Only what is marked private stays here: a medicine, a bank detail and a passport number go
+/// with the question like any other line, and the notes they were read from never do.
 #[test]
-fn private_and_sensitive_never_in_payload() {
+fn only_private_is_kept_out_of_the_payload() {
     let l = lab();
     let e = l.h.engine();
     let open = dentist(&l);
@@ -359,101 +359,63 @@ fn private_and_sensitive_never_in_payload() {
         "4411",
     );
     e.set_private(&private, true).unwrap();
-    let health = sensitive(&l, "health note", "The dentist said HEALTHMARK take pills.");
-    l.turn_on(true, false, 200);
-    let d = l.ask("What about the dentist?", None);
-    let recorded = serde_json::to_string(&l.chats()).unwrap();
-    for marker in [
-        "PRIVMARK",
-        "HEALTHMARK",
-        "NOTEMARK",
-        "PRIVNOTE",
-        &private,
-        &health,
-        &open,
-    ] {
-        assert!(!recorded.contains(marker), "{marker} left the computer");
-    }
-    assert!(recorded.contains("The dentist is on Thursday."));
-    assert_eq!(last(&d).left_out, Some(LeftOut::Both));
-}
-
-/// A bank detail and a passport number found in what was kept stay here with the switch off,
-/// though neither was suggested private when it was kept.
-#[test]
-fn bank_and_passport_details_stay_here() {
-    let l = lab();
-    dentist(&l);
-    let (_, bank) = l.h.learn(
+    medicine(&l, "HEALTHNOTE", "The dentist said HEALTHMARK take pills.");
+    l.h.learn(
         "BANKNOTE the dentist bill",
         "The dentist is paid from GB82 WEST 1234 5698 7654 32 BANKMARK.",
         "Dentist",
         "GB82 WEST 1234 5698 7654 32",
     );
-    let (_, passport) = l.h.learn(
+    l.h.learn(
         "PASSNOTE the dentist form",
         "The dentist form needs passport AB1234567 PASSMARK.",
         "Dentist",
         "AB1234567",
     );
-    assert!(!l.h.memory(&bank).suggest_private);
-    assert!(!l.h.memory(&passport).suggest_private);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let d = l.ask("What about the dentist?", None);
     let recorded = serde_json::to_string(&l.chats()).unwrap();
     for marker in [
-        "BANKMARK",
-        "PASSMARK",
-        "GB82",
-        "AB1234567",
+        "PRIVMARK",
+        "NOTEMARK",
+        "PRIVNOTE",
+        "HEALTHNOTE",
         "BANKNOTE",
         "PASSNOTE",
+        &private,
+        &open,
     ] {
         assert!(!recorded.contains(marker), "{marker} left the computer");
     }
-    assert!(recorded.contains("The dentist is on Thursday."));
-    assert_eq!(last(&d).left_out, Some(LeftOut::Sensitive));
+    for marker in [
+        "The dentist is on Thursday.",
+        "HEALTHMARK",
+        "BANKMARK",
+        "PASSMARK",
+    ] {
+        assert!(recorded.contains(marker), "{marker} was kept back");
+    }
+    assert_eq!(last(&d).left_out, Some(LeftOut::Private));
     assert_eq!(last(&d).answered_by, online());
 }
 
 #[test]
-fn left_out_flag_private_sensitive_both() {
-    for (private, sensitive, want) in [
-        (true, false, Some(LeftOut::Private)),
-        (false, true, Some(LeftOut::Sensitive)),
-        (true, true, Some(LeftOut::Both)),
-        (false, false, None),
-    ] {
+fn left_out_says_private_or_nothing() {
+    for private in [true, false] {
         let l = lab();
         dentist(&l);
-        let e = l.h.engine();
+        medicine(&l, "s", "The dentist gave pills.");
         if private {
             let (_, p) =
                 l.h.learn("p", "The dentist bill is high.", "Dentist", "bill");
-            e.set_private(&p, true).unwrap();
+            l.h.engine().set_private(&p, true).unwrap();
         }
-        if sensitive {
-            self::sensitive(&l, "s", "The dentist gave pills.");
-        }
-        l.turn_on(true, false, 200);
+        l.turn_on(true, 200);
         let d = l.ask("What about the dentist?", None);
-        assert_eq!(last(&d).left_out, want, "{private} {sensitive}");
+        let want = private.then_some(LeftOut::Private);
+        assert_eq!(last(&d).left_out, want, "{private}");
         assert_eq!(last(&d).answered_by, online());
     }
-}
-
-#[test]
-fn sensitive_goes_with_the_switch_on() {
-    let l = lab();
-    sensitive(&l, "s", "The dentist gave SENSMARK pills.");
-    l.turn_on(true, true, 200);
-    let d = l.ask("What did the dentist give?", None);
-    assert_eq!(last(&d).left_out, None);
-    assert!(
-        serde_json::to_string(&l.questions())
-            .unwrap()
-            .contains("SENSMARK")
-    );
 }
 
 #[test]
@@ -461,7 +423,7 @@ fn nothing_sendable_answers_here() {
     let l = lab();
     let (_, p) = l.h.learn("p", "The safe code is 9911.", "Safe", "9911");
     l.h.engine().set_private(&p, true).unwrap();
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let d = l.ask("What is the safe code?", None);
     assert_eq!(last(&d).answered_by, here(LocalReason::KeptHere));
     assert_eq!(
@@ -497,7 +459,7 @@ fn nothing_sendable_answers_here() {
 fn falls_back(script: Value, want: LocalReason) {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(script.clone());
     let d = l.ask("When is the dentist?", None);
     assert_eq!(last(&d).phase, AskPhase::Done, "{script}");
@@ -531,7 +493,7 @@ fn every_fallback_row() {
 fn waiting_after_six_seconds_then_the_online_answer() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"delay_ms": 7000}));
     let d = l.ask("When is the dentist?", None);
     let p = phases(&d);
@@ -543,7 +505,7 @@ fn waiting_after_six_seconds_then_the_online_answer() {
 fn switched_to_this_computer_after_twenty_seconds() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"delay_ms": 25000}));
     let d = l.ask("When is the dentist?", None);
     let p = phases(&d);
@@ -557,7 +519,7 @@ fn switched_to_this_computer_after_twenty_seconds() {
 fn limit_reached_answers_here() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 1);
+    l.turn_on(true, 1);
     assert_eq!(
         l.ask("When is the dentist?", None)
             .last()
@@ -583,7 +545,7 @@ fn not_sure_never_resends() {
         "Dentist",
         "Thursday",
     );
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"reply": "NOT_SURE"}));
     let d = l.ask("When is the dentist?", None);
     assert_eq!(last(&d).phase, AskPhase::NotSure);
@@ -601,7 +563,7 @@ fn local_failure_never_goes_online() {
     let mind = TestMind::new(AnswerMode::NotSure);
     let l = lab_with(mind.clone());
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     // Online fails, this computer is not sure: nothing goes online again.
     l.script(json!({"status": 500}));
     let d = l.ask("When is the dentist?", None);
@@ -619,7 +581,7 @@ fn local_failure_never_goes_online() {
 fn turn_off_mid_answer_switches() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"delay_ms": 15000}));
     let seen = l.h.ask_deltas();
     let id =
@@ -652,7 +614,7 @@ fn turn_off_mid_answer_switches() {
 fn answered_by_on_every_terminal_delta() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     // Done online, not sure online, done here, nothing found.
     let d = l.ask("When is the dentist?", None);
     assert!(last(&d).answered_by.is_some());
@@ -684,7 +646,7 @@ fn answered_by_on_every_terminal_delta() {
 fn at_most_one_request_per_question() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     for (i, script) in [
         json!({"status": null, "reply": "NOT_SURE"}),
         json!({"reply": "No receipt."}),
@@ -705,7 +667,7 @@ fn at_most_one_request_per_question() {
 #[test]
 fn only_ask_reaches_the_route() {
     let l = lab();
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let before = l.chats().len();
     l.h.ok(
         "keep_text",
@@ -728,7 +690,7 @@ fn only_ask_reaches_the_route() {
 fn download_window_answers_here() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.port
         .downloading
         .store(true, std::sync::atomic::Ordering::SeqCst);
@@ -744,7 +706,7 @@ fn download_window_answers_here() {
 fn a_route_the_engine_did_not_take_sends_nothing() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let before = l.chats().len();
     l.port.set_route_taken(Some(false));
     let d = l.ask("When is the dentist?", None);
@@ -769,7 +731,7 @@ fn a_route_the_engine_did_not_take_sends_nothing() {
 fn a_question_while_the_engine_starts_is_answered_here_quietly() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let before = l.chats().len();
     l.port
         .starting
@@ -794,7 +756,7 @@ fn a_question_while_the_engine_starts_is_answered_here_quietly() {
 fn a_check_after_the_engine_lost_its_route_relaunches_it() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.port.set_route_taken(Some(false));
     let calls = l.port.calls();
     let out = l.h.ok(
@@ -817,7 +779,7 @@ fn a_check_after_the_engine_lost_its_route_relaunches_it() {
 fn a_refused_key_request_keeps_the_gate_closed() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let calls = l.port.calls();
     l.port
         .refuse
@@ -853,7 +815,7 @@ fn a_refused_key_request_keeps_the_gate_closed() {
 fn turn_off_between_choice_and_send_sends_nothing() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let before = l.chats().len();
     let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
     let hold = Arc::new(nocturne_app_lib::online::controller::SendHold::default());
@@ -998,7 +960,7 @@ fn the_sent_log_says_whether_the_provider_was_reached() {
     ] {
         let l = lab();
         dentist(&l);
-        l.turn_on(true, false, 200);
+        l.turn_on(true, 200);
         l.script(script.clone());
         l.ask("When is the dentist?", None);
         let sends =
@@ -1012,7 +974,7 @@ fn the_sent_log_says_whether_the_provider_was_reached() {
 fn a_question_cut_off_by_a_turn_off_is_logged_unreached() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"delay_ms": 15000}));
     let seen = l.h.ask_deltas();
     let id =
@@ -1044,7 +1006,7 @@ fn a_question_cut_off_by_a_turn_off_is_logged_unreached() {
 fn questions_at_once_cannot_pass_the_limit_together() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 1);
+    l.turn_on(true, 1);
     l.script(json!({"delay_ms": 1500}));
     let seen = l.h.ask_deltas();
     let desk =
@@ -1078,7 +1040,7 @@ fn left_out_is_not_said_of_an_answer_written_here() {
     let (_, p) =
         l.h.learn("p", "The dentist bill is high.", "Dentist", "bill");
     l.h.engine().set_private(&p, true).unwrap();
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     l.script(json!({"status": 500}));
     let d = l.ask("What about the dentist?", None);
     assert_eq!(last(&d).answered_by, here(LocalReason::CouldntReach));
@@ -1091,7 +1053,7 @@ fn left_out_is_not_said_of_an_answer_written_here() {
 fn a_404_while_a_download_opens_is_not_a_missing_model() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     let hub = nocturne_app_lib::online::hub(l.h.app.handle()).unwrap();
     let hold = Arc::new(nocturne_app_lib::online::controller::SendHold::default());
     hub.hold_sends(Some(hold.clone()));
@@ -1125,29 +1087,34 @@ fn a_404_while_a_download_opens_is_not_a_missing_model() {
 }
 
 /// Someone who turned Online answers on before only what is marked private was held back sees
-/// the notice first: until then nothing goes online, from the window or a phone.
+/// the notice first: until then nothing goes online, from the window or a phone, not even a line
+/// earlier versions kept here. Once seen, that line may go.
 #[test]
 fn an_install_that_agreed_before_sends_nothing_until_the_notice_is_seen() {
     let l = lab_agreed_before(Arc::new(FakeMind::new()));
-    dentist(&l);
+    medicine(&l, "HEALTHNOTE", "The dentist said HEALTHMARK take pills.");
     assert_eq!(
         l.h.ok("get_online", json!({}))["changeNotice"],
         false,
         "off: nothing to tell"
     );
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     assert_eq!(l.h.ok("get_online", json!({}))["changeNotice"], true);
-    let d = l.ask("When is the dentist?", None);
+    let d = l.ask("What about the dentist?", None);
     assert_eq!(last(&d).answered_by, here(LocalReason::Changed));
     assert!(!phases(&d).contains(&AskPhase::AskingOnline));
-    phone_ask(&l, "When is the dentist?");
+    phone_ask(&l, "What about the dentist?");
     assert!(l.questions().is_empty(), "nothing went online");
+    let before = serde_json::to_string(&l.chats()).unwrap();
+    assert!(!before.contains("HEALTHMARK"), "the line stayed here");
 
     let view = l.h.ok("see_online_change", json!({}));
     assert_eq!(view["changeNotice"], false);
-    let d = l.ask("When is the dentist?", None);
+    let d = l.ask("What about the dentist?", None);
     assert_eq!(last(&d).answered_by, online());
     assert_eq!(l.questions().len(), 1);
+    let recorded = serde_json::to_string(&l.chats()).unwrap();
+    assert!(recorded.contains("HEALTHMARK"), "the line goes once seen");
 }
 
 /// A setup through the consent step has seen the new words: no notice, and questions go.
@@ -1155,7 +1122,7 @@ fn an_install_that_agreed_before_sends_nothing_until_the_notice_is_seen() {
 fn a_new_setup_has_no_notice() {
     let l = lab();
     dentist(&l);
-    l.turn_on(true, false, 200);
+    l.turn_on(true, 200);
     assert_eq!(l.h.ok("get_online", json!({}))["changeNotice"], false);
     let d = l.ask("When is the dentist?", None);
     assert_eq!(last(&d).answered_by, online());

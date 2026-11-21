@@ -16,8 +16,8 @@
 //! seconds, and `switchingToComputer` when the provider fails, takes twenty seconds or Online
 //! answers is turned off. Falling back to this computer is automatic and marked on the
 //! terminal delta; nothing here ever goes online after something failed on this computer. A
-//! provider that is not sure, when something private or sensitive or a line of an original was
-//! kept back from it, also hands the question to this computer, which has what was kept back
+//! provider that is not sure, when something private or a line of an original was kept back
+//! from it, also hands the question to this computer, which has what was kept back
 //! (`notSureOnline`, still linked to what was sent).
 //!
 //! The windows' questions are also matched against the Nocturne guide (`crate::help`). A
@@ -610,7 +610,6 @@ async fn answer<R: Runtime>(
             RouteChoice::Online {
                 mind: online,
                 host,
-                send_sensitive,
                 reservation,
             },
             Some(hub),
@@ -628,17 +627,7 @@ async fn answer<R: Runtime>(
                 facts: &facts,
                 pairs: &pairs,
             };
-            match ask_online(
-                sink,
-                hub,
-                &online,
-                &host,
-                send_sensitive,
-                &asked,
-                turned_off,
-            )
-            .await
-            {
+            match ask_online(sink, hub, &online, &host, &asked, turned_off).await {
                 Online::Answered => return,
                 Online::Here(reason) => Some(reason),
             }
@@ -742,7 +731,6 @@ async fn ask_online<R: Runtime>(
     hub: &OnlineHub<R>,
     mind: &OnlineMind,
     host: &str,
-    send_sensitive: bool,
     asked: &Asked<'_>,
     mut turned_off: tokio::sync::watch::Receiver<u64>,
 ) -> Online {
@@ -756,7 +744,7 @@ async fn ask_online<R: Runtime>(
         .collect();
     let ids: Vec<String> = facts.iter().map(|f| f.memory.id.clone()).collect();
     let e = asked.engine.clone();
-    let verdicts = match blocking(move || e.online_verdicts(&ids, send_sensitive)).await {
+    let verdicts = match blocking(move || e.online_verdicts(&ids)).await {
         Ok(v) => v,
         Err(err) => {
             tracing::warn!("could not check what may go online: {:?}", err.code);
@@ -765,7 +753,7 @@ async fn ask_online<R: Runtime>(
             return Online::Here(LocalReason::Problem);
         }
     };
-    let (mut private, mut sensitive) = (false, false);
+    let mut private = false;
     let mut sendable: Vec<Fact> = Vec::new();
     for (fact, verdict) in facts.iter().zip(&verdicts) {
         match verdict {
@@ -783,9 +771,7 @@ async fn ask_online<R: Runtime>(
                 }
                 sendable.push(fact);
             }
-            Some(LeftOut::Private) => private = true,
-            Some(LeftOut::Sensitive) => sensitive = true,
-            Some(LeftOut::Both) => (private, sensitive) = (true, true),
+            Some(_) => private = true,
         }
     }
     sendable.truncate(MAX_FACTS);
@@ -793,12 +779,7 @@ async fn ask_online<R: Runtime>(
     if prepared.as_ref().is_some_and(|p| p.dropped > 0) {
         private = true;
     }
-    let left_out = match (private, sensitive) {
-        (true, true) => Some(LeftOut::Both),
-        (true, false) => Some(LeftOut::Private),
-        (false, true) => Some(LeftOut::Sensitive),
-        (false, false) => None,
-    };
+    let left_out = private.then_some(LeftOut::Private);
     let Some(prepared) = prepared else {
         hub.record_not_sent(asked.question, host, LocalReason::KeptHere)
             .await;
@@ -905,8 +886,8 @@ async fn ask_online<R: Runtime>(
         SendResult::NotSure
     };
     let send_id = hub.record(outcome(receipt, result, None, true)).await;
-    // The provider was not sure without what was kept back (something private or sensitive, or
-    // lines of originals): this computer, which has it, answers instead, and the mark still
+    // The provider was not sure without what was kept back (something private, or lines of
+    // originals): this computer, which has it, answers instead, and the mark still
     // leads to what was sent.
     if !stands && (left_out.is_some() || lines_held) {
         sink.mark(|m| m.send_id = send_id.map(|id| id as f64));
@@ -923,10 +904,7 @@ async fn ask_online<R: Runtime>(
     if stands && let Some((extra, ids)) = settle(asked.pairs, &meta, &said, &known) {
         said.push_str(&extra);
         meta.cited.extend(ids);
-        left_out = Some(match left_out {
-            Some(LeftOut::Sensitive | LeftOut::Both) => LeftOut::Both,
-            _ => LeftOut::Private,
-        });
+        left_out = Some(LeftOut::Private);
     }
     sink.mark(|m| {
         m.answered_by = Some(AnsweredBy::Online {

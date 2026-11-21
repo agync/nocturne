@@ -1055,17 +1055,15 @@ impl<R: Runtime> OnlineHub<R> {
         let Some(client) = self.port.client().await else {
             return RouteChoice::Computer(LocalReason::Problem);
         };
-        let allow = row.send_sensitive;
         let check_engine = engine.clone();
         let sendable = Arc::new(move |ids: &[String]| {
             check_engine
-                .sendable(ids, allow)
+                .sendable(ids)
                 .unwrap_or_else(|_| vec![false; ids.len()])
         });
         RouteChoice::Online {
             mind: Arc::new(OnlineMind::new(client, sendable)),
             host: host_of(route.base_url()),
-            send_sensitive: allow,
             reservation,
         }
     }
