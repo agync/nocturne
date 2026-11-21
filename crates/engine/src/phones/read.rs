@@ -245,23 +245,24 @@ fn chart_value(v: &ReadingValue) -> f64 {
 }
 
 /// One value per day: the longest night, the most steps (two phones may count the same walk),
-/// the minutes of every workout together, otherwise the average. The receipt is the day's
-/// latest reading.
-fn per_day(kind: ReadingKind, readings: &[Stored]) -> Vec<SeriesPoint> {
+/// the minutes of every workout together, otherwise the average. The receipt is the reading the
+/// value came from (the longest night, the most steps), else the day's latest.
+pub(crate) fn per_day(kind: ReadingKind, readings: &[Stored]) -> Vec<SeriesPoint> {
     let mut days: BTreeMap<&str, Vec<&Stored>> = BTreeMap::new();
     for r in readings.iter().filter(|r| !r.removed) {
         days.entry(r.day.as_str()).or_default().push(r);
     }
     let mut out = Vec::new();
     for (day, rs) in days {
-        let values: Vec<f64> = rs
+        let valued: Vec<(&Stored, f64)> = rs
             .iter()
-            .map(|r| chart_value(&r.value))
-            .filter(|v| v.is_finite())
+            .map(|r| (*r, chart_value(&r.value)))
+            .filter(|(_, v)| v.is_finite())
             .collect();
-        if values.is_empty() {
+        if valued.is_empty() {
             continue;
         }
+        let values: Vec<f64> = valued.iter().map(|(_, v)| *v).collect();
         let value = match kind {
             ReadingKind::Sleep | ReadingKind::Steps => {
                 values.iter().copied().fold(f64::MIN, f64::max)
@@ -269,14 +270,21 @@ fn per_day(kind: ReadingKind, readings: &[Stored]) -> Vec<SeriesPoint> {
             ReadingKind::Workout => values.iter().sum(),
             _ => values.iter().sum::<f64>() / values.len() as f64,
         };
-        let latest = rs
-            .iter()
-            .max_by(|a, b| a.start.cmp(&b.start))
-            .expect("not empty");
+        let chosen = match kind {
+            ReadingKind::Sleep | ReadingKind::Steps => valued
+                .iter()
+                .max_by(|a, b| a.1.total_cmp(&b.1).then(a.0.start.cmp(&b.0.start)))
+                .map(|(r, _)| *r),
+            _ => valued
+                .iter()
+                .map(|(r, _)| *r)
+                .max_by(|a, b| a.start.cmp(&b.start)),
+        }
+        .expect("not empty");
         out.push(SeriesPoint {
             day: day.to_string(),
             value,
-            item_id: latest.item_id.clone(),
+            item_id: chosen.item_id.clone(),
         });
     }
     out

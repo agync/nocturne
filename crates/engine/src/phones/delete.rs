@@ -129,6 +129,14 @@ impl Engine {
             }
             Ok(n)
         })?;
+        let originals = self.originals_dir();
+        let noticing = self.read(|conn| {
+            if scope.source != PhoneSource::Health {
+                return Ok(0);
+            }
+            let ctx = crate::journal::Ctx::load(conn, self.clock())?;
+            crate::journal::lookback::noticing_changed_by(conn, &ctx, &originals, &items)
+        })?;
         self.write(|tx| {
             tx.execute(
                 "UPDATE forget_tokens SET phone_scope = ?2 WHERE token = ?1",
@@ -143,8 +151,7 @@ impl Engine {
             memories: preview.memories.len() as u32,
             page_lines,
             recap_lines: preview.reflection_lines.unwrap_or(0),
-            // Noticing is worked out in recaps from what remains; nothing is stored for it yet.
-            noticing: 0,
+            noticing,
             shared_memories: said.shared.len() as u32,
         })
     }

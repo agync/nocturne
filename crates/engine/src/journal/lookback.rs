@@ -10,8 +10,9 @@ use jiff::tz::TimeZone;
 use nocturne_contract::{
     CheckIn, Compare, DayCount, DayReflection, Feeling, FeelingPart, Glance, GlanceKind, GoodThing,
     Highlight, ItemKind, JournalRole, KeptCount, MemoryView, Mention, MentionState, NameRef,
-    Period, PeriodKind, Recap, Receipt, ReflectionLine, ReflectionSummary, ReflectionView,
-    Together, Tried, WordCount, WrittenWhen,
+    Noticed, NoticedTopic, Period, PeriodKind, ReadingKind, ReadingRow, Recap, RecapHealth,
+    Receipt, ReflectionLine, ReflectionSummary, ReflectionView, Together, Tried, WordCount,
+    WrittenWhen,
 };
 use rusqlite::{Connection, params_from_iter};
 
@@ -24,6 +25,8 @@ use super::{Ctx, JItem, current, first_line, items_in_days, load_item};
 use crate::Engine;
 use crate::error::{Error, Result};
 use crate::mind::{ReflectInput, ReflectItem, WrittenSentence};
+use crate::phones::noticing::{self, Topic};
+use crate::phones::read::{health_series, per_day, readings_of};
 use crate::rows::{MEM_COLS, mem_row, mem_view};
 use crate::util::{fmt_ts, new_id, parse_ts};
 
@@ -149,13 +152,239 @@ fn day_reflection(
     Ok(r)
 }
 
-fn recap_view(conn: &Connection, row: &store::Row) -> Result<Recap> {
+fn recap_view(conn: &Connection, ctx: &Ctx, originals: &Path, row: &store::Row) -> Result<Recap> {
     let mut r: Recap = serde_json::from_str(&row.body)?;
     let left = left_out_ids(conn)?;
     store::retain_recap(&mut r, &|id| !left.contains(id));
     r.id = row.id.clone();
     r.lines_removed = row.lines_removed;
+    // What Health says is never stored: it is worked out from what is kept now.
+    r.health = from_health(conn, ctx, originals, None, &r.period);
     Ok(r)
+}
+
+/// "From Health" with what went together, none when nothing came in. `g` is what the period
+/// holds when the caller has it already; it is loaded only when a sentence can be made. A
+/// problem with Health leaves the recap without it, never without the recap.
+fn from_health(
+    conn: &Connection,
+    ctx: &Ctx,
+    originals: &Path,
+    g: Option<&Gathered>,
+    period: &Period,
+) -> Option<Box<RecapHealth>> {
+    let made = (|| -> Result<Option<Box<RecapHealth>>> {
+        let Some(mut health) = recap_health(conn, ctx, period)? else {
+            return Ok(None);
+        };
+        health.noticed = noticed_in(conn, ctx, originals, g, period, &HashSet::new())?;
+        Ok(Some(health))
+    })();
+    made.unwrap_or_else(|e| {
+        tracing::warn!("a recap's Health could not be worked out: {e}");
+        None
+    })
+}
+
+/// "From Health" for a week, month or year: the nights, steps, resting heart rate and
+/// workouts kept for it, none when nothing came in.
+fn recap_health(conn: &Connection, ctx: &Ctx, period: &Period) -> Result<Option<Box<RecapHealth>>> {
+    let (from, to) = period_days(period)?;
+    let (f, t) = (from.to_string(), to.to_string());
+    let series = |kind| -> Result<Option<_>> {
+        let s = health_series(conn, &ctx.tz, kind, from, to)?;
+        Ok((!s.points.is_empty()).then_some(s))
+    };
+    let sleep = series(ReadingKind::Sleep)?;
+    let steps = series(ReadingKind::Steps)?;
+    let resting = series(ReadingKind::RestingHeartRate)?;
+    let nights: Vec<ReadingRow> = if period.kind == PeriodKind::Year {
+        Vec::new()
+    } else {
+        // One reading for each night: the one its day's value came from.
+        let stored = readings_of(conn, ReadingKind::Sleep, &f, &t, false)?;
+        let chosen: HashSet<String> = per_day(ReadingKind::Sleep, &stored)
+            .into_iter()
+            .map(|p| p.item_id)
+            .collect();
+        stored
+            .into_iter()
+            .filter(|r| chosen.contains(&r.item_id))
+            .map(|r| ReadingRow {
+                item_id: r.item_id,
+                day: r.day,
+                start: r.start,
+                end: r.end,
+                value: r.value,
+                source_device: r.source_device,
+                phone: r.phone,
+                removed: r.removed,
+                device_id: r.device_id,
+            })
+            .collect()
+    };
+    let workouts: Vec<Receipt> = readings_of(conn, ReadingKind::Workout, &f, &t, false)?
+        .iter()
+        .filter_map(|w| noticing::workout_receipt(w, &ctx.tz))
+        .collect();
+    if sleep.is_none() && steps.is_none() && resting.is_none() && workouts.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(Box::new(RecapHealth {
+        nights,
+        sleep,
+        steps,
+        resting,
+        workouts,
+        noticed: Vec::new(),
+    })))
+}
+
+/// What the journal says on each day: people, places and things, check-ins by part of the
+/// field, and good things, each with the items that said it.
+fn journal_topics(g: &Gathered, ctx: &Ctx, names: Vec<(NameRef, SaidOn)>) -> Result<Vec<Topic>> {
+    let mut topics: Vec<Topic> = names
+        .into_iter()
+        .map(|(with, days)| Topic {
+            kind: NoticedTopic::Name { with },
+            days,
+        })
+        .collect();
+    let mut felt: Vec<SaidOn> = vec![BTreeMap::new(); PARTS.len()];
+    for item in g.checkins() {
+        if let Some(f) = item.feeling() {
+            felt[part_index(f.part)]
+                .entry(item.day(ctx)?)
+                .or_default()
+                .push(item.receipt());
+        }
+    }
+    for (days, part) in felt.into_iter().zip(PARTS) {
+        topics.push(Topic {
+            kind: NoticedTopic::Felt { part },
+            days,
+        });
+    }
+    let mut good: SaidOn = BTreeMap::new();
+    for item in g.usable().filter(|i| i.role() == Some(JournalRole::Good)) {
+        good.entry(item.day(ctx)?).or_default().push(item.receipt());
+    }
+    topics.push(Topic {
+        kind: NoticedTopic::Good,
+        days: good,
+    });
+    Ok(topics)
+}
+
+/// The sentences about what went together in the period, none while the switch is off or
+/// nothing of Health's came in. A period still going leaves out today, which is not over.
+/// Leaves out the readings in `excluded`, for working out what deleting them would change.
+fn noticed_in(
+    conn: &Connection,
+    ctx: &Ctx,
+    originals: &Path,
+    g: Option<&Gathered>,
+    period: &Period,
+    excluded: &HashSet<String>,
+) -> Result<Vec<Noticed>> {
+    if period.kind == PeriodKind::Day || !noticing::is_on(conn)? {
+        return Ok(Vec::new());
+    }
+    let (from, end) = period_days(period)?;
+    let to = if ctx.ended(end)? {
+        end
+    } else {
+        ctx.today()?.yesterday()?.min(end)
+    };
+    if to < from {
+        return Ok(Vec::new());
+    }
+    let body = noticing::body_of(conn, &ctx.tz, from, to, excluded)?;
+    if body.is_empty() {
+        return Ok(Vec::new());
+    }
+    let loaded;
+    let g = match g {
+        Some(g) => g,
+        None => {
+            loaded = Gathered::load(conn, ctx, originals, period)?;
+            &loaded
+        }
+    };
+    let mut topics = journal_topics(g, ctx, names_by_day(g, ctx)?)?;
+    for topic in &mut topics {
+        topic.days.retain(|d, _| *d >= from && *d <= to);
+    }
+    Ok(noticing::notice(&topics, &body))
+}
+
+/// How many sentences in saved recaps would be worked out again, or taken out, if `items`
+/// were deleted.
+pub(crate) fn noticing_changed_by(
+    conn: &Connection,
+    ctx: &Ctx,
+    originals: &Path,
+    items: &[String],
+) -> Result<u32> {
+    if !noticing::is_on(conn)? {
+        return Ok(0);
+    }
+    let gone: HashSet<String> = items.iter().cloned().collect();
+    // Only a period that spans a day of the deleted readings can change.
+    let ids = serde_json::to_string(items)?;
+    let (first, last): (Option<String>, Option<String>) = conn.query_row(
+        "SELECT MIN(json_extract(metadata, '$.day')), MAX(json_extract(metadata, '$.day')) \
+         FROM items WHERE id IN (SELECT value FROM json_each(?1))",
+        [ids],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let (Some(first), Some(last)) = (first, last) else {
+        return Ok(0);
+    };
+    let mut stmt = conn.prepare(
+        "SELECT kind, start, end FROM reflections WHERE kind != 'day' AND start <= ?2 AND end >= ?1",
+    )?;
+    let periods: Vec<Period> = stmt
+        .query_map([&first, &last], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|(kind, start, end)| {
+            Some(Period {
+                kind: crate::util::parse_enum(&kind).ok()?,
+                start,
+                end,
+            })
+        })
+        .collect();
+    let mut changed = 0;
+    for period in periods {
+        let before = noticed_in(conn, ctx, originals, None, &period, &HashSet::new())?;
+        if before.is_empty() {
+            continue;
+        }
+        let after = noticed_in(conn, ctx, originals, None, &period, &gone)?;
+        // What a sentence says does not depend on how many other days it was set against.
+        let same = |a: &Noticed, b: &Noticed| {
+            Noticed {
+                other_days: 0,
+                ..a.clone()
+            } == Noticed {
+                other_days: 0,
+                ..b.clone()
+            }
+        };
+        changed += before
+            .iter()
+            .filter(|b| !after.iter().any(|a| same(a, b)))
+            .count() as u32;
+    }
+    Ok(changed)
 }
 
 fn glance_kind(item: &JItem) -> GlanceKind {
@@ -566,12 +795,59 @@ fn highlights(
     Ok(out.into_iter().map(|c| c.1).collect())
 }
 
+/// The items that said something on each day.
+type SaidOn = BTreeMap<Date, Vec<Receipt>>;
+
+/// Each person, place or thing the period's entries name, with the days it was named on and
+/// the items that named it each day.
+fn names_by_day(g: &Gathered, ctx: &Ctx) -> Result<Vec<(NameRef, SaidOn)>> {
+    let mut with: Vec<(NameRef, SaidOn)> = Vec::new();
+    for item in g.usable().filter(|i| !is_background(i)) {
+        let day = item.day(ctx)?;
+        for m in g.mentions.get(item.id()).into_iter().flatten() {
+            if m.state == MentionState::Removed {
+                continue;
+            }
+            let at = match with.iter().position(|(n, _)| n.entity_id == m.entity_id) {
+                Some(i) => {
+                    let (n, _) = &mut with[i];
+                    n.new |= m.new;
+                    if !n.item_ids.contains(&m.item_id) {
+                        n.item_ids.push(m.item_id.clone());
+                    }
+                    i
+                }
+                None => {
+                    with.push((
+                        NameRef {
+                            entity_id: m.entity_id.clone(),
+                            name: m.name.clone(),
+                            kind: m.kind,
+                            role: m.role.clone(),
+                            new: m.new,
+                            item_ids: vec![m.item_id.clone()],
+                        },
+                        BTreeMap::new(),
+                    ));
+                    with.len() - 1
+                }
+            };
+            let receipts = with[at].1.entry(day).or_default();
+            if !receipts.iter().any(|r| r.item_id == item.id()) {
+                receipts.push(item.receipt());
+            }
+        }
+    }
+    Ok(with)
+}
+
 fn compose(
     conn: &Connection,
     ctx: &Ctx,
     originals: &Path,
     period: &Period,
     written: WrittenWhen,
+    with_health: bool,
 ) -> Result<Recap> {
     if period.kind == PeriodKind::Day {
         return Err(Error::invalid("a day is reflected on, not recapped"));
@@ -610,35 +886,11 @@ fn compose(
     });
 
     // The days each thing was mentioned on, and what was felt on each day.
-    let mut with: Vec<(NameRef, BTreeSet<Date>)> = Vec::new();
-    for item in g.usable().filter(|i| !is_background(i)) {
-        let day = item.day(ctx)?;
-        for m in g.mentions.get(item.id()).into_iter().flatten() {
-            if m.state == MentionState::Removed {
-                continue;
-            }
-            match with.iter_mut().find(|(n, _)| n.entity_id == m.entity_id) {
-                Some((n, d)) => {
-                    n.new |= m.new;
-                    if !n.item_ids.contains(&m.item_id) {
-                        n.item_ids.push(m.item_id.clone());
-                    }
-                    d.insert(day);
-                }
-                None => with.push((
-                    NameRef {
-                        entity_id: m.entity_id.clone(),
-                        name: m.name.clone(),
-                        kind: m.kind,
-                        role: m.role.clone(),
-                        new: m.new,
-                        item_ids: vec![m.item_id.clone()],
-                    },
-                    BTreeSet::from([day]),
-                )),
-            }
-        }
-    }
+    let named = names_by_day(&g, ctx)?;
+    let with: Vec<(NameRef, BTreeSet<Date>)> = named
+        .iter()
+        .map(|(n, days)| (n.clone(), days.keys().copied().collect()))
+        .collect();
     let mut felt_on: HashMap<(Date, usize), &JItem> = HashMap::new();
     for item in &checkin_items {
         if let Some(f) = item.feeling() {
@@ -773,6 +1025,11 @@ fn compose(
     };
 
     let still_reading = g.usable().filter(|i| i.pending()).count() as u32;
+    let health = if with_health {
+        from_health(conn, ctx, originals, Some(&g), period)
+    } else {
+        None
+    };
 
     Ok(Recap {
         id: new_id("rcp"),
@@ -794,6 +1051,7 @@ fn compose(
         still_open,
         lines_removed: 0,
         still_reading: (still_reading > 0).then_some(still_reading),
+        health,
     })
 }
 
@@ -830,6 +1088,20 @@ impl Engine {
 
     /// Compose a week, month or year from what was kept, with no mind.
     pub fn compose_recap(&self, period: &Period, written: WrittenWhen) -> Result<Recap> {
+        self.compose_recap_with(period, written, true)
+    }
+
+    /// [`Engine::compose_recap`] for storing: without "From Health", which a recap never keeps.
+    pub fn compose_recap_to_keep(&self, period: &Period, written: WrittenWhen) -> Result<Recap> {
+        self.compose_recap_with(period, written, false)
+    }
+
+    fn compose_recap_with(
+        &self,
+        period: &Period,
+        written: WrittenWhen,
+        with_health: bool,
+    ) -> Result<Recap> {
         let originals = self.originals_dir();
         self.read(|conn| {
             compose(
@@ -838,6 +1110,7 @@ impl Engine {
                 &originals,
                 period,
                 written,
+                with_health,
             )
         })
     }
@@ -951,6 +1224,8 @@ impl Engine {
             }
             // What was deleted after the recap was composed is not brought back by saving it.
             let mut recap = recap.clone();
+            // Health is worked out again whenever the recap is opened, so none is kept.
+            recap.health = None;
             let mut live = HashSet::new();
             for id in store::item_ids_in(&serde_json::to_value(&recap)?) {
                 let exists: bool = tx.query_row(
@@ -993,7 +1268,7 @@ impl Engine {
                 }
             } else {
                 ReflectionView::Recap {
-                    recap: recap_view(conn, &row)?,
+                    recap: recap_view(conn, &ctx, &originals, &row)?,
                 }
             }))
         })

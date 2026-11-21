@@ -7,7 +7,7 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::{EntityKind, ItemView, MemoryView, PageLine, Receipt};
+use crate::{EntityKind, HealthSeries, ItemView, MemoryView, PageLine, ReadingRow, Receipt};
 
 /// The four parts of the feelings field.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
@@ -535,6 +535,87 @@ pub struct Compare {
     pub previous_period: Period,
 }
 
+/// What a recap's "From Health" shows for the period: the nights, steps, resting heart rate
+/// and workouts that are kept and not removed. Worked out each time the recap is opened, so a
+/// reading removed or deleted is gone from it at once. Blood pressure and weight are never
+/// here; they have their own pages.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct RecapHealth {
+    /// One reading per night, for a week or a month; empty for a year.
+    pub nights: Vec<ReadingRow>,
+    /// Asleep minutes by day, with the person's usual night.
+    pub sleep: Option<HealthSeries>,
+    pub steps: Option<HealthSeries>,
+    pub resting: Option<HealthSeries>,
+    /// Each workout as a receipt: its label is the kind ("Walk") and its day is the day it was on.
+    pub workouts: Vec<Receipt>,
+    /// Sentences about what sleep, steps or workouts went with, none while "Notice what goes
+    /// together" is off.
+    #[serde(default)]
+    pub noticed: Vec<Noticed>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum NoticedMeasure {
+    /// The night that ended on the day: minutes asleep.
+    Sleep,
+    /// The day's steps.
+    Steps,
+    /// Days with at least one workout.
+    Workout,
+}
+
+/// The thing in the journal a noticing sentence is about.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(
+    tag = "type",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+#[ts(export)]
+pub enum NoticedTopic {
+    /// A person, place or thing written about.
+    Name { with: NameRef },
+    /// A check-in in this part of the field.
+    Felt { part: FeelingPart },
+    /// A good thing was written down.
+    Good,
+}
+
+/// "On the {days} nights before days you wrote about {name}, you slept {difference} less than
+/// on other nights." Shown only for sleep, steps or workouts, only with at least three days with
+/// the thing and three without a reading to set it against, a difference of at least 30 minutes
+/// of sleep, 2,000 steps or (for workouts) a share of days 25 percentage points larger, and the
+/// pattern holding on at least three of the days. Every night, day or workout counted is a
+/// receipt, with the journal items that named the thing. It says what went together, never why.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Noticed {
+    pub measure: NoticedMeasure,
+    pub topic: NoticedTopic,
+    /// Days the topic was written about in the period; for workouts, days with a workout.
+    pub days: u32,
+    /// Days among those with a reading on which the pattern held; for workouts, the workout
+    /// days checked in as `topic`.
+    pub held: u32,
+    /// Days set against them: those without the topic that have a reading; for workouts, days
+    /// known to have had no workout.
+    pub other_days: u32,
+    /// Minutes of sleep or number of steps, never zero; zero for workouts.
+    pub difference: u32,
+    /// More than on other days; false for less.
+    pub more: bool,
+    /// One for each day counted: the night, the day's steps or each workout.
+    pub body: Vec<Receipt>,
+    /// The journal items that named the topic on those days.
+    pub journal: Vec<Receipt>,
+}
+
 /// A week, month or year looked back on.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -567,6 +648,10 @@ pub struct Recap {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub still_reading: Option<u32>,
+    /// "From Health" and what went together: worked out when the recap is opened, never stored.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub health: Option<Box<RecapHealth>>,
 }
 
 /// What the journal shows for a day or a period that is looked back on.

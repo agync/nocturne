@@ -150,7 +150,7 @@ pub async fn write_recap(
 ) -> Result<Wrote, ReflectError> {
     let p = period.clone();
     let recap = on_engine(engine, move |e| {
-        let recap = e.compose_recap(&p, written)?;
+        let recap = e.compose_recap_to_keep(&p, written)?;
         if recap.days > 0 {
             e.save_recap_unless(&recap, &|| stop.load(Ordering::SeqCst))?;
         }

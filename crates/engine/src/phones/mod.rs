@@ -11,6 +11,7 @@
 pub(crate) mod calendar;
 pub(crate) mod delete;
 pub(crate) mod export;
+pub(crate) mod noticing;
 pub(crate) mod read;
 pub(crate) mod readings;
 pub mod usual;
