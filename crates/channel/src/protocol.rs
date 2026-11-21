@@ -127,10 +127,14 @@ pub const LIMIT_SYNCS: u32 = 12;
 pub const PAGES_BACK: u32 = 7;
 pub const EVENTS_KEPT_DAYS: u32 = 90;
 
-/// The build of the phone code in this tree.
-pub const PHONE_BUILD: u32 = 1;
-/// The oldest phone build the computer accepts.
+/// The newest phone build this tree speaks. Each build and the day it shipped are listed in
+/// `protocol-history.json`.
+pub const PHONE_BUILD: u32 = 2;
+/// The oldest phone build this tree still speaks, on either side. It rises only once the build
+/// after it has been out for six months.
 pub const MIN_PHONE_BUILD: u32 = 1;
+/// The first build in which a phone app introduces itself (`introduce`).
+pub const INTRODUCE_BUILD: u32 = 2;
 
 /// HTTP statuses between the listener and the phone.
 ///
@@ -322,6 +326,7 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         EVENTS_KEPT_DAYS,
         PHONE_BUILD,
         MIN_PHONE_BUILD,
+        INTRODUCE_BUILD,
         HTTP_OFF,
         HTTP_ENDED,
         HTTP_POLL_BUSY,
@@ -374,6 +379,103 @@ mod tests {
     #[test]
     fn the_oldest_accepted_build_is_not_newer_than_this_one() {
         const { assert!(MIN_PHONE_BUILD <= PHONE_BUILD) };
+        const { assert!(MIN_PHONE_BUILD <= INTRODUCE_BUILD && INTRODUCE_BUILD <= PHONE_BUILD) };
+    }
+
+    type Day = (i64, u32, u32);
+
+    /// Each build and the day it shipped; `None` for the build not shipped yet.
+    fn history() -> Vec<(u32, Option<Day>)> {
+        let v: serde_json::Value =
+            serde_json::from_str(include_str!("../protocol-history.json")).unwrap();
+        v["builds"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                let build = u32::try_from(b["build"].as_u64().unwrap()).unwrap();
+                let day = b["released"].as_str().map(|d| {
+                    let p: Vec<&str> = d.split('-').collect();
+                    assert_eq!(p.len(), 3, "{d} is YYYY-MM-DD");
+                    (
+                        p[0].parse().unwrap(),
+                        p[1].parse().unwrap(),
+                        p[2].parse().unwrap(),
+                    )
+                });
+                (build, day)
+            })
+            .collect()
+    }
+
+    fn six_months_after((y, m, d): Day) -> Day {
+        let months = y * 12 + i64::from(m - 1) + 6;
+        (months / 12, u32::try_from(months % 12).unwrap() + 1, d)
+    }
+
+    fn today() -> Day {
+        let secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // Days since 1970-01-01 to a civil date (Howard Hinnant's algorithm).
+        let z = i64::try_from(secs / 86_400).unwrap() + 719_468;
+        let era = z.div_euclid(146_097);
+        let doe = z - era * 146_097;
+        let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+        let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+        let mp = (5 * doy + 2) / 153;
+        let d = u32::try_from(doy - (153 * mp + 2) / 5 + 1).unwrap();
+        let m = u32::try_from(if mp < 10 { mp + 3 } else { mp - 9 }).unwrap();
+        let y = yoe + era * 400 + i64::from(m <= 2);
+        (y, m, d)
+    }
+
+    /// Whether `min` may be the oldest build spoken on `today`: every build below it has a
+    /// successor that shipped at least six months ago.
+    fn may_be_oldest(history: &[(u32, Option<Day>)], min: u32, today: Day) -> bool {
+        (1..min).all(|b| {
+            history
+                .iter()
+                .find(|(n, _)| *n == b + 1)
+                .and_then(|(_, day)| *day)
+                .is_some_and(|shipped| six_months_after(shipped) <= today)
+        })
+    }
+
+    #[test]
+    fn the_history_lists_every_build_in_order() {
+        let h = history();
+        let builds: Vec<u32> = h.iter().map(|(b, _)| *b).collect();
+        assert_eq!(builds, (1..=PHONE_BUILD).collect::<Vec<_>>());
+        let shipped: Vec<Day> = h.iter().filter_map(|(_, d)| *d).collect();
+        assert!(shipped.windows(2).all(|w| w[0] <= w[1]), "days go forward");
+        assert!(
+            h.iter().rev().skip(1).all(|(_, d)| d.is_some()),
+            "only the newest build may be unshipped"
+        );
+    }
+
+    #[test]
+    fn raising_the_oldest_build_drops_only_builds_replaced_six_months_ago() {
+        assert!(may_be_oldest(&history(), MIN_PHONE_BUILD, today()));
+
+        let h = vec![
+            (1, Some((2026, 1, 10))),
+            (2, Some((2026, 3, 31))),
+            (3, None),
+        ];
+        assert!(may_be_oldest(&h, 1, (2026, 3, 31)));
+        assert!(
+            !may_be_oldest(&h, 2, (2026, 9, 30)),
+            "build 2 shipped under six months ago"
+        );
+        assert!(may_be_oldest(&h, 2, (2026, 9, 31)));
+        assert!(may_be_oldest(&h, 2, (2027, 1, 1)));
+        assert!(
+            !may_be_oldest(&h, 3, (2030, 1, 1)),
+            "build 3 has not shipped"
+        );
     }
 
     #[test]

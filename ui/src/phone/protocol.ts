@@ -131,10 +131,12 @@ export const LIMIT_SYNCS = 12;
 export const PAGES_BACK = 7;
 export const EVENTS_KEPT_DAYS = 90;
 
-/** The build of the phone code in this tree. */
-export const PHONE_BUILD = 1;
-/** The oldest phone build the computer accepts. */
+/** The newest phone build this tree speaks. */
+export const PHONE_BUILD = 2;
+/** The oldest phone build this tree still speaks, on either side. */
 export const MIN_PHONE_BUILD = 1;
+/** The first build in which a phone introduces itself (`introduce`). */
+export const INTRODUCE_BUILD = 2;
 
 /** HTTP statuses between the listener and the phone. */
 /** Away from home is off. */
