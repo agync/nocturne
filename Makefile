@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
-	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
+	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/e2e-phone-native ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
 	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test \
 	site site/serve site/clean
 
@@ -74,6 +74,9 @@ ui/test: ui/node_modules ## Unit-test the interface
 
 ui/e2e: ui/node_modules ## Browser tests against the mock engine
 	cd ui && npm run e2e
+
+ui/e2e-phone-native: ui/node_modules ## The phone app's screens in a browser, its native side answered in the page
+	cd ui && npx playwright test -c playwright.phone-native.config.ts
 
 ui/lint: ui/node_modules ## Lint and type-check the interface
 	cd ui && npm run lint
