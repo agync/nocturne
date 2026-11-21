@@ -424,6 +424,29 @@ impl Engine {
         result: RemoteResult,
         bytes: f64,
     ) -> Result<()> {
+        self.log_remote(device_id, action, result, bytes, 1)
+    }
+
+    /// A phone sent `count` things at once (calendar changes, readings): one line counting
+    /// them, never what they were.
+    pub fn log_remote_count(
+        &self,
+        device_id: &str,
+        action: RemoteAction,
+        result: RemoteResult,
+        count: u32,
+    ) -> Result<()> {
+        self.log_remote(Some(device_id), action, result, 0.0, count)
+    }
+
+    fn log_remote(
+        &self,
+        device_id: Option<&str>,
+        action: RemoteAction,
+        result: RemoteResult,
+        bytes: f64,
+        count: u32,
+    ) -> Result<()> {
         let now = self.clock_now();
         let (action, result) = (enum_str(&action), enum_str(&result));
         self.write(|tx| {
@@ -442,16 +465,16 @@ impl Engine {
                 && now.duration_since(parse_ts(&at)?) <= SignedDuration::from_secs(COLLAPSE_SECS)
             {
                 tx.execute(
-                    "UPDATE remote_events SET count = count + 1, bytes = bytes + ?2, at = ?3 \
+                    "UPDATE remote_events SET count = count + ?4, bytes = bytes + ?2, at = ?3 \
                      WHERE id = ?1",
-                    params![id, bytes, fmt_ts(now)],
+                    params![id, bytes, fmt_ts(now), count],
                 )?;
                 return Ok(());
             }
             tx.execute(
                 "INSERT INTO remote_events(device_id, action, result, bytes, count, at) \
-                 VALUES (?1, ?2, ?3, ?4, 1, ?5)",
-                params![device_id, action, result, bytes, fmt_ts(now)],
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![device_id, action, result, bytes, count, fmt_ts(now)],
             )?;
             Ok(())
         })

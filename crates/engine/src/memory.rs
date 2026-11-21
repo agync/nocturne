@@ -841,6 +841,8 @@ struct ItemInfo {
     checkin: bool,
     /// The photo of a good thing.
     good_photo: bool,
+    /// An appointment from a phone's calendar.
+    calendar: bool,
 }
 
 impl ItemInfo {
@@ -923,6 +925,7 @@ fn load_item_info(
         kept_at,
         kept_on,
         checkin: kind == "checkin" || journal.as_deref() == Some("checkin"),
+        calendar: kind == "calendar",
         journal,
         good_photo: tx.query_row(
             "SELECT EXISTS(SELECT 1 FROM items WHERE json_extract(metadata, '$.journal') = 'good' \
@@ -1190,11 +1193,56 @@ fn apply(
         .collect();
     let item = load_item_info(tx, item_id, today, tz)?;
     let routed = route(tx, now, item_id, cands)?;
-    if item.checkin {
+    if item.checkin || item.calendar {
+        // A calendar entry's memory comes from its own fields when it arrives (see
+        // `apply_structured`): the mind's reading of its title names people and places only.
         mention_only(tx, now, item_id, &routed, true)?;
         finish_item(tx, item_id, "understood", took)?;
         return Ok((ApplyReport::default(), Vec::new()));
     }
+    let (report, files) = apply_claims(tx, now, today, item_id, &item, &routed)?;
+    let status = if !item.trusted {
+        "unconfirmed"
+    } else if !report.conflicts.is_empty() {
+        "needsYou"
+    } else {
+        "understood"
+    };
+    finish_item(tx, item_id, status, took)?;
+    Ok((report, files))
+}
+
+/// Claims made from an item's own structured fields, with no mind and no lease: a calendar
+/// entry's appointment. Applied the way a reading is, so a new version of the entry replaces
+/// what the earlier one said. The item's status is left as it is.
+pub(crate) fn apply_structured(
+    tx: &Transaction<'_>,
+    now: &str,
+    today: &str,
+    tz: &jiff::tz::TimeZone,
+    item_id: &str,
+    cands: Vec<Candidate>,
+) -> Result<(ApplyReport, Vec<PathBuf>)> {
+    let item = load_item_info(tx, item_id, today, tz)?;
+    let routed: Vec<Routed> = cands
+        .into_iter()
+        .map(|cand| Routed {
+            said_as: cand.subject.clone(),
+            cand,
+        })
+        .collect();
+    apply_claims(tx, now, today, item_id, &item, &routed)
+}
+
+/// The body of a reading: what the item says, applied again in place of what it said before.
+fn apply_claims(
+    tx: &Transaction<'_>,
+    now: &str,
+    today: &str,
+    item_id: &str,
+    item: &ItemInfo,
+    routed: &[Routed],
+) -> Result<(ApplyReport, Vec<PathBuf>)> {
     let mut report = ApplyReport::default();
 
     // Applying is idempotent per item: detach what this item said before, apply again, then
@@ -1224,13 +1272,13 @@ fn apply(
     let mut touched: HashSet<String> = HashSet::new();
 
     let mut found: Vec<Found> = Vec::new();
-    for r in &routed {
+    for r in routed {
         if let Some(filed) = apply_one(
             tx,
             now,
             today,
             item_id,
-            &item,
+            item,
             &relinked,
             &mut touched,
             &mut report,
@@ -1276,7 +1324,7 @@ fn apply(
         // history) keeps its links.
         let may_go = row.superseded_at.is_none() && !protected;
         let successor = if may_go && replaced_others {
-            successor_in_slot(tx, &row, &touched, &item)?
+            successor_in_slot(tx, &row, &touched, item)?
         } else {
             None
         };
@@ -1320,16 +1368,7 @@ fn apply(
     }
     report.conflicts = open_conflicts;
 
-    let files = settle_links(tx, item_id, &item)?;
-
-    let status = if !item.trusted {
-        "unconfirmed"
-    } else if !report.conflicts.is_empty() {
-        "needsYou"
-    } else {
-        "understood"
-    };
-    finish_item(tx, item_id, status, took)?;
+    let files = settle_links(tx, item_id, item)?;
     Ok((report, files))
 }
 
@@ -1392,7 +1431,7 @@ pub(crate) fn file_held(
     routed: Vec<Routed>,
 ) -> Result<Vec<PathBuf>> {
     let item = load_item_info(tx, item_id, today, tz)?;
-    if item.checkin {
+    if item.checkin || item.calendar {
         mention_only(tx, now, item_id, &routed, false)?;
         return Ok(Vec::new());
     }

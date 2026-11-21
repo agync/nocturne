@@ -938,15 +938,16 @@ impl Reader {
 
         if text.is_none() {
             match p.kind {
-                // Nothing was said, so there is nothing to read: a feeling alone is understood.
-                ItemKind::Checkin => {
+                // Nothing was said, so there is nothing to read: a feeling alone is understood,
+                // and so is a health reading, which never reaches the mind.
+                ItemKind::Checkin | ItemKind::Reading => {
                     let (i, l) = (id.clone(), lease.clone());
                     let took = started.elapsed();
                     self.eng(move |e| e.apply_candidates_took(&i, &l, Vec::new(), took))
                         .await?;
                     return Ok(Outcome::Understood);
                 }
-                ItemKind::Text | ItemKind::Web | ItemKind::Calendar | ItemKind::Reading => {
+                ItemKind::Text | ItemKind::Web | ItemKind::Calendar => {
                     return self
                         .fail(&id, &lease, CouldntReadReason::Unsupported, reread)
                         .await;

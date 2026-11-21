@@ -277,6 +277,7 @@ pub fn extraction_user(text: &str, cx: &ExtractContext, nonce: &str) -> String {
         ItemKind::Document => "a document",
         ItemKind::Web => "a web page",
         ItemKind::Calendar => "an appointment from a calendar",
+        // Health readings never reach the mind: they are understood when they arrive.
         ItemKind::Reading => "a health reading",
     };
     let mut out = format!(
