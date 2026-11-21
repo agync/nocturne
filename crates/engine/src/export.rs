@@ -716,6 +716,8 @@ impl Engine {
                 "reflection_cites",
                 "reflections",
                 "reflections_declined",
+                "decision_items",
+                "decisions",
                 "mentions",
                 "name_questions",
                 "page_line_memories",

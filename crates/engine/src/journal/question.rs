@@ -42,6 +42,37 @@ pub(crate) struct Chosen {
 /// The journal question for the page dated `page_day`, if the rule finds one and the week
 /// allows it. Never on page one: the caller asks the page-time question there first.
 pub(crate) fn pick(conn: &Connection, ctx: &Ctx, page_day: Date) -> Result<Option<Chosen>> {
+    pick_noting(conn, ctx, page_day, None)
+}
+
+/// A memory the page would have asked about but for rule 5: something kept after its block, up
+/// to the end of the day, is about it. Logged in shadow beside what a decider says (`decide`).
+#[derive(Debug)]
+pub(crate) struct Blocked {
+    pub memory_id: String,
+    pub block_id: String,
+    pub sentence: String,
+    /// What was kept later about the same subject, oldest first: each item's id and words.
+    pub later: Vec<(String, String)>,
+}
+
+/// The memories rule 5 alone kept from being asked about on the page dated `page_day`.
+pub(crate) fn blocked_by_later(
+    conn: &Connection,
+    ctx: &Ctx,
+    page_day: Date,
+) -> Result<Vec<Blocked>> {
+    let mut blocked = Vec::new();
+    pick_noting(conn, ctx, page_day, Some(&mut blocked))?;
+    Ok(blocked)
+}
+
+fn pick_noting(
+    conn: &Connection,
+    ctx: &Ctx,
+    page_day: Date,
+    mut blocked: Option<&mut Vec<Blocked>>,
+) -> Result<Option<Chosen>> {
     if asked_this_week(conn, page_day)? {
         return Ok(None);
     }
@@ -60,7 +91,15 @@ pub(crate) fn pick(conn: &Connection, ctx: &Ctx, page_day: Date) -> Result<Optio
     let mut found: Vec<(Reverse<String>, u32, String, Chosen)> = Vec::new();
     for m in rows {
         let undated = m.due.is_none() && m.valid_from.is_none();
-        if let Some((kept_at, chosen)) = qualify(conn, ctx, &m, event, event_end, undated)? {
+        if let Some((kept_at, chosen)) = qualify(
+            conn,
+            ctx,
+            &m,
+            event,
+            event_end,
+            undated,
+            blocked.as_deref_mut(),
+        )? {
             let at = minutes_in(&chosen.sentence)
                 .or_else(|| minutes_in(&m.object))
                 .or_else(|| minutes_in(&m.sentence))
@@ -181,6 +220,7 @@ fn qualify(
     event: Date,
     event_end: Timestamp,
     undated: bool,
+    mut blocked: Option<&mut Vec<Blocked>>,
 ) -> Result<Option<(String, Chosen)>> {
     if m.is_safety() || m.suggest_private || flagged(conn, &m.id)? {
         return Ok(None);
@@ -220,6 +260,16 @@ fn qualify(
             continue;
         }
         if written_about(conn, m, &s.id, &s.kept_at, event_end)? {
+            if let Some(out) = blocked.as_deref_mut()
+                && !out.iter().any(|b| b.memory_id == m.id)
+            {
+                out.push(Blocked {
+                    memory_id: m.id.clone(),
+                    block_id: s.id.clone(),
+                    sentence: sentence.clone(),
+                    later: later_about(conn, m, &s.id, &s.kept_at, event_end)?,
+                });
+            }
             continue;
         }
         let ask = JournalAsk {
@@ -310,6 +360,49 @@ fn written_about(
         }
     }
     Ok(false)
+}
+
+/// What was kept after the block, up to the end of the event's day, about the memory's subject,
+/// by the same test as [`written_about`]: oldest first, at most three, each cut to 600
+/// characters.
+fn later_about(
+    conn: &Connection,
+    m: &MemRow,
+    block_id: &str,
+    block_kept_at: &str,
+    event_end: Timestamp,
+) -> Result<Vec<(String, String)>> {
+    const MOST: usize = 3;
+    const LONGEST: usize = 600;
+    let end = fmt_ts(event_end);
+    let key = coverage::normalise(&m.subject);
+    let needle = format!(" {key} ");
+    let mut stmt = conn.prepare_cached(
+        "SELECT i.id, i.text, EXISTS(SELECT 1 FROM mentions n WHERE n.item_id = i.id \
+         AND n.entity_id = ?4 AND n.state != 'removed') \
+         FROM items i WHERE i.text IS NOT NULL AND i.id != ?1 AND i.kept_at > ?2 \
+         AND i.kept_at < ?3 ORDER BY i.kept_at, i.id",
+    )?;
+    let rows = stmt.query_map(params![block_id, block_kept_at, end, m.entity_id], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, bool>(2)?,
+        ))
+    })?;
+    let mut out = Vec::new();
+    for row in rows {
+        let (id, text, mentioned) = row?;
+        let named =
+            !key.is_empty() && format!(" {} ", coverage::normalise(&text)).contains(&needle);
+        if mentioned || named {
+            out.push((id, text.chars().take(LONGEST).collect()));
+            if out.len() == MOST {
+                break;
+            }
+        }
+    }
+    Ok(out)
 }
 
 /// The first time of day a text gives, in minutes after midnight: "9am", "7:30pm", "14:30",
