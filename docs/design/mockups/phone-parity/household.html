@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Household · joining · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "Back" },
+  "found": { "bar": "modal", "title": "Join a household", "back": "Cancel" },
+  "passphrase": { "back": "Back" },
+  "words": { "bar": "none" },
+  "joined": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="found choose see passphrase words joined">
+<main id="content">
+
+  <!-- Found -->
+  <div class="hero" data-state="found" style="padding-top: 40px">
+    <span data-icon="laptop" data-size="36"></span>
+    <h1 class="stepH">Join Hallway’s household?</h1>
+    <p class="pstatus"><span data-icon="user" data-size="16"></span>Run by Tom</p>
+    <p class="plead">Hallway is a computer at home that runs Nocturne. Next, choose how it should help you.</p>
+  </div>
+  <div class="foot" data-state="found"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Cancel</span></div>
+
+  <!-- How should it help you? -->
+  <h1 class="stepH" data-state="choose">How should Hallway help you?</h1>
+  <div class="choices" data-state="choose">
+    <div class="choice" data-on><span class="rad"></span><span><strong>Borrow its mind</strong><span class="hint">Your memory stays on this phone. Hallway reads and answers for you, and keeps nothing.</span></span></div>
+    <div class="choice"><span class="rad"></span><span><strong>Keep my memory there</strong><span class="hint">Hallway keeps your memory, locked with a key this phone holds, and reads it overnight. This phone keeps what you add until it can reach Hallway.</span></span></div>
+  </div>
+  <p class="small" data-state="choose">You can change this later.</p>
+  <div class="foot" data-state="choose"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- What the person who runs it can see (borrowing) -->
+  <h1 class="stepH" data-state="see">What Tom can see</h1>
+  <p class="seeHead" data-state="see">Tom can see</p>
+  <ul class="see" data-state="see">
+    <li><span data-icon="check" data-size="18"></span><span>This phone’s name</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>That it borrows Hallway’s mind</span></li>
+    <li><span data-icon="check" data-size="18"></span><span>When it last used it, and how much: how many things were read, how many questions, and the mind’s time</span></li>
+  </ul>
+  <p class="seeHead" data-state="see">Tom can’t see, in Nocturne</p>
+  <ul class="see no" data-state="see">
+    <li><span data-icon="x" data-size="18"></span><span>What you keep, ask or write</span></li>
+    <li><span data-icon="x" data-size="18"></span><span>Your answers, your page or your journal</span></li>
+    <li><span data-icon="x" data-size="18"></span><span>Your calendar and health</span></li>
+  </ul>
+  <p class="small" data-state="see" style="color: var(--ink)">Hallway reads each thing in its memory while it works on it, then lets it go. It keeps nothing, and no record of what it read. Things you marked private never go to Hallway. No one else in the household sees anything of yours, and you see nothing of theirs.</p>
+  <p class="limit" data-state="see">Someone with full control of Hallway could change Nocturne on it to look at what it reads. Nocturne can’t prevent that. Join only a household you trust.</p>
+  <div class="foot" data-state="see"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- A passphrase for a memory kept there -->
+  <p class="stepLbl" data-state="passphrase">Keeping your memory on Hallway</p>
+  <h1 class="stepH" data-state="passphrase">Choose a passphrase for your memory on Hallway</h1>
+  <p class="plead" data-state="passphrase">Your memory there is locked with a key this phone holds. If this phone is lost, this passphrase lets a new phone open it. Nobody else can, not even Tom.</p>
+  <div class="fieldWrap" data-state="passphrase">
+    <span class="fieldLabel">Choose a passphrase</span>
+    <div class="fieldInput"><span>••••••••••••••••••</span></div>
+    <p class="small">At least 8 characters. A few words that don’t go together are strong and easy to remember.</p>
+  </div>
+  <div class="fieldWrap" data-state="passphrase">
+    <span class="fieldLabel">Type it again</span>
+    <div class="fieldInput"><span>••••••••••••••••••</span></div>
+  </div>
+  <div data-state="passphrase" style="display: flex; gap: 10px; align-items: center"><span style="width: 18px; height: 18px; flex: none; border: 1.5px solid var(--ink); border-radius: 4px; background: var(--ink)"></span><span style="font-size: 0.9375rem">I’ve written it down or saved it somewhere safe</span></div>
+  <div class="foot" data-state="passphrase"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Three words -->
+  <div class="hero" data-state="words" style="padding-top: 28px">
+    <span class="plbl">Adding Ines’s phone to Hallway’s household</span>
+    <h1 class="ptitle" style="font-size: 1.625rem">Check Hallway shows the same three words.</h1>
+  </div>
+  <ul class="wordsBig" data-state="words"><li>harbour</li><li>violet</li><li>kettle</li></ul>
+  <p class="plead" data-state="words">If they match, Tom chooses <span class="cc">Allow</span> on Hallway. If they don’t, Tom chooses <span class="cc">Don’t allow</span> there and you start again.</p>
+  <p class="small" data-state="words">If Hallway asks to allow a phone and this phone isn’t showing three words, someone else is trying to join. Refuse it.</p>
+  <p class="pstatus" data-state="words" style="color: var(--ink)"><span class="pdot pulse"></span>Waiting for Hallway…</p>
+  <div class="foot plain" data-state="words"><span class="btn">Cancel</span></div>
+
+  <!-- Joined -->
+  <div class="hero" data-state="joined" style="padding-top: 56px">
+    <span data-icon="check" data-size="40"></span>
+    <h1 class="heroTitle">Ines’s phone borrows Hallway’s mind.</h1>
+    <p class="plead">What you keep is read there and comes back to this phone. Your first page comes tomorrow morning.</p>
+  </div>
+  <div class="foot plain" data-state="joined"><span class="btn" data-kind="primary">Continue</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

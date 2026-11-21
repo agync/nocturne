@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moving your memory, on the phone · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "Back" },
+  "moving": { "bar": "none" },
+  "moved": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="found size moving moved">
+<main id="content">
+
+  <!-- Found -->
+  <div class="hero" data-state="found" style="padding-top: 32px">
+    <span data-icon="laptop" data-size="36"></span>
+    <h1 class="stepH">Move your memory to Maya’s laptop?</h1>
+    <p class="plead">Maya’s laptop becomes the home of your memory. It reads, tidies and writes your page from now on.</p>
+    <p class="plead">This phone then works with Maya’s laptop: keep, ask and read your page from here.</p>
+    <p class="small">Your memory lives in one place at a time, so it moves rather than copies.</p>
+  </div>
+  <div class="foot" data-state="found"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- What moves -->
+  <h1 class="stepH" data-state="size">What moves</h1>
+  <ul class="counts" data-state="size">
+    <li><span>Things you kept since 3 March</span><span>1,284</span></li>
+    <li><span>Pages and your journal</span><span>212</span></li>
+    <li><span>Size, most of it photos and recordings</span><span>About 1.4 GB</span></li>
+  </ul>
+  <p class="small" data-state="size">About 6 minutes on this connection. Keep Nocturne open; it carries on if the phone allows.</p>
+  <ul class="lines" data-state="size">
+    <li><span>Your memory here is put aside once it has arrived. You choose then whether to remove it.</span></li>
+    <li><span>Your locked copy online stops being made. You choose then whether to delete it.</span></li>
+    <li><span>Nocturne’s mind online turns off on this phone. Maya’s laptop has its own.</span></li>
+  </ul>
+  <div class="foot" data-state="size"><span class="btn" data-kind="primary">Move my memory</span><span class="btn" data-kind="quiet">Back</span></div>
+
+  <!-- Moving -->
+  <div class="hero" data-state="moving" style="padding-top: 72px">
+    <span data-mark="40"></span>
+    <h1 class="stepH">Moving your memory</h1>
+  </div>
+  <div data-state="moving" style="display: flex; flex-direction: column; gap: 8px">
+    <div class="prog"><span style="width: 58%"></span></div>
+    <p class="pstatus"><span class="pdot pulse"></span>820 MB of 1.4 GB</p>
+  </div>
+  <p class="small" data-state="moving">You can still keep things. They go across at the end.</p>
+  <div class="foot plain" data-state="moving"><span class="btn">Stop</span></div>
+
+  <!-- Moved -->
+  <div class="hero" data-state="moved" style="padding-top: 40px">
+    <span data-icon="check" data-size="40"></span>
+    <h1 class="heroTitle" style="font-size: 1.75rem">Your memory is on Maya’s laptop.</h1>
+    <p class="plead">1,284 things arrived, and every count matches. This phone now works with Maya’s laptop.</p>
+  </div>
+  <p class="seeHead" data-state="moved">Your memory on this phone</p>
+  <div class="choices" data-state="moved">
+    <div class="choice" data-on><span class="rad"></span><span><strong>Remove it from this phone</strong></span></div>
+    <div class="choice"><span class="rad"></span><span><strong>Keep it put aside for 30 days</strong></span></div>
+  </div>
+  <p class="seeHead" data-state="moved">Your locked copy online</p>
+  <div class="choices" data-state="moved">
+    <div class="choice"><span class="rad"></span><span><strong>Delete the copy online</strong></span></div>
+    <div class="choice" data-on><span class="rad"></span><span><strong>Keep it as it is</strong></span></div>
+  </div>
+  <div class="foot plain" data-state="moved"><span class="btn" data-kind="primary">Done</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

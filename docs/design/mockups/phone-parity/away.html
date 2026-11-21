@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Household · the mind is away · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "bar": "brand", "title": "Today", "tab": "Today", "keep": true, "action": true },
+  "journal": { "bar": "top", "title": "Journal", "tab": "Journal" },
+  "removed": { "bar": "none", "tab": "", "keep": false }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="today journal back removed">
+<main id="content">
+
+  <!-- Today, Hallway out of reach, memory kept there -->
+  <div class="pbanner" role="status" data-state="today journal">
+    <span data-icon="moon" data-size="22"></span>
+    <span><strong>Hallway is out of reach. Still recording.</strong>What you keep waits here and goes across when it’s back.</span>
+  </div>
+  <p class="pstatus" data-state="today"><span class="pdot" style="background: var(--ember)"></span>3 waiting to go across</p>
+  <p class="pstatus" data-state="back"><span class="pdot"></span>Connected to Hallway</p>
+
+  <div data-state="today back" style="display: flex; flex-direction: column; gap: 12px">
+    <p class="plbl">Saturday 21 November · From 7:10 am today</p>
+    <h1 class="ptitle">Ines’s birthday is on Tuesday.</h1>
+    <p class="plead" style="font-family: var(--font-serif); font-style: italic; font-size: 1.0625rem">Overnight Nocturne read 7 things you kept and noticed 2 changes.</p>
+  </div>
+  <section data-state="today back" style="display: flex; flex-direction: column; gap: 8px">
+    <p class="plbl">What changed · 2</p>
+    <p class="quote" style="font-size: 1.0625rem">The boiler service moved to <strong>Wednesday</strong> morning.</p>
+    <span><span class="rchip"><span data-icon="file" data-size="12"></span>Note · Thursday</span></span>
+    <p class="quote" style="font-size: 1.0625rem">You ordered the cake from Fenwick’s for Tuesday.</p>
+    <span><span class="rchip"><span data-icon="mic" data-size="12"></span>Voice note · yesterday</span></span>
+  </section>
+  <p class="plead" data-state="back" style="padding: 10px 14px; border-radius: 12px; background: var(--accent-soft)">Your page is updated once they’re read.</p>
+
+  <!-- Journal with things waiting to go across -->
+  <p class="plbl" data-state="journal">Today · Saturday 21 November</p>
+  <ul class="kept" data-state="journal">
+    <li><span class="at">7:20 am</span><span>Order the cake from Fenwick’s for Tuesday</span></li>
+    <li><span class="at">8:05 am</span><span><span data-icon="mic" data-size="14"></span> Voice note · 0:42<br><span class="wait"><span data-icon="refresh" data-size="12"></span>waiting to go across</span> <span class="rchip"><span data-icon="phone" data-size="12"></span>On this phone</span></span></li>
+    <li><span class="at">9:30 am</span><span>Power cut on our street, boiler off, Hallway down too<br><span class="wait"><span data-icon="refresh" data-size="12"></span>waiting to go across</span> <span class="rchip"><span data-icon="phone" data-size="12"></span>On this phone</span></span></li>
+    <li><span class="at">9:41 am</span><span><span data-icon="image" data-size="14"></span> Photo · the fuse box<br><span class="wait"><span data-icon="refresh" data-size="12"></span>waiting to go across</span> <span class="rchip"><span data-icon="phone" data-size="12"></span>On this phone</span></span></li>
+  </ul>
+
+  <!-- Removed, memory still on the household computer -->
+  <div class="hero" data-state="removed" style="padding-top: 64px">
+    <span data-icon="laptop" data-size="36"></span>
+    <h1 class="stepH">Hallway’s household removed this phone.</h1>
+    <p class="plead">Your memory is still on Hallway, locked. Bring it to this phone before 21 December. After that, Tom may delete it.</p>
+  </div>
+  <div class="foot plain" data-state="removed"><span class="btn" data-kind="primary">Bring my memory to this phone</span><span class="btn" data-kind="quiet">Later</span></div>
+
+  <div class="over bottom" data-state="back" style="background: transparent; justify-content: flex-end; padding: 0 16px 190px">
+    <div class="toast" style="position: static; width: 100%"><span>Hallway is back. 3 went across.</span></div>
+  </div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Moving your memory, on the computer · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+</head>
+<body data-frame="app" data-section="Settings" data-states="receive done">
+<div id="content" class="sheet">
+  <div style="display: flex; flex-direction: column; gap: var(--s-4); max-width: 720px">
+    <a class="back" href="#"><span aria-hidden="true">←</span> Settings</a>
+    <h1 class="stepTitle">Away from home</h1>
+    <h2 class="label">Phones · 1</h2>
+    <ul class="oRows">
+      <li class="oRow"><span class="oText"><span class="oLabel">Maya’s phone</span><span class="oHint">Android app · Nocturne 2.0</span></span><span class="button" data-variant="quiet">Remove…</span></li>
+    </ul>
+  </div>
+</div>
+
+<div id="overlay" data-state="receive">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="mt" style="width: min(100%, 580px)">
+      <h2 id="mt" class="dialogTitle">Maya’s phone has its own memory. Move it here?</h2>
+      <p class="muted">1,284 things kept since 3 March · about 1.4 GB</p>
+      <p>This computer becomes its home: it reads, tidies and writes the page. Maya’s phone then works with it like your other phones.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="secondary">Not now</span>
+        <span class="button" data-variant="primary">Move it here</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay2" data-state="done">
+  <div class="dialog">
+    <div class="panel" role="dialog" aria-labelledby="dt" style="width: min(100%, 580px)">
+      <h2 id="dt" class="dialogTitle">The memory from Maya’s phone is here.</h2>
+      <p>Reading carries on from where it was. Nothing is read again.</p>
+      <p class="small">To have answers written online here, set up Online answers in <span class="cc">Settings</span>.</p>
+      <div class="buttons" style="justify-content: flex-end">
+        <span class="button" data-variant="primary">Open today’s page</span>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../phone-apps/shell.js"></script>
+<script>
+  const o2 = document.getElementById("overlay2"); if (o2) document.body.appendChild(o2);
+</script>
+</body>
+</html>

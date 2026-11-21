@@ -1,0 +1,61 @@
+/* Static mockups for docs/design/phone-parity.md and its pages. Frames, tokens and the phone and
+   computer parts come from the phone app kit; this adds step lines, choices, the can and can't
+   lists, progress and waiting marks. */
+@import "../phone-apps/mock.css";
+
+/* A step flow on the phone: label, title, short lines, expander, bar */
+.stepLbl { color: var(--ink3); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.08em; }
+.stepH { font: 400 1.625rem / 1.2 var(--font-serif); letter-spacing: -0.01em; text-wrap: balance; }
+.lines { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.lines li { display: flex; flex-direction: column; gap: 3px; font-size: 0.9375rem; line-height: 1.5; }
+.lines b { color: var(--ink2); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.expander { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); color: var(--accent); font-size: 0.9375rem; font-weight: 500; }
+.barLine { color: var(--ink2); font-size: 0.8125rem; text-align: center; }
+.foot { box-shadow: 0 -1px 0 var(--rule); }
+.foot.plain { box-shadow: none; }
+
+/* Choices: a card per way, the chosen one outlined */
+.choices { display: flex; flex-direction: column; gap: 10px; }
+.choice { display: grid; grid-template-columns: 22px 1fr; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--sheet); box-shadow: 0 0 0 1px var(--rule); }
+.choice[data-on] { box-shadow: 0 0 0 2px var(--ink); }
+.choice .rad { width: 20px; height: 20px; margin-top: 2px; border: 1.5px solid var(--ink3); border-radius: 50%; }
+.choice[data-on] .rad { border: 6px solid var(--ink); }
+.choice strong { display: block; font-weight: 500; font-size: 1rem; line-height: 1.35; }
+.choice span.hint { display: block; margin-top: 3px; color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
+.choice .ic { color: var(--ink2); }
+
+/* Can and can't lists */
+.seeHead { color: var(--ink2); font: 500 0.75rem / 1.4 var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.see { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.see li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; font-size: 0.9375rem; line-height: 1.45; }
+.see li svg { margin-top: 2px; color: var(--ink2); }
+.see.no li svg { color: var(--ink3); }
+.limit { padding: 12px 14px; border-radius: 12px; background: var(--accent-soft); font-size: 0.9375rem; line-height: 1.5; }
+
+/* Progress */
+.prog { height: 6px; border-radius: 3px; background: var(--rule); overflow: hidden; }
+.prog span { display: block; height: 100%; background: var(--ink); }
+
+/* Lists on Today and the journal */
+.kept { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.kept li { display: grid; grid-template-columns: 64px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); font-size: 0.9375rem; line-height: 1.45; }
+.kept li:last-child { border-bottom: 0; }
+.kept .at { color: var(--ink2); font: 400 0.8125rem / 1.6 var(--font-mono); }
+.kept .wait { display: inline-flex; align-items: center; gap: 6px; color: var(--ink3); font-size: 0.8125rem; }
+.mark { background: var(--accent-soft); border-radius: 3px; padding: 0 2px; }
+.found li { grid-template-columns: 1fr; }
+.found .meta { display: flex; gap: 8px; align-items: center; color: var(--ink3); font-size: 0.8125rem; }
+.noMind { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 16px; border: 1px dashed var(--ink3); }
+.noMind h2 { font: 400 1.375rem / 1.25 var(--font-serif); }
+.example { padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--sheet); font-size: 0.875rem; line-height: 1.5; }
+.secH { padding-top: 6px; font-weight: 500; font-size: 0.9375rem; }
+.counts { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; font-size: 0.9375rem; }
+.counts li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--rule); }
+.counts li span:last-child { color: var(--ink2); font-family: var(--font-mono); font-size: 0.875rem; }
+
+/* The computer: the household list */
+.hhRow .oText { max-width: 34rem; }
+.useBar { display: inline-block; width: 120px; height: 6px; border-radius: 3px; background: var(--rule); vertical-align: middle; overflow: hidden; }
+.useBar span { display: block; height: 100%; background: var(--accent); }
+.tagPaused { padding: 1px 7px; border-radius: var(--r-sm); background: var(--feel-settled-soft); font: 500 0.6875rem / 1.5 var(--font-mono); }
+.wayTag { padding: 1px 7px; border-radius: var(--r-sm); background: var(--accent-soft); font: 500 0.6875rem / 1.5 var(--font-mono); }

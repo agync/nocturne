@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone alone · choosing a mind · Nocturne</title>
+<link rel="stylesheet" href="parity.css">
+<script type="application/json" id="frames">
+{
+  "*": { "tab": "", "action": false, "bar": "back", "title": "", "back": "Today" },
+  "choose": { "title": "Choose a mind" },
+  "service": { "title": "", "back": "Back" },
+  "consent": { "title": "", "back": "Back" },
+  "apple": { "title": "", "back": "Back" },
+  "first-page": { "bar": "none" }
+}
+</script>
+</head>
+<body data-frame="duo" data-states="choose service consent apple first-page">
+<main id="content">
+
+  <!-- Where should Nocturne's mind be? -->
+  <h1 class="stepH" data-state="choose">Where should Nocturne’s mind be?</h1>
+  <p class="plead" data-state="choose">A mind reads what you keep, writes your page each morning and answers your questions. Your memory stays on this phone whichever you choose.</p>
+  <div class="choices" data-state="choose">
+    <div class="choice"><span class="rad"></span><span><strong>A computer at home</strong><span class="hint">Someone in your household runs Nocturne on a computer that’s always on. It reads and answers for you, and keeps nothing.</span></span></div>
+    <div class="choice" data-on><span class="rad"></span><span><strong>An online service you choose</strong><span class="hint">A company you have an account with reads the words of what you keep. You’ll copy three details from its website.</span></span></div>
+    <div class="choice" data-os="ios"><span class="rad"></span><span><strong>Apple Intelligence</strong><span class="hint">Apple’s servers read the words of what you keep. No account or key.</span></span></div>
+    <div class="choice"><span class="rad"></span><span><strong>A computer of your own</strong><span class="hint">Install Nocturne on your computer and move your memory there. This phone then works with it.</span></span></div>
+  </div>
+  <div class="foot" data-state="choose"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- Online service, step 1 -->
+  <p class="stepLbl" data-state="service">Nocturne’s mind online · step 1 of 4</p>
+  <h1 class="stepH" data-state="service">Have Nocturne’s mind work online, with a service you choose.</h1>
+  <ul class="lines" data-state="service">
+    <li><b>Sent</b><span>The words of what you keep, your journal entries and good things, and your questions. Only words: what you typed, and what this phone heard in your voice notes.</span></li>
+    <li><b>Never sent</b><span>Your photos and recordings themselves, your check-ins, reflections and recaps, and anything you marked private.</span></li>
+    <li><b>You need</b><span>An account with that service. Most charge a little for what they read and write. Setting up means copying three details from its website.</span></li>
+  </ul>
+  <div class="expander" data-state="service"><span>Everything that is sent, and what stays here</span><span data-icon="chevron-down" data-size="18"></span></div>
+  <div class="foot" data-state="service"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nothing is turned on until the last step.</p></div>
+
+  <!-- Online service, step 4: agree -->
+  <p class="stepLbl" data-state="consent">Nocturne’s mind online · step 4 of 4</p>
+  <h1 class="stepH" data-state="consent" style="font-size: 1.4375rem">Before you turn this on, here is exactly what happens.</h1>
+  <p class="plead" data-state="consent">While this is on, the words of what you keep and your questions leave this phone. Your photos, recordings and check-ins stay here.</p>
+  <p class="secH" data-state="consent">What is sent</p>
+  <p class="small" data-state="consent" style="color: var(--ink)">The words of each thing you keep: what you typed, what this phone heard in a voice note, the text of a page you shared. Your journal entries and good things. Each question, with the few lines that answer it. Each night, the lines your page is written from. For example:</p>
+  <p class="example" data-state="consent">Kept 7:40 am · Dentist moved to Thursday at 9, Bridge Street.</p>
+  <p class="secH" data-state="consent">Where it goes</p>
+  <p class="small" data-state="consent" style="color: var(--ink)">This phone sends it straight to answers.example, which reads it and writes back. Nocturne keeps what it learned on this phone, with its receipts, and checks every receipt before you see it. Nothing passes through Nocturne’s makers.</p>
+  <p class="secH" data-state="consent">Who can see it</p>
+  <p class="small" data-state="consent" style="color: var(--ink)">answers.example can see everything sent, when it is sent, and this phone’s internet address.</p>
+  <div class="foot" data-state="consent"><span class="btn" data-kind="primary">Turn on</span><span class="btn" data-kind="quiet">Not now</span></div>
+
+  <!-- Apple Intelligence, step 1 (iPhone only) -->
+  <p class="stepLbl" data-state="apple" data-os="ios">Apple Intelligence · step 1 of 2</p>
+  <h1 class="stepH" data-state="apple" data-os="ios">Have Nocturne’s mind work on Apple’s servers.</h1>
+  <ul class="lines" data-state="apple" data-os="ios">
+    <li><b>Sent</b><span>The words of what you keep, your journal entries and good things, and your questions. Only words: what you typed, and what this phone heard in your voice notes.</span></li>
+    <li><b>Never sent</b><span>Your photos and recordings themselves, your check-ins, reflections and recaps, and anything you marked private.</span></li>
+    <li><b>You need</b><span>Apple Intelligence turned on, on this iPhone. No account, key or cost.</span></li>
+  </ul>
+  <div class="expander" data-state="apple" data-os="ios"><span>Everything that is sent, and what stays here</span><span data-icon="chevron-down" data-size="18"></span></div>
+  <div class="foot" data-state="apple" data-os="ios"><span class="btn" data-kind="primary">Continue</span><span class="btn" data-kind="quiet">Not now</span><p class="barLine">Nothing is turned on until the last step.</p></div>
+  <p class="osLabel" data-state="apple" data-os="android" style="padding-top: 320px">iPhone only. Android shows no such choice.</p>
+
+  <!-- Reading what you kept -->
+  <div class="hero" data-state="first-page" style="padding-top: 72px">
+    <span data-mark="40"></span>
+    <h1 class="stepH">Reading what you kept</h1>
+    <p class="plead">Nocturne is reading 46 things you kept, a few at a time. Your first page comes tomorrow morning.</p>
+  </div>
+  <div data-state="first-page" style="display: flex; flex-direction: column; gap: 8px">
+    <div class="prog"><span style="width: 26%"></span></div>
+    <p class="pstatus"><span class="pdot pulse"></span>12 of 46 read</p>
+  </div>
+  <p class="small" data-state="first-page">Reading carries on when this phone allows it, often while it charges.</p>
+  <div class="foot plain" data-state="first-page"><span class="btn" data-kind="primary">OK</span></div>
+</main>
+<script src="../phone-apps/shell.js"></script>
+</body>
+</html>
