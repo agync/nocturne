@@ -182,6 +182,13 @@ impl Engine {
             if journal {
                 return Err(Error::invalid("a journal item cannot be marked private"));
             }
+            let kind: String =
+                tx.query_row("SELECT kind FROM items WHERE id = ?1", [item_id], |r| {
+                    r.get(0)
+                })?;
+            if kind == "reading" {
+                return Err(Error::invalid("a health reading cannot be marked private"));
+            }
             tx.execute(
                 "UPDATE items SET private = ?2 WHERE id = ?1",
                 params![item_id, on],

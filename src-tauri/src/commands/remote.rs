@@ -82,13 +82,19 @@ pub async fn remove_device<R: Runtime>(
     also_delete_brought: Option<bool>,
 ) -> Result<(), CommandError> {
     let hub = hub(&app)?;
-    if also_delete_brought == Some(true) {
-        // What it brought goes first: a phone is never removed with its delete left undone.
+    let delete = also_delete_brought == Some(true);
+    if delete {
+        // What it brought goes first, its sources stopped before anything is deleted: a phone
+        // is never removed with its delete left undone.
         let device = id.clone();
         app.state::<crate::state::AppState>().asks.cancel_all();
         super::change(app.clone(), move |e| e.delete_brought(&device)).await?;
     }
-    hub.remove_device(&id).await
+    hub.remove_device(&id).await?;
+    if delete {
+        super::change(app, move |e| e.forget_phone_sources(&id)).await?;
+    }
+    Ok(())
 }
 
 #[tauri::command]

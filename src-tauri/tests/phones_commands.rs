@@ -49,6 +49,7 @@ fn bring(h: &Harness, device: &str) {
                     people: Vec::new(),
                     repeats: false,
                     notes: None,
+                    repeat_rule: None,
                 },
             }],
         },
@@ -203,6 +204,7 @@ fn removing_a_phone_keeps_or_deletes_what_it_brought() {
             source: nocturne_contract::PhoneSource::Calendar,
             kinds: None,
             before: None,
+            item_id: None,
         })
         .unwrap();
 

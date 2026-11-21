@@ -53,10 +53,16 @@ pub fn day_ids(day: &JournalDay, add: &mut dyn FnMut(&str)) {
     if let Some(h) = &day.health {
         health_ids(h, add);
     }
+    if let Some(b) = &day.from_phones {
+        b.calendar
+            .iter()
+            .chain(&b.health)
+            .for_each(|i| add(&i.item_id));
+    }
 }
 
-/// Every reading "From Health" cites. Readings cannot be marked private, so none is withheld;
-/// they are named so the phone may open them.
+/// Every reading "From Health" cites, so the phone may open them. Readings cannot be marked
+/// private; one held back all the same is taken out by `scrub_day`.
 fn health_ids(h: &nocturne_contract::DayHealth, add: &mut dyn FnMut(&str)) {
     if let Some(n) = &h.night {
         add(&n.item_id);
@@ -275,8 +281,26 @@ pub fn scrub_day(day: JournalDay, w: &Withheld) -> JournalDay {
             .into_iter()
             .filter(|q: &SameNameQuestion| !w.contains(&q.receipt.item_id))
             .collect(),
+        health: day.health.map(|h| health(h, w)),
+        from_phones: day.from_phones.map(|mut b| {
+            b.calendar.retain(|i| !w.contains(&i.item_id));
+            b.health.retain(|i| !w.contains(&i.item_id));
+            b
+        }),
         ..day
     }
+}
+
+/// "From Health" without anything held back.
+fn health(mut h: nocturne_contract::DayHealth, w: &Withheld) -> nocturne_contract::DayHealth {
+    h.night = h.night.filter(|n| !w.contains(&n.item_id));
+    h.heart = h.heart.filter(|r| !w.contains(&r.item_id));
+    for s in [h.resting.as_mut(), h.steps.as_mut()].into_iter().flatten() {
+        s.points.retain(|p| !w.contains(&p.item_id));
+    }
+    h.pressure.retain(|p| !w.contains(&p.item_id));
+    h.workouts.retain(|x| !w.contains(&x.item_id));
+    h
 }
 
 /// What each person the day's "Which {name} is this?" questions offer rests on: for each
@@ -448,6 +472,7 @@ mod tests {
             from_device: None,
             journal: None,
             checkin: None,
+            calendar: None,
         }
     }
 
@@ -499,6 +524,7 @@ mod tests {
             reading: 2,
             same_name: Vec::new(),
             health: None,
+            from_phones: None,
         }
     }
 

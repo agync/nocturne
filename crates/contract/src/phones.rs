@@ -68,6 +68,11 @@ pub struct CalendarEntry {
     pub people: Vec<String>,
     pub repeats: bool,
     pub notes: Option<String>,
+    /// How it repeats, as the phone's calendar holds it (an iCalendar `RRULE`, such as
+    /// `FREQ=WEEKLY;BYDAY=FR`), when it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub repeat_rule: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -77,6 +82,8 @@ pub struct CalendarEntry {
     rename_all_fields = "camelCase"
 )]
 #[ts(export)]
+// A wire type, a hundred at most to a batch: an entry is not boxed to keep it plain to build.
+#[allow(clippy::large_enum_variant)]
 pub enum CalendarChange {
     Upsert {
         entry: CalendarEntry,
@@ -260,6 +267,20 @@ pub struct PhoneSources {
     pub in_browser: bool,
     pub calendar: Option<SourceState>,
     pub health: Option<SourceState>,
+    /// Which app and version the phone runs, once it has said so.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub app: Option<PhoneApp>,
+}
+
+/// "Android app · Nocturne {version}".
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PhoneApp {
+    /// `android` or `ios`.
+    pub platform: String,
+    pub version: String,
 }
 
 /// `calendars` and `upcoming` count for the calendar, `kinds` for health.
@@ -302,6 +323,73 @@ pub struct CameInRow {
     pub title: String,
     pub day: String,
     pub tag: CameInTag,
+    /// A calendar entry's start, whether it is all day, and its calendar's name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub start: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub all_day: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub calendar: Option<String>,
+}
+
+/// An appointment's own page: where it came from and what it was before.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CalendarDetail {
+    /// The calendar's name.
+    pub calendar: String,
+    /// The phone's name.
+    pub phone: String,
+    pub device_id: String,
+    pub start: String,
+    pub end: String,
+    pub all_day: bool,
+    /// The entry's own place name when its time zone differs from the computer's.
+    pub zone: Option<String>,
+    pub place: Option<String>,
+    pub people: Vec<String>,
+    pub repeats: bool,
+    /// "Every Friday", when the rule is a simple one.
+    pub repeat_rule: Option<String>,
+    /// "last updated {time}": when this version came in.
+    pub updated_at: String,
+    /// The version this one replaced ("Was {old day and time}").
+    pub was: Option<CalendarWas>,
+    /// "Removed from your calendar".
+    pub removed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CalendarWas {
+    pub start: String,
+    pub end: String,
+    pub title: String,
+    pub place: Option<String>,
+}
+
+/// One thing a phone brought for a day, as "Delete this day" lists it.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BroughtItem {
+    pub item_id: String,
+    pub title: String,
+    pub phone: String,
+}
+
+/// "From your calendar" and "From Health" in "Delete this day".
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DayFromPhones {
+    pub calendar: Vec<BroughtItem>,
+    pub health: Vec<BroughtItem>,
 }
 
 /// One appointment in "In your calendar today". `zone` is the entry's own place name when its
@@ -359,7 +447,9 @@ pub struct Band {
     pub high: f64,
 }
 
-/// One day's value on a line or day bars.
+/// One day's value on a line or day bars. Sleep is in minutes asleep, heart rate in beats a
+/// minute (the day's middle), blood pressure its top number, steps a count, workouts minutes,
+/// weight as Health gave it.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -381,6 +471,25 @@ pub struct HealthSeries {
     pub points: Vec<SeriesPoint>,
     pub usual: Option<Band>,
     pub journal_days: Vec<String>,
+    /// Blood pressure's usual, one band for each number.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub pressure_usual: Option<PressureUsual>,
+    /// Sleep's usual bedtime and waking time (`HH:MM`), once there is a usual.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub usual_bed: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub usual_wake: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PressureUsual {
+    pub top: Band,
+    pub bottom: Band,
 }
 
 /// One day's heart rate range, in beats a minute.
@@ -455,6 +564,11 @@ pub struct PhoneDeleteScope {
     pub source: PhoneSource,
     pub kinds: Option<Vec<ReadingKind>>,
     pub before: Option<String>,
+    /// One reading or entry alone ("Delete…" in a reading's menu); `kinds` and `before` then
+    /// do not apply.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub item_id: Option<String>,
 }
 
 /// What a delete would remove, and the token that applies it.
@@ -469,4 +583,9 @@ pub struct PhoneDeletePreview {
     pub page_lines: u32,
     pub recap_lines: u32,
     pub noticing: u32,
+    /// What Nocturne learned from them that something the person kept also says: kept, with
+    /// only the phone's receipt taken off.
+    #[serde(default)]
+    #[ts(as = "Option<u32>", optional)]
+    pub shared_memories: u32,
 }

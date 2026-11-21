@@ -21,7 +21,7 @@ mod tests;
 use std::collections::BTreeSet;
 
 use nocturne_contract::{
-    CameInRow, CameInTag, PhonePageOptions, PhoneSource, PhoneSources, PhoneSourcesView,
+    CameInRow, CameInTag, PhoneApp, PhonePageOptions, PhoneSource, PhoneSources, PhoneSourcesView,
     ReadingKind, SourceState, SyncReceipt,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
@@ -264,9 +264,24 @@ pub(crate) fn insert_version(
     });
     // Unique per version: the same content may come back after a change.
     let sha = sha256_hex(format!("{}\n{version}", v.hash).as_bytes());
+    // A version the person marked private stays private when the phone changes it.
+    let private: bool = match before {
+        Some(b) => tx
+            .query_row(
+                "SELECT private FROM items WHERE id = ?1",
+                [&b.item_id],
+                |r| r.get(0),
+            )
+            .optional()?
+            .unwrap_or(false),
+        None => false,
+    };
+    // A calendar entry waits to be read below anything the person kept.
+    let priority = if v.kind == "calendar" { -1 } else { 0 };
     tx.execute(
-        "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status, text, metadata) \
-         VALUES (?1, ?2, 'phone', 'trusted', ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO items(id, kind, source, trust, sha256, title, kept_at, status, text, metadata, \
+         private, priority) \
+         VALUES (?1, ?2, 'phone', 'trusted', ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             id,
             v.kind,
@@ -275,9 +290,19 @@ pub(crate) fn insert_version(
             now,
             v.status,
             v.text,
-            serde_json::to_string(&meta)?
+            serde_json::to_string(&meta)?,
+            private,
+            priority
         ],
     )?;
+    if let Some(b) = before {
+        // An earlier version nobody read yet will not be: the new one is read instead.
+        tx.execute(
+            "UPDATE items SET status = 'understood', lease_until = NULL, lease_token = NULL \
+             WHERE id = ?1 AND status IN ('kept', 'reading')",
+            [&b.item_id],
+        )?;
+    }
     // The phone is named on every receipt, as for what it keeps.
     tx.execute(
         "INSERT INTO remote_keeps(item_id, device_id, client_id, kept_at) VALUES (?1, ?2, ?3, ?4)",
@@ -425,15 +450,17 @@ impl Engine {
         let today: jiff::civil::Date = self.today().parse()?;
         self.read(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, name FROM remote_devices d WHERE revoked_at IS NULL \
+                "SELECT id, name, app_platform, app_version FROM remote_devices d \
+                 WHERE revoked_at IS NULL \
                  OR EXISTS (SELECT 1 FROM phone_sources s WHERE s.device_id = d.id) \
                  ORDER BY paired_at, id",
             )?;
-            let devices: Vec<(String, String)> = stmt
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+            type Row = (String, String, Option<String>, Option<String>);
+            let devices: Vec<Row> = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
                 .collect::<rusqlite::Result<_>>()?;
             let mut phones = Vec::new();
-            for (device_id, name) in devices {
+            for (device_id, name, platform, version) in devices {
                 let calendar = source_state(conn, &device_id, PhoneSource::Calendar, today)?;
                 let health = source_state(conn, &device_id, PhoneSource::Health, today)?;
                 phones.push(PhoneSources {
@@ -443,6 +470,10 @@ impl Engine {
                     name,
                     calendar,
                     health,
+                    app: match (platform, version) {
+                        (Some(platform), Some(version)) => Some(PhoneApp { platform, version }),
+                        _ => None,
+                    },
                 });
             }
             Ok(PhoneSourcesView {
@@ -450,6 +481,17 @@ impl Engine {
                 page: page_options(conn)?,
                 noticing: flag(conn, NOTICING, true)?,
             })
+        })
+    }
+
+    /// Note which app and version a phone runs, as it says when it connects.
+    pub fn set_phone_app(&self, device_id: &str, platform: &str, version: &str) -> Result<()> {
+        self.write(|tx| {
+            tx.execute(
+                "UPDATE remote_devices SET app_platform = ?2, app_version = ?3 WHERE id = ?1",
+                params![device_id, platform, version],
+            )?;
+            Ok(())
         })
     }
 
@@ -526,18 +568,21 @@ impl Engine {
             .transpose()?;
         self.read(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT i.id, i.kept_at, i.title, json_extract(i.metadata, '$.day'), \
-                 json_extract(i.metadata, '$.replaces') IS NOT NULL, NULL \
-                 FROM items i WHERE json_extract(i.metadata, '$.phone.device') = ?1 \
+                "SELECT id, at, title, day, changed, removed, metadata FROM ( \
+                 SELECT i.id, i.kept_at AS at, i.title, json_extract(i.metadata, '$.day') AS day, \
+                 json_extract(i.metadata, '$.replaces') IS NOT NULL AS changed, 0 AS removed, \
+                 i.metadata FROM items i \
+                 WHERE json_extract(i.metadata, '$.phone.device') = ?1 \
                  AND json_extract(i.metadata, '$.phone.source') = ?2 \
                  UNION ALL \
-                 SELECT i.id, r.removed_at, i.title, json_extract(i.metadata, '$.day'), 0, 1 \
-                 FROM phone_records r JOIN items i ON i.id = r.item_id \
-                 WHERE r.device_id = ?1 AND r.source = ?2 AND r.removed_at IS NOT NULL",
+                 SELECT i.id, r.removed_at, i.title, json_extract(i.metadata, '$.day'), 0, 1, \
+                 i.metadata FROM phone_records r JOIN items i ON i.id = r.item_id \
+                 WHERE r.device_id = ?1 AND r.source = ?2 AND r.removed_at IS NOT NULL) \
+                 WHERE ?3 IS NULL OR at < ?3 ORDER BY at DESC, id LIMIT ?4",
             )?;
-            type Raw = (String, String, String, Option<String>, bool, Option<i64>);
-            let mut rows: Vec<Raw> = stmt
-                .query_map(params![device_id, source_str(source)], |r| {
+            type Raw = (String, String, String, Option<String>, bool, bool, String);
+            let rows: Vec<Raw> = stmt
+                .query_map(params![device_id, source_str(source), before, limit], |r| {
                     Ok((
                         r.get(0)?,
                         r.get(1)?,
@@ -545,26 +590,45 @@ impl Engine {
                         r.get(3)?,
                         r.get(4)?,
                         r.get(5)?,
+                        r.get(6)?,
                     ))
                 })?
                 .collect::<rusqlite::Result<_>>()?;
-            rows.retain(|r| before.as_ref().is_none_or(|b| &r.1 < b));
-            rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
-            rows.truncate(limit as usize);
+            let calendars = if source == PhoneSource::Calendar {
+                read::phone_calendars(conn, device_id)?
+            } else {
+                Vec::new()
+            };
             Ok(rows
                 .into_iter()
-                .map(|(item_id, at, title, day, changed, removed)| CameInRow {
-                    item_id,
-                    came_in_at: at,
-                    title,
-                    day: day.unwrap_or_default(),
-                    tag: if removed.is_some() {
-                        CameInTag::Removed
-                    } else if changed {
-                        CameInTag::Changed
-                    } else {
-                        CameInTag::New
-                    },
+                .map(|(item_id, at, title, day, changed, removed, meta)| {
+                    let entry = serde_json::from_str::<Value>(&meta)
+                        .ok()
+                        .and_then(|m| m.get("entry").cloned())
+                        .and_then(|e| {
+                            serde_json::from_value::<nocturne_contract::CalendarEntry>(e).ok()
+                        });
+                    CameInRow {
+                        item_id,
+                        came_in_at: at,
+                        title,
+                        day: day.unwrap_or_default(),
+                        tag: if removed {
+                            CameInTag::Removed
+                        } else if changed {
+                            CameInTag::Changed
+                        } else {
+                            CameInTag::New
+                        },
+                        start: entry.as_ref().map(|e| e.start.clone()),
+                        all_day: entry.as_ref().map(|e| e.all_day),
+                        calendar: entry.as_ref().and_then(|e| {
+                            calendars
+                                .iter()
+                                .find(|c| c.id == e.calendar_id)
+                                .map(|c| c.name.clone())
+                        }),
+                    }
                 })
                 .collect())
         })

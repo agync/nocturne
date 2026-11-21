@@ -4,4 +4,8 @@ import type { CameInTag } from "./CameInTag";
 /**
  * One line of "What came in", newest first.
  */
-export type CameInRow = { itemId: string, cameInAt: string, title: string, day: string, tag: CameInTag, };
+export type CameInRow = { itemId: string, cameInAt: string, title: string, day: string, tag: CameInTag, 
+/**
+ * A calendar entry's start, whether it is all day, and its calendar's name.
+ */
+start?: string, allDay?: boolean, calendar?: string, };

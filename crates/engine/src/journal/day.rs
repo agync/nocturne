@@ -234,11 +234,14 @@ pub(crate) fn previous_period(p: &Period) -> Result<Period> {
     period_of(p.kind, start.yesterday()?)
 }
 
+/// One journal day. `with_phones` adds what phones brought (rows, "From Health" and the groups
+/// "Delete this day" offers); the export leaves it out, having its own files for it.
 pub(crate) fn build_day(
     conn: &Connection,
     ctx: &Ctx,
     originals: &Path,
     day: Date,
+    with_phones: bool,
 ) -> Result<JournalDay> {
     let all = items_in_days(conn, ctx, originals, day, day)?;
     let items = current(&all);
@@ -357,8 +360,14 @@ pub(crate) fn build_day(
             },
         ));
     }
-    let health = crate::phones::read::day_health(conn, &ctx.tz, day)?;
-    rows.extend(phone_rows(conn, ctx, originals, day, health.as_ref())?);
+    let health = if with_phones {
+        crate::phones::read::day_health(conn, &ctx.tz, day)?
+    } else {
+        None
+    };
+    if with_phones {
+        rows.extend(phone_rows(conn, ctx, originals, day, health.as_ref())?);
+    }
     rows.sort_by(|a, b| (&a.0, &a.1).cmp(&(&b.0, &b.1)));
     // Last night beside the day's first check-in, with its receipt.
     let after_sleep =
@@ -406,6 +415,11 @@ pub(crate) fn build_day(
         reading,
         same_name,
         health,
+        from_phones: if with_phones {
+            crate::phones::read::day_brought(conn, day)?
+        } else {
+            None
+        },
     })
 }
 
@@ -421,7 +435,8 @@ fn phone_rows(
 ) -> Result<Vec<(String, String, TimelineRow)>> {
     let mut wanted: Vec<(String, String, RowKind)> = Vec::new();
     for c in crate::phones::read::calendar_entries(conn, day)? {
-        let at = if c.entry.all_day {
+        let starts_today = crate::phones::calendar::entry_day(&c.entry, &ctx.tz) == Some(day);
+        let at = if c.entry.all_day || !starts_today {
             crate::util::fmt_ts(day.to_zoned(ctx.tz.clone())?.timestamp())
         } else {
             crate::util::fmt_ts(parse_ts(&c.entry.start)?)
@@ -513,7 +528,7 @@ impl Engine {
             if day > ctx.today()? {
                 return Err(Error::invalid("that day has not come yet"));
             }
-            build_day(conn, &ctx, &originals, day)
+            build_day(conn, &ctx, &originals, day, true)
         })
     }
 

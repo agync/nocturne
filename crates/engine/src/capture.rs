@@ -414,6 +414,9 @@ impl Engine {
                 let mentions = crate::journal::day::mentions_of(conn, &[id.to_string()])?;
                 view.checkin = crate::journal::day::checkin_view(&item, &mentions).ok();
             }
+            if view.kind == nocturne_contract::ItemKind::Calendar {
+                view.calendar = crate::phones::read::calendar_detail(conn, &self.clock().tz(), id)?;
+            }
             Ok(Some(view))
         })?
         .ok_or_else(|| Error::not_found(format!("item {id}")))

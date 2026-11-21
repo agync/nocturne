@@ -111,6 +111,10 @@ pub struct ItemView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub checkin: Option<crate::CheckIn>,
+    /// An appointment from a phone's calendar, for its own page.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub calendar: Option<crate::CalendarDetail>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

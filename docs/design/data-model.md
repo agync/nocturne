@@ -52,9 +52,10 @@ tape, trusted, with the phone as its source.
 | Key | Meaning |
 |---|---|
 | `phone` | `device`, `source` (`calendar` or `health`), `phoneId` (the phone's own id) and `hash` (of what the phone sent) |
-| `entry`, `calendarName`, `calendarColour`, `calendarKind` | A calendar entry as the phone sent it, and the calendar it is in |
+| `entry` | A calendar entry as the phone sent it, its repeat rule included. Its calendar's name and colour are read from the phone's list in `phone_sources`, so renaming a calendar changes no entry |
 | `reading`, `start`, `end`, `sourceDevice` | A reading's value by kind, its time and the app or device Health names |
-| `day` | The day it is on: an appointment's day in the computer's time, a reading's journal day (a night belongs to the day it ends on) |
+| `day` | The day it is on: an appointment's first day in the computer's time, a reading's journal day (a night belongs to the day it ends on) |
+| `endDay` | An appointment's last day: an all-day entry's end date is not one of its days, and one that ends at midnight ends the day before |
 | `replaces` | The earlier version a changed entry or reading replaces |
 
 Two tables sit beside the tape. `phone_sources` holds, per phone and source, whether the person
@@ -65,8 +66,8 @@ when it was removed on the phone.
 | What arrives | What is kept |
 |---|---|
 | The same entry again | Nothing new: the hash matches the current version |
-| A changed entry | A new item that `replaces` the earlier one. The earlier version's fact becomes history of the new one, never a question |
-| A cancelled or deleted entry, inside the window the phone read | `removed_at` is set and the fact's valid time ends on that day. The item stays until the person deletes it |
+| A changed entry | A new item that `replaces` the earlier one, private if the earlier one was. The earlier version's fact becomes history of the new one, never a question, and an earlier version not yet read is not read |
+| A cancelled or deleted entry, well inside the window the phone read | `removed_at` is set and the fact's valid time ends on that day, unless a note, a letter or another phone still says it. The item stays until the person deletes it |
 | A reading deleted in Health | `removed_at` is set. It is left out of charts, lines and sentences, and listed as removed |
 | More than 500 calendar changes or 5,000 readings in one send | Only the first ones up to the cap |
 
@@ -285,4 +286,4 @@ Forgetting is explicit and confirmed, and it is not undoable. The interface call
 | The source event and its original file | Removed when the person chooses, the default when no other fact depends on it |
 | Lines on past pages that cite the fact | Redacted to "(forgotten)" |
 | Exports and printed pages already made | Out of reach; the confirmation says so |
-| What a phone brought ("Delete what came in") | Its items, earlier versions and the facts they said, through the same preview and token; optionally its source is stopped too |
+| What a phone brought ("Delete what came in") | Its items, earlier versions and the facts only they said, through the same preview and token; a fact the person's own keeps also say stays, with only the phone's receipt removed. Optionally its source is stopped first |

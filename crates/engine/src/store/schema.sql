@@ -376,3 +376,12 @@ CREATE INDEX items_phone_source ON items(json_extract(metadata, '$.phone.source'
   WHERE json_extract(metadata, '$.phone.source') IS NOT NULL;
 -- What a phone delete covers, so applying it can also stop that source.
 ALTER TABLE forget_tokens ADD COLUMN phone_scope TEXT;
+-- Memories a delete keeps because something else also said them: only their links to the
+-- deleted items go.
+ALTER TABLE forget_tokens ADD COLUMN unlink TEXT;
+-- Which app and version a phone runs, once it says so.
+ALTER TABLE remote_devices ADD COLUMN app_platform TEXT;
+ALTER TABLE remote_devices ADD COLUMN app_version TEXT;
+-- Earlier versions are found by what replaced them.
+CREATE INDEX items_replaces ON items(json_extract(metadata, '$.replaces'))
+  WHERE json_extract(metadata, '$.replaces') IS NOT NULL;

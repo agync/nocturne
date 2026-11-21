@@ -137,6 +137,7 @@ fn entry(phone_id: &str, title: &str, hour: u8) -> CalendarEntry {
         people: Vec::new(),
         repeats: false,
         notes: None,
+        repeat_rule: None,
     }
 }
 

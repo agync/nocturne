@@ -7,7 +7,7 @@ use nocturne_contract::{
     CalendarBatch, CalendarChange, CalendarEntry, EntityKind, PhoneCalendar, PhoneSource, Span,
     SyncReceipt,
 };
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 use serde_json::{Value, json};
 
 use super::{
@@ -18,7 +18,7 @@ use crate::Engine;
 use crate::error::Result;
 use crate::memory::apply_structured;
 use crate::types::{Candidate, Predicate};
-use crate::util::fmt_ts;
+use crate::util::{fmt_ts, new_id};
 
 /// The longest title, place, name or note kept from an entry, in characters.
 const MAX_FIELD: usize = 2000;
@@ -79,6 +79,24 @@ pub(crate) fn entry_day(e: &CalendarEntry, tz: &TimeZone) -> Option<Date> {
     )
 }
 
+/// The last day an entry is on: an all-day entry ends the day before its end date, a timed one
+/// on the day it ends, or the day before when it ends at midnight.
+pub(crate) fn entry_end_day(e: &CalendarEntry, tz: &TimeZone) -> Option<Date> {
+    let start = entry_day(e, tz)?;
+    let end = if e.all_day {
+        e.end.get(..10)?.parse::<Date>().ok()?.yesterday().ok()?
+    } else {
+        let z = e.end.parse::<Timestamp>().ok()?.to_zoned(tz.clone());
+        let at_midnight = z.hour() == 0 && z.minute() == 0 && z.second() == 0;
+        if at_midnight {
+            z.date().yesterday().ok()?
+        } else {
+            z.date()
+        }
+    };
+    Some(end.max(start))
+}
+
 fn valid(e: &CalendarEntry, tz: &TimeZone) -> bool {
     let short = |s: &str| s.chars().count() <= MAX_FIELD;
     let times_ok = if e.all_day {
@@ -94,6 +112,7 @@ fn valid(e: &CalendarEntry, tz: &TimeZone) -> bool {
         && entry_day(e, tz).is_some()
         && !e.phone_id.is_empty()
         && e.phone_id.len() <= 200
+        && e.calendar_id.len() <= 200
         && !e.title.trim().is_empty()
         && short(&e.title)
         && e.place.as_deref().is_none_or(short)
@@ -128,9 +147,21 @@ pub(crate) fn candidate(e: &CalendarEntry, day: Date, tz: &TimeZone) -> Candidat
     c
 }
 
-fn calendars_merged(stored: &str, sent: &[PhoneCalendar]) -> Vec<PhoneCalendar> {
-    let mut all: Vec<PhoneCalendar> = serde_json::from_str(stored).unwrap_or_default();
-    for c in sent {
+/// The calendars a send names. The first batch of a send lists them all, so it replaces what was
+/// kept; later batches add to it. A name or colour too long to be one is left out.
+fn calendars_merged(stored: &str, sent: &[PhoneCalendar], first: bool) -> Vec<PhoneCalendar> {
+    let mut all: Vec<PhoneCalendar> = if first {
+        Vec::new()
+    } else {
+        serde_json::from_str(stored).unwrap_or_default()
+    };
+    let fits = |c: &&PhoneCalendar| {
+        !c.id.is_empty()
+            && c.id.len() <= 200
+            && c.name.chars().count() <= 200
+            && c.colour.as_deref().is_none_or(|x| x.len() <= 40)
+    };
+    for c in sent.iter().filter(fits) {
         match all.iter_mut().find(|a| a.id == c.id) {
             Some(a) => *a = c.clone(),
             None => all.push(c.clone()),
@@ -204,14 +235,88 @@ fn appointment(
                  WHERE id = ?1 AND superseded_at IS NULL",
                 params![o, now, n],
             )?;
+            // What the person chose for the appointment holds for its new day.
+            tx.execute(
+                "UPDATE memories SET keep_forever = 1 WHERE id = ?1 \
+                 AND EXISTS (SELECT 1 FROM memories WHERE id = ?2 AND keep_forever = 1)",
+                params![n, o],
+            )?;
         }
     }
     Ok(())
 }
 
-/// A cancelled or deleted entry: its appointment's valid time ends, and nothing is deleted.
+/// A title the mind already read for another entry is not read again: its mentions are copied,
+/// and the entry is understood.
+fn reuse_mentions(tx: &Transaction<'_>, item_id: &str, title: &str) -> Result<()> {
+    let read: Option<String> = tx
+        .query_row(
+            "SELECT id FROM items WHERE kind = 'calendar' AND text = ?1 AND id != ?2 \
+             AND status = 'understood' ORDER BY kept_at DESC, id LIMIT 1",
+            params![title, item_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(read) = read else {
+        return Ok(());
+    };
+    let mut stmt = tx.prepare(
+        "SELECT entity_id, name, start, end, ord, state FROM mentions WHERE item_id = ?1",
+    )?;
+    type Mention = (String, String, Option<i64>, Option<i64>, i64, String);
+    let rows: Vec<Mention> = stmt
+        .query_map([&read], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let now: String = tx.query_row("SELECT kept_at FROM items WHERE id = ?1", [item_id], |r| {
+        r.get(0)
+    })?;
+    for (entity, name, start, end, ord, state) in rows {
+        tx.execute(
+            "INSERT OR IGNORE INTO mentions(id, item_id, entity_id, name, start, end, ord, state, \
+             new, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9)",
+            params![
+                new_id("men"),
+                item_id,
+                entity,
+                name,
+                start,
+                end,
+                ord,
+                state,
+                now
+            ],
+        )?;
+    }
+    tx.execute(
+        "UPDATE items SET status = 'understood' WHERE id = ?1 AND status = 'kept'",
+        [item_id],
+    )?;
+    Ok(())
+}
+
+/// A cancelled or deleted entry: its appointment's valid time ends, and nothing is deleted. An
+/// appointment something else still says (a note, a letter, another phone's calendar) stays on.
 fn close(tx: &Transaction<'_>, item_id: &str, today: &str) -> Result<()> {
     for m in current_memories(tx, item_id)? {
+        let others: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM memory_sources s JOIN items i ON i.id = s.item_id \
+             WHERE s.memory_id = ?1 AND s.item_id != ?2 AND (i.kind != 'calendar' OR EXISTS \
+               (SELECT 1 FROM phone_records r WHERE r.item_id = i.id AND r.removed_at IS NULL)))",
+            params![m, item_id],
+            |r| r.get(0),
+        )?;
+        if others {
+            continue;
+        }
         tx.execute(
             "UPDATE memories SET valid_to = ?2 WHERE id = ?1 AND valid_to IS NULL",
             params![m, today],
@@ -235,7 +340,8 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
         if !row.taking {
             return Ok(stopped());
         }
-        let calendars = calendars_merged(&row.calendars, &batch.calendars);
+        let first = batch.seq == 0 && !batch.calendars.is_empty();
+        let calendars = calendars_merged(&row.calendars, &batch.calendars, first);
         tx.execute(
             "UPDATE phone_sources SET calendars = ?3 WHERE device_id = ?1 AND source = ?2",
             params![device_id, "calendar", serde_json::to_string(&calendars)?],
@@ -264,13 +370,9 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
                         receipt.refused += 1;
                         continue;
                     };
-                    let cal = calendars.iter().find(|c| c.id == entry.calendar_id);
-                    let content = json!({
-                        "entry": entry,
-                        "calendarName": cal.map(|c| c.name.clone()),
-                        "calendarColour": cal.and_then(|c| c.colour.clone()),
-                        "calendarKind": cal.map(|c| c.kind),
-                    });
+                    // The calendar's name and colour are read from the phone's list when shown,
+                    // so renaming a calendar is not a change to every entry in it.
+                    let content = json!({ "entry": entry });
                     let hash =
                         content_hash(device_id, PhoneSource::Calendar, &entry.phone_id, &content);
                     let before = record(tx, device_id, PhoneSource::Calendar, &entry.phone_id)?;
@@ -283,6 +385,8 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
                     }
                     let mut meta = content;
                     meta["day"] = Value::String(day.to_string());
+                    let last = entry_end_day(&entry, &tz).unwrap_or(day);
+                    meta["endDay"] = Value::String(last.to_string());
                     let title = entry.title.trim().to_string();
                     let id = insert_version(
                         tx,
@@ -312,6 +416,7 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
                         earlier,
                     )?;
                     set_replaces(tx, &id, before.as_ref())?;
+                    reuse_mentions(tx, &id, &title)?;
                     receipt.taken += 1;
                 }
                 CalendarChange::Removed { phone_id } => {
@@ -328,8 +433,10 @@ pub(crate) fn take(engine: &Engine, device_id: &str, batch: CalendarBatch) -> Re
                         .and_then(|d| d.parse().ok());
                     // Only an entry inside the window the phone read can have gone from it:
                     // one that aged out of the window is not removed.
+                    // The phone reads its window in its own time zone: a day of margin at each
+                    // edge keeps a time-zone difference from counting as inside.
                     let inside = match (window, day) {
-                        ((Some(from), Some(to)), Some(d)) => from <= d && d <= to,
+                        ((Some(from), Some(to)), Some(d)) => from < d && d < to,
                         _ => false,
                     };
                     if b.removed || !inside {

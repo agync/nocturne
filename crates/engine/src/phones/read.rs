@@ -2,16 +2,17 @@
 //! and readings are left out of every line, chart and sentence; only a kind's own list shows
 //! them.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
 use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use nocturne_contract::{
-    CalendarEntry, CalendarLine, DayHealth, DayRange, HealthSeries, NightLine, PressureReading,
+    BroughtItem, CalendarDetail, CalendarEntry, CalendarLine, CalendarWas, DayFromPhones,
+    DayHealth, DayRange, HealthSeries, NightLine, PhoneCalendar, PressureReading, PressureUsual,
     ReadingKind, ReadingRow, ReadingValue, SeriesPoint, TimeSpan, Versus, WorkoutRow,
 };
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::Value;
 
 use super::usual::{self, USUAL_DAYS, USUAL_MIN_DAYS};
@@ -34,37 +35,74 @@ pub(crate) struct CalEntry {
     pub phone: String,
 }
 
-/// The day's current entries, all-day ones first, then by start.
+/// The calendars a phone named, as it last sent them.
+pub(crate) fn phone_calendars(conn: &Connection, device_id: &str) -> Result<Vec<PhoneCalendar>> {
+    let json: Option<String> = conn
+        .query_row(
+            "SELECT calendars FROM phone_sources WHERE device_id = ?1 AND source = 'calendar'",
+            [device_id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    Ok(json
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default())
+}
+
+/// One current entry, read from its item.
+pub(crate) fn cal_entry(
+    conn: &Connection,
+    item_id: &str,
+    meta: &Value,
+    device_id: &str,
+    phone: String,
+    names: &mut HashMap<String, Vec<PhoneCalendar>>,
+) -> Result<Option<CalEntry>> {
+    let Some(entry) = meta
+        .get("entry")
+        .and_then(|e| serde_json::from_value::<CalendarEntry>(e.clone()).ok())
+    else {
+        return Ok(None);
+    };
+    if !names.contains_key(device_id) {
+        names.insert(device_id.to_string(), phone_calendars(conn, device_id)?);
+    }
+    let calendar = names[device_id]
+        .iter()
+        .find(|c| c.id == entry.calendar_id)
+        .map(|c| c.name.clone())
+        .unwrap_or_default();
+    Ok(Some(CalEntry {
+        item_id: item_id.to_string(),
+        entry,
+        calendar,
+        phone,
+    }))
+}
+
+/// The entries on the day, an entry over several days on each of them: all-day ones first, then
+/// by start.
 pub(crate) fn calendar_entries(conn: &Connection, day: Date) -> Result<Vec<CalEntry>> {
     let mut stmt = conn.prepare_cached(
-        "SELECT i.id, i.metadata, COALESCE(d.name, '') \
+        "SELECT i.id, i.metadata, r.device_id, COALESCE(d.name, '') \
          FROM phone_records r JOIN items i ON i.id = r.item_id \
          LEFT JOIN remote_devices d ON d.id = r.device_id \
          WHERE r.source = 'calendar' AND r.removed_at IS NULL \
-         AND json_extract(i.metadata, '$.day') = ?1",
+         AND json_extract(i.metadata, '$.day') <= ?1 \
+         AND COALESCE(json_extract(i.metadata, '$.endDay'), json_extract(i.metadata, '$.day')) >= ?1",
     )?;
-    let rows: Vec<(String, String, String)> = stmt
-        .query_map([day.to_string()], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+    let rows: Vec<(String, String, String, String)> = stmt
+        .query_map([day.to_string()], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?
         .collect::<rusqlite::Result<_>>()?;
+    let mut names = HashMap::new();
     let mut out = Vec::new();
-    for (item_id, meta, phone) in rows {
+    for (item_id, meta, device, phone) in rows {
         let meta: Value = serde_json::from_str(&meta)?;
-        let Some(entry) = meta
-            .get("entry")
-            .and_then(|e| serde_json::from_value::<CalendarEntry>(e.clone()).ok())
-        else {
-            continue;
-        };
-        out.push(CalEntry {
-            item_id,
-            calendar: meta
-                .get("calendarName")
-                .and_then(Value::as_str)
-                .unwrap_or_default()
-                .to_string(),
-            entry,
-            phone,
-        });
+        if let Some(c) = cal_entry(conn, &item_id, &meta, &device, phone, &mut names)? {
+            out.push(c);
+        }
     }
     out.sort_by(|a, b| {
         b.entry
@@ -254,6 +292,7 @@ fn journal_days(conn: &Connection, from: &str, to: &str) -> Result<Vec<String>> 
 
 pub(crate) fn health_series(
     conn: &Connection,
+    tz: &TimeZone,
     kind: ReadingKind,
     from: Date,
     to: Date,
@@ -266,22 +305,81 @@ pub(crate) fn health_series(
         &readings_of(conn, kind, &from.to_string(), &to.to_string(), false)?,
     );
     let first = days_back(to, USUAL_DAYS)?;
-    let history = per_day(
-        kind,
-        &readings_of(conn, kind, &first.to_string(), &to.to_string(), false)?,
-    );
-    let values: Vec<(Date, f64)> = history
-        .iter()
-        .filter_map(|p| Some((p.day.parse().ok()?, p.value)))
-        .collect();
+    let recent = readings_of(conn, kind, &first.to_string(), &to.to_string(), false)?;
+    let history = per_day(kind, &recent);
+    let values = dated(&history);
+    let usual = usual::band(&values, to);
+    let pressure_usual = if kind == ReadingKind::BloodPressure {
+        let bottoms: Vec<(Date, f64)> = per_day_by(&recent, |v| match v {
+            ReadingValue::BloodPressure { bottom, .. } => *bottom,
+            _ => f64::NAN,
+        });
+        match (usual, usual::band(&bottoms, to)) {
+            (Some(top), Some(bottom)) => Some(PressureUsual { top, bottom }),
+            _ => None,
+        }
+    } else {
+        None
+    };
+    let (usual_bed, usual_wake) = if kind == ReadingKind::Sleep {
+        usual_times(&recent, &history, tz)
+    } else {
+        (None, None)
+    };
     Ok(HealthSeries {
         kind,
         from: from.to_string(),
         to: to.to_string(),
         points,
-        usual: usual::band(&values, to),
+        usual,
         journal_days: journal_days(conn, &from.to_string(), &to.to_string())?,
+        pressure_usual,
+        usual_bed,
+        usual_wake,
     })
+}
+
+fn dated(points: &[SeriesPoint]) -> Vec<(Date, f64)> {
+    points
+        .iter()
+        .filter_map(|p| Some((p.day.parse().ok()?, p.value)))
+        .collect()
+}
+
+/// The average of one number per day, for a band of its own.
+fn per_day_by(readings: &[Stored], value: impl Fn(&ReadingValue) -> f64) -> Vec<(Date, f64)> {
+    let mut days: BTreeMap<&str, Vec<f64>> = BTreeMap::new();
+    for r in readings.iter().filter(|r| !r.removed) {
+        let v = value(&r.value);
+        if v.is_finite() {
+            days.entry(r.day.as_str()).or_default().push(v);
+        }
+    }
+    days.into_iter()
+        .filter_map(|(d, vs)| Some((d.parse().ok()?, vs.iter().sum::<f64>() / vs.len() as f64)))
+        .collect()
+}
+
+/// The usual bedtime and waking time, from the nights the usual counts, once there are enough.
+fn usual_times(
+    nights: &[Stored],
+    per: &[SeriesPoint],
+    tz: &TimeZone,
+) -> (Option<String>, Option<String>) {
+    let mut beds = Vec::new();
+    let mut wakes = Vec::new();
+    for p in per {
+        if let Some(n) = nights.iter().find(|n| n.item_id == p.item_id)
+            && let Some((_, f, t)) = night_of(n)
+        {
+            beds.push(after_noon(f, tz));
+            wakes.push(after_noon(t, tz));
+        }
+    }
+    if beds.len() < USUAL_MIN_DAYS {
+        return (None, None);
+    }
+    (Some(clock_of(median(beds))), Some(clock_of(median(wakes))))
 }
 
 /// Minutes after noon, so a bedtime either side of midnight sorts as the evening it is.
@@ -351,18 +449,7 @@ pub(crate) fn night_line(conn: &Connection, tz: &TimeZone, day: Date) -> Result<
             None
         }
     });
-    // The usual bedtime and waking time, from the same nights as the usual.
-    let mut beds = Vec::new();
-    let mut wakes = Vec::new();
-    for p in &per {
-        if let Some(n) = nights.iter().find(|n| n.item_id == p.item_id)
-            && let Some((_, f, t)) = night_of(n)
-        {
-            beds.push(after_noon(f, tz));
-            wakes.push(after_noon(t, tz));
-        }
-    }
-    let enough = beds.len() >= USUAL_MIN_DAYS;
+    let (usual_bed, usual_wake) = usual_times(&nights, &per, tz);
     Ok(Some(NightLine {
         item_id: best.item_id.clone(),
         asleep_min,
@@ -375,8 +462,8 @@ pub(crate) fn night_line(conn: &Connection, tz: &TimeZone, day: Date) -> Result<
         awake_count: periods.len().saturating_sub(1) as u32,
         periods,
         versus,
-        usual_bed: enough.then(|| clock_of(median(beds))),
-        usual_wake: enough.then(|| clock_of(median(wakes))),
+        usual_bed,
+        usual_wake,
         phone: best.phone.clone(),
     }))
 }
@@ -386,7 +473,7 @@ pub(crate) fn day_health(conn: &Connection, tz: &TimeZone, day: Date) -> Result<
     let d = day.to_string();
     let night = night_line(conn, tz, day)?;
     let series = |kind: ReadingKind, n: i64| -> Result<Option<HealthSeries>> {
-        let s = health_series(conn, kind, days_back(day, n)?, day)?;
+        let s = health_series(conn, tz, kind, days_back(day, n)?, day)?;
         Ok((!s.points.is_empty()).then_some(s))
     };
     let resting = series(ReadingKind::RestingHeartRate, RESTING_DAYS)?;
@@ -484,7 +571,8 @@ impl Engine {
 
     /// One kind over the days `from` to `to`, both included, with the person's usual.
     pub fn health_series(&self, kind: ReadingKind, from: Date, to: Date) -> Result<HealthSeries> {
-        self.read(|conn| health_series(conn, kind, from, to))
+        let tz = self.clock().tz();
+        self.read(|conn| health_series(conn, &tz, kind, from, to))
     }
 
     /// Every reading of one kind on the days `from` to `to`, newest first, removed ones too.
@@ -515,4 +603,168 @@ pub(crate) fn cap_lines(mut all: Vec<CalendarLine>) -> (Vec<CalendarLine>, u32) 
     let more = all.len().saturating_sub(CALENDAR_TODAY_ROWS) as u32;
     all.truncate(CALENDAR_TODAY_ROWS);
     (all, more)
+}
+
+/// What phones brought for a day, for "Delete this day": the entries that start on it and the
+/// readings that belong to it, removed ones too.
+pub(crate) fn day_brought(conn: &Connection, day: Date) -> Result<Option<DayFromPhones>> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT r.source, i.id, i.title, COALESCE(d.name, '') \
+         FROM phone_records r JOIN items i ON i.id = r.item_id \
+         LEFT JOIN remote_devices d ON d.id = r.device_id \
+         WHERE json_extract(i.metadata, '$.day') = ?1 \
+         ORDER BY json_extract(i.metadata, '$.entry.start'), json_extract(i.metadata, '$.start'), i.id",
+    )?;
+    let rows: Vec<(String, String, String, String)> = stmt
+        .query_map([day.to_string()], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut out = DayFromPhones {
+        calendar: Vec::new(),
+        health: Vec::new(),
+    };
+    for (source, item_id, title, phone) in rows {
+        let row = BroughtItem {
+            item_id,
+            title,
+            phone,
+        };
+        if source == "calendar" {
+            out.calendar.push(row);
+        } else {
+            out.health.push(row);
+        }
+    }
+    Ok((!out.calendar.is_empty() || !out.health.is_empty()).then_some(out))
+}
+
+/// A repeat rule in words, when it is a simple one: "Every Friday", "Every other week",
+/// "Every day", "Every month", "Every year". Anything else is left unsaid.
+pub(crate) fn repeat_words(rule: &str) -> Option<String> {
+    let mut freq = None;
+    let mut interval = 1u32;
+    let mut days: Vec<&str> = Vec::new();
+    for part in rule.trim().trim_start_matches("RRULE:").split(';') {
+        let (k, v) = part.split_once('=')?;
+        match k {
+            "FREQ" => freq = Some(v),
+            "INTERVAL" => interval = v.parse().ok()?,
+            "BYDAY" => days = v.split(',').collect(),
+            "WKST" | "UNTIL" | "COUNT" => {}
+            _ => return None,
+        }
+    }
+    let name = |d: &str| -> Option<&'static str> {
+        Some(match d {
+            "MO" => "Monday",
+            "TU" => "Tuesday",
+            "WE" => "Wednesday",
+            "TH" => "Thursday",
+            "FR" => "Friday",
+            "SA" => "Saturday",
+            "SU" => "Sunday",
+            _ => return None,
+        })
+    };
+    let every = match interval {
+        1 => "Every",
+        2 => "Every other",
+        _ => return None,
+    };
+    Some(match (freq?, days.as_slice()) {
+        ("DAILY", []) => match interval {
+            1 => "Every day".to_string(),
+            _ => "Every other day".to_string(),
+        },
+        ("WEEKLY", []) => format!("{every} week"),
+        ("WEEKLY", ds) => {
+            let names: Vec<&str> = ds.iter().map(|d| name(d)).collect::<Option<_>>()?;
+            let list = match names.as_slice() {
+                [one] => (*one).to_string(),
+                [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+                [] => return None,
+            };
+            format!("{every} {list}")
+        }
+        ("MONTHLY", []) => format!("{every} month"),
+        ("YEARLY", []) => format!("{every} year"),
+        _ => return None,
+    })
+}
+
+/// An appointment's own page: its calendar and phone, what it was before, and whether it was
+/// removed on the phone.
+pub(crate) fn calendar_detail(
+    conn: &Connection,
+    tz: &TimeZone,
+    item_id: &str,
+) -> Result<Option<CalendarDetail>> {
+    let row: Option<(String, String, String)> = conn
+        .query_row(
+            "SELECT metadata, kept_at, json_extract(metadata, '$.phone.device') FROM items \
+             WHERE id = ?1 AND kind = 'calendar'",
+            [item_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    let Some((meta, updated_at, device)) = row else {
+        return Ok(None);
+    };
+    let meta: Value = serde_json::from_str(&meta)?;
+    let phone: String = conn
+        .query_row(
+            "SELECT name FROM remote_devices WHERE id = ?1",
+            [&device],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or_default();
+    let mut names = HashMap::new();
+    let Some(c) = cal_entry(conn, item_id, &meta, &device, phone.clone(), &mut names)? else {
+        return Ok(None);
+    };
+    let removed: bool = conn
+        .query_row(
+            "SELECT removed_at IS NOT NULL FROM phone_records WHERE item_id = ?1",
+            [item_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .unwrap_or(false);
+    let was = match meta.get("replaces").and_then(Value::as_str) {
+        Some(prev) => conn
+            .query_row(
+                "SELECT json_extract(metadata, '$.entry') FROM items WHERE id = ?1",
+                [prev],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten()
+            .and_then(|e| serde_json::from_str::<CalendarEntry>(&e).ok())
+            .map(|e| CalendarWas {
+                start: e.start,
+                end: e.end,
+                title: e.title.trim().to_string(),
+                place: e.place,
+            }),
+        None => None,
+    };
+    let line = calendar_line(&c, tz);
+    Ok(Some(CalendarDetail {
+        calendar: c.calendar,
+        phone,
+        device_id: device,
+        start: c.entry.start.clone(),
+        end: c.entry.end.clone(),
+        all_day: c.entry.all_day,
+        zone: line.zone,
+        place: line.place,
+        people: c.entry.people.clone(),
+        repeats: c.entry.repeats,
+        repeat_rule: c.entry.repeat_rule.as_deref().and_then(repeat_words),
+        updated_at,
+        was,
+        removed,
+    }))
 }
