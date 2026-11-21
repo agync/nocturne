@@ -1,13 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
-import { App } from "../App";
+import type { PairedDevice } from "../engine";
 import { Pair } from "../screens/Pair";
 import type { PairingLike } from "../services";
 import { AddressStep, CameraOff, CodeStep, NativeWelcome } from "./Entry";
+import { watchLaunch } from "./launch";
+import { NativeApp } from "./NativeApp";
 import { openAppSettings, scanCode } from "./scanner";
 import { CalendarConnect } from "./screens/CalendarConnect";
 import { HealthConnect } from "./screens/HealthConnect";
 import { Rationale } from "./screens/Rationale";
+import { queueShared } from "./screens/ShareSheet";
 import { checkAddress, type NativeServices, pairScanned, pairTyped } from "./services";
 import { nativeChannel, watchFront } from "./sources";
 
@@ -21,7 +24,7 @@ type Screen =
   | { name: "address"; text: string; busy: boolean; error: "incomplete" | "noAnswer" | null }
   | { name: "code"; address: string; busy: boolean; error: "bad" | "noAnswer" | null }
   | { name: "pair"; pairing: PairingLike }
-  | { name: "paired" };
+  | { name: "paired"; device: PairedDevice; offer: boolean };
 
 /** A page opened by its own address: from Health Connect, or from This phone. */
 type Route = "rationale" | "calendar" | "health";
@@ -42,9 +45,14 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
 
   const home = useCallback(
-    async (unreached = false) => {
+    async (unreached = false, offer = false) => {
       const device = await services.store.device().catch(() => null);
-      if (device) return setScreen({ name: "paired" });
+      if (device)
+        return setScreen((now) =>
+          now.name === "paired" && now.device.address === device.address && !offer
+            ? now
+            : { name: "paired", device, offer },
+        );
       setWaiting(await services.queue.count().catch(() => 0));
       setScreen({ name: "welcome", unreached });
     },
@@ -67,6 +75,19 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       stop();
     };
   }, []);
+
+  // Not paired: what another app shares waits on this phone, and Welcome counts it.
+  const unpaired = screen.name !== "paired" && screen.name !== "loading";
+  useEffect(() => {
+    if (!unpaired) return;
+    return watchLaunch(
+      () => undefined,
+      (shared) =>
+        void queueShared(shared, services.queue, services.now).then(async () =>
+          setWaiting(await services.queue.count().catch(() => 0)),
+        ),
+    );
+  }, [unpaired, services]);
 
   const leave = () => {
     history.replaceState(null, "", location.pathname + location.search);
@@ -171,10 +192,22 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           services={services}
           pairing={screen.pairing}
           onExit={() => void home()}
-          onPaired={() => void home()}
+          onPaired={() => void home(false, true)}
         />
       );
     case "paired":
-      return <App services={services} />;
+      return (
+        <NativeApp
+          key={`${screen.device.address}${screen.offer ? "-offer" : ""}`}
+          services={services}
+          channel={nativeChannel}
+          initial={screen.device}
+          offer={screen.offer}
+          onUnpaired={(unreached) => {
+            services.store.changed();
+            void home(unreached);
+          }}
+        />
+      );
   }
 }
