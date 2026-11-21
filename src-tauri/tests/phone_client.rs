@@ -20,7 +20,10 @@ use nocturne_channel::client::{
     self, CallError, Connection, OnIdentity, Options, PairFailure, Phone, Reach, Router,
 };
 use nocturne_channel::phone::{PhoneIdentity, PhonePairing};
-use nocturne_contract::{PhoneReadiness, RemoteAnswer, RemoteCall, RemoteState};
+use nocturne_channel::protocol::{MIN_PHONE_BUILD, PHONE_BUILD};
+use nocturne_contract::{
+    AppPlatform, PhoneAppIntro, PhoneReadiness, RemoteAction, RemoteAnswer, RemoteCall, RemoteState,
+};
 use nocturne_engine::FakeMind;
 use nocturne_helpers::{HelperKind, Origin};
 use nocturne_intelligence::FakeHost;
@@ -442,6 +445,108 @@ fn removed_on_the_computer_forgets_the_phone() {
     assert_eq!(phone.state(), Connection::Removed);
     assert!(phone.identity().is_none());
     assert_eq!(saved.lock().unwrap().last(), Some(&None));
+}
+
+fn app(min_build: u32, max_build: u32) -> Options {
+    Options {
+        app: Some(PhoneAppIntro {
+            platform: AppPlatform::Android,
+            version: "0.8.0".into(),
+            min_build,
+            max_build,
+        }),
+        ..Options::default()
+    }
+}
+
+/// The phones list's entry for the one phone, as the window reads it.
+fn listed(c: &Computer) -> Value {
+    c.h.ok("get_phone_sources", json!({}))["phones"][0].clone()
+}
+
+#[test]
+fn an_app_introduces_itself_and_both_speak_the_newest_build() {
+    let c = computer(0);
+    let (phone, _) = c.phone(scanned(&c), app(MIN_PHONE_BUILD, PHONE_BUILD));
+    assert!(matches!(
+        block(phone.connect()),
+        Connection::Connected { .. }
+    ));
+    assert_eq!(phone.agreed_build(), PHONE_BUILD);
+    assert_eq!(
+        listed(&c)["app"],
+        json!({"platform": "android", "version": "0.8.0"})
+    );
+    assert!(matches!(
+        block(phone.call(RemoteCall::GetStatus)).unwrap(),
+        RemoteAnswer::Status { .. }
+    ));
+}
+
+#[test]
+fn an_app_a_build_behind_connects_and_the_computer_has_an_update_ready() {
+    let c = computer(0);
+    let (phone, _) = c.phone(scanned(&c), app(MIN_PHONE_BUILD, PHONE_BUILD - 1));
+    assert!(matches!(
+        block(phone.connect()),
+        Connection::Connected { .. }
+    ));
+    assert_eq!(phone.agreed_build(), PHONE_BUILD - 1);
+    assert_eq!(listed(&c)["app"]["update"], "ready");
+}
+
+#[test]
+fn an_app_too_old_for_the_computer_asks_to_update_this_phone() {
+    let c = computer(0);
+    let identity = scanned(&c);
+    let (phone, saved) = c.phone(identity, app(0, MIN_PHONE_BUILD - 1));
+    let Connection::Outdated {
+        min_build,
+        computer,
+    } = block(phone.connect())
+    else {
+        panic!("{:?}", phone.state())
+    };
+    assert_eq!(min_build, MIN_PHONE_BUILD);
+    assert!(computer.is_some_and(|v| !v.is_empty()));
+    assert!(phone.identity().is_some(), "keys stay");
+    assert!(saved.lock().unwrap().is_empty(), "nothing saved");
+    assert_eq!(listed(&c)["app"]["update"], "needed");
+    assert_eq!(
+        block(phone.call(RemoteCall::GetStatus)).err(),
+        Some(CallError::Connection {
+            state: Reach::Outdated
+        })
+    );
+}
+
+#[test]
+fn an_app_newer_than_the_computer_asks_to_update_the_computer() {
+    let c = computer(0);
+    let (phone, _) = c.phone(scanned(&c), app(PHONE_BUILD + 1, PHONE_BUILD + 1));
+    let Connection::ComputerOutdated { computer } = block(phone.connect()) else {
+        panic!("{:?}", phone.state())
+    };
+    assert!(!computer.is_empty());
+    let events = c.h.engine().remote_events(20).unwrap();
+    assert!(
+        events
+            .iter()
+            .any(|e| e.action == RemoteAction::NeedsNewerHere),
+        "noted in the activity list"
+    );
+}
+
+#[test]
+fn without_an_app_to_introduce_nothing_is_said() {
+    let c = computer(0);
+    let (phone, _) = c.phone(scanned(&c), Options::default());
+    assert!(matches!(
+        block(phone.connect()),
+        Connection::Connected { .. }
+    ));
+    assert_eq!(phone.agreed_build(), PHONE_BUILD);
+    assert!(listed(&c).get("app").is_none());
 }
 
 #[test]

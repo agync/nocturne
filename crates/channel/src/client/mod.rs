@@ -12,12 +12,12 @@ mod poll;
 mod session;
 mod ws;
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
 
 use nocturne_contract::{
-    AskDelta, AskPhase, AskPlace, PhoneError, PhoneHello, RemoteAnswer, RemoteCall,
+    AskDelta, AskPhase, AskPlace, PhoneAppIntro, PhoneError, PhoneHello, RemoteAnswer, RemoteCall,
 };
 use serde::{Deserialize, Serialize};
 use tokio::sync::watch;
@@ -45,12 +45,46 @@ use session::{Down, Fault, OpenFailure, OpenInit, Session};
 )]
 pub enum Connection {
     Connecting,
-    Connected { hello: PhoneHello },
+    Connected {
+        hello: PhoneHello,
+    },
     Asleep,
     CantConnect,
     TurnedOff,
-    Outdated { min_build: u32 },
+    /// This app is older than the oldest build the computer speaks: update the phone.
+    /// `computer` is the computer's version, when it said.
+    Outdated {
+        min_build: u32,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        computer: Option<String>,
+    },
+    /// The computer is older than the oldest build this app speaks: update the computer.
+    ComputerOutdated {
+        computer: String,
+    },
     Removed,
+}
+
+/// What a phone and its computer work out from the computer's hello and the builds the phone
+/// speaks: the newest build both speak, or which side must update.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Overlap {
+    Agreed(u32),
+    UpdatePhone,
+    UpdateComputer,
+}
+
+/// The overlap of the builds the computer says it speaks and `min_build..=max_build`. A computer
+/// from before the version window speaks its oldest build only.
+pub fn overlap(hello: &PhoneHello, min_build: u32, max_build: u32) -> Overlap {
+    let agreed = max_build.min(hello.newest_phone_build());
+    if max_build < hello.min_phone_build {
+        Overlap::UpdatePhone
+    } else if agreed < min_build {
+        Overlap::UpdateComputer
+    } else {
+        Overlap::Agreed(agreed)
+    }
 }
 
 /// Why a path to the computer is not open, for a call that failed on it.
@@ -61,16 +95,23 @@ pub enum Reach {
     CantConnect,
     TurnedOff,
     Outdated,
+    ComputerOutdated,
     Removed,
 }
 
 impl Reach {
-    fn connection(self, min_build: u32) -> Connection {
+    fn connection(self) -> Connection {
         match self {
             Reach::Asleep => Connection::Asleep,
             Reach::CantConnect => Connection::CantConnect,
             Reach::TurnedOff => Connection::TurnedOff,
-            Reach::Outdated => Connection::Outdated { min_build },
+            Reach::Outdated => Connection::Outdated {
+                min_build: 0,
+                computer: None,
+            },
+            Reach::ComputerOutdated => Connection::ComputerOutdated {
+                computer: String::new(),
+            },
             Reach::Removed => Connection::Removed,
         }
     }
@@ -111,6 +152,9 @@ pub struct Options {
     pub handshake: Duration,
     /// Open a replacement session this long before the old one lapses.
     pub renew_margin: Duration,
+    /// What a phone app says of itself first on each session. None: it says nothing, and speaks
+    /// the builds of this tree.
+    pub app: Option<PhoneAppIntro>,
 }
 
 impl Default for Options {
@@ -120,6 +164,7 @@ impl Default for Options {
             socket_timeout: Duration::from_secs(5),
             handshake: Duration::from_secs(HANDSHAKE_TIMEOUT_SECS),
             renew_margin: Duration::from_secs(60),
+            app: None,
         }
     }
 }
@@ -141,6 +186,8 @@ struct Inner {
     upload: tokio::sync::Mutex<()>,
     /// Counts opens; a session that ends says connecting only while it is the latest.
     opens: AtomicU64,
+    /// The newest build this phone and its computer both speak, from the last open.
+    agreed: AtomicU32,
 }
 
 /// A paired phone's way to its computer.
@@ -177,6 +224,7 @@ impl Phone {
                 closed: AtomicBool::new(false),
                 upload: tokio::sync::Mutex::new(()),
                 opens: AtomicU64::new(0),
+                agreed: AtomicU32::new(0),
             }),
         }
     }
@@ -184,6 +232,11 @@ impl Phone {
     /// The identity as it stands, or `None` once forgotten.
     pub fn identity(&self) -> Option<PhoneIdentity> {
         self.inner.identity.lock().unwrap().clone()
+    }
+
+    /// The newest phone build this phone and its computer both speak; 0 before a session opens.
+    pub fn agreed_build(&self) -> u32 {
+        self.inner.agreed.load(Ordering::SeqCst)
     }
 
     /// The connection state, as it changes.
@@ -299,18 +352,13 @@ impl Phone {
                     OpenFailure::Off => Reach::TurnedOff,
                     OpenFailure::Network | OpenFailure::Ended => Reach::Asleep,
                 };
-                self.set(reach.connection(0));
+                self.set(reach.connection());
                 return Err(gone(reach));
             }
         };
-        if s.hello.min_phone_build > PHONE_BUILD {
-            // This app is older than the computer wants: keys stay, nothing is saved.
-            s.close();
-            self.set(Connection::Outdated {
-                min_build: s.hello.min_phone_build,
-            });
-            return Err(gone(Reach::Outdated));
-        }
+        // Keys stay and nothing is saved while one side must update.
+        let agreed = self.agree(&s).await?;
+        self.inner.agreed.store(agreed, Ordering::SeqCst);
         if s.kind() == LinkKind::Poll {
             self.inner.sticky_poll.store(true, Ordering::SeqCst);
         }
@@ -338,6 +386,60 @@ impl Phone {
             hello: s.hello.clone(),
         });
         Ok(s)
+    }
+
+    /// Work out the build to speak on a session just opened: from the hello, and from the
+    /// computer's answer when this app introduces itself. Closes the session when one side
+    /// must update.
+    async fn agree(&self, s: &Session) -> Result<u32, CallError> {
+        let app = self.inner.options.app.clone();
+        let (min, max) = app.as_ref().map_or((MIN_PHONE_BUILD, PHONE_BUILD), |a| {
+            (a.min_build, a.max_build)
+        });
+        let mut found = overlap(&s.hello, min, max);
+        // A computer that speaks introductions hears this app's, even when one side must
+        // update: it notes it in its phones list or its activity list.
+        if let Some(app) = app
+            && s.hello.newest_phone_build() >= INTRODUCE_BUILD
+        {
+            match call_once(s, RemoteCall::Introduce { app }).await {
+                Ok(RemoteAnswer::Introduced { agreed }) => found = Overlap::Agreed(agreed),
+                Err(Fault::Phone(PhoneError::TooOld)) => found = Overlap::UpdatePhone,
+                Err(Fault::Phone(PhoneError::Outdated)) => found = Overlap::UpdateComputer,
+                Err(Fault::Phone(PhoneError::Revoked)) => {
+                    self.forget();
+                    return Err(gone(Reach::Removed));
+                }
+                Err(Fault::Closed) => {
+                    s.close();
+                    if s.revoked() {
+                        self.forget();
+                        return Err(gone(Reach::Removed));
+                    }
+                    self.set(Connection::Asleep);
+                    return Err(gone(Reach::Asleep));
+                }
+                // Any other answer leaves what the hello said.
+                Ok(_) | Err(Fault::Phone(_)) => {}
+            }
+        }
+        let computer = s.hello.version.clone();
+        match found {
+            Overlap::Agreed(agreed) => Ok(agreed),
+            Overlap::UpdatePhone => {
+                s.close();
+                self.set(Connection::Outdated {
+                    min_build: s.hello.min_phone_build,
+                    computer: Some(computer),
+                });
+                Err(gone(Reach::Outdated))
+            }
+            Overlap::UpdateComputer => {
+                s.close();
+                self.set(Connection::ComputerOutdated { computer });
+                Err(gone(Reach::ComputerOutdated))
+            }
+        }
     }
 
     async fn open_new(&self) -> Result<Session, CallError> {
@@ -600,4 +702,70 @@ async fn original_once(s: &Session, id: &str) -> Result<(String, Vec<u8>), Fault
         s.close();
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn hello(json: &str) -> PhoneHello {
+        serde_json::from_str(&format!(
+            r#"{{"computerName":"Laptop","deviceName":"Pixel","connection":"simple",
+                "version":"0.7.2",{json}}}"#
+        ))
+        .unwrap()
+    }
+
+    #[test]
+    fn both_speak_the_newest_build_they_share() {
+        let h = hello(r#""minPhoneBuild":1,"maxPhoneBuild":3"#);
+        assert_eq!(overlap(&h, 1, 3), Overlap::Agreed(3));
+        assert_eq!(
+            overlap(&h, 1, 2),
+            Overlap::Agreed(2),
+            "a phone a build behind"
+        );
+        assert_eq!(
+            overlap(&h, 3, 4),
+            Overlap::Agreed(3),
+            "a phone a build ahead"
+        );
+    }
+
+    #[test]
+    fn with_nothing_shared_the_older_side_updates() {
+        let h = hello(r#""minPhoneBuild":2,"maxPhoneBuild":3"#);
+        assert_eq!(overlap(&h, 1, 1), Overlap::UpdatePhone);
+        assert_eq!(overlap(&h, 4, 5), Overlap::UpdateComputer);
+    }
+
+    #[test]
+    fn a_computer_from_before_the_window_speaks_its_oldest_build_only() {
+        let old = hello(r#""minPhoneBuild":1"#);
+        assert_eq!(overlap(&old, 1, 2), Overlap::Agreed(1));
+        assert_eq!(overlap(&old, 2, 2), Overlap::UpdateComputer);
+        assert!(
+            old.newest_phone_build() < INTRODUCE_BUILD,
+            "it is not sent an introduction it cannot read"
+        );
+    }
+
+    #[test]
+    fn the_states_for_the_update_cards_read_as_the_screens_expect() {
+        let phone = Connection::Outdated {
+            min_build: 2,
+            computer: Some("0.9.0".into()),
+        };
+        assert_eq!(
+            serde_json::to_value(&phone).unwrap(),
+            serde_json::json!({"kind": "outdated", "minBuild": 2, "computer": "0.9.0"})
+        );
+        let computer = Connection::ComputerOutdated {
+            computer: "0.7.2".into(),
+        };
+        assert_eq!(
+            serde_json::to_value(&computer).unwrap(),
+            serde_json::json!({"kind": "computerOutdated", "computer": "0.7.2"})
+        );
+    }
 }
