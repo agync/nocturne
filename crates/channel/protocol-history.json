@@ -1,6 +1,11 @@
 {
   "builds": [
-    { "build": 1, "released": "2026-11-15" },
+    {
+      "build": 1,
+      "released": "2026-11-15",
+      "version": "0.1.0",
+      "fixtures": "34d728b615099757271288f05396f68e3f073fdceb7e9a174b6a403c00371e49"
+    },
     { "build": 2, "released": null }
   ]
 }
