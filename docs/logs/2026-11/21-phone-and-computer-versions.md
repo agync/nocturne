@@ -10,8 +10,9 @@ status: stable
 The computer's hello gives the oldest and newest phone build it speaks, and a phone app's first
 call says which app it is, its version and the builds it speaks
 ([Remote access](/architecture/remote.md#phone-and-computer-versions)). With a build in common
-they speak the newest one. Without one, the phone shows "Update Nocturne on this phone" or "Update
-Nocturne on your computer" on Today, and keeping still works and waits
+they speak the newest one, and a call newer than it waits on the phone. Without one, the phone
+shows "Update Nocturne on this phone" or "Update Nocturne on your computer" on Today, and keeping
+still works and waits
 ([Nocturne on Android and iPhone](/design/phone-apps.md#please-update), decision 12).
 
 The computer's phones list says "Android app · Nocturne {version}", "{name} · an update is ready

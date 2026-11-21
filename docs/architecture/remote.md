@@ -107,10 +107,18 @@ the computer must. It notes the app, the version and that build for its phones l
 newer than it in the activity list. The phone page in a browser introduces itself too, as the
 browser.
 
-`crates/channel/protocol-history.json` lists each build and the day it shipped. The oldest build
-spoken rises only once the build after it has been out for six months, and a test holds the tree
-to that. `crates/contract/tests/fixtures/phone-v{n}/` holds every call of build `n` as that build
-sent it: each still parses, and the app dispatches each one for every build it still speaks.
+Both sides then keep to that build. A call newer than it, such as an answer to the page's question
+from the journal or a shared web page kept as untrusted, waits on the phone, and the share says
+"Needs a newer Nocturne on your computer."; below that build the page shows no question from the
+journal. A reply the phone cannot read, from a newer computer, fails that call and leaves the
+session open.
+
+`crates/channel/protocol-history.json` lists each build, the day it shipped, the release that
+first carried it and a checksum of its fixtures; tests hold those to `CHANGELOG.md` and to the
+fixtures. The oldest build spoken rises only once the build after it has been out for six months,
+and a test holds the tree to that. `crates/contract/tests/fixtures/phone-v{n}/` holds every call of
+build `n` as that build sent it: each still parses, and the app dispatches each one for every build
+it still speaks.
 
 ## Limits
 
