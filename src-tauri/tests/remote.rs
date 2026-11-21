@@ -18,8 +18,9 @@ use nocturne_app_lib::remote::testing::client::{
 use nocturne_app_lib::remote::testing::{self, FakeHelpers, PhoneKeys, PhonePair};
 use nocturne_contract::{
     AskPhase, CheckInInput, EntityKind, Feeling, FeelingPart, FeelingPoint, GlanceReason, ItemKind,
-    JournalDay, PeriodKind, PhoneError, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall,
-    RemoteState, SameNameAnswer, Source, Trust,
+    JournalDay, PageView, PeriodKind, PhoneError, QuestionChoice, QuestionKind, ReflectionView,
+    RemoteAction, RemoteAnswer, RemoteCall, RemoteState, RowKind, SameNameAnswer, Source, Span,
+    Trust,
 };
 use nocturne_engine::{Candidate, FakeMind, Mind, Predicate};
 use nocturne_helpers::{HelperKind, Origin};
@@ -292,6 +293,8 @@ fn only_the_allowed_calls_parse() {
         json!({"cmd": "lookBack", "period": {"kind": "day", "start": "2026-11-13", "end": "2026-11-13"}}),
         json!({"cmd": "keepCheckIn", "clientId": "c", "input": {"feeling": {"part": "litUp", "point": {"pleasant": 1, "energy": 1}, "words": []}, "line": null, "urge": null, "replaces": null}}),
         json!({"cmd": "answerSameName", "questionId": "snq_1", "answer": {"type": "new"}}),
+        json!({"cmd": "answerJournalQuestion", "pageDate": "2026-11-20", "choice": "fine", "clientId": "c"}),
+        json!({"cmd": "answerJournalQuestion", "pageDate": "2026-11-20", "choice": "notYet", "line": "x", "clientId": "c"}),
     ];
     for call in &allowed {
         let req = json!({"id": 1, "call": call});
@@ -3258,4 +3261,180 @@ fn taking_back_a_repeat_of_this_phones_own_photo_leaves_the_first_keep() {
     assert!(day.good[0].photo.is_some(), "with its photo");
     assert_eq!(day.checkins.len(), 1);
     assert!(e.get_item(&kept_id(&first)).is_ok(), "the first keep stays");
+}
+
+const PLAN: &str = "Parents\u{2019} evening at six. Not looking forward to it.";
+
+/// A page whose question is from the journal: page one on the 10th, an entry on the evening of
+/// the 13th with a plan for that day, then the morning of the 14th.
+fn journal_question_page(p: &Phone) -> String {
+    let e = p.h.engine();
+    let day = |d: &str| d.parse::<jiff::civil::Date>().unwrap();
+    p.h.clock.set_str("2026-11-10T08:00:00Z");
+    p.h.save_todays_page();
+    p.h.clock.set_str("2026-11-13T19:00:00Z");
+    let entry = e
+        .save_entry_text(day("2026-11-13"), None, 0, PLAN)
+        .unwrap()
+        .unwrap();
+    let lease = e
+        .lease_item(&entry.item.id, Duration::from_secs(60))
+        .unwrap();
+    let mut plan = Candidate::new(
+        "Parents evening",
+        Predicate::Scheduled,
+        "at six",
+        "Parents evening is at six.",
+        0.9,
+    );
+    plan.subject_kind = Some(EntityKind::Thing);
+    plan.due = Some(day("2026-11-13"));
+    plan.span = Some(Span::Quote { text: PLAN.into() });
+    e.apply_candidates(&entry.item.id, &lease.lease, vec![plan])
+        .unwrap();
+    p.h.clock.set_str("2026-11-14T07:00:00Z");
+    let page = p.h.save_todays_page();
+    assert_eq!(page.question.unwrap().kind, QuestionKind::Journal);
+    page.date
+}
+
+fn answer_journal(
+    c: &mut PhoneClient,
+    page_date: &str,
+    choice: QuestionChoice,
+    line: Option<&str>,
+    client_id: &str,
+) -> RemoteAnswer {
+    call(
+        c,
+        RemoteCall::AnswerJournalQuestion {
+            page_date: page_date.into(),
+            choice,
+            line: line.map(str::to_string),
+            client_id: client_id.into(),
+        },
+    )
+}
+
+fn page_of(a: RemoteAnswer) -> Box<PageView> {
+    match a {
+        RemoteAnswer::Page { page } => page,
+        other => panic!("not a page: {other:?}"),
+    }
+}
+
+fn answer_rows(p: &Phone) -> usize {
+    let e = p.h.engine();
+    e.journal_day(e.journal_today().unwrap())
+        .unwrap()
+        .rows
+        .iter()
+        .filter(|r| r.kind == RowKind::Answer)
+        .count()
+}
+
+#[test]
+fn a_phone_answers_the_journal_question_once_into_todays_journal() {
+    let p = on();
+    let date = journal_question_page(&p);
+    let (_, mut c) = p.session("Pixel");
+    let shown = page_of(call(
+        &mut c,
+        RemoteCall::GetPage {
+            date: Some(date.clone()),
+        },
+    ));
+    assert_eq!(shown.question.unwrap().kind, QuestionKind::Journal);
+
+    for _ in 0..2 {
+        let page = page_of(answer_journal(
+            &mut c,
+            &date,
+            QuestionChoice::NotGreat,
+            None,
+            "c-question",
+        ));
+        assert_eq!(page.edition, nocturne_contract::Edition::Phone);
+        assert_eq!(
+            page.question.unwrap().answered,
+            Some(QuestionChoice::NotGreat)
+        );
+    }
+    assert_eq!(answer_rows(&p), 1, "a retry keeps one answer");
+
+    let page = page_of(answer_journal(
+        &mut c,
+        &date,
+        QuestionChoice::NotGreat,
+        Some("Long queue."),
+        "c-question",
+    ));
+    let ask = page.question.unwrap().journal.unwrap();
+    assert_eq!(ask.line.as_deref(), Some("Long queue."));
+    assert_eq!(answer_rows(&p), 1);
+
+    let e = p.h.engine();
+    let on_computer = e
+        .page(Some(date.parse().unwrap()))
+        .unwrap()
+        .unwrap()
+        .question
+        .unwrap();
+    assert_eq!(on_computer.answered, Some(QuestionChoice::NotGreat));
+    assert_eq!(
+        on_computer.journal.unwrap().line.as_deref(),
+        Some("Long queue.")
+    );
+    let actions: Vec<RemoteAction> = e
+        .remote_events(20)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.action)
+        .collect();
+    assert!(actions.contains(&RemoteAction::AnsweredQuestion));
+}
+
+#[test]
+fn a_phone_shows_the_answer_the_computer_kept_first() {
+    let p = on();
+    let date = journal_question_page(&p);
+    p.h.engine()
+        .answer_question(date.parse().unwrap(), QuestionChoice::Fine)
+        .unwrap();
+    let (_, mut c) = p.session("Pixel");
+    let page = page_of(answer_journal(
+        &mut c,
+        &date,
+        QuestionChoice::NotGreat,
+        Some("Awful."),
+        "c-late",
+    ));
+    let q = page.question.unwrap();
+    assert_eq!(q.answered, Some(QuestionChoice::Fine));
+    assert_eq!(q.journal.unwrap().line, None);
+    assert_eq!(answer_rows(&p), 1);
+}
+
+#[test]
+fn a_phone_answers_only_the_journal_question_on_a_page_it_reads() {
+    let p = on();
+    let date = journal_question_page(&p);
+    let (_, mut c) = p.session("Pixel");
+    let fine = QuestionChoice::Fine;
+    for (page_date, choice, client, code) in [
+        (date.as_str(), fine, "not an id!", PhoneError::Invalid),
+        ("tomorrow", fine, "c-1", PhoneError::Invalid),
+        ("2026-10-01", fine, "c-1", PhoneError::NotFound),
+        ("2026-11-10", fine, "c-1", PhoneError::NotFound),
+        (
+            date.as_str(),
+            QuestionChoice::Yes,
+            "c-1",
+            PhoneError::Invalid,
+        ),
+    ] {
+        let a = answer_journal(&mut c, page_date, choice, None, client);
+        assert_eq!(error_of(&a), Some(code), "{page_date} {choice:?} {client}");
+    }
+    assert_eq!(answer_rows(&p), 0);
 }
