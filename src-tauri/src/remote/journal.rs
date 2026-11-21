@@ -50,6 +50,25 @@ pub fn day_ids(day: &JournalDay, add: &mut dyn FnMut(&str)) {
     for q in &day.same_name {
         add(&q.receipt.item_id);
     }
+    if let Some(h) = &day.health {
+        health_ids(h, add);
+    }
+}
+
+/// Every reading "From Health" cites. Readings cannot be marked private, so none is withheld;
+/// they are named so the phone may open them.
+fn health_ids(h: &nocturne_contract::DayHealth, add: &mut dyn FnMut(&str)) {
+    if let Some(n) = &h.night {
+        add(&n.item_id);
+    }
+    for s in h.resting.iter().chain(h.steps.iter()) {
+        s.points.iter().for_each(|p| add(&p.item_id));
+    }
+    if let Some(r) = &h.heart {
+        add(&r.item_id);
+    }
+    h.pressure.iter().for_each(|p| add(&p.item_id));
+    h.workouts.iter().for_each(|w| add(&w.item_id));
 }
 
 /// Every item and memory id a reflection, recap or glance names.
@@ -111,6 +130,9 @@ fn checkin_ids(c: &CheckIn, add: &mut dyn FnMut(&str)) {
     if let Some(a) = &c.about {
         add(a);
     }
+    if let Some(n) = &c.after_sleep {
+        add(&n.item_id);
+    }
     mention_items(&c.mentions, add);
 }
 
@@ -159,6 +181,12 @@ fn photo(v: Option<ItemView>, w: &Withheld) -> Option<ItemView> {
 fn checkin(mut c: CheckIn, w: &Withheld) -> CheckIn {
     if c.about.as_ref().is_some_and(|a| w.contains(a)) {
         c.about = None;
+    }
+    if c.after_sleep
+        .as_ref()
+        .is_some_and(|n| w.contains(&n.item_id))
+    {
+        c.after_sleep = None;
     }
     c
 }
@@ -518,6 +546,37 @@ mod tests {
             checkin(c, &Withheld::new()).about.as_deref(),
             Some("itm_secret")
         );
+    }
+
+    #[test]
+    fn a_check_in_no_longer_points_at_a_withheld_night() {
+        let c = CheckIn {
+            id: "itm_c".into(),
+            kept_at: "2026-11-19T09:00:00Z".into(),
+            day: "2026-11-19".into(),
+            feeling: Feeling {
+                part: FeelingPart::Settled,
+                point: FeelingPoint {
+                    pleasant: 0.5,
+                    energy: -0.5,
+                },
+                words: Vec::new(),
+            },
+            line: None,
+            urge: None,
+            about: None,
+            tried: Vec::new(),
+            from_device: None,
+            mentions: Vec::new(),
+            left_out: false,
+            after_sleep: Some(AfterSleep {
+                minutes: 420,
+                item_id: "itm_secret".into(),
+            }),
+        };
+        let w: Withheld = ["itm_secret".to_string()].into();
+        assert_eq!(checkin(c.clone(), &w).after_sleep, None);
+        assert!(checkin(c, &Withheld::new()).after_sleep.is_some());
     }
 
     #[test]

@@ -50,6 +50,8 @@ pub enum Bucket {
     Requests,
     Asks,
     Keeps,
+    /// A phone app's calendar and health sends, per phone.
+    Syncs,
 }
 
 impl Bucket {
@@ -63,6 +65,7 @@ impl Bucket {
             Bucket::Requests => LIMIT_REQUESTS,
             Bucket::Asks => LIMIT_ASKS,
             Bucket::Keeps => LIMIT_KEEPS,
+            Bucket::Syncs => LIMIT_SYNCS,
         }
     }
 }

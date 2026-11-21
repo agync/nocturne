@@ -85,12 +85,24 @@ delete, forget, export, change settings, pair or remove phones, or browse memori
 private memories out, pages use the phone edition, and an outbound filter drops any payload naming
 a private item.
 
+A phone app also sends what changed in its calendar and in Health, in batches under one send id:
+`send_calendar` (a window of days, the calendars, and each entry as new, changed or removed) and
+`send_readings` (each reading as new, changed or removed). Each batch is answered with a receipt:
+how many changes were taken, unchanged and refused, whether the person stopped taking that source
+on the computer (then nothing is taken), and whether the send went over its cap. The computer's
+hello lists what it takes (`calendar`, `health`), and a phone hides an offer that is not listed.
+Calendar entries reach the phone's page and journal day like any other line: an entry marked
+private is left out before the page leaves, and the outbound filter holds back any page that
+still names one. The activity list counts what each send brought, never what it was.
+
 ## Limits
 
 Separate rate buckets apply to requests without the helper key, pairing frames, failed session
 opens, and each phone's opens, requests, asks and keeps. Text is capped at 100 KB, a question at
 2 KB and an item at 50 MB, with 500 MB a day per phone. Uploads stream to an owner-only file, one
-per phone, at most 100 MB of incoming files in all. Nothing polls faster than every 30 seconds while
+per phone, at most 100 MB of incoming files in all. A calendar or health batch holds at most 100
+changes and 64 KB of JSON, each phone sends at most 12 batches a minute, and one send takes at most
+500 calendar changes or 5,000 readings. Nothing polls faster than every 30 seconds while
 no phone is connected. Removing a phone ends its open connections within a second.
 
 ## What is recorded

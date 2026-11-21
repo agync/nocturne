@@ -116,3 +116,6 @@ log upload is refused with a plain message, because the helper never uploads log
   sentence when it fails.
 - Real-network behaviour, including how long a quick tunnel stays up and how the helpers behave on
   each system, is not claimed until the owner-approved trials run.
+- The native phone apps ([decision 0017](/adr/0017-native-phone-apps.md)) add two sends, a phone's
+  calendar and its health readings, each a typed match with its own limits, inside the same
+  sealed channel ([remote access](/architecture/remote.md)).
