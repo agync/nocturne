@@ -53,9 +53,10 @@ the app id differs between the four files, or when the finish-args differ from t
 ## Build it locally
 
 You need `flatpak`, `flatpak-builder`, `uv`, and the GNOME 51 runtime and SDK with the
-`rust-stable` and `node26` extensions for the 26.08 SDK, installed for your user. GNOME 51 is the
-first GNOME runtime whose C library is new enough for the pinned engine (it needs glibc 2.43;
-GNOME 50 has 2.42).
+`rust-stable` and `node26` extensions for the 26.08 SDK, installed for your user. GNOME 51 was the
+first GNOME runtime whose C library was new enough for the engine before 2026.47.1 (glibc 2.43;
+GNOME 50 has 2.42). The pinned engine needs 2.38, so an older runtime would now do; moving it is a
+decision of its own.
 
 ```bash
 flatpak install --user flathub org.gnome.Sdk//51 org.gnome.Platform//51 \

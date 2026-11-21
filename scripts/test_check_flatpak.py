@@ -50,7 +50,7 @@ class Drift(unittest.TestCase):
         return "\n".join(check_flatpak.problems(self.root))
 
     def test_a_new_engine_pin(self):
-        self.edit("lemonade.lock", 'sha256 = "6', 'sha256 = "7')
+        self.edit("lemonade.lock", 'x64.tar.gz", sha256 = "', 'x64.tar.gz", sha256 = "0')
         self.assertIn("x86_64 engine archive", self.problems())
 
     def test_a_new_version(self):
