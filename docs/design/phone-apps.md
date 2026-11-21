@@ -767,6 +767,7 @@ New strings only; everything marked "Phone page" above is reused as it is.
 | Privacy policy | "Privacy policy" |
 | Calendar refused | "Your calendar stays on this phone." / "Nocturne works just the same without it. You can bring it later in {thisPhone}." |
 | Off in settings | "Off in your phone’s settings" |
+| Stopped on computer, row | "Stopped on your computer" |
 | Today, tab | "Today" |
 | Journal, tab | "Journal" |
 | Ask, tab | "Ask" |
@@ -779,8 +780,10 @@ New strings only; everything marked "Phone page" above is reused as it is.
 | Away, today | "Today’s page is back when your computer is. This phone keeps no copy." |
 | Keep in Nocturne | "Keep in Nocturne" |
 | Add a note | "Add a note (optional)" |
+| Shared file | "{kind} · {size}" and, for more than one, "and {count} more" |
 | Photo choices | "Take a photo" / "Choose a photo" |
 | Icon shortcuts | "Keep a note" / "Record a voice note" / "Check in" |
+| Icon shortcuts, short labels | "Keep" / "Record" / "Check in", where the launcher has room for one word only |
 | This phone, groups | "Connected to" / "What this phone brings" / "When it sends" / "This phone" / "Help" |
 | Last sent | "{time} · {count, plural, one {# calendar change} other {# calendar changes}}, {count, plural, one {# reading} other {# readings}}" |
 | While open | "While Nocturne is open" / "And when you open it." |
