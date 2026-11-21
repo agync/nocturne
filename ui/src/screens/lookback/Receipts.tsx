@@ -1,10 +1,11 @@
 import { Fragment, type ReactNode, useCallback, useRef, useState } from "react";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { formatDayMonth, formatDuration } from "../../copy/format";
 import type { CopyId } from "../../copy/t";
 import { t, tParts } from "../../copy/t";
 import type { Receipt } from "../../engine/bindings";
 import styles from "./Lookback.module.css";
-import { clock, itemHref, receiptKey, weekdayDay } from "./text";
+import { clock, receiptKey, weekdayDay } from "./text";
 
 /** A sentence whose placeholders are drawn as elements, each given a key. */
 export function rich(id: CopyId, values: Record<string, unknown>): ReactNode[] {
@@ -136,7 +137,7 @@ export function Chips({
             <a
               ref={receipt.register(key)}
               className={styles.receiptChip}
-              href={itemHref(r.itemId)}
+              href={`#${receiptPath(r)}`}
               data-on={receipt.active === key}
               data-kind={r.kind}
               onMouseEnter={() => receipt.setActive(key)}
