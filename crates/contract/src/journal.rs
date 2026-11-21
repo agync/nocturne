@@ -80,7 +80,17 @@ pub struct CheckIn {
     /// "after {duration} asleep": on the day's first check-in, when last night has come in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub after_sleep_min: Option<u32>,
+    pub after_sleep: Option<AfterSleep>,
+}
+
+/// Last night beside the day's first check-in, with its receipt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AfterSleep {
+    pub minutes: u32,
+    /// The night's reading.
+    pub item_id: String,
 }
 
 /// What an item is in the journal. Ordinary things kept have none.
