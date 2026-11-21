@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phone · the page’s question, from the journal · Nocturne</title>
+<link rel="stylesheet" href="mock.css">
+</head>
+<body data-frame="phone" data-back="Today’s page" data-states="ask answered added elsewhere waiting failed">
+<main id="content" class="ppage">
+  <article class="ppaper">
+    <p class="plbl">Friday 20 November</p>
+    <h1>Nothing needs you today.</h1>
+    <p class="pdek">Overnight Nocturne noticed 1 change.</p>
+
+    <section style="display: flex; flex-direction: column; gap: 6px; margin-top: 8px">
+      <p class="plbl">What changed · 1</p>
+      <p class="pline">Leo’s swimming moved from Wednesday to <strong>Monday</strong>, same time.</p>
+      <span class="psrc">Note · Thu 19 Nov</span>
+    </section>
+
+    <section class="pq" aria-labelledby="q">
+      <p class="plbl">One question · from your journal</p>
+      <p id="q" class="pqtext" data-state="ask failed">Yesterday you wrote: <em>“Parents’ evening at six. Not looking forward to it.”</em> How did it go?</p>
+      <p class="pqtext" data-quiet data-state="answered added elsewhere waiting">Yesterday you wrote: <em>“Parents’ evening at six. Not looking forward to it.”</em> How did it go?</p>
+      <span class="psrc">Entry · Thu 19 Nov · 8:12 am</span>
+
+      <div class="pqchoices" data-state="ask failed">
+        <span class="pqchoice">Fine</span>
+        <span class="pqchoice">Not great</span>
+        <span class="pqchoice">Not yet</span>
+      </div>
+      <p class="pqerr" role="alert" data-state="failed"><strong>That didn’t go across.</strong>Nothing was kept. Try again in a moment.</p>
+
+      <p class="pqdone" data-state="answered added">Not great. Kept on today’s journal.</p>
+      <p class="pqdone" data-state="elsewhere">Fine. Kept on today’s journal.</p>
+      <p class="pqnote" data-state="elsewhere">Already answered, on your computer or another phone.</p>
+      <p class="pqdone" data-state="waiting">Not great. Waiting on this phone.</p>
+      <p class="pqnote" data-state="waiting">It’s on this phone and goes across when your computer is back. You can leave this page.</p>
+
+      <div data-state="answered elsewhere waiting" style="display: flex; flex-direction: column; gap: 8px">
+        <label class="pqlabel" for="more">Anything to add? (optional)</label>
+        <div class="pqrow">
+          <span class="pqinput" id="more" data-state="answered"><span>Mrs Okafor is worried<span class="caret"></span></span></span>
+          <span class="pqinput" data-state="elsewhere waiting"><span class="ph">A line, if you like.</span></span>
+          <span class="pqadd" data-state="answered">Add</span>
+          <span class="pqadd" data-off data-state="elsewhere waiting">Add</span>
+        </div>
+      </div>
+
+      <p class="pqline" data-state="added">“Mrs Okafor is worried about his reading.” Added.</p>
+      <span class="pqopen" data-state="added">Open today’s journal ›</span>
+    </section>
+  </article>
+  <footer class="ppfoot">
+    <span class="pedition">Phone edition · private lines left out</span>
+    <div class="row"><span style="font-size: 0.875rem; font-weight: 500; margin-right: 4px">Earlier</span><span class="ppchip">Thu 19</span><span class="ppchip">Wed 18</span><span class="ppchip">Tue 17</span></div>
+  </footer>
+</main>
+<script src="shell.js"></script>
+</body>
+</html>

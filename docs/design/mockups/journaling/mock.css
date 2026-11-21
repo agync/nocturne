@@ -1187,3 +1187,35 @@ body[data-frame="phone"] { background: var(--bg); }
 .qdone { font: 400 1.25rem / 1.4 var(--font-serif); }
 .lineRow { display: flex; gap: var(--s-2); align-items: stretch; }
 .lineRow .fieldInput { flex: 1; }
+
+/* ---------- The journal question on the phone's page ---------- */
+
+.ppage { display: flex; flex: 1; flex-direction: column; }
+.ppaper { display: flex; flex: 1; flex-direction: column; gap: 14px; padding: 24px 22px 20px; background: var(--sheet); }
+.ppaper h1 { font: 400 2.125rem / 1.08 var(--font-serif); letter-spacing: -0.015em; }
+.pdek { color: var(--ink2); font: italic 400 1.0625rem / 1.45 var(--font-serif); }
+.pline { font: 400 1.1875rem / 1.42 var(--font-serif); }
+.pline strong { font-weight: 600; }
+.psrc { align-self: flex-start; color: var(--ink2); font: 400 0.75rem / 2 var(--font-mono); text-decoration: underline; text-decoration-color: var(--rule); text-underline-offset: 3px; }
+.pq { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; padding: 18px 16px; border-radius: 12px; background: var(--bg); }
+.pqtext { font: 400 1.25rem / 1.4 var(--font-serif); text-wrap: pretty; }
+.pqtext[data-quiet] { color: var(--ink2); font-size: 1.0625rem; }
+.pqchoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.pqchoice { display: flex; align-items: center; justify-content: center; height: 48px; border: 1px solid var(--ink); border-radius: 8px; font-size: 0.9375rem; font-weight: 500; }
+.pqdone { font: 400 1.1875rem / 1.4 var(--font-serif); }
+.pqnote { color: var(--ink2); font-size: 0.875rem; line-height: 1.45; }
+.pqline { color: var(--ink2); font-size: 0.9375rem; line-height: 1.45; }
+.pqlabel { font-size: 0.875rem; font-weight: 500; }
+.pqrow { display: flex; gap: 8px; }
+.pqinput { display: flex; flex: 1; align-items: center; min-width: 0; height: 48px; padding: 0 14px; border: 1px solid var(--ink); border-radius: 8px; background: var(--raised); font-size: 1rem; white-space: nowrap; overflow: hidden; }
+.pqinput .ph { color: var(--ink3); }
+.pqadd { display: flex; flex: none; align-items: center; justify-content: center; width: 76px; height: 48px; border: 1px solid var(--rule2); border-radius: 8px; font-weight: 500; }
+.pqadd[data-off] { border-color: var(--rule); background: var(--rule); color: var(--ink2); }
+.pqerr { color: var(--ember); font-size: 0.9375rem; line-height: 1.45; }
+.pqerr strong { display: block; font-weight: 500; }
+.pqopen { display: flex; align-items: center; min-height: 44px; color: var(--accent); font-size: 0.9375rem; font-weight: 500; }
+.ppfoot { display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px; border-top: 1px solid var(--rule); background: var(--bg); }
+.ppfoot .row { display: flex; align-items: center; gap: 8px; }
+.ppchip { display: inline-flex; align-items: center; height: 44px; padding: 0 14px; border: 1px solid var(--rule); border-radius: 8px; background: var(--sheet); font-size: 0.875rem; }
+.ptl .choice { font-weight: 500; }
+.ptl .about { color: var(--ink2); font-size: 0.8125rem; }

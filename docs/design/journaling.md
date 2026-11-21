@@ -40,7 +40,7 @@ beside them. A dashed outline marks what is new in the app frame; it is not part
 | Phone: home with a Journal tile | `phone-home.html`: `home`, `asleep` | `phone-home-light.png`, `phone-home-dark.png` |
 | Phone: keeping on the go | `phone-keep.html`: `text`, `feeling`, `voice`, `photo`, `good`, `kept`, `waiting` | `phone-keep-light.png`, `phone-keep-dark.png`, `phone-keep-voice-light.png`, `phone-keep-photo-light.png`, `phone-keep-good-light.png` |
 | Phone: the check-in for touch | `phone-checkin.html`: `field`, `words`, `list`, `saved` | `phone-checkin-light.png`, `phone-checkin-dark.png`, `phone-checkin-field-light.png` |
-| Phone: today's timeline | `phone-day.html`: `day`, `asleep`, `empty` | `phone-day-light.png`, `phone-day-dark.png`, `phone-day-asleep-light.png` |
+| Phone: today's timeline | `phone-day.html`: `day`, `asleep`, `empty` (and `answer`, `answerWaiting`, from [the journal question on the phone](phone-journal-question.md)) | `phone-day-light.png`, `phone-day-dark.png`, `phone-day-asleep-light.png` |
 | Phone: a day, looked back on | `phone-reflection.html`: `written`, `writing` | `phone-reflection-light.png`, `phone-reflection-dark.png` |
 | Phone: your week | `phone-recap.html`: `week` | `phone-recap-light.png`, `phone-recap-dark.png` |
 | Phone: which Sam is this? | `phone-which.html`: `which`, `done` | `phone-which-light.png`, `phone-which-dark.png` |
@@ -743,6 +743,7 @@ and never in a notification, on the lock screen or read aloud.
 | Keep | A note, voice note or photo, with a feeling, words and a good-thing mark | Write or change today's entry |
 | Check in | The whole check-in, by touch | |
 | Read | Any day's timeline, entry, reflection, and any week, month or year recap; "Reflect on today" asks the computer to write one | Write a reflection on the phone, or read it aloud |
+| The page's question | Answer the question from the journal, with its line ([design](phone-journal-question.md)) | Answer the page's other questions |
 | People and places | Answer "Which {name} is this?" | Answer "Which is right?", which stays on the computer; confirm, correct or remove a link; rename, merge or delete |
 | Change | Take back what it just kept, as today | Leave out, delete, or change settings |
 | Offline | Keep; what is kept waits on the phone, and goes on the day it was kept | Read the journal; the phone keeps no copy |
@@ -798,8 +799,9 @@ the quoted line, where it came from, the choices as 56px rows with their roles, 
 computer." Done: "Filed under {name}, {role}." and "Only this one. You can change it on your
 computer."
 
-This is the one place the phone changes anything beyond keeping. It answers only the name
-question, because that files one item and can be changed back on the computer. The phone's page
+Beyond keeping, the phone changes only this and the answer to the page's question from the
+journal ([design](phone-journal-question.md)). It answers the name question, because that files one
+item and can be changed back on the computer. The phone's page
 keeps "Choose which is right on your computer." for which-is-right questions about two memories
 that disagree: those stay on the computer.
 
