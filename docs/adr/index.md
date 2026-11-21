@@ -18,3 +18,4 @@ not deleted.
 - [0013 Back up and restore with a passphrase](0013-passphrase-backup.md) - One file holds everything needed to restore, sealed with a passphrase the person sets, and a restore never deletes what is already here.
 - [0014 The NPU takes the mind's work](0014-npu-mind.md) - On computers with an XDNA 2 NPU, Gemma e4b on the NPU reads beside the GPU mind where both fit, and reads and answers alone where only one fits.
 - [0015 A journal privacy class](0015-journal-privacy-class.md) - A third sensitivity keeps the journal out of audio, notifications, the tray and a lock screen, with no private switch.
+- [0016 Decision models, shadow first](0016-decision-models-shadow-first.md) - Typed questions are asked beside the rules and logged, never acting: first of the mind already loaded, with decision models in the evaluation only.
