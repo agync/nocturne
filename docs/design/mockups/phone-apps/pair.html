@@ -11,13 +11,17 @@
   "welcome": { "bar": "none" },
   "scan": { "bar": "modal", "title": "Scan the code", "back": "Cancel" },
   "camera-off": { "bar": "modal", "title": "Scan the code", "back": "Cancel" },
-  "type": { "bar": "back", "title": "Type the code", "back": "Welcome" },
+  "type": { "bar": "back", "title": "Your computer’s address", "back": "Back" },
+  "type-name": { "bar": "back", "title": "Your computer’s address", "back": "Back" },
+  "type-wrong": { "bar": "back", "title": "Your computer’s address", "back": "Back" },
+  "type-lost": { "bar": "back", "title": "Your computer’s address", "back": "Back" },
+  "type-code": { "bar": "back", "title": "Type the code", "back": "Address" },
   "words": { "bar": "none" },
   "allowed": { "bar": "none" }
 }
 </script>
 </head>
-<body data-frame="duo" data-states="welcome scan camera-off type words allowed">
+<body data-frame="duo" data-states="welcome scan camera-off type type-name type-wrong type-lost type-code words allowed">
 <main id="content">
 
   <!-- Welcome -->
@@ -28,7 +32,7 @@
   </div>
   <ol class="steps" data-state="welcome">
     <li><span>On your computer, open Nocturne and choose <span class="cc">Settings</span>, then <span class="cc">Away from home</span>, then <span class="cc">Add a phone</span>.</span></li>
-    <li><span>Scan the code it shows, or type it.</span></li>
+    <li><span>Scan the code it shows, or type the address and the code.</span></li>
   </ol>
   <div class="foot" data-state="welcome">
     <span class="btn" data-kind="primary"><span data-icon="scan" data-size="20"></span>Scan the code</span>
@@ -57,11 +61,22 @@
     <span class="btn">Type the code</span>
   </div>
 
-  <!-- Type -->
-  <p class="plead" data-state="type">The 24 letters and numbers under the code on your computer.</p>
-  <div class="codeGroups" data-state="type"><span>K7QM2A</span><span>X9DPLR</span><span>4TWB8N</span><span style="color: var(--ink3)">______</span></div>
-  <p class="small" data-state="type">Capitals don’t matter.</p>
-  <div class="foot" data-state="type"><span class="btn" data-kind="primary" style="opacity: 0.45">Connect</span><span class="btn" data-kind="quiet">Scan the code instead</span></div>
+  <!-- Type: the address first -->
+  <p class="plead" data-state="type type-name type-wrong type-lost">On your computer, under the code, find the four words or the name. Type it here.</p>
+  <div class="fieldWrap" data-state="type type-name type-wrong type-lost">
+    <span class="fieldLabel">Your computer’s address</span>
+    <div class="fieldInput"><span data-state="type"><span class="ph">Four words, or a name</span></span><span data-state="type-name">sam-desktop.tail4f2a.ts.net</span><span data-state="type-wrong">amber otter quiet</span><span data-state="type-lost">amber otter quiet river</span></div>
+    <p class="small" data-state="type type-name">Simple shows four words. Most private shows a name. Capitals don’t matter.</p>
+    <p class="pstatus" data-state="type-wrong" style="color: var(--ink)"><span class="pdot"></span>Type all four words, or the full name.</p>
+    <p class="pstatus" data-state="type-lost" style="color: var(--ink)"><span class="pdot"></span>That address didn’t answer. Check the words, and that your computer is awake.</p>
+  </div>
+  <div class="foot" data-state="type type-name type-wrong type-lost"><span class="btn" data-kind="primary" data-state="type type-wrong" style="opacity: 0.45">Next</span><span class="btn" data-kind="primary" data-state="type-name type-lost">Next</span><span class="btn" data-kind="quiet">Scan the code instead</span></div>
+
+  <!-- Type: then the code -->
+  <p class="plead" data-state="type-code">Now the 24 letters and numbers under the address on your computer.</p>
+  <div class="codeGroups" data-state="type-code"><span>K7QM2A</span><span>X9DPLR</span><span>4TWB8N</span><span style="color: var(--ink3)">______</span></div>
+  <p class="small" data-state="type-code">Capitals don’t matter.</p>
+  <div class="foot" data-state="type-code"><span class="btn" data-kind="primary" style="opacity: 0.45">Connect</span><span class="btn" data-kind="quiet">Scan the code instead</span></div>
 
   <!-- Three words -->
   <div class="hero" data-state="words" style="padding-top: 28px">
