@@ -23,7 +23,7 @@ use std::collections::BTreeSet;
 
 use nocturne_contract::{
     AppPlatform, CameInRow, CameInTag, PhoneApp, PhonePageOptions, PhoneSource, PhoneSources,
-    PhoneSourcesView, ReadingKind, SourceState, SyncReceipt,
+    PhoneSourcesView, PhoneUpdate, ReadingKind, SourceState, SyncReceipt,
 };
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde_json::Value;
@@ -31,6 +31,13 @@ use serde_json::Value;
 use crate::Engine;
 use crate::error::{Error, Result};
 use crate::util::{enum_str, fmt_ts, new_id, sha256_hex};
+
+/// The phone builds this computer speaks, oldest and newest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PhoneBuilds {
+    pub oldest: u32,
+    pub newest: u32,
+}
 
 /// The most calendar changes one send may bring; the rest of that send is refused.
 pub const CALENDAR_PER_SEND: u32 = 500;
@@ -446,39 +453,60 @@ impl Engine {
     }
 
     /// From your phones: every phone, paired or removed, that is paired now or brought
-    /// something, with what it brings.
+    /// something, with what it brings. No update lines: see [`Engine::phone_sources_for`].
     pub fn phone_sources(&self) -> Result<PhoneSourcesView> {
+        self.phone_sources_for(PhoneBuilds {
+            oldest: 0,
+            newest: 0,
+        })
+    }
+
+    /// From your phones, with whether each app should update for the phone builds this
+    /// computer speaks.
+    pub fn phone_sources_for(&self, builds: PhoneBuilds) -> Result<PhoneSourcesView> {
         let today: jiff::civil::Date = self.today().parse()?;
         self.read(|conn| {
             let mut stmt = conn.prepare(
-                "SELECT id, name, app_platform, app_version FROM remote_devices d \
+                "SELECT id, name, app_platform, app_version, agreed_build FROM remote_devices d \
                  WHERE revoked_at IS NULL \
                  OR EXISTS (SELECT 1 FROM phone_sources s WHERE s.device_id = d.id) \
                  ORDER BY paired_at, id",
             )?;
-            type Row = (String, String, Option<String>, Option<String>);
+            type Row = (String, String, Option<String>, Option<String>, Option<u32>);
             let devices: Vec<Row> = stmt
-                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
+                .query_map([], |r| {
+                    Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?))
+                })?
                 .collect::<rusqlite::Result<_>>()?;
             let mut phones = Vec::new();
-            for (device_id, name, platform, version) in devices {
+            for (device_id, name, platform, version, agreed) in devices {
                 let calendar = source_state(conn, &device_id, PhoneSource::Calendar, today)?;
                 let health = source_state(conn, &device_id, PhoneSource::Health, today)?;
+                let app = match (platform.as_deref().and_then(AppPlatform::parse), version) {
+                    (Some(platform), Some(version)) => Some(PhoneApp {
+                        platform,
+                        version,
+                        update: match agreed {
+                            _ if platform == AppPlatform::Browser => None,
+                            Some(b) if b < builds.oldest => Some(PhoneUpdate::Needed),
+                            Some(b) if b < builds.newest => Some(PhoneUpdate::Ready),
+                            _ => None,
+                        },
+                    }),
+                    _ => None,
+                };
                 phones.push(PhoneSources {
-                    // A phone that has never offered anything is taken to be on the browser page.
-                    in_browser: calendar.is_none() && health.is_none(),
+                    // A phone that has not said which app it runs, and has never offered
+                    // anything, is taken to be on the browser page.
+                    in_browser: match &app {
+                        Some(a) => a.platform == AppPlatform::Browser,
+                        None => calendar.is_none() && health.is_none(),
+                    },
                     device_id,
                     name,
                     calendar,
                     health,
-                    app: match (platform.as_deref().and_then(AppPlatform::parse), version) {
-                        (Some(platform), Some(version)) => Some(PhoneApp {
-                            platform,
-                            version,
-                            update: None,
-                        }),
-                        _ => None,
-                    },
+                    app,
                 });
             }
             Ok(PhoneSourcesView {
@@ -489,14 +517,23 @@ impl Engine {
         })
     }
 
-    /// Note which app and version a phone runs, as it says when it connects.
-    pub fn set_phone_app(&self, device_id: &str, platform: &str, version: &str) -> Result<()> {
+    /// Note which app and version a phone runs, and the newest phone build it and this computer
+    /// both speak, as it says when it connects. True when any of them changed.
+    pub fn set_phone_app(
+        &self,
+        device_id: &str,
+        platform: AppPlatform,
+        version: &str,
+        agreed_build: u32,
+    ) -> Result<bool> {
         self.write(|tx| {
-            tx.execute(
-                "UPDATE remote_devices SET app_platform = ?2, app_version = ?3 WHERE id = ?1",
-                params![device_id, platform, version],
+            let changed = tx.execute(
+                "UPDATE remote_devices SET app_platform = ?2, app_version = ?3, agreed_build = ?4 \
+                 WHERE id = ?1 AND (app_platform IS NOT ?2 OR app_version IS NOT ?3 \
+                 OR agreed_build IS NOT ?4)",
+                params![device_id, platform.as_str(), version, agreed_build],
             )?;
-            Ok(())
+            Ok(changed > 0)
         })
     }
 

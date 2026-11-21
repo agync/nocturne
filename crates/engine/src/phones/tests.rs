@@ -1620,3 +1620,73 @@ fn a_reading_names_the_phone_it_came_from() {
         .unwrap();
     assert_eq!(rows[0].device_id, f.phone);
 }
+
+#[test]
+fn the_app_a_phone_runs_and_whether_it_should_update() {
+    use nocturne_contract::{AppPlatform, PhoneUpdate};
+
+    use crate::PhoneBuilds;
+    let f = fx();
+    let builds = PhoneBuilds {
+        oldest: 2,
+        newest: 3,
+    };
+    let app = |f: &Fx| {
+        f.engine.phone_sources_for(builds).unwrap().phones[0]
+            .app
+            .clone()
+    };
+    assert_eq!(app(&f), None, "not said yet");
+
+    assert!(
+        f.engine
+            .set_phone_app(&f.phone, AppPlatform::Android, "0.9.0", 3)
+            .unwrap()
+    );
+    let a = app(&f).unwrap();
+    assert_eq!(
+        (a.platform, a.version.as_str(), a.update),
+        (AppPlatform::Android, "0.9.0", None)
+    );
+    assert!(!f.phone_sources_in_browser());
+    assert!(
+        !f.engine
+            .set_phone_app(&f.phone, AppPlatform::Android, "0.9.0", 3)
+            .unwrap(),
+        "said again, nothing changed"
+    );
+
+    f.engine
+        .set_phone_app(&f.phone, AppPlatform::Android, "0.8.0", 2)
+        .unwrap();
+    assert_eq!(app(&f).unwrap().update, Some(PhoneUpdate::Ready));
+    f.engine
+        .set_phone_app(&f.phone, AppPlatform::Ios, "0.7.0", 1)
+        .unwrap();
+    assert_eq!(app(&f).unwrap().update, Some(PhoneUpdate::Needed));
+    assert_eq!(
+        f.engine.phone_sources().unwrap().phones[0]
+            .app
+            .as_ref()
+            .unwrap()
+            .update,
+        None,
+        "no update lines without the builds"
+    );
+
+    f.engine
+        .set_phone_app(&f.phone, AppPlatform::Browser, "0.9.0", 1)
+        .unwrap();
+    assert_eq!(
+        app(&f).unwrap().update,
+        None,
+        "the page comes from this computer"
+    );
+    assert!(f.phone_sources_in_browser());
+}
+
+impl Fx {
+    fn phone_sources_in_browser(&self) -> bool {
+        self.engine.phone_sources().unwrap().phones[0].in_browser
+    }
+}
