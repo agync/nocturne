@@ -502,6 +502,7 @@ still works.
 | Can’t scan, address | | Simple: "The four words" and the words, such as "amber otter quiet river". Most private: "Your computer’s name" and the full name |
 | Can’t scan, code | "On your phone, open {address} and type this code:" and the code | "The code" and the code in four groups of six |
 | Can’t scan, browser | | "No app? In your phone’s browser, open {address} and type the code." The address is the full one in both modes |
+| Can’t scan, how long | | "The code lasts five minutes and works once." |
 | A new line | | "Get the free Nocturne app: search for “Nocturne” in Google Play or the App Store. It has the same half-moon mark." |
 | Simple, what it needs | "Nothing to sign up for. Nothing to install on your phone." | "Nothing to sign up for. Use the Nocturne app, or your phone’s browser." |
 | Simple, what it sees | "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where, and it supplies the page your phone opens." | "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where. If you use the browser instead of the app, it also supplies the page your phone opens." |
@@ -553,6 +554,51 @@ Buttons: "Delete" in the careful style and "Keep them".
 brought stay too. To delete them, use {fromYourPhones}." and an unticked "Also delete what it
 brought" which, when ticked, adds the delete list above to the same dialog.
 
+**States and labels on the page.**
+
+| Part | Copy |
+|---|---|
+| Loading | "Getting your phones…" |
+| Error | "Nocturne couldn’t get your phones." |
+| Nothing yet | "No phone has brought its calendar or health yet." |
+| An action failed | "That didn’t go through. Nothing was changed." |
+| List heading | "Your phones" |
+| Row on the Settings list | The value "Open"; the screen-reader label "From your phones, open" |
+| Source names in a sentence | "the calendar" / "Health" |
+| When it last came in | "today {time}" / "yesterday {time}" / "{day} {time}" |
+| Screen-reader labels | Each action names the phone, such as "See what came in from {phone}’s calendar", "See readings from {phone}", "Stop taking {source} from {phone}", "Take {source} from {phone} again" and "Delete what came in from {phone}…" |
+
+**What came in, the list's page.** Titled "What came in" in Settings and "Calendar from {phone}"
+on the page, which is also the back link from an entry.
+
+| Part | Copy |
+|---|---|
+| Lead | "Newest change first. Each one opens its own page." |
+| List heading | "What came in" |
+| Tags | "new" / "changed" / "removed from your calendar" |
+| Row, time | "{day}, {time}" / "{day}, all day" |
+| Row, second line | "{when} · {calendar}" |
+| Nothing yet | "Nothing has come in from {phone} yet." |
+| More | "Load more" |
+| Error | "Nocturne couldn’t get the list." |
+| Phone gone | "That phone isn’t paired any more." |
+
+**Stop and delete dialogs.**
+
+| Part | Copy |
+|---|---|
+| Stop, titles | "Stop taking the calendar from {phone}?" / "Stop taking Health from {phone}?" |
+| Stop, body and buttons | "What already came in stays. {phone} is told next time it connects, and stops sending." / "Stop" / "Keep taking it" |
+| Delete, titles | "Delete the calendar from {phone}?" / "Delete the health readings from {phone}?" |
+| Delete, lead | "It goes from this computer for good." |
+| Delete, choice | "What to delete" |
+| Delete, rows | The calendar and health rows listed above and in [Health from the phone](phone-health.md#on-the-computer) |
+| Delete, getting ready | "Getting the list ready…" |
+| Delete, list failed | "Nocturne couldn’t get the list ready. Nothing has been deleted." |
+| Delete, list out of date | "That list was out of date, so Nocturne refreshed it. Check it, then delete." |
+| Delete, done | "Deleted." |
+| Delete, shared with kept things | "{count, plural, one {# thing Nocturne learned also comes from something you kept. It stays; only the phone’s receipt goes.} other {# things Nocturne learned also come from things you kept. They stay; only the phone’s receipt goes.}}" |
+
 ### The morning page
 
 | Part | Change |
@@ -571,6 +617,20 @@ Calendar rows on the day's timeline, as on the phone: quiet rows with the calend
 your calendar". The day's reflection may mention an appointment, with its receipt. Delete this day
 lists the calendar entries kept that day under a new group "From your calendar", unticked, because
 they belong to the phone's calendar and will come back if still inside the window.
+
+**The calendar entry's own page.** Opened from a row in "What came in", from a receipt chip or from
+the journal.
+
+| Part | Copy |
+|---|---|
+| Back link | "Calendar from {phone}" |
+| When | "{day}, {span}" with the span "{from} to {to}" or "all day" |
+| Detail labels | "Repeats" / "Who’s invited" |
+| Source line | "From {phone}’s calendar · last updated {time}" |
+| Removed | "Removed from your calendar" |
+| Earlier versions | "Earlier versions", each "Was {when}" |
+| What Nocturne learned | "What Nocturne learned" |
+| Time zone | "{time} in {place}" |
 
 ### Privacy, activity and export
 

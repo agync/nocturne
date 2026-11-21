@@ -191,6 +191,8 @@ On the computer, the journal day gains:
   the day; resting heart rate today on a 30-day line with your usual band; steps on 14 day bars;
   the day's heart rate range; any blood pressure readings of the day. Each has "See more ›" to its
   own page. Kinds not brought are not shown; the block is not shown when nothing is brought.
+- **Side block lines, as built.** "today", "{asleep} asleep", "{steps} today" and
+  "{low} to {high} · mostly around {middle}".
 - **Day markers.** The lines mark the days with a journal entry, so a trend sits beside the days
   written about.
 
@@ -350,6 +352,45 @@ Buttons: "Delete" in the careful style and "Keep them".
 **Delete this day** lists the day's readings under "From Health", unticked.
 
 **Stop taking it** works as for the calendar. What came in stays.
+
+**States on a kind's page and in its delete dialog.**
+
+| Part | Copy |
+|---|---|
+| Loading | "Opening your readings…" |
+| Nothing in the range | "No readings in this range." |
+| Error | "Nocturne couldn’t open your readings. What you kept is safe." |
+| Range control | The screen-reader label "Range" |
+| Row menu | The screen-reader label "More about the reading on {day}", with "Delete…" |
+| Source, no device | "Through Health on {phone}" |
+| List columns | "Day" / "Value" / "Time", and for the values "Beats a minute" or "Steps" |
+| Journal link | "Journal ›" |
+| Reading opened as an item | "See it in Health" |
+| Delete, titles | "Delete readings?" / "Delete this reading?" for a single row |
+| Delete, choices | "Which phone" / "Kinds" / "All of them" / "Before a date…" with the field "Before this day" |
+| Delete, getting ready | "Getting the list ready…" |
+| Delete, list failed | "Nocturne couldn’t get the list ready. Nothing has been deleted." |
+| Delete, failed | "That didn’t go through. Nothing was deleted." |
+| Delete, list out of date | "That list was out of date, so Nocturne refreshed it. Check it, then delete." |
+| Delete, shared with kept things | "{count, plural, one {# thing Nocturne learned also comes from something you kept. It stays; only the phone’s receipt goes.} other {# things Nocturne learned also come from things you kept. They stay; only the phone’s receipt goes.}}" |
+
+**Sentences the charts speak.** Each is the chart's accessible name, as in
+[The visual forms](#the-visual-forms).
+
+| Part | Copy |
+|---|---|
+| Duration | "{hours} h {minutes} min" / "{minutes} min" |
+| Night | "{asleep} asleep, from {from} to {to}, awake once." / "…, awake # times." / "{asleep} asleep, {from} to {to}" |
+| Nights | "{count, plural, one {# night} other {# nights}}. Asleep {average} on an average night, between {low} and {high}." |
+| When | "today" / "on {day}" / "this morning" / "this afternoon" / "this evening" |
+| A value | "{label}, {value} {when}." |
+| Heart rate day | "Heart rate {when}, {low} to {high} beats a minute, mostly around {middle}." |
+| Units | "{value} beats a minute" / "{range} beats a minute" / "{count, plural, one {# step} other {# steps}}" |
+| Hours | "Heart rate by hour {when}." / "Highest between {from} and {to}." / "Highest between {from} and {to}, during {kind}." with hours as "{hour} am" and "{hour} pm" |
+| Blood pressure | "{top} over {bottom}" / "{reading} {when}." / "Your usual is {topLow} to {topHigh} over {bottomLow} to {bottomHigh}." |
+| Steps | "{steps} {when}. {average} on an average day {period}." with the period "this fortnight" or "in the last {count} days" |
+| Your usual | "Your usual is {low} to {high}", "{low} to {high}" as a band, and "your usual" on the axis |
+| Workouts | "{kind} · {length}" / "{kind} · {length} · {distance}", the distance "{km} km", and the recap counts "{count, plural, one {# walk} other {# walks}}", runs, swims, cycles, hikes and "{count, plural, one {# workout} other {# workouts}}", joined as "{counts}." |
 
 ### Export
 

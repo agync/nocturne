@@ -19,3 +19,5 @@ from home. The charts live in `ui/src/components/health` so the phone's screens 
 The screens run against the mock engine (`?mockPhones=1` in the browser build) until the engine
 fills in the commands. Words the interface uses for the two new kinds are "appointment" and
 "health reading".
+The state copy those screens use (loading, error, empty and refreshed states, dialog titles, units
+and the chart sentences) is now recorded in the two design pages.
