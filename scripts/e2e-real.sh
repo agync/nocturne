@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Run the real end-to-end test, then run it again with the network cut and traced.
 #
-# Usage: scripts/e2e-real.sh [run|offline|all|online|models|relay|help]     (default: all)
+# Usage: scripts/e2e-real.sh [run|offline|all|online|models|relay|help|decisions]   (default: all)
 #   run      the test with real models. The first run downloads the small mind (about 4.8 GB)
 #            through the app's own setup into NOCTURNE_E2E_DIR; later runs reuse it.
 #   offline  the same test in a private network namespace (loopback only) under strace, on what
@@ -26,6 +26,11 @@
 #   help     the help check (docs/design/in-app-help.md) on the size NOCTURNE_E2E_TIER sets up:
 #            the 29 questions, NOCTURNE_E2E_HELP times (default 3), with help written here
 #            (`make e2e-help`). Results in $NOCTURNE_E2E_DIR/results/help.json.
+#   decisions the decision check (docs/design/evaluation.md) on the size NOCTURNE_E2E_TIER sets up:
+#            the rules, the mind and the decision model this computer's hardware picks (or
+#            NOCTURNE_E2E_DECISION_MODEL), NOCTURNE_E2E_DECISIONS times (default 1). A decision model
+#            missing from the scratch folder is downloaded into it, the mode's only network use
+#            beyond setup (`make e2e-decisions`). Results in $NOCTURNE_E2E_DIR/results/decisions.json.
 #
 # NOCTURNE_E2E_DIR is the scratch folder (default target/e2e-real). It is the only place models
 # are downloaded to, and it is never the app's own data folder. Results are written to
@@ -176,6 +181,12 @@ run_help() {
         cargo test -p nocturne-app --test e2e_real -- --ignored --nocapture --test-threads=1
 }
 
+run_decisions() {
+    printf '== e2e-real: the decision check, tier %s, scratch folder %s\n' "${NOCTURNE_E2E_TIER:-small}" "$dir"
+    NOCTURNE_E2E_DECISIONS=${NOCTURNE_E2E_DECISIONS:-1} \
+        cargo test -p nocturne-app --test e2e_real -- --ignored --nocapture --test-threads=1
+}
+
 test_binary() {
     cargo test -p nocturne-app --test e2e_real --no-run --message-format=json 2> /dev/null |
         python3 -I -c '
@@ -217,6 +228,7 @@ case "$mode" in
     online) run_stand_in ;;
     models) run_models ;;
     help) run_help ;;
+    decisions) run_decisions ;;
     relay) start_relay && stop_relay ;;
     offline) run_offline ;;
     all)
