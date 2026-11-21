@@ -1,0 +1,8 @@
+{
+  "name": "nocturne-phone",
+  "private": true,
+  "description": "Gradle calls the Tauri CLI back through this script; the Makefile puts the CLI on PATH.",
+  "scripts": {
+    "tauri": "tauri"
+  }
+}

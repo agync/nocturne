@@ -1,0 +1,48 @@
+[package]
+name = "nocturne-phone"
+description = "Nocturne on the phone: the app shell around the phone screens and the sealed channel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "nocturne_phone_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "nocturne-phone"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { workspace = true }
+
+[dependencies]
+nocturne-channel = { workspace = true, features = ["client"] }
+nocturne-contract.workspace = true
+tauri.workspace = true
+tauri-plugin-opener.workspace = true
+tauri-plugin-nocturne-system = { path = "../plugins/system" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+
+[target.'cfg(any(target_os = "android", target_os = "ios"))'.dependencies]
+tauri-plugin-barcode-scanner = "2"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[features]
+default = []
+# Reaches the computer at http://127.0.0.1:<NOCTURNE_DEV_LOOPBACK_PORT> (default 8799), through
+# `adb reverse`. Debug builds for checks only: never in `default`, never in a release build; the
+# release target fails when its marker is in the library.
+dev-loopback = ["nocturne-channel/dev-loopback"]
+# Set by `tauri build`: embed the interface instead of loading a dev server.
+custom-protocol = ["tauri/custom-protocol"]
+
+[lints]
+workspace = true

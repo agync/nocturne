@@ -1,0 +1,20 @@
+[package]
+name = "tauri-plugin-nocturne-system"
+description = "The phone's own bits Nocturne needs: screen insets, the phone's name, its app settings"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+links = "tauri-plugin-nocturne-system"
+publish = false
+
+[dependencies]
+tauri.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true

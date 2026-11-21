@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "default",
+  "description": "What the phone screens may ask of the app.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "nocturne-system:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://nocturne.is/*" }]
+    }
+  ],
+  "platforms": ["linux", "macOS", "windows", "android", "iOS"]
+}
