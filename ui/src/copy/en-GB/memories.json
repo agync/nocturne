@@ -193,5 +193,6 @@
   "item.calendar.versions": "Earlier versions",
   "item.calendar.was": "Was {when}",
   "item.calendar.learned": "What Nocturne learned",
-  "item.calendar.back": "Calendar from {phone}"
+  "item.calendar.back": "Calendar from {phone}",
+  "item.reading.open": "See it in Health"
 }

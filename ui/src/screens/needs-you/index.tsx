@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { goTo } from "../../app/query";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
@@ -45,7 +46,6 @@ export default function NeedsYou() {
   const engine = useEngine();
   const refresh = useRefresh();
   const toast = useToast();
-  const [, navigate] = useLocation();
   const needs = useNeedsYou();
   const { data: page } = usePage();
   const [settled, setSettled] = useState<ReadonlySet<string>>(new Set());
@@ -136,10 +136,7 @@ export default function NeedsYou() {
     });
   };
 
-  const openReceipt = useCallback(
-    (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
-    [navigate],
-  );
+  const openReceipt = useCallback((receipt: Receipt) => goTo(receiptPath(receipt)), []);
 
   const settle = async (key: string, index: number, work: () => Promise<string>) => {
     setBusy(key);

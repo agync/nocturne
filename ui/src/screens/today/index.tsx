@@ -1,8 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useRoute } from "wouter";
+import { goTo } from "../../app/query";
 import { ForgetDialog } from "../../components/ForgetDialog/ForgetDialog";
 import { PageSheet, type SheetAction } from "../../components/PageSheet/PageSheet";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { useToast } from "../../components/Toast/Toast";
 import { formatBytes, isDay } from "../../copy/format";
 import { paceDays } from "../../copy/pace";
@@ -229,7 +231,7 @@ function TodayPage({ date }: { date: string | undefined }) {
           );
           break;
         case "open":
-          navigate(`/items/${action.receipt.itemId}`);
+          goTo(receiptPath(action.receipt, "today"));
           break;
         case "edition":
           if (action.edition === "audio") navigate(`/listen/${page.date}`);

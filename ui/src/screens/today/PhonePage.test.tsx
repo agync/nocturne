@@ -41,7 +41,7 @@ describe("the morning page with a phone's calendar and last night", () => {
       name: "Calendar · Family · Sam’s phone. Source.",
     });
     await userEvent.click(chip as HTMLElement);
-    expect(window.location.hash).toBe("#/items/cal-dentist");
+    expect(window.location.hash).toBe("#/items/cal-dentist?from=today");
   });
 
   it("puts last night under the title with its bar and a receipt to the night", async () => {
@@ -58,7 +58,7 @@ describe("the morning page with a phone's calendar and last night", () => {
     await userEvent.click(
       within(night).getByRole("button", { name: "Sleep · Health · Sam’s phone. Source." }),
     );
-    expect(window.location.hash).toBe("#/items/read-sleep-0");
+    expect(window.location.hash).toBe("#/journal/health?day=2026-11-13");
   });
 
   it("puts last night before the deck and the calendar before what changed", async () => {

@@ -4,6 +4,7 @@ import { duration } from "../../components/health/sentence";
 import { Icon } from "../../components/Icon/Icon";
 import { choiceText } from "../../components/PageSheet/questionWords";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
 import type { CheckIn, DayPart, JournalDay, Mention, TimelineRow } from "../../engine/bindings";
@@ -60,6 +61,14 @@ function wokeText(row: TimelineRow, data: JournalDay): string {
     : row.item.title;
 }
 
+/** A night or a workout is read on its Health page; everything else opens its own page. */
+function rowHref(row: TimelineRow, day: string): string {
+  if (row.kind === "woke") return `#/journal/health/sleep?day=${day}`;
+  if (row.kind === "workout") return `#/journal/health/workouts?day=${day}`;
+  if (row.kind === "calendar") return `#/items/${row.item.id}?from=journal`;
+  return `#/items/${row.item.id}`;
+}
+
 const PHONE_KINDS = new Set(["calendar", "workout", "woke"]);
 
 /** What a row says: the words, the voice note's words, or what was seen in a photo. */
@@ -70,7 +79,7 @@ function lineOf(row: TimelineRow, data: JournalDay): string {
     case "workout":
       return workoutText(row, data);
     case "calendar": {
-      const place = row.item.calendar?.place ?? row.item.summary;
+      const place = row.item.calendar?.place;
       return place ? `${row.item.title} · ${place}` : row.item.title;
     }
     case "checkin":
@@ -375,7 +384,7 @@ function Row({
         <a
           ref={link as React.RefObject<HTMLAnchorElement>}
           className={styles.link}
-          href={`#/items/${row.item.id}`}
+          href={rowHref(row, data.day)}
           aria-haspopup={hasMenu ? "menu" : undefined}
           aria-keyshortcuts={hasMenu ? "Shift+F10" : undefined}
           onKeyDown={(event) => {
@@ -441,14 +450,18 @@ function Row({
             }}
             text={t("page.lastNight.receipt", { phone: data.health.night.phone })}
             icon="moon"
-            onOpen={(receipt) => goTo(`/items/${receipt.itemId}`)}
+            onOpen={(receipt) => goTo(receiptPath(receipt))}
           />
         </div>
       ) : null}
       {after ? (
         <div className={styles.sub}>
           {after.itemId ? (
-            <a className={styles.meta} href={`#/items/${after.itemId}`} tabIndex={-1}>
+            <a
+              className={styles.meta}
+              href={`#/journal/health/sleep?day=${data.day}`}
+              tabIndex={-1}
+            >
               {t("journal.timeline.afterSleep", { asleep: duration(after.minutes) })}
             </a>
           ) : (

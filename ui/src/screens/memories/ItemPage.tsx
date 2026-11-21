@@ -1,14 +1,15 @@
 import type { ReactNode } from "react";
 import { useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { useQueryParam } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { StatusLabel } from "../../components/StatusLabel/StatusLabel";
 import { useToast } from "../../components/Toast/Toast";
-import { formatDay, formatTime } from "../../copy/format";
+import { formatDay, formatTime, localDay } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { CouldntReadReason } from "../../engine/bindings";
+import type { CouldntReadReason, ItemView } from "../../engine/bindings";
 import { useEngine, useEngineEvent, useRefresh } from "../../engine/context";
 import { usePlatform } from "../../platform/context";
 import { CalendarFacts, CalendarPreview } from "./CalendarItem";
@@ -28,6 +29,21 @@ const REASON = {
   mindUnavailable: "item.reason.mindUnavailable",
 } as const satisfies Record<CouldntReadReason, Parameters<typeof t>[0]>;
 
+/** Back to the screen that sent the person to a calendar entry: the page, the journal day, or what came in. */
+function backOf(
+  calendar: NonNullable<ItemView["calendar"]>,
+  from: string | null,
+): { to: string; label: string } {
+  if (from === "today") return { to: "/today", label: t("screen.today.title") };
+  if (from === "journal") {
+    return { to: `/journal/${localDay(calendar.start)}`, label: t("screen.journal.title") };
+  }
+  return {
+    to: `/settings/phones/came-in/${calendar.deviceId}/calendar`,
+    label: t("item.calendar.back", { phone: calendar.phone }),
+  };
+}
+
 /** #/items/:itemId: the original on the left, what Nocturne understood from it on the right. */
 export function ItemPage({ id }: { id: string }) {
   const engine = useEngine();
@@ -36,6 +52,7 @@ export function ItemPage({ id }: { id: string }) {
   const refresh = useRefresh();
   const [, navigate] = useLocation();
   const item = useItem(id);
+  const from = useQueryParam("from");
   const memories = useMemories({ itemId: id });
   const heading = useRef<HTMLHeadingElement>(null);
   const [busy, setBusy] = useState(false);
@@ -81,8 +98,31 @@ export function ItemPage({ id }: { id: string }) {
 
   const it = item.data;
   const calendar = it.kind === "calendar" ? (it.calendar ?? null) : null;
+  const back = calendar ? backOf(calendar, from) : { to: "/memories", label: "" };
   if (it.journal === "checkin" && it.checkin) {
     return page(<CheckinPage item={it} checkin={it.checkin} />);
+  }
+  if (it.kind === "reading") {
+    return page(
+      <ScreenSheet>
+        <BackLink to="/journal" label={t("screen.journal.title")} />
+        <div className={styles.details}>
+          <p className={`t-section ${styles.meta}`}>
+            {t("item.meta", {
+              kind: kindWord(it.kind),
+              day: formatDay(it.keptAt),
+              time: formatTime(it.keptAt),
+            })}
+          </p>
+          <h1 ref={heading} tabIndex={-1} className={`t-item-title ${styles.title}`}>
+            {it.title}
+          </h1>
+          <a className="hit" href={`#/journal/health?day=${localDay(it.keptAt)}`}>
+            {t("item.reading.open")}
+          </a>
+        </div>
+      </ScreenSheet>,
+    );
   }
   const list = memories.data;
   const keptForever = list.length > 0 && list.every((m) => m.keepForever);
@@ -120,10 +160,7 @@ export function ItemPage({ id }: { id: string }) {
         </div>
         <div className={styles.details}>
           {calendar ? (
-            <BackLink
-              to={`/settings/phones/came-in/${calendar.deviceId}/calendar`}
-              label={t("item.calendar.back", { phone: calendar.phone })}
-            />
+            <BackLink to={back.to} label={back.label} />
           ) : (
             <BackLink to="/memories" label={t("screen.memories.title")} />
           )}

@@ -10,8 +10,8 @@ afterEach(() => {
 });
 
 const NOW = "2026-11-13T07:02:00Z";
-const open = async (id: string) => {
-  renderApp({ hash: `#/items/${id}`, engine: withPhones(createMockEngine(), NOW) });
+const open = async (id: string, query = "") => {
+  renderApp({ hash: `#/items/${id}${query}`, engine: withPhones(createMockEngine(), NOW) });
   return screen.findByRole("heading", { level: 1 });
 };
 
@@ -63,5 +63,37 @@ describe("a calendar entry's own page", () => {
     await open("cal-inset-day");
     const page = screen.getByRole("main");
     expect(within(page).getAllByText(/all day/).length).toBeGreaterThan(0);
+  });
+});
+
+describe("where a calendar entry's page goes back to", () => {
+  it("is the morning page when it was opened from there", async () => {
+    await open("cal-dentist", "?from=today");
+    expect(within(screen.getByRole("main")).getByRole("link", { name: /Today/ })).toHaveAttribute(
+      "href",
+      "#/today",
+    );
+  });
+
+  it("is the journal day when it was opened from the timeline", async () => {
+    await open("cal-dentist", "?from=journal");
+    expect(within(screen.getByRole("main")).getByRole("link", { name: /Journal/ })).toHaveAttribute(
+      "href",
+      "#/journal/2026-11-13",
+    );
+  });
+});
+
+describe("a health reading's page", () => {
+  it("leads to Health and offers nothing to keep, read again or forget", async () => {
+    await open("read-sleep-0");
+    expect(await screen.findByRole("link", { name: "See it in Health" })).toHaveAttribute(
+      "href",
+      "#/journal/health?day=2026-11-13",
+    );
+    for (const name of ["Mark private", "Keep forever", "Read it again", "Delete…"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.queryByText(/Memories from it/)).toBeNull();
   });
 });

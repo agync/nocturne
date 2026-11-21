@@ -26,17 +26,19 @@ const receiptOf = (
 
 /** "Last night": one line under the page's title, with the night bar and a receipt to the night. */
 export function LastNight({
+  id,
   night,
   onOpen,
 }: {
+  id: string;
   night: NightLine;
   onOpen: (receipt: Receipt) => void;
 }) {
   const versus = versusText(night.versus);
   return (
-    <section className={styles.night} aria-labelledby="last-night">
+    <section className={styles.night} aria-labelledby={id}>
       <div className={styles.nightText}>
-        <h2 id="last-night" className={`t-section ${styles.label}`}>
+        <h2 id={id} className={`t-section ${styles.label}`}>
           {t("page.lastNight.label")}
         </h2>
         <p className={styles.nightLine}>
@@ -73,19 +75,21 @@ function when(line: CalendarLine): string {
 
 /** "In your calendar today · 3": the time, the title in the page's serif, the place, and the receipt. */
 export function CalendarToday({
+  id,
   lines,
   more,
   day,
   onOpen,
 }: {
+  id: string;
   lines: readonly CalendarLine[];
   more: number;
   day: string;
   onOpen: (receipt: Receipt) => void;
 }) {
   return (
-    <section className={styles.agenda} aria-labelledby="calendar-today">
-      <h2 id="calendar-today" className={`t-section ${styles.label}`}>
+    <section className={styles.agenda} aria-labelledby={id}>
+      <h2 id={id} className={`t-section ${styles.label}`}>
         {t("page.section.calendarToday", { count: lines.length + more })}
       </h2>
       <ul className={styles.rows}>
@@ -97,8 +101,10 @@ export function CalendarToday({
                 : when(line)}
             </span>
             <span className={styles.what}>
-              <span className={styles.title}>{line.title}</span>
-              {line.place ? <span className={styles.place}> {line.place}</span> : null}
+              <span className={styles.titleLine}>
+                <span className={styles.title}>{line.title}</span>
+                {line.place ? <span className={styles.place}> {line.place}</span> : null}
+              </span>
               <span className={styles.chip}>
                 <ReceiptChip
                   receipt={receiptOf(line.itemId, "calendar", line.title, line.start, line.phone)}
