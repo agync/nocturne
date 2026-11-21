@@ -2,7 +2,7 @@
 
 .PHONY: help setup build test lint fmt check check-changed contract/ts contract/check docs/check \
 	rust/build rust/test rust/lint rust/fmt ui/install ui/build ui/test ui/lint ui/e2e ui/fmt dev lemonade/fetch scripts/test package smoke netcheck netcheck-remote netcheck-online e2e-real e2e-online e2e-models e2e-help e2e-decisions preview-real helpers-pin phone tailnet/test \
-	server/build server/image \
+	server/build server/image phone/env phone/android phone/android-release phone/lint phone/test \
 	site site/serve site/clean
 
 UI_PRESENT := $(wildcard ui/package.json)
@@ -173,6 +173,36 @@ site/serve: ## Serve site/dist on loopback with its headers
 
 site/clean: ## Remove the built site
 	$(MAKE) -C site clean
+
+##@ Phone app (Android)
+
+# The Android toolchain comes from the environment, never from paths here: JAVA_HOME (JDK 17+),
+# ANDROID_HOME, NDK_HOME, and optionally GRADLE_USER_HOME and CARGO_TARGET_DIR. Gradle calls the
+# Tauri CLI back through phone/package.json, so the CLI from ui/node_modules goes on PATH.
+PHONE_TAURI = cd phone && PATH="$(CURDIR)/ui/node_modules/.bin:$$PATH" npm run --silent tauri --
+PHONE_FEATURES ?=
+
+phone/env:
+	@for v in JAVA_HOME ANDROID_HOME NDK_HOME; do \
+	  if [ -z "$$(printenv $$v)" ]; then echo "$$v is not set; see docs/contribution/building.md" >&2; exit 1; fi; \
+	done
+
+phone/android: ui/node_modules phone/env ## Build the phone app's debug APK for arm64 (PHONE_FEATURES=dev-loopback)
+	cd ui && npm run build:phone-native
+	$(PHONE_TAURI) android build --debug --target aarch64 --apk $(if $(PHONE_FEATURES),--features $(PHONE_FEATURES))
+
+phone/android-release: ui/node_modules phone/env ## Build the release APK and bundle for every phone ABI
+	phone/check-release.sh --features
+	cd ui && npm run build:phone-native
+	$(PHONE_TAURI) android build --target aarch64 --target armv7 --target x86_64 --apk --aab
+	phone/check-release.sh $$(find phone/src-tauri/gen/android/app/build/outputs \
+	  -name '*-release*.apk' -o -name '*-release*.aab')
+
+phone/lint: ## Clippy for the phone app and its plugins, on this machine
+	cargo clippy -p nocturne-phone -p tauri-plugin-nocturne-system --all-targets -- -D warnings
+
+phone/test: ## Test the phone app's Rust side on this machine
+	cargo test -p nocturne-phone -p tauri-plugin-nocturne-system
 
 ##@ Utilities
 

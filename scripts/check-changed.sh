@@ -54,6 +54,8 @@ add() { targets+=("$1"); }
 [ "${on[scripts]}" = true ] && add scripts/test
 [ "${on[tailnet]}" = true ] && add tailnet/test
 [ "${on[site]}" = true ] && { add docs/check; add site/strings; }
+# The phone app's host clippy only: Gradle and the APK are CI's.
+[ "${on[android]}" = true ] && add phone/lint
 
 echo "changed: $(wc -l < "$changed") path(s)"
 echo "targets: ${targets[*]:-none}"

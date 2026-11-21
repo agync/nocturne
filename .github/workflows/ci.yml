@@ -22,6 +22,9 @@
 #   rust-lint-platforms  rust/lint's clippy on macOS arm64 and Windows x64
 #   ui-platforms         the interface's unit tests on macOS and Windows
 #
+# `android` builds the phone app's debug APK for arm64 and runs its plugins' JVM tests and lint.
+# It runs no emulator; the phone app's Rust side is linted and tested on the host in `rust`.
+#
 # A pull request that touches what the packages are built from also builds them, on the platforms
 # release.yml builds on, unsigned and with nothing uploaded:
 #
@@ -92,6 +95,7 @@ jobs:
       site: ${{ steps.paths.outputs.site }}
       package: ${{ steps.paths.outputs.package }}
       package-linux: ${{ steps.paths.outputs.package-linux }}
+      android: ${{ steps.paths.outputs.android }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -628,6 +632,57 @@ jobs:
             Write-Output "ok    $name"
           }
 
+  # The phone app: the debug APK for arm64 only, and the plugins' JVM tests and lint. Release
+  # builds (every ABI, the bundle, signing) are release.yml's, wired in the release phase. The NDK
+  # is the runner's newest; Gradle's cache, like the cargo cache, is saved on main only. It runs on
+  # Cargo.toml and Cargo.lock changes too: a dependency bump is what most often breaks the Android
+  # build, and the host jobs never cross-compile.
+  android:
+    name: android
+    needs: changes
+    if: needs.changes.outputs.android != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Android NDK
+        run: echo "NDK_HOME=$ANDROID_NDK_LATEST_HOME" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/rust-toolchain
+      - name: Android Rust target
+        run: rustup target add aarch64-linux-android
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: android
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: Debug APK, arm64
+        run: |
+          set -euo pipefail
+          make ui/install
+          make phone/android
+      - name: Plugin tests and lint
+        working-directory: phone/src-tauri/gen/android
+        run: ./gradlew --no-daemon :tauri-plugin-nocturne-system:testDebugUnitTest :tauri-plugin-nocturne-system:lintDebug
+      - name: Keep the APK for emulator checks
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nocturne-phone-debug-arm64
+          path: phone/src-tauri/gen/android/app/build/outputs/apk/**/*.apk
+          retention-days: 7
+
   # The one job to require in branch protection: it fails when any job above failed or was
   # cancelled, and it says what this workflow does not cover. A job that was skipped because its
   # paths did not change counts as passed; if `changes` itself fails, every job waiting on it is
@@ -650,6 +705,7 @@ jobs:
       - package-linux
       - package-macos
       - package-windows
+      - android
     # The gate only reads its needs, so the 1 vCPU runner is enough.
     runs-on: ubuntu-slim
     timeout-minutes: 5

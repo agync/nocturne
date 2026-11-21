@@ -16,12 +16,12 @@ export LC_ALL=C
 # A change here runs every job.
 everything='^(\.github/(workflows|actions)/|Makefile$|rust-toolchain\.toml$|scripts/ci-areas\.sh$)'
 lockfiles='Cargo\.(toml|lock)$|(helpers|lemonade)\.lock$'
-rust_side="crates/|src-tauri/|docs/guide/|\.cargo/|clippy\.toml$|$lockfiles"
+rust_side="crates/|src-tauri/|phone/|docs/guide/|\.cargo/|clippy\.toml$|$lockfiles"
 # What the packages are built from. The Rust sources are not here: the rust and rust-platforms
 # jobs check their release build.
 package="scripts/|src-tauri/(bundle/|macos/|icons/|tauri[^/]*\.json$|Info\.plist$|Cargo\.toml$|build\.rs$)|Cargo\.(toml|lock)$|LICENSE$|ui/package[^/]*\.json$|(helpers|lemonade)\.lock$|\.github/workflows/release\.yml$"
 
-names=(rust rust-platforms ui ui-platforms scripts tailnet site package package-linux)
+names=(rust rust-platforms ui ui-platforms scripts tailnet site package package-linux android)
 declare -A areas=(
     # The Rust tests read ui/ and write the bindings there, and the interop tests run the phone
     # client from ui/ against the Rust side.
@@ -39,6 +39,8 @@ declare -A areas=(
     [site]='^(site/|docs/|lemonade\.lock$|ui/package(-lock)?\.json$)'
     [package]="^($package)"
     [package-linux]="^($package|flatpak/)"
+    # The phone app: its shell, the channel it links, and the phone screens it carries.
+    [android]='^(phone/|crates/channel/|ui/src/phone/|ui/phone/|ui/vite\.phone\.config\.ts$|ui/package(-lock)?\.json$|Cargo\.(toml|lock)$)'
 )
 
 # grep exits 1 when nothing matches and 2 on a bad pattern, which must fail rather than skip.
