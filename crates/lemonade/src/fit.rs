@@ -1,10 +1,12 @@
 //! Whether a model fits this computer for a job: the memory budget, the busiest moment of the
 //! chosen set, the engine's own size cap and the free disk.
 
-use nocturne_contract::{ComponentRole, Fit, FitReason, Job, ModelChoice};
+use nocturne_contract::{ComponentRole, Fit, FitReason, Job, ModelChoice, Tier};
 
 use crate::client::{BackendState, ModelInfo, SystemInfo};
+use crate::decision_models::{D1_OMNI_2B, D3_LITE_FLM, DecisionModel};
 use crate::fit_table::{self, PRESET_PEAKS};
+use crate::npu;
 use crate::residency;
 use crate::selection::{self, Picks, Selection};
 use crate::tier::{self, DISK_HEADROOM};
@@ -384,4 +386,86 @@ fn smallest_for(job: Job, catalogue: &[ModelInfo]) -> Option<String> {
         .filter(|m| qualifies(job, m).is_ok())
         .min_by_key(|m| memory_of(&m.id, Some(m)))
         .map(|m| m.id.clone())
+}
+
+/// The model that answers decisions on this computer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeciderPick {
+    /// The mind already loaded answers them.
+    Mind,
+    Model(&'static DecisionModel),
+}
+
+/// The decider that suits this computer: `ram` bytes of memory, `vram` bytes on its largest
+/// graphics card of its own (0 for graphics that share the memory) and the NPU as `npu` reads it.
+///
+/// In order: `d3-lite-FLM` when the NPU is [`Readiness::Ready`]; else `d1-Omni-2B` when the engine
+/// gives llama.cpp a graphics backend (never the CPU); else the mind. An Unsupported tier always
+/// gets the mind, and a mind the person chose changes nothing, since the models are picked by the
+/// hardware.
+///
+/// A decision model loads in the engine's `classification` pool, so it does not evict the mind
+/// under `max_loaded_models`, but its memory still counts. Deciding runs while items are read, so
+/// it is added to the reading moment of `s`, where the NPU's mind is counted as
+/// [`npu::placement`] places it (beside the GPU mind, or in its place). A model is picked only
+/// when the busiest moment with it still Fits the budget. On a card of its own the GPU model must
+/// also fit on the card beside the mind and recall, and then costs the shared memory nothing;
+/// when it does not fit the card, the choice falls to the next in the list. Pure: the same inputs
+/// give the same pick.
+pub fn decider_for(
+    info: &SystemInfo,
+    s: &Selection,
+    ram: u64,
+    vram: u64,
+    npu: &npu::Readiness,
+) -> DeciderPick {
+    let mut picks = selection::picks(s);
+    if s.tier == Tier::Unsupported || picks.mind.is_empty() {
+        return DeciderPick::Mind;
+    }
+    let mem = |id: &str| memory_of(id, None);
+    let b = budget(ram, info.devices.largest_pool(), u64::MAX);
+    let alone_voice = !residency::alone_for(s, &b).is_empty();
+    let ready = *npu == npu::Readiness::Ready;
+    let mut extra = 0;
+    if ready && !s.custom.contains_key(&ComponentRole::Speech) && npu::fits(s, ram) {
+        picks.speech = npu::SPEECH.model.to_string();
+    }
+    if ready {
+        match npu::placement(s, ram, vram) {
+            npu::Placement::Gpu => {}
+            npu::Placement::Split => extra = mem(npu::MIND.model),
+            npu::Placement::NpuOnly => picks.mind = npu::MIND.model.to_string(),
+        }
+    }
+    let own = selection::picks(s);
+    let on_card = mem(&own.mind) + mem(&own.recall);
+    let card_holds = vram > 0 && on_card <= vram;
+    // The busiest moment with `model` added to reading. When the card holds the mind and recall
+    // they are not in the shared memory, as `npu::placement` counts it.
+    let busiest_with = |model: &DecisionModel| {
+        if card_holds {
+            return mem(&picks.speech) + mem(&picks.voice) + extra + mem(model.id);
+        }
+        let read = read_set_with(&picks, mem) + extra + mem(model.id);
+        (extra + peak_with(&picks, alone_voice, mem)).max(read)
+    };
+    let fits = |need: u64| fit_for(need, &b) == Fit::Fits;
+
+    if ready && fits(busiest_with(&D3_LITE_FLM)) {
+        return DeciderPick::Model(&D3_LITE_FLM);
+    }
+    if tier::choose_backend(info, D1_OMNI_2B.recipe) == "cpu" {
+        return DeciderPick::Mind;
+    }
+    // On the card the model sits beside the mind and recall and costs the shared memory nothing.
+    let ok = if card_holds {
+        on_card + mem(D1_OMNI_2B.id) <= vram && fits(busiest_with(&D1_OMNI_2B) - mem(D1_OMNI_2B.id))
+    } else {
+        vram == 0 && fits(busiest_with(&D1_OMNI_2B))
+    };
+    if ok {
+        return DeciderPick::Model(&D1_OMNI_2B);
+    }
+    DeciderPick::Mind
 }
