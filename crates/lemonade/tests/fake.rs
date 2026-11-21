@@ -101,3 +101,16 @@ async fn echoes_its_environment() {
         .collect();
     assert_eq!(keys, vec!["LEMONADE_ADMIN_API_KEY", "LEMONADE_API_KEY"]);
 }
+
+/// Like the real engine from 2026.47.1, an empty admin key is no key at all: the admin routes
+/// then take the API key, and stay closed without one.
+#[tokio::test]
+async fn an_empty_admin_key_falls_back_to_the_api_key() {
+    let mut fake = common::Fake::start_with_admin_key(None, "");
+    fake.wait_live().await;
+    let url = fake.url("/internal/config");
+    let without = fake.http.get(&url).send().await.unwrap();
+    assert_eq!(without.status(), 401);
+    let with = fake.http.get(&url).bearer_auth("k3y").send().await.unwrap();
+    assert_eq!(with.status(), 200);
+}

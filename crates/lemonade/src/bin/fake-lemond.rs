@@ -422,8 +422,11 @@ async fn main() {
         .unwrap_or_default();
     let modes = parse_modes(&mode_str);
     let key = std::env::var("LEMONADE_API_KEY").unwrap_or_default();
-    // Like the real engine, the admin key is the API key when it is not given.
-    let admin_key = std::env::var("LEMONADE_ADMIN_API_KEY").unwrap_or_else(|_| key.clone());
+    // Like the real engine, the admin key is the API key when it is not given or empty.
+    let admin_key = std::env::var("LEMONADE_ADMIN_API_KEY")
+        .ok()
+        .filter(|k| !k.is_empty())
+        .unwrap_or_else(|| key.clone());
 
     let counter_path = cache.join("fake-launches");
     let launches = std::fs::read_to_string(&counter_path)

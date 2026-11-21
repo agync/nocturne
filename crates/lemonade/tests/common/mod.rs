@@ -211,6 +211,11 @@ pub struct Fake {
 
 impl Fake {
     pub fn start(mode: Option<&str>) -> Fake {
+        Fake::start_with_admin_key(mode, "adm1n")
+    }
+
+    /// A fake given `admin` as its admin key, which may be empty.
+    pub fn start_with_admin_key(mode: Option<&str>, admin: &str) -> Fake {
         let tmp = tempfile::tempdir().unwrap();
         let dirs = dirs(tmp.path());
         if let Some(m) = mode {
@@ -222,7 +227,7 @@ impl Fake {
             .args(["--port", "0", "--host", "127.0.0.1"])
             .args(["--no-broadcast", "--watchdog-fd", "0"])
             .env("LEMONADE_API_KEY", "k3y")
-            .env("LEMONADE_ADMIN_API_KEY", "adm1n")
+            .env("LEMONADE_ADMIN_API_KEY", admin)
             .stdin(std::process::Stdio::piped())
             .spawn()
             .unwrap();
@@ -233,7 +238,11 @@ impl Fake {
             http: reqwest::Client::new(),
             dirs,
             client: nocturne_lemonade::Client::new(port, "k3y"),
-            admin: nocturne_lemonade::Admin::new(port, "adm1n").unwrap(),
+            admin: nocturne_lemonade::Admin::new(
+                port,
+                if admin.is_empty() { "k3y" } else { admin },
+            )
+            .unwrap(),
             _tmp: tmp,
         }
     }
