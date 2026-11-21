@@ -206,6 +206,9 @@ export function AddPhone({ view }: { view: RemoteView }) {
     );
   } else {
     const address = offer.typedAddress;
+    const mostPrivate = view.connection === "mostPrivate";
+    const host = address.split("/")[0] ?? address;
+    const words = (host.split(".")[0] ?? host).replace(/-/g, " ");
     body = (
       <div className={styles.addCode}>
         <div className={styles.codeColumn}>
@@ -243,23 +246,31 @@ export function AddPhone({ view }: { view: RemoteView }) {
           <p className={styles.muted}>{t("away.add.warning")}</p>
           <div className={styles.typed}>
             <span className={styles.label}>{t("away.add.cantScan")}</span>
-            <span className={styles.sub}>
-              {t("away.add.typedOpen")} <span className={styles.mono}>{address}</span>{" "}
-              {t("away.add.typedCode")}
-            </span>
-            <ul className={styles.codeGroups} aria-label={t("away.add.codeLabel")}>
-              {groups(offer.typedCode).map((g, i) => (
-                <li key={`${i}-${g}`} className={styles.mono}>
-                  {g}
-                </li>
-              ))}
-            </ul>
+            <div className={styles.typedField}>
+              <span className={styles.sub}>
+                {t(mostPrivate ? "away.add.name" : "away.add.words")}
+              </span>
+              <span className={styles.codeLine}>{mostPrivate ? host : words}</span>
+            </div>
+            <div className={styles.typedField}>
+              <span className={styles.sub}>{t("away.add.code")}</span>
+              <ul className={styles.codeGroups} aria-label={t("away.add.codeLabel")}>
+                {groups(offer.typedCode).map((g, i) => (
+                  <li key={`${i}-${g}`} className={styles.mono}>
+                    {g}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <p className={styles.sub}>{t("away.add.browser", { address })}</p>
             <div>
               <Button variant="quiet" onClick={() => void copyCode()}>
                 {t("away.add.copy")}
               </Button>
             </div>
           </div>
+          <p className={styles.muted}>{t("away.add.lasts")}</p>
+          <p className={styles.muted}>{t("away.add.getApp")}</p>
           <ActionBar>
             <Button variant="secondary" onClick={cancel}>
               {t("away.cancel")}

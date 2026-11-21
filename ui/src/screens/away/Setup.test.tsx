@@ -29,7 +29,7 @@ describe("setup", () => {
     await openAway(SETUP, "off", STEP1);
     expect(
       screen.getByText(
-        "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where, and it supplies the page your phone opens.",
+        "Cloudflare carries locked messages between your phone and this computer. It can see when your phone connects and from where. If you use the browser instead of the app, it also supplies the page your phone opens.",
       ),
     ).toBeInTheDocument();
     expect(

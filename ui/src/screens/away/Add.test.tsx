@@ -43,9 +43,28 @@ describe("add", () => {
 
   it("typed_alternative_shown: gives the address and the code to type", async () => {
     await openAway(ADD, "onAlone", "Add a phone");
-    expect(await screen.findByText("Can’t scan?")).toBeInTheDocument();
-    expect(screen.getByText("amber-otter-lamp-quiet.trycloudflare.com/p")).toBeInTheDocument();
-    expect(screen.getByText(/and type this code:/)).toBeInTheDocument();
+    expect(
+      await screen.findByText("Can’t scan? In the app, choose Type the code, then type:"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("The four words")).toBeInTheDocument();
+    expect(screen.getByText("amber otter lamp quiet")).toBeInTheDocument();
+    expect(screen.getByText("The code")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No app? In your phone’s browser, open amber-otter-lamp-quiet.trycloudflare.com/p and type the code.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Scan it with the Nocturne app on your phone. No app? Your phone’s camera opens Nocturne in its browser instead.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("The code lasts five minutes and works once.")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Get the free Nocturne app: search for “Nocturne” in Google Play or the App Store. It has the same half-moon mark.",
+      ),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("img", { name: "Code to scan with your phone’s camera" }),
     ).toBeInTheDocument();

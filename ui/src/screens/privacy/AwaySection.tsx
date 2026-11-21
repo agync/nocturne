@@ -53,6 +53,7 @@ export function AwaySection({ view }: { view: PrivacyView }) {
         {t("privacy.away.heading")}
       </h2>
       <p>{t(simple ? "privacy.away.on.simple" : "privacy.away.on.mostPrivate")}</p>
+      <p>{t("privacy.away.phonesBring")}</p>
       <div className={styles.awayActions}>
         <Button variant="secondary" onClick={() => void act(() => engine.stopRemote(false))}>
           {t("privacy.away.turnOff")}

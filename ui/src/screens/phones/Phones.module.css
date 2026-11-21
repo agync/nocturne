@@ -1,0 +1,280 @@
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-5);
+  max-width: 720px;
+}
+
+.lede {
+  color: var(--ink2);
+  font-size: 1rem;
+  line-height: 1.55;
+}
+
+.phones {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-6);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.phone {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+}
+
+.phoneHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s-1) var(--s-3);
+}
+
+.phoneName {
+  margin: 0;
+  font: 400 1.5rem / 1.3 var(--font-serif);
+  letter-spacing: -0.01em;
+}
+
+.kind,
+.muted {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.rows > li {
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.source {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s-2) var(--s-4);
+}
+
+.sourceText {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 14rem;
+}
+
+.sourceLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  font: 500 0.9375rem / 1.4 var(--font-sans);
+}
+
+.actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s-2);
+}
+
+.linkButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-control);
+  padding: 0 var(--s-4);
+  border: 1px solid var(--rule2);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  font: 500 0.875rem / 1.3 var(--font-sans);
+  text-decoration: none;
+}
+
+.linkButton:hover {
+  background: var(--bg);
+}
+
+.stopped {
+  color: var(--ink2);
+  font-size: 0.875rem;
+}
+
+.deleteLink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-2);
+}
+
+.groupLabel {
+  margin: 0;
+  color: var(--ink3);
+  font: 500 0.75rem / 1.4 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.foot {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--s-3);
+  color: var(--ink2);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s-3);
+  color: var(--ink2);
+}
+
+.deleteList {
+  margin: 0;
+  padding-left: var(--s-4);
+  color: var(--ink);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.deleteList li {
+  padding: 2px 0;
+}
+
+.choice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s-2) var(--s-4);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choiceLegend {
+  padding: 0;
+  margin-bottom: var(--s-1);
+  color: var(--ink);
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+.choiceOption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+  min-height: var(--size-control);
+  color: var(--ink);
+  font-size: 0.9375rem;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-3);
+  padding-top: var(--s-2);
+}
+
+.cameList {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+
+.cameRow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 7.5rem minmax(0, 1fr) auto;
+  gap: var(--s-1) var(--s-4);
+  align-items: start;
+  padding: var(--s-3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.cameRow:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.cameWhen {
+  color: var(--ink2);
+  font: 400 0.75rem / 1.6 var(--font-mono);
+}
+
+.cameText {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.cameTitle {
+  color: var(--ink);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.cameTitle::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.cameTitle:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.cameDay {
+  color: var(--ink2);
+  font-size: 0.8125rem;
+}
+
+.tag {
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--ink);
+  font: 500 0.6875rem / 1.4 var(--font-mono);
+}
+
+.tag[data-tag="removed"] {
+  border: 1px solid var(--rule2);
+  background: transparent;
+}
+
+.more {
+  align-self: flex-start;
+}
+
+:global([data-size="narrow"]) .cameRow {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+:global([data-size="narrow"]) .cameWhen {
+  grid-column: 1 / -1;
+}

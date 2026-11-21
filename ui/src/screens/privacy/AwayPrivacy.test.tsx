@@ -19,6 +19,9 @@ describe("privacy", () => {
     await open("on");
     const section = await screen.findByRole("region", { name: "Away from home" });
     expect(section).toHaveTextContent(/Your phones reach this computer through Cloudflare/);
+    expect(section).toHaveTextContent(
+      "Your phones can bring their calendar and health readings, in the same locked messages.",
+    );
     expect(section).toHaveTextContent(/locked so Cloudflare can’t read it/);
     expect(
       within(section).getByRole("heading", { name: "The company in the middle: Cloudflare" }),

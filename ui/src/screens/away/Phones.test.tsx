@@ -1,7 +1,8 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { openAway } from "./testing";
+import { withPhones } from "../../engine/mock/phones";
+import { manualEngine, openAway } from "./testing";
 
 afterEach(() => {
   window.location.hash = "";
@@ -136,5 +137,55 @@ describe("activity", () => {
     expect(
       await screen.findByText(/Nothing yet\. What your phones do is listed here\./),
     ).toBeInTheDocument();
+  });
+});
+
+describe("phones that bring things", () => {
+  const withBrought = () => withPhones(manualEngine("on"), "2026-11-13T07:02:00Z");
+
+  it("adds what kind of phone it is and what it brings under each phone", async () => {
+    await openAway(PHONES, "on", "Phones", withBrought());
+    const list = screen.getByRole("list", { name: "Your phones" });
+    expect(
+      await within(list).findByText("Android app · Nocturne 1.2 · Brings your calendar and health"),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("In the browser")).toBeInTheDocument();
+    expect(within(list).getAllByRole("link", { name: "From your phones" })).toHaveLength(1);
+  });
+
+  it("the remove dialog points to From your phones and offers to delete what it brought", async () => {
+    const engine = withBrought();
+    await openAway(PHONES, "on", "Phones", engine);
+    await screen.findByText(/Android app/);
+    const remove = vi.spyOn(engine, "removeDevice");
+    await userEvent.click(screen.getByRole("button", { name: "Remove Sam’s phone" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Remove Sam’s phone?" }));
+    expect(
+      dialog.getByText(
+        /Calendar entries and health readings it brought stay too\. To delete them, use/,
+      ),
+    ).toBeInTheDocument();
+    expect(dialog.getByRole("link", { name: "From your phones" })).toHaveAttribute(
+      "href",
+      "#/settings/phones",
+    );
+    const tick = dialog.getByRole("checkbox", { name: "Also delete what it brought" });
+    expect(tick).not.toBeChecked();
+    await userEvent.click(tick);
+    expect(
+      await dialog.findByText(
+        "41 appointments from Sam’s phone’s calendar, and their earlier versions",
+      ),
+    ).toBeInTheDocument();
+    await userEvent.click(dialog.getByRole("button", { name: "Remove" }));
+    await waitFor(() => expect(remove).toHaveBeenCalledWith("pixel", true));
+  });
+
+  it("a phone in the browser has no tick to delete what it brought", async () => {
+    await openAway(PHONES, "on", "Phones", withBrought());
+    await screen.findByText(/Android app/);
+    await userEvent.click(screen.getByRole("button", { name: "Remove Ana’s phone" }));
+    const dialog = within(await screen.findByRole("dialog", { name: "Remove Ana’s phone?" }));
+    expect(dialog.queryByRole("checkbox")).toBeNull();
   });
 });

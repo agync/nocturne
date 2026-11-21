@@ -1,6 +1,7 @@
 import { screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
+import { withPhones } from "../../engine/mock/phones";
 import { renderApp, setViewport } from "../../test/render";
 
 beforeEach(() => setViewport(1280));
@@ -30,6 +31,28 @@ describe("settings", () => {
       "href",
       "#/settings/models",
     );
+  });
+
+  it("shows From your phones only once a phone with the app is paired", async () => {
+    const { unmount } = renderApp({ hash: "#/settings", engine: createMockEngine() });
+    await screen.findByRole("combobox", { name: "Voice, name" });
+    expect(screen.queryByRole("link", { name: "From your phones, open" })).toBeNull();
+    unmount();
+    renderApp({
+      hash: "#/settings",
+      engine: withPhones(createMockEngine(), "2026-11-13T07:02:00Z"),
+    });
+    const row = await screen.findByRole("link", { name: "From your phones, open" });
+    expect(row).toHaveAttribute("href", "#/settings/phones");
+    expect(row).toHaveAccessibleDescription("Calendar and health your phones bring");
+  });
+
+  it("leaves From your phones out when the only phone is in the browser", async () => {
+    const engine = withPhones(createMockEngine(), "2026-11-13T07:02:00Z");
+    engine.sim.fixtures.phones = engine.sim.fixtures.phones.filter((p) => p.inBrowser);
+    renderApp({ hash: "#/settings", engine });
+    await screen.findByRole("combobox", { name: "Voice, name" });
+    expect(screen.queryByRole("link", { name: "From your phones, open" })).toBeNull();
   });
 
   it("ends with the Nocturne guide, which opens the reader", async () => {
