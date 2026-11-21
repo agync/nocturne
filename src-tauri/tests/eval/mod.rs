@@ -5,6 +5,7 @@
 //! fixture test that runs without models (`eval_fixture.rs`).
 #![allow(dead_code)]
 
+pub mod decisions;
 pub mod help;
 pub mod journal;
 
