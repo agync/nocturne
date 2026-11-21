@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    EVENT_DEVICE, EVENT_PAIRING, EVENT_REMOTE, PairingRequest, PhoneHello, PrivacyView,
-    RemoteAdvanced, RemoteConnection,
+    EVENT_DEVICE, EVENT_PAIRING, EVENT_REMOTE, PairingRequest, PhoneFeature, PhoneHello,
+    PrivacyView, RemoteAdvanced, RemoteConnection,
 };
 use nocturne_engine::{DeviceRow, Engine};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
@@ -99,7 +99,8 @@ impl<R: Runtime> session::Shell for AppShell<R> {
             connection,
             min_phone_build: protocol::MIN_PHONE_BUILD,
             version: self.app.package_info().version.to_string(),
-            features: Vec::new(),
+            // A phone app offers the calendar and Health only to a computer that takes them.
+            features: vec![PhoneFeature::Calendar, PhoneFeature::Health],
         }
     }
 

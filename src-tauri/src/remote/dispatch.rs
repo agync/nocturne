@@ -15,7 +15,7 @@ use nocturne_contract::{
     AskDelta, AskPhase, AskPlace, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, Period,
     PeriodKind, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice,
     QuestionKind, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall, RemoteResult,
-    SameNameAnswer, Source,
+    SameNameAnswer, Source, SyncReceipt,
 };
 use nocturne_engine::{DeviceRow, Engine, KeepPlace};
 use tauri::{AppHandle, Manager, Runtime};
@@ -164,6 +164,12 @@ pub fn cited_ids(answer: &RemoteAnswer) -> Vec<String> {
                 if let Some(r) = &q.receipt {
                     add(&r.item_id);
                 }
+            }
+            // A private calendar entry never leaves: the page left it out, and this holds the
+            // whole page back if one is still there.
+            page.calendar_today.iter().for_each(|c| add(&c.item_id));
+            if let Some(n) = &page.last_night {
+                add(&n.item_id);
             }
         }
         RemoteAnswer::Item { item } => add(&item.id),
@@ -390,8 +396,33 @@ impl<R: Runtime> Call<R> {
                 },
                 None => err(PhoneError::NotReady),
             },
-            RemoteCall::SendCalendar { .. } | RemoteCall::SendReadings { .. } => {
-                err(PhoneError::NotReady)
+            RemoteCall::SendCalendar { batch } => {
+                let shape = sync_shape(
+                    &batch.sync_id,
+                    batch.changes.len().max(batch.calendars.len()),
+                    &batch,
+                )
+                .and_then(|()| {
+                    (is_date(&batch.window_from) && is_date(&batch.window_to))
+                        .then_some(())
+                        .ok_or(PhoneError::Invalid)
+                });
+                if let Err(code) = shape {
+                    return err(code);
+                }
+                self.sync(RemoteAction::SentCalendar, move |e, device| {
+                    e.take_calendar(&device, batch)
+                })
+                .await
+            }
+            RemoteCall::SendReadings { batch } => {
+                if let Err(code) = sync_shape(&batch.sync_id, batch.changes.len(), &batch) {
+                    return err(code);
+                }
+                self.sync(RemoteAction::SentReadings, move |e, device| {
+                    e.take_readings(&device, batch)
+                })
+                .await
             }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
@@ -407,6 +438,40 @@ impl<R: Runtime> Call<R> {
                 }
                 None
             }
+        }
+    }
+
+    /// One batch of a phone app's calendar or health send: one per-phone token, then the store
+    /// takes it. The activity list counts what was taken, never what it was.
+    async fn sync(
+        &self,
+        action: RemoteAction,
+        take: impl FnOnce(Engine, String) -> nocturne_engine::Result<SyncReceipt> + Send + 'static,
+    ) -> Option<RemoteAnswer> {
+        let me = &self.device.id;
+        if !self.core.limits.take(Bucket::Syncs, me) {
+            self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
+            return err(PhoneError::TooMany);
+        }
+        let e = self.engine()?;
+        let device = me.clone();
+        match blocking(move || take(e, device)).await {
+            Ok(receipt) => {
+                if receipt.taken > 0
+                    && let Some(e) = self.engine()
+                {
+                    let (device, taken) = (me.clone(), receipt.taken);
+                    let logged = blocking(move || {
+                        e.log_remote_count(&device, action, RemoteResult::Ok, taken)
+                    })
+                    .await;
+                    if logged.is_err() {
+                        tracing::warn!("could not note what a phone sent");
+                    }
+                }
+                Some(RemoteAnswer::Synced { receipt })
+            }
+            Err(e) => err(phone_code(&e)),
         }
     }
 
@@ -1431,6 +1496,18 @@ fn feeling_ok(f: &Feeling) -> bool {
         && f.words
             .iter()
             .all(|w| (1..=MAX_FEELING_WORD).contains(&w.chars().count()))
+}
+
+/// A send's id is an id, its batch holds at most `MAX_SYNC_BATCH` changes and fits
+/// `MAX_SYNC_JSON` as JSON.
+fn sync_shape(sync_id: &str, len: usize, batch: &impl serde::Serialize) -> Result<(), PhoneError> {
+    if crypto::check_id(sync_id).is_err() {
+        return Err(PhoneError::Invalid);
+    }
+    if len > MAX_SYNC_BATCH || serde_json::to_vec(batch).map_or(true, |b| b.len() > MAX_SYNC_JSON) {
+        return Err(PhoneError::TooLarge);
+    }
+    Ok(())
 }
 
 fn phone_code(e: &CommandError) -> PhoneError {

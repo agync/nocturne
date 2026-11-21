@@ -1,101 +1,130 @@
 //! From your phones: what paired phone apps bring (the calendar and health readings), seeing,
 //! stopping and deleting it, and the health pages. Main window only.
-//!
-//! Every body answers `unavailable` until the store keeps what phones bring.
 
+use jiff::civil::Date;
 use nocturne_contract::{
     CameInRow, HealthSeries, PhoneDeletePreview, PhoneDeleteScope, PhonePageOptions, PhoneSource,
     PhoneSourcesView, ReadingKind, ReadingRow,
 };
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
+use super::{change, read};
 use crate::error::CommandError;
+use crate::state::AppState;
 
-pub(crate) fn not_ready() -> CommandError {
-    CommandError::unavailable("what phones bring is not kept yet")
+/// The most rows "What came in" lists at once.
+const MAX_CAME_IN: u32 = 200;
+
+fn day(s: &str) -> Result<Date, CommandError> {
+    s.parse()
+        .map_err(|_| CommandError::invalid("a day is YYYY-MM-DD"))
 }
 
 #[tauri::command]
 pub async fn get_phone_sources<R: Runtime>(
-    _app: AppHandle<R>,
+    app: AppHandle<R>,
 ) -> Result<PhoneSourcesView, CommandError> {
-    Err(not_ready())
+    read(app, |e| e.phone_sources()).await
 }
 
 /// Stop or start taking one source from one phone. Stopping deletes nothing.
 #[tauri::command]
 pub async fn set_phone_source<R: Runtime>(
-    _app: AppHandle<R>,
-    _device_id: String,
-    _source: PhoneSource,
-    _taking: bool,
+    app: AppHandle<R>,
+    device_id: String,
+    source: PhoneSource,
+    taking: bool,
 ) -> Result<PhoneSourcesView, CommandError> {
-    Err(not_ready())
+    change(app, move |e| {
+        e.set_source_taking(&device_id, source, taking)?;
+        e.phone_sources()
+    })
+    .await
 }
 
 #[tauri::command]
 pub async fn set_phone_page_options<R: Runtime>(
-    _app: AppHandle<R>,
-    _options: PhonePageOptions,
+    app: AppHandle<R>,
+    options: PhonePageOptions,
 ) -> Result<PhoneSourcesView, CommandError> {
-    Err(not_ready())
+    change(app, move |e| {
+        e.set_phone_page_options(options)?;
+        e.phone_sources()
+    })
+    .await
 }
 
 /// "Notice what goes together".
 #[tauri::command]
-pub async fn set_noticing<R: Runtime>(_app: AppHandle<R>, _on: bool) -> Result<(), CommandError> {
-    Err(not_ready())
+pub async fn set_noticing<R: Runtime>(app: AppHandle<R>, on: bool) -> Result<(), CommandError> {
+    change(app, move |e| e.set_noticing(on)).await
 }
 
 /// "What came in" from one source of one phone, newest first, before `before` when given.
 #[tauri::command]
 pub async fn list_came_in<R: Runtime>(
-    _app: AppHandle<R>,
-    _device_id: String,
-    _source: PhoneSource,
-    _before: Option<String>,
-    _limit: u32,
+    app: AppHandle<R>,
+    device_id: String,
+    source: PhoneSource,
+    before: Option<String>,
+    limit: u32,
 ) -> Result<Vec<CameInRow>, CommandError> {
-    Err(not_ready())
+    read(app, move |e| {
+        e.came_in(
+            &device_id,
+            source,
+            before.as_deref(),
+            limit.min(MAX_CAME_IN),
+        )
+    })
+    .await
 }
 
 /// One kind over days, `from` to `to` both included.
 #[tauri::command]
 pub async fn get_health_series<R: Runtime>(
-    _app: AppHandle<R>,
-    _kind: ReadingKind,
-    _from: String,
-    _to: String,
+    app: AppHandle<R>,
+    kind: ReadingKind,
+    from: String,
+    to: String,
 ) -> Result<HealthSeries, CommandError> {
-    Err(not_ready())
+    let (from, to) = (day(&from)?, day(&to)?);
+    read(app, move |e| e.health_series(kind, from, to)).await
 }
 
 /// "Show as a list": every reading of one kind, `from` to `to` both included.
 #[tauri::command]
 pub async fn list_readings<R: Runtime>(
-    _app: AppHandle<R>,
-    _kind: ReadingKind,
-    _from: String,
-    _to: String,
+    app: AppHandle<R>,
+    kind: ReadingKind,
+    from: String,
+    to: String,
 ) -> Result<Vec<ReadingRow>, CommandError> {
-    Err(not_ready())
+    let (from, to) = (day(&from)?, day(&to)?);
+    read(app, move |e| e.readings(kind, from, to)).await
 }
 
 /// What a delete would remove, and the token that applies it.
 #[tauri::command]
 pub async fn preview_phone_delete<R: Runtime>(
-    _app: AppHandle<R>,
-    _scope: PhoneDeleteScope,
+    app: AppHandle<R>,
+    scope: PhoneDeleteScope,
 ) -> Result<PhoneDeletePreview, CommandError> {
-    Err(not_ready())
+    read(app, move |e| e.preview_phone_delete(scope)).await
 }
 
 /// Apply a previewed delete; `also_stop` stops taking that source from the phone too.
 #[tauri::command]
 pub async fn delete_phone_data<R: Runtime>(
-    _app: AppHandle<R>,
-    _token: String,
-    _also_stop: bool,
+    app: AppHandle<R>,
+    token: String,
+    also_stop: bool,
 ) -> Result<(), CommandError> {
-    Err(not_ready())
+    // An answer already reading an appointment is stopped first, as for every forget.
+    app.state::<AppState>().asks.cancel_all();
+    let outcome = change(app, move |e| e.delete_phone_data(&token, also_stop)).await?;
+    if !outcome.fully_scrubbed {
+        tracing::warn!("a phone delete finished but the log could not be truncated yet");
+    }
+    Ok(())
 }

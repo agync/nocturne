@@ -5,7 +5,7 @@
 use nocturne_contract::{
     DeviceView, PairingOffer, RemoteConnection, RemoteEvent, RemoteSettingsPatch, RemoteView,
 };
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Manager, Runtime};
 
 use crate::error::CommandError;
 use crate::remote::controller::RemoteHub;
@@ -81,11 +81,14 @@ pub async fn remove_device<R: Runtime>(
     id: String,
     also_delete_brought: Option<bool>,
 ) -> Result<(), CommandError> {
+    let hub = hub(&app)?;
     if also_delete_brought == Some(true) {
-        // Nothing is removed until what it brought can be deleted with it.
-        return Err(super::phones::not_ready());
+        // What it brought goes first: a phone is never removed with its delete left undone.
+        let device = id.clone();
+        app.state::<crate::state::AppState>().asks.cancel_all();
+        super::change(app.clone(), move |e| e.delete_brought(&device)).await?;
     }
-    hub(&app)?.remove_device(&id).await
+    hub.remove_device(&id).await
 }
 
 #[tauri::command]
