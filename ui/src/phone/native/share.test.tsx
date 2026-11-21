@@ -36,6 +36,27 @@ describe("what the app was opened for", () => {
 describe("keeping what another app shared", () => {
   const shared = { text: "https://example.org/letter", subject: "Trip letter", files: [] };
 
+  it("a web page waits while the computer's Nocturne is too old for it", async () => {
+    mockIPC(() => null);
+    const engine = createMockPhoneEngine({ hello: { maxPhoneBuild: undefined } });
+    await engine.connect();
+    const queue = memoryQueue();
+    render(
+      <ShareSheet
+        shared={shared}
+        engine={engine}
+        queue={queue}
+        connection={engine.connection()}
+        now={() => 0}
+        onQueued={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+    expect(await screen.findByText("Needs a newer Nocturne on your computer.")).toBeInTheDocument();
+    expect(await queue.count()).toBe(1);
+  });
+
   it("keeps the text with the note before it", async () => {
     mockIPC(() => null);
     const engine = createMockPhoneEngine();

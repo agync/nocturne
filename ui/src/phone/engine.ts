@@ -90,7 +90,8 @@ export interface PhoneEngine {
  */
 export type Connection =
   | { kind: "connecting" }
-  | { kind: "connected"; hello: PhoneHello }
+  /** `agreed`: the newest phone build both sides speak; calls and answers keep to it. */
+  | { kind: "connected"; hello: PhoneHello; agreed: number }
   | { kind: "asleep" }
   | { kind: "cantConnect" }
   | { kind: "turnedOff" }

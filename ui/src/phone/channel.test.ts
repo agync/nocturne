@@ -649,6 +649,43 @@ describe("the page says it is the phone page in a browser", () => {
     engine.close();
   });
 
+  it("with a computer from before the window, it speaks build 1 only", async () => {
+    const computer = await FakeComputer.create({ maxPhoneBuild: null });
+    const { device } = await paired({ computer });
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+      app,
+    });
+    const state = await engine.connect();
+    expect(state.kind === "connected" && state.agreed).toBe(1);
+    expect((await engine.getPage(undefined)).question).toBeNull();
+    await expect(
+      engine.keepText("https://example.com/a-recipe", "c-web-1", { web: true }),
+    ).rejects.toMatchObject({ code: "computerOutdated" });
+    await expect(
+      engine.answerJournalQuestion("2026-11-13", "fine", "c-answer-1", undefined),
+    ).rejects.toMatchObject({ code: "computerOutdated" });
+    expect(computer.items.size).toBe(0);
+    await engine.keepText("Bins out on Tuesday", "c-plain-1", undefined);
+    expect(computer.items.size).toBe(1);
+    engine.close();
+  });
+
+  it("with a current computer, it keeps the journal question and web pages", async () => {
+    const computer = await FakeComputer.create();
+    const { device } = await paired({ computer });
+    const engine = createPhoneEngine(memoryKeyStore(device), () => host(computer), {
+      env: computer.env,
+      app,
+    });
+    const state = await engine.connect();
+    expect(state.kind === "connected" && state.agreed).toBe(PHONE_BUILD);
+    expect((await engine.getPage(undefined)).question?.kind).toBe("journal");
+    await engine.keepText("https://example.com/a-recipe", "c-web-2", { web: true });
+    expect(computer.items.size).toBe(1);
+    engine.close();
+  });
+
   it("a page kept from before the computer updated is told to update", async () => {
     const computer = await FakeComputer.create();
     const { device } = await paired({ computer });

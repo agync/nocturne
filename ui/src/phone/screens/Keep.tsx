@@ -60,6 +60,7 @@ const encoder = new TextEncoder();
 const capped = (text: string, max: number) => [...text].slice(0, max).join("");
 
 export const WAIT_CODES: ReadonlySet<PhoneError> = new Set([
+  "computerOutdated",
   "busy",
   "tooMany",
   "notReady",

@@ -509,6 +509,7 @@ describe("keep", () => {
         queue={memoryQueue()}
         connection={{
           kind: "connected",
+          agreed: 2,
           hello: {
             computerName: "Home computer",
             deviceName: "Pixel",
@@ -583,6 +584,7 @@ describe("keep", () => {
         queue={memoryQueue()}
         connection={{
           kind: "connected",
+          agreed: 2,
           hello: {
             computerName: "Home computer",
             deviceName: "Pixel",

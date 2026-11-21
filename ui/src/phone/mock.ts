@@ -21,6 +21,7 @@ import {
   ConnectionError,
   PhoneRequestError,
 } from "./engine";
+import { JOURNAL_ANSWER_BUILD, PHONE_BUILD, WEB_KEEP_BUILD } from "./protocol";
 import {
   emptyDay,
   lookBackFor,
@@ -340,6 +341,8 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     };
   };
 
+  const agreedNow = () => (state.kind === "connected" ? state.agreed : PHONE_BUILD);
+
   return {
     connection: () => state,
     subscribe(listener) {
@@ -358,7 +361,9 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
       gate();
       return { readiness: "ready", pageDate: "2026-11-13", needsYou: 2 };
     },
-    async keepText(text) {
+    async keepText(text, _id, marks) {
+      if (marks?.web && agreedNow() < WEB_KEEP_BUILD)
+        throw new PhoneRequestError("computerOutdated");
       return keptAnswer(text.slice(0, 40), "text");
     },
     async keepBytes(_blob, _id, caption) {
@@ -484,7 +489,10 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     async getPage(date) {
       gate();
       if (script.noPage) throw new PhoneRequestError("notFound");
-      return pageOf(date);
+      const page = pageOf(date);
+      return agreedNow() < JOURNAL_ANSWER_BUILD && page.question?.kind === "journal"
+        ? { ...page, question: null }
+        : page;
     },
     async answerJournalQuestion(pageDate, choice, clientId, line) {
       if (script.keepFails) throw new ConnectionError("asleep");
@@ -533,12 +541,14 @@ function helloOf(script: MockScript): PhoneHello {
     connection: "simple",
     version: "0.1.0",
     minPhoneBuild: 1,
+    maxPhoneBuild: PHONE_BUILD,
     ...script.hello,
   };
 }
 
 function initialConnected(script: MockScript): Connection {
-  return { kind: "connected", hello: helloOf(script) };
+  const hello = helloOf(script);
+  return { kind: "connected", hello, agreed: Math.min(PHONE_BUILD, hello.maxPhoneBuild ?? 1) };
 }
 
 function initial(script: MockScript): Connection {
