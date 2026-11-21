@@ -74,8 +74,17 @@ pub async fn rename_device<R: Runtime>(
     hub(&app)?.rename_device(&id, &name).await
 }
 
+/// Remove a phone. What it brought stays unless `also_delete_brought`, false when left out.
 #[tauri::command]
-pub async fn remove_device<R: Runtime>(app: AppHandle<R>, id: String) -> Result<(), CommandError> {
+pub async fn remove_device<R: Runtime>(
+    app: AppHandle<R>,
+    id: String,
+    also_delete_brought: Option<bool>,
+) -> Result<(), CommandError> {
+    if also_delete_brought == Some(true) {
+        // Nothing is removed until what it brought can be deleted with it.
+        return Err(super::phones::not_ready());
+    }
     hub(&app)?.remove_device(&id).await
 }
 

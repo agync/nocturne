@@ -149,7 +149,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["decidePairing", ["p1", true], "decide_pairing", ["pairingId", "allow"]],
   ["cancelPairing", [], "cancel_pairing", []],
   ["renameDevice", ["d1", "Pixel"], "rename_device", ["id", "name"]],
-  ["removeDevice", ["d1"], "remove_device", ["id"]],
+  ["removeDevice", ["d1"], "remove_device", ["id", "alsoDeleteBrought"]],
   ["listRemoteEvents", [50], "list_remote_events", ["limit"]],
   [
     "updateRemoteSettings",
@@ -230,6 +230,40 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["reflect", [{}], "reflect", ["period"]],
   ["stopReflecting", [{}], "stop_reflecting", ["period"]],
   ["deleteReflection", [{}], "delete_reflection", ["period"]],
+  ["getPhoneSources", [], "get_phone_sources", []],
+  [
+    "setPhoneSource",
+    ["d1", "calendar", false],
+    "set_phone_source",
+    ["deviceId", "source", "taking"],
+  ],
+  [
+    "setPhonePageOptions",
+    [{ calendarToday: true, sleepLastNight: false }],
+    "set_phone_page_options",
+    ["options"],
+  ],
+  ["setNoticing", [false], "set_noticing", ["on"]],
+  [
+    "listCameIn",
+    ["d1", "health", null, 50],
+    "list_came_in",
+    ["deviceId", "source", "before", "limit"],
+  ],
+  [
+    "getHealthSeries",
+    ["sleep", "2026-11-01", "2026-11-14"],
+    "get_health_series",
+    ["kind", "from", "to"],
+  ],
+  ["listReadings", ["steps", "2026-11-01", "2026-11-14"], "list_readings", ["kind", "from", "to"]],
+  [
+    "previewPhoneDelete",
+    [{ deviceId: "d1", source: "health", kinds: null, before: null }],
+    "preview_phone_delete",
+    ["scope"],
+  ],
+  ["deletePhoneData", ["t1", false], "delete_phone_data", ["token", "alsoStop"]],
 ];
 
 describe("TauriEngine commands", () => {

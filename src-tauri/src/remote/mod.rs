@@ -425,6 +425,15 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("reflect", Never),
         ("stop_reflecting", Never),
         ("delete_reflection", Never),
+        ("get_phone_sources", Never),
+        ("set_phone_source", Never),
+        ("set_phone_page_options", Never),
+        ("set_noticing", Never),
+        ("list_came_in", Never),
+        ("get_health_series", Never),
+        ("list_readings", Never),
+        ("preview_phone_delete", Never),
+        ("delete_phone_data", Never),
     ]
 };
 

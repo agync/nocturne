@@ -6,6 +6,7 @@ import type {
   AskPlace,
   BackupReport,
   BackupsView,
+  CameInRow,
   ChangePreview,
   CheckOutcome,
   DeviceView,
@@ -17,6 +18,7 @@ import type {
   ForgetPreview,
   ForgetReport,
   GuideView,
+  HealthSeries,
   ItemFilter,
   ItemKind,
   ItemView,
@@ -39,8 +41,15 @@ import type {
   PageSummary,
   PageView,
   PairingOffer,
+  PhoneDeletePreview,
+  PhoneDeleteScope,
+  PhonePageOptions,
+  PhoneSource,
+  PhoneSourcesView,
   PrivacyView,
   QuestionChoice,
+  ReadingKind,
+  ReadingRow,
   Receipt,
   Refiled,
   RefileTarget,
@@ -78,6 +87,7 @@ import { journalQuestionFromAddress, journalQuestionSeed } from "./journalQuesti
 import { ModelsSim } from "./models";
 import { OnlineSim } from "./online";
 import { answeredBy, onlinePrelude } from "./onlineAsk";
+import { PhonesSim } from "./phones";
 import { type RemoteOptions, RemoteSim } from "./remote";
 import { audioScript } from "./script";
 import { buildSeed, DEFAULT_NOW, SAFETY_PREDICATES } from "./seed";
@@ -365,6 +375,8 @@ export class MockEngine implements EngineClient {
   readonly script: MockBackupsScript;
   /** The journal: its state and every journal method. */
   readonly journal: MockJournal;
+  /** What paired phone apps bring: nothing until a test or the demo gives it fixtures. */
+  readonly phones = new PhonesSim();
 
   constructor(options: MockOptions = {}) {
     this.firstAsk = options.cold ?? false;
@@ -1630,6 +1642,32 @@ export class MockEngine implements EngineClient {
   deleteReflection: EngineClient["deleteReflection"] = (period) =>
     this.journal.deleteReflection(period);
 
+  // From your phones
+
+  getPhoneSources = async (): Promise<PhoneSourcesView> => this.phones.view();
+  setPhoneSource = async (
+    deviceId: string,
+    source: PhoneSource,
+    taking: boolean,
+  ): Promise<PhoneSourcesView> => this.phones.setSource(deviceId, source, taking);
+  setPhonePageOptions = async (options: PhonePageOptions): Promise<PhoneSourcesView> =>
+    this.phones.setPageOptions(options);
+  setNoticing = async (on: boolean): Promise<void> => this.phones.setNoticing(on);
+  listCameIn = async (
+    deviceId: string,
+    source: PhoneSource,
+    before: string | null,
+    limit: number,
+  ): Promise<CameInRow[]> => this.phones.cameIn(deviceId, source, before, limit);
+  getHealthSeries = async (kind: ReadingKind, from: string, to: string): Promise<HealthSeries> =>
+    this.phones.series(kind, from, to);
+  listReadings = async (kind: ReadingKind, from: string, to: string): Promise<ReadingRow[]> =>
+    this.phones.readings(kind, from, to);
+  previewPhoneDelete = async (scope: PhoneDeleteScope): Promise<PhoneDeletePreview> =>
+    this.phones.previewDelete(scope);
+  deletePhoneData = async (token: string, _alsoStop: boolean): Promise<void> =>
+    this.phones.delete(token);
+
   // System
 
   async getPrivacy(): Promise<PrivacyView> {
@@ -1838,7 +1876,8 @@ export class MockEngine implements EngineClient {
     this.remote.decide(pairingId, allow);
   cancelPairing = (): Promise<void> => this.remote.cancelPairing();
   renameDevice = (id: string, name: string): Promise<DeviceView> => this.remote.rename(id, name);
-  removeDevice = (id: string): Promise<void> => this.remote.remove(id);
+  removeDevice = (id: string, _alsoDeleteBrought?: boolean): Promise<void> =>
+    this.remote.remove(id);
   listRemoteEvents = async (limit: number): Promise<RemoteEvent[]> => this.remote.events(limit);
   updateRemoteSettings = (patch: RemoteSettingsPatch): Promise<RemoteView> =>
     this.remote.update(patch);
