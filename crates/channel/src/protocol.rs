@@ -135,6 +135,10 @@ pub const PHONE_BUILD: u32 = 2;
 pub const MIN_PHONE_BUILD: u32 = 1;
 /// The first build in which a phone app introduces itself (`introduce`).
 pub const INTRODUCE_BUILD: u32 = 2;
+/// The first build that answers the page's question from the journal (`answerJournalQuestion`).
+pub const JOURNAL_ANSWER_BUILD: u32 = 2;
+/// The first build that keeps a shared web page as untrusted (`keepText` with `web`).
+pub const WEB_KEEP_BUILD: u32 = 2;
 
 /// HTTP statuses between the listener and the phone.
 ///
@@ -327,6 +331,8 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         PHONE_BUILD,
         MIN_PHONE_BUILD,
         INTRODUCE_BUILD,
+        JOURNAL_ANSWER_BUILD,
+        WEB_KEEP_BUILD,
         HTTP_OFF,
         HTTP_ENDED,
         HTTP_POLL_BUSY,

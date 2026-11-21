@@ -169,11 +169,11 @@ pub async fn send<R: Runtime>(app: &AppHandle<R>, asked: bool) -> Option<SyncRep
     let state = app.state::<AppState>();
     let phone = state.phone(app)?;
     let connection = match phone.state() {
-        Connection::Connected { hello } => Connection::Connected { hello },
+        connected @ Connection::Connected { .. } => connected,
         _ if asked => phone.connect().await,
         _ => return None,
     };
-    let Connection::Connected { hello } = connection else {
+    let Connection::Connected { hello, .. } = connection else {
         return None;
     };
     {
