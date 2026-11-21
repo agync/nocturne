@@ -74,6 +74,9 @@ pub struct Granted {
     /// Workouts carry their distance only when it is allowed too.
     #[serde(default)]
     pub distance: bool,
+    /// Health never says which kinds it refused (iPhone): only its own deletions remove.
+    #[serde(default)]
+    pub refusals_hidden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -89,7 +92,7 @@ pub struct Changes {
     pub removed: Vec<String>,
     pub token: Option<String>,
     pub expired: bool,
-    /// The days read again whole for each daily kind.
+    /// The days read again whole, by kind.
     pub refreshed: std::collections::HashMap<ReadingKind, Vec<String>>,
 }
 
