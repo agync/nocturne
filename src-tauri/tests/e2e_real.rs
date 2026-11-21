@@ -1178,6 +1178,7 @@ fn the_whole_product_works_with_real_models() {
     // Before anything reads: the store holds a perfect reading and nothing is waiting.
     let fixture = frozen.map(|_| seed_fixture(&h.engine(), &h.clock));
     let help_runs = runs_of("NOCTURNE_E2E_HELP").filter(|_| frozen.is_none());
+    let decision_runs = runs_of("NOCTURNE_E2E_DECISIONS").filter(|_| frozen.is_none());
     let help_ids: Option<HashMap<&'static str, String>> = help_runs.map(|_| {
         eval::help::SEEDS
             .iter()
@@ -1566,6 +1567,25 @@ fn the_whole_product_works_with_real_models() {
             serde_json::to_string_pretty(&report).unwrap_or_default(),
         );
         println!("help check: pass = {}", report["pass"]);
+        return;
+    }
+
+    if let Some(runs) = decision_runs {
+        mem.phase("decisions");
+        let report = decision_check(&h, &services, &scratch, runs);
+        run.put("decision_check", report.clone());
+        run.check(
+            "decisions.ran",
+            "the decision check asked every arm every seeded decision",
+            report["complete"] == true,
+            format!("{runs} runs, tier {}", tier_name()),
+        );
+        h.state().run_exit_hooks();
+        let _ = std::fs::write(
+            run.dir.join(format!("decisions{}.json", run.tag)),
+            serde_json::to_string_pretty(&report).unwrap_or_default(),
+        );
+        println!("{}", report["markdown"].as_str().unwrap_or_default());
         return;
     }
 
@@ -2630,6 +2650,124 @@ impl Tally {
                            "answers_fully_covered": self.bold_answers, "answers_bold_dropped": self.bold_dropped},
         })
     }
+}
+
+/// The decision check (`docs/design/evaluation.md`) on this computer, `runs` times: the rules, the
+/// mind the app loaded, and the decision model the hardware picks (`fit::decider_for`), or the one
+/// `NOCTURNE_E2E_DECISION_MODEL` names. Each run seeds a fresh store in the scratch folder. A
+/// decision model is fetched here, into the scratch engine only, with the engine let online for
+/// that download alone; this is the evaluation, never the product.
+fn decision_check(h: &Harness, services: &runtime::Services, scratch: &Path, runs: usize) -> Value {
+    use nocturne_engine::decide::MindDecider;
+    use nocturne_lemonade::decide::SystemOneDecider;
+    use nocturne_lemonade::decision_models::{self, DecisionModel};
+    use nocturne_lemonade::fit::{self, DeciderPick};
+    use nocturne_lemonade::npu;
+
+    let wait = env_secs("NOCTURNE_E2E_DECISION_SECS", 60);
+    let mind = h.state().mind.get().expect("a mind");
+    let client = block_on(services.client()).expect("the engine client");
+    let chosen: Option<&'static DecisionModel> = match std::env::var("NOCTURNE_E2E_DECISION_MODEL")
+    {
+        Ok(id) => Some(
+            decision_models::ALL
+                .iter()
+                .copied()
+                .find(|m| m.id == id)
+                .unwrap_or_else(|| panic!("no decision model {id}")),
+        ),
+        Err(_) => {
+            let info = block_on(client.system_info()).expect("system info");
+            let config = nocturne_app_lib::models::config_dir(&h.state().data_dir);
+            let selection = nocturne_lemonade::selection::read(&config);
+            let readiness = npu::readiness(&info, npu::pci_xdna2());
+            let vram = info.devices.largest_pool();
+            match fit::decider_for(&info, &selection, fit::ram_bytes(), vram, &readiness) {
+                DeciderPick::Mind => None,
+                DeciderPick::Model(m) => Some(m),
+            }
+        }
+    };
+    let model_ready = chosen.is_some_and(|m| fetch_decision_model(services, &client, m));
+    let mut arms: Vec<eval::decisions::ArmReport> = Vec::new();
+    let mut complete = true;
+    for n in 0..runs {
+        let store = scratch.join(format!("decisions-{n}"));
+        let _ = std::fs::remove_dir_all(&store);
+        std::fs::create_dir_all(&store).expect("a scratch store");
+        let clock = Arc::new(ManualClock::at("2026-11-12T07:00:00Z", "Europe/London"));
+        let engine = nocturne_engine::Engine::open(&store, clock.clone()).expect("a store");
+        let seeded = eval::decisions::seed(&engine, &clock);
+        arms.push(eval::decisions::score_arm(
+            "rules",
+            &eval::decisions::rule_arm(&seeded),
+        ));
+        let by_mind = MindDecider(mind.clone());
+        let results = block_on(eval::decisions::run_arm(&by_mind, &seeded, wait));
+        complete &= results.len() == seeded.len();
+        arms.push(eval::decisions::score_arm("mind", &results));
+        let guards = eval::decisions::guard_cases();
+        let guarded = block_on(eval::decisions::run_guard_arm(&by_mind, &guards, wait));
+        arms.push(eval::decisions::score_arm("mind guard", &guarded));
+        if let (Some(m), true) = (chosen, model_ready) {
+            let decider = SystemOneDecider::new(client.clone(), m.id, m.backend);
+            let results = block_on(eval::decisions::run_arm(&decider, &seeded, wait));
+            complete &= results.len() == seeded.len();
+            arms.push(eval::decisions::score_arm(m.id, &results));
+            let guarded = block_on(eval::decisions::run_guard_arm(&decider, &guards, wait));
+            arms.push(eval::decisions::score_arm(
+                &format!("{} guard", m.id),
+                &guarded,
+            ));
+        }
+    }
+    json!({
+        "tier": tier_name(),
+        "runs": runs,
+        "model": chosen.map(|m| m.id),
+        "model_ready": model_ready,
+        "complete": complete && (chosen.is_none() || model_ready),
+        "arms": eval::decisions::report_json(&arms),
+        "markdown": eval::decisions::markdown(&arms),
+    })
+}
+
+/// Fetches decision model `m` into the scratch engine if it is not there: registered with its
+/// checkpoint, or pulled by name when the engine lists it itself. The engine is let online for
+/// the download and put back offline after.
+fn fetch_decision_model(
+    services: &runtime::Services,
+    client: &nocturne_lemonade::Client,
+    m: &nocturne_lemonade::decision_models::DecisionModel,
+) -> bool {
+    let present = |c: &nocturne_lemonade::Client| {
+        block_on(c.models())
+            .map(|list| list.iter().any(|x| x.id == m.id && x.present()))
+            .unwrap_or(false)
+    };
+    if present(client) {
+        return true;
+    }
+    let Some(admin) = block_on(services.admin()) else {
+        return false;
+    };
+    let online = json!({"offline": false, "no_fetch_executables": false});
+    if block_on(admin.set(&online)).is_err() {
+        return false;
+    }
+    let started = match m.checkpoint {
+        Some(checkpoint) => block_on(client.pull_registered(m.id, checkpoint, m.recipe, m.labels)),
+        None => block_on(client.pull(m.id)),
+    };
+    let done = started.is_ok()
+        && wait_until(Duration::from_secs(3600), || {
+            block_on(client.downloads())
+                .map(|jobs| jobs.iter().all(|j| j.model_name != m.id || j.finished()))
+                .unwrap_or(false)
+        })
+        .is_some();
+    let _ = block_on(admin.set(&json!({"offline": true, "no_fetch_executables": true})));
+    done && present(client)
 }
 
 fn ratio(a: usize, b: usize) -> Value {

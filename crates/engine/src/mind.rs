@@ -217,6 +217,15 @@ pub trait Mind: Send + Sync {
         let _ = input;
         Box::pin(async { Err(MindError::Unsupported("reflect".into())) })
     }
+    /// Answers a decision with one of its question's labels (`decide`), with the model that
+    /// already reads items. A mind that cannot says so.
+    fn decide<'a>(
+        &'a self,
+        decision: &'a crate::decide::Decision,
+    ) -> BoxFuture<'a, Result<crate::decide::Answer, MindError>> {
+        let _ = decision;
+        Box::pin(async { Err(MindError::Unsupported("decide".into())) })
+    }
 }
 
 /// One thing kept on the day a reflection looks back on, as the mind is shown it.
@@ -331,6 +340,7 @@ mod fake {
         embed: HashMap<String, Vec<f32>>,
         transcripts: HashMap<String, Transcript>,
         understandings: HashMap<String, Understanding>,
+        decisions: Vec<(String, String)>,
     }
 
     /// A scripted mind for tests. Responses are keyed by input: the text for `extract` and
@@ -461,6 +471,15 @@ mod fake {
             self.script()
                 .reflections
                 .push_back(Reflected { sentences, written });
+            self
+        }
+
+        /// `decide` answers `label`, certain, for a state that holds `needle`. The first
+        /// needle found wins; a state none matches is unsupported.
+        pub fn with_decision(self, needle: &str, label: &str) -> Self {
+            self.script()
+                .decisions
+                .push((needle.to_string(), label.to_string()));
             self
         }
 
@@ -661,6 +680,21 @@ mod fake {
             Box::pin(async move {
                 self.check("speak").await?;
                 Ok(text.as_bytes().to_vec())
+            })
+        }
+
+        fn decide<'a>(
+            &'a self,
+            decision: &'a crate::decide::Decision,
+        ) -> BoxFuture<'a, Result<crate::decide::Answer, MindError>> {
+            Box::pin(async move {
+                self.check("decide").await?;
+                self.script()
+                    .decisions
+                    .iter()
+                    .find(|(needle, _)| decision.state.contains(needle.as_str()))
+                    .map(|(_, label)| crate::decide::Answer::certain(label, "fake"))
+                    .ok_or_else(|| MindError::Unsupported("no scripted decision".into()))
             })
         }
     }

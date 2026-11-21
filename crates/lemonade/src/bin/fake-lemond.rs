@@ -25,6 +25,13 @@
 //! `POST /fake/crash` kills it on demand. `POST /v1/delete` removes a model's files, as the real
 //! engine does.
 //!
+//! Decision models: `POST /v1/systemone` refuses a model not labelled `classification` and
+//! `systemone` (400), an unknown one (404) and a body without `state` or `questions` (400).
+//! `Decision-Lite-GGUF` and `d3-lite-FLM` (listed with the NPU runtime) are catalogued with those
+//! labels, and `POST /v1/pull` with a `checkpoint`, a `recipe` and `labels` registers a
+//! `user.<name>` model. `/fake/script` takes `systemone` beside `chat`: a list of answers
+//! (`{"answer": {...}}`) or refusals (`{"status": N, "error": "..."}`), used in order.
+//!
 //! Online answers: `POST /v1/cloud/auth` keeps a provider's key in memory and, like the real
 //! engine, reads the provider's list of models once with it, but only from a stand-in on
 //! `http://127.0.0.1`, so no test reaches the network; `DELETE /v1/cloud/auth/{provider}` forgets
@@ -83,7 +90,16 @@ const CATALOG: &[(&str, f64, &str, &str)] = &[
         "flm",
         "audio,chat,reasoning,tool-calling,vision",
     ),
+    (DECISION_GGUF, 0.9, "llamacpp", "classification,systemone"),
+    (DECISION_FLM, 1.2, "flm", "classification,systemone"),
 ];
+
+/// Decision models for `POST /v1/systemone`. Like the real engine, only a model labelled
+/// `classification` and `systemone` serves it. The FastFlowLM one is listed with the NPU runtime.
+const DECISION_GGUF: &str = "Decision-Lite-GGUF";
+const DECISION_FLM: &str = "d3-lite-FLM";
+/// What a model registered with `POST /v1/pull` and a checkpoint weighs, in gigabytes.
+const REGISTERED_GB: f64 = 0.5;
 
 /// The NPU's speech model, listed only once the `flm:npu` backend is installed.
 const NPU_SPEECH: &str = "whisper-v3-turbo-FLM";
@@ -138,6 +154,10 @@ struct Inner {
     cloud_loaded: bool,
     /// A key was handed over, which dropped the static row from the model list.
     row_dropped: bool,
+    /// Models registered by a pull with a checkpoint: name, recipe, comma-separated labels.
+    registered: Vec<(String, String, String)>,
+    /// What the next `/v1/systemone` calls answer, scripted with `/fake/script`.
+    systemone: VecDeque<Value>,
 }
 
 struct App {
@@ -184,11 +204,19 @@ impl App {
         self.mode_u64("download-ms").unwrap_or(600) as f64
     }
 
-    fn model_total(&self, name: &str) -> Option<u64> {
-        CATALOG
+    fn model_total(inner: &Inner, name: &str) -> Option<u64> {
+        let gb = CATALOG
             .iter()
             .find(|m| m.0 == name)
-            .map(|m| (m.1 * 1e9 / SCALE) as u64)
+            .map(|m| m.1)
+            .or_else(|| {
+                inner
+                    .registered
+                    .iter()
+                    .any(|r| r.0 == name)
+                    .then_some(REGISTERED_GB)
+            })?;
+        Some((gb * 1e9 / SCALE) as u64)
     }
 
     fn job_bytes(&self, job: &Job) -> u64 {
@@ -583,6 +611,7 @@ async fn main() {
         )
         .route("/unload", post(unload))
         .route("/chat/completions", post(chat))
+        .route("/systemone", post(systemone))
         .route("/embeddings", post(embeddings))
         .route("/audio/transcriptions", post(transcriptions))
         .route("/audio/speech", post(speech));
@@ -822,11 +851,19 @@ async fn models(State(app): State<Shared>) -> Json<Value> {
     app.tick(&mut inner);
     let half = app.flag("half-present");
     let flm = inner.backends.iter().any(|b| b == NPU_BACKEND);
-    let data: Vec<Value> = CATALOG
+    let registered: Vec<(String, f64, String, String)> = inner
+        .registered
         .iter()
+        .map(|(n, r, l)| (n.clone(), REGISTERED_GB, r.clone(), l.clone()))
+        .collect();
+    let catalogued = CATALOG
+        .iter()
+        .map(|(n, s, r, l)| (n.to_string(), *s, r.to_string(), l.to_string()));
+    let data: Vec<Value> = catalogued
+        .chain(registered)
         .filter(|m| m.2 != "flm" || flm)
         .map(|(name, size, recipe, labels)| {
-            let present = inner.downloaded.iter().any(|d| d == name);
+            let present = inner.downloaded.contains(&name);
             json!({
                 "id": name,
                 "object": "model",
@@ -885,7 +922,25 @@ async fn pull(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     if inner.config.get("offline") == Some(&json!(true)) {
         return err(400, "lemond_offline", "offline mode is on");
     }
-    let Some(total) = app.model_total(&name) else {
+    if let Some(checkpoint) = body["checkpoint"].as_str() {
+        if checkpoint.is_empty() || !name.starts_with("user.") {
+            return err(
+                400,
+                "invalid_argument",
+                "a model with a checkpoint is named user.<name>",
+            );
+        }
+        let recipe = body["recipe"].as_str().unwrap_or("").to_string();
+        let labels = body["labels"]
+            .as_array()
+            .map(|l| l.iter().filter_map(Value::as_str).collect::<Vec<_>>())
+            .unwrap_or_default()
+            .join(",");
+        if !inner.registered.iter().any(|r| r.0 == name) {
+            inner.registered.push((name.clone(), recipe, labels));
+        }
+    }
+    let Some(total) = App::model_total(&inner, &name) else {
         return err(400, "unknown_model", "model is not registered");
     };
     if inner.downloaded.contains(&name) {
@@ -964,15 +1019,16 @@ async fn control(State(app): State<Shared>, Json(body): Json<Value>) -> Response
 /// Removes a model's files, finished or partial, unloading it first.
 async fn delete(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     let name = body["model_name"].as_str().unwrap_or("").to_string();
-    if app.model_total(&name).is_none() {
+    let mut inner = app.inner();
+    app.tick(&mut inner);
+    if App::model_total(&inner, &name).is_none() {
         return err(
             422,
             "",
             "The model is not in the registry, or this system does not support it",
         );
     }
-    let mut inner = app.inner();
-    app.tick(&mut inner);
+    inner.registered.retain(|r| r.0 != name);
     inner.downloaded.retain(|d| d != &name);
     inner.partial.remove(&name);
     inner.loaded.retain(|m| m != &name);
@@ -1345,6 +1401,115 @@ async fn chat(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
     resp
 }
 
+/// `POST /v1/systemone` as the real engine answers it (lemonade v2026.47.1). A scripted item is
+/// the answer given to every question, as `{"answer": {...}}`, or `{"status": N, "error": "..."}`
+/// for a refusal. Without a script, a choice answers its first option at 0.6 and the rest share
+/// 0.4, a score does the same for its levels, and `noul` is 0.5.
+async fn systemone(State(app): State<Shared>, Json(body): Json<Value>) -> Response {
+    let model = body["model"].as_str().unwrap_or("").to_string();
+    let labels = {
+        let inner = app.inner();
+        CATALOG
+            .iter()
+            .find(|m| m.0 == model)
+            .map(|m| m.3.to_string())
+            .or_else(|| {
+                inner
+                    .registered
+                    .iter()
+                    .find(|r| r.0 == model)
+                    .map(|r| r.2.clone())
+            })
+    };
+    let Some(labels) = labels else {
+        return err(404, "model_not_found", "model is not registered");
+    };
+    if !["classification", "systemone"]
+        .iter()
+        .all(|l| labels.split(',').any(|have| have == *l))
+    {
+        return err(
+            400,
+            "invalid_request",
+            "model is not labelled classification and systemone",
+        );
+    }
+    let Some(state) = body["state"].as_str() else {
+        return err(400, "invalid_request", "state is required");
+    };
+    let Some(questions) = body["questions"].as_object().filter(|q| !q.is_empty()) else {
+        return err(400, "invalid_request", "questions is required");
+    };
+    app.touch_model(&model);
+    let scripted = app.inner().systemone.pop_front();
+    if let Some(status) = scripted.as_ref().and_then(|s| s["status"].as_u64()) {
+        let message = scripted.as_ref().and_then(|s| s["error"].as_str());
+        return err(
+            status as u16,
+            "scripted",
+            message.unwrap_or("scripted failure"),
+        );
+    }
+    let _ = state;
+    let mut answers = Map::new();
+    for (qid, q) in questions {
+        let answer = match &scripted {
+            Some(s) => s["answer"].clone(),
+            None => default_systemone(q),
+        };
+        answers.insert(qid.clone(), answer);
+    }
+    Json(json!({"model": model, "answers": answers, "usage": {"prompt_tokens": 1}})).into_response()
+}
+
+fn default_systemone(q: &Value) -> Value {
+    let spread = |keys: Vec<String>| -> Map<String, Value> {
+        let rest = keys.len().saturating_sub(1).max(1) as f64;
+        keys.iter()
+            .enumerate()
+            .map(|(i, k)| {
+                let p = match (i, keys.len()) {
+                    (_, 1) => 1.0,
+                    (0, _) => 0.6,
+                    _ => 0.4 / rest,
+                };
+                (k.clone(), json!(p))
+            })
+            .collect()
+    };
+    match q["type"].as_str() {
+        Some("choice") => {
+            let options: Vec<String> = q["criteria"]
+                .as_object()
+                .map(|o| o.keys().cloned().collect())
+                .unwrap_or_default();
+            let first = options.first().cloned().unwrap_or_default();
+            json!({"type": "choice", "choice": first, "probabilities": spread(options),
+                   "confidence": 0.6, "truncated": false})
+        }
+        Some("score") => {
+            let n = q["criteria"].as_array().map_or(0, Vec::len);
+            let probabilities = spread((0..n).map(|i| i.to_string()).collect());
+            let legend: Map<String, Value> = q["criteria"]
+                .as_array()
+                .map(|l| {
+                    l.iter()
+                        .enumerate()
+                        .map(|(i, t)| (i.to_string(), t.clone()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let expected: f64 = probabilities
+                .iter()
+                .map(|(k, p)| k.parse::<f64>().unwrap_or(0.0) * p.as_f64().unwrap_or(0.0))
+                .sum();
+            json!({"type": "score", "score": expected, "legend": legend,
+                   "probabilities": probabilities, "confidence": 0.6, "truncated": false})
+        }
+        _ => json!({"type": "noul", "noul": 0.5, "confidence": 0.5, "truncated": false}),
+    }
+}
+
 fn sse_items(
     deltas: Vec<String>,
     cut: bool,
@@ -1540,6 +1705,9 @@ async fn fake_script(State(app): State<Shared>, Json(body): Json<Value>) -> Json
     let mut inner = app.inner();
     if let Some(items) = body["chat"].as_array() {
         inner.script = items.iter().cloned().collect();
+    }
+    if let Some(items) = body["systemone"].as_array() {
+        inner.systemone = items.iter().cloned().collect();
     }
     Json(json!({"status": "ok"}))
 }

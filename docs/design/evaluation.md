@@ -107,6 +107,56 @@ checks the wiring and the scoring, not a size. A run on the real models of each 
 yet; it will follow the help check's `make e2e-help`. No size has passed, so every size shows "At a
 glance" and the line "On this computer, Nocturne lists the day rather than writing about it."
 
+## The decision check
+
+Nocturne asks a few typed questions about a short text and logs what a decider would answer beside
+what today's rules and word lists did; nothing acts on the answer yet. Whether a decider may one
+day act is decided by the check below, kind by kind. The kinds are: did a new note move or cancel a
+kept appointment, is a note a health, money or identity detail, and has the person already
+written how a planned thing went.
+
+Each decision is asked of every arm, once, on the same seeded text:
+
+| Arm | What it is |
+|---|---|
+| Rules | What the rules and word lists said, as logged when the note was kept |
+| Mind | The mind Nocturne already loads, its single reply read as certain |
+| Decision model | A model made for typed questions, chosen by hardware: `d3` on an NPU, Liquid `d1-Omni-2B` on a capable GPU; `d3-lite` on the CPU only when the run names it |
+
+| Metric | Meaning |
+|---|---|
+| Accuracy | Verdicts that equal the label, over all cases |
+| Losing errors | Verdicts on the side that loses something: a wrong move closes the kept appointment, a missed health detail could go online, a wrong "already written" drops the page question |
+| Losing-error rate | Losing errors over the cases whose label is not the losing side |
+| Band | Answers with no side at the kind's threshold, so no verdict |
+| Errors | Failures and timeouts; the rule's outcome stands |
+| Latency | Median and 95th percentile, in milliseconds |
+| Overnight tidy | Still under 10 minutes with the decisions asked; not yet measured by the check |
+| Forgetting precision | Unchanged; not yet measured by the check |
+
+A kind may act only when its arm beats the rules and the mind on a real set of at least 100 cases
+for that kind, each labelled by two people, with accuracy at least 5 points higher and no more
+losing errors than the rule. Until then it stays in shadow. The gain looked for is mostly in other
+languages, where English word lists break.
+
+The set today has 17 moved, 18 sensitive and 16 followed-up cases, mostly English with some
+German, Spanish, French and Dutch. It is made up and labelled by one person, so it checks that the
+wiring and the scoring work and shows where the rules go wrong; it cannot promote anything. The
+set and the scoring are in `src-tauri/tests/eval/decisions.rs`. Each case is kept and applied
+through the engine, so the rule's outcome is the real one.
+
+`cargo test -p nocturne-app --test decisions` runs it on scripted deciders, which checks the
+wiring and the scoring, not a size. `make e2e-decisions` runs the mind arm and the
+decision-model arm this computer's hardware picks (or the one `NOCTURNE_E2E_DECISION_MODEL` names),
+and writes `decisions.json` with the numbers
+per arm and kind. Decision-model arms run in the evaluation only: a model download for people
+needs its own design and consent first.
+
+An evaluation-only guard arm asks two yes or no questions of each sentence of the journal check's
+seeded days and of a few bad ones: does it tell the person what to do or how to feel, and does it
+name a feeling the day's items do not mention. It is scored the same way, and nothing of it is
+logged or shown in the product.
+
 ## Online answers on the smallest tier (S1b)
 
 Measured against a stand-in provider with a larger model, on the smallest tier, with the same

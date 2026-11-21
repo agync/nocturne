@@ -784,6 +784,100 @@ fn req_sampling(req: &ChatRequest) -> Sampling {
     }
 }
 
+/// How a decision question is answered by `/v1/systemone`.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SystemOneKind {
+    Choice,
+    Score,
+    Noul,
+}
+
+/// One question for a decision model.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SystemOneQuestion {
+    #[serde(rename = "type")]
+    pub kind: SystemOneKind,
+    pub instructions: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub criteria: Option<Criteria>,
+}
+
+/// What a question is judged against: for a choice, each option with its description (or none),
+/// sent as an object in this order, since the engine passes the order on and the answers depend
+/// on it; for a score, the levels, lowest first.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Criteria {
+    Options(Vec<(String, Option<String>)>),
+    Levels(Vec<String>),
+}
+
+impl Serialize for Criteria {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::{SerializeMap, SerializeSeq};
+        match self {
+            Criteria::Options(options) => {
+                let mut map = s.serialize_map(Some(options.len()))?;
+                for (option, description) in options {
+                    map.serialize_entry(option, description)?;
+                }
+                map.end()
+            }
+            Criteria::Levels(levels) => {
+                let mut seq = s.serialize_seq(Some(levels.len()))?;
+                for level in levels {
+                    seq.serialize_element(level)?;
+                }
+                seq.end()
+            }
+        }
+    }
+}
+
+/// Questions about one state, as `POST /v1/systemone` takes them.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct SystemOneRequest {
+    pub model: String,
+    pub state: String,
+    pub questions: BTreeMap<String, SystemOneQuestion>,
+}
+
+/// A decision model's answer to one question. Each field is what the engine sent for that kind
+/// of question and is left out of the others.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct SystemOneAnswer {
+    #[serde(default, rename = "type")]
+    pub kind: Option<String>,
+    #[serde(default)]
+    pub choice: Option<String>,
+    /// The expected level of a score.
+    #[serde(default)]
+    pub score: Option<f64>,
+    /// The probability that a `noul` question is true.
+    #[serde(default)]
+    pub noul: Option<f64>,
+    /// Keyed by option for a choice and by level index for a score.
+    #[serde(default)]
+    pub probabilities: Option<BTreeMap<String, f64>>,
+    #[serde(default)]
+    pub confidence: Option<f64>,
+    #[serde(default)]
+    pub truncated: bool,
+    /// Set for one question that FastFlowLM could not take, such as `max_length_exceeded`.
+    #[serde(default)]
+    pub error: Option<String>,
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+pub struct SystemOneReply {
+    #[serde(default)]
+    pub model: String,
+    #[serde(default)]
+    pub answers: BTreeMap<String, SystemOneAnswer>,
+}
+
 /// A whole reply, and whether the engine stopped it at the token ceiling.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChatReply {
@@ -888,6 +982,30 @@ impl Client {
         self.post_json(
             "/v1/pull",
             &json!({"model_name": model, "stream": true, "subscribe": false}),
+        )
+        .await
+    }
+
+    /// Registers a model from a checkpoint under `model` (`user.<name>`) and pulls it, with the
+    /// labels the engine needs to route it. A llama.cpp decision model is labelled
+    /// `classification` and `systemone`.
+    pub async fn pull_registered(
+        &self,
+        model: &str,
+        checkpoint: &str,
+        recipe: &str,
+        labels: &[&str],
+    ) -> Result<Download, RuntimeError> {
+        self.post_json(
+            "/v1/pull",
+            &json!({
+                "model_name": model,
+                "checkpoint": checkpoint,
+                "recipe": recipe,
+                "labels": labels,
+                "stream": true,
+                "subscribe": false,
+            }),
         )
         .await
     }
@@ -1102,6 +1220,18 @@ impl Client {
             bytes_down,
             cost_usd: v["usage"]["cost"].as_f64(),
         })
+    }
+
+    /// Asks a decision model typed questions about a state. Experimental in the engine: only a
+    /// model labelled `classification` and `systemone` serves it, and one that is not on disk is
+    /// fetched first, so callers check it is present before asking.
+    pub async fn systemone(&self, req: &SystemOneRequest) -> Result<SystemOneReply, RuntimeError> {
+        let _busy = self.busy(&req.model);
+        let rb = self
+            .request(Method::POST, "/v1/systemone")?
+            .json(req)
+            .timeout(self.shared.timeouts.json);
+        Self::json(rb).await
     }
 
     /// An answer constrained to `schema` and parsed into `T`.

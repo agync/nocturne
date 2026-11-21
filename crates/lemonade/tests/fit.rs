@@ -576,7 +576,20 @@ fn table_covers_every_tier_model() {
     }
     let recall = fit_table::lookup(tier::RECALL.model).unwrap();
     assert_eq!(recall.dim, Some(1024));
-    assert!(fit_table::TABLE.iter().all(|e| !e.id.starts_with("user.")));
+    // Only the decision models are user models, and only the evaluation loads them.
+    assert!(
+        fit_table::TABLE
+            .iter()
+            .filter(|e| e.id.starts_with("user."))
+            .all(|e| nocturne_lemonade::decision_models::ALL
+                .iter()
+                .any(|d| d.id == e.id))
+    );
+    assert!(
+        nocturne_lemonade::decision_models::ALL
+            .iter()
+            .all(|d| fit_table::lookup(d.id).is_some_and(|e| !e.tested))
+    );
     let mut ids: Vec<&str> = fit_table::TABLE.iter().map(|e| e.id).collect();
     ids.sort_unstable();
     ids.dedup();
