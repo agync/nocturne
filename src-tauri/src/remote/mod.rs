@@ -426,16 +426,24 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
 };
 
 /// What a phone may do that no window command does: fetch a cited original, end its session,
-/// and the journal calls, which answer from the computer's own journal module.
-pub const PHONE_ONLY_CALLS: &[&str] = &["get_original", "disconnect", "get_look_back", "look_back"];
+/// and the journal calls, which answer from the computer's own journal module. Answering the
+/// page's question from the journal is its own call, not `answer_question`: a phone answers no
+/// other question, and its answer is kept once per client id.
+pub const PHONE_ONLY_CALLS: &[&str] = &[
+    "get_original",
+    "disconnect",
+    "get_look_back",
+    "look_back",
+    "answer_journal_question",
+];
 
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
 
     use nocturne_contract::{
-        CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind, RemoteCall,
-        SameNameAnswer,
+        CheckInInput, Feeling, FeelingPart, FeelingPoint, Period, PeriodKind, QuestionChoice,
+        RemoteCall, SameNameAnswer,
     };
 
     use super::*;
@@ -509,6 +517,12 @@ mod tests {
                 question_id: s(),
                 answer: SameNameAnswer::Leave,
             },
+            RemoteCall::AnswerJournalQuestion {
+                page_date: s(),
+                choice: QuestionChoice::Fine,
+                line: None,
+                client_id: s(),
+            },
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -529,7 +543,8 @@ mod tests {
                 | RemoteCall::GetLookBack { .. }
                 | RemoteCall::LookBack { .. }
                 | RemoteCall::KeepCheckIn { .. }
-                | RemoteCall::AnswerSameName { .. } => {}
+                | RemoteCall::AnswerSameName { .. }
+                | RemoteCall::AnswerJournalQuestion { .. } => {}
             }
         }
         let snake = |camel: &str| {

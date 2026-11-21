@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::{
     AskDelta, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay, PageSummary, PageView, Period,
-    ReflectionView, SameNameAnswer, SameNameAnswered,
+    QuestionChoice, ReflectionView, SameNameAnswer, SameNameAnswered,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -199,6 +199,7 @@ pub enum RemoteAction {
     KeptDocument,
     KeptVoiceNote,
     AnsweredName,
+    AnsweredQuestion,
     TookBack,
     ReadPage,
     OpenedOriginal,
@@ -453,6 +454,17 @@ pub enum RemoteCall {
     AnswerSameName {
         question_id: String,
         answer: SameNameAnswer,
+    },
+    /// The page's question from the journal, by touch: the choice, and the line when one was
+    /// written before the answer went across. Kept once per `client_id`, like a keep; answered
+    /// with the phone's page as it stands after.
+    AnswerJournalQuestion {
+        page_date: String,
+        choice: QuestionChoice,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        line: Option<String>,
+        client_id: String,
     },
 }
 

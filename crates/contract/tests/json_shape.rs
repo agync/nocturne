@@ -97,6 +97,19 @@ fn remote_calls_are_tagged_by_cmd() {
     )
     .unwrap();
     assert!(matches!(same, RemoteCall::AnswerSameName { .. }));
+    let journal: RemoteCall = serde_json::from_str(
+        r#"{"cmd":"answerJournalQuestion","pageDate":"2026-11-20","choice":"notGreat","clientId":"c1"}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        journal,
+        RemoteCall::AnswerJournalQuestion {
+            page_date: "2026-11-20".into(),
+            choice: nocturne_contract::QuestionChoice::NotGreat,
+            line: None,
+            client_id: "c1".into(),
+        }
+    );
     let unit: RemoteCall = serde_json::from_str(r#"{"cmd":"listPages"}"#).unwrap();
     assert_eq!(unit, RemoteCall::ListPages);
     assert!(serde_json::from_str::<RemoteCall>(r#"{"cmd":"deleteEverything"}"#).is_err());

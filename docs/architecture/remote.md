@@ -70,7 +70,9 @@ vectors made by an independent script.
 
 Ten calls and two phone verbs, each a typed match: see readiness, keep text, keep a photo, document
 or voice note, take back a recent keep, ask and cancel, read today's page and the last seven, and
-open a cited original. A keep that waited on the phone says when it was made, and the computer
+open a cited original. The journal adds its own calls: read a day and a look back, keep a check-in,
+answer "Which {name} is this?", and answer the page's question from the journal, which is kept once
+per client id like a keep. A keep that waited on the phone says when it was made, and the computer
 files it on that journal day, never in the future and never more than a week back. A phone cannot
 delete, forget, export, change settings, pair or remove phones, or browse memories. Asks leave
 private memories out, pages use the phone edition, and an outbound filter drops any payload naming

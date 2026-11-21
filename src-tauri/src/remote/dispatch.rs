@@ -12,9 +12,10 @@ use std::time::Duration;
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    AskDelta, AskPhase, CheckInInput, Edition, Feeling, ItemView, Kept, Period, PeriodKind,
-    PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, ReflectionView, RemoteAction,
-    RemoteAnswer, RemoteCall, RemoteResult, SameNameAnswer, Source,
+    AskDelta, AskPhase, CheckInInput, Edition, Feeling, ItemView, Kept, PageView, Period,
+    PeriodKind, PhoneError, PhoneItem, PhoneKept, PhoneReadiness, PhoneStatus, QuestionChoice,
+    QuestionKind, ReflectionView, RemoteAction, RemoteAnswer, RemoteCall, RemoteResult,
+    SameNameAnswer, Source,
 };
 use nocturne_engine::{DeviceRow, Engine, KeepPlace};
 use tauri::{AppHandle, Manager, Runtime};
@@ -371,6 +372,15 @@ impl<R: Runtime> Call<R> {
                 question_id,
                 answer,
             } => self.same_name(question_id, answer).await,
+            RemoteCall::AnswerJournalQuestion {
+                page_date,
+                choice,
+                line,
+                client_id,
+            } => {
+                self.journal_answer(page_date, choice, line, client_id)
+                    .await
+            }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;
@@ -961,19 +971,87 @@ impl<R: Runtime> Call<R> {
             }
             Some(_) => return err(PhoneError::Invalid),
         };
-        // Again here: the page command adds what it knows of the tidy (unread items) after
-        // the engine has made the phone edition.
-        let page = crate::commands::page::page_view(&self.app, day, Edition::Phone)
-            .await
-            .ok()
-            .and_then(|p| nocturne_engine::phone_view(p).ok());
-        match page {
+        match self.phone_page(day).await {
             Some(page) => {
                 self.audit(RemoteAction::ReadPage, RemoteResult::Ok, 0.0);
                 Some(RemoteAnswer::Page {
                     page: Box::new(page),
                 })
             }
+            None => err(PhoneError::NotFound),
+        }
+    }
+
+    /// A page in the phone edition. Again here: the page command adds what it knows of the tidy
+    /// (unread items) after the engine has made the phone edition.
+    async fn phone_page(&self, day: Option<jiff::civil::Date>) -> Option<PageView> {
+        crate::commands::page::page_view(&self.app, day, Edition::Phone)
+            .await
+            .ok()
+            .and_then(|p| nocturne_engine::phone_view(p).ok())
+    }
+
+    /// The page's question from the journal: the one answer a phone gives on its page. Only the
+    /// question the phone's own page shows, through the engine path the computer uses, kept once
+    /// per client id. The answer is the phone's page as it stands after, so the phone shows what
+    /// is kept, whichever device kept it first.
+    async fn journal_answer(
+        &self,
+        page_date: String,
+        choice: QuestionChoice,
+        line: Option<String>,
+        client_id: String,
+    ) -> Option<RemoteAnswer> {
+        let me = &self.device.id;
+        if crypto::check_id(&client_id).is_err() || !is_date(&page_date) {
+            return err(PhoneError::Invalid);
+        }
+        if line.as_deref().map_or(0, str::len) > MAX_TEXT {
+            return err(PhoneError::TooLarge);
+        }
+        if !self.in_window(&page_date) {
+            return err(PhoneError::NotFound);
+        }
+        let day: jiff::civil::Date = page_date.parse().ok()?;
+        let asked = self
+            .phone_page(Some(day))
+            .await
+            .and_then(|p| p.question)
+            .is_some_and(|q| q.kind == QuestionKind::Journal);
+        if !asked {
+            return err(PhoneError::NotFound);
+        }
+        if !self.core.limits.take(Bucket::Keeps, me) {
+            self.audit(RemoteAction::Limited, RemoteResult::Limited, 0.0);
+            return err(PhoneError::TooMany);
+        }
+        let e = self.engine()?;
+        let device = me.clone();
+        let answered = blocking(move || {
+            let Some(id) =
+                e.answer_from_phone(day, choice, line.as_deref(), &device, &client_id)?
+            else {
+                return Ok(None);
+            };
+            e.get_item(&id).map(Some)
+        })
+        .await;
+        match answered {
+            Ok(changed) => {
+                if let Some(item) = changed {
+                    crate::commands::capture::announce(&self.app, &[Kept::New { item }]).await;
+                    self.audit(RemoteAction::AnsweredQuestion, RemoteResult::Ok, 0.0);
+                }
+            }
+            Err(e) => {
+                self.audit(RemoteAction::AnsweredQuestion, RemoteResult::Failed, 0.0);
+                return err(phone_code(&e));
+            }
+        }
+        match self.phone_page(Some(day)).await {
+            Some(page) => Some(RemoteAnswer::Page {
+                page: Box::new(page),
+            }),
             None => err(PhoneError::NotFound),
         }
     }

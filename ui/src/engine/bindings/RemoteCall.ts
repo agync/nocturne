@@ -2,6 +2,7 @@
 import type { CheckInInput } from "./CheckInInput";
 import type { Feeling } from "./Feeling";
 import type { Period } from "./Period";
+import type { QuestionChoice } from "./QuestionChoice";
 import type { SameNameAnswer } from "./SameNameAnswer";
 
 /**
@@ -13,4 +14,4 @@ import type { SameNameAnswer } from "./SameNameAnswer";
  * when it was made (`captured_at`, RFC 3339): a keep that waited on the phone belongs to the
  * day it was made, not the day it arrived.
  */
-export type RemoteCall = { "cmd": "getStatus" } | { "cmd": "keepText", text: string, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepBytes", mime: string, size: number, clientId: string, caption: string | null, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepRecording", mime: string, size: number, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "unkeep", id: string, } | { "cmd": "ask", question: string, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, };
+export type RemoteCall = { "cmd": "getStatus" } | { "cmd": "keepText", text: string, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepBytes", mime: string, size: number, clientId: string, caption: string | null, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "keepRecording", mime: string, size: number, clientId: string, feeling?: Feeling, good?: boolean, capturedAt?: string, } | { "cmd": "unkeep", id: string, } | { "cmd": "ask", question: string, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, } | { "cmd": "answerJournalQuestion", pageDate: string, choice: QuestionChoice, line?: string, clientId: string, };
