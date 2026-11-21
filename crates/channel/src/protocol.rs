@@ -105,6 +105,12 @@ pub const MAX_LONG_POLL_BATCH: usize = 8;
 pub const MAX_CONNECTIONS: usize = 16;
 /// Live sessions; pending ones do not count.
 pub const MAX_SESSIONS_PER_DEVICE: usize = 3;
+/// A phone app's calendar or health send: changes in one batch, the batch's JSON in bytes, and
+/// the changes taken under one sync id.
+pub const MAX_SYNC_BATCH: usize = 100;
+pub const MAX_SYNC_JSON: usize = 65_536;
+pub const MAX_CALENDAR_PER_SEND: usize = 500;
+pub const MAX_READINGS_PER_SEND: usize = 5_000;
 
 /// Per minute.
 pub const LIMIT_NO_KEY: u32 = 20;
@@ -116,6 +122,8 @@ pub const LIMIT_SESSION_OPENS_PER_DEVICE: u32 = 6;
 pub const LIMIT_REQUESTS: u32 = 60;
 pub const LIMIT_ASKS: u32 = 10;
 pub const LIMIT_KEEPS: u32 = 30;
+/// Calendar and health sends from a phone app, per device.
+pub const LIMIT_SYNCS: u32 = 12;
 pub const PAGES_BACK: u32 = 7;
 pub const EVENTS_KEPT_DAYS: u32 = 90;
 
@@ -297,6 +305,10 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         MAX_LONG_POLL_BATCH,
         MAX_CONNECTIONS,
         MAX_SESSIONS_PER_DEVICE,
+        MAX_SYNC_BATCH,
+        MAX_SYNC_JSON,
+        MAX_CALENDAR_PER_SEND,
+        MAX_READINGS_PER_SEND,
         LIMIT_NO_KEY,
         LIMIT_STATIC,
         LIMIT_PAIRING_FRAMES,
@@ -305,6 +317,7 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         LIMIT_REQUESTS,
         LIMIT_ASKS,
         LIMIT_KEEPS,
+        LIMIT_SYNCS,
         PAGES_BACK,
         EVENTS_KEPT_DAYS,
         PHONE_BUILD,
