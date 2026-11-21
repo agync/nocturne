@@ -141,13 +141,18 @@ impl<R: Runtime, T: Manager<R>> CalendarExt<R> for T {
     }
 }
 
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_nocturne_calendar);
+
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     Builder::new("nocturne-calendar")
         .setup(|app, _api| {
             #[cfg(target_os = "android")]
             let handle =
                 Some(_api.register_android_plugin("app.nocturne.calendar", "CalendarPlugin")?);
-            #[cfg(not(target_os = "android"))]
+            #[cfg(target_os = "ios")]
+            let handle = Some(_api.register_ios_plugin(init_plugin_nocturne_calendar)?);
+            #[cfg(not(mobile))]
             let handle: Option<PluginHandle<R>> = None;
             app.manage(Calendar(handle));
             Ok(())
