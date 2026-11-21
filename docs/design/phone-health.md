@@ -219,7 +219,7 @@ why."
 | Where | Week, month and year recaps, on the computer and the phone. Never on the morning page, never read aloud, never in a notification |
 | What it may use | Sleep, steps and workouts, with things from the journal: people, places and things named in entries, check-in parts, good things ([decision H4](#decisions-for-the-owner)) |
 | What it never uses | Blood pressure, heart rate, resting heart rate and weight |
-| When it is shown | At least three days with the thing and three without, a difference of at least 30 minutes of sleep, 2,000 steps or one workout, and the pattern holding on at least three of the days |
+| When it is shown | At least three days with the thing and three without, a difference of at least 30 minutes of sleep, 2,000 steps or one workout, and the pattern holding on at least three of the days. For workouts, the part of the field is felt on a share of workout days at least 25 percentage points larger than its share of the days without one. A period still going leaves out today |
 | How it is said | What went together, in counts and the person's own units: "On the 4 nights before days you wrote about deadlines, you slept 50 minutes less than on other nights." Never why, never advice, never a judgement |
 | Receipts | Both sides: each night or day counted is a receipt, and each journal item that named the thing. Shown as the first two chips and "+{count}" |
 | Where it is made | On this computer, from what is kept, like every recap line. It never goes online |
