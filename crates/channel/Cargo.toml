@@ -18,9 +18,36 @@ serde.workspace = true
 serde_json.workspace = true
 getrandom.workspace = true
 
+# The phone's networked client (`client`): off for the computer.
+nocturne-contract = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+tokio-tungstenite = { version = "0.29", default-features = false, features = ["connect", "handshake", "__rustls-tls"], optional = true }
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"], optional = true }
+reqwest = { version = "0.13", default-features = false, features = ["rustls-no-provider"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"], optional = true }
+webpki-roots = { version = "1", optional = true }
+tracing = { workspace = true, optional = true }
+
+[features]
+default = []
+client = [
+    "dep:nocturne-contract",
+    "dep:tokio",
+    "dep:tokio-tungstenite",
+    "dep:futures-util",
+    "dep:reqwest",
+    "dep:rustls",
+    "dep:webpki-roots",
+    "dep:tracing",
+]
+# Lets the client reach a computer at http://127.0.0.1 (tests, and `adb reverse` on a debug
+# build). Never in `default`, never packaged; the release check looks for the marker it adds.
+dev-loopback = ["client"]
+
 [dev-dependencies]
 # The vectors seal a real remote answer.
 nocturne-contract.workspace = true
+tokio = { workspace = true, features = ["net"] }
 
 [lints]
 workspace = true
