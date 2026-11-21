@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "wouter";
 import { askRequests, useAskRequest } from "../../app/ask-request";
-import { hashHref } from "../../app/query";
+import { goTo, hashHref } from "../../app/query";
 import { BackLink } from "../../components/BackLink/BackLink";
 import { Button } from "../../components/Button/Button";
 import type { ChipId } from "../../components/ControlChip/registry";
@@ -11,6 +10,7 @@ import { askPlace } from "../../components/KeepAskBar/askPlace";
 import { PlaceIcon } from "../../components/KeepAskBar/PlaceIcon";
 import { richText } from "../../components/PageLine/richText";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { ScreenSheet } from "../../components/ScreenSheet/ScreenSheet";
 import { useToast } from "../../components/Toast/Toast";
 import { t } from "../../copy/t";
@@ -81,7 +81,6 @@ export default function Ask() {
   const engine = useEngine();
   const platform = usePlatform();
   const toast = useToast();
-  const [, navigate] = useLocation();
   const request = useAskRequest();
   const asking = useAsk();
   const { data: status } = useStatus();
@@ -389,10 +388,7 @@ export default function Ask() {
     }
   }, [phase, restored]);
 
-  const openReceipt = useCallback(
-    (receipt: Receipt) => navigate(`/items/${receipt.itemId}`),
-    [navigate],
-  );
+  const openReceipt = useCallback((receipt: Receipt) => goTo(receiptPath(receipt)), []);
 
   const memoryReceipts = (memory: MemoryView | undefined): Receipt[] =>
     memory ? receipts.filter((r) => memory.receipts.some((x) => same(x, r))) : [];
@@ -569,7 +565,7 @@ export default function Ask() {
             onThisComputer={() => start(held.question, true, "thisComputer")}
             onSettings={() => {
               setHeld(null);
-              navigate("/settings/online");
+              goTo("/settings/online");
             }}
           />
         ) : null}

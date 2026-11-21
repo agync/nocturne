@@ -4,7 +4,9 @@ import {
   Ellipsis,
   FileText,
   Footprints,
+  Gauge,
   Globe,
+  Heart,
   Image,
   Mic,
   Moon,
@@ -28,6 +30,8 @@ const GLYPHS = {
   walk: Footprints,
   swim: Waves,
   workout: Activity,
+  heart: Heart,
+  pressure: Gauge,
 } as const;
 
 export type GlyphName = keyof typeof GLYPHS;

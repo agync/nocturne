@@ -136,12 +136,15 @@ export function FromHealth({
               label: kindName("restingHeartRate"),
               value: String(restingNow.value),
               day: restingNow.day,
-              today: today || restingNow.day,
+              today,
               band: resting.usual,
             })}
             width={300}
             height={84}
-            labels={axisLabels(resting, t("journal.health.todayShort"))}
+            labels={axisLabels(
+              resting,
+              isToday ? t("journal.health.todayShort") : shortDay(resting.to),
+            )}
           />
           {resting.usual ? null : <p className={styles.waiting}>{usualWaiting()}</p>}
           <More kind="restingHeartRate" />
@@ -152,7 +155,11 @@ export function FromHealth({
         <div className={styles.item}>
           <Head
             label={kindName("steps")}
-            say={t("journal.health.stepsToday", { steps: num(stepsNow.value) })}
+            say={
+              isToday
+                ? t("journal.health.stepsToday", { steps: num(stepsNow.value) })
+                : num(stepsNow.value)
+            }
           />
           <DayBars
             points={steps.points}
@@ -162,7 +169,7 @@ export function FromHealth({
             sentence={stepsSentence({
               steps: stepsNow.value,
               day: stepsNow.day,
-              today: today || stepsNow.day,
+              today,
               average: stepAverage,
               days: steps.points.length,
             })}

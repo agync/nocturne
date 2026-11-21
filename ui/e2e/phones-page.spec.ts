@@ -56,8 +56,7 @@ for (const scheme of schemes) {
       await expect(page.getByText("from your calendar").first()).toBeVisible();
       await expect(page.getByRole("heading", { name: "From Health" })).toBeVisible();
       await page.screenshot({ path: `${SHOTS}/phones-journal-${scheme}.png` });
-      // The entry strip's "In this entry" label already misses contrast in dark, before this lane.
-      const results = await runAxe(page, (b) => b.withTags(TAGS).exclude("[class*=stripLabel]"));
+      const results = await runAxe(page, (b) => b.withTags(TAGS));
       expect(results.violations.map((v) => `${v.id}: ${v.nodes[0]?.html}`)).toEqual([]);
     });
 

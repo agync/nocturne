@@ -6,6 +6,7 @@ import { Disclosure } from "../../components/Disclosure/Disclosure";
 import { Icon } from "../../components/Icon/Icon";
 import { PageLine } from "../../components/PageLine/PageLine";
 import { richText } from "../../components/PageLine/richText";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { Thumb } from "../../components/Thumb/Thumb";
 import { formatDayMonth } from "../../copy/format";
 import { hasCopy, t } from "../../copy/t";
@@ -551,7 +552,7 @@ export function RecapView({
                 key={line.id}
                 line={line}
                 onAction={(action) => {
-                  if (action.type === "open") goTo(`/items/${action.receipt.itemId}`);
+                  if (action.type === "open") goTo(receiptPath(action.receipt));
                 }}
               />
             ))}

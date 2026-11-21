@@ -1,9 +1,10 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createMockEngine } from "../../engine/mock/engine";
 import { withPhones } from "../../engine/mock/phones";
 import { renderApp, setViewport } from "../../test/render";
+import { FromHealth } from "./FromHealth";
 
 const NOW = new Date("2026-11-13T07:02:00Z");
 
@@ -40,7 +41,7 @@ describe("the journal day with a phone's calendar and health", () => {
     await open();
     expect(
       within(timeline()).getByRole("link", { name: "after 6 h 40 min asleep", hidden: true }),
-    ).toHaveAttribute("href", "#/items/read-sleep-0");
+    ).toHaveAttribute("href", "#/journal/health/sleep?day=2026-11-13");
   });
 
   it("shows From Health beside the day, each part with its sentence and a way to see more", async () => {
@@ -92,5 +93,33 @@ describe("Delete this day with a phone's things", () => {
     await waitFor(() =>
       expect(within(dialog).getByRole("button", { name: /^Delete \d+ things?$/ })).toBeEnabled(),
     );
+  });
+});
+
+describe("From Health on a day that is not today", () => {
+  it("never says today", async () => {
+    const e = engine();
+    const health = (await e.getJournalDay()).health;
+    if (!health) throw new Error("no health");
+    render(<FromHealth health={health} day="2026-11-12" isToday={false} />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/today/i);
+    expect(
+      screen.getByRole("img", { name: /^Resting heart rate, 58 on Thursday 12 November\./ }),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("a night and a workout on the timeline", () => {
+  it("are read on their Health page, not on a page to keep, read again or forget", async () => {
+    await open();
+    const woke = within(timeline()).getByText("Woke · 6 h 40 min asleep").closest("a");
+    expect(woke).toHaveAttribute("href", "#/journal/health/sleep?day=2026-11-13");
+    const walk = within(timeline()).getByText("Walk · 42 min · 3.1 km").closest("a");
+    expect(walk).toHaveAttribute("href", "#/journal/health/workouts?day=2026-11-13");
+    const entry = within(timeline())
+      .getByText(/^Dentist, check-up/)
+      .closest("a");
+    expect(entry).toHaveAttribute("href", "#/items/cal-dentist?from=journal");
   });
 });

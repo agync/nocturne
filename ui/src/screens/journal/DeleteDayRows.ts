@@ -196,23 +196,49 @@ export function dayRows(day: JournalDay): DeleteRow[] {
   return [...blocks, ...rest];
 }
 
+/** The picture and time of a brought reading, found among the day's own health lines. */
+function healthLook(day: JournalDay, itemId: string): { icon: RowIcon; time: string } {
+  const health = day.health;
+  if (health?.night?.itemId === itemId) return { icon: "moon", time: clock12(health.night.to) };
+  const workout = health?.workouts.find((w) => w.itemId === itemId);
+  if (workout) {
+    const kind = workout.kind.toLowerCase();
+    const icon = kind.includes("swim") ? "swim" : /walk|hike|run/.test(kind) ? "walk" : "workout";
+    return { icon, time: clock12(workout.start) };
+  }
+  const pressure = health?.pressure.find((p) => p.itemId === itemId);
+  if (pressure) return { icon: "pressure", time: clock12(pressure.at) };
+  if (health?.steps?.points.some((p) => p.itemId === itemId)) return { icon: "walk", time: "" };
+  return { icon: "heart", time: "" };
+}
+
 /** The calendar entries and readings a phone brought for the day: unticked, because the phone brings them back. */
 export function phoneRows(day: JournalDay): { calendar: DeleteRow[]; health: DeleteRow[] } {
-  const row = (item: BroughtItem, section: "calendar" | "health"): DeleteRow => ({
+  const row = (
+    item: BroughtItem,
+    section: "calendar" | "health",
+    look: { icon: RowIcon; time: string },
+  ): DeleteRow => ({
     key: `item:${item.itemId}`,
     ids: [item.itemId],
     section,
-    icon: section === "calendar" ? "calendar" : "workout",
-    time: "",
+    icon: look.icon,
+    time: look.time,
     tag: null,
     feel: null,
     text: item.title,
     tail: null,
     changed: null,
   });
+  const calendarTime = (itemId: string) => {
+    const found = day.rows.find((r) => r.item.id === itemId);
+    return found ? clock12(found.item.keptAt) : "";
+  };
   return {
-    calendar: (day.fromPhones?.calendar ?? []).map((i) => row(i, "calendar")),
-    health: (day.fromPhones?.health ?? []).map((i) => row(i, "health")),
+    calendar: (day.fromPhones?.calendar ?? []).map((i) =>
+      row(i, "calendar", { icon: "calendar", time: calendarTime(i.itemId) }),
+    ),
+    health: (day.fromPhones?.health ?? []).map((i) => row(i, "health", healthLook(day, i.itemId))),
   };
 }
 

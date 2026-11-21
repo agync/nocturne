@@ -1,8 +1,9 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
 import { Certainty } from "../../components/Certainty/Certainty";
 import { ReceiptChip } from "../../components/ReceiptChip/ReceiptChip";
+import { receiptPath } from "../../components/ReceiptChip/receiptPath";
 import { StatusLabel } from "../../components/StatusLabel/StatusLabel";
 import { TextInput } from "../../components/TextInput/TextInput";
 import { useToast } from "../../components/Toast/Toast";
@@ -31,7 +32,6 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget, onRefile }:
   const engine = useEngine();
   const toast = useToast();
   const refresh = useRefresh();
-  const [, navigate] = useLocation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(m.sentence);
   const [busy, setBusy] = useState(false);
@@ -123,7 +123,7 @@ export function MemoryRow({ memory: m, selected, onSelect, onForget, onRefile }:
           <ReceiptChip
             key={`${r.itemId}-${JSON.stringify(r.span)}`}
             receipt={r}
-            onOpen={() => navigate(`/items/${r.itemId}`)}
+            onOpen={() => goTo(receiptPath(r))}
           />
         ))}
         {m.was ? <span className={styles.changed}>{t("memory.flag.changed")}</span> : null}

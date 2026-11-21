@@ -190,6 +190,7 @@ export function PageSheet({
             <h1 className={styles.headline}>{page.headline}</h1>
             {page.lastNight ? (
               <LastNight
+                id={`${base}-night`}
                 night={page.lastNight}
                 onOpen={(receipt) => onAction({ type: "open", receipt })}
               />
@@ -276,6 +277,7 @@ export function PageSheet({
 
           {page.calendarToday && page.calendarToday.length > 0 ? (
             <CalendarToday
+              id={`${base}-calendar`}
               lines={page.calendarToday}
               more={page.moreCalendarToday ?? 0}
               day={page.date}
