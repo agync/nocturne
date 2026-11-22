@@ -299,6 +299,7 @@ export function Restore({
   letGo,
   onBack,
   onDone,
+  holds = false,
 }: {
   /** The phone's open sheet; null when closed, a `notABackup` error for another file. */
   pickFile(): Promise<PickedFile | null>;
@@ -307,6 +308,8 @@ export function Restore({
   letGo(): Promise<void>;
   onBack(): void;
   onDone(): void;
+  /** This phone holds a memory (Restore in This phone): what is here is always asked about. */
+  holds?: boolean;
 }) {
   const [file, setFile] = useState<PickedFile | null>(null);
   const [passphrase, setPassphrase] = useState("");
@@ -358,7 +361,7 @@ export function Restore({
     try {
       setStep({ name: "running", phase: "checking", progress: null });
       const checked = await check(file.path, passphrase, running("checking"));
-      if (checked.check.here !== null) return setStep({ name: "replace", checked });
+      if (holds || checked.check.here !== null) return setStep({ name: "replace", checked });
       await bringIn(checked, false);
     } catch (e) {
       failed(e);

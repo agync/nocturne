@@ -35,7 +35,7 @@ import { Which } from "../screens/Which";
 import "./home.css";
 import { HomeRequestError, NEARLY_FULL } from "./api";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
-import { SaveBackup } from "./screens/Backup";
+import { Restore, SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
 import { DeleteKept } from "./screens/DeleteKept";
 import { HomeFind } from "./screens/Find";
@@ -55,6 +55,7 @@ type View =
   | { name: "health" }
   | { name: "mind" }
   | { name: "backup" }
+  | { name: "restore" }
   | { name: "delete" }
   | { name: "putAside"; memory: PutAsideMemory; withTime: boolean }
   | { name: "deleteKept"; source: PhoneSource; choose: boolean }
@@ -76,6 +77,7 @@ const OWN: ReadonlySet<string> = new Set([
   "health",
   "mind",
   "backup",
+  "restore",
   "delete",
   "putAside",
   "deleteKept",
@@ -470,6 +472,7 @@ export function HomeApp({
           onCalendar={() => go({ name: "calendar" })}
           onHealth={() => go({ name: "health" })}
           onBackup={() => go({ name: "backup" })}
+          onRestore={() => go({ name: "restore" })}
           onDelete={() => go({ name: "delete" })}
           putAside={home.putAside}
           onPutAside={(memory, withTime) => go({ name: "putAside", memory, withTime })}
@@ -484,6 +487,22 @@ export function HomeApp({
       break;
     case "backup":
       screen = <SaveBackup save={home.saveBackupFile} now={services.now} onClose={back} />;
+      break;
+    case "restore":
+      screen = (
+        <Restore
+          holds
+          pickFile={home.chooseBackupFile}
+          check={home.checkBackup}
+          restore={home.restoreBackup}
+          letGo={home.letGoBackupFile}
+          onBack={back}
+          onDone={() => {
+            refresh();
+            unwind();
+          }}
+        />
+      );
       break;
     case "delete":
       screen = (
