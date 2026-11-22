@@ -156,6 +156,8 @@ describe("deleting what the calendar brought", () => {
     fireEvent.click(screen.getByLabelText(/Also stop showing/));
     fireEvent.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith("kept-token", "calendar", false));
+    expect(await screen.findByRole("heading", { name: "Deleted." })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "OK" }));
     expect(await screen.findByRole("region", { name: "Your memory" })).toBeInTheDocument();
     expect(screen.queryByText(/computer/)).toBeNull();
   }, 15_000);

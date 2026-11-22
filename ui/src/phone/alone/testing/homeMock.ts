@@ -272,7 +272,7 @@ export function homeState(scenario: HomeScenario) {
           here:
             call.passphrase === "already here"
               ? ({
-                  things: rows.length,
+                  things: 2,
                   journalEntries: 0,
                   photosAndRecordings: 1,
                 } satisfies KeptCounts)

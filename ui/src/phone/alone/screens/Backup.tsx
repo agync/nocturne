@@ -347,7 +347,7 @@ export function Restore({
       setStep({ name: "running", phase: "restoring", progress: null });
       await restore(file.path, passphrase, replace, running("restoring"));
       kept.current = true;
-      setStep({ name: "done", count: checked.check.summary.items });
+      setStep({ name: "done", count: checked.backup.things });
     } catch (e) {
       failed(e);
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatBytes, formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { PutAsideMemory } from "../../../engine/bindings";
@@ -34,16 +34,18 @@ function Confirm({
   onKeep(): void;
   onGo(): void;
 }) {
-  const heading = useHeading(title);
+  const foot = useRef<HTMLElement>(null);
+  // 0013: the answer that changes nothing has focus.
+  useEffect(() => {
+    foot.current?.querySelector("button")?.focus();
+  }, []);
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 16 }}>
-        <h1 className="ph-steph" tabIndex={-1} ref={heading}>
-          {title}
-        </h1>
+        <h1 className="ph-steph">{title}</h1>
         <p className="ph-body ph-ink2">{body}</p>
       </main>
-      <footer className="ph-foot">
+      <footer className="ph-foot" ref={foot}>
         <Button onClick={onKeep}>{keep}</Button>
         {careful ? (
           <button

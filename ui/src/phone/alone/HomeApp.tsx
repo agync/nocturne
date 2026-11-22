@@ -94,14 +94,24 @@ function useView(first: View) {
   });
   useEffect(() => {
     history.replaceState({ view }, "");
-    const onPop = (e: PopStateEvent) => setView(ownView(e.state) ?? TODAY);
+    const onPop = (e: PopStateEvent) => {
+      depth.current = Math.max(0, depth.current - 1);
+      setView(ownView(e.state) ?? TODAY);
+    };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
     // The first entry is recorded once.
   }, []);
+  // Entries this app pushed and has not stepped back from, so Delete everything can unwind them.
+  const depth = useRef(0);
   const go = useCallback((next: View) => {
     history.pushState({ view: next }, "");
+    depth.current += 1;
     setView(next);
+  }, []);
+  const unwind = useCallback(() => {
+    if (depth.current > 0) history.go(-depth.current);
+    depth.current = 0;
   }, []);
   const replace = useCallback((next: View) => {
     history.replaceState({ view: next }, "");
@@ -111,7 +121,7 @@ function useView(first: View) {
     if (history.length > 1 && history.state?.view?.name !== "tab") history.back();
     else replace(TODAY);
   }, [replace]);
-  return { view, go, back, replace };
+  return { view, go, back, replace, unwind };
 }
 
 /** The phone's language for reading voice notes, as the web view knows it. */
@@ -144,7 +154,7 @@ export function HomeApp({
   const engine = useMemo(() => services.engineFor(() => ""), [services]);
   useEffect(() => () => engine.close(), [engine]);
   const conn = engine.connection();
-  const { view, go, back, replace } = useView(offer ? { name: "offer" } : TODAY);
+  const { view, go, back, replace, unwind } = useView(offer ? { name: "offer" } : TODAY);
   const [tab, setTab] = useState<Tab>(view.name === "tab" ? view.tab : "today");
   const [chosen, setChosen] = useState<ReadonlySet<"calendar" | "health">>(new Set());
   const [shared, setShared] = useState<Shared | null>(null);
@@ -467,7 +477,8 @@ export function HomeApp({
             await home.deleteEverything(phrase);
             await services.queue.clear().catch(() => undefined);
             await forgetReminder(home.notes);
-            history.replaceState(null, "");
+            // Welcome is a new start: the back gesture does not walk into the screens before.
+            unwind();
             onDeleted();
           }}
         />

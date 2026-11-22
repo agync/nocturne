@@ -47,7 +47,7 @@ export function ForgetItem({
   preview(id: string, withOriginal: boolean): Promise<ForgetPreview>;
   forget(token: string): Promise<ForgetReport>;
   onBack(): void;
-  /** Deleted: the page it came from shows what is left. */
+  /** `gone`: the thing itself went, so its page goes too. */
   onDone(gone: boolean): void;
 }) {
   const [load, setLoad] = useState<Load>({ name: "loading" });
@@ -89,7 +89,7 @@ export function ForgetItem({
         title={t("forget.done.lead")}
         body={body}
         button={t("phone.sources.ok")}
-        onDone={() => onDone(withOriginal)}
+        onDone={() => onDone(report.originalsRemoved > 0)}
       />
     );
   }
