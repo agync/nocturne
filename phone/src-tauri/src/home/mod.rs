@@ -23,7 +23,7 @@ mod tests;
 pub mod voice;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use nocturne_contract::{HomeError, PhoneMode};
@@ -72,6 +72,8 @@ pub struct Home {
     job: AtomicBool,
     /// One of the phone's save or open sheets is up, or its file is on the way: one at a time.
     pub(crate) sheet: AtomicBool,
+    /// Callers waiting to swap, reopen or empty the store; long reads let go for them.
+    writers: AtomicUsize,
     pub(crate) voice: voice::Voice,
     /// Held while fading runs, so a second ask for the same day waits and then finds it done.
     fading: Mutex<()>,
@@ -137,6 +139,7 @@ impl Home {
             gate: RwLock::new(()),
             job: AtomicBool::new(false),
             sheet: AtomicBool::new(false),
+            writers: AtomicUsize::new(0),
             voice: voice::Voice::default(),
             fading: Mutex::new(()),
             work_factor: None,
@@ -177,7 +180,15 @@ impl Home {
 
     /// No use of the store until the guard goes: for what swaps, reopens or empties it.
     pub(crate) fn exclusive(&self) -> RwLockWriteGuard<'_, ()> {
-        self.gate.write().unwrap_or_else(|e| e.into_inner())
+        self.writers.fetch_add(1, Ordering::SeqCst);
+        let only = self.gate.write().unwrap_or_else(|e| e.into_inner());
+        self.writers.fetch_sub(1, Ordering::SeqCst);
+        only
+    }
+
+    /// Someone waits to change the store: a long read stops and waits for another pass.
+    pub(crate) fn store_wanted(&self) -> bool {
+        self.writers.load(Ordering::SeqCst) > 0
     }
 
     /// The store, opened now if it is not open yet. Only while the phone is alone.
