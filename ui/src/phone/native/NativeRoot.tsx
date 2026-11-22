@@ -19,7 +19,7 @@ import { HealthConnect } from "./screens/HealthConnect";
 import { Rationale } from "./screens/Rationale";
 import { queueShared } from "./screens/ShareSheet";
 import { checkAddress, type NativeServices, pairScanned, pairTyped } from "./services";
-import { nativeChannel, watchFront } from "./sources";
+import { nativeChannel, type StillGranted, watchFront } from "./sources";
 
 /** The project's site, opened in the phone's browser from Welcome. */
 const SITE = "https://nocturne.is/";
@@ -63,6 +63,8 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
   // Just after Delete everything, Welcome says so until the person goes on.
   const [deleted, setDeleted] = useState(false);
+  // And what the phone still lets Nocturne use, which is all that line may name.
+  const [granted, setGranted] = useState<StillGranted | null>(null);
   // A restore says where the memory lives before its own "back on this phone" is read.
   const shown = useRef(screen.name);
   shown.current = screen.name;
@@ -185,6 +187,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       return (
         <AloneWelcome
           deleted={deleted}
+          granted={granted}
           onPermissions={() => setScreen({ name: "permissions" })}
           onStart={() => {
             setDeleted(false);
@@ -248,8 +251,11 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           name={name}
           onLost={() => void home()}
           onDeleted={() => {
-            setDeleted(true);
-            void home();
+            void services.granted().then((now) => {
+              setGranted(now);
+              setDeleted(true);
+              void home();
+            });
           }}
           onScan={() => void scan()}
         />

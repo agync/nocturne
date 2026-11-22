@@ -179,6 +179,13 @@
   "phone.alone.permissions.title": "Your phone’s permissions",
   "phone.alone.permissions.android": "Nocturne reads your calendar and Health, and uses the microphone, only while your phone allows it. To take that back: your calendar and the microphone in Settings, then Apps, then Nocturne, then Permissions; Health in Health Connect, then App permissions, then Nocturne.",
   "phone.alone.permissions.iphone": "Nocturne reads your calendar and Health, and uses the microphone and speech recognition, only while your iPhone allows it. To take that back: your calendar, the microphone and speech recognition in Settings, then Nocturne; Health in the Health app, then Sharing, then Apps, then Nocturne.",
-  "phone.alone.welcome.stillAllowed": "Your phone still lets Nocturne read your calendar and Health until you take that back.",
+  "phone.alone.welcome.stillAllowed": "Your phone still lets Nocturne {what} until you take that back.",
+  "phone.alone.welcome.what.c": "read your calendar",
+  "phone.alone.welcome.what.h": "read Health",
+  "phone.alone.welcome.what.m": "use the microphone",
+  "phone.alone.welcome.what.ch": "read your calendar and Health",
+  "phone.alone.welcome.what.cm": "read your calendar and use the microphone",
+  "phone.alone.welcome.what.hm": "read Health and use the microphone",
+  "phone.alone.welcome.what.chm": "read your calendar and Health, and use the microphone",
   "phone.alone.welcome.howToTakeBack": "How to take that back"
 }
