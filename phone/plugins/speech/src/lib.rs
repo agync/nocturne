@@ -1,20 +1,23 @@
 //! The phone's own speech reader: a kept voice note, as raw sound in a file, read into words on the
 //! phone, offline, and never from the microphone. The app's Rust side calls it; the screens never
-//! do. Only Android has it so far; on a computer and on an iPhone every ask is unavailable.
+//! do. Android and iPhone have it; on a computer every ask is unavailable.
 //!
 //! Every ask blocks until the phone has answered, which can take as long as the sound plays, so it
 //! belongs on a worker thread, never the Android main thread (the plugin works there). One ask
 //! runs at a time; the others wait.
 //!
-//! The sound is 16-bit, mono, 16 kHz, with no header, in a file of the app's own. Reading a file
-//! still asks for the microphone permission, because the phone's reader does.
+//! The sound is 16-bit, mono, 16 kHz, with no header, in a file of the app's own. On Android,
+//! reading a file still asks for the microphone permission, because the phone's reader does; on
+//! an iPhone it asks for speech recognition. An iPhone reads about a minute at most, so a longer
+//! note is given in pieces.
 
 use serde::{Deserialize, Serialize};
 use tauri::plugin::{Builder, PluginHandle, TauriPlugin};
 use tauri::{Manager, Runtime};
 
-/// Whether the app may use the microphone permission the phone's reader asks for. `Prompt` is also
-/// what a phone says once it will no longer show its prompt.
+/// Whether the app may use the permission the phone's reader asks for: the microphone on Android,
+/// speech recognition on an iPhone. `Prompt` is also what a phone says once it will no longer show
+/// its prompt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Access {
@@ -26,6 +29,7 @@ pub enum Access {
 
 #[derive(Debug, Deserialize)]
 struct Status {
+    #[serde(alias = "speech")]
     microphone: Access,
 }
 
@@ -159,6 +163,9 @@ impl<R: Runtime> Speech<R> {
     }
 }
 
+#[cfg(target_os = "ios")]
+tauri::ios_plugin_binding!(init_plugin_nocturne_speech);
+
 pub trait SpeechExt<R: Runtime> {
     fn speech(&self) -> &Speech<R>;
 }
@@ -174,7 +181,9 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
         .setup(|app, _api| {
             #[cfg(target_os = "android")]
             let handle = Some(_api.register_android_plugin("app.nocturne.speech", "SpeechPlugin")?);
-            #[cfg(not(target_os = "android"))]
+            #[cfg(target_os = "ios")]
+            let handle = Some(_api.register_ios_plugin(init_plugin_nocturne_speech)?);
+            #[cfg(not(mobile))]
             let handle: Option<PluginHandle<R>> = None;
             app.manage(Speech(handle));
             Ok(())
@@ -218,6 +227,8 @@ mod tests {
     fn access_reads_as_the_phone_says_it() {
         let s: Status = serde_json::from_str(r#"{"microphone":"prompt-with-rationale"}"#).unwrap();
         assert_eq!(s.microphone, Access::PromptWithRationale);
+        let iphone: Status = serde_json::from_str(r#"{"speech":"granted"}"#).unwrap();
+        assert_eq!(iphone.microphone, Access::Granted);
     }
 
     #[test]

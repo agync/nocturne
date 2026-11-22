@@ -8,6 +8,8 @@
 	<string>Nocturne records voice notes you choose to keep, only while you’re recording.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Nocturne reads your calendar so your computer can show what’s on today on your morning page. It never changes your calendar.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Nocturne turns your voice notes into words on this iPhone so you can find them. They never leave it.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Nocturne reads the health kinds you choose, such as sleep and heart rate, and sends them only to your own computer to show beside your journal. It never changes anything in Health.</string>
 </dict>
