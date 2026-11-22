@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { formatBytes, formatLongDay } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { PutAsideMemory } from "../../../engine/bindings";
 import { Group, Row } from "../../native/screens/chrome";
@@ -14,7 +14,7 @@ type Step =
   | { name: "delete" }
   | { name: "deleting" };
 
-/** A question with the answer that changes nothing first, as 0013's dialogs ask it. */
+/** A question whose answer that changes nothing has focus, as 0013's dialogs ask it. */
 function Confirm({
   title,
   body,
@@ -37,7 +37,7 @@ function Confirm({
   const foot = useRef<HTMLElement>(null);
   // 0013: the answer that changes nothing has focus.
   useEffect(() => {
-    foot.current?.querySelector("button")?.focus();
+    foot.current?.querySelector<HTMLButtonElement>("button:last-child")?.focus();
   }, []);
   return (
     <Page bar={null}>
@@ -46,7 +46,6 @@ function Confirm({
         <p className="ph-body ph-ink2">{body}</p>
       </main>
       <footer className="ph-foot" ref={foot}>
-        <Button onClick={onKeep}>{keep}</Button>
         {careful ? (
           <button
             type="button"
@@ -61,6 +60,7 @@ function Confirm({
             {go}
           </Button>
         )}
+        <Button onClick={onKeep}>{keep}</Button>
       </footer>
     </Page>
   );
@@ -72,12 +72,15 @@ function Confirm({
  */
 export function PutAside({
   memory,
+  withTime = false,
   bringBack,
   remove,
   onBack,
   onDone,
 }: {
   memory: PutAsideMemory;
+  /** Another was put aside the same day: the title says the time too. */
+  withTime?: boolean;
   bringBack(id: string): Promise<void>;
   remove(id: string): Promise<void>;
   onBack(): void;
@@ -104,9 +107,9 @@ export function PutAside({
   if (step.name === "bringBack")
     return (
       <Confirm
-        title={t("privacy.backup.bringBack.title")}
+        title={t("phone.alone.bringBack.title", { day })}
         body={t("phone.alone.bringBack.body")}
-        keep={t("privacy.backup.bringBack.notNow")}
+        keep={t("phone.cancel")}
         go={t("privacy.backup.bringBack.confirm")}
         onKeep={() => setStep({ name: "choose", failed: false })}
         onGo={() => void run({ name: "bringing" }, () => bringBack(memory.id))}
@@ -115,7 +118,7 @@ export function PutAside({
   if (step.name === "delete" || step.name === "deleting")
     return (
       <Confirm
-        title={t("privacy.backup.delete.title")}
+        title={t("phone.alone.putAside.delete.title", { day })}
         body={
           counts
             ? t("phone.alone.putAside.delete.body", {
@@ -127,7 +130,7 @@ export function PutAside({
             : t("phone.alone.putAside.delete.unread", { day })
         }
         keep={t("privacy.backup.delete.keep")}
-        go={t("privacy.backup.delete.confirm")}
+        go={t("phones.delete.confirm")}
         careful
         busy={step.name === "deleting"}
         onKeep={() => setStep({ name: "choose", failed: false })}
@@ -139,10 +142,14 @@ export function PutAside({
     <Page bar={<BackBar title={t("phone.sheet.title")} onBack={onBack} />}>
       <main className="ph-main ph-settings">
         <h1 className="ph-steph" tabIndex={-1} ref={heading}>
-          {t("phone.alone.putAside.title", { day })}
+          {withTime
+            ? t("phone.alone.putAside.titleAt", { day, time: formatTime12(memory.at) })
+            : t("phone.alone.putAside.title", { day })}
         </h1>
         <p className="ph-body ph-ink2">
-          {counts ? formatBytes(memory.bytes) : t("phone.alone.putAside.unread")}
+          {counts
+            ? t("phone.alone.putAside.lead", { size: formatBytes(memory.bytes) })
+            : t("phone.alone.putAside.unread")}
         </p>
         <Group>
           {counts ? (

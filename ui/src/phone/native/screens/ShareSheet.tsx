@@ -72,7 +72,11 @@ export async function sharedKeeps(
   now: () => number,
 ): Promise<PendingKeep[] | Problem> {
   const web = shared.files.length === 0 && isWeb(shared);
-  const marks = { ...(feeling ? { feeling } : {}), ...(web ? { web } : {}) };
+  const marks = {
+    ...(feeling ? { feeling } : {}),
+    ...(web ? { web } : {}),
+    how: "shared" as const,
+  };
   if (shared.files.length === 0) {
     const text = textToKeep(shared, note);
     const size = encoder.encode(text).length;
@@ -173,7 +177,10 @@ export function ShareSheet({
     setState({ name: "sending" });
     const feeling = feel ? feelingOfPick(feel) : undefined;
     const web = shared.files.length === 0 && isWeb(shared);
-    const marks = feeling || web ? { feeling, web: web || undefined } : undefined;
+    const marks = {
+      ...(feeling || web ? { feeling, web: web || undefined } : {}),
+      how: "shared" as const,
+    };
     let keeps: PendingKeep[];
     try {
       const made = await sharedKeeps(shared, note, feeling, now);

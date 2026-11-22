@@ -14,7 +14,9 @@ import type {
   HomeCall,
   HomeError,
   HomeStats,
+  ItemKept,
   KeptCounts,
+  KeptHow,
   PhoneDeletePreview,
   PhoneItem,
   PhoneMode,
@@ -39,8 +41,6 @@ export interface PickedFile {
   path: string;
   name: string;
   bytes: number;
-  /** When the backup was made, when it can be told before the passphrase. */
-  madeAt?: string;
 }
 
 /** What the phone's open sheet answers once a file is chosen and found to be a backup. */
@@ -48,7 +48,6 @@ interface ChosenBackup {
   file: string;
   name: string;
   size: number;
-  modified: string | null;
 }
 
 /** A backup checked, with what it and this phone hold in the replace columns. */
@@ -93,6 +92,9 @@ export interface HomeApi {
   deletePutAside(id: string): Promise<void>;
   previewSourceDelete(source: PhoneSource): Promise<PhoneDeletePreview>;
   deleteSource(token: string, source: PhoneSource, alsoStop: boolean): Promise<void>;
+  /** Notes how a thing was just kept, for its page. */
+  setKeptHow(id: string, how: KeptHow): Promise<void>;
+  itemKept(id: string): Promise<ItemKept>;
   /** "Forget…" (what was learned) or "Delete…" (the thing too) from an item's page. */
   previewForgetItem(id: string, withOriginal: boolean): Promise<ForgetPreview>;
   forget(token: string): Promise<ForgetReport>;
@@ -196,12 +198,8 @@ export function createHomeApi(notes: NoteStore = idbNotes()): HomeApi {
         throw failed(e);
       }
       if (!chosen) return null;
-      return {
-        path: chosen.file,
-        name: chosen.name,
-        bytes: chosen.size,
-        madeAt: chosen.modified ?? undefined,
-      };
+      // No date: the file's own changes when it is copied, and the backup's is locked.
+      return { path: chosen.file, name: chosen.name, bytes: chosen.size };
     },
     letGoBackupFile: () => invoke<void>("let_go_backup_file").catch(() => undefined),
     async checkBackup(file, passphrase, onProgress) {
@@ -233,6 +231,12 @@ export function createHomeApi(notes: NoteStore = idbNotes()): HomeApi {
     },
     async deleteSource(token, source, alsoStop) {
       expect(await local({ cmd: "deleteSource", token, source, alsoStop }), "sourceDeleted");
+    },
+    async setKeptHow(id, how) {
+      expect(await local({ cmd: "setKeptHow", id, how }), "keptHowSet");
+    },
+    async itemKept(id) {
+      return expect(await local({ cmd: "itemKept", id }), "itemKept").kept;
     },
     async previewForgetItem(id, withOriginal) {
       return expect(await local({ cmd: "previewForgetItem", id, withOriginal }), "forgetPreview")

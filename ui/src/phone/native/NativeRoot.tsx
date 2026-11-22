@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { t } from "../../copy/t";
 import { HomeApp } from "../alone/HomeApp";
 import { Restore } from "../alone/screens/Backup";
+import { Permissions } from "../alone/screens/Permissions";
 import { AloneWelcome, Damaged, Start } from "../alone/screens/Welcome";
 import { cleanDeviceName } from "../crypto";
 import type { PairedDevice } from "../engine";
@@ -25,6 +26,7 @@ const SITE = "https://nocturne.is/";
 type Screen =
   | { name: "loading" }
   | { name: "first" }
+  | { name: "permissions" }
   | { name: "start"; busy: boolean; failed: boolean }
   | { name: "restore" }
   | { name: "damaged" }
@@ -175,6 +177,7 @@ export function NativeRoot({ services }: { services: NativeServices }) {
       return (
         <AloneWelcome
           deleted={deleted}
+          onPermissions={() => setScreen({ name: "permissions" })}
           onStart={() => {
             setDeleted(false);
             setScreen({ name: "start", busy: false, failed: false });
@@ -188,6 +191,14 @@ export function NativeRoot({ services }: { services: NativeServices }) {
             setDeleted(false);
             setScreen({ name: "restore" });
           }}
+        />
+      );
+    case "permissions":
+      return (
+        <Permissions
+          ios={services.platform.ios}
+          fromWelcome
+          onBack={() => setScreen({ name: "first" })}
         />
       );
     case "start":

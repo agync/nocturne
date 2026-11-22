@@ -8,6 +8,7 @@ import type {
   CheckInInput,
   Feeling,
   JournalDay,
+  KeptHow,
   PageSummary,
   PageView,
   Period,
@@ -35,6 +36,8 @@ export interface KeepMarks {
   capturedAt?: string;
   /** Text shared from a web page or a link: the computer keeps it as untrusted web content. */
   web?: boolean;
+  /** How it was kept, which a phone alone notes for the thing's page. Never sent to a computer. */
+  how?: KeptHow;
 }
 
 export interface PhoneEngine {
@@ -159,6 +162,8 @@ export interface PendingKeep {
   good?: boolean;
   /** Shared from a web page or a link. */
   web?: boolean;
+  /** How it was kept, for its page on a phone alone. */
+  how?: KeptHow;
   /** A check-in kept while the computer was out of reach. */
   checkIn?: CheckInInput;
   /** An answer to the page's question given while the computer was out of reach. */
