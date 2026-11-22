@@ -1,6 +1,7 @@
 import { type ReactNode, useId, useRef, useState } from "react";
 import { goTo } from "../../app/query";
 import { Button } from "../../components/Button/Button";
+import { Icon } from "../../components/Icon/Icon";
 import { Toggle } from "../../components/Toggle/Toggle";
 import { formatBytes, formatLongDay, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -237,6 +238,41 @@ function limitOptions(
   return list.map((limit) => ({ value: limitKey(limit), label: limitText(limit), limit }));
 }
 
+/**
+ * Online answers' one-time notice, for someone who turned it on before only what they mark
+ * private was held back. Continue here clears it for Ask and for phones too.
+ */
+function ChangeCard() {
+  const engine = useEngine();
+  const { run, busy } = useOnlineAct();
+  const [failed, setFailed] = useState(false);
+  const see = async () => {
+    setFailed(false);
+    const done = await run(() => engine.seeOnlineChange(), { quiet: true });
+    if (!done) setFailed(true);
+  };
+  return (
+    <section className={styles.card} data-kind="notice" aria-labelledby="online-changed">
+      <span className={styles.cardText}>
+        <h2 id="online-changed" className={`${styles.name} ${styles.cardTitle}`}>
+          <Icon name="lock" size={16} />
+          {t("ask.changed.title")}
+        </h2>
+        <span className={styles.body}>{t("ask.changed.body")}</span>
+        <span className={styles.body}>{t("ask.changed.private")}</span>
+        {failed ? (
+          <span role="alert" className={styles.body}>
+            {t("online.changed.failed")}
+          </span>
+        ) : null}
+      </span>
+      <Button variant="secondary" disabled={busy} onClick={() => void see()}>
+        {t("ask.changed.continue")}
+      </Button>
+    </section>
+  );
+}
+
 function OnPage({ view, back }: { view: OnlineView; back: Back }) {
   const engine = useEngine();
   const { run, busy } = useOnlineAct();
@@ -359,6 +395,7 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
     <Frame back={back} aside={<MonthAside view={view} />}>
       <Title tag={t(trouble ? "online.tag.trouble" : "online.tag.on")} trouble={trouble} />
       <p className={styles.lede}>{t("online.on.lead")}</p>
+      {view.changeNotice ? <ChangeCard /> : null}
       {warning ? (
         <div className={styles.card} data-kind="warn">
           {warning}
