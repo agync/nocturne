@@ -19,6 +19,7 @@ pub mod dispatch;
 pub mod fading;
 pub mod files;
 pub mod mode;
+pub mod r#move;
 #[cfg(test)]
 mod tests;
 pub mod voice;
