@@ -629,7 +629,11 @@ export function Journal(p: JournalProps) {
             <p className="ph-serif ph-text">
               {day0.today ? t("phone.journal.empty.title") : t("phone.journal.empty.past")}
             </p>
-            {day0.today ? <p className="ph-body">{t("phone.journal.empty.body")}</p> : null}
+            {day0.today ? (
+              <p className="ph-body">
+                {t(p.noMind ? "phone.alone.journal.empty.body" : "phone.journal.empty.body")}
+              </p>
+            ) : null}
           </div>
         ) : null}
         {inTab ? <div className="ph-stack ph-tab-foot">{footButtons}</div> : null}
