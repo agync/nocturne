@@ -15,6 +15,7 @@
 pub mod calls;
 pub mod commands;
 pub mod dispatch;
+pub mod fading;
 pub mod mode;
 #[cfg(test)]
 mod tests;
@@ -69,6 +70,8 @@ pub struct Home {
     /// A backup, check or restore under way: one at a time.
     job: AtomicBool,
     pub(crate) voice: voice::Voice,
+    /// Held while fading runs, so a second ask for the same day waits and then finds it done.
+    fading: Mutex<()>,
     /// The passphrase work a backup asks of whoever opens it; `None` is what Nocturne writes.
     work_factor: Option<u8>,
 }
@@ -131,6 +134,7 @@ impl Home {
             gate: RwLock::new(()),
             job: AtomicBool::new(false),
             voice: voice::Voice::default(),
+            fading: Mutex::new(()),
             work_factor: None,
         }
     }

@@ -6,7 +6,7 @@ use nocturne_contract::{
     HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, PhoneError, PhoneMode, RemoteAnswer,
     RemoteCall,
 };
-use nocturne_engine::ManualClock;
+use nocturne_engine::{Candidate, DecayReport, ManualClock, Predicate};
 
 use super::voice::{Heard, Reader};
 use super::{Home, dispatch};
@@ -945,4 +945,145 @@ fn files_from_the_screens_never_land_among_the_apps_own() {
         ),
         HomeAnswer::Exported { .. }
     ));
+}
+
+/// A memory read from a note, as a mind would leave it, and its id.
+fn learn(home: &Home, text: &str) -> String {
+    let open = home.open_store().unwrap();
+    let item = kept_id(&call(home, note(text, "c-learn")));
+    let lease = open
+        .engine
+        .lease_item(&item, std::time::Duration::from_secs(60))
+        .unwrap()
+        .lease;
+    let report = open
+        .engine
+        .apply_candidates(
+            &item,
+            &lease,
+            vec![Candidate::new(
+                "Leo",
+                Predicate::Prefers,
+                "jam",
+                "Leo likes jam.",
+                0.8,
+            )],
+        )
+        .unwrap();
+    report.created[0].clone()
+}
+
+fn status_of(home: &Home, id: &str) -> nocturne_contract::MemoryStatus {
+    home.open_store()
+        .unwrap()
+        .engine
+        .get_memory(id)
+        .unwrap()
+        .status
+}
+
+#[test]
+fn what_goes_unused_fades_and_is_let_go_once_a_day_on_the_phones_clock() {
+    use nocturne_contract::MemoryStatus::{Active, Fading, LetGo};
+    let dir = tempfile::tempdir().unwrap();
+    let (home, clock) = alone(dir.path());
+    let id = learn(&home, "Leo likes jam");
+
+    // The first open of a day runs it; the rest of that day does nothing.
+    assert_eq!(home.fade_if_due(), Some(DecayReport::default()));
+    assert_eq!(home.fade_if_due(), None);
+    clock.advance_days(29);
+    assert_eq!(home.fade_if_due(), Some(DecayReport::default()));
+    assert_eq!(status_of(&home, &id), Active);
+
+    clock.advance_days(1);
+    let faded = home.fade_if_due().unwrap();
+    assert_eq!((faded.faded, faded.let_go), (1, 0));
+    assert_eq!(status_of(&home, &id), Fading);
+    assert_eq!(home.fade_if_due(), None, "once today");
+
+    clock.advance_days(60);
+    let gone = home.fade_if_due().unwrap();
+    assert_eq!((gone.faded, gone.let_go), (0, 1));
+    assert_eq!(status_of(&home, &id), LetGo);
+
+    // Never deleted: it comes back when the person restores it.
+    home.open_store()
+        .unwrap()
+        .engine
+        .restore(std::slice::from_ref(&id))
+        .unwrap();
+    assert_eq!(status_of(&home, &id), Active);
+}
+
+#[test]
+fn a_new_local_day_is_due_by_the_phones_zone_not_by_utc() {
+    let dir = tempfile::tempdir().unwrap();
+    let clock = Arc::new(ManualClock::at("2026-11-22T04:30:00Z", "America/New_York"));
+    let home = home_at(dir.path(), clock.clone());
+    home.start_alone("Pixel", false).unwrap();
+    assert!(home.fade_if_due().is_some());
+    clock.set_str("2026-11-22T05:30:00Z");
+    assert!(
+        home.fade_if_due().is_some(),
+        "past local midnight, on the same day in UTC"
+    );
+    clock.set_str("2026-11-22T06:30:00Z");
+    assert_eq!(home.fade_if_due(), None);
+}
+
+#[test]
+fn a_restored_memory_has_its_own_days_for_fading() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("backup.nocturne");
+    let HomeAnswer::BackupSaved { .. } = local(
+        &home,
+        HomeCall::SaveBackup {
+            dest: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("no backup")
+    };
+    assert!(home.fade_if_due().is_some());
+    assert_eq!(home.fade_if_due(), None);
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::RestoreBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+                replace: true,
+            }
+        ),
+        HomeAnswer::Restored
+    );
+    assert!(home.fade_if_due().is_some());
+}
+
+#[test]
+fn fading_waits_for_a_memory_and_starts_again_with_a_new_one() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = home_at(dir.path(), clock());
+    assert_eq!(home.fade_if_due(), None, "no memory yet");
+    home.start_alone("Pixel", false).unwrap();
+    assert!(home.fade_if_due().is_some(), "not marked while nothing ran");
+    assert_eq!(home.fade_if_due(), None);
+
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::DeleteEverything {
+                phrase: nocturne_engine::DELETE_PHRASE.into()
+            }
+        ),
+        HomeAnswer::Deleted
+    );
+    assert!(
+        home.fade_if_due().is_some(),
+        "a fresh memory has its own days"
+    );
 }

@@ -268,6 +268,7 @@ impl Home {
         }
         self.clear_damaged();
         self.forget_backup_note();
+        self.forget_fading_note();
         let in_store = Engine::open(&store, self.clock.clone())
             .ok()
             .and_then(|e| e.local_device().ok().flatten())
@@ -301,6 +302,7 @@ impl Home {
         clear(&self.check_dir());
         clear(&self.keeping_dir());
         self.forget_backup_note();
+        self.forget_fading_note();
         // The phone's own row went with the rest: made again, the store left open.
         let device = open
             .engine
