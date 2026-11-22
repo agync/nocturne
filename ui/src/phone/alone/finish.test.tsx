@@ -207,6 +207,29 @@ describe("a phone that is nearly full", () => {
   }, 15_000);
 });
 
+describe("the back gesture", () => {
+  it("lands where it came from when a tap comes on the first paint", async () => {
+    history.replaceState(null, "", "/?m=fresh");
+    const services = await nativeMockServices();
+    // Tapped the moment the button shows, before the app's effects run, as on a busy phone.
+    const tapped = new Promise<void>((done) => {
+      const watch = new MutationObserver(() => {
+        const button = screen.queryByRole("button", { name: "This phone" });
+        if (!button) return;
+        watch.disconnect();
+        fireEvent.click(button);
+        done();
+      });
+      watch.observe(document.body, { childList: true, subtree: true });
+    });
+    render(<NativeRoot services={services} />);
+    await tapped;
+    fireEvent.click(await screen.findByRole("button", { name: "Your phone’s permissions" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Back to home" }));
+    expect(await screen.findByRole("region", { name: "Your memory" })).toBeInTheDocument();
+  }, 15_000);
+});
+
 describe("This phone's help and two put aside on one day", () => {
   it("opens the phone's permissions and tells same-day put asides apart by time", async () => {
     await app("m=aside&twice=1");
