@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Debug builds only: runs the phone's reader on a file in the app's own storage and logs the
+         result. Never in a release build. Only the shell, which holds DUMP, may start it. -->
+    <application>
+        <activity
+            android:name="app.nocturne.speech.SpeechProbeActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+    </application>
+</manifest>
