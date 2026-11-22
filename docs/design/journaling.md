@@ -582,6 +582,15 @@ never more than the entries say.
 - **The day.** Three to six sentences on what happened, in the order it happened, mainly from the
   person's own words (entry, notes, voice notes), with things kept from elsewhere only as
   background ("You also kept Leo's trip form").
+- **Appointments.** What the day's calendar held, when a phone brings it: only as background, in a
+  short clause with its time, and with a place when it has one: "..., and your calendar had the
+  dentist at 9:00." An entry that began the day before is shown "until {time}" when it ends that
+  day, and "all day" when it spans it. It never says the person went or that it happened, because a calendar says what was
+  planned, not what took place. Every calendar counts alike, and a cancelled entry is left out.
+  Each such clause cites its calendar entry, whose receipt chip opens the entry's own page
+  ([Phone apps](phone-apps.md#the-journal)). At most eight are shown to the writer, earliest first.
+  A day with appointments and nothing kept has nothing to look back on, and the footer counts
+  only what was kept.
 - **How it felt.** Only from check-ins and from feelings the person put in words. A feeling is
   quoted, never guessed: "At 6:10 pm you checked in as relieved and content." "You wrote that
   the drive home was 'the best bit'." If nothing says how the day felt, the section says "You
