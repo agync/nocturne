@@ -220,7 +220,7 @@ phone/ios-sim: ui/node_modules ## Build the iPhone app for the Simulator on Appl
 	$(PHONE_TAURI) ios build --debug --target aarch64-sim --ci
 
 phone/ios-test: phone/ios-sim ## The iPhone plugins' Swift tests in a Simulator (IOS_SIMULATOR=name)
-	for p in calendar health; do \
+	for p in calendar health speech; do \
 	  (cd phone/plugins/$$p/ios && xcodebuild test -scheme tauri-plugin-nocturne-$$p \
 	    -destination "platform=iOS Simulator,name=$(IOS_SIMULATOR)") || exit 1; \
 	done
