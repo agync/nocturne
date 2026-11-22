@@ -122,7 +122,11 @@ impl Computer {
         };
         assert_eq!(
             hello.features,
-            vec![PhoneFeature::Calendar, PhoneFeature::Health]
+            vec![
+                PhoneFeature::Calendar,
+                PhoneFeature::Health,
+                PhoneFeature::HoldsMemory
+            ]
         );
         (phone, self.device_id())
     }

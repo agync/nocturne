@@ -1117,6 +1117,9 @@ fn remote_commands_refused_from_quick_capture() {
         "update_remote_settings",
         "open_remote_sign_in",
         "new_computer_key",
+        "get_move",
+        "answer_move",
+        "finish_move",
     ] {
         assert_eq!(h.code_from(&quick, cmd, json!({})), "invalid", "{cmd}");
     }

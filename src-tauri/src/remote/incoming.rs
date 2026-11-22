@@ -2,7 +2,9 @@
 //! `<remote>/incoming`, never held whole in memory. One upload per phone at a time, at most
 //! `MAX_INCOMING_TOTAL` bytes declared across all of them, `MAX_ITEM` each and `MAX_DAY` a day
 //! per phone. The first chunk must start with the declared type's magic bytes, and the bytes
-//! received must equal the size declared.
+//! received must equal the size declared. A phone's whole memory moving here (`memoryDone`)
+//! comes the same way, up to `MAX_MEMORY_BYTES` and outside the daily and incoming totals, and
+//! must start as a backup file does.
 
 use std::collections::HashMap;
 use std::io::Write;
@@ -62,6 +64,8 @@ struct Upload {
     file: Option<std::fs::File>,
     path: PathBuf,
     done: Option<oneshot::Sender<Result<Uploaded, PhoneError>>>,
+    /// A phone's memory moving here, not a keep.
+    memory: bool,
 }
 
 impl Upload {
@@ -137,7 +141,11 @@ impl Incoming {
                 old.fail(PhoneError::SessionExpired);
             }
         }
-        let others: u64 = uploads.values().map(|u| u.declared).sum();
+        let others: u64 = uploads
+            .values()
+            .filter(|u| !u.memory)
+            .map(|u| u.declared)
+            .sum();
         if others + size > MAX_INCOMING_TOTAL {
             return Err(PhoneError::Busy);
         }
@@ -159,9 +167,62 @@ impl Incoming {
                 file: Some(file),
                 path,
                 done: Some(tx),
+                memory: false,
             },
         );
         Ok(rx)
+    }
+
+    /// Start the upload of a phone's memory, `size` bytes of a backup file. The caller has
+    /// checked that the person agreed to it.
+    pub fn begin_memory(
+        &self,
+        device: &str,
+        conv: ConvId,
+        call_id: u32,
+        size: f64,
+    ) -> Result<UploadDone, PhoneError> {
+        if !(size.is_finite() && size >= 1.0 && size.fract() == 0.0) {
+            return Err(PhoneError::Invalid);
+        }
+        if size > MAX_MEMORY_BYTES as f64 {
+            return Err(PhoneError::TooLarge);
+        }
+        let mut uploads = self.uploads();
+        // One move at a time: whatever this phone had coming gives way to it.
+        if let Some(old) = uploads.remove(device) {
+            old.fail(PhoneError::SessionExpired);
+        }
+        crate::fsutil::create_private_dir(&self.dir).map_err(|_| PhoneError::Busy)?;
+        let path = self
+            .dir
+            .join(format!("{}.part", hex(&crypto::random::<12>())));
+        let file = private_file(&path).map_err(|_| PhoneError::Busy)?;
+        let (tx, rx) = oneshot::channel();
+        uploads.insert(
+            device.to_string(),
+            Upload {
+                conv,
+                call_id,
+                mime: String::new(),
+                declared: size as u64,
+                received: 0,
+                order: ChunkOrder::default(),
+                file: Some(file),
+                path,
+                done: Some(tx),
+                memory: true,
+            },
+        );
+        Ok(rx)
+    }
+
+    /// How much of a phone's memory is in, and its size, while it is coming.
+    pub fn memory_progress(&self, device: &str) -> Option<(u64, u64)> {
+        self.uploads()
+            .get(device)
+            .filter(|u| u.memory)
+            .map(|u| (u.received, u.declared))
     }
 
     /// Count `size` bytes against a phone's day, once the keep is admitted. The count is kept
@@ -194,9 +255,11 @@ impl Incoming {
             return Err(PhoneError::Invalid);
         }
         let out_of_order = u.order.accept(&chunk).is_err();
-        let failure = if out_of_order
-            || (chunk.seq == 0 && crypto::magic_matches(&u.mime, &chunk.bytes).is_err())
-        {
+        let first_fits = match u.memory {
+            true => chunk.bytes.starts_with(BACKUP_MAGIC),
+            false => crypto::magic_matches(&u.mime, &chunk.bytes).is_ok(),
+        };
+        let failure = if out_of_order || (chunk.seq == 0 && !first_fits) {
             Some(PhoneError::Invalid)
         } else if u.received + chunk.bytes.len() as u64 > u.declared {
             Some(PhoneError::TooLarge)
@@ -279,6 +342,9 @@ impl Incoming {
         }
     }
 }
+
+/// How a backup file starts: the header of the encryption it is locked with.
+const BACKUP_MAGIC: &[u8] = b"age-encryption.org/v1\n";
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()

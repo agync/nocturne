@@ -15,8 +15,8 @@ use std::time::{Duration, Instant};
 
 use jiff::Timestamp;
 use nocturne_contract::{
-    PairingRequest, PhoneError, PhoneHello, RemoteAction, RemoteAnswer, RemoteConnection,
-    RemoteReply, RemoteRequest, RemoteResult,
+    PairingRequest, PhoneError, PhoneHello, RemoteAction, RemoteAnswer, RemoteCall,
+    RemoteConnection, RemoteReply, RemoteRequest, RemoteResult,
 };
 use nocturne_engine::{DeviceRow, Engine};
 use p256::SecretKey;
@@ -43,6 +43,8 @@ pub trait Shell: Send + Sync + 'static {
     fn hello(&self, device: &DeviceRow, connection: RemoteConnection) -> PhoneHello;
     /// Stop everything a phone has running (its answers).
     fn stop_phone(&self, device_id: &str);
+    /// A phone's memory moving here changed: more of it is in, or it stopped (`move-changed`).
+    fn move_changed(&self, _view: Option<&super::moving::MoveView>) {}
 }
 
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
@@ -261,6 +263,8 @@ pub struct Core {
     /// so an open racing a removal never carries on.
     revoked: Mutex<HashSet<String>>,
     pub incoming: Incoming,
+    /// A phone's memory moving here.
+    pub moves: super::moving::Moves,
     next_conv: AtomicU64,
     sent: AtomicU64,
 }
@@ -275,6 +279,7 @@ impl Core {
             shell,
             limits: Limits::new(mono.clone()),
             incoming: Incoming::new(remote_dir.join("incoming")),
+            moves: super::moving::Moves::default(),
             mono,
             dispatch: RwLock::new(None),
             on: RwLock::new(None),
@@ -465,6 +470,9 @@ impl Core {
         }
         self.shell.stop_phone(device_id);
         self.incoming.cancel(device_id);
+        if self.moves.forget(device_id) {
+            self.shell.move_changed(None);
+        }
         lock(&self.phones).remove(device_id);
         self.limits.forget(device_id);
     }
@@ -739,7 +747,9 @@ impl Core {
             let Role::Session(s) = &mut *role else {
                 return Inbound::Close;
             };
-            let ttl = if s.live {
+            let ttl = if s.live && self.moves.holds(conv.id) {
+                super::moving::MEMORY_SESSION_SECS
+            } else if s.live {
                 SESSION_TTL_SECS
             } else {
                 PENDING_SESSION_TTL_SECS
@@ -779,6 +789,11 @@ impl Core {
                 if let Err(code) = self.incoming.chunk(&device.id, conv.id, chunk) {
                     self.reply(conv, 0, RemoteAnswer::Error { code });
                 }
+                if let Some((done, size)) = self.incoming.memory_progress(&device.id)
+                    && let Some(view) = self.moves.arriving(&device.id, done, size)
+                {
+                    self.shell.move_changed(Some(&view));
+                }
                 Inbound::Continue
             }
         }
@@ -791,6 +806,7 @@ impl Core {
             .convs()
             .into_iter()
             .filter(|c| c.id != conv.id && c.is_live() && c.device().as_ref() == Some(&device.id))
+            .filter(|c| !self.moves.holds(c.id))
             .collect();
         mine.sort_by_key(|c| c.created);
         while mine.len() >= MAX_SESSIONS_PER_DEVICE {
@@ -840,15 +856,26 @@ impl Core {
             );
             return Inbound::Continue;
         }
-        let upload = match super::incoming::declared(&req.call) {
-            Some(decl) => match self.incoming.begin(self, &device.id, conv.id, req.id, decl) {
-                Ok(done) => Some(done),
-                Err(code) => {
-                    self.reply(conv, req.id, RemoteAnswer::Error { code });
-                    return Inbound::Continue;
-                }
-            },
-            None => None,
+        let begun = match (&req.call, super::incoming::declared(&req.call)) {
+            // A memory already here is answered without taking it again.
+            (RemoteCall::MemoryDone { .. }, _) if self.moves.arrived_for(&device.id) => Ok(None),
+            (RemoteCall::MemoryDone { size, .. }, _) if self.moves.may_upload(&device.id) => self
+                .incoming
+                .begin_memory(&device.id, conv.id, req.id, *size)
+                .map(Some),
+            (RemoteCall::MemoryDone { .. }, _) => Err(PhoneError::NotReady),
+            (_, Some(decl)) => self
+                .incoming
+                .begin(self, &device.id, conv.id, req.id, decl)
+                .map(Some),
+            (_, None) => Ok(None),
+        };
+        let upload = match begun {
+            Ok(upload) => upload,
+            Err(code) => {
+                self.reply(conv, req.id, RemoteAnswer::Error { code });
+                return Inbound::Continue;
+            }
         };
         let Some(dispatch) = self
             .dispatch
