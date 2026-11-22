@@ -6,6 +6,7 @@ import type { ForgetReport } from "./ForgetReport";
 import type { FoundItem } from "./FoundItem";
 import type { HomeError } from "./HomeError";
 import type { HomeStats } from "./HomeStats";
+import type { PhoneItem } from "./PhoneItem";
 import type { RestoreCheck } from "./RestoreCheck";
 
-export type HomeAnswer = { "type": "found", items: Array<FoundItem>, } | { "type": "forgetPreview", preview: ForgetPreview, } | { "type": "forgotten", report: ForgetReport, } | { "type": "backupSaved", report: BackupReport, } | { "type": "backupChecked", check: RestoreCheck, } | { "type": "restored" } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "error", code: HomeError, };
+export type HomeAnswer = { "type": "found", items: Array<FoundItem>, } | { "type": "forgetPreview", preview: ForgetPreview, } | { "type": "forgotten", report: ForgetReport, } | { "type": "backupSaved", report: BackupReport, } | { "type": "backupChecked", check: RestoreCheck, } | { "type": "restored" } | { "type": "deleted" } | { "type": "exported", report: ExportReport, } | { "type": "stats", stats: HomeStats, } | { "type": "privateSet", item: PhoneItem, } | { "type": "error", code: HomeError, };

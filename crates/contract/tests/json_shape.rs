@@ -355,3 +355,25 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         [PhoneFeature::Calendar, PhoneFeature::Unknown]
     );
 }
+
+#[test]
+fn a_private_mark_is_said_only_when_set_and_an_older_item_reads() {
+    let call = HomeCall::SetPrivate {
+        id: "itm_1".into(),
+        private: true,
+    };
+    assert_eq!(
+        serde_json::to_string(&call).unwrap(),
+        r#"{"cmd":"setPrivate","id":"itm_1","private":true}"#
+    );
+    let old = r#"{"id":"itm_1","kind":"text","title":"t","keptAt":"2026-11-22T09:00:00Z",
+        "durationMs":null,"pages":null,"hasOriginal":false,"summary":null,"text":"x",
+        "truncated":false}"#;
+    let mut item: PhoneItem = serde_json::from_str(old).unwrap();
+    assert!(!item.private);
+    assert_eq!(item.journal, None);
+    let plain = serde_json::to_value(&item).unwrap();
+    assert!(plain.get("private").is_none() && plain.get("journal").is_none());
+    item.private = true;
+    assert_eq!(serde_json::to_value(&item).unwrap()["private"], true);
+}

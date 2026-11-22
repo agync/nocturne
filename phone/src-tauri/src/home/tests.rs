@@ -318,6 +318,99 @@ fn finds_by_words_but_never_a_check_in() {
     assert!(found(&home, "   ").is_empty());
 }
 
+fn item_of(home: &Home, id: &str) -> nocturne_contract::PhoneItem {
+    match call(home, RemoteCall::GetItem { id: id.into() }) {
+        RemoteAnswer::Item { item } => item,
+        other => panic!("no item: {other:?}"),
+    }
+}
+
+fn mark(home: &Home, id: &str, private: bool) -> HomeAnswer {
+    local(
+        home,
+        HomeCall::SetPrivate {
+            id: id.into(),
+            private,
+        },
+    )
+}
+
+#[test]
+fn an_item_is_marked_private_and_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let id = kept_id(&call(
+        &home,
+        note("The purple giraffes bought lemons", "c-1"),
+    ));
+    assert!(!item_of(&home, &id).private);
+
+    let HomeAnswer::PrivateSet { item } = mark(&home, &id, true) else {
+        panic!("not marked")
+    };
+    assert!(item.private);
+    assert!(item_of(&home, &id).private);
+    // Private things are found too, with the mark: nothing leaves this phone.
+    let HomeAnswer::Found { items } = local(
+        &home,
+        HomeCall::Find {
+            query: "giraffe".into(),
+        },
+    ) else {
+        panic!("no find")
+    };
+    assert_eq!(items.len(), 1);
+    assert!(items[0].private);
+
+    let HomeAnswer::PrivateSet { item } = mark(&home, &id, false) else {
+        panic!("not cleared")
+    };
+    assert!(!item.private);
+    assert!(!item_of(&home, &id).private);
+}
+
+#[test]
+fn what_cannot_be_private_and_what_is_missing_answer_with_a_code() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let RemoteAnswer::CheckIn { checkin } = call(
+        &home,
+        RemoteCall::KeepCheckIn {
+            input: CheckInInput {
+                feeling: feeling(),
+                line: None,
+                urge: None,
+                replaces: None,
+            },
+            client_id: "c-1".into(),
+            captured_at: None,
+        },
+    ) else {
+        panic!("no check-in")
+    };
+    let item = item_of(&home, &checkin.id);
+    assert!(item.journal.is_some(), "the page can hide the switch");
+    assert_eq!(
+        mark(&home, &checkin.id, true),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+    assert!(!item_of(&home, &checkin.id).private);
+    assert_eq!(
+        mark(&home, &format!("itm_{}", "0".repeat(32)), true),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
+    assert_eq!(
+        mark(&home, "not an id", true),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+}
+
 #[test]
 fn forgets_after_a_preview() {
     let dir = tempfile::tempdir().unwrap();

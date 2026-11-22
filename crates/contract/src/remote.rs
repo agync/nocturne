@@ -365,6 +365,16 @@ pub struct PhoneItem {
     pub summary: Option<String>,
     pub text: Option<String>,
     pub truncated: bool,
+    /// Marked private. A computer never sends a private item to a phone, so only a phone that
+    /// keeps its own memory sees it set.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    #[ts(optional, as = "Option<bool>")]
+    pub private: bool,
+    /// What it is in the journal; none for an ordinary thing kept. Journal items cannot be
+    /// marked private.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub journal: Option<crate::JournalRole>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    BackupReport, ExportReport, ForgetPreview, ForgetReport, LastBackup, Receipt, RestoreCheck,
+    BackupReport, ExportReport, ForgetPreview, ForgetReport, LastBackup, PhoneItem, Receipt,
+    RestoreCheck,
 };
 
 /// Where a phone's memory lives. `Alone`: on the phone itself. `Companion`: on a computer the
@@ -143,6 +144,12 @@ pub enum HomeCall {
         dest: String,
     },
     Stats,
+    /// Mark a kept thing private, or not. A journal entry, a good thing, a check-in or a health
+    /// reading cannot be: `Invalid`.
+    SetPrivate {
+        id: String,
+        private: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -153,14 +160,34 @@ pub enum HomeCall {
 )]
 #[ts(export)]
 pub enum HomeAnswer {
-    Found { items: Vec<FoundItem> },
-    ForgetPreview { preview: ForgetPreview },
-    Forgotten { report: ForgetReport },
-    BackupSaved { report: BackupReport },
-    BackupChecked { check: Box<RestoreCheck> },
+    Found {
+        items: Vec<FoundItem>,
+    },
+    ForgetPreview {
+        preview: ForgetPreview,
+    },
+    Forgotten {
+        report: ForgetReport,
+    },
+    BackupSaved {
+        report: BackupReport,
+    },
+    BackupChecked {
+        check: Box<RestoreCheck>,
+    },
     Restored,
     Deleted,
-    Exported { report: ExportReport },
-    Stats { stats: HomeStats },
-    Error { code: HomeError },
+    Exported {
+        report: ExportReport,
+    },
+    Stats {
+        stats: HomeStats,
+    },
+    /// The thing as it is now, after its private mark changed.
+    PrivateSet {
+        item: PhoneItem,
+    },
+    Error {
+        code: HomeError,
+    },
 }
