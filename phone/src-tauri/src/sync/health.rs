@@ -326,7 +326,9 @@ pub async fn sync(
         ledger.update(|l| take_full(&mut l.health, read, &kinds, &granted, older));
     }
     let changes = in_order(ledger.get().health.pending.into_values().collect());
-    if changes.is_empty() {
+    // As the calendar: an empty send once after the app starts.
+    let went = ledger.went_this_run(true);
+    if changes.is_empty() && went {
         ledger.update(|l| l.health.too_many = false);
         return None;
     }

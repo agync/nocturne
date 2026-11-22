@@ -1537,3 +1537,29 @@ fn a_computer_that_lost_what_was_sent_gets_all_of_it_again() {
     assert_eq!(report.health.unwrap().taken, 2, "a whole read again");
     assert!(!s.ledger.get().health.again);
 }
+
+#[test]
+fn after_a_start_a_phone_with_nothing_new_still_hears_a_computer_that_lost_it() {
+    let (dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    *d.entries.lock().unwrap() = vec![entry("a", "2026-11-21", "1"), entry("b", "2026-11-23", "1")];
+    let link = FakeLink::new(Mode::Take);
+    sync(&s, &d, &link);
+
+    // The app starts again; nothing changed on the phone, but the computer replaced its memory.
+    let s = Syncer::new(LedgerFile::open(dir.path()));
+    link.clear();
+    link.set(Mode::Again);
+    let report = sync(&s, &d, &link);
+    assert_eq!(
+        report.calendar.unwrap().taken,
+        2,
+        "all of it, though nothing changed"
+    );
+
+    // Within one run, nothing new means nothing goes.
+    link.clear();
+    assert_eq!(sync(&s, &d, &link).calendar, None);
+    assert!(link.calls.lock().unwrap().is_empty());
+}

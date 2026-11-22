@@ -184,7 +184,10 @@ pub async fn sync(
     let window = l.window.clone()?;
     let changes = in_order(l.pending.into_values().collect());
     let list_changed = l.calendars_sent.as_deref() != Some(hash(&mine).as_str());
-    if changes.is_empty() && !list_changed {
+    // Nothing changed: nothing goes, except once after the app starts, empty, so a computer that
+    // lost what this phone sent can ask for all of it again.
+    let went = ledger.went_this_run(false);
+    if changes.is_empty() && !list_changed && went {
         ledger.update(|l| l.calendar.too_many = false);
         return None;
     }
