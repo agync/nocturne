@@ -28,6 +28,9 @@ pub enum PhoneFeature {
     Health,
     /// The computer takes a phone's whole memory (`offerMemory`).
     HoldsMemory,
+    /// A feature a newer computer lists that this app does not know: skipped, never offered.
+    #[serde(other)]
+    Unknown,
 }
 
 /// A calendar as the phone names it. `colour` is a CSS colour.

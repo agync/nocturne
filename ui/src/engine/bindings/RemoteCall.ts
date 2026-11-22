@@ -31,4 +31,4 @@ place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage
 /**
  * The store's schema version, so a computer that is older says so before any bytes move.
  */
-schema: number, } | { "cmd": "memoryDone", sha256: string, passphrase: string, };
+schema: number, } | { "cmd": "memoryDone", size: number, sha256: string, passphrase: string, };

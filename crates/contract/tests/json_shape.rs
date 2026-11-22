@@ -347,4 +347,11 @@ fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
         serde_json::to_value(PhoneFeature::HoldsMemory).unwrap(),
         "holdsMemory"
     );
+    let hello = r#"{"computerName":"c","deviceName":"d","connection":"simple","version":"1",
+        "minPhoneBuild":1,"features":["calendar","somethingNew"]}"#;
+    let hello: PhoneHello = serde_json::from_str(hello).unwrap();
+    assert_eq!(
+        hello.features,
+        [PhoneFeature::Calendar, PhoneFeature::Unknown]
+    );
 }

@@ -443,7 +443,8 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
 /// and the journal calls, which answer from the computer's own journal module. Answering the
 /// page's question from the journal is its own call, not `answer_question`: a phone answers no
 /// other question, and its answer is kept once per client id. A phone app also sends its
-/// calendar and health readings, which no window does, and introduces itself first.
+/// calendar and health readings, which no window does, introduces itself first, and offers its
+/// whole memory to move here.
 pub const PHONE_ONLY_CALLS: &[&str] = &[
     "get_original",
     "disconnect",
@@ -582,6 +583,7 @@ mod tests {
                 schema: 1,
             },
             RemoteCall::MemoryDone {
+                size: 0.0,
                 sha256: s(),
                 passphrase: s(),
             },
