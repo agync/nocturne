@@ -53,6 +53,23 @@ pub struct FoundItem {
     pub private: bool,
 }
 
+impl From<FoundItem> for nocturne_contract::FoundItem {
+    fn from(found: FoundItem) -> Self {
+        Self {
+            receipt: found.receipt,
+            excerpt: found
+                .excerpt
+                .into_iter()
+                .map(|p| nocturne_contract::ExcerptPart {
+                    text: p.text,
+                    matched: p.matched,
+                })
+                .collect(),
+            private: found.private,
+        }
+    }
+}
+
 impl Engine {
     /// The kept things whose words match `query`, best match first and the newest first among
     /// equals, at most `limit` and never more than [`FIND_CAP`]. A query with no words in it
