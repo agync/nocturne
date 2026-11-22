@@ -607,6 +607,80 @@ fn a_backup_comes_back_on_another_phone() {
 }
 
 #[test]
+fn a_backup_that_cannot_be_used_says_why() {
+    use nocturne_engine::Error;
+    let one = tempfile::tempdir().unwrap();
+    let (home, _) = alone(one.path());
+    call(&home, note("Bins go out on Thursday", "c-1"));
+    let saved = tempfile::tempdir().unwrap();
+    let file = saved.path().join("backup.nocturne");
+    let HomeAnswer::BackupSaved { .. } = local(
+        &home,
+        HomeCall::SaveBackup {
+            dest: file.to_string_lossy().into(),
+            passphrase: PASS.into(),
+        },
+    ) else {
+        panic!("no backup")
+    };
+    let bytes = std::fs::read(&file).unwrap();
+    let cut = saved.path().join("cut.nocturne");
+    std::fs::write(&cut, &bytes[..bytes.len() / 2]).unwrap();
+    let words = saved.path().join("words.nocturne");
+    std::fs::write(&words, b"not a backup at all").unwrap();
+
+    let two = tempfile::tempdir().unwrap();
+    let other = home_at(two.path(), clock());
+    let check = |file: &Path| {
+        local(
+            &other,
+            HomeCall::CheckBackup {
+                file: file.to_string_lossy().into(),
+                passphrase: PASS.into(),
+            },
+        )
+    };
+    let refused = |code| HomeAnswer::Error { code };
+    assert_eq!(check(&cut), refused(HomeError::DamagedBackup));
+    assert_eq!(check(&words), refused(HomeError::NotABackup));
+
+    // A backup from a newer Nocturne is built by the engine's own tests; here, how it is said.
+    assert_eq!(
+        super::calls::code(&Error::BackupTooNew),
+        HomeError::NewerBackup
+    );
+    assert_eq!(
+        super::calls::code(&Error::BackupDamaged),
+        HomeError::DamagedBackup
+    );
+}
+
+fn full_disk() -> nocturne_engine::Error {
+    nocturne_engine::Error::Store(rusqlite::Error::SqliteFailure(
+        rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_FULL),
+        None,
+    ))
+}
+
+#[test]
+fn a_phone_with_no_room_says_so_and_a_busy_one_does_not() {
+    use nocturne_engine::Error;
+    let io_full = || Error::Io(std::io::Error::from(std::io::ErrorKind::StorageFull));
+    for e in [full_disk(), io_full()] {
+        assert_eq!(dispatch::keep_code(&e), PhoneError::Full);
+        assert_eq!(dispatch::code(&e), PhoneError::Full);
+        assert_eq!(super::calls::code(&e), HomeError::Full);
+    }
+    let other = Error::Io(std::io::Error::from(std::io::ErrorKind::PermissionDenied));
+    assert_eq!(dispatch::keep_code(&other), PhoneError::Busy);
+    assert_eq!(dispatch::keep_code(&Error::Busy), PhoneError::Busy);
+    assert_eq!(
+        dispatch::keep_code(&Error::Invalid("x".into())),
+        PhoneError::Invalid
+    );
+}
+
+#[test]
 fn a_damaged_store_is_put_aside() {
     let dir = tempfile::tempdir().unwrap();
     let (home, _) = alone(dir.path());

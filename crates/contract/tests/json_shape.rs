@@ -377,3 +377,16 @@ fn a_private_mark_is_said_only_when_set_and_an_older_item_reads() {
     item.private = true;
     assert_eq!(serde_json::to_value(&item).unwrap()["private"], true);
 }
+
+#[test]
+fn the_ways_a_backup_or_a_keep_can_fail_have_their_own_codes() {
+    for (code, text) in [
+        (HomeError::NotABackup, "notABackup"),
+        (HomeError::NewerBackup, "newerBackup"),
+        (HomeError::DamagedBackup, "damagedBackup"),
+        (HomeError::Full, "full"),
+    ] {
+        assert_eq!(serde_json::to_value(code).unwrap(), text);
+    }
+    assert_eq!(serde_json::to_value(PhoneError::Full).unwrap(), "full");
+}

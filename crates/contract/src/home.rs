@@ -96,8 +96,12 @@ pub enum HomeError {
     TooLate,
     /// The backup's passphrase did not open it.
     WrongPassphrase,
-    /// A backup file that is not one, or is from a newer Nocturne.
+    /// A file that is not a Nocturne backup.
     NotABackup,
+    /// The backup was made by a newer Nocturne than this one: update the app first.
+    NewerBackup,
+    /// The backup is damaged or incomplete. Nothing here was changed.
+    DamagedBackup,
     /// The phone has no room for it.
     Full,
     /// The phrase to delete everything was not typed exactly.

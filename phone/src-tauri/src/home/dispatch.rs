@@ -18,7 +18,7 @@ use nocturne_contract::{
 };
 use nocturne_engine::{Engine, KeepPlace};
 
-use super::Open;
+use super::{Open, io_full, is_full};
 
 /// The longest word of a feeling the screens may send. Nocturne's own words are far shorter.
 const MAX_FEELING_WORD: usize = 40;
@@ -27,9 +27,10 @@ fn err(code: PhoneError) -> RemoteAnswer {
     RemoteAnswer::Error { code }
 }
 
-fn code(e: &nocturne_engine::Error) -> PhoneError {
+pub(crate) fn code(e: &nocturne_engine::Error) -> PhoneError {
     use nocturne_engine::Error;
     match e {
+        e if is_full(e) => PhoneError::Full,
         Error::NotFound(_) => PhoneError::NotFound,
         Error::Invalid(_) => PhoneError::Invalid,
         Error::TooLate => PhoneError::TooLate,
@@ -39,14 +40,16 @@ fn code(e: &nocturne_engine::Error) -> PhoneError {
 }
 
 /// Why a keep was not made. Only a keep that can never be made is `Invalid`: the screens drop
-/// it. A full phone or a busy store is `Busy`, so the keep waits and goes again.
-fn keep_code(e: &nocturne_engine::Error) -> PhoneError {
+/// it. A phone with no room is `Full` and nothing was kept; the keep waits for room and goes
+/// again. A busy store or a file that would not write is `Busy`, and waits the same way.
+pub(crate) fn keep_code(e: &nocturne_engine::Error) -> PhoneError {
     use nocturne_engine::Error;
-    use rusqlite::ErrorCode::{DatabaseBusy, DatabaseLocked, DiskFull};
+    use rusqlite::ErrorCode::{DatabaseBusy, DatabaseLocked};
     match e {
+        e if is_full(e) => PhoneError::Full,
         Error::Io(_) | Error::Busy => PhoneError::Busy,
         Error::Store(rusqlite::Error::SqliteFailure(f, _))
-            if matches!(f.code, DiskFull | DatabaseBusy | DatabaseLocked) =>
+            if matches!(f.code, DatabaseBusy | DatabaseLocked) =>
         {
             PhoneError::Busy
         }
@@ -238,6 +241,7 @@ fn finish_keep(
         tracing::warn!("a feeling or good thing was not kept: {x}");
         return err(match x {
             nocturne_engine::Error::Invalid(_) => PhoneError::Invalid,
+            ref x if is_full(x) => PhoneError::Full,
             _ => PhoneError::Busy,
         });
     }
@@ -424,7 +428,11 @@ pub fn keep_bytes(open: &Open, call: RemoteCall, bytes: &[u8], scratch: &Path) -
     if let Err(x) = written {
         let _ = std::fs::remove_dir_all(&folder);
         tracing::warn!("a keep could not be written: {x}");
-        return err(PhoneError::Busy);
+        return err(if io_full(&x) {
+            PhoneError::Full
+        } else {
+            PhoneError::Busy
+        });
     }
     let words = caption
         .as_deref()
