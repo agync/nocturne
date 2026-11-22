@@ -3,7 +3,7 @@ import type { ItemView, PageLine, Receipt, Span } from "../../bindings";
 
 export const DEFAULT_NOW = "2026-11-13T07:02:00Z";
 
-/** Predicates that make a memory a safety memory: kept forever, never the daily question. */
+/** Predicates that make a memory a safety memory: kept forever by default. */
 export const SAFETY_PREDICATES: ReadonlySet<string> = new Set([
   "takes",
   "allergicTo",

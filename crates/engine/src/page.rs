@@ -257,8 +257,8 @@ fn question_for(
             journal: Some(chosen.ask),
         }));
     }
-    // Eligible: active, not a safety memory, not keep-forever, not asked in the last 14 days,
-    // and never one the journal asked about.
+    // Eligible: active, not keep-forever, not asked in the last 14 days, and never one the
+    // journal asked about. What a memory is about never keeps it out.
     let cutoff = now
         .checked_sub(SignedDuration::from_hours(24 * QUESTION_GAP_DAYS))
         .map_err(Error::from)?;
@@ -271,7 +271,7 @@ fn question_for(
                           WHERE memory_id IS NOT NULL AND kind = 'journal')",
         params![fmt_ts(cutoff), day.to_string()],
     )?;
-    rows.retain(|m| !m.is_safety() && (edition == Edition::Screen || !m.private));
+    rows.retain(|m| edition == Edition::Screen || !m.private);
     // Prefer memories with one source, then ones the person has not confirmed, oldest first.
     rows.sort_by(|a, b| {
         ((a.sources != 1), a.confirmed, &a.recorded_at, &a.id).cmp(&(

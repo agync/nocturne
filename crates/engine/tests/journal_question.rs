@@ -471,28 +471,23 @@ fn condition_6_a_memory_that_is_not_active_is_not_asked() {
     }
 }
 
+/// Nocturne does not judge what a memory is about: a health, money, passport or insurance label
+/// is no reason to skip it. If it is private, the person marks it so.
 #[test]
-fn condition_6_a_safety_memory_is_not_asked() {
-    for tag in ["health", "Allergy", "medication"] {
+fn a_memory_labelled_health_money_or_id_is_asked() {
+    for tag in [
+        "health",
+        "Allergy",
+        "medication",
+        "money",
+        "passport",
+        "insurance",
+        "appointment",
+    ] {
         let w = world();
         sql(
             &w.f,
-            "UPDATE memories SET tags = ?2 WHERE id = ?1",
-            params![w.memory, format!("[\"{tag}\"]")],
-        );
-        no_journal_question(&w);
-    }
-}
-
-/// Nocturne does not judge what a memory is about: a money, passport or insurance label is no
-/// reason to skip it.
-#[test]
-fn a_memory_labelled_money_or_id_is_asked() {
-    for tag in ["money", "passport", "insurance", "appointment"] {
-        let w = world();
-        sql(
-            &w.f,
-            "UPDATE memories SET tags = ?2 WHERE id = ?1",
+            "UPDATE memories SET tags = ?2, keep_forever = 1 WHERE id = ?1",
             params![w.memory, format!("[\"{tag}\"]")],
         );
         assert!(asks_from_the_journal(&w), "{tag}");
