@@ -450,11 +450,11 @@ function RestoreProblem({ error }: { error: RestoreError }) {
     error === "bad"
       ? [t("restore.bad.title"), t("restore.bad.body")]
       : error === "newer"
-        ? [t("restore.newer.title"), t("restore.newer.body.generic")]
+        ? [t("restore.newer.title"), t("phone.alone.restore.newer.body")]
         : error === "damaged"
           ? [t("restore.damaged.title"), t("restore.damaged.body")]
           : error === "full"
-            ? [t("restore.noRoom.title"), null]
+            ? [t("restore.noRoom.title"), t("phone.alone.restore.noRoom.body")]
             : [null, error === "wrong" ? t("restore.wrong") : t("setup.action.failed")];
   return (
     <div className="ph-stack" role="alert" style={{ gap: 4 }}>

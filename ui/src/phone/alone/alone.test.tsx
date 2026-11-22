@@ -191,6 +191,7 @@ describe("Ask finds by words", () => {
 
 describe("This phone, a backup and Delete everything", () => {
   it("shows where the memory is, its mind and the actions", async () => {
+    scriptedNoteRows.set("voiceAsked", "1");
     await app("m=fresh");
     fireEvent.click(await screen.findByRole("button", { name: "This phone" }));
     const memory = await screen.findByRole("region", { name: "Your memory" });
@@ -381,6 +382,15 @@ describe("keeping and an item on a phone alone", () => {
     expect(await screen.findByText(/^Next, Android asks to let Nocturne use/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(screen.queryByText(/^Next, Android asks/)).toBeNull());
+  });
+
+  it("opens no microphone when the person says Not now", async () => {
+    await app("m=fresh");
+    fireEvent.click(await screen.findByRole("button", { name: "Keep" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Record/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    await waitFor(() => expect(screen.queryByText(/^Next, Android asks/)).toBeNull());
+    expect(screen.getByLabelText(/Type something to keep/)).toBeInTheDocument();
   });
 
   it("marks a kept thing private on its page", async () => {

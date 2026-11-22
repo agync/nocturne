@@ -130,5 +130,7 @@
   "phone.alone.voice.offInSettings": "Off in your phone’s settings",
   "phone.alone.restore.file.hint": "{size} · made {day}",
   "phone.alone.rationale.stopping": "Turn Health off in Nocturne’s {thisPhone}, or take the permission back in Health Connect. To delete readings already kept, use {deleteReadings} in {thisPhone}.",
-  "phone.alone.sources.delete": "Delete what was kept…"
+  "phone.alone.sources.delete": "Delete what was kept…",
+  "phone.alone.restore.newer.body": "It was made with a newer Nocturne than this phone has. Update Nocturne on this phone, then try again. Nothing was changed.",
+  "phone.alone.restore.noRoom.body": "This phone needs more free space to restore this backup. Free some space, then check again."
 }

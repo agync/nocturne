@@ -97,7 +97,7 @@ export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps
           type="button"
           className="ph-ib ph-ib--ink"
           onClick={onBack}
-          aria-label={t("phone.back")}
+          aria-label={t("restore.back")}
         >
           <Icon name="back" />
         </button>
@@ -295,19 +295,34 @@ function marked(text: string, quote: string | null) {
 /** Marking a thing private, on the phone that holds it. Journal entries never can be. */
 function PrivateRow({ item, onChange }: { item: PhoneItem; onChange(on: boolean): Promise<void> }) {
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (item.journal)
     return <p className="ph-hint ph-hint--ink2">{t("phone.alone.private.journal")}</p>;
   return (
-    <Switch
-      label={t("phone.alone.private")}
-      hint={t("phone.alone.private.hint")}
-      on={item.private === true}
-      disabled={busy}
-      onChange={(on) => {
-        setBusy(true);
-        void onChange(on).finally(() => setBusy(false));
-      }}
-    />
+    <>
+      <Switch
+        label={t("phone.alone.private")}
+        hint={t("phone.alone.private.hint")}
+        on={item.private === true}
+        disabled={busy}
+        onChange={(on) => {
+          setBusy(true);
+          setFailed(false);
+          onChange(on).then(
+            () => setBusy(false),
+            () => {
+              setBusy(false);
+              setFailed(true);
+            },
+          );
+        }}
+      />
+      {failed ? (
+        <p className="ph-error" role="alert">
+          {t("item.failed")}
+        </p>
+      ) : null}
+    </>
   );
 }
 
