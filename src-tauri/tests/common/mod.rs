@@ -116,6 +116,23 @@ pub fn build(
     finish(dir, clock, state, hook)
 }
 
+/// The app started again on the same data folder, as a start does: a scheduled restore or a
+/// memory that moved here is put in place first.
+pub fn restart(h: Harness) -> Harness {
+    let Harness {
+        app,
+        webview,
+        dir,
+        clock,
+    } = h;
+    drop(webview);
+    drop(app);
+    nocturne_app_lib::restore::apply_pending(dir.path());
+    let state = AppState::open(dir.path(), clock.clone());
+    state.set_backup_work_factor(10);
+    finish(dir, clock, state, |b| b)
+}
+
 /// An app whose data folder cannot be opened.
 pub fn broken_harness() -> Harness {
     let dir = tempfile::tempdir().unwrap();
