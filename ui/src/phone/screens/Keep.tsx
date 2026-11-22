@@ -3,6 +3,7 @@ import { canCaptureSound, startWavCapture } from "../../app/wavCapture";
 import { formatBytes, formatDuration, formatTime } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { FeelingPart, PhoneError, PhoneKept } from "../../engine/bindings";
+import { NearlyFull } from "../alone/screens/parts";
 import { copy } from "../bytes";
 import { sniffMime } from "../crypto";
 import {
@@ -101,6 +102,8 @@ export interface AloneKeep {
   onKept?(kind: "text" | "photo" | "recording"): void;
   /** Opens the phone's settings for Nocturne, where the microphone is turned back on. */
   onSettings?(): void;
+  /** Less than 500 MB is free: the banner shows above what is being kept. */
+  nearlyFull?: boolean;
 }
 
 export interface Recording {
@@ -342,6 +345,7 @@ export function Keep({
     return (
       <Page bar={bar}>
         <main className="ph-main ph-main--tight" style={{ gap: 16, padding: 20 }}>
+          {alone?.nearlyFull ? <NearlyFull /> : null}
           <form
             className="ph-stack"
             style={{ gap: 16, flex: 1 }}

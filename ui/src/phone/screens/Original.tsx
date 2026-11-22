@@ -3,6 +3,7 @@ import { formatDay, formatDuration } from "../../copy/format";
 import { t } from "../../copy/t";
 import type { PhoneItem } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
+import { Group, Row } from "../native/screens/chrome";
 import { Switch } from "../native/screens/parts";
 import { renderingFor } from "../renderable";
 import { Button, Icon, Page } from "./ui";
@@ -49,6 +50,8 @@ export interface AloneItem {
   setPrivate(id: string, on: boolean): Promise<PhoneItem>;
   /** Opened from Ask: the marked words are what was looked for. */
   found: boolean;
+  /** "Forget…" (what was learned from it) or "Delete…" (the thing too). */
+  onForget?(id: string, withOriginal: boolean): void;
 }
 
 export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps) {
@@ -247,6 +250,19 @@ export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps
               setLoad((now) => (now.name === "ready" ? { ...now, item: next } : now));
             }}
           />
+        ) : null}
+        {alone?.onForget ? (
+          <Group>
+            <Row
+              label={t("phone.alone.item.forget")}
+              onPress={() => alone.onForget?.(item.id, false)}
+            />
+            <Row
+              label={t("phone.alone.item.delete")}
+              danger
+              onPress={() => alone.onForget?.(item.id, true)}
+            />
+          </Group>
         ) : null}
       </main>
     </Page>

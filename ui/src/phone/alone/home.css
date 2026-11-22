@@ -406,3 +406,65 @@
   color: var(--ink2);
   font-family: var(--font-mono);
 }
+
+.ph-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+}
+
+.ph-banner-icon {
+  display: flex;
+  flex: none;
+  color: var(--ember);
+}
+
+.ph-banner strong {
+  display: block;
+  font-weight: 500;
+}
+
+.ph-delete-rows {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ph-delete-rows li {
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--sheet);
+  box-shadow: 0 0 0 1px var(--rule);
+}
+
+.ph-kept-choice {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ph-kept-choice label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+}
+
+.ph-full-line {
+  padding: 0 16px 12px 50px;
+  color: var(--ember);
+}

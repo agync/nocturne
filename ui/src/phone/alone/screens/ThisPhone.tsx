@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { formatBytes, formatLongDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { HomeStats } from "../../../engine/bindings";
+import type { HomeStats, PutAsideMemory } from "../../../engine/bindings";
 import type { NativeChannel, ThisPhoneSources } from "../../native/api";
 import { Group, Row } from "../../native/screens/chrome";
 import { calendarValue, healthValue } from "../../native/screens/Offer";
@@ -37,9 +37,20 @@ export function HomeThisPhone({
   onHealth,
   onBackup,
   onDelete,
+  putAside,
+  onPutAside,
+  onDeleteKept,
+  nearlyFull,
 }: {
   channel: NativeChannel;
   stats(): Promise<HomeStats>;
+  /** The memories put aside on this phone, newest first. */
+  putAside(): Promise<PutAsideMemory[]>;
+  onPutAside(memory: PutAsideMemory): void;
+  /** "Delete what was kept…" from the calendar or Health. */
+  onDeleteKept(): void;
+  /** Less than 500 MB is free. */
+  nearlyFull: boolean;
   /** This app's version. */
   version: string;
   /** Whether voice notes can be read into words, and the way to turn it on. */
@@ -59,6 +70,7 @@ export function HomeThisPhone({
   const [sources, setSources] = useState<ThisPhoneSources | null>(null);
   const [held, setHeld] = useState<HomeStats | null>(null);
   const [heard, setHeard] = useState<VoiceAccess | null>(null);
+  const [aside, setAside] = useState<PutAsideMemory[]>([]);
   const heading = useHeading("thisPhone");
 
   useEffect(() => {
@@ -71,6 +83,10 @@ export function HomeThisPhone({
       (s) => !gone && setHeld(s),
       () => undefined,
     );
+    putAside().then(
+      (list) => !gone && setAside(list),
+      () => undefined,
+    );
     Promise.all([voice.access(), voice.asked()]).then(
       ([a, asked]) => !gone && setHeard(asked || a === "denied" ? a : "granted"),
       () => undefined,
@@ -78,7 +94,7 @@ export function HomeThisPhone({
     return () => {
       gone = true;
     };
-  }, [channel, stats, voice]);
+  }, [channel, stats, voice, putAside]);
 
   const last = held?.lastBackup ?? null;
   return (
@@ -97,12 +113,24 @@ export function HomeThisPhone({
                 : undefined
             }
           />
+          {nearlyFull ? (
+            <p className="ph-srow-hint ph-full-line" role="status">
+              {t("phone.alone.full.title")} {t("phone.alone.full.body")}
+            </p>
+          ) : null}
           <Row
             icon="moon"
             label={t("phone.alone.thisPhone.mind")}
             hint={t("phone.alone.thisPhone.mindNone")}
             onPress={onMind}
           />
+          {aside.map((m) => (
+            <Row
+              key={m.id}
+              label={t("phone.alone.thisPhone.putAside", { day: formatLongDay(m.at) })}
+              onPress={() => onPutAside(m)}
+            />
+          ))}
         </Group>
         {sources ? (
           <Group title={t("phone.app.settings.brings")}>
@@ -118,6 +146,7 @@ export function HomeThisPhone({
               value={healthValue(sources)}
               onPress={onHealth}
             />
+            <Row label={t("phone.alone.sources.delete")} onPress={onDeleteKept} />
             {heard === "denied" ? (
               <Row
                 icon="mic"

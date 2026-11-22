@@ -53,11 +53,14 @@ export function HealthConnect({
   channel,
   onDone,
   alone = false,
+  onDeleteKept,
 }: {
   channel: NativeChannel;
   onDone(): void;
   /** A phone alone: readings stay in this phone's own memory. */
   alone?: boolean;
+  /** A phone alone: "Delete what was kept…" under the line about what was already kept. */
+  onDeleteKept?(): void;
 }) {
   const [step, setStep] = useState<Step>({ name: "loading" });
   const [kinds, setKinds] = useState<ReadingKind[]>(DEFAULT_KINDS);
@@ -136,7 +139,15 @@ export function HealthConnect({
     case "missing":
       return <HealthMissing onGet={() => void openHealth("healthStore")} onBack={onDone} />;
     case "settings":
-      return <HealthSettingsScreen channel={channel} ios={ios} onBack={onDone} alone={alone} />;
+      return (
+        <HealthSettingsScreen
+          channel={channel}
+          ios={ios}
+          onBack={onDone}
+          alone={alone}
+          onDeleteKept={onDeleteKept}
+        />
+      );
   }
 }
 
@@ -307,12 +318,14 @@ export function HealthSettingsScreen({
   ios = false,
   onBack,
   alone = false,
+  onDeleteKept,
 }: {
   channel: NativeChannel;
   ios?: boolean;
   onBack(): void;
   /** A phone alone sends nothing anywhere: no lines about what went across. */
   alone?: boolean;
+  onDeleteKept?(): void;
 }) {
   const [settings, setSettings] = useState<HealthSettings | null>(null);
   const [status, setStatus] = useState<ThisPhoneSources | null>(null);
@@ -404,6 +417,11 @@ export function HealthSettingsScreen({
         <p className="ph-hint">
           {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
         </p>
+        {alone && onDeleteKept ? (
+          <button type="button" className="ph-link" onClick={onDeleteKept}>
+            {t("phone.alone.sources.delete")}
+          </button>
+        ) : null}
       </main>
     </Page>
   );

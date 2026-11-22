@@ -6,7 +6,7 @@ import type { PhoneEngine } from "../../engine";
 import { CalendarToday, LastNight } from "../../screens/PageSections";
 import { Button, Page } from "../../screens/ui";
 import { KeptLine } from "./kept";
-import { chips } from "./parts";
+import { chips, NearlyFull } from "./parts";
 
 /** Rows that are things kept, not plans or readings the phone brought. */
 const KEPT: ReadonlySet<TimelineRow["kind"]> = new Set([
@@ -39,6 +39,8 @@ export interface HomeTodayProps {
   /** Last night opens its day in the journal, from when the night ended. */
   onNight(to: string): void;
   onJournal(): void;
+  /** Less than 500 MB is free: the banner shows under the status. */
+  nearlyFull: boolean;
 }
 
 /** Today on a phone alone: the no-mind card where the page would be, then what this phone holds. */
@@ -172,6 +174,7 @@ export function HomeToday(p: HomeTodayProps) {
           <span className="ph-dot" aria-hidden="true" />
           {t("phone.alone.today.status")}
         </p>
+        {p.nearlyFull ? <NearlyFull /> : null}
         {body}
       </main>
     </Page>

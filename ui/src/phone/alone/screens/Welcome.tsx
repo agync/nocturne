@@ -5,10 +5,13 @@ import { chips } from "./parts";
 
 /** The first screen: start on this phone, connect to a computer, or bring back a backup. */
 export function AloneWelcome({
+  deleted = false,
   onStart,
   onConnect,
   onBackup,
 }: {
+  /** Just after Delete everything: one line above the buttons says so. */
+  deleted?: boolean;
   onStart(): void;
   onConnect(): void;
   onBackup(): void;
@@ -26,6 +29,11 @@ export function AloneWelcome({
         </div>
         <div className="ph-spacer" />
         <div className="ph-stack">
+          {deleted ? (
+            <p className="ph-body ph-center" role="status">
+              {t("phone.alone.welcome.deleted")}
+            </p>
+          ) : null}
           <Button kind="primary" onClick={onStart}>
             {t("phone.alone.welcome.start")}
           </Button>

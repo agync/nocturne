@@ -1,5 +1,6 @@
 import { Children, type ReactNode } from "react";
 import { type CopyId, type CopyValues, t, tParts } from "../../../copy/t";
+import { Icon } from "../../screens/ui";
 
 /** A control named in a sentence, drawn as the control's own label in a box. */
 export function Chip({ children }: { children: ReactNode }) {
@@ -26,4 +27,18 @@ export function chipsPlain(id: CopyId, values?: CopyValues): string {
     keep: t("phone.home.keep.title"),
     addAPhone: t("away.phones.add"),
   });
+}
+
+/** "This phone is nearly full.": on Today and on Keep while less than 500 MB is free. */
+export function NearlyFull() {
+  return (
+    <div className="ph-banner" role="status">
+      <span className="ph-banner-icon" aria-hidden="true">
+        <Icon name="phone" size={22} />
+      </span>
+      <span>
+        <strong>{t("phone.alone.full.title")}</strong> {t("phone.alone.full.body")}
+      </span>
+    </div>
+  );
 }
