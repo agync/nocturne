@@ -55,8 +55,6 @@ const SHADOW_LIMIT: Duration = Duration::from_secs(3 * 60);
 const SHADOW_STRIKES: u32 = 3;
 /// Idle time that counts as nobody at the keyboard, the night tidy's own.
 const SHADOW_IDLE: Duration = Duration::from_secs(10 * 60);
-/// Memories recorded this long before the tidy began are checked for health, money and ID.
-const SHADOW_WINDOW: SignedDuration = SignedDuration::from_hours(24);
 
 /// Runs once the backlog is read and before the page is composed: the journal's looking back,
 /// which the page may then carry a line about.
@@ -351,7 +349,7 @@ impl Tidy {
         self.inner.finishing.store(true, Ordering::SeqCst);
         drop(slots);
         self.inner.reader.end_drain(&run.drain);
-        let (kind, date, started, deadline) = (run.kind, run.date, run.started, run.deadline);
+        let (kind, date, deadline) = (run.kind, run.date, run.deadline);
         // The mind is asked for things now; the lock is free so pausing and status still work.
         let (step, watch) = self.finish(run).await;
         if watch.is_some() {
@@ -360,7 +358,7 @@ impl Tidy {
         self.inner.finishing.store(false, Ordering::SeqCst);
         // Only a night's tidy, once its page is saved and the tidy no longer counts as running.
         if kind == TidyKind::Night && matches!(step, TidyStep::Finished(_)) {
-            self.shadow_decisions(date, started, deadline).await;
+            self.shadow_decisions(date, deadline).await;
         }
         step
     }
@@ -371,11 +369,10 @@ impl Tidy {
     /// in a row, the rest wait for the next night. It asks only while the night tidy's own rules
     /// hold (on mains, nobody at the keyboard) and stops well before the page time, so it never
     /// competes with the person's first questions.
-    async fn shadow_decisions(&self, date: Date, started: Timestamp, page_at: Timestamp) {
-        let since = started - SHADOW_WINDOW;
+    async fn shadow_decisions(&self, date: Date, page_at: Timestamp) {
         let pending = self
             .eng(move |e| {
-                e.queue_decisions(date, since)?;
+                e.queue_decisions(date)?;
                 e.pending_decisions(SHADOW_PER_NIGHT)
             })
             .await;

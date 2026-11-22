@@ -622,8 +622,9 @@ async fn a_decision_the_npu_cannot_answer_is_no_strike() {
     use nocturne_engine::decide::Kind;
     let r = placed("npu=broken,downloaded=all", Placement::Split).await;
     let decision = nocturne_engine::decide::Decision {
-        state: "Memory: Sam likes tea.".into(),
-        question: Kind::Sensitive.question(),
+        state: "Planned, in the person's words: Tea with Sam.\nWritten later: Sam came round."
+            .into(),
+        question: Kind::FollowedUp.question(),
     };
     for _ in 0..=npu::STRIKES {
         assert!(r.mind.decide(&decision).await.is_err());

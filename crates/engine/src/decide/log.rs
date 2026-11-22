@@ -11,7 +11,6 @@ use crate::Engine;
 use crate::error::Result;
 use crate::journal::Ctx;
 use crate::journal::question::blocked_by_later;
-use crate::sensitive;
 use crate::util::{fmt_ts, new_id};
 
 /// How long a row is kept, asked or not.
@@ -54,9 +53,21 @@ pub(crate) fn record_moved(
     Ok(())
 }
 
-/// Drops rows past [`KEEP_DAYS`]. Run wherever rows are written, so the log stays bounded on a
+/// Drops rows past [`KEEP_DAYS`], and rows of a kind no longer asked (the health, money and ID
+/// check of earlier versions). Run wherever rows are written, so the log stays bounded on a
 /// computer that never has a night's tidy.
 fn prune(conn: &Connection, now: &str) -> Result<()> {
+    let known: Vec<String> = Kind::ALL
+        .iter()
+        .map(|k| format!("'{}'", k.as_str()))
+        .collect();
+    conn.execute(
+        &format!(
+            "DELETE FROM decisions WHERE kind NOT IN ({})",
+            known.join(", ")
+        ),
+        [],
+    )?;
     let Ok(now) = now.parse::<Timestamp>() else {
         return Ok(());
     };
@@ -104,80 +115,6 @@ fn insert(conn: &Connection, row: Row<'_>, now: &str) -> Result<usize> {
         }
     }
     Ok(added)
-}
-
-/// The first quote a memory was read from, with the item it is from, if any.
-fn first_quote(conn: &Connection, memory_id: &str) -> Result<Option<(String, String)>> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT s.item_id, s.span FROM memory_sources s JOIN items i ON i.id = s.item_id \
-         WHERE s.memory_id = ?1 AND s.span IS NOT NULL ORDER BY i.kept_at, i.id",
-    )?;
-    let spans: Vec<(String, String)> = stmt
-        .query_map([memory_id], |r| Ok((r.get(0)?, r.get(1)?)))?
-        .collect::<rusqlite::Result<_>>()?;
-    Ok(spans.into_iter().find_map(|(item, json)| {
-        match serde_json::from_str::<nocturne_contract::Span>(&json).ok()? {
-            nocturne_contract::Span::Quote { text } => Some((item, text)),
-            _ => None,
-        }
-    }))
-}
-
-/// Queues the health, money and ID check for every current memory recorded since `since` that
-/// has none yet, with what the rules say of this version of it.
-fn queue_sensitive(tx: &Transaction<'_>, since: &str, now: &str) -> Result<usize> {
-    let mut stmt = tx.prepare(
-        "SELECT m.id, m.subject, m.object, m.sentence, m.tags, m.suggest_private FROM memories m \
-         WHERE m.recorded_at >= ?1 AND m.superseded_at IS NULL AND NOT EXISTS (SELECT 1 FROM \
-         decisions d WHERE d.kind = 'sensitive' AND d.memory_id = m.id) ORDER BY m.recorded_at, m.id",
-    )?;
-    type Found = (String, String, String, String, String, bool);
-    let rows: Vec<Found> = stmt
-        .query_map([since], |r| {
-            Ok((
-                r.get(0)?,
-                r.get(1)?,
-                r.get(2)?,
-                r.get(3)?,
-                r.get(4)?,
-                r.get(5)?,
-            ))
-        })?
-        .collect::<rusqlite::Result<_>>()?;
-    let mut queued = 0;
-    for (id, subject, object, sentence, tags, suggested) in &rows {
-        let labelled = match serde_json::from_str::<Vec<String>>(tags) {
-            Ok(tags) => tags.iter().any(|t| sensitive::tag(t)),
-            Err(_) => true,
-        };
-        let rule = *suggested
-            || labelled
-            || [subject, object, sentence]
-                .iter()
-                .any(|t| sensitive::text(t));
-        let mut state = format!("Memory: {}", sentence.trim());
-        let mut copied: Vec<&str> = Vec::new();
-        let quote = first_quote(tx, id)?;
-        if let Some((item, text)) = &quote {
-            state.push_str(&format!("\nFrom the note: {}", text.trim()));
-            copied.push(item);
-        }
-        queued += insert(
-            tx,
-            Row {
-                kind: Kind::Sensitive,
-                item_id: None,
-                memory_id: Some(id),
-                other_id: None,
-                state: &state,
-                rule,
-                detail: None,
-                copied_from: &copied,
-            },
-            now,
-        )?;
-    }
-    Ok(queued)
 }
 
 /// Queues "already wrote how it went" for each memory rule 5 kept off the page dated
@@ -241,18 +178,16 @@ fn parse_logged(r: &rusqlite::Row<'_>) -> rusqlite::Result<Option<Logged>> {
 }
 
 impl Engine {
-    /// Queues the decisions the night's tidy asks about in shadow: the health, money and ID
-    /// check for memories recorded since `since`, and rule 5 of the page question for the page
-    /// dated `page_day`. Rows past their time are dropped first. Returns how many were queued.
-    pub fn queue_decisions(&self, page_day: Date, since: Timestamp) -> Result<usize> {
+    /// Queues the decisions the night's tidy asks about in shadow: rule 5 of the page question
+    /// for the page dated `page_day`. Rows past their time are dropped first. Returns how many
+    /// were queued.
+    pub fn queue_decisions(&self, page_day: Date) -> Result<usize> {
         let stamp = fmt_ts(self.clock_now());
         let clock = self.inner.clock.clone();
         self.write(|tx| {
             prune(tx, &stamp)?;
             let ctx = Ctx::load(tx, clock.as_ref())?;
-            let sensitive = queue_sensitive(tx, &fmt_ts(since), &stamp)?;
-            let followed = queue_followed_up(tx, &ctx, page_day, &stamp)?;
-            Ok(sensitive + followed)
+            queue_followed_up(tx, &ctx, page_day, &stamp)
         })
     }
 

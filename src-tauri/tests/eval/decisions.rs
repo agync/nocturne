@@ -31,14 +31,6 @@ pub struct MovedCase {
     pub label: &'static str,
 }
 
-/// A note kept, and whether it holds a health, money or ID detail.
-pub struct SensitiveCase {
-    pub id: &'static str,
-    pub lang: &'static str,
-    pub text: &'static str,
-    pub label: bool,
-}
-
 /// A planned thing the person wrote down for the day, a later note that names it, and whether
 /// the later note says how it went.
 pub struct FollowedUpCase {
@@ -347,121 +339,6 @@ pub const MOVED: &[MovedCase] = &[
     ),
 ];
 
-const fn sensitive(
-    id: &'static str,
-    lang: &'static str,
-    text: &'static str,
-    label: bool,
-) -> SensitiveCase {
-    SensitiveCase {
-        id,
-        lang,
-        text,
-        label,
-    }
-}
-
-pub const SENSITIVE: &[SensitiveCase] = &[
-    sensitive(
-        "se01",
-        "en",
-        "I am seeing a counsellor on Friday because I have been feeling low.",
-        true,
-    ),
-    sensitive(
-        "se02",
-        "nl",
-        "Morgen heb ik een afspraak bij de huisarts voor mijn rugpijn.",
-        true,
-    ),
-    sensitive("se03", "en", "Paid the flat deposit of £1,200 today.", true),
-    sensitive("se04", "en", "Gran lives at 14 Elm Road, Leeds.", false),
-    sensitive(
-        "se05",
-        "en",
-        "The GP prescribed new tablets for my blood pressure.",
-        true,
-    ),
-    sensitive(
-        "se06",
-        "de",
-        "Die Ärztin hat mir ein neues Mittel gegen die Migräne verschrieben.",
-        true,
-    ),
-    sensitive(
-        "se07",
-        "en",
-        "My passport number is 533214987 and it runs out in March.",
-        true,
-    ),
-    sensitive(
-        "se08",
-        "en",
-        "Booked a table for four at the Italian place on Saturday.",
-        false,
-    ),
-    sensitive(
-        "se09",
-        "en",
-        "Leo's school play is on Thursday at 6pm, bring a camera.",
-        false,
-    ),
-    sensitive(
-        "se10",
-        "es",
-        "Mi hermana tiene diabetes y se mide el azúcar cada mañana.",
-        true,
-    ),
-    sensitive(
-        "se11",
-        "fr",
-        "J'ai rendez-vous chez le psychologue mardi, je dors mal en ce moment.",
-        true,
-    ),
-    sensitive(
-        "se12",
-        "en",
-        "The plumber's number is on the fridge, call him about the tap.",
-        false,
-    ),
-    sensitive(
-        "se13",
-        "en",
-        "Rent is 950 euros a month and due on the first.",
-        true,
-    ),
-    sensitive(
-        "se14",
-        "en",
-        "The train to Leeds leaves at 07:45 from platform 3.",
-        false,
-    ),
-    sensitive(
-        "se15",
-        "en",
-        "Bank sort code 20-45-17, account ending 4471.",
-        true,
-    ),
-    sensitive(
-        "se16",
-        "en",
-        "Watched a documentary about hospitals, it was quite good.",
-        false,
-    ),
-    sensitive(
-        "se17",
-        "nl",
-        "Morgen fietsen we met de kinderen naar het bos.",
-        false,
-    ),
-    sensitive(
-        "se18",
-        "en",
-        "Started therapy again, Tuesdays at four.",
-        true,
-    ),
-];
-
 const fn followed(
     id: &'static str,
     lang: &'static str,
@@ -615,7 +492,6 @@ pub const FOLLOWED_UP: &[FollowedUpCase] = &[
 pub fn case_count(kind: Kind) -> usize {
     match kind {
         Kind::Moved => MOVED.len(),
-        Kind::Sensitive => SENSITIVE.len(),
         Kind::FollowedUp => FOLLOWED_UP.len(),
     }
 }
@@ -633,8 +509,8 @@ pub struct Seeded {
 }
 
 impl Seeded {
-    /// The label as a yes or no, the way a verdict is read (true: moved, a health detail,
-    /// already written about).
+    /// The label as a yes or no, the way a verdict is read (true: moved, already written
+    /// about).
     pub fn truth(&self) -> bool {
         label_truth(self.label)
     }
@@ -706,24 +582,6 @@ pub fn seed(engine: &Engine, clock: &ManualClock) -> Vec<Seeded> {
         by_item.insert((Kind::Moved, item), (c.id, c.lang, c.label));
     }
 
-    for (i, c) in SENSITIVE.iter().enumerate() {
-        clock.set_str(&format!("2026-11-12T14:{i:02}:00Z"));
-        let item = keep(engine, c.text);
-        let mut cand = Candidate::new("Me", Predicate::Happened, c.text, c.text, 0.8);
-        cand.span = Some(Span::Quote {
-            text: c.text.to_string(),
-        });
-        let report = apply(engine, &item, cand);
-        let memory = report
-            .created
-            .first()
-            .or(report.reinforced.first())
-            .expect("a memory")
-            .clone();
-        let label = if c.label { "yes" } else { "no" };
-        by_item.insert((Kind::Sensitive, memory), (c.id, c.lang, label));
-    }
-
     for (i, c) in FOLLOWED_UP.iter().enumerate() {
         let at = 8 * 60 + 3 * i;
         clock.set_str(&format!("2026-11-13T{:02}:{:02}:00Z", at / 60, at % 60));
@@ -764,21 +622,14 @@ pub fn seed(engine: &Engine, clock: &ManualClock) -> Vec<Seeded> {
     }
 
     clock.set_str("2026-11-14T04:00:00Z");
-    engine
-        .queue_decisions(
-            day("2026-11-14"),
-            "2026-11-11T00:00:00Z".parse().expect("a time"),
-        )
-        .expect("queued");
+    engine.queue_decisions(day("2026-11-14")).expect("queued");
 
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
     for p in engine.pending_decisions(100_000).expect("pending") {
-        let key = match p.kind {
-            Kind::Sensitive => p.memory_id.clone(),
-            Kind::Moved | Kind::FollowedUp => p.item_id.clone(),
+        let Some(key) = p.item_id.clone() else {
+            continue;
         };
-        let Some(key) = key else { continue };
         let Some(&(id, lang, label)) = by_item.get(&(p.kind, key)) else {
             continue;
         };
@@ -800,7 +651,7 @@ pub fn seed(engine: &Engine, clock: &ManualClock) -> Vec<Seeded> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CaseResult {
     pub id: String,
-    /// The kind (`moved`, `sensitive`, `followed_up`) or a guard question.
+    /// The kind (`moved`, `followed_up`) or a guard question.
     pub group: &'static str,
     /// The true answer as yes or no.
     pub label: bool,

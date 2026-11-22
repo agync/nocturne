@@ -138,7 +138,6 @@ fn the_oracle_scores_perfectly_and_the_losing_answer_loses() {
         let losing = kind.losing_verdict();
         let label = match kind {
             Kind::Moved => "moved",
-            Kind::Sensitive => "no",
             Kind::FollowedUp => "yes",
         };
         let of_kind: Vec<_> = pending.iter().filter(|s| s.kind == kind).cloned().collect();
@@ -193,7 +192,7 @@ fn an_unsure_answer_is_the_band_and_not_an_error() {
     let (_dir, rows) = seeded();
     let of_kind: Vec<_> = rows
         .iter()
-        .filter(|s| s.kind == Kind::Sensitive)
+        .filter(|s| s.kind == Kind::FollowedUp)
         .cloned()
         .collect();
     struct Unsure;
@@ -213,7 +212,7 @@ fn an_unsure_answer_is_the_band_and_not_an_error() {
     }
     let results = block_on(run_arm(&Unsure, &of_kind, WAIT));
     let report = score_arm("unsure", &results);
-    let s = report.kind("sensitive");
+    let s = report.kind("followed_up");
     assert_eq!(s.band, s.n);
     assert_eq!(s.errors, 0);
     assert_eq!(s.correct, 0);
@@ -293,7 +292,7 @@ fn latency_percentiles_come_from_the_asked_cases() {
     let results: Vec<CaseResult> = (1..=100u64)
         .map(|ms| CaseResult {
             id: "x".into(),
-            group: "sensitive",
+            group: "followed_up",
             label: true,
             losing: false,
             verdict: Some(true),
@@ -301,7 +300,7 @@ fn latency_percentiles_come_from_the_asked_cases() {
             ms,
         })
         .collect();
-    let s = score_arm("timed", &results).kind("sensitive");
+    let s = score_arm("timed", &results).kind("followed_up");
     assert_eq!(s.p50_ms, 50);
     assert_eq!(s.p95_ms, 95);
 }

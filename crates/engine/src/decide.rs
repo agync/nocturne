@@ -122,20 +122,16 @@ impl Backend {
 pub enum Kind {
     /// Did a new note move or cancel a kept appointment? (`memory.rs`, `says_moved`)
     Moved,
-    /// Is a memory a health, money or ID detail? (`sensitive.rs`) Recorded only: it may one day
-    /// add marks, never remove them.
-    Sensitive,
     /// Has the person already written how a planned thing went? (the page question, rule 5)
     FollowedUp,
 }
 
 impl Kind {
-    pub const ALL: [Kind; 3] = [Kind::Moved, Kind::Sensitive, Kind::FollowedUp];
+    pub const ALL: [Kind; 2] = [Kind::Moved, Kind::FollowedUp];
 
     pub fn as_str(self) -> &'static str {
         match self {
             Kind::Moved => "moved",
-            Kind::Sensitive => "sensitive",
             Kind::FollowedUp => "followed_up",
         }
     }
@@ -169,12 +165,6 @@ impl Kind {
                     ),
                 ]),
             },
-            Kind::Sensitive => Question {
-                instructions: "Is this a detail about someone's health, money, or identity \
-                               documents and numbers?"
-                    .into(),
-                ask: Ask::YesNo,
-            },
             Kind::FollowedUp => Question {
                 instructions: "Does the later writing say how the planned thing went?".into(),
                 ask: Ask::YesNo,
@@ -182,51 +172,46 @@ impl Kind {
         }
     }
 
-    /// The labels that mean "yes" for this kind: moved, a health detail, already written about.
+    /// The labels that mean "yes" for this kind: moved, already written about.
     fn yes_labels(self) -> &'static [&'static str] {
         match self {
             Kind::Moved => &["moved", "cancelled"],
-            Kind::Sensitive | Kind::FollowedUp => &["yes"],
+            Kind::FollowedUp => &["yes"],
         }
     }
 
     fn no_labels(self) -> &'static [&'static str] {
         match self {
             Kind::Moved => &["same", "unrelated"],
-            Kind::Sensitive | Kind::FollowedUp => &["no"],
+            Kind::FollowedUp => &["no"],
         }
     }
 
     /// The verdict that would lose something if it were wrong: a wrong move closes the old
-    /// appointment, a missed health detail could leave the computer through Online answers, and
-    /// a wrong "already written" drops the person's one chance to say how it went.
+    /// appointment, and a wrong "already written" drops the person's one chance to say how it
+    /// went.
     pub fn losing_verdict(self) -> bool {
         match self {
             Kind::Moved | Kind::FollowedUp => true,
-            Kind::Sensitive => false,
         }
     }
 }
 
 /// How sure a decider must be before its verdict counts, per question and per backend. Until the
 /// decision check calibrates them on labelled data, these are cautious starting points: a move
-/// must be very sure (it would close a row), a health detail may be marked at less (marks are
-/// only ever added), and the page question sits between.
+/// must be very sure (it would close a row), and the page question a little less.
 pub fn threshold(kind: Kind, backend: Backend) -> f64 {
     match (kind, backend) {
         (Kind::Moved, Backend::Mind) => 0.9,
         (Kind::Moved, Backend::LlamaCpp) => 0.93,
         (Kind::Moved, Backend::Flm) => 0.9,
-        (Kind::Sensitive, Backend::Mind) => 0.5,
-        (Kind::Sensitive, Backend::LlamaCpp) => 0.6,
-        (Kind::Sensitive, Backend::Flm) => 0.65,
         (Kind::FollowedUp, Backend::Mind) => 0.8,
         (Kind::FollowedUp, Backend::LlamaCpp) => 0.85,
         (Kind::FollowedUp, Backend::Flm) => 0.85,
     }
 }
 
-/// The decider's verdict for `kind` (true: moved, a health detail, already written about), or
+/// The decider's verdict for `kind` (true: moved, already written about), or
 /// none when neither side reaches the threshold.
 pub fn verdict(kind: Kind, backend: Backend, answer: &Answer) -> Option<bool> {
     let t = threshold(kind, backend);
@@ -250,7 +235,7 @@ pub struct Pending {
     pub item_id: Option<String>,
     pub memory_id: Option<String>,
     pub decision: Decision,
-    /// What the rule said (true: moved, a health detail, already written about).
+    /// What the rule said (true: moved, already written about).
     pub rule: bool,
 }
 

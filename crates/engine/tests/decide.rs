@@ -240,57 +240,12 @@ fn delete_everything_empties_the_log() {
             )],
         )
         .unwrap();
-    f.engine
-        .queue_decisions(date("2026-11-13"), "2026-11-11T00:00:00Z".parse().unwrap())
-        .unwrap();
+    f.engine.queue_decisions(date("2026-11-13")).unwrap();
     assert!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM decisions") > 0);
     f.engine
         .delete_everything(nocturne_engine::DELETE_PHRASE)
         .unwrap();
     assert_eq!(sql_count(f.dir.path(), "SELECT COUNT(*) FROM decisions"), 0);
-}
-
-#[test]
-fn the_health_money_and_id_check_is_queued_for_new_memories_with_the_rule_outcome() {
-    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
-    let mut tagged = cand(
-        "Me",
-        Predicate::Scheduled,
-        "counsellor on Friday",
-        "I am seeing a counsellor on Friday because I have been feeling low.",
-    );
-    tagged.tags = vec!["health".into()];
-    learn(
-        &f.engine,
-        "Seeing a counsellor on Friday, feeling low.",
-        tagged,
-    );
-    learn(
-        &f.engine,
-        "Gran lives in Leeds.",
-        cand("Gran", Predicate::LivesIn, "Leeds", "Gran lives in Leeds."),
-    );
-    f.clock.set_str("2026-11-13T03:00:00Z");
-    let queued = f
-        .engine
-        .queue_decisions(date("2026-11-13"), "2026-11-12T00:00:00Z".parse().unwrap())
-        .unwrap();
-    assert_eq!(queued, 2);
-    let mut rows: Vec<_> = f
-        .engine
-        .pending_decisions(50)
-        .unwrap()
-        .into_iter()
-        .filter(|p| p.kind == Kind::Sensitive)
-        .map(|p| (p.decision.state.contains("counsellor"), p.rule))
-        .collect();
-    rows.sort();
-    assert_eq!(rows, [(false, false), (true, true)]);
-    let again = f
-        .engine
-        .queue_decisions(date("2026-11-13"), "2026-11-12T00:00:00Z".parse().unwrap())
-        .unwrap();
-    assert_eq!(again, 0, "a memory is checked once");
 }
 
 #[test]
@@ -329,9 +284,7 @@ fn a_page_question_a_later_note_stopped_is_queued_as_followed_up() {
         "Parents evening went fine, the teacher was kind.",
     );
     f.clock.set_str("2026-11-14T04:00:00Z");
-    f.engine
-        .queue_decisions(date("2026-11-14"), "2026-11-14T00:00:00Z".parse().unwrap())
-        .unwrap();
+    f.engine.queue_decisions(date("2026-11-14")).unwrap();
     let rows: Vec<_> = f
         .engine
         .pending_decisions(50)
@@ -352,14 +305,14 @@ fn a_page_question_a_later_note_stopped_is_queued_as_followed_up() {
 
 #[test]
 fn thresholds_live_in_code_per_question_and_per_backend() {
-    for kind in [Kind::Moved, Kind::Sensitive, Kind::FollowedUp] {
+    for kind in Kind::ALL {
         for backend in [Backend::Mind, Backend::LlamaCpp, Backend::Flm] {
             let t = threshold(kind, backend);
             assert!((0.5..1.0).contains(&t), "{kind:?} {backend:?} {t}");
         }
     }
     assert!(
-        threshold(Kind::Moved, Backend::LlamaCpp) > threshold(Kind::Sensitive, Backend::LlamaCpp)
+        threshold(Kind::Moved, Backend::LlamaCpp) > threshold(Kind::FollowedUp, Backend::LlamaCpp)
     );
     // Below the threshold the decider has no verdict, either way.
     let mut unsure = answer("moved", 0.55);
@@ -370,50 +323,12 @@ fn thresholds_live_in_code_per_question_and_per_backend() {
         Some(true)
     );
     assert_eq!(
-        verdict(Kind::Sensitive, Backend::Flm, &answer("yes", 0.9)),
+        verdict(Kind::FollowedUp, Backend::Flm, &answer("yes", 0.9)),
         Some(true)
     );
     assert_eq!(
         verdict(Kind::FollowedUp, Backend::Mind, &answer("no", 1.0)),
         Some(false)
-    );
-}
-
-#[test]
-fn undoing_the_keep_a_quote_came_from_takes_the_row_with_it() {
-    let f = fixture_at("2026-11-12T08:05:00Z", "Europe/London");
-    let first = "Seeing a counsellor on Friday, feeling low.";
-    let mut c = cand(
-        "Me",
-        Predicate::Scheduled,
-        "counsellor on Friday",
-        "I am seeing a counsellor on Friday.",
-    );
-    c.span = Some(Span::Quote { text: first.into() });
-    let (a, memory) = learn(&f.engine, first, c.clone());
-    f.clock.set_str("2026-11-12T08:06:00Z");
-    let second = "Counsellor on Friday, booked.";
-    c.span = Some(Span::Quote {
-        text: second.into(),
-    });
-    let b = keep(&f.engine, second);
-    let r = f.engine.apply(&b, vec![c]).unwrap();
-    assert_eq!(r.reinforced, [memory], "{r:?}");
-    f.engine
-        .queue_decisions(date("2026-11-13"), "2026-11-12T00:00:00Z".parse().unwrap())
-        .unwrap();
-    let quoted = "SELECT COUNT(*) FROM decisions WHERE state LIKE '%feeling low%'";
-    assert_eq!(sql_count(f.dir.path(), quoted), 1);
-    f.engine.unkeep(&a).unwrap();
-    assert_eq!(
-        f.engine.memories(MemoryFilter::default()).unwrap().len(),
-        1,
-        "the memory stays with its other source"
-    );
-    assert_eq!(
-        sql_count(f.dir.path(), quoted),
-        0,
-        "no word of the undone keep stays"
     );
 }
 
@@ -453,9 +368,7 @@ fn undoing_a_later_note_takes_the_followed_up_row_with_it() {
         "Parents evening went fine, the teacher was kind.",
     );
     f.clock.set_str("2026-11-13T21:02:00Z");
-    f.engine
-        .queue_decisions(date("2026-11-14"), "2026-11-13T00:00:00Z".parse().unwrap())
-        .unwrap();
+    f.engine.queue_decisions(date("2026-11-14")).unwrap();
     let quoted = "SELECT COUNT(*) FROM decisions WHERE state LIKE '%teacher was kind%'";
     assert_eq!(sql_count(f.dir.path(), quoted), 1);
     f.engine.unkeep(&later).unwrap();
@@ -488,4 +401,26 @@ fn rows_older_than_thirty_days_are_dropped_even_without_a_night_tidy() {
         .unwrap();
     let old = "SELECT COUNT(*) FROM decisions WHERE created_at < '2026-12-01'";
     assert_eq!(sql_count(f.dir.path(), old), 0);
+}
+
+/// Rows an earlier version logged for the health, money and ID check are dropped, never asked.
+#[test]
+fn rows_of_the_removed_check_are_dropped() {
+    let (f, memory) = with_appointment();
+    let conn = rusqlite::Connection::open(f.dir.path().join("nocturne.db")).unwrap();
+    conn.execute(
+        "INSERT INTO decisions(id, kind, memory_id, state, rule, created_at) \
+         VALUES ('dec_old', 'sensitive', ?1, 'Memory: the dentist.', 1, '2026-11-12T11:00:00.000Z')",
+        [&memory],
+    )
+    .unwrap();
+    assert!(f.engine.pending_decisions(50).unwrap().is_empty());
+    f.engine.queue_decisions(date("2026-11-13")).unwrap();
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM decisions WHERE kind = 'sensitive'"
+        ),
+        0
+    );
 }
