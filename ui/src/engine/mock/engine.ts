@@ -75,6 +75,8 @@ import type {
   EngineEvents,
   EntryAt,
   ForgetItems,
+  MoveChoice,
+  MoveView,
   RecordingState,
   Unsubscribe,
 } from "../client";
@@ -140,6 +142,26 @@ function remoteFromAddress(): RemoteOptions {
     stepMs: step > 0 ? step : undefined,
     phone: params.get("mockPhone") === "typed" ? "typed" : undefined,
   };
+}
+
+/** `?mockMove=offered|here|arriving|checking|arrived` opens with a phone's memory moving here. */
+function moveFromAddress(): MoveView | null {
+  if (typeof location === "undefined") return null;
+  const name = "Maya’s phone";
+  switch (new URLSearchParams(location.search).get("mockMove")) {
+    case "offered":
+      return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: false };
+    case "here":
+      return { phase: "offered", name, items: 1284, bytes: 1_400_000_000, here: true };
+    case "arriving":
+      return { phase: "arriving", name, done: 820_000_000, size: 1_400_000_000 };
+    case "checking":
+      return { phase: "checking", name };
+    case "arrived":
+      return { phase: "arrived", name, online: false };
+    default:
+      return null;
+  }
 }
 
 /** How long after keeping something it can still be taken back. */
@@ -1883,6 +1905,29 @@ export class MockEngine implements EngineClient {
     this.remote.update(patch);
   openRemoteSignIn = (): Promise<void> => this.remote.openSignIn();
   newComputerKey = (): Promise<RemoteView> => this.remote.newKey();
+
+  // A phone's memory moving here
+
+  private moving: MoveView | null = moveFromAddress();
+
+  /** Tests and stories: a phone's memory, as the computer would show it. */
+  setMove(view: MoveView | null): void {
+    this.moving = view;
+    this.emit("move-changed", view);
+  }
+
+  getMove = async (): Promise<MoveView | null> => clone(this.moving);
+  answerMove = async (choice: MoveChoice): Promise<void> => {
+    const now = this.moving;
+    if (now?.phase !== "offered") throw new Error("There is no offer to answer");
+    this.setMove(
+      choice === "move" ? { phase: "arriving", name: now.name, done: 0, size: now.bytes } : null,
+    );
+  };
+  finishMove = async (): Promise<void> => {
+    if (this.moving?.phase !== "arrived") throw new Error("No memory is waiting");
+    this.setMove(null);
+  };
 
   // Online answers
 

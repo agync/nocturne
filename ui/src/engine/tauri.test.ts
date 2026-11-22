@@ -159,6 +159,9 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ],
   ["openRemoteSignIn", [], "open_remote_sign_in", []],
   ["newComputerKey", [], "new_computer_key", []],
+  ["getMove", [], "get_move", []],
+  ["answerMove", ["move"], "answer_move", ["choice"]],
+  ["finishMove", [], "finish_move", []],
   ["getOnline", [], "get_online", []],
   [
     "checkOnline",

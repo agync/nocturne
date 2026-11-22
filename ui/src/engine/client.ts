@@ -125,7 +125,18 @@ export interface EngineEvents {
   "device-active": DeviceView;
   "online-changed": OnlineView;
   "models-changed": ModelsView;
+  "move-changed": MoveView | null;
 }
+
+/** A phone's memory moving to this computer, as the window shows it (`get_move`). */
+export type MoveView =
+  | { phase: "offered"; name: string; items: number; bytes: number; here: boolean }
+  | { phase: "arriving"; name: string; done: number; size: number }
+  | { phase: "checking"; name: string }
+  | { phase: "arrived"; name: string; online: boolean };
+
+/** The person's answer to a phone that offers its memory. */
+export type MoveChoice = "move" | "notNow";
 
 export type EngineEventName = keyof EngineEvents;
 
@@ -143,6 +154,7 @@ export const ENGINE_EVENT_NAMES: readonly EngineEventName[] = [
   "device-active",
   "online-changed",
   "models-changed",
+  "move-changed",
 ];
 
 /** What a window can do about recording: `available`, or why it cannot. */
@@ -327,6 +339,11 @@ export interface EngineClient {
   openRemoteSignIn(): Promise<void>;
   /** A new key for this computer; every phone has to be added again. */
   newComputerKey(): Promise<RemoteView>;
+  /** A phone's memory moving here, if one is; it follows `move-changed`. */
+  getMove(): Promise<MoveView | null>;
+  answerMove(choice: MoveChoice): Promise<void>;
+  /** "Open today's page": the memory that arrived takes its place as Nocturne starts again. */
+  finishMove(): Promise<void>;
 
   /** Online answers. Main window only; the key goes out in `checkOnline` and never comes back. */
   getOnline(): Promise<OnlineView>;
