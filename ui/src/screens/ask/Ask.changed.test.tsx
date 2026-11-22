@@ -63,6 +63,25 @@ describe("the notice for someone who agreed before", () => {
     expect(engine.online.view().changeNotice).toBe(false);
   });
 
+  it("answers on this computer, records nothing, and comes back with the next question", async () => {
+    const engine = await open("changed");
+    const see = vi.spyOn(engine, "seeOnlineChange");
+    await screen.findByRole("heading", { name: TITLE });
+    const notice = screen.getByRole("heading", { name: TITLE }).closest("section");
+    expect([...(notice?.querySelectorAll("button") ?? [])].map((b) => b.textContent)).toEqual([
+      "Continue",
+      "Answer on this computer",
+      "Online answers settings",
+    ]);
+    await userEvent.click(screen.getByRole("button", { name: "Answer on this computer" }));
+    await waitFor(() =>
+      expect(engine.asked).toEqual([{ question: QUESTION, place: "thisComputer" }]),
+    );
+    expect(see).not.toHaveBeenCalled();
+    expect(screen.queryByRole("heading", { name: TITLE })).toBeNull();
+    expect(engine.online.view().changeNotice).toBe(true);
+  });
+
   it("leads to Online answers in Settings and sends nothing", async () => {
     const engine = await open("changed");
     await screen.findByRole("heading", { name: TITLE });

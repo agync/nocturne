@@ -566,6 +566,7 @@ export default function Ask() {
             busy={seeing}
             failed={noticeFailed}
             onContinue={() => void continueHeld()}
+            onThisComputer={() => start(held.question, true, "thisComputer")}
             onSettings={() => {
               setHeld(null);
               navigate("/settings/online");

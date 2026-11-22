@@ -88,6 +88,7 @@
   "ask.changed.waits": "Your question waits until you continue.",
   "ask.changed.failed": "Nocturne couldn’t save this, so your question hasn’t been sent. Try again.",
   "ask.changed.continue": "Continue",
+  "ask.changed.computer": "Answer on this computer",
   "ask.changed.settings": "Online answers settings",
   "ask.notSure.online.lead": "Not sure. The answer that came back didn’t match anything you kept, so Nocturne won’t show it. {count, plural, one {This comes} other {These come}} close:",
   "ask.where.label": "Answer this",
