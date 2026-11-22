@@ -9,6 +9,7 @@
 pub mod calendar;
 pub mod health;
 pub mod ledger;
+pub mod sink;
 
 use std::future::Future;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -23,6 +24,7 @@ use nocturne_contract::{
 use serde::{Deserialize, Serialize};
 
 pub use ledger::{CalendarSettings, HealthSettings, LastSent, Ledger, LedgerFile, SourceSent};
+pub use sink::{ChannelSink, EngineSink, LocalStore, Sink, ViaSink};
 
 /// Two days back to two weeks ahead.
 pub const DAYS_BACK: u32 = 2;
@@ -413,6 +415,18 @@ impl Syncer {
             });
         }
         Some(report)
+    }
+
+    /// Like [`Syncer::sync`], into a sink: the paired computer or this phone's own store. The
+    /// ledger is the same either way, so moving from one to the other keeps what was sent.
+    pub async fn sync_to(
+        &self,
+        device: &impl Device,
+        sink: &impl Sink,
+        takes: &[PhoneFeature],
+        now: String,
+    ) -> Option<SyncReport> {
+        self.sync(device, &ViaSink(sink), takes, now).await
     }
 
     /// What This phone shows, from the ledger and what the phone says now.
