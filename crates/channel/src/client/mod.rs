@@ -88,6 +88,7 @@ pub fn needs_build(call: &RemoteCall) -> u32 {
         RemoteCall::Introduce { .. } => INTRODUCE_BUILD,
         RemoteCall::AnswerJournalQuestion { .. } => JOURNAL_ANSWER_BUILD,
         RemoteCall::KeepText { web: true, .. } => WEB_KEEP_BUILD,
+        RemoteCall::OfferMemory { .. } | RemoteCall::MemoryDone { .. } => MEMORY_MOVE_BUILD,
         // The sends are offered only to a computer whose hello lists them.
         _ => MIN_PHONE_BUILD,
     }

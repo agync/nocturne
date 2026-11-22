@@ -101,6 +101,9 @@ pub const MAX_ITEM_TEXT: usize = 16_384;
 pub const MAX_ITEM: u64 = 52_428_800;
 pub const MAX_DAY: u64 = 524_288_000;
 pub const MAX_INCOMING_TOTAL: u64 = 104_857_600;
+/// The most a phone may offer to move to a computer as one memory (`offerMemory`), in bytes. It
+/// goes across in `CHUNK` pieces, outside the daily and incoming totals above.
+pub const MAX_MEMORY_BYTES: u64 = 4_294_967_296;
 pub const MAX_LONG_POLL_BATCH: usize = 8;
 pub const MAX_CONNECTIONS: usize = 16;
 /// Live sessions; pending ones do not count.
@@ -139,6 +142,8 @@ pub const INTRODUCE_BUILD: u32 = 2;
 pub const JOURNAL_ANSWER_BUILD: u32 = 2;
 /// The first build that keeps a shared web page as untrusted (`keepText` with `web`).
 pub const WEB_KEEP_BUILD: u32 = 2;
+/// The first build that moves a phone's memory to a computer (`offerMemory`, `memoryDone`).
+pub const MEMORY_MOVE_BUILD: u32 = 2;
 
 /// HTTP statuses between the listener and the phone.
 ///
@@ -310,6 +315,7 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         MAX_ITEM,
         MAX_DAY,
         MAX_INCOMING_TOTAL,
+        MAX_MEMORY_BYTES,
         MAX_LONG_POLL_BATCH,
         MAX_CONNECTIONS,
         MAX_SESSIONS_PER_DEVICE,
@@ -333,6 +339,7 @@ pub fn table() -> serde_json::Map<String, serde_json::Value> {
         INTRODUCE_BUILD,
         JOURNAL_ANSWER_BUILD,
         WEB_KEEP_BUILD,
+        MEMORY_MOVE_BUILD,
         HTTP_OFF,
         HTTP_ENDED,
         HTTP_POLL_BUSY,
