@@ -5,10 +5,12 @@
 #        phone/check-release.sh <apk-or-aab>...     after building: the library in each package
 #
 # Fails when the feature is on, when no package is named, when a package holds no phone library,
-# or when a library holds the marker the feature adds.
+# when a library holds the marker the feature adds, or when the debug-only speech probe is in the
+# code of a package.
 set -euo pipefail
 
 marker=nocturne-dev-loopback-marker
+probe=SpeechProbeActivity
 lib=libnocturne_phone_lib.so
 
 if [ "${1:-}" = --features ]; then
@@ -41,4 +43,16 @@ for package in "$@"; do
         fi
         echo "ok    $package: $entry"
     done <<< "$libs"
+    dexes=$(unzip -Z1 "$package" | grep -E '\.dex$' || true)
+    if [ -z "$dexes" ]; then
+        echo "no code in $package" >&2
+        exit 1
+    fi
+    while IFS= read -r dex; do
+        found=$(unzip -p "$package" "$dex" | grep -ac "$probe" || true)
+        if [ "$found" != 0 ]; then
+            echo "the debug-only speech probe is in $package ($dex)" >&2
+            exit 1
+        fi
+    done <<< "$dexes"
 done
