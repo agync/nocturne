@@ -15,16 +15,17 @@ PACKAGE = {"package", "package-linux"}
 
 # One changed path for each alternative in the table, and the areas it alone selects.
 CASES = (
-    (".cargo/config.toml", RUST),
     ("clippy.toml", RUST),
-    ("Cargo.toml", RUST | PACKAGE | {"android"}),
-    ("Cargo.lock", RUST | PACKAGE | {"android"}),
+    ("Cargo.toml", RUST | PACKAGE | {"android", "phone-engine"}),
+    ("Cargo.lock", RUST | PACKAGE | {"android", "phone-engine"}),
     ("helpers.lock", RUST | PACKAGE),
     ("lemonade.lock", RUST | PACKAGE | {"site"}),
-    ("crates/engine/src/lib.rs", RUST),
-    ("crates/engine/tests/round2.rs", RUST),
+    ("crates/engine/src/lib.rs", RUST | {"phone-engine"}),
+    ("crates/engine/tests/round2.rs", RUST | {"phone-engine"}),
     ("crates/helpers/fixtures/help/tailnet/1.104.6/help.txt", RUST),
     ("crates/channel/src/words.txt", RUST | {"ui"} | {"android"}),
+    ("crates/contract/src/lib.rs", RUST | {"phone-engine"}),
+    (".cargo/config.toml", RUST | {"phone-engine"}),
     ("src-tauri/src/remote/mod.rs", RUST | {"ui"}),
     ("src-tauri/tests/ipc.rs", RUST | {"ui"}),
     ("src-tauri/bundle/macos.json", RUST | PACKAGE | {"ui"}),
@@ -84,6 +85,7 @@ JOBS = {
     "package-macos": "package",
     "package-windows": "package",
     "android": "android",
+    "android-engine": "phone-engine",
 }
 
 

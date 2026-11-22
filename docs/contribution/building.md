@@ -64,6 +64,7 @@ they cover all of it. On a pull request, each job runs only when a path it reads
 | `rust lint` | `cargo clippy --workspace --all-targets -- -D warnings` on `macos-15` and `windows-2022` | the code compiled only for macOS or Windows, which the Linux lint never builds | the Rust side |
 | `ui tests` | `npm test` in `ui/` on `macos-15` and `windows-2022` | the interface tests on macOS and Windows | `ui/` |
 | `android` | `make ui/install phone/android`, then the plugins' `testDebugUnitTest` and `lintDebug` through Gradle | the phone app's debug APK for arm64, its plugins' JVM tests and Android lint; the APK is kept for 7 days for emulator checks | `phone/`, `crates/channel/`, `ui/src/phone/`, `ui/phone/`, `ui/vite.phone.config.ts`, `ui/package*.json`, `Cargo.*` |
+| `android (engine)` | `cargo check -p nocturne-engine --target aarch64-linux-android` with the NDK's clang | the engine builds for the phone, with its bundled SQLite, without the APK build | `crates/contract/`, `crates/engine/`, `.cargo/`, `Cargo.*` |
 | `gate` | | fails when any job above failed or was cancelled; the one job to require | always |
 
 The `changed paths` job compares a pull request with its merge base, and its run summary says
