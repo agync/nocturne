@@ -5,7 +5,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { PhoneHello, PhoneKept, RemoteAnswer, RemoteCall } from "../../engine/bindings";
 import { toBase64Url } from "../bytes";
-import { type ConnectedEngine, type Connection, PhoneRequestError } from "../engine";
+import {
+  type ConnectedEngine,
+  type Connection,
+  type KeepMarks,
+  PhoneRequestError,
+} from "../engine";
 import { asError, marked, mimeOf, SLICE, unframe } from "../native/engine";
 import * as P from "../protocol";
 
@@ -38,6 +43,15 @@ function expect<K extends RemoteAnswer["type"]>(
   if (answer.type === "error") throw new PhoneRequestError(answer.code);
   if (answer.type !== kind) throw new PhoneRequestError("invalid");
   return answer as Extract<RemoteAnswer, { type: K }>;
+}
+
+/** How a thing was kept, noted for its page; a keep never fails for want of it. */
+async function noted(kept: PhoneKept, marks: KeepMarks | undefined): Promise<PhoneKept> {
+  if (marks?.how && !kept.duplicate)
+    await invoke("home_local", {
+      call: { cmd: "setKeptHow", id: kept.item.id, how: marks.how },
+    }).catch(() => undefined);
+  return kept;
 }
 
 const once = async <K extends RemoteAnswer["type"]>(call: RemoteCall, kind: K) =>
@@ -92,7 +106,8 @@ export function createLocalEngine(options: {
       if (text.trim() === "") throw new PhoneRequestError("invalid");
       if (new TextEncoder().encode(text).length > P.MAX_TEXT)
         throw new PhoneRequestError("tooLarge");
-      return (await once({ cmd: "keepText", text, clientId, ...marked(marks) }, "kept")).kept;
+      const kept = (await once({ cmd: "keepText", text, clientId, ...marked(marks) }, "kept")).kept;
+      return noted(kept, marks);
     },
     async keepBytes(blob, clientId, caption, marks) {
       const note = (caption ?? "").trim();
@@ -100,7 +115,7 @@ export function createLocalEngine(options: {
       if (blob.size > P.MAX_ITEM) throw new PhoneRequestError("tooLarge");
       const mime = await mimeOf(blob);
       if (marks?.good && !mime.startsWith("image/")) throw new PhoneRequestError("invalid");
-      return keepWith(
+      const kept = await keepWith(
         {
           cmd: "keepBytes",
           mime,
@@ -111,16 +126,18 @@ export function createLocalEngine(options: {
         },
         blob,
       );
+      return noted(kept, marks);
     },
     async keepRecording(blob, clientId, marks) {
       if (marks?.good) throw new PhoneRequestError("invalid");
       if (blob.size < 1) throw new PhoneRequestError("invalid");
       if (blob.size > P.MAX_ITEM) throw new PhoneRequestError("tooLarge");
       const mime = await mimeOf(blob);
-      return keepWith(
+      const kept = await keepWith(
         { cmd: "keepRecording", mime, size: blob.size, clientId, ...marked(marks) },
         blob,
       );
+      return noted(kept, marks);
     },
     async keepCheckIn(input, clientId, capturedAt) {
       if (input.replaces) throw new PhoneRequestError("invalid");

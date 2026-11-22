@@ -51,6 +51,7 @@ function build(backing: Backing): Queue {
     good: keep.good,
     capturedAt: madeAt(keep),
     web: keep.web,
+    how: keep.how,
   });
 
   async function send(engine: PhoneEngine, keep: PendingKeep, out: FlushResult) {

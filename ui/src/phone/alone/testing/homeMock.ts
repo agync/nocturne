@@ -10,6 +10,7 @@ import type {
   HomeStats,
   JournalDay,
   KeptCounts,
+  KeptHow,
   PhoneItem,
   PhoneMode,
   PutAsideMemory,
@@ -161,7 +162,16 @@ export function homeState(scenario: HomeScenario) {
           },
         ]
       : [];
+  if (scenario === "aside" && new URLSearchParams(location.search).has("twice"))
+    aside.unshift({
+      id: "store-put-aside-2026-11-20-171000",
+      at: "2026-11-20T17:10:00.000Z",
+      bytes: 401_000_000,
+      counts: { things: 120, journalEntries: 42, photosAndRecordings: 37 },
+    });
   let calendarKept = 6;
+  let healthKept = 412;
+  const how = new Map<string, KeptHow>([["note-swap", "typed"]]);
   const forgotten = new Set<string>();
   let lastBackup: HomeStats["lastBackup"] = null;
   const privates = new Set<string>();
@@ -301,6 +311,14 @@ export function homeState(scenario: HomeScenario) {
         return { type: "deleted" };
       case "putAside":
         return { type: "putAside", memories: aside };
+      case "setKeptHow":
+        how.set(call.id, call.how);
+        return { type: "keptHowSet" };
+      case "itemKept":
+        return {
+          type: "itemKept",
+          kept: { how: how.get(call.id) ?? null, device: null, workedOut: false },
+        };
       case "bringBack":
         if (!aside.some((m) => m.id === call.id)) return { type: "error", code: "notFound" };
         aside = [
@@ -316,13 +334,13 @@ export function homeState(scenario: HomeScenario) {
         aside = aside.filter((m) => m.id !== call.id);
         return { type: "putAsideDeleted" };
       case "previewSourceDelete":
-        if (call.source === "health" || calendarKept === 0)
+        if ((call.source === "health" ? healthKept : calendarKept) === 0)
           return { type: "error", code: "notFound" };
         return {
           type: "sourceDeletePreview",
           preview: {
-            token: "kept-token",
-            items: calendarKept,
+            token: `kept-${call.source}`,
+            items: call.source === "health" ? healthKept : calendarKept,
             versions: 0,
             memories: 0,
             pageLines: 0,
@@ -331,8 +349,9 @@ export function homeState(scenario: HomeScenario) {
           },
         };
       case "deleteSource":
-        if (call.token !== "kept-token") return { type: "error", code: "tooLate" };
-        calendarKept = 0;
+        if (call.token !== `kept-${call.source}`) return { type: "error", code: "tooLate" };
+        if (call.source === "health") healthKept = 0;
+        else calendarKept = 0;
         return { type: "sourceDeleted" };
       case "previewForgetItem": {
         const row = rows.find((r) => r.item.id === call.id);

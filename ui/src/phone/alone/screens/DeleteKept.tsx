@@ -66,7 +66,7 @@ export function DeleteKept({
     setBusy(true);
     setFailed(false);
     try {
-      await remove(ready.token, source, calendar && alsoStop);
+      await remove(ready.token, source, alsoStop);
       setDone(true);
     } catch (e) {
       setBusy(false);
@@ -85,7 +85,7 @@ export function DeleteKept({
         title={t("phones.delete.done")}
         body={
           calendar
-            ? t("phones.delete.untouched.calendar")
+            ? t("phone.alone.deleteKept.untouched.calendar")
             : t("phone.alone.deleteKept.untouched.health")
         }
         button={t("phone.sources.ok")}
@@ -116,7 +116,9 @@ export function DeleteKept({
               : "phone.alone.deleteKept.title.health",
           )}
         </h1>
-        <p className="ph-body ph-ink2">{t("phone.alone.deleteKept.lead")}</p>
+        <p className="ph-body ph-ink2">
+          {calendar ? t("phone.alone.deleteKept.lead") : t("phone.alone.deleteKept.lead.health")}
+        </p>
         {choose ? (
           <div className="ph-kept-choice" role="radiogroup" aria-labelledby={`${stopId}-choose`}>
             <p className="ph-lbl" id={`${stopId}-choose`}>
@@ -131,6 +133,7 @@ export function DeleteKept({
                   disabled={busy}
                   onChange={() => {
                     setRefreshed(false);
+                    setAlsoStop(true);
                     setSource(value);
                   }}
                 />
@@ -182,7 +185,7 @@ export function DeleteKept({
             </ul>
           </>
         )}
-        {calendar && ready !== null ? (
+        {ready !== null ? (
           <label className="ph-check" htmlFor={stopId}>
             <input
               id={stopId}
@@ -192,16 +195,23 @@ export function DeleteKept({
               onChange={(e) => setAlsoStop(e.target.checked)}
             />
             <span className="ph-srow-text">
-              <span>{t("phone.alone.deleteKept.alsoStop")}</span>
-              <span className="ph-srow-hint">{t("phone.alone.deleteKept.alsoStop.hint")}</span>
+              <span>
+                {calendar
+                  ? t("phone.alone.deleteKept.alsoStop")
+                  : t("phone.alone.deleteKept.alsoStop.health")}
+              </span>
+              <span className="ph-srow-hint">
+                {calendar
+                  ? t("phone.alone.deleteKept.alsoStop.hint")
+                  : t("phone.alone.deleteKept.alsoStop.health.hint")}
+              </span>
             </span>
           </label>
         ) : null}
         <p className="ph-small">
           {calendar
-            ? t("phones.delete.untouched.calendar")
-            : t("phone.alone.deleteKept.untouched.health")}{" "}
-          {t("forget.stays.out")}
+            ? t("phone.alone.deleteKept.untouched.calendar")
+            : t("phone.alone.deleteKept.untouched.health")}
         </p>
         {failed ? (
           <p className="ph-error" role="alert">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { formatDay, formatDuration } from "../../copy/format";
+import { formatDay, formatDuration, formatLongDay, formatTime12 } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { PhoneItem } from "../../engine/bindings";
+import type { ItemKept, KeptHow, PhoneItem } from "../../engine/bindings";
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
 import { Group, Row } from "../native/screens/chrome";
 import { Switch } from "../native/screens/parts";
@@ -52,12 +52,48 @@ export interface AloneItem {
   found: boolean;
   /** "Forget…" (what was learned from it) or "Delete…" (the thing too). */
   onForget?(id: string, withOriginal: boolean): void;
+  /** How it was kept, and whether anything was worked out from it. */
+  kept?(id: string): Promise<ItemKept>;
+}
+
+const HOW: Record<KeptHow, Parameters<typeof t>[0]> = {
+  typed: "phone.alone.kept.typed",
+  taken: "phone.alone.kept.taken",
+  chosen: "phone.alone.kept.chosen",
+  recorded: "phone.alone.kept.recorded",
+  shared: "phone.alone.kept.shared",
+  calendar: "phone.alone.kept.calendar",
+  health: "phone.alone.kept.health",
+};
+
+/** "Kept" / "{how} · {day}, {time}": shown only when how it was kept is known. */
+function keptHint(kept: ItemKept, at: string): string | null {
+  const how = kept.how
+    ? t(HOW[kept.how])
+    : kept.device
+      ? t("phone.alone.kept.on", { device: kept.device })
+      : null;
+  if (!how) return null;
+  return t("phone.alone.kept.hint", { how, day: formatLongDay(at), time: formatTime12(at) });
 }
 
 export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps) {
   const [load, setLoad] = useState<Load>({ name: "loading" });
   const [attempt, setAttempt] = useState(0);
+  const [kept, setKept] = useState<ItemKept | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
+  const keptOf = alone?.kept;
+  useEffect(() => {
+    if (!keptOf) return;
+    let gone = false;
+    keptOf(itemId).then(
+      (k) => !gone && setKept(k),
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+  }, [keptOf, itemId]);
   const blob = load.name === "ready" ? load.blob : null;
   const rendering = blob ? renderingFor(blob.type) : null;
   // A type that cannot be shown safely never gets a URL.
@@ -251,12 +287,19 @@ export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps
             }}
           />
         ) : null}
+        {alone && kept && keptHint(kept, item.keptAt) ? (
+          <Group>
+            <Row label={t("phone.alone.kept")} hint={keptHint(kept, item.keptAt) ?? undefined} />
+          </Group>
+        ) : null}
         {alone?.onForget ? (
           <Group>
-            <Row
-              label={t("phone.alone.item.forget")}
-              onPress={() => alone.onForget?.(item.id, false)}
-            />
+            {kept?.workedOut ? (
+              <Row
+                label={t("phone.alone.item.forget")}
+                onPress={() => alone.onForget?.(item.id, false)}
+              />
+            ) : null}
             <Row
               label={t("phone.alone.item.delete")}
               danger

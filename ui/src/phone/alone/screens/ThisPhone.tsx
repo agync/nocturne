@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { formatBytes, formatLongDay } from "../../../copy/format";
+import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, PutAsideMemory } from "../../../engine/bindings";
 import type { NativeChannel, ThisPhoneSources } from "../../native/api";
@@ -22,6 +22,19 @@ export function aloneSources(s: ThisPhoneSources): ThisPhoneSources {
   };
 }
 
+/** Two put aside on the same day: each says its time too. */
+export function sameDay(m: PutAsideMemory, all: readonly PutAsideMemory[]): boolean {
+  const day = formatLongDay(m.at);
+  return all.some((o) => o.id !== m.id && formatLongDay(o.at) === day);
+}
+
+function putAsideLabel(m: PutAsideMemory, all: readonly PutAsideMemory[]): string {
+  const day = formatLongDay(m.at);
+  return sameDay(m, all)
+    ? t("phone.alone.thisPhone.putAsideAt", { day, time: formatTime12(m.at) })
+    : t("phone.alone.thisPhone.putAside", { day });
+}
+
 /**
  * This phone on a phone alone: where the memory is and its mind, what the phone brings, its
  * name and what it can do, then moving, a backup and deleting everything.
@@ -40,15 +53,19 @@ export function HomeThisPhone({
   putAside,
   onPutAside,
   onDeleteKept,
+  onPermissions,
   nearlyFull,
 }: {
   channel: NativeChannel;
   stats(): Promise<HomeStats>;
   /** The memories put aside on this phone, newest first. */
   putAside(): Promise<PutAsideMemory[]>;
-  onPutAside(memory: PutAsideMemory): void;
+  /** `withTime`: another was put aside the same day, so the time tells them apart. */
+  onPutAside(memory: PutAsideMemory, withTime: boolean): void;
   /** "Delete what was kept…" from the calendar or Health. */
   onDeleteKept(): void;
+  /** "Your phone's permissions", and where to take them back. */
+  onPermissions(): void;
   /** Less than 500 MB is free. */
   nearlyFull: boolean;
   /** This app's version. */
@@ -127,8 +144,8 @@ export function HomeThisPhone({
           {aside.map((m) => (
             <Row
               key={m.id}
-              label={t("phone.alone.thisPhone.putAside", { day: formatLongDay(m.at) })}
-              onPress={() => onPutAside(m)}
+              label={putAsideLabel(m, aside)}
+              onPress={() => onPutAside(m, sameDay(m, aside))}
             />
           ))}
         </Group>
@@ -174,6 +191,7 @@ export function HomeThisPhone({
         </Group>
         <Group title={t("phone.app.settings.help")}>
           <Row label={t("phone.sources.privacy")} onPress={openPolicy} />
+          <Row label={t("phone.alone.permissions.title")} onPress={onPermissions} />
           <Row
             label={t("phone.app.settings.can")}
             hint={`${t("phone.alone.thisPhone.can")} ${t("phone.alone.thisPhone.removing")}`}

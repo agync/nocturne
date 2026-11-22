@@ -32,6 +32,7 @@ import { DeleteEverything } from "./screens/DeleteEverything";
 import { DeleteKept } from "./screens/DeleteKept";
 import { HomeFind } from "./screens/Find";
 import { ForgetItem } from "./screens/Forget";
+import { Permissions } from "./screens/Permissions";
 import { PutAside } from "./screens/PutAside";
 import { HomeThisPhone } from "./screens/ThisPhone";
 import { HomeToday } from "./screens/Today";
@@ -47,9 +48,10 @@ type View =
   | { name: "mind" }
   | { name: "backup" }
   | { name: "delete" }
-  | { name: "putAside"; memory: PutAsideMemory }
+  | { name: "putAside"; memory: PutAsideMemory; withTime: boolean }
   | { name: "deleteKept"; source: PhoneSource; choose: boolean }
   | { name: "forget"; id: string; withOriginal: boolean }
+  | { name: "permissions" }
   | { name: "keep"; recording?: boolean }
   | { name: "checkin"; part?: FeelingPart }
   | { name: "original"; id: string }
@@ -70,6 +72,7 @@ const OWN: ReadonlySet<string> = new Set([
   "putAside",
   "deleteKept",
   "forget",
+  "permissions",
   "keep",
   "checkin",
   "original",
@@ -245,6 +248,7 @@ export function HomeApp({
         return found.current;
       },
       onForget: (id: string, withOriginal: boolean) => go({ name: "forget", id, withOriginal }),
+      kept: home.itemKept,
     }),
     [home, go],
   );
@@ -410,6 +414,7 @@ export function HomeApp({
       screen = (
         <PutAside
           memory={view.memory}
+          withTime={view.withTime}
           bringBack={home.bringBack}
           remove={home.deletePutAside}
           onBack={back}
@@ -419,6 +424,9 @@ export function HomeApp({
           }}
         />
       );
+      break;
+    case "permissions":
+      screen = <Permissions ios={ios} onBack={back} />;
       break;
     case "forget":
       screen = (
@@ -451,8 +459,9 @@ export function HomeApp({
           onBackup={() => go({ name: "backup" })}
           onDelete={() => go({ name: "delete" })}
           putAside={home.putAside}
-          onPutAside={(memory) => go({ name: "putAside", memory })}
+          onPutAside={(memory, withTime) => go({ name: "putAside", memory, withTime })}
           onDeleteKept={() => go({ name: "deleteKept", source: "calendar", choose: true })}
+          onPermissions={() => go({ name: "permissions" })}
           nearlyFull={nearlyFull}
         />
       );

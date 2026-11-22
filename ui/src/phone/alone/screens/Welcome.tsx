@@ -6,12 +6,15 @@ import { chips } from "./parts";
 /** The first screen: start on this phone, connect to a computer, or bring back a backup. */
 export function AloneWelcome({
   deleted = false,
+  onPermissions,
   onStart,
   onConnect,
   onBackup,
 }: {
   /** Just after Delete everything: one line above the buttons says so. */
   deleted?: boolean;
+  /** "How to take that back": the phone's permissions. */
+  onPermissions?(): void;
   onStart(): void;
   onConnect(): void;
   onBackup(): void;
@@ -30,9 +33,17 @@ export function AloneWelcome({
         <div className="ph-spacer" />
         <div className="ph-stack">
           {deleted ? (
-            <p className="ph-body ph-center" role="status">
-              {t("phone.alone.welcome.deleted")}
-            </p>
+            <div className="ph-stack ph-center" style={{ gap: 6 }}>
+              <p className="ph-body" role="status">
+                {t("phone.alone.welcome.deleted")}
+              </p>
+              <p className="ph-small">{t("phone.alone.welcome.stillAllowed")}</p>
+              {onPermissions ? (
+                <button type="button" className="ph-link ph-link--center" onClick={onPermissions}>
+                  {t("phone.alone.welcome.howToTakeBack")}
+                </button>
+              ) : null}
+            </div>
           ) : null}
           <Button kind="primary" onClick={onStart}>
             {t("phone.alone.welcome.start")}

@@ -23,7 +23,7 @@ type Kind = "text" | "photo" | "recording";
 
 type State =
   | { name: "compose" }
-  | { name: "photo"; blob: Blob; url: string }
+  | { name: "photo"; blob: Blob; url: string; taken: boolean }
   | { name: "recording" }
   | { name: "sending" }
   | {
@@ -208,7 +208,10 @@ export function Keep({
 
   const connected = connection.kind === "connected";
 
-  const submit = async (kind: Kind, body: { text?: string; blob?: Blob; caption?: string }) => {
+  const submit = async (
+    kind: Kind,
+    body: { text?: string; blob?: Blob; caption?: string; taken?: boolean },
+  ) => {
     // A voice note is kept with how it feels; the good-thing mark is for notes and photos.
     const feeling = feel ? feelingOfPick(feel) : undefined;
     const goodMark = kind !== "recording" && good ? true : undefined;
@@ -228,6 +231,14 @@ export function Keep({
       blob: body.blob,
       caption: body.caption,
       ...marks,
+      how:
+        kind === "text"
+          ? "typed"
+          : kind === "recording"
+            ? "recorded"
+            : body.taken
+              ? "taken"
+              : "chosen",
       size,
       createdAt: now(),
     };
@@ -250,13 +261,14 @@ export function Keep({
     };
     if (!connected) return wait();
     setState({ name: "sending" });
+    const sent = { ...marks, how: keep.how };
     try {
       const kept = await withKeepLock(() =>
         kind === "text"
-          ? engine.keepText(body.text ?? "", keep.clientId, marks)
+          ? engine.keepText(body.text ?? "", keep.clientId, sent)
           : kind === "photo"
-            ? engine.keepBytes(body.blob as Blob, keep.clientId, body.caption, marks)
-            : engine.keepRecording(body.blob as Blob, keep.clientId, marks),
+            ? engine.keepBytes(body.blob as Blob, keep.clientId, body.caption, sent)
+            : engine.keepRecording(body.blob as Blob, keep.clientId, sent),
       );
       await drop();
       alone?.onKept?.(kind);
@@ -300,10 +312,10 @@ export function Keep({
     setTimeout(() => textArea.current?.focus(), 0);
   };
 
-  const pick = (file: File | undefined) => {
+  const pick = (file: File | undefined, taken: boolean) => {
     if (!file) return;
     setCaption("");
-    setState({ name: "photo", blob: file, url: url(file) });
+    setState({ name: "photo", blob: file, url: url(file), taken });
   };
 
   const back = () => {
@@ -414,7 +426,7 @@ export function Keep({
               tabIndex={-1}
               aria-hidden="true"
               onChange={(e) => {
-                pick(e.target.files?.[0]);
+                pick(e.target.files?.[0], true);
                 e.target.value = "";
               }}
             />
@@ -426,7 +438,7 @@ export function Keep({
               tabIndex={-1}
               aria-hidden="true"
               onChange={(e) => {
-                pick(e.target.files?.[0]);
+                pick(e.target.files?.[0], false);
                 e.target.value = "";
               }}
             />
@@ -489,7 +501,11 @@ export function Keep({
             <Button
               kind="primary"
               onClick={() =>
-                void submit("photo", { blob: state.blob, caption: caption.trim() || undefined })
+                void submit("photo", {
+                  blob: state.blob,
+                  caption: caption.trim() || undefined,
+                  taken: state.taken,
+                })
               }
             >
               {t("phone.keep.submit")}

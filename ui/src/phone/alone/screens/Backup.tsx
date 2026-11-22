@@ -404,14 +404,7 @@ export function Restore({
             <Icon name="document" size={22} />
             <span className="ph-srow-text">
               <span className="ph-srow-label">{file.name}</span>
-              <span className="ph-srow-hint">
-                {file.madeAt
-                  ? t("phone.alone.restore.file.hint", {
-                      size: formatBytes(file.bytes),
-                      day: formatLongDay(file.madeAt),
-                    })
-                  : formatBytes(file.bytes)}
-              </span>
+              <span className="ph-srow-hint">{formatBytes(file.bytes)}</span>
             </span>
             <button type="button" className="ph-link" onClick={() => void choose()}>
               {t("phone.alone.restore.change")}
