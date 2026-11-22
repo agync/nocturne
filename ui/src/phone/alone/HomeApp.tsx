@@ -5,7 +5,7 @@ import { t } from "../../copy/t";
 import type { FeelingPart, HomeStats, Receipt, SameNameQuestion } from "../../engine/bindings";
 import type { NativeChannel } from "../native/api";
 import { type LaunchRoute, type Shared, watchLaunch } from "../native/launch";
-import { scanCode } from "../native/scanner";
+import { openAppSettings, scanCode } from "../native/scanner";
 import { CalendarConnect } from "../native/screens/CalendarConnect";
 import { KeepButton, NavBar, type Tab, TabBar } from "../native/screens/chrome";
 import { HealthConnect } from "../native/screens/HealthConnect";
@@ -19,12 +19,13 @@ import { Original } from "../screens/Original";
 import { Which } from "../screens/Which";
 import "./home.css";
 import { HomeRequestError } from "./api";
-import { forgetReminder, reminderDone, reminderDue } from "./reminder";
+import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
 import { HomeFind } from "./screens/Find";
 import { HomeThisPhone } from "./screens/ThisPhone";
 import { HomeToday } from "./screens/Today";
+import { VoiceAsk } from "./screens/VoiceAsk";
 import { GiveMind } from "./screens/Welcome";
 
 type View =
@@ -131,6 +132,8 @@ export function HomeApp({
   const [empty, setEmpty] = useState(false);
   const [fresh, setFresh] = useState(0);
   const question = useRef<SameNameQuestion | null>(null);
+  const [asking, setAsking] = useState<((go: boolean) => void) | null>(null);
+  const found = useRef(false);
   const quote = useRef<string | null>(null);
   const draft = useRef("");
 
@@ -160,6 +163,45 @@ export function HomeApp({
     [channel],
   );
   const refresh = useCallback(() => setFresh((n) => n + 1), []);
+
+  // Once per phone: a plain line, then the phone's own prompt for what reads voice notes.
+  const askVoice = useCallback(
+    () =>
+      new Promise<void>((done) => {
+        void (async () => {
+          const access = await home.voiceAccess();
+          const asked = await home.notes.get(VOICE_ASKED);
+          if (asked || (access !== "prompt" && access !== "prompt-with-rationale")) return done();
+          await home.notes.set(VOICE_ASKED, "1");
+          setAsking(() => (go: boolean) => {
+            setAsking(null);
+            if (!go) return done();
+            void home.voiceRequest().finally(done);
+          });
+        })();
+      }),
+    [home],
+  );
+  const ios = services.platform.ios;
+  const keepAlone = useMemo(
+    () => ({
+      beforeRecord: ios ? undefined : askVoice,
+      onKept: (kind: string) => {
+        if (ios && kind === "recording") void askVoice();
+      },
+      onSettings: () => void openAppSettings(),
+    }),
+    [ios, askVoice],
+  );
+  const itemAlone = useMemo(
+    () => ({
+      setPrivate: home.setPrivate,
+      get found() {
+        return found.current;
+      },
+    }),
+    [home],
+  );
 
   // What waited in the keep queue (the store was busy) goes into the memory now.
   useEffect(() => {
@@ -208,13 +250,24 @@ export function HomeApp({
     (receipt: Receipt) => {
       if (receipt.kind === "reading")
         return go({ name: "journal", day: readingDay(receipt.keptAt), today: null });
+      found.current = false;
       quote.current = receipt.span?.type === "quote" ? receipt.span.text : null;
       go({ name: "original", id: receipt.itemId });
     },
     [go],
   );
+  const openFound = useCallback(
+    (receipt: Receipt, words: string | null) => {
+      if (receipt.kind === "reading") return open(receipt);
+      found.current = words !== null;
+      quote.current = words;
+      go({ name: "original", id: receipt.itemId });
+    },
+    [go, open],
+  );
   const openItem = useCallback(
     (id: string) => {
+      found.current = false;
       quote.current = null;
       go({ name: "original", id });
     },
@@ -258,14 +311,15 @@ export function HomeApp({
       screen = <CalendarConnect channel={channel} onDone={back} alone />;
       break;
     case "health":
-      screen = <HealthConnect channel={channel} onDone={back} />;
+      screen = <HealthConnect channel={channel} onDone={back} alone />;
       break;
     case "thisPhone":
       screen = (
         <HomeThisPhone
           channel={channel}
           stats={stats}
-          name={name}
+          version={services.version}
+          voice={{ access: home.voiceAccess, turnOn: home.voiceRequest }}
           onBack={back}
           onMind={toMind}
           onCalendar={() => go({ name: "calendar" })}
@@ -321,6 +375,7 @@ export function HomeApp({
           onMoreWords={(part) => go({ name: "checkin", part })}
           draft={draft}
           recording={view.recording}
+          alone={keepAlone}
         />
       );
       break;
@@ -340,7 +395,15 @@ export function HomeApp({
       );
       break;
     case "original":
-      screen = <Original engine={engine} itemId={view.id} quote={quote.current} onBack={back} />;
+      screen = (
+        <Original
+          engine={engine}
+          itemId={view.id}
+          quote={quote.current}
+          onBack={back}
+          alone={itemAlone}
+        />
+      );
       break;
     case "which":
       screen = (
@@ -418,7 +481,7 @@ export function HomeApp({
             empty={empty}
             today={localDay(new Date(services.now()))}
             find={home.find}
-            onOpen={open}
+            onOpen={openFound}
             onMind={toMind}
           />
         );
@@ -436,6 +499,9 @@ export function HomeApp({
           <NavBar tab={tab} onTab={toTab} />
         </>
       ) : null}
+      {asking ? (
+        <VoiceAsk ios={ios} onContinue={() => asking(true)} onNotNow={() => asking(false)} />
+      ) : null}
       {shared ? (
         <ShareSheet
           shared={shared}
@@ -444,6 +510,7 @@ export function HomeApp({
           connection={conn}
           now={services.now}
           onQueued={refresh}
+          alone
           onClose={() => {
             setShared(null);
             refresh();

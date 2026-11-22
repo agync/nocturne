@@ -101,11 +101,11 @@ export function Start({
       <footer className="ph-foot">
         {failed ? (
           <p className="ph-error" role="alert">
-            {t("setup.action.failed")}
+            {t("phone.alone.start.failed")}
           </p>
         ) : null}
         <Button kind="primary" disabled={busy} onClick={onStart}>
-          {t("phone.alone.start.button")}
+          {failed ? t("phone.tryAgain") : t("phone.alone.start.button")}
         </Button>
       </footer>
     </Page>
