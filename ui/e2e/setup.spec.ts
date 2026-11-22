@@ -118,6 +118,11 @@ test.describe("using it", () => {
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.getByRole("button", { name: "Get started" }).click();
     await expect(
+      page.getByRole("heading", { level: 1, name: "Already use Nocturne on your phone?" }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.getByRole("button", { name: "No, start fresh" }).click();
+    await expect(
       page.getByRole("heading", { level: 1, name: "Checking this computer…" }),
     ).toBeVisible();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
