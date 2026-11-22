@@ -9,19 +9,20 @@ import type {
   HomeCall,
   HomeStats,
   JournalDay,
+  KeptCounts,
   PhoneItem,
   PhoneMode,
+  PutAsideMemory,
   RemoteAnswer,
   RemoteCall,
   TimelineRow,
 } from "../../../engine/bindings";
 import { emptyDay, itemView } from "../../testing/journalFixtures";
-import type { HomeFiles } from "../api";
 import { memoryNotes, SHOWN, SINCE } from "../reminder";
 
 export const HOME_DAY = "2026-11-21";
 
-export type HomeScenario = "first" | "fresh" | "kept" | "reminder" | "damaged";
+export type HomeScenario = "first" | "fresh" | "kept" | "reminder" | "damaged" | "aside" | "full";
 
 export const HOME_SCENARIOS: readonly HomeScenario[] = [
   "first",
@@ -29,7 +30,12 @@ export const HOME_SCENARIOS: readonly HomeScenario[] = [
   "kept",
   "reminder",
   "damaged",
+  "aside",
+  "full",
 ];
+
+/** The backup file the open sheet offers, as a person who picks the first one. */
+export const PICKED_BACKUP = "nocturne-backup-2026-11-21.nocturne";
 
 const at = (time: string) => `${HOME_DAY}T${time}:00.000Z`;
 
@@ -143,7 +149,20 @@ export function homeState(scenario: HomeScenario) {
     damaged = true;
     return false;
   };
-  let rows = scenario === "kept" || scenario === "reminder" ? keptRows() : [];
+  let rows = ["kept", "reminder", "aside", "full"].includes(scenario) ? keptRows() : [];
+  let aside: PutAsideMemory[] =
+    scenario === "aside"
+      ? [
+          {
+            id: "store-put-aside-2026-11-20-081500",
+            at: "2026-11-20T08:15:00.000Z",
+            bytes: 388_000_000,
+            counts: { things: 117, journalEntries: 41, photosAndRecordings: 36 },
+          },
+        ]
+      : [];
+  let calendarKept = 6;
+  const forgotten = new Set<string>();
   let lastBackup: HomeStats["lastBackup"] = null;
   const privates = new Set<string>();
   let voice: "granted" | "denied" | "prompt" = "prompt";
@@ -163,6 +182,7 @@ export function homeState(scenario: HomeScenario) {
       case "getJournalDay":
         return { type: "journalDay", day: day() };
       case "getItem":
+        if (forgotten.has(call.id)) return { type: "error", code: "notFound" };
         return { type: "item", item: { ...phoneItem(call.id), private: privates.has(call.id) } };
       case "keepText": {
         if (call.text === "no room left") return { type: "error", code: "full" };
@@ -246,8 +266,17 @@ export function homeState(scenario: HomeScenario) {
                     bytes: 1,
                   }
                 : null,
-            putAside: null,
+            putAside: aside[0]?.at ?? null,
           },
+          backup: { things: 128, journalEntries: 52, photosAndRecordings: 40 },
+          here:
+            call.passphrase === "already here"
+              ? ({
+                  things: rows.length,
+                  journalEntries: 0,
+                  photosAndRecordings: 1,
+                } satisfies KeptCounts)
+              : null,
         };
       case "restoreBackup":
         if (call.passphrase === "already here" && !call.replace)
@@ -265,8 +294,79 @@ export function homeState(scenario: HomeScenario) {
       case "deleteEverything":
         if (call.phrase !== "delete everything") return { type: "error", code: "wrongPhrase" };
         rows = [];
+        aside = [];
         lastBackup = null;
+        mode = null;
+        void emit("mode_changed", null);
         return { type: "deleted" };
+      case "putAside":
+        return { type: "putAside", memories: aside };
+      case "bringBack":
+        if (!aside.some((m) => m.id === call.id)) return { type: "error", code: "notFound" };
+        aside = [
+          {
+            id: "store-put-aside-2026-11-21-093000",
+            at: at("09:30"),
+            bytes: 412_000_000,
+            counts: { things: rows.length, journalEntries: 0, photosAndRecordings: 1 },
+          },
+        ];
+        return { type: "restored" };
+      case "deletePutAside":
+        aside = aside.filter((m) => m.id !== call.id);
+        return { type: "putAsideDeleted" };
+      case "previewSourceDelete":
+        if (call.source === "health" || calendarKept === 0)
+          return { type: "error", code: "notFound" };
+        return {
+          type: "sourceDeletePreview",
+          preview: {
+            token: "kept-token",
+            items: calendarKept,
+            versions: 0,
+            memories: 0,
+            pageLines: 0,
+            recapLines: 0,
+            noticing: 0,
+          },
+        };
+      case "deleteSource":
+        if (call.token !== "kept-token") return { type: "error", code: "tooLate" };
+        calendarKept = 0;
+        return { type: "sourceDeleted" };
+      case "previewForgetItem": {
+        const row = rows.find((r) => r.item.id === call.id);
+        if (!row || !call.withOriginal) return { type: "error", code: "notFound" };
+        return {
+          type: "forgetPreview",
+          preview: {
+            token: `forget-${call.id}`,
+            memories: [],
+            originals: [
+              {
+                itemId: call.id,
+                label: row.item.title,
+                kind: row.item.kind,
+                keptAt: row.item.keptAt,
+                durationMs: null,
+                removable: true,
+                otherMemories: 0,
+              },
+            ],
+            includeOriginals: true,
+            pagesAffected: 0,
+          },
+        };
+      }
+      case "forget": {
+        const id = call.token.replace(/^forget-/, "");
+        forgotten.add(id);
+        rows = rows.filter((r) => r.item.id !== id);
+        return {
+          type: "forgotten",
+          report: { memoriesRemoved: 0, originalsRemoved: 1, pagesRedacted: 0 },
+        };
+      }
       default:
         return { type: "error", code: "invalid" };
     }
@@ -297,6 +397,22 @@ export function homeState(scenario: HomeScenario) {
       case "voice_request":
         voice = "granted";
         return voice;
+      case "free_space":
+        return scenario === "full" ? 312_000_000 : 24_000_000_000;
+      case "save_backup_file": {
+        const passphrase = String(args.passphrase);
+        if (passphrase === "closes the sheet") return null;
+        return local({ cmd: "saveBackup", dest: PICKED_BACKUP, passphrase });
+      }
+      case "choose_backup_file":
+        return {
+          file: `/cache/backup-inbox/${PICKED_BACKUP}`,
+          name: PICKED_BACKUP,
+          size: 412_000_000,
+          modified: at("09:32"),
+        };
+      case "let_go_backup_file":
+        return null;
       default:
         return undefined;
     }
@@ -304,17 +420,6 @@ export function homeState(scenario: HomeScenario) {
 
   return { answer };
 }
-
-/** The save and open sheets, as a person who picks the first place offered. */
-export const scriptedFiles: HomeFiles = {
-  saveTo: async (suggested) => `/sdcard/Download/${suggested}`,
-  open: async () => ({
-    path: "/sdcard/Download/nocturne-backup-2026-11-21.nocturne",
-    name: "nocturne-backup-2026-11-21.nocturne",
-    bytes: 412_000_000,
-    madeAt: at("09:32"),
-  }),
-};
 
 /** What the scripted phone noted for itself; it lasts across reloads in one test run. */
 export const scriptedNoteRows = new Map<string, string>();

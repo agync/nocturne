@@ -10,7 +10,6 @@ import { createLocalEngine } from "../alone/engine";
 import {
   type HomeScenario,
   homeState,
-  scriptedFiles,
   scriptedNotes,
   seedReminder,
 } from "../alone/testing/homeMock";
@@ -175,7 +174,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
     (params.get("n") ?? "full") as NativeScenario,
     alone ? homeState(alone).answer : undefined,
   );
-  const home = createHomeApi(scriptedFiles, scriptedNotes);
+  const home = createHomeApi(scriptedNotes);
   const view = params.get("v");
   if (view)
     history.replaceState(

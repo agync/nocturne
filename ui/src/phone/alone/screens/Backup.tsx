@@ -1,10 +1,10 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { formatBytes, formatLongDay, formatTime12 } from "../../../copy/format";
 import { t } from "../../../copy/t";
-import type { BackupProgress, BackupReport, RestoreCheck } from "../../../engine/bindings";
+import type { BackupProgress, BackupReport, KeptCounts } from "../../../engine/bindings";
 import { useHeading } from "../../native/screens/parts";
 import { Button, Icon, Page } from "../../screens/ui";
-import { HomeRequestError, type PickedFile, type Progress } from "../api";
+import { type Checked, HomeRequestError, type PickedFile, type Progress } from "../api";
 import { chips } from "./parts";
 
 const MIN_PASSPHRASE = 8;
@@ -44,7 +44,7 @@ function BackOnly({ onBack }: { onBack(): void }) {
 }
 
 /** A backup or a restore running: its phase, and how far it is. */
-function Running({ title, progress }: { title: string; progress: BackupProgress | null }) {
+export function Running({ title, progress }: { title: string; progress: BackupProgress | null }) {
   const heading = useHeading(title);
   const share = progress && progress.total > 0 ? progress.done / progress.total : 0;
   return (
@@ -79,7 +79,7 @@ function Running({ title, progress }: { title: string; progress: BackupProgress 
 }
 
 /** "Your backup is saved." or "Your memory is back on this phone.", and the one button on. */
-function Done({
+export function Done({
   title,
   body,
   button,
@@ -154,16 +154,17 @@ type SaveStep =
   | { name: "saving"; progress: BackupProgress | null }
   | { name: "saved"; report: BackupReport; at: Date };
 
-/** Save a backup: 0013's passphrase form, the phone's own save sheet, then the result. */
+/**
+ * Save a backup: 0013's passphrase form, then the backup is made and the phone's own save sheet
+ * asks where it goes. A sheet closed without choosing changes nothing.
+ */
 export function SaveBackup({
   save,
-  pickDest,
   now,
   onClose,
 }: {
-  save(dest: string, passphrase: string, onProgress: Progress): Promise<BackupReport>;
-  /** The phone's save sheet; null when the person chose nowhere. */
-  pickDest(suggested: string): Promise<string | null>;
+  /** Makes the backup, then the save sheet; null when the person chose nowhere. */
+  save(passphrase: string, onProgress: Progress): Promise<BackupReport | null>;
   now(): number;
   onClose(): void;
 }) {
@@ -179,15 +180,14 @@ export function SaveBackup({
   const go = async () => {
     if (!ready) return;
     if (first !== again) return setStep({ name: "form", error: "mismatch" });
-    const day = new Date(now()).toISOString().slice(0, 10);
-    const dest = await pickDest(`nocturne-backup-${day}.nocturne`);
-    if (!dest) return;
     setStep({ name: "saving", progress: null });
     try {
-      const report = await save(dest, first, (progress) =>
+      const report = await save(first, (progress) =>
         setStep((s) => (s.name === "saving" ? { name: "saving", progress } : s)),
       );
-      setStep({ name: "saved", report, at: new Date(now()) });
+      setStep(
+        report ? { name: "saved", report, at: new Date(now()) } : { name: "form", error: null },
+      );
     } catch (e) {
       const full = e instanceof HomeRequestError && e.code === "full";
       setStep({ name: "form", error: full ? "full" : "failed" });
@@ -284,21 +284,27 @@ type RestoreError = "wrong" | "bad" | "newer" | "damaged" | "full" | "failed";
 
 type RestoreStep =
   | { name: "form"; error: RestoreError | null }
-  | { name: "replace"; check: RestoreCheck }
+  | { name: "replace"; checked: Checked }
   | { name: "running"; phase: "checking" | "restoring"; progress: BackupProgress | null }
   | { name: "done"; count: number };
 
-/** Bring back your memory: choose the backup file, type its passphrase, then 0013's checks. */
+/**
+ * Bring back your memory: the phone's open sheet for the backup file, its passphrase, then 0013's
+ * checks. The chosen file's copy goes when the person leaves without bringing it back.
+ */
 export function Restore({
   pickFile,
   check,
   restore,
+  letGo,
   onBack,
   onDone,
 }: {
+  /** The phone's open sheet; null when closed, a `notABackup` error for another file. */
   pickFile(): Promise<PickedFile | null>;
-  check(file: string, passphrase: string, onProgress: Progress): Promise<RestoreCheck>;
+  check(file: string, passphrase: string, onProgress: Progress): Promise<Checked>;
   restore(file: string, passphrase: string, replace: boolean, onProgress: Progress): Promise<void>;
+  letGo(): Promise<void>;
   onBack(): void;
   onDone(): void;
 }) {
@@ -306,12 +312,25 @@ export function Restore({
   const [passphrase, setPassphrase] = useState("");
   const [step, setStep] = useState<RestoreStep>({ name: "form", error: null });
   const heading = useHeading("restore");
+  const kept = useRef(false);
+
+  useEffect(
+    () => () => {
+      if (!kept.current) void letGo();
+    },
+    [letGo],
+  );
 
   const choose = async () => {
-    const picked = await pickFile();
-    if (picked) {
-      setFile(picked);
-      setStep({ name: "form", error: null });
+    try {
+      const picked = await pickFile();
+      if (picked) {
+        setFile(picked);
+        setStep({ name: "form", error: null });
+      }
+    } catch (e) {
+      setFile(null);
+      setStep({ name: "form", error: restoreError(e) });
     }
   };
 
@@ -322,12 +341,13 @@ export function Restore({
 
   const failed = (e: unknown) => setStep({ name: "form", error: restoreError(e) });
 
-  const bringIn = async (checked: RestoreCheck, replace: boolean) => {
+  const bringIn = async (checked: Checked, replace: boolean) => {
     if (!file) return;
     try {
       setStep({ name: "running", phase: "restoring", progress: null });
       await restore(file.path, passphrase, replace, running("restoring"));
-      setStep({ name: "done", count: checked.summary.items });
+      kept.current = true;
+      setStep({ name: "done", count: checked.check.summary.items });
     } catch (e) {
       failed(e);
     }
@@ -338,7 +358,7 @@ export function Restore({
     try {
       setStep({ name: "running", phase: "checking", progress: null });
       const checked = await check(file.path, passphrase, running("checking"));
-      if (checked.here !== null) return setStep({ name: "replace", check: checked });
+      if (checked.check.here !== null) return setStep({ name: "replace", checked });
       await bringIn(checked, false);
     } catch (e) {
       failed(e);
@@ -357,9 +377,9 @@ export function Restore({
   if (step.name === "replace")
     return (
       <Replace
-        check={step.check}
+        checked={step.checked}
         onKeep={onBack}
-        onReplace={() => void bringIn(step.check, true)}
+        onReplace={() => void bringIn(step.checked, true)}
       />
     );
   if (step.name === "done")
@@ -473,18 +493,28 @@ function Count({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function Columns({ counts }: { counts: KeptCounts }) {
+  return (
+    <>
+      <Count label={t("phone.alone.replace.things")} value={counts.things} />
+      <Count label={t("phone.alone.replace.journal")} value={counts.journalEntries} />
+      <Count label={t("phone.alone.replace.originals")} value={counts.photosAndRecordings} />
+    </>
+  );
+}
+
 /** "Replace what's on this phone?": 0013's choice, worded for the phone; neither is the default. */
 function Replace({
-  check,
+  checked,
   onKeep,
   onReplace,
 }: {
-  check: RestoreCheck;
+  checked: Checked;
   onKeep(): void;
   onReplace(): void;
 }) {
   const heading = useHeading("replace");
-  const { summary, here, putAside } = check;
+  const { summary, here, putAside } = checked.check;
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 16 }}>
@@ -498,8 +528,7 @@ function Replace({
           </h2>
           <dl>
             <Count label={t("restore.confirm.made")} value={formatLongDay(summary.madeAt)} />
-            <Count label={t("phone.alone.replace.things")} value={summary.items} />
-            <Count label={t("phone.alone.replace.originals")} value={summary.originals} />
+            <Columns counts={checked.backup} />
           </dl>
         </section>
         {here ? (
@@ -511,7 +540,7 @@ function Replace({
               {here.lastKept ? (
                 <Count label={t("restore.confirm.lastKept")} value={formatLongDay(here.lastKept)} />
               ) : null}
-              <Count label={t("phone.alone.replace.originals")} value={here.originals} />
+              {checked.here ? <Columns counts={checked.here} /> : null}
               {here.keptAfterBackup > 0 ? (
                 <Count label={t("restore.confirm.keptAfter")} value={here.keptAfterBackup} />
               ) : null}

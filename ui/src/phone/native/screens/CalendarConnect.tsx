@@ -17,11 +17,14 @@ export function CalendarConnect({
   channel,
   onDone,
   alone = false,
+  onDeleteKept,
 }: {
   channel: NativeChannel;
   onDone(): void;
   /** A phone alone: the calendar stays in this phone's own memory. */
   alone?: boolean;
+  /** A phone alone: "Delete what was kept…" under the line about what was already kept. */
+  onDeleteKept?(): void;
 }) {
   const [step, setStep] = useState<Step>("loading");
   const [access, setAccess] = useState<CalendarAccess>("ask");
@@ -72,7 +75,14 @@ export function CalendarConnect({
     case "refused":
       return <CalendarRefused onOk={onDone} />;
     case "settings":
-      return <CalendarSettingsScreen channel={channel} onBack={onDone} alone={alone} />;
+      return (
+        <CalendarSettingsScreen
+          channel={channel}
+          onBack={onDone}
+          alone={alone}
+          onDeleteKept={onDeleteKept}
+        />
+      );
   }
 }
 
@@ -157,11 +167,13 @@ export function CalendarSettingsScreen({
   channel,
   onBack,
   alone = false,
+  onDeleteKept,
 }: {
   channel: NativeChannel;
   onBack(): void;
   /** A phone alone sends nothing anywhere: no lines about what went across. */
   alone?: boolean;
+  onDeleteKept?(): void;
 }) {
   const [calendars, setCalendars] = useState<PhoneCalendar[]>([]);
   const [settings, setSettings] = useState<CalendarSettings | null>(null);
@@ -257,6 +269,11 @@ export function CalendarSettingsScreen({
         <p className="ph-hint">
           {alone ? t("phone.alone.sources.already") : places("phone.sources.already")}
         </p>
+        {alone && onDeleteKept ? (
+          <button type="button" className="ph-link" onClick={onDeleteKept}>
+            {t("phone.alone.sources.delete")}
+          </button>
+        ) : null}
       </main>
     </Page>
   );

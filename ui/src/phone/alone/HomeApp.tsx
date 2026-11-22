@@ -2,7 +2,14 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
 import { localDay } from "../../copy/format";
 import { t } from "../../copy/t";
-import type { FeelingPart, HomeStats, Receipt, SameNameQuestion } from "../../engine/bindings";
+import type {
+  FeelingPart,
+  HomeStats,
+  PhoneSource,
+  PutAsideMemory,
+  Receipt,
+  SameNameQuestion,
+} from "../../engine/bindings";
 import type { NativeChannel } from "../native/api";
 import { type LaunchRoute, type Shared, watchLaunch } from "../native/launch";
 import { openAppSettings, scanCode } from "../native/scanner";
@@ -18,11 +25,14 @@ import { Keep } from "../screens/Keep";
 import { Original } from "../screens/Original";
 import { Which } from "../screens/Which";
 import "./home.css";
-import { HomeRequestError } from "./api";
+import { HomeRequestError, NEARLY_FULL } from "./api";
 import { forgetReminder, reminderDone, reminderDue, VOICE_ASKED } from "./reminder";
 import { SaveBackup } from "./screens/Backup";
 import { DeleteEverything } from "./screens/DeleteEverything";
+import { DeleteKept } from "./screens/DeleteKept";
 import { HomeFind } from "./screens/Find";
+import { ForgetItem } from "./screens/Forget";
+import { PutAside } from "./screens/PutAside";
 import { HomeThisPhone } from "./screens/ThisPhone";
 import { HomeToday } from "./screens/Today";
 import { VoiceAsk } from "./screens/VoiceAsk";
@@ -37,6 +47,9 @@ type View =
   | { name: "mind" }
   | { name: "backup" }
   | { name: "delete" }
+  | { name: "putAside"; memory: PutAsideMemory }
+  | { name: "deleteKept"; source: PhoneSource; choose: boolean }
+  | { name: "forget"; id: string; withOriginal: boolean }
   | { name: "keep"; recording?: boolean }
   | { name: "checkin"; part?: FeelingPart }
   | { name: "original"; id: string }
@@ -54,6 +67,9 @@ const OWN: ReadonlySet<string> = new Set([
   "mind",
   "backup",
   "delete",
+  "putAside",
+  "deleteKept",
+  "forget",
   "keep",
   "checkin",
   "original",
@@ -111,6 +127,7 @@ export function HomeApp({
   offer,
   name,
   onLost,
+  onDeleted,
 }: {
   services: NativeServices;
   channel: NativeChannel;
@@ -120,6 +137,8 @@ export function HomeApp({
   name: string;
   /** The memory could not be opened: where it stands is asked again. */
   onLost(): void;
+  /** Everything was deleted: Welcome comes next, saying so. */
+  onDeleted(): void;
 }) {
   const { home } = services;
   const engine = useMemo(() => services.engineFor(() => ""), [services]);
@@ -136,6 +155,7 @@ export function HomeApp({
   const found = useRef(false);
   const quote = useRef<string | null>(null);
   const draft = useRef("");
+  const [nearlyFull, setNearlyFull] = useState(false);
 
   useEffect(() => {
     if (view.name === "tab") setTab(view.tab);
@@ -204,8 +224,9 @@ export function HomeApp({
         if (ios && kind === "recording") void askVoice();
       },
       onSettings: () => void openAppSettings(),
+      nearlyFull,
     }),
-    [ios, askVoice],
+    [ios, askVoice, nearlyFull],
   );
   const itemAlone = useMemo(
     () => ({
@@ -213,8 +234,9 @@ export function HomeApp({
       get found() {
         return found.current;
       },
+      onForget: (id: string, withOriginal: boolean) => go({ name: "forget", id, withOriginal }),
     }),
-    [home],
+    [home, go],
   );
 
   // What waited in the keep queue (the store was busy) goes into the memory now.
@@ -224,6 +246,24 @@ export function HomeApp({
       () => undefined,
     );
   }, [engine, services.queue, refresh]);
+
+  // How much room is left, on open and each time the app comes back to the front.
+  useEffect(() => {
+    let gone = false;
+    const look = () =>
+      void home.freeSpace().then((free) => {
+        if (!gone) setNearlyFull(free !== null && free < NEARLY_FULL);
+      });
+    look();
+    const front = () => {
+      if (document.visibilityState === "visible") look();
+    };
+    document.addEventListener("visibilitychange", front);
+    return () => {
+      gone = true;
+      document.removeEventListener("visibilitychange", front);
+    };
+  }, [home]);
 
   // Voice notes are read into words where the phone can: on open and each time it comes back.
   useEffect(() => {
@@ -322,10 +362,70 @@ export function HomeApp({
       );
       break;
     case "calendar":
-      screen = <CalendarConnect channel={channel} onDone={back} alone />;
+      screen = (
+        <CalendarConnect
+          channel={channel}
+          onDone={back}
+          alone
+          onDeleteKept={() => go({ name: "deleteKept", source: "calendar", choose: false })}
+        />
+      );
       break;
     case "health":
-      screen = <HealthConnect channel={channel} onDone={back} alone />;
+      screen = (
+        <HealthConnect
+          channel={channel}
+          onDone={back}
+          alone
+          onDeleteKept={() => go({ name: "deleteKept", source: "health", choose: false })}
+        />
+      );
+      break;
+    case "deleteKept":
+      screen = (
+        <DeleteKept
+          key={view.source}
+          first={view.source}
+          choose={view.choose}
+          preview={home.previewSourceDelete}
+          remove={home.deleteSource}
+          onClose={(deleted) => {
+            if (deleted) refresh();
+            back();
+          }}
+        />
+      );
+      break;
+    case "putAside":
+      screen = (
+        <PutAside
+          memory={view.memory}
+          bringBack={home.bringBack}
+          remove={home.deletePutAside}
+          onBack={back}
+          onDone={() => {
+            refresh();
+            back();
+          }}
+        />
+      );
+      break;
+    case "forget":
+      screen = (
+        <ForgetItem
+          id={view.id}
+          withOriginal={view.withOriginal}
+          preview={home.previewForgetItem}
+          forget={home.forget}
+          onBack={back}
+          onDone={(gone) => {
+            refresh();
+            // The thing's own page went with it: back to where it was opened from.
+            if (gone && history.length > 2) history.go(-2);
+            else back();
+          }}
+        />
+      );
       break;
     case "thisPhone":
       screen = (
@@ -340,6 +440,10 @@ export function HomeApp({
           onHealth={() => go({ name: "health" })}
           onBackup={() => go({ name: "backup" })}
           onDelete={() => go({ name: "delete" })}
+          putAside={home.putAside}
+          onPutAside={(memory) => go({ name: "putAside", memory })}
+          onDeleteKept={() => go({ name: "deleteKept", source: "calendar", choose: true })}
+          nearlyFull={nearlyFull}
         />
       );
       break;
@@ -353,14 +457,7 @@ export function HomeApp({
       );
       break;
     case "backup":
-      screen = (
-        <SaveBackup
-          save={home.saveBackup}
-          pickDest={home.files.saveTo}
-          now={services.now}
-          onClose={back}
-        />
-      );
+      screen = <SaveBackup save={home.saveBackupFile} now={services.now} onClose={back} />;
       break;
     case "delete":
       screen = (
@@ -370,8 +467,8 @@ export function HomeApp({
             await home.deleteEverything(phrase);
             await services.queue.clear().catch(() => undefined);
             await forgetReminder(home.notes);
-            refresh();
-            replace(TODAY);
+            history.replaceState(null, "");
+            onDeleted();
           }}
         />
       );
@@ -476,6 +573,7 @@ export function HomeApp({
             onCalendarItem={openItem}
             onNight={(to) => go({ name: "journal", day: readingDay(to), today: null })}
             onJournal={() => toTab("journal")}
+            nearlyFull={nearlyFull}
           />
         );
       } else if (view.tab === "journal") {

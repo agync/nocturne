@@ -1,19 +1,25 @@
 // What a phone alone asks of its own memory beyond the shared screen calls: where the memory
-// lives, starting, finding by words, backups and deleting everything. Each goes to the app's Rust
-// side; backups report progress as `backup-progress` events.
+// lives, starting, finding by words, backups and what was put aside, deleting and how much room
+// is left. Each goes to the app's Rust side; backups report progress as `backup-progress` events.
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type {
   BackupProgress,
   BackupReport,
+  ForgetPreview,
+  ForgetReport,
   FoundItem,
   HomeAnswer,
   HomeCall,
   HomeError,
   HomeStats,
+  KeptCounts,
+  PhoneDeletePreview,
   PhoneItem,
   PhoneMode,
+  PhoneSource,
+  PutAsideMemory,
   RestoreCheck,
 } from "../../engine/bindings";
 import { idbNotes, type NoteStore } from "./reminder";
@@ -28,29 +34,29 @@ export class HomeRequestError extends Error {
   }
 }
 
-/** A backup file the person chose. */
+/** A backup file the person chose, copied where the app can read it. */
 export interface PickedFile {
   path: string;
   name: string;
   bytes: number;
-  /** When the backup was made, when the sheet can tell before the passphrase. */
+  /** When the backup was made, when it can be told before the passphrase. */
   madeAt?: string;
 }
 
-/**
- * The phone's own sheets for choosing where a backup goes and which one comes back. Each
- * resolves to null when the person chose nothing.
- */
-export interface HomeFiles {
-  saveTo(suggested: string): Promise<string | null>;
-  open(): Promise<PickedFile | null>;
+/** What the phone's open sheet answers once a file is chosen and found to be a backup. */
+interface ChosenBackup {
+  file: string;
+  name: string;
+  size: number;
+  modified: string | null;
 }
 
-/** No sheet to choose with: nothing is ever chosen. */
-export const noFiles: HomeFiles = {
-  saveTo: () => Promise.resolve(null),
-  open: () => Promise.resolve(null),
-};
+/** A backup checked, with what it and this phone hold in the replace columns. */
+export interface Checked {
+  check: RestoreCheck;
+  backup: KeptCounts;
+  here: KeptCounts | null;
+}
 
 export type Progress = (p: BackupProgress) => void;
 
@@ -62,32 +68,49 @@ export interface HomeApi {
   mode(): Promise<PhoneMode | null>;
   /** The last mode heard, without asking. */
   known(): PhoneMode | null;
-  /** Called with each new mode, after a start or a restore. */
+  /** Called with each new mode, after a start, a restore or Delete everything. */
   onMode(listener: (mode: PhoneMode | null) => void): () => void;
   /** Set when the memory could not be opened and was put aside. */
   damaged(): Promise<boolean>;
   startAlone(name: string): Promise<void>;
   find(query: string): Promise<FoundItem[]>;
   stats(): Promise<HomeStats>;
-  saveBackup(dest: string, passphrase: string, onProgress: Progress): Promise<BackupReport>;
-  checkBackup(file: string, passphrase: string, onProgress: Progress): Promise<RestoreCheck>;
+  /** Makes the backup, then the phone's save sheet; null when the sheet was closed. */
+  saveBackupFile(passphrase: string, onProgress: Progress): Promise<BackupReport | null>;
+  /** The phone's open sheet; null when it was closed. */
+  chooseBackupFile(): Promise<PickedFile | null>;
+  /** The chosen file's copy goes, when the restore is left. */
+  letGoBackupFile(): Promise<void>;
+  checkBackup(file: string, passphrase: string, onProgress: Progress): Promise<Checked>;
   restoreBackup(
     file: string,
     passphrase: string,
     replace: boolean,
     onProgress: Progress,
   ): Promise<void>;
+  putAside(): Promise<PutAsideMemory[]>;
+  bringBack(id: string): Promise<void>;
+  deletePutAside(id: string): Promise<void>;
+  previewSourceDelete(source: PhoneSource): Promise<PhoneDeletePreview>;
+  deleteSource(token: string, source: PhoneSource, alsoStop: boolean): Promise<void>;
+  /** "Forget…" (what was learned) or "Delete…" (the thing too) from an item's page. */
+  previewForgetItem(id: string, withOriginal: boolean): Promise<ForgetPreview>;
+  forget(token: string): Promise<ForgetReport>;
   deleteEverything(phrase: string): Promise<void>;
+  /** The bytes free where the memory is; null where the phone does not say. */
+  freeSpace(): Promise<number | null>;
   /** The phone's language, so waiting voice notes can be read into words where it can. */
   hearVoiceNotes(language: string): Promise<boolean>;
   voiceAccess(): Promise<VoiceAccess>;
   /** The phone's own prompt; the screens say why first. */
   voiceRequest(): Promise<VoiceAccess>;
   setPrivate(id: string, on: boolean): Promise<PhoneItem>;
-  files: HomeFiles;
   /** What this phone notes for itself, such as the reminder having been shown. */
   notes: NoteStore;
 }
+
+/** Below this much free room, Today, Keep and This phone say the phone is nearly full. */
+export const NEARLY_FULL = 500_000_000;
 
 function failed(e: unknown): HomeRequestError {
   return new HomeRequestError(typeof e === "string" ? (e as HomeError) : "failed");
@@ -116,7 +139,7 @@ function expect<K extends HomeAnswer["type"]>(
   return answer as Extract<HomeAnswer, { type: K }>;
 }
 
-export function createHomeApi(files: HomeFiles = noFiles, notes: NoteStore = idbNotes()): HomeApi {
+export function createHomeApi(notes: NoteStore = idbNotes()): HomeApi {
   let current: PhoneMode | null = null;
   const listeners = new Set<(mode: PhoneMode | null) => void>();
   const set = (mode: PhoneMode | null) => {
@@ -152,15 +175,41 @@ export function createHomeApi(files: HomeFiles = noFiles, notes: NoteStore = idb
     async stats() {
       return expect(await local({ cmd: "stats" }), "stats").stats;
     },
-    async saveBackup(dest, passphrase, onProgress) {
-      return expect(await local({ cmd: "saveBackup", dest, passphrase }, onProgress), "backupSaved")
-        .report;
+    async saveBackupFile(passphrase, onProgress) {
+      const stop = await listen<BackupProgress>("backup-progress", (e) => onProgress(e.payload));
+      try {
+        const answer = await invoke<HomeAnswer | null>("save_backup_file", { passphrase });
+        if (answer === null) return null;
+        if (answer.type === "error") throw new HomeRequestError(answer.code);
+        return expect(answer, "backupSaved").report;
+      } catch (e) {
+        throw e instanceof HomeRequestError ? e : failed(e);
+      } finally {
+        stop();
+      }
     },
+    async chooseBackupFile() {
+      let chosen: ChosenBackup | null;
+      try {
+        chosen = await invoke<ChosenBackup | null>("choose_backup_file");
+      } catch (e) {
+        throw failed(e);
+      }
+      if (!chosen) return null;
+      return {
+        path: chosen.file,
+        name: chosen.name,
+        bytes: chosen.size,
+        madeAt: chosen.modified ?? undefined,
+      };
+    },
+    letGoBackupFile: () => invoke<void>("let_go_backup_file").catch(() => undefined),
     async checkBackup(file, passphrase, onProgress) {
-      return expect(
+      const { check, backup, here } = expect(
         await local({ cmd: "checkBackup", file, passphrase }, onProgress),
         "backupChecked",
-      ).check;
+      );
+      return { check, backup, here };
     },
     async restoreBackup(file, passphrase, replace, onProgress) {
       expect(
@@ -169,9 +218,34 @@ export function createHomeApi(files: HomeFiles = noFiles, notes: NoteStore = idb
       );
       set("alone");
     },
+    async putAside() {
+      return expect(await local({ cmd: "putAside" }), "putAside").memories;
+    },
+    async bringBack(id) {
+      expect(await local({ cmd: "bringBack", id }), "restored");
+    },
+    async deletePutAside(id) {
+      expect(await local({ cmd: "deletePutAside", id }), "putAsideDeleted");
+    },
+    async previewSourceDelete(source) {
+      return expect(await local({ cmd: "previewSourceDelete", source }), "sourceDeletePreview")
+        .preview;
+    },
+    async deleteSource(token, source, alsoStop) {
+      expect(await local({ cmd: "deleteSource", token, source, alsoStop }), "sourceDeleted");
+    },
+    async previewForgetItem(id, withOriginal) {
+      return expect(await local({ cmd: "previewForgetItem", id, withOriginal }), "forgetPreview")
+        .preview;
+    },
+    async forget(token) {
+      return expect(await local({ cmd: "forget", token }), "forgotten").report;
+    },
     async deleteEverything(phrase) {
       expect(await local({ cmd: "deleteEverything", phrase }), "deleted");
+      set(null);
     },
+    freeSpace: () => invoke<number | null>("free_space").catch(() => null),
     voiceAccess: () => invoke<VoiceAccess>("voice_access").catch(() => "denied" as const),
     voiceRequest: () => invoke<VoiceAccess>("voice_request").catch(() => "denied" as const),
     async setPrivate(id, on) {
@@ -179,7 +253,6 @@ export function createHomeApi(files: HomeFiles = noFiles, notes: NoteStore = idb
     },
     hearVoiceNotes: (language) =>
       invoke<boolean>("hear_voice_notes", { language }).catch(() => false),
-    files,
     notes,
   };
 }

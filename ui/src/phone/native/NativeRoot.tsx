@@ -57,6 +57,8 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   const [waiting, setWaiting] = useState(0);
   const [route, setRoute] = useState<Route | null>(() => routeOf(location.hash));
   const [name, setName] = useState(() => cleanDeviceName(t("phone.pair.default")));
+  // Just after Delete everything, Welcome says so until the person goes on.
+  const [deleted, setDeleted] = useState(false);
   // A restore says where the memory lives before its own "back on this phone" is read.
   const shown = useRef(screen.name);
   shown.current = screen.name;
@@ -172,12 +174,20 @@ export function NativeRoot({ services }: { services: NativeServices }) {
     case "first":
       return (
         <AloneWelcome
-          onStart={() => setScreen({ name: "start", busy: false, failed: false })}
+          deleted={deleted}
+          onStart={() => {
+            setDeleted(false);
+            setScreen({ name: "start", busy: false, failed: false });
+          }}
           onConnect={() => {
+            setDeleted(false);
             history.pushState({ root: "pairing" }, "");
             setScreen({ name: "welcome", unreached: false });
           }}
-          onBackup={() => setScreen({ name: "restore" })}
+          onBackup={() => {
+            setDeleted(false);
+            setScreen({ name: "restore" });
+          }}
         />
       );
     case "start":
@@ -199,9 +209,10 @@ export function NativeRoot({ services }: { services: NativeServices }) {
     case "restore":
       return (
         <Restore
-          pickFile={services.home.files.open}
+          pickFile={services.home.chooseBackupFile}
           check={services.home.checkBackup}
           restore={services.home.restoreBackup}
+          letGo={services.home.letGoBackupFile}
           onBack={() => void home()}
           onDone={() => void home()}
         />
@@ -217,6 +228,10 @@ export function NativeRoot({ services }: { services: NativeServices }) {
           offer={screen.offer}
           name={name}
           onLost={() => void home()}
+          onDeleted={() => {
+            setDeleted(true);
+            void home();
+          }}
         />
       );
     case "welcome":
