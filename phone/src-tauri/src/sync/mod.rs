@@ -24,7 +24,8 @@ use nocturne_contract::{
 use serde::{Deserialize, Serialize};
 
 pub use ledger::{CalendarSettings, HealthSettings, LastSent, Ledger, LedgerFile, SourceSent};
-pub use sink::{ChannelSink, EngineSink, LocalStore, Sink, ViaSink};
+pub(crate) use sink::ViaSink;
+pub use sink::{ChannelSink, EngineSink, LocalStore, Sink};
 
 /// Two days back to two weeks ahead.
 pub const DAYS_BACK: u32 = 2;
