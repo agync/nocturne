@@ -10,6 +10,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use serde_json::{Value, json};
@@ -160,12 +161,50 @@ pub fn behave(control: &Value, index: usize) {
     }
 }
 
+/// What a quick tunnel prints when its connection drops, as `cloudflared` does.
+pub const DROPPED_LINE: &str = "ERR Failed to dial a quic connection error=\"failed to dial to edge with quic: timeout: no recent network activity\" connIndex=0";
+/// What it prints on every retry once the edge has deleted the tunnel.
+pub const DELETED_LINE: &str = "ERR Register tunnel error from server side error=\"Unauthorized: Tunnel not found\" connIndex=0 event=0 ip=198.51.100.7";
+
+/// The network going away under a run that is up, from the control file. With `drop_after_ms`
+/// the connection drops; for runs up to `drop_runs` (every run when absent) the edge then deletes
+/// the tunnel and every retry is refused, else the connection comes back on the same name. With
+/// `still_ready` the refusals come while another connection stays up.
+pub fn drop_connection(control: &Value, index: usize, ready: &AtomicBool) {
+    let Some(after) = control.get("drop_after_ms").and_then(Value::as_u64) else {
+        return;
+    };
+    let runs = control
+        .get("drop_runs")
+        .and_then(Value::as_u64)
+        .unwrap_or(u64::MAX);
+    let deleted = control.get("deleted").and_then(Value::as_bool) != Some(false);
+    if index as u64 > runs {
+        return;
+    }
+    std::thread::sleep(Duration::from_millis(after));
+    let still_ready = control.get("still_ready").and_then(Value::as_bool) == Some(true);
+    ready.store(still_ready, Ordering::SeqCst);
+    eprintln!("{DROPPED_LINE}");
+    if !deleted {
+        std::thread::sleep(Duration::from_millis(200));
+        eprintln!("INF Registered tunnel connection connIndex=0");
+        ready.store(true, Ordering::SeqCst);
+        return;
+    }
+    loop {
+        std::thread::sleep(Duration::from_millis(100));
+        eprintln!("{DELETED_LINE}");
+    }
+}
+
 pub fn hangs(control: &Value) -> bool {
     control.get("mode").and_then(Value::as_str) == Some("hang")
 }
 
-/// Answer the metrics endpoints of a quick tunnel on `addr`. Returns the port it answers on.
-pub fn serve_metrics(addr: &str, hostname: String) -> Option<u16> {
+/// Answer the metrics endpoints of a quick tunnel on `addr`, ready while `ready` holds. Returns
+/// the port it answers on.
+pub fn serve_metrics(addr: &str, hostname: String, ready: Arc<AtomicBool>) -> Option<u16> {
     let listener = TcpListener::bind(addr).ok()?;
     let port = listener.local_addr().ok()?.port();
     std::thread::spawn(move || {
@@ -177,9 +216,13 @@ pub fn serve_metrics(addr: &str, hostname: String) -> Option<u16> {
             let path = head.split_whitespace().nth(1).unwrap_or("");
             let (status, body) = match path {
                 "/quicktunnel" => ("200 OK", json!({ "hostname": hostname }).to_string()),
-                "/ready" => (
+                "/ready" if ready.load(Ordering::SeqCst) => (
                     "200 OK",
                     json!({ "status": 200, "readyConnections": 1 }).to_string(),
+                ),
+                "/ready" => (
+                    "503 Service Unavailable",
+                    json!({ "status": 503, "readyConnections": 0 }).to_string(),
                 ),
                 _ => ("404 Not Found", String::new()),
             };
@@ -233,7 +276,7 @@ pub fn spoofer_if_asked() {
     }
     let addr = std::env::var("FAKE_SPOOF_ADDR").unwrap_or_default();
     let host = std::env::var("FAKE_SPOOF_HOST").unwrap_or_default();
-    if let Some(port) = serve_metrics(&addr, host) {
+    if let Some(port) = serve_metrics(&addr, host, Arc::new(AtomicBool::new(true))) {
         write_whole(&exe_dir().join(SPOOF_PORT_FILE), &port.to_string());
     }
     sleep_forever();

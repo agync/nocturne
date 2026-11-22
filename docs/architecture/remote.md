@@ -32,6 +32,10 @@ that state is on and automatic switch-off is not due. The release check proves t
   before every start, and never updates itself or uploads logs. Flags are used only if they appear
   in help text captured from the pinned binary.
 - **Simple.** A Cloudflare quick tunnel to the listener. Its address changes each start.
+  Cloudflare deletes a quick tunnel once all its connections drop, and the helper then retries the
+  dead name forever. When the edge refuses a connection because the tunnel is gone and none is
+  left, Nocturne stops the helper and starts a new tunnel, after a wait that grows with each
+  renewal in a row, and shows the new address so each paired phone can be re-linked.
 - **Most private.** `nocturne-tailnet`, a small helper Nocturne builds on Tailscale's `tsnet`
   library, joins the person's own tailnet and serves the listener over HTTPS on port 443 only. It
   admits only the person's own devices (same user, untagged, not shared in), forwards nothing to
