@@ -345,4 +345,31 @@ test.describe("200 per cent text", () => {
       await shot(page, `text-200-${name}`);
     });
   }
+
+  test("today: the Keep button never covers a kept row once scrolled to the end", async ({
+    page,
+  }) => {
+    await page.goto("/?m=kept");
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    await expect(page.getByRole("heading", { name: "Kept today · 2" })).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const covered = await page.evaluate(() => {
+      const fab = document.querySelector(".ph-fab")?.getBoundingClientRect();
+      if (!fab) return ["no Keep button"];
+      return [...document.querySelectorAll("main li, main .ph-link")]
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.width > 0 &&
+            r.left < fab.right &&
+            r.right > fab.left &&
+            r.top < fab.bottom + 8 &&
+            r.bottom > fab.top - 8
+          );
+        })
+        .map((el) => el.textContent);
+    });
+    expect(covered).toEqual([]);
+    await shot(page, "text-200-today-end");
+  });
 });
