@@ -3,6 +3,7 @@ import type { AskPlace } from "./AskPlace";
 import type { CalendarBatch } from "./CalendarBatch";
 import type { CheckInInput } from "./CheckInInput";
 import type { Feeling } from "./Feeling";
+import type { MemoryCounts } from "./MemoryCounts";
 import type { Period } from "./Period";
 import type { PhoneAppIntro } from "./PhoneAppIntro";
 import type { QuestionChoice } from "./QuestionChoice";
@@ -26,4 +27,8 @@ web?: boolean, } | { "cmd": "keepBytes", mime: string, size: number, clientId: s
 /**
  * `thisComputer` when the person chose to have this question answered on the computer.
  */
-place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, } | { "cmd": "answerJournalQuestion", pageDate: string, choice: QuestionChoice, line?: string, clientId: string, } | { "cmd": "seeOnlineChange" } | { "cmd": "sendCalendar", batch: CalendarBatch, } | { "cmd": "sendReadings", batch: ReadingBatch, } | { "cmd": "introduce", app: PhoneAppIntro, };
+place?: AskPlace, } | { "cmd": "cancelAsk", askId: string, } | { "cmd": "getPage", date: string | null, } | { "cmd": "listPages" } | { "cmd": "getItem", id: string, } | { "cmd": "getOriginal", id: string, } | { "cmd": "disconnect" } | { "cmd": "getJournalDay", date: string | null, } | { "cmd": "getLookBack", period: Period, } | { "cmd": "lookBack", period: Period, } | { "cmd": "keepCheckIn", input: CheckInInput, clientId: string, capturedAt?: string, } | { "cmd": "answerSameName", questionId: string, answer: SameNameAnswer, } | { "cmd": "answerJournalQuestion", pageDate: string, choice: QuestionChoice, line?: string, clientId: string, } | { "cmd": "seeOnlineChange" } | { "cmd": "sendCalendar", batch: CalendarBatch, } | { "cmd": "sendReadings", batch: ReadingBatch, } | { "cmd": "introduce", app: PhoneAppIntro, } | { "cmd": "offerMemory", counts: MemoryCounts, bytes: number, 
+/**
+ * The store's schema version, so a computer that is older says so before any bytes move.
+ */
+schema: number, } | { "cmd": "memoryDone", sha256: string, passphrase: string, };

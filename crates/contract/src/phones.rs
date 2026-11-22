@@ -26,6 +26,8 @@ pub enum PhoneSource {
 pub enum PhoneFeature {
     Calendar,
     Health,
+    /// The computer takes a phone's whole memory (`offerMemory`).
+    HoldsMemory,
 }
 
 /// A calendar as the phone names it. `colour` is a CSS colour.

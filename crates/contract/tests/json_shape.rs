@@ -297,3 +297,54 @@ fn the_page_journal_and_check_in_read_without_the_phone_fields() {
     .unwrap();
     assert_eq!(day.health, None);
 }
+
+#[test]
+fn a_phone_alone_speaks_home_calls_and_the_move_verbs() {
+    let call = HomeCall::RestoreBackup {
+        file: "backup.nocturne".into(),
+        passphrase: "p".into(),
+        replace: true,
+    };
+    assert_eq!(
+        serde_json::to_string(&call).unwrap(),
+        r#"{"cmd":"restoreBackup","file":"backup.nocturne","passphrase":"p","replace":true}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&HomeAnswer::Error {
+            code: HomeError::WrongPassphrase
+        })
+        .unwrap(),
+        r#"{"type":"error","code":"wrongPassphrase"}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&PhoneMode::Companion).unwrap(),
+        r#""companion""#
+    );
+    let counts = MemoryCounts {
+        items: 3,
+        memories: 2,
+        pages: 1,
+        originals: 3,
+    };
+    let offer = RemoteCall::OfferMemory {
+        counts,
+        bytes: 10.0,
+        schema: 14,
+    };
+    assert_eq!(
+        serde_json::to_string(&offer).unwrap(),
+        r#"{"cmd":"offerMemory","counts":{"items":3,"memories":2,"pages":1,"originals":3},"bytes":10.0,"schema":14}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&RemoteAnswer::MemoryArrived { counts }).unwrap(),
+        r#"{"type":"memoryArrived","counts":{"items":3,"memories":2,"pages":1,"originals":3}}"#
+    );
+    assert_eq!(
+        serde_json::to_string(&RemoteAnswer::MemoryAccepted { here: None }).unwrap(),
+        r#"{"type":"memoryAccepted","here":null}"#
+    );
+    assert_eq!(
+        serde_json::to_value(PhoneFeature::HoldsMemory).unwrap(),
+        "holdsMemory"
+    );
+}

@@ -435,6 +435,10 @@ impl<R: Runtime> Call<R> {
                 .await
             }
             RemoteCall::Introduce { app } => self.introduce(app).await,
+            // Taking a phone's memory arrives with the move to a computer.
+            RemoteCall::OfferMemory { .. } | RemoteCall::MemoryDone { .. } => {
+                err(PhoneError::NotReady)
+            }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
                 let e = self.engine()?;

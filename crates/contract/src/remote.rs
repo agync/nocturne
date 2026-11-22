@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, ItemKind,
-    JournalDay, PageSummary, PageView, Period, PhoneFeature, QuestionChoice, ReadingBatch,
-    ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
+    AppPlatform, AskDelta, AskPlace, CalendarBatch, CheckIn, CheckInInput, Feeling, Holdings,
+    ItemKind, JournalDay, MemoryCounts, PageSummary, PageView, Period, PhoneFeature,
+    QuestionChoice, ReadingBatch, ReflectionView, SameNameAnswer, SameNameAnswered, SyncReceipt,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -538,6 +538,21 @@ pub enum RemoteCall {
     Introduce {
         app: PhoneAppIntro,
     },
+    /// A phone that keeps its own memory offers it to this computer, with what it holds.
+    /// Answered with `MemoryAccepted`, or an error (`TooLarge` over `MAX_MEMORY_BYTES`).
+    OfferMemory {
+        counts: MemoryCounts,
+        bytes: f64,
+        /// The store's schema version, so a computer that is older says so before any bytes move.
+        schema: u32,
+    },
+    /// The backup file of the offered memory is all uploaded: its SHA-256 (lower-case hex) and
+    /// the one-time passphrase it is locked with. Answered with `MemoryArrived` once checked
+    /// and in place.
+    MemoryDone {
+        sha256: String,
+        passphrase: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
@@ -556,23 +571,65 @@ pub struct RemoteRequest {
 )]
 #[ts(export)]
 pub enum RemoteAnswer {
-    Hello { hello: PhoneHello },
-    Status { status: PhoneStatus },
-    Kept { kept: PhoneKept },
-    AskStarted { ask_id: String },
-    AskDelta { delta: AskDelta },
-    Page { page: Box<PageView> },
-    Pages { pages: Vec<PageSummary> },
-    Item { item: PhoneItem },
-    OriginalStart { mime: String, size: f64 },
-    JournalDay { day: Box<JournalDay> },
-    LookBack { view: Box<ReflectionView> },
-    CheckIn { checkin: Box<CheckIn> },
-    SameName { answered: SameNameAnswered },
-    Synced { receipt: SyncReceipt },
-    Introduced { agreed: u32 },
+    Hello {
+        hello: PhoneHello,
+    },
+    Status {
+        status: PhoneStatus,
+    },
+    Kept {
+        kept: PhoneKept,
+    },
+    AskStarted {
+        ask_id: String,
+    },
+    AskDelta {
+        delta: AskDelta,
+    },
+    Page {
+        page: Box<PageView>,
+    },
+    Pages {
+        pages: Vec<PageSummary>,
+    },
+    Item {
+        item: PhoneItem,
+    },
+    OriginalStart {
+        mime: String,
+        size: f64,
+    },
+    JournalDay {
+        day: Box<JournalDay>,
+    },
+    LookBack {
+        view: Box<ReflectionView>,
+    },
+    CheckIn {
+        checkin: Box<CheckIn>,
+    },
+    SameName {
+        answered: SameNameAnswered,
+    },
+    Synced {
+        receipt: SyncReceipt,
+    },
+    Introduced {
+        agreed: u32,
+    },
+    /// The offer is welcome. `here` is what this computer already holds, so the phone can say
+    /// so before the upload; none when it holds nothing.
+    MemoryAccepted {
+        here: Option<Holdings>,
+    },
+    /// The memory is checked and in place on this computer.
+    MemoryArrived {
+        counts: MemoryCounts,
+    },
     Done,
-    Error { code: PhoneError },
+    Error {
+        code: PhoneError,
+    },
     Revoked,
 }
 
