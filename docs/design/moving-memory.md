@@ -79,11 +79,11 @@ holds its own memory is added.
 
 ### To a household computer
 
-Only when the household's owner invited the person to keep their memory there, and they pair
+Only when the household's owner gave the person a code to keep their memory there, and they pair
 ([Making a household computer your home](household-server.md#making-a-household-computer-your-home)).
 Then the same move, with the household computer as the new home and its own per-person store locked
 with this phone's key. A phone that only borrows a household's mind has nothing there to move from
-or into; making the household its home is a new invitation and a new pairing.
+or into; making the household its home takes a code for that person and a new pairing.
 
 ### From a household computer to a computer
 
