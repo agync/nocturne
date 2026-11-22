@@ -9,6 +9,7 @@ use tauri::{AppHandle, Manager, Runtime};
 
 use crate::error::CommandError;
 use crate::remote::controller::RemoteHub;
+use crate::remote::moving::{self, MoveChoice, MoveView};
 
 fn hub<R: Runtime>(app: &AppHandle<R>) -> Result<std::sync::Arc<RemoteHub>, CommandError> {
     crate::remote::hub(app).ok_or_else(|| CommandError::unavailable("Nocturne's store is not open"))
@@ -140,4 +141,34 @@ pub async fn open_remote_sign_in<R: Runtime>(app: AppHandle<R>) -> Result<(), Co
 #[tauri::command]
 pub async fn new_computer_key<R: Runtime>(app: AppHandle<R>) -> Result<RemoteView, CommandError> {
     hub(&app)?.new_computer_key().await
+}
+
+/// A phone's memory moving here, as it stands, if one is.
+#[tauri::command]
+pub async fn get_move<R: Runtime>(app: AppHandle<R>) -> Result<Option<MoveView>, CommandError> {
+    Ok(moving::view(&app, &hub(&app)?.core))
+}
+
+/// The person's answer to a phone that offers its memory.
+#[tauri::command]
+pub async fn answer_move<R: Runtime>(
+    app: AppHandle<R>,
+    choice: MoveChoice,
+) -> Result<(), CommandError> {
+    if moving::decide(&app, &hub(&app)?.core, choice) {
+        Ok(())
+    } else {
+        Err(CommandError::not_found("there is no offer to answer"))
+    }
+}
+
+/// "Open today's page" once a phone's memory is here: the person has seen it.
+#[tauri::command]
+pub async fn finish_move<R: Runtime>(app: AppHandle<R>) -> Result<(), CommandError> {
+    let data = app.state::<crate::state::AppState>().data_dir.clone();
+    if moving::seen(&data) {
+        Ok(())
+    } else {
+        Err(CommandError::not_found("no memory is waiting"))
+    }
 }

@@ -61,6 +61,10 @@ struct Marker {
     aside: Option<Aside>,
     #[serde(default)]
     summary: Option<BackupSummary>,
+    /// A phone's memory that moved here: it takes this computer's own settings and paired
+    /// phones again as it goes in place.
+    #[serde(default)]
+    arrival: bool,
 }
 
 /// The partial file of a backup being written.
@@ -122,6 +126,26 @@ pub fn clear_check(data: &Path) {
     prune(&restore);
 }
 
+/// The note a phone's move leaves in its stage; it goes beside the backup state once the memory
+/// is in place, and never before.
+pub const ARRIVAL_NOTE: &str = "moved.json";
+
+/// The prefix of a stage a phone's move let go of, renamed away to be shredded.
+pub const LET_GO: &str = "let-go-";
+
+/// Shred what a move let go of and a stop left behind.
+fn clear_let_go(data: &Path) {
+    let restore = data.join(RESTORE);
+    if let Ok(entries) = std::fs::read_dir(&restore) {
+        for entry in entries.flatten() {
+            if entry.file_name().to_string_lossy().starts_with(LET_GO) {
+                fsutil::shred_tree(&entry.path());
+            }
+        }
+    }
+    prune(&restore);
+}
+
 /// Remove both the unpacked backup and any check scratch.
 pub fn clear_staging(data: &Path) {
     let restore = data.join(RESTORE);
@@ -139,6 +163,29 @@ pub fn schedule(
     source: Source,
     aside: Option<Aside>,
     summary: Option<BackupSummary>,
+) -> io::Result<()> {
+    write_marker(data, replace, stamp, source, aside, summary, false)
+}
+
+/// Ask the next start to put a phone's memory, settled in the stage, in place. `stamp` names
+/// the copy of what is here that will be put aside, and `aside` what it holds.
+pub fn schedule_arrival(
+    data: &Path,
+    replace: bool,
+    stamp: &str,
+    aside: Option<Aside>,
+) -> io::Result<()> {
+    write_marker(data, replace, stamp, Source::Stage, aside, None, true)
+}
+
+fn write_marker(
+    data: &Path,
+    replace: bool,
+    stamp: &str,
+    source: Source,
+    aside: Option<Aside>,
+    summary: Option<BackupSummary>,
+    arrival: bool,
 ) -> io::Result<()> {
     match &source {
         Source::Stage => {
@@ -166,10 +213,16 @@ pub fn schedule(
         source,
         aside,
         summary,
+        arrival,
     };
     let bytes = serde_json::to_vec(&marker).map_err(io::Error::other)?;
     fsutil::create_private_dir(&data.join(RESTORE))?;
     fsutil::write_private(&marker_path(data), &bytes)
+}
+
+/// A phone's memory waits for the next start to take its place.
+pub fn arrival_waits(data: &Path) -> bool {
+    read_marker(&marker_path(data)).is_ok_and(|m| m.arrival)
 }
 
 /// Clean up a backup or a restore that stopped unexpectedly. Runs before the store is opened.
@@ -197,6 +250,7 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
     recover(data);
     // A check that stopped part way left a plain copy of a backup's database; nothing checks now.
     clear_check(data);
+    clear_let_go(data);
     let marker_path = marker_path(data);
     if !marker_path.exists() {
         // Nobody asked for a restore: a stage left behind is one that stopped part way.
@@ -230,6 +284,17 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
             return complete(data, &source, &marker, &marker_path, None);
         }
         return ApplyOutcome::Failed("the copy to bring back is not there".into());
+    }
+
+    // What changed on this computer since the memory was settled (a phone removed or added,
+    // a new address) holds: its own rows are taken again from the store still in use.
+    if marker.arrival
+        && store.is_dir()
+        && let Err(e) = retake_computer(&source_store, &store)
+    {
+        return ApplyOutcome::Failed(format!(
+            "the computer's own settings could not be kept ({e})"
+        ));
     }
 
     let mut kept = None;
@@ -266,6 +331,11 @@ pub fn apply_pending(data: &Path) -> ApplyOutcome {
     complete(data, &source, &marker, &marker_path, kept)
 }
 
+fn retake_computer(arriving: &Path, here: &Path) -> nocturne_engine::Result<()> {
+    let clock = std::sync::Arc::new(nocturne_engine::SystemClock);
+    nocturne_engine::Engine::open(arriving, clock)?.retake_computer(here)
+}
+
 /// The steps after the store is in place: the reading setup, the spent source folder and the
 /// marker. Safe to run again when a crash stopped them part way.
 fn complete(
@@ -283,6 +353,19 @@ fn complete(
             "the reading setup could not be kept ({:?})",
             e.kind()
         ));
+    }
+
+    // A phone's memory in place: its note says so from now on.
+    let note = source.join(ARRIVAL_NOTE);
+    if marker.arrival && note.is_file() {
+        let placed = fsutil::create_private_dir(&backup_dir(data))
+            .and_then(|()| std::fs::copy(&note, backup_dir(data).join(ARRIVAL_NOTE)).map(drop));
+        if let Err(e) = placed {
+            return ApplyOutcome::Failed(format!(
+                "the note of the memory that moved could not be kept ({:?})",
+                e.kind()
+            ));
+        }
     }
 
     // The stage is spent, and so is a copy brought back: its store is the live one now, and what
@@ -932,6 +1015,55 @@ mod tests {
     }
 
     #[test]
+    fn a_moves_note_counts_only_once_its_memory_is_in_place() {
+        // Stopped before the marker: the stage and its note go, and nothing says it arrived.
+        let dir = tempfile::tempdir().unwrap();
+        live(dir.path());
+        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
+        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
+        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
+        assert_eq!(apply_pending(dir.path()), ApplyOutcome::NothingPending);
+        assert!(!backup_dir(dir.path()).join(ARRIVAL_NOTE).exists());
+
+        // With its marker the store goes in place and the note with it.
+        std::fs::create_dir_all(stage_dir(dir.path()).join("store")).unwrap();
+        std::fs::write(stage_dir(dir.path()).join("store/nocturne.db"), b"PHONE").unwrap();
+        std::fs::write(stage_dir(dir.path()).join(ARRIVAL_NOTE), b"{}").unwrap();
+        let marker = Marker {
+            version: VERSION,
+            replace: true,
+            stamp: STAMP.into(),
+            source: Source::Stage,
+            aside: None,
+            summary: None,
+            arrival: true,
+        };
+        std::fs::write(
+            marker_path(dir.path()),
+            serde_json::to_vec(&marker).unwrap(),
+        )
+        .unwrap();
+        // The live store here is not a real one, so the computer's rows cannot be taken again:
+        // nothing changes and the next start tries again.
+        assert!(matches!(apply_pending(dir.path()), ApplyOutcome::Failed(_)));
+        assert!(!backup_dir(dir.path()).join(ARRIVAL_NOTE).exists());
+        assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
+    }
+
+    #[test]
+    fn what_a_move_let_go_of_is_gone_at_the_next_start() {
+        let dir = tempfile::tempdir().unwrap();
+        live(dir.path());
+        let gone = dir.path().join(RESTORE).join(format!("{LET_GO}abc"));
+        std::fs::create_dir_all(gone.join("store")).unwrap();
+        std::fs::write(gone.join("store/nocturne.db"), b"PHONE").unwrap();
+        assert_eq!(apply_pending(dir.path()), ApplyOutcome::NothingPending);
+        assert!(!gone.exists());
+        assert!(!dir.path().join(RESTORE).exists());
+        assert_eq!(read(dir.path().join("store/nocturne.db")), b"OLDDB");
+    }
+
+    #[test]
     fn a_marker_with_no_stage_is_finished_and_removed() {
         let dir = tempfile::tempdir().unwrap();
         live(dir.path());
@@ -943,6 +1075,7 @@ mod tests {
             source: Source::Stage,
             aside: None,
             summary: None,
+            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -970,6 +1103,7 @@ mod tests {
             source: Source::Stage,
             aside: None,
             summary: None,
+            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -1004,6 +1138,7 @@ mod tests {
             source: Source::Stage,
             aside: Some(aside()),
             summary: Some(summary()),
+            arrival: false,
         };
         std::fs::write(
             marker_path(dir.path()),
@@ -1228,6 +1363,7 @@ mod tests {
             source: Source::PutAside("2026-11-14 090000".into()),
             aside: None,
             summary: None,
+            arrival: false,
         };
         std::fs::create_dir_all(restore_dir(dir.path())).unwrap();
         std::fs::write(

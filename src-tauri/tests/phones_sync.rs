@@ -166,7 +166,14 @@ fn send_calendar(sync: &str, entries: Vec<CalendarEntry>) -> RemoteCall {
 fn the_computer_says_it_takes_calendar_and_health() {
     let p = on();
     let (_, features, _) = p.session("Pixel");
-    assert_eq!(features, vec![PhoneFeature::Calendar, PhoneFeature::Health]);
+    assert_eq!(
+        features,
+        vec![
+            PhoneFeature::Calendar,
+            PhoneFeature::Health,
+            PhoneFeature::HoldsMemory
+        ]
+    );
 }
 
 #[test]

@@ -30,6 +30,7 @@ pub mod keepawake;
 pub mod keyfile;
 pub mod limits;
 pub mod listener;
+pub mod moving;
 pub mod name;
 pub mod pairing;
 pub mod protocol;
@@ -100,8 +101,19 @@ impl<R: Runtime> session::Shell for AppShell<R> {
             min_phone_build: protocol::MIN_PHONE_BUILD,
             max_phone_build: Some(protocol::PHONE_BUILD),
             version: self.app.package_info().version.to_string(),
-            // A phone app offers the calendar and Health only to a computer that takes them.
-            features: vec![PhoneFeature::Calendar, PhoneFeature::Health],
+            // A phone app offers the calendar and Health only to a computer that takes them, and
+            // offers its own memory only to one that takes that.
+            features: vec![
+                PhoneFeature::Calendar,
+                PhoneFeature::Health,
+                PhoneFeature::HoldsMemory,
+            ],
+        }
+    }
+
+    fn move_changed(&self, view: Option<&moving::MoveView>) {
+        if let Err(e) = self.app.emit(moving::EVENT_MOVE, view) {
+            tracing::warn!("could not emit the move: {e}");
         }
     }
 
@@ -184,6 +196,12 @@ pub fn hub<R: Runtime>(app: &AppHandle<R>) -> Option<Arc<RemoteHub>> {
         phone_files(app),
         Arc::new(limits::RealMono),
     )
+}
+
+/// A phone's memory is being checked here or waits for the next start.
+pub fn move_holds<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<Hub>()
+        .is_some_and(|h| h.0.core.moves.holding())
 }
 
 /// Called once the app is ready. Starts nothing unless the person left Away from home on and
@@ -381,6 +399,9 @@ pub const REMOTE_DECISIONS: &[(&str, RemoteDecision)] = {
         ("update_remote_settings", Never),
         ("open_remote_sign_in", Never),
         ("new_computer_key", Never),
+        ("get_move", Never),
+        ("answer_move", Never),
+        ("finish_move", Never),
         ("get_online", Never),
         ("check_online", Never),
         ("cancel_online_check", Never),

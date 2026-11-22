@@ -236,6 +236,9 @@ async fn preview_refuses_remote_commands() {
         "update_remote_settings",
         "open_remote_sign_in",
         "new_computer_key",
+        "get_move",
+        "answer_move",
+        "finish_move",
     ] {
         let (status, body) = invoke(&r, command, json!({})).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "{command}");

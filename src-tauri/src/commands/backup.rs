@@ -91,6 +91,18 @@ fn busy() -> CommandError {
     CommandError::new(ErrorCode::Busy, "a backup is already running")
 }
 
+/// A phone's memory moving here, checked or waiting for the next start, is not replaced by a
+/// restore.
+fn moving<R: Runtime>(app: &AppHandle<R>, data: &Path) -> Result<(), CommandError> {
+    if crate::remote::move_holds(app) || restore::arrival_waits(data) {
+        return Err(CommandError::new(
+            ErrorCode::Busy,
+            "a phone's memory is moving here",
+        ));
+    }
+    Ok(())
+}
+
 /// What this install holds now, with a store that cannot be opened treated as holding something.
 async fn here_now<R: Runtime>(app: &AppHandle<R>) -> Result<Option<Holdings>, CommandError> {
     match app.state::<AppState>().engine() {
@@ -294,6 +306,7 @@ pub async fn restore_backup<R: Runtime>(
     run(app, move |app| async move {
         let file = PathBuf::from(&path);
         let state = app.state::<AppState>();
+        moving(&app, &state.data_dir)?;
         let Some((checked, checked_summary)) = state.checked_backup() else {
             return Err(CommandError::invalid("open a backup first"));
         };
@@ -320,6 +333,8 @@ pub async fn restore_backup<R: Runtime>(
 
         let cancel = state.begin_backup()?;
         let _job = Job(&state);
+        // Asked again holding the job: a move takes the job for its check too.
+        moving(&app, &state.data_dir)?;
         let data = state.data_dir.clone();
         let stage = restore::stage_dir(&data);
         let restore_dir = restore::restore_dir(&data);
@@ -436,9 +451,10 @@ pub async fn restore_put_aside<R: Runtime>(
 ) -> Result<(), CommandError> {
     run(app, move |app| async move {
         let state = app.state::<AppState>();
-        if !state.backup_idle() {
-            return Err(busy());
-        }
+        // Held to the end, so a phone's move cannot stage under this restore.
+        let _cancel = state.begin_backup()?;
+        let _job = Job(&state);
+        moving(&app, &state.data_dir)?;
         let Some(path) = restore::put_aside_path(&state.data_dir, &id) else {
             return Err(CommandError::invalid("that is not a copy's name"));
         };

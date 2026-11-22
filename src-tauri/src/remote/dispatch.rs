@@ -252,6 +252,20 @@ impl<R: Runtime> Call<R> {
         upload: Option<super::incoming::UploadDone>,
     ) -> Option<RemoteAnswer> {
         let me = &self.device.id;
+        // A memory that moved here is checked or waits for the next start: what a phone sends
+        // now would land in the store about to be put aside, so it waits on the phone.
+        if self.core.moves.holding()
+            && !matches!(
+                call,
+                RemoteCall::GetStatus
+                    | RemoteCall::Introduce { .. }
+                    | RemoteCall::OfferMemory { .. }
+                    | RemoteCall::MemoryDone { .. }
+                    | RemoteCall::Disconnect
+            )
+        {
+            return err(PhoneError::Busy);
+        }
         match call {
             RemoteCall::GetStatus => Some(self.status().await),
             RemoteCall::KeepText {
@@ -438,9 +452,29 @@ impl<R: Runtime> Call<R> {
                 .await
             }
             RemoteCall::Introduce { app } => self.introduce(app).await,
-            // Taking a phone's memory arrives with the move to a computer.
-            RemoteCall::OfferMemory { .. } | RemoteCall::MemoryDone { .. } => {
-                err(PhoneError::NotReady)
+            RemoteCall::OfferMemory {
+                counts,
+                bytes,
+                schema,
+            } => {
+                let (app, core) = (&self.app, &self.core);
+                super::moving::offer(app, core, &self.out, &self.device, counts, bytes, schema)
+                    .await
+            }
+            RemoteCall::MemoryDone {
+                size,
+                sha256,
+                passphrase,
+            } => {
+                let sent = super::moving::Done {
+                    conv: self.out.conv_id(),
+                    call: self.out.id,
+                    size,
+                    sha256,
+                    passphrase,
+                };
+                let (app, core) = (&self.app, &self.core);
+                super::moving::done(app, core, &self.out, &self.device, upload, sent).await
             }
             RemoteCall::Disconnect => {
                 // The phone forgot this computer: it is removed here too, as from the desktop.
