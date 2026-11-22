@@ -149,6 +149,13 @@ export const browserRecorder: RecorderFactory = async (onLimit) => {
   };
 };
 
+/** Only a refusal of the microphone is "denied"; any other failure is a keep that did not happen. */
+function micErrorKind(e: unknown): "denied" | "none" | "failed" {
+  if (e instanceof Error && e.message === "none") return "none";
+  const name = (e as { name?: unknown } | null)?.name;
+  return name === "NotAllowedError" || name === "PermissionDeniedError" ? "denied" : "failed";
+}
+
 export function Keep({
   engine,
   queue,
@@ -337,6 +344,7 @@ export function Keep({
           void submit("recording", { blob });
         }}
         onError={(e) => {
+          if (e === "failed") return setState({ name: "problem", kind: "failed" });
           setMicError(e);
           setState({ name: "compose" });
         }}
@@ -746,7 +754,7 @@ function Recorder({
   factory: RecorderFactory;
   onCancel(): void;
   onDone(blob: Blob | null): void;
-  onError(kind: "denied" | "none"): void;
+  onError(kind: "denied" | "none" | "failed"): void;
   children?: React.ReactNode;
 }) {
   const [seconds, setSeconds] = useState(0);
@@ -772,7 +780,7 @@ function Recorder({
         setLive(true);
       },
       (e: unknown) => {
-        if (!gone) errorRef.current(e instanceof Error && e.message === "none" ? "none" : "denied");
+        if (!gone) errorRef.current(micErrorKind(e));
       },
     );
     return () => {

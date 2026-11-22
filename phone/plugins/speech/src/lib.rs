@@ -200,6 +200,17 @@ mod tests {
     }
 
     #[test]
+    fn the_manifest_declares_what_the_web_view_asks_for_to_record() {
+        let manifest = include_str!("../android/src/main/AndroidManifest.xml");
+        for permission in ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"] {
+            assert!(
+                manifest.contains(&format!("android.permission.{permission}\"")),
+                "{permission} is not declared"
+            );
+        }
+    }
+
+    #[test]
     fn words_come_with_the_text_outcome() {
         let got = outcome(r#"{"outcome":"text","text":"the purple giraffe"}"#);
         assert_eq!(got.words(), Some("the purple giraffe"));

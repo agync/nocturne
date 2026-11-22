@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- The phone's reader asks for the microphone even when it reads a kept file. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The web view asks for both together before it lets a screen record, and refuses the
+         recording when this one is not declared. -->
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
 
     <queries>
         <intent>
