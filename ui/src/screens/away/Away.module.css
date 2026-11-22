@@ -690,6 +690,13 @@
   content: "·";
 }
 
+.moveFoot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--s-2);
+}
+
 .pairFoot {
   display: flex;
   flex-wrap: wrap;
