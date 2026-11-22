@@ -3,7 +3,7 @@ import { t } from "../../../copy/t";
 import { Button, Icon } from "../../screens/ui";
 
 /** This app's page in Google Play. */
-export const STORE = "https://play.google.com/store/apps/details?id=app.nocturne.phone";
+export const STORE = "https://play.google.com/store/apps/details?id=is.nocturne.phone";
 /** Nocturne in the App Store, found by name until the app has its store page. */
 export const APP_STORE =
   "itms-apps://search.itunes.apple.com/WebObjects/MZSearch.woa/wa/search?media=software&term=Nocturne";

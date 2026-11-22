@@ -502,13 +502,14 @@ far: there is no signing, no device build and no TestFlight yet. The Xcode proje
 release-please bumps; after changing it, run `xcodegen generate` there with an empty `Externals`
 folder (move the built one aside), or the project picks up the built libraries as files. The
 purpose strings the system shows in its prompts are in `phone/src-tauri/Info.ios.plist`, which the
-build merges into the app's `Info.plist`. `phone/src-tauri/tauri.ios.conf.json` gives the iPhone
-app its identifier, `is.nocturne.phone`, which Android takes too once its package is renamed; until
-then the shared `tauri.conf.json` still says `app.nocturne.phone`, and the app's own data folder
-follows that. The calendar and Health plugins each have a Swift package in `ios/` beside their
-Kotlin: EventKit with full access to read the calendar, and HealthKit asked only to read. Health
-never tells an app which kinds it refused, so a refused kind reads as no readings, and only
-Health's own deletions remove readings from the computer. The share extension is not built yet.
+build merges into the app's `Info.plist`. Both phone apps share the identifier `is.nocturne.phone`
+and the publisher name "Nocturne", set in `phone/src-tauri/tauri.conf.json`; the Android package
+and its Kotlin directories carry the same name. The app's own data folder moves with the
+identifier (debug builds only so far; no released app exists yet). The calendar and Health
+plugins each have a Swift package in `ios/` beside their Kotlin: EventKit with full access to read
+the calendar, and HealthKit asked only to read. Health never tells an app which kinds it refused,
+so a refused kind reads as no readings, and only Health's own deletions remove readings from the
+computer. The share extension is not built yet.
 
 It needs Xcode with an iOS Simulator runtime, the Rust target `aarch64-apple-ios-sim`, and
 `make ui/install` done. The Tauri CLI installs `xcodegen`, `libimobiledevice` and CocoaPods

@@ -9,8 +9,8 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="nocturne://keep"
-            android:targetPackage="app.nocturne.phone"
-            android:targetClass="app.nocturne.phone.MainActivity" />
+            android:targetPackage="is.nocturne.phone"
+            android:targetClass="is.nocturne.phone.MainActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="record"
@@ -21,8 +21,8 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="nocturne://record"
-            android:targetPackage="app.nocturne.phone"
-            android:targetClass="app.nocturne.phone.MainActivity" />
+            android:targetPackage="is.nocturne.phone"
+            android:targetClass="is.nocturne.phone.MainActivity" />
     </shortcut>
     <shortcut
         android:shortcutId="checkin"
@@ -33,7 +33,7 @@
         <intent
             android:action="android.intent.action.VIEW"
             android:data="nocturne://checkin"
-            android:targetPackage="app.nocturne.phone"
-            android:targetClass="app.nocturne.phone.MainActivity" />
+            android:targetPackage="is.nocturne.phone"
+            android:targetClass="is.nocturne.phone.MainActivity" />
     </shortcut>
 </shortcuts>
