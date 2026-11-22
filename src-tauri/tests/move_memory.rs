@@ -347,7 +347,13 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
             code: PhoneError::Busy
         })
     );
-    // Asking again before the restart: not opened yet, so the phone waits and keeps its memory.
+    // Asking before the restart: not opened yet, so the phone waits and keeps its memory.
+    assert_eq!(
+        block(phone.memory_status()).err(),
+        Some(CallError::Phone {
+            code: PhoneError::Busy
+        })
+    );
     assert_eq!(
         block(phone.call(home.offer(&file))).err(),
         Some(CallError::Phone {
@@ -399,7 +405,7 @@ fn a_phones_memory_moves_here_and_the_phone_becomes_one_of_its_phones() {
         Connection::Connected { .. }
     ));
     assert_eq!(
-        block(phone.call(home.offer(&file))).unwrap(),
+        block(phone.memory_status()).unwrap(),
         RemoteAnswer::MemoryArrived { counts }
     );
     let RemoteAnswer::Synced { receipt } = block(phone.call(RemoteCall::SendCalendar {
@@ -787,14 +793,16 @@ fn a_memory_that_does_not_open_changes_nothing_and_the_phone_keeps_its_own() {
     assert!(c.h.ok("get_move", json!({})).is_null());
 
     let phone = c.phone(phone.identity().unwrap());
-    assert_eq!(
-        block(phone.call(home.offer(&file))).err(),
-        Some(CallError::Phone {
-            code: PhoneError::NotFound
-        }),
-        "the phone hears it did not open"
-    );
-    // Told once: trying again is a new move, asked as before.
+    for _ in 0..2 {
+        assert_eq!(
+            block(phone.memory_status()).err(),
+            Some(CallError::Phone {
+                code: PhoneError::NotFound
+            }),
+            "the phone hears it did not open, however often it asks"
+        );
+    }
+    // Offered again, it is a new move, asked as before.
     let p = phone.clone();
     let offer = home.offer(&file);
     let again = tauri::async_runtime::spawn(async move { p.call(offer).await });
@@ -857,4 +865,45 @@ fn after_a_replace_the_other_phones_send_their_calendar_again() {
         panic!("a receipt")
     };
     assert_eq!(receipt.taken, 1, "taken anew");
+}
+
+#[test]
+fn a_stop_before_the_upload_reaches_the_phone_and_not_the_next_move() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, sha) = home.backup();
+    offer_and_answer(&c, &phone, home.offer(&file), "move");
+    c.h.ok("stop_move", json!({}));
+    assert!(c.view().is_none());
+    assert_eq!(
+        block(phone.upload_memory(done(&file, &sha), &file, |_| {})).err(),
+        Some(CallError::Phone {
+            code: PhoneError::Paused
+        }),
+        "the phone hears the move was stopped"
+    );
+    // Tried again, the person agrees again and the memory comes.
+    offer_and_answer(&c, &phone, home.offer(&file), "move");
+    assert!(matches!(
+        block(phone.upload_memory(done(&file, &sha), &file, |_| {})).unwrap(),
+        RemoteAnswer::MemoryArrived { .. }
+    ));
+}
+
+#[test]
+fn a_phone_that_asks_where_its_memory_stands_starts_nothing() {
+    let home = phone_home();
+    let c = computer(harness_with_mind(Arc::new(FakeMind::new())));
+    let phone = c.phone(c.pair());
+    let (file, _) = home.backup();
+    assert_eq!(
+        block(phone.memory_status()).err(),
+        Some(CallError::Phone {
+            code: PhoneError::NotReady
+        }),
+        "nothing is known of it here"
+    );
+    assert!(c.view().is_none(), "no question is asked");
+    let _ = file;
 }

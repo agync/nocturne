@@ -271,7 +271,7 @@ impl Incoming {
                 .as_mut()
                 .map(|f| f.write_all(&chunk.bytes))
                 .unwrap_or(Ok(()));
-            wrote.err().map(|_| PhoneError::Busy)
+            wrote.err().map(|e| write_failed(&e))
         };
         u.received += chunk.bytes.len() as u64;
         if let Some(code) = failure {
@@ -283,8 +283,8 @@ impl Incoming {
         if chunk.last {
             let mut u = uploads.remove(device).expect("present");
             let synced = u.file.take().map(|f| f.sync_all()).unwrap_or(Ok(()));
-            if synced.is_err() {
-                u.fail(PhoneError::Busy);
+            if let Err(e) = synced {
+                u.fail(write_failed(&e));
                 return Ok(());
             }
             let sent = u.done.take().map(|tx| {
@@ -345,6 +345,15 @@ impl Incoming {
                 let _ = std::fs::remove_file(e.path());
             }
         }
+    }
+}
+
+/// A write that did not go: no room here is `TooLarge`, anything else may pass.
+fn write_failed(e: &std::io::Error) -> PhoneError {
+    use std::io::ErrorKind::{FileTooLarge, QuotaExceeded, StorageFull};
+    match e.kind() {
+        StorageFull | QuotaExceeded | FileTooLarge => PhoneError::TooLarge,
+        _ => PhoneError::Busy,
     }
 }
 
