@@ -216,6 +216,19 @@ fn hear_soon<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
+/// Fade and let go what has gone unused, in the background, when the app opens and each time it
+/// comes back to the front. It runs at most once a day.
+pub fn fade_soon<R: Runtime>(app: &AppHandle<R>) {
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(done) = app.state::<Home>().fade_if_due()
+            && (done.faded, done.let_go) != (0, 0)
+        {
+            tracing::info!("{} memories faded, {} let go", done.faded, done.let_go);
+        }
+    });
+}
+
 /// The phone's language, as the web view knows it (such as `en-GB`), for reading voice notes;
 /// then every note still waiting is read where the phone can. Called when the app opens and
 /// each time it comes back to the front. Never asks for the microphone.

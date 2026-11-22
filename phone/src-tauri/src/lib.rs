@@ -34,6 +34,7 @@ pub fn run() {
                 exclude_from_backup(app.handle()),
             ));
             sources::start(app.handle());
+            home::commands::fade_soon(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -83,9 +84,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("the phone app runs")
         .run(|app, event| {
-            // Back to the front: send what changed while away.
+            // Back to the front: send what changed while away, and fade what went unused.
             if let tauri::RunEvent::Resumed = event {
                 sources::start(app);
+                home::commands::fade_soon(app);
             }
         });
 }
