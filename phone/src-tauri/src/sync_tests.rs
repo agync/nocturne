@@ -1,7 +1,7 @@
 //! The sends with the phone's sources and the computer as fakes.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nocturne_channel::client::{CallError, Reach};
@@ -1181,7 +1181,7 @@ struct FakeStore {
     readings: Mutex<BTreeMap<String, String>>,
 }
 
-impl LocalStore for &FakeStore {
+impl LocalStore for Arc<FakeStore> {
     fn take_calendar(
         &self,
         batch: nocturne_contract::CalendarBatch,
@@ -1256,8 +1256,8 @@ fn the_local_store_takes_a_batch() {
     let d = FakeDevice::new();
     two_entries(&d);
     *d.readings.lock().unwrap() = vec![steps("2026-11-21", 900)];
-    let store = FakeStore::default();
-    let report = sync_to(&s, &d, &EngineSink(&store)).unwrap();
+    let store = Arc::new(FakeStore::default());
+    let report = sync_to(&s, &d, &EngineSink::new(store.clone())).unwrap();
     assert_eq!(report.calendar.unwrap().taken, 2);
     assert_eq!(report.health.unwrap().taken, 1);
     assert_eq!(store.calendar.lock().unwrap().len(), 2);
@@ -1271,8 +1271,8 @@ fn a_resend_into_the_local_store_changes_nothing() {
     bring_calendar(&s);
     let d = FakeDevice::new();
     two_entries(&d);
-    let store = FakeStore::default();
-    let sink = EngineSink(&store);
+    let store = Arc::new(FakeStore::default());
+    let sink = EngineSink::new(store.clone());
     sync_to(&s, &d, &sink);
 
     // The ledger lost: everything goes again and the store says it already has it.
@@ -1293,8 +1293,8 @@ fn an_entry_removed_on_the_phone_closes_in_the_local_store() {
         entry("b", "2026-11-23", "1"),
         entry("c", "2026-11-24", "1"),
     ];
-    let store = FakeStore::default();
-    let sink = EngineSink(&store);
+    let store = Arc::new(FakeStore::default());
+    let sink = EngineSink::new(store.clone());
     sync_to(&s, &d, &sink);
     d.entries.lock().unwrap().remove(2);
     sync_to(&s, &d, &sink);
@@ -1308,8 +1308,8 @@ fn switching_the_sink_keeps_what_was_sent() {
     bring_calendar(&s);
     let d = FakeDevice::new();
     two_entries(&d);
-    let store = FakeStore::default();
-    sync_to(&s, &d, &EngineSink(&store));
+    let store = Arc::new(FakeStore::default());
+    sync_to(&s, &d, &EngineSink::new(store.clone()));
 
     // Moved to a computer: what already went is not sent again, only what changed since.
     let link = FakeLink::new(Mode::Take);
@@ -1342,4 +1342,149 @@ fn the_channel_sink_sends_as_the_link_does() {
     let report = sync_to(&s2, &d, &ChannelSink(&away)).unwrap();
     assert_eq!(report.calendar, None);
     assert_eq!(s2.ledger.get().calendar.pending.len(), 2);
+}
+
+#[test]
+fn the_channel_sink_ends_each_answer_as_the_link_does() {
+    struct Scripted(RemoteAnswer);
+    impl Link for Scripted {
+        fn send(
+            &self,
+            _call: RemoteCall,
+        ) -> impl std::future::Future<Output = Result<RemoteAnswer, CallError>> + Send {
+            let a = self.0.clone();
+            async move { Ok(a) }
+        }
+        async fn pause(&self, _how_long: Duration) {}
+    }
+    let call = || RemoteCall::SendCalendar {
+        batch: nocturne_contract::CalendarBatch {
+            sync_id: "x".into(),
+            seq: 0,
+            last: true,
+            window_from: "2026-11-19".into(),
+            window_to: "2026-12-05".into(),
+            calendars: vec![],
+            changes: vec![],
+        },
+    };
+    let ended = |a: crate::sync::Answer| match a {
+        crate::sync::Answer::Took(r) => format!("took {}", r.taken),
+        crate::sync::Answer::Ended(e) => format!("{e:?}"),
+    };
+    for answer in [
+        RemoteAnswer::Revoked,
+        RemoteAnswer::Error {
+            code: PhoneError::SessionExpired,
+        },
+        RemoteAnswer::Error {
+            code: PhoneError::NotYours,
+        },
+        RemoteAnswer::Synced {
+            receipt: SyncReceipt {
+                taken: 0,
+                unchanged: 0,
+                refused: 0,
+                stopped: true,
+                too_many: false,
+            },
+        },
+    ] {
+        let raw = Scripted(answer);
+        let direct = ended(block(crate::sync::send_batch(&raw, call())));
+        let wrapped = ChannelSink(&raw);
+        let via = ended(block(crate::sync::send_batch(
+            &crate::sync::ViaSink(&wrapped),
+            call(),
+        )));
+        assert_eq!(direct, via);
+    }
+}
+
+impl LocalStore for Arc<crate::home::Home> {
+    fn take_calendar(
+        &self,
+        batch: nocturne_contract::CalendarBatch,
+    ) -> Result<SyncReceipt, PhoneError> {
+        LocalStore::take_calendar(&**self, batch)
+    }
+
+    fn take_readings(
+        &self,
+        batch: nocturne_contract::ReadingBatch,
+    ) -> Result<SyncReceipt, PhoneError> {
+        LocalStore::take_readings(&**self, batch)
+    }
+}
+
+fn alone_home(dir: &std::path::Path) -> Arc<crate::home::Home> {
+    let clock = Arc::new(nocturne_engine::ManualClock::at(
+        "2026-11-21T09:00:00Z",
+        "Europe/London",
+    ));
+    let home = crate::home::Home::new(dir.to_path_buf(), clock, Box::new(|_: &std::path::Path| {}));
+    home.start_alone("Pixel", false).unwrap();
+    Arc::new(home)
+}
+
+#[test]
+fn alone_a_send_lands_in_the_memory_on_the_phone() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    bring_health(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    *d.readings.lock().unwrap() = vec![steps("2026-11-21", 900)];
+    let home_dir = tempfile::tempdir().unwrap();
+    let home = alone_home(home_dir.path());
+    let sink = EngineSink::new(home.clone());
+
+    let report = sync_to(&s, &d, &sink).unwrap();
+    assert_eq!(report.calendar.unwrap().taken, 2);
+    assert_eq!(report.health.unwrap().taken, 1);
+
+    // The ledger lost: the memory says it has it all already.
+    s.ledger.forget_sends();
+    let report = sync_to(&s, &d, &sink).unwrap();
+    let receipt = report.calendar.unwrap();
+    assert_eq!((receipt.taken, receipt.unchanged), (0, 2));
+}
+
+#[test]
+fn a_memory_that_is_not_there_makes_the_send_wait() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    let home_dir = tempfile::tempdir().unwrap();
+    let clock = Arc::new(nocturne_engine::ManualClock::at(
+        "2026-11-21T09:00:00Z",
+        "Europe/London",
+    ));
+    let home = crate::home::Home::new(
+        home_dir.path().to_path_buf(),
+        clock,
+        Box::new(|_: &std::path::Path| {}),
+    );
+    let sink = EngineSink::new(Arc::new(home));
+    // Not alone: the send ends at once, and the changes stay waiting.
+    let report = sync_to(&s, &d, &sink).unwrap();
+    assert_eq!(report.calendar, None);
+    assert_eq!(s.ledger.get().calendar.pending.len(), 2);
+}
+
+#[test]
+fn moving_from_alone_to_a_computer_keeps_the_ledger() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    let home_dir = tempfile::tempdir().unwrap();
+    let home = alone_home(home_dir.path());
+    sync_to(&s, &d, &EngineSink::new(home));
+
+    let link = FakeLink::new(Mode::Take);
+    let report = sync_to(&s, &d, &ChannelSink(&link)).unwrap();
+    assert_eq!(report.calendar, None);
+    assert!(link.calls.lock().unwrap().is_empty());
 }
