@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use nocturne_contract::{
     BackupPhase, CheckInInput, Feeling, FeelingPart, FeelingPoint, ForgetScope, HeardBy,
-    HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, KeptCounts, PhoneError, PhoneMode,
-    PhoneSource, RemoteAnswer, RemoteCall,
+    HomeAnswer, HomeCall, HomeError, ItemKind, ItemStatus, KeptCounts, KeptHow, PhoneError,
+    PhoneMode, PhoneSource, RemoteAnswer, RemoteCall,
 };
 use nocturne_engine::{Candidate, DecayReport, ManualClock, Predicate};
 
@@ -1099,6 +1099,52 @@ fn a_deleted_calendar_comes_back_unless_it_is_stopped() {
     fill();
     super::commands::forget_source_sends(&ledger, PhoneSource::Calendar, true);
     assert!(!ledger.get().calendar.settings.bring);
+}
+
+fn kept(home: &Home, id: &str) -> nocturne_contract::ItemKept {
+    match local(home, HomeCall::ItemKept { id: id.into() }) {
+        HomeAnswer::ItemKept { kept } => kept,
+        other => panic!("no kept: {other:?}"),
+    }
+}
+
+#[test]
+fn a_things_page_says_how_it_was_kept() {
+    let dir = tempfile::tempdir().unwrap();
+    let (home, _) = alone(dir.path());
+    let id = kept_id(&call(&home, note("The purple giraffe", "c-1")));
+    let before = kept(&home, &id);
+    assert_eq!((before.how, before.device.as_deref()), (None, None));
+    assert!(!before.worked_out, "no mind, nothing worked out");
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::SetKeptHow {
+                id: id.clone(),
+                how: KeptHow::Typed
+            }
+        ),
+        HomeAnswer::KeptHowSet
+    );
+    assert_eq!(kept(&home, &id).how, Some(KeptHow::Typed));
+    assert_eq!(
+        local(
+            &home,
+            HomeCall::SetKeptHow {
+                id: id.clone(),
+                how: KeptHow::Health
+            }
+        ),
+        HomeAnswer::Error {
+            code: HomeError::Invalid
+        }
+    );
+    assert_eq!(
+        local(&home, HomeCall::ItemKept { id: "nope".into() }),
+        HomeAnswer::Error {
+            code: HomeError::NotFound
+        }
+    );
 }
 
 #[test]

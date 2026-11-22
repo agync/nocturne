@@ -6,7 +6,7 @@ use jiff::Timestamp;
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use nocturne_contract::MemoryStatus;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 
 use crate::Engine;
 use crate::audio::{drop_audio_rows, pages_citing, shred_all};
@@ -165,6 +165,32 @@ impl Engine {
         self.bump_audio();
         shred_all(files);
         Ok(())
+    }
+
+    /// Note how a thing was kept on a phone ("typed", "taken", ...), for its page's Kept row. It
+    /// travels with the thing in a backup or a move.
+    pub fn set_kept_how(&self, item_id: &str, how: &str) -> Result<()> {
+        self.write(|tx| {
+            item_exists(tx, item_id)?;
+            tx.execute(
+                "UPDATE items SET metadata = json_set(metadata, '$.kept_how', ?2) WHERE id = ?1",
+                params![item_id, how],
+            )?;
+            Ok(())
+        })
+    }
+
+    /// How a thing was kept, when a phone noted it.
+    pub fn kept_how(&self, item_id: &str) -> Result<Option<String>> {
+        self.read(|conn| {
+            conn.query_row(
+                "SELECT json_extract(metadata, '$.kept_how') FROM items WHERE id = ?1",
+                [item_id],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .ok_or_else(|| Error::not_found("that item"))
+        })
     }
 
     /// Mark an item private (or not). Turning it on makes every memory linked to the item
