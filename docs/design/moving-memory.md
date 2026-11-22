@@ -1,7 +1,7 @@
 ---
 type: Design
 title: Moving your memory
-description: Proposal for moving a person's memory between a phone, a household computer and a computer of their own, one home at a time, with what moves, what happens to the old home, the locked copy online and the online mind afterwards, the screens on the phone and the computer, states and copy.
+description: Proposal for moving a person's memory between a phone, a household computer and a computer of their own, one home at a time and only by pairing, with what moves, what happens to the old home, the locked copy online and the online mind afterwards, the screens on the phone and the computer, states and copy.
 status: draft
 tags: [proposal, ux, phone, household, backup, copy]
 ---
@@ -10,9 +10,15 @@ tags: [proposal, ux, phone, household, backup, copy]
 
 Part of [Phone and computer as equal starting points](phone-parity.md). A memory lives in one place
 at a time. Moving it is how a person goes up the ladder and back down: a phone alone to a laptop, a
-phone into a household, a household to a computer of their own, a computer back to a phone.
+phone to a household computer it makes its home, a household computer to a computer of their own, a
+computer back to a phone.
 
-Status: proposed. Nothing here is built.
+A memory moves only by pairing. The person pairs the phone with the new home, or the new home with
+the phone, and agrees to the move. Using a mind, online or a household's, never moves a memory or
+leaves a copy of it on the mind's machine. The locked copy online is a copy of the one home, used to
+restore it, never a home of its own.
+
+Status: proposed, with the owner's decisions folded in. Nothing here is built.
 
 ## Mockups
 
@@ -71,13 +77,15 @@ phone?" with "Yes, bring my memory here" and "No, start fresh". Yes goes straigh
 once paired, to the move. A computer that is already set up offers the move whenever a phone that
 holds its own memory is added.
 
-### From a phone to a household
+### To a household computer
 
-Joining with "Keep my memory there" ([Household](household-server.md#joining)), then the same move,
-with the household computer as the new home and its own per-person store locked with this phone's
-key.
+Only when the household's owner invited the person to keep their memory there, and they pair
+([Making a household computer your home](household-server.md#making-a-household-computer-your-home)).
+Then the same move, with the household computer as the new home and its own per-person store locked
+with this phone's key. A phone that only borrows a household's mind has nothing there to move from
+or into; making the household its home is a new invitation and a new pairing.
 
-### From a household to a computer
+### From a household computer to a computer
 
 From This phone, "Move my memory…", "A computer of your own". The phone pairs with the computer,
 then asks the household computer to send the memory. It travels from the household computer to the
@@ -86,11 +94,13 @@ with the new one. When it has arrived: "Delete your memory from {household}?".
 
 ### Back to the phone
 
-From a household: "Leave this household…", "To this phone". From a computer of one's own:
+From a household computer that is its home: "Leave this household…", "To this phone". From a computer of one's own:
 Settings, "Your data", "Move my memory to a phone…", choosing one paired phone. Both check room on
 the phone first, since photos and recordings can be large. The phone becomes a phone alone. On a
 computer, the done screen offers "Keep using this computer’s mind", which turns on Household and adds
-that phone as borrowing its mind, so the page does not stop.
+that phone as borrowing its mind, so the page does not stop. The person is the computer's owner, so
+this is their own invitation; the computer then keeps nothing of the memory it handed over once the
+person removes what was put aside.
 
 ## Afterwards
 
@@ -98,7 +108,7 @@ that phone as borrowing its mind, so the page does not stop.
 |---|---|---|
 | The phone | A companion of the new home | A phone alone, its mind "None yet" unless the person chooses one |
 | The old memory on the phone | Put aside; the person removes it or keeps it put aside for 30 days | Not applicable |
-| A locked copy online | Turned off. "Delete the copy online" or "Keep it as it is" ([decision 19](phone-parity.md#decisions-for-the-owner)) | Offered: "Keep a locked copy online?" |
+| A locked copy online | Turned off. "Delete the copy online" or "Keep it as it is" ([decision 19](phone-parity.md#decisions)) | Offered: "Keep a locked copy online?" |
 | Its online mind | Turned off on the phone. The computer has its own mind, and Online answers can be set up there | Offered: "Choose a mind" |
 | Calendar and health | Keep coming, now to the new home | Stay on the phone |
 | The Sent online list | Moves with the memory | Moves with the memory |
