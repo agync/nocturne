@@ -20,7 +20,7 @@ import type {
 } from "../../engine/bindings";
 import type { NativeChannel } from "../native/api";
 import { type LaunchRoute, type Shared, watchLaunch } from "../native/launch";
-import { openAppSettings, scanCode } from "../native/scanner";
+import { openAppSettings } from "../native/scanner";
 import { CalendarConnect } from "../native/screens/CalendarConnect";
 import { KeepButton, NavBar, type Tab, TabBar } from "../native/screens/chrome";
 import { HealthConnect } from "../native/screens/HealthConnect";
@@ -151,6 +151,7 @@ export function HomeApp({
   name,
   onLost,
   onDeleted,
+  onScan,
 }: {
   services: NativeServices;
   channel: NativeChannel;
@@ -162,6 +163,8 @@ export function HomeApp({
   onLost(): void;
   /** Everything was deleted: Welcome comes next, saying so. */
   onDeleted(): void;
+  /** "Scan the code" in Give Nocturne a mind: pairing a computer starts the move. */
+  onScan(): void;
 }) {
   const { home } = services;
   const engine = useMemo(() => services.engineFor(() => ""), [services]);
@@ -477,13 +480,7 @@ export function HomeApp({
       );
       break;
     case "mind":
-      screen = (
-        <GiveMind
-          backLabel={t("phone.back")}
-          onBack={back}
-          onScan={() => void scanCode().catch(() => undefined)}
-        />
-      );
+      screen = <GiveMind backLabel={t("phone.back")} onBack={back} onScan={onScan} />;
       break;
     case "backup":
       screen = <SaveBackup save={home.saveBackupFile} now={services.now} onClose={back} />;
