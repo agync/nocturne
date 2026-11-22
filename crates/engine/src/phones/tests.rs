@@ -2151,3 +2151,203 @@ fn rehoming_prefers_what_the_phone_sent_first() {
         1
     );
 }
+
+#[test]
+fn a_dropped_or_changed_entry_is_not_found_by_its_words_but_the_current_one_is() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .take_calendar(
+            &local,
+            batch(
+                "s1",
+                vec![
+                    upsert(dentist_wed()),
+                    upsert(entry(
+                        "ev2",
+                        "Haircut",
+                        "2026-11-25T11:00:00Z",
+                        "2026-11-25T11:30:00Z",
+                    )),
+                ],
+            ),
+        )
+        .unwrap();
+    assert_eq!(f.engine.find_items("dentist", 10).unwrap().len(), 1);
+    assert_eq!(f.engine.find_items("haircut", 10).unwrap().len(), 1);
+
+    f.engine
+        .take_calendar(&local, batch("s2", vec![upsert(dentist_thu())]))
+        .unwrap();
+    let found = f.engine.find_items("dentist", 10).unwrap();
+    assert_eq!(found.len(), 1, "the version it replaced is history");
+    assert_eq!(found[0].receipt.item_id, record_item(&f, "ev1"));
+    assert_eq!(found[0].receipt.kind, nocturne_contract::ItemKind::Calendar);
+    assert_eq!(found[0].receipt.calendar.as_deref(), Some("Home"));
+
+    f.engine
+        .take_calendar(
+            &local,
+            batch(
+                "s3",
+                vec![CalendarChange::Removed {
+                    phone_id: "ev2".into(),
+                }],
+            ),
+        )
+        .unwrap();
+    assert!(f.engine.find_items("haircut", 10).unwrap().is_empty());
+}
+
+#[test]
+fn an_appointment_is_found_by_its_place_and_a_summary_is_not_the_persons_words() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    let mut dentist = dentist_wed();
+    dentist.place = Some("Maple Street Clinic".into());
+    f.engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist)]))
+        .unwrap();
+    let found = f.engine.find_items("clinic", 10).unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].receipt.label, "Dentist");
+    let marked: Vec<&str> = found[0]
+        .excerpt
+        .iter()
+        .filter(|p| p.matched)
+        .map(|p| p.text.as_str())
+        .collect();
+    assert_eq!(marked, ["Clinic"]);
+    assert_eq!(found[0].receipt.calendar.as_deref(), Some("Home"));
+    assert_eq!(f.engine.find_items("dentist clinic", 10).unwrap().len(), 1);
+    assert_eq!(
+        f.engine.find_items("clin", 10).unwrap().len(),
+        1,
+        "a word's start"
+    );
+    assert_eq!(
+        f.engine.find_items("the at street", 10).unwrap().len(),
+        1,
+        "stop words are left out"
+    );
+    assert!(
+        f.engine.find_items("treet", 10).unwrap().is_empty(),
+        "not part way in"
+    );
+    assert!(
+        f.engine.find_items("at", 10).unwrap().is_empty(),
+        "no word of the place starts with it"
+    );
+
+    let item = record_item(&f, "ev1");
+    f.engine
+        .write(|tx| {
+            tx.execute(
+                "UPDATE items SET summary = 'molar extraction' WHERE id = ?1",
+                [&item],
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    assert!(f.engine.find_items("molar", 10).unwrap().is_empty());
+}
+
+#[test]
+fn rehoming_follows_the_markers_keeps_left() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .keep_checkin_at(
+            CheckInInput {
+                feeling: Feeling {
+                    part: FeelingPart::Settled,
+                    point: FeelingPoint {
+                        pleasant: 0.5,
+                        energy: 0.5,
+                    },
+                    words: vec!["calm".into()],
+                },
+                line: None,
+                urge: None,
+                replaces: None,
+            },
+            Source::Phone,
+            &crate::KeepPlace {
+                day: None,
+                phone: Some((&local, "c1")),
+            },
+        )
+        .unwrap();
+    f.engine.rehome_device(&local, &f.phone).unwrap();
+    assert_eq!(
+        count(
+            &f,
+            &format!(
+                "SELECT COUNT(*) FROM items WHERE json_extract(metadata, '$.keep') = '{}/c1'",
+                f.phone
+            )
+        ),
+        1
+    );
+}
+
+#[test]
+fn rehoming_is_refused_for_a_phone_that_already_brought_its_own() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    f.engine
+        .take_calendar(&f.phone, batch("s0", vec![upsert(dentist_thu())]))
+        .unwrap();
+    assert!(f.engine.rehome_device(&local, &f.phone).is_err());
+    assert!(f.engine.local_device().unwrap().is_some());
+    assert_eq!(
+        count(
+            &f,
+            &format!("SELECT COUNT(*) FROM phone_records WHERE device_id = '{local}'")
+        ),
+        1,
+        "nothing moved"
+    );
+}
+
+#[test]
+fn export_does_not_name_a_phone_alone() {
+    let f = fx();
+    let local = f.engine.ensure_local_device("This phone").unwrap();
+    f.engine
+        .take_calendar(&local, batch("s1", vec![upsert(dentist_wed())]))
+        .unwrap();
+    f.engine
+        .take_readings(
+            &local,
+            readings(
+                "h1",
+                vec![reading(
+                    "bp1",
+                    "2026-11-19",
+                    "2026-11-19T07:30:00Z",
+                    ReadingValue::BloodPressure {
+                        top: 128.0,
+                        bottom: 82.0,
+                    },
+                )],
+            ),
+        )
+        .unwrap();
+    let out = tempfile::tempdir().unwrap();
+    let report = f.engine.export_to(out.path()).unwrap();
+    let root = std::path::PathBuf::from(report.path);
+    let files: Vec<String> = std::fs::read_dir(root.join("calendar"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(files, ["Phone.ics"], "no phone name in the file name");
+    let csv = std::fs::read_to_string(root.join("health/Blood pressure.csv")).unwrap();
+    assert!(
+        csv.contains("\"Watch, through Health\"") && !csv.contains(" on "),
+        "{csv}"
+    );
+}
