@@ -8,6 +8,10 @@
 
 mod link;
 mod pair;
+#[cfg(test)]
+mod pipe;
+#[cfg(test)]
+mod pipe_tests;
 mod poll;
 mod session;
 mod ws;
