@@ -2,7 +2,7 @@
 // keeping began and that it was shown are noted on this phone, beside the phone's other stores.
 
 import type { HomeStats } from "../../engine/bindings";
-import { openDb, run, STORE_NOTES } from "../idb";
+import { openNotesDb, run, STORE_NOTES } from "../idb";
 
 export const REMINDER_DAYS = 30;
 const DAY_MS = 86_400_000;
@@ -18,7 +18,7 @@ export interface NoteStore {
 export function idbNotes(factory?: IDBFactory): NoteStore {
   let db: Promise<IDBDatabase> | null = null;
   const ready = () => {
-    db ??= openDb(factory);
+    db ??= openNotesDb(factory);
     return db;
   };
   return {
@@ -66,4 +66,10 @@ export async function reminderDue(
 /** Answered with either button: it does not come back. */
 export function reminderDone(notes: NoteStore): Promise<void> {
   return notes.set(SHOWN, "1");
+}
+
+/** Everything was deleted: keeping starts again from nothing. */
+export async function forgetReminder(notes: NoteStore): Promise<void> {
+  await notes.set(SINCE, "");
+  await notes.set(SHOWN, "");
 }
