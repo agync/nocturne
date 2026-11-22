@@ -350,7 +350,7 @@ mod online {
         assert_eq!(out["type"], "works", "{out}");
         h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": true, "sendSensitive": false,
+            json!({"settings": {"phones": true,
                                 "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
         );
         let online = Online { s, port };

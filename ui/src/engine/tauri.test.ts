@@ -172,7 +172,6 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
     [
       {
         phones: true,
-        sendSensitive: false,
         limit: { kind: "questions", questions: 200, usd: null },
       },
     ],
@@ -182,12 +181,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["turnOffOnline", [true], "turn_off_online", ["forget"]],
   ["abandonOnlineSetup", [], "abandon_online_setup", []],
   ["seeOnlineChange", [], "see_online_change", []],
-  [
-    "updateOnlineSettings",
-    [{ phones: false, sendSensitive: null, limit: null }],
-    "update_online_settings",
-    ["patch"],
-  ],
+  ["updateOnlineSettings", [{ phones: false, limit: null }], "update_online_settings", ["patch"]],
   ["listOnlineSends", [20, null], "list_online_sends", ["limit", "before"]],
   ["getModels", [], "get_models", []],
   ["listModelChoices", ["answering"], "list_model_choices", ["job"]],

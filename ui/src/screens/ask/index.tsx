@@ -870,13 +870,7 @@ export default function Ask() {
                 <div className={styles.leftOut}>
                   <span className={styles.leftOutText}>
                     <PlaceIcon place="computer" size={16} />
-                    {t(
-                      leftOut === "private"
-                        ? "ask.leftOut.private"
-                        : leftOut === "sensitive"
-                          ? "ask.leftOut.sensitive"
-                          : "ask.leftOut.both",
-                    )}
+                    {t(leftOut === "private" ? "ask.leftOut.private" : "ask.leftOut.other")}
                   </span>
                   {phase === "done" ? (
                     <Button variant="secondary" onClick={askHere}>

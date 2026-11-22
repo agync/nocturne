@@ -95,7 +95,7 @@ function StaysHere() {
           <li key={line}>{line}</li>
         ))}
       </ul>
-      <LockNote>{t("online.stays.sensitive")}</LockNote>
+      <LockNote>{t("online.stays.markPrivate")}</LockNote>
       <LockNote>{t("journal.online.settings.privateNote")}</LockNote>
     </>
   );
@@ -248,11 +248,10 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
   const trouble = state.type !== "on";
   const options = limitOptions(view);
 
-  const patch = (change: { phones?: boolean; sendSensitive?: boolean; limit?: OnlineLimit }) =>
+  const patch = (change: { phones?: boolean; limit?: OnlineLimit }) =>
     run(() =>
       engine.updateOnlineSettings({
         phones: change.phones ?? null,
-        sendSensitive: change.sendSensitive ?? null,
         limit: change.limit ?? null,
       }),
     );
@@ -393,15 +392,6 @@ function OnPage({ view, back }: { view: OnlineView; back: Back }) {
             />
           </li>
         ) : null}
-        <li className={styles.row}>
-          <Toggle
-            label={t("online.row.sensitive.label")}
-            hint={t(view.sendSensitive ? "online.row.sensitive.on" : "online.row.sensitive.off")}
-            checked={view.sendSensitive}
-            disabled={busy}
-            onChange={(sendSensitive) => void patch({ sendSensitive })}
-          />
-        </li>
         <Row title={t("online.row.private.label")} hint={t("online.row.private.hint")}>
           <span className={styles.value}>{t("online.row.private.value")}</span>
         </Row>

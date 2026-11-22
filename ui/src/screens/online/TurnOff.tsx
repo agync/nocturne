@@ -10,7 +10,6 @@ import { useOnlineAct } from "./useOnline";
 /** The settings Online answers had, so turning it back on needs nothing more. */
 export const settingsOf = (view: OnlineView) => ({
   phones: view.phones,
-  sendSensitive: view.sendSensitive,
   limit: view.limit,
 });
 

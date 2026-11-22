@@ -506,7 +506,6 @@ impl<R: Runtime> OnlineHub<R> {
             model: row.model.clone(),
             phones: row.phones,
             phones_available: engine.remote_state().map(|r| r.wanted_on).unwrap_or(false),
-            send_sensitive: row.send_sensitive,
             change_notice: row.wanted_on && !engine.online_change_seen().unwrap_or(false),
             limit: row.limit.clone(),
             questions_this_month: engine.questions_this_month(&tz).unwrap_or(0),
@@ -806,7 +805,6 @@ impl<R: Runtime> OnlineHub<R> {
                 s.base_url = Some(route.base_url().to_string());
                 s.model = Some(route.model.clone());
                 s.phones = settings.phones;
-                s.send_sensitive = settings.send_sensitive;
                 s.limit = settings.limit.clone();
                 s.pause = None;
                 s.problem = None;
@@ -930,9 +928,6 @@ impl<R: Runtime> OnlineHub<R> {
             .update_online_state(|s| {
                 if let Some(p) = patch.phones {
                     s.phones = p;
-                }
-                if let Some(v) = patch.send_sensitive {
-                    s.send_sensitive = v;
                 }
                 if let Some(l) = patch.limit.clone() {
                     s.limit = l;

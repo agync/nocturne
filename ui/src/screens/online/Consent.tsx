@@ -17,7 +17,6 @@ const NEVER: CopyId[] = [
   "online.consent.never.photos",
   "online.consent.never.private",
   "journal.online.step5.neverSent",
-  "online.consent.never.sensitive",
   "online.consent.never.rest",
 ];
 
@@ -82,13 +81,6 @@ export function Consent({
     });
   }
   summary.push(
-    {
-      label: t("online.consent.aside.sensitive"),
-      value: t(
-        draft.sendSensitive ? "online.consent.aside.mayGo" : "online.consent.aside.keptHere",
-      ),
-      to: "send",
-    },
     { label: t("online.consent.aside.private"), value: t("online.consent.aside.neverSent") },
     {
       label: t("journal.online.step5.choice.entries"),
@@ -198,6 +190,7 @@ export function Consent({
             </li>
           ))}
         </ul>
+        <p className={styles.body}>{t("online.consent.never.markPrivate")}</p>
         <p className={styles.body}>{t("journal.online.step5.privateNote")}</p>
       </div>
 

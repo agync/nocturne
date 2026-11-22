@@ -99,7 +99,7 @@ impl Lab {
         assert_eq!(out["type"], "works", "{out}");
         let view = self.h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": phones, "sendSensitive": false,
+            json!({"settings": {"phones": phones,
                                 "limit": {"kind": "questions", "questions": questions, "usd": null}}}),
         );
         assert_eq!(view["state"]["type"], "on", "{view}");
@@ -787,7 +787,7 @@ fn a_refused_key_request_keeps_the_gate_closed() {
     l.h.ok("turn_off_online", json!({"forget": false}));
     let view = l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     assert_eq!(view["state"]["type"], "problem", "{view}");
@@ -800,7 +800,7 @@ fn a_refused_key_request_keeps_the_gate_closed() {
         .store(false, std::sync::atomic::Ordering::SeqCst);
     let view = l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     assert_eq!(view["state"]["type"], "on", "{view}");
@@ -858,7 +858,7 @@ fn a_check_of_another_provider_never_carries_questions() {
     assert_eq!(out["type"], "works");
     l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     let b = StandIn::start(&fake_provider());

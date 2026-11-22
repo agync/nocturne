@@ -250,3 +250,16 @@ describe("the journal on the Online answers page", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("only what is marked private is held back", () => {
+  it("has no health, money or ID switch, and says to mark things private", async () => {
+    await openOnline(PAGE, "on");
+    expect(screen.queryByRole("switch", { name: /Health, money and ID/ })).toBeNull();
+    expect(screen.queryByText(/health, money/i)).toBeNull();
+    expect(
+      screen.getByText(
+        "Nocturne doesn’t guess what is private. Mark anything you never want sent as private.",
+      ),
+    ).toBeInTheDocument();
+  });
+});

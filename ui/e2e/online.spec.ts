@@ -214,13 +214,12 @@ test.describe("O2 to O6, setting up", () => {
     await press(page, "button", "Continue");
     await connectAndCheck(page);
     await press(page, "button", "Continue");
-    await press(page, "switch", "Health, money and ID details");
-    await expect(page.getByRole("switch", { name: "Health, money and ID details" })).toBeChecked();
+    await expect(page.getByRole("switch", { name: /Health, money and ID/ })).toHaveCount(0);
     await press(page, "button", "Continue");
     await press(page, "button", "Continue");
     await press(page, "button", "Turn on online answers");
     await expect(page.getByRole("switch", { name: "Online answers are on" })).toBeChecked();
-    await expect(page.getByText("Health, money and ID details", { exact: true })).toBeVisible();
+    await expect(page.getByText(/health, money/i)).toHaveCount(0);
   });
 
   test("Tab alone: through the form, the check and on to Continue", async ({ page }) => {

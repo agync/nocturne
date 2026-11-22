@@ -113,7 +113,6 @@ export class OnlineSim {
       model: null,
       phones: false,
       phonesAvailable: false,
-      sendSensitive: false,
       changeNotice: false,
       limit: { kind: "none", questions: 200, usd: null },
       questionsThisMonth: 0,
@@ -375,7 +374,6 @@ export class OnlineSim {
       baseUrl: route.baseUrl,
       model: route.model,
       phones: settings.phones,
-      sendSensitive: settings.sendSensitive,
       limit: clone(settings.limit),
       keyStorage: was.keyStorage ?? "keychain",
       onSince:
@@ -409,7 +407,6 @@ export class OnlineSim {
   async update(patch: OnlineSettingsPatch): Promise<OnlineView> {
     const next = { ...this.current };
     if (patch.phones !== null) next.phones = patch.phones;
-    if (patch.sendSensitive !== null) next.sendSensitive = patch.sendSensitive;
     if (patch.limit !== null) {
       next.limit = clone(patch.limit);
       const reached =

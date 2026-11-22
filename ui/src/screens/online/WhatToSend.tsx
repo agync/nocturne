@@ -45,14 +45,6 @@ export function WhatToSend({ draft, phonesAvailable, setDraft, onBack, onNext }:
           </li>
         ) : null}
         <li className={styles.row}>
-          <Toggle
-            label={t("online.send.sensitive.label")}
-            hint={t("online.send.sensitive.hint")}
-            checked={draft.sendSensitive}
-            onChange={(sendSensitive) => setDraft({ ...draft, sendSensitive })}
-          />
-        </li>
-        <li className={styles.row}>
           <span className={styles.lockNote}>
             <Icon name="lock" size={18} />
             <span className={styles.textStack}>
