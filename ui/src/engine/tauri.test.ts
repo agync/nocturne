@@ -162,6 +162,7 @@ const table: Array<[keyof EngineClient, unknown[], string, string[]]> = [
   ["getMove", [], "get_move", []],
   ["answerMove", ["move"], "answer_move", ["choice"]],
   ["finishMove", [], "finish_move", []],
+  ["stopMove", [], "stop_move", []],
   ["getOnline", [], "get_online", []],
   [
     "checkOnline",

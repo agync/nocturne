@@ -128,6 +128,12 @@ export interface EngineEvents {
   "move-changed": MoveView | null;
 }
 
+/** How much room a move needs on this computer and how much there is, in bytes. */
+export interface MoveRoom {
+  need: number;
+  free: number;
+}
+
 /** A phone's memory moving to this computer, as the window shows it (`get_move`). */
 export type MoveView =
   | {
@@ -138,10 +144,14 @@ export type MoveView =
       here: boolean;
       /** Other phones send their calendar and health again after this replaces a memory. */
       others?: boolean;
+      /** Not enough room yet: the move button waits. */
+      room?: MoveRoom | null;
     }
   | { phase: "arriving"; name: string; done: number; size: number }
   | { phase: "checking"; name: string }
-  | { phase: "arrived"; name: string; online: boolean };
+  | { phase: "restarting"; name: string }
+  | { phase: "arrived"; name: string; online: boolean }
+  | { phase: "failed"; name: string; why: "noRoom" | "notOpened"; room: MoveRoom | null };
 
 /** The person's answer to a phone that offers its memory. */
 export type MoveChoice = "move" | "notNow";
@@ -350,8 +360,10 @@ export interface EngineClient {
   /** A phone's memory moving here, if one is; it follows `move-changed`. */
   getMove(): Promise<MoveView | null>;
   answerMove(choice: MoveChoice): Promise<void>;
-  /** "Open today's page": the memory that arrived takes its place as Nocturne starts again. */
+  /** "Open today's page", or "OK" on a move that changed nothing. */
   finishMove(): Promise<void>;
+  /** "Stop moving" while a phone's memory arrives, until the restart. */
+  stopMove(): Promise<void>;
 
   /** Online answers. Main window only; the key goes out in `checkOnline` and never comes back. */
   getOnline(): Promise<OnlineView>;

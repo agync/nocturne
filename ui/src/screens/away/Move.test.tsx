@@ -78,18 +78,76 @@ describe("a phone with its own memory", () => {
     expect(answer).toHaveBeenCalledWith("notNow");
   });
 
-  it("stays while the memory arrives and is checked, with nothing to press", async () => {
+  it("stays while the memory arrives and is checked, and can be stopped until the restart", async () => {
     const { engine } = await withOffer();
     act(() => engine.setMove({ phase: "arriving", name: "Maya’s phone", done: 7e8, size: 1.4e9 }));
     const bar = await screen.findByRole("progressbar");
-    expect(bar).toHaveAccessibleName("Arriving from Maya’s phone · 700 MB of 1.4 GB");
-    expect(within(screen.getByRole("alertdialog")).queryByRole("button")).toBeNull();
+    expect(bar).toHaveAccessibleName("Arriving from Maya’s phone · 700\u00a0MB of 1.4\u00a0GB");
     await userEvent.keyboard("{Escape}");
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    expect(
+      screen.getByText("Stop this move? Nothing changes here, and Maya’s phone keeps its memory."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Keep moving" }));
+    expect(await screen.findByRole("progressbar")).toBeInTheDocument();
+
     act(() => engine.setMove({ phase: "checking", name: "Maya’s phone" }));
     expect(await screen.findByRole("progressbar")).toHaveAccessibleName(
       "Checking · every count must match before Maya’s phone lets go of it",
     );
+    const stop = vi.spyOn(engine, "stopMove");
+    await userEvent.click(screen.getByRole("button", { name: "Stop" }));
+    await userEvent.click(screen.getByRole("button", { name: "Stop moving" }));
+    expect(stop).toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+
+  it("says Nocturne restarts to open it, with nothing to press", async () => {
+    const { engine } = await withOffer();
+    act(() => engine.setMove({ phase: "restarting", name: "Maya’s phone" }));
+    expect(
+      await screen.findByText(
+        "Nocturne restarts to open the memory from Maya’s phone. It opens again by itself.",
+      ),
+    ).toBeInTheDocument();
+    expect(within(screen.getByRole("alertdialog")).queryByRole("button")).toBeNull();
+  });
+
+  it("waits for room before moving it here", async () => {
+    const { engine } = await withOffer();
+    act(() =>
+      engine.setMove({
+        ...offered(false),
+        room: { need: 2_900_000_000, free: 1_200_000_000 },
+      }),
+    );
+    const dialog = await screen.findByRole("alertdialog");
+    await waitFor(() =>
+      expect(dialog).toHaveTextContent(
+        "This computer needs about 2.9 GB free for it and has 1.2 GB. Free some room here, then choose Move it here.",
+      ),
+    );
+    expect(within(dialog).getByRole("button", { name: "Move it here" })).toBeDisabled();
+  });
+
+  it.each([
+    [
+      { why: "noRoom" as const, room: { need: 2_900_000_000, free: 0 } },
+      "There wasn’t room for Maya’s phone’s memory, so nothing changed. Free about 2.9 GB here, then move it again from Maya’s phone.",
+    ],
+    [
+      { why: "notOpened" as const, room: null },
+      "The memory from Maya’s phone couldn’t be opened here, so nothing changed. What was on this computer is as it was.",
+    ],
+  ])("says how a move ended with nothing changed, with OK", async (failed, line) => {
+    const { engine } = await withOffer();
+    act(() => engine.setMove({ phase: "failed", name: "Maya’s phone", ...failed }));
+    const dialog = await screen.findByRole("alertdialog");
+    await waitFor(() => expect(dialog).toHaveTextContent(line));
+    await userEvent.click(within(dialog).getByRole("button", { name: "OK" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 
   it("says the memory is here, and Open today’s page finishes it", async () => {
