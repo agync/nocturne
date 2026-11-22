@@ -250,3 +250,58 @@ fn a_store_in_use_a_version_behind_still_settles() {
         KEY
     );
 }
+
+#[test]
+fn a_leaving_memory_names_where_its_things_were_kept() {
+    let phone = fixture();
+    let local = phone.engine.ensure_local_device("Phone").unwrap();
+    let typed = keep(&phone.engine, "Bought a ticket");
+    phone.engine.link_remote_keep(&typed, &local, "c1").unwrap();
+    let restored = keep(&phone.engine, "From an older backup");
+    assert_eq!(phone.engine.get_item(&typed).unwrap().from_device, None);
+
+    assert_eq!(phone.engine.name_unnamed_items("Ana’s Pixel").unwrap(), 2);
+    assert_eq!(phone.engine.name_unnamed_items("Another name").unwrap(), 0);
+    for id in [&typed, &restored] {
+        assert_eq!(
+            phone.engine.get_item(id).unwrap().from_device.as_deref(),
+            Some("Ana’s Pixel")
+        );
+    }
+
+    // At the computer, a thing kept through the pairing names the phone as paired there.
+    let computer = fixture();
+    let paired = computer
+        .engine
+        .add_device(
+            "Pixel 9",
+            KEY,
+            "https://home.example",
+            RemoteConnection::Simple,
+            "a",
+        )
+        .unwrap()
+        .id;
+    phone
+        .engine
+        .settle_arrival(computer.dir.path(), &paired)
+        .unwrap();
+    assert_eq!(
+        phone
+            .engine
+            .get_item(&typed)
+            .unwrap()
+            .from_device
+            .as_deref(),
+        Some("Pixel 9")
+    );
+    assert_eq!(
+        phone
+            .engine
+            .get_item(&restored)
+            .unwrap()
+            .from_device
+            .as_deref(),
+        Some("Ana’s Pixel")
+    );
+}
