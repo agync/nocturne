@@ -1,0 +1,8 @@
+[
+  {
+    "cmd": "offerMemory",
+    "counts": { "items": 212, "memories": 87, "pages": 9, "originals": 140 },
+    "bytes": 52428800.0,
+    "schema": 14
+  }
+]

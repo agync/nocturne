@@ -453,6 +453,8 @@ pub const PHONE_ONLY_CALLS: &[&str] = &[
     "send_calendar",
     "send_readings",
     "introduce",
+    "offer_memory",
+    "memory_done",
 ];
 
 #[cfg(test)]
@@ -460,8 +462,9 @@ mod tests {
     use std::collections::BTreeSet;
 
     use nocturne_contract::{
-        AppPlatform, CalendarBatch, CheckInInput, Feeling, FeelingPart, FeelingPoint, Period,
-        PeriodKind, PhoneAppIntro, QuestionChoice, ReadingBatch, RemoteCall, SameNameAnswer,
+        AppPlatform, CalendarBatch, CheckInInput, Feeling, FeelingPart, FeelingPoint, MemoryCounts,
+        Period, PeriodKind, PhoneAppIntro, QuestionChoice, ReadingBatch, RemoteCall,
+        SameNameAnswer,
     };
 
     use super::*;
@@ -573,6 +576,15 @@ mod tests {
                     max_build: 1,
                 },
             },
+            RemoteCall::OfferMemory {
+                counts: MemoryCounts::default(),
+                bytes: 0.0,
+                schema: 1,
+            },
+            RemoteCall::MemoryDone {
+                sha256: s(),
+                passphrase: s(),
+            },
         ];
         // No wildcard: a new call fails to compile here until it is listed above.
         for call in &calls {
@@ -598,7 +610,9 @@ mod tests {
                 | RemoteCall::SeeOnlineChange
                 | RemoteCall::SendCalendar { .. }
                 | RemoteCall::SendReadings { .. }
-                | RemoteCall::Introduce { .. } => {}
+                | RemoteCall::Introduce { .. }
+                | RemoteCall::OfferMemory { .. }
+                | RemoteCall::MemoryDone { .. } => {}
             }
         }
         let snake = |camel: &str| {
