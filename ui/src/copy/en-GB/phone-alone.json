@@ -25,6 +25,7 @@
   "phone.alone.calendar.why.for": "Today shows what’s on, and your journal shows each appointment at its time. Each line shows which calendar it came from.",
   "phone.alone.today.status": "Your memory is on this phone",
   "phone.alone.today.kept": "Kept today · {count}",
+  "phone.alone.today.afterMidnight": "{day}, after midnight",
   "phone.alone.today.seeJournal": "See today’s journal",
   "phone.alone.today.empty": "Nothing kept yet today. Tap {keep} to keep something.",
   "phone.alone.today.noCalendar": "Nothing in your calendar today.",

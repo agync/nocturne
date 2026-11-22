@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { formatLongDay, formatTime12, localDay } from "../../../copy/format";
+import { formatLongDay, formatTime12, journalDay } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { FoundItem, ItemKind, Receipt } from "../../../engine/bindings";
 import { Icon, type IconName, Page } from "../../screens/ui";
@@ -38,7 +38,7 @@ function kindWord(kind: ItemKind): string {
 
 /** "Today 7:05 am", or "Thursday 19 November" for an earlier day. */
 function when(receipt: Receipt, today: string): string {
-  return localDay(receipt.keptAt) === today
+  return journalDay(receipt.keptAt) === today
     ? `${t("phone.app.tab.today")} ${formatTime12(receipt.keptAt)}`
     : formatLongDay(receipt.keptAt);
 }

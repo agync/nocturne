@@ -158,6 +158,30 @@ export function localDay(input: string | Date): string {
   return `${y}-${m}-${day}`;
 }
 
+/** The hour a journal day starts at on a phone alone, which has no page time to follow. */
+export const DAY_STARTS_AT = 4;
+
+/** `YYYY-MM-DD` of the journal day an instant belongs to: half past midnight is still the evening. */
+export function journalDay(input: string | Date): string {
+  const d = toDate(input);
+  if (!valid(d)) return "";
+  return localDay(
+    new Date(
+      d.getFullYear(),
+      d.getMonth(),
+      d.getDate(),
+      d.getHours() - DAY_STARTS_AT,
+      d.getMinutes(),
+    ),
+  );
+}
+
+/** Whether an instant falls between midnight and the hour the journal day starts. */
+export function isAfterMidnight(input: string | Date): boolean {
+  const d = toDate(input);
+  return valid(d) && d.getHours() < DAY_STARTS_AT;
+}
+
 /** Shifts a `YYYY-MM-DD` day by whole days. */
 export function addDays(day: string, delta: number): string {
   const d = toDate(day);
