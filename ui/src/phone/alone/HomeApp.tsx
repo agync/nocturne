@@ -48,7 +48,7 @@ import { VoiceAsk } from "./screens/VoiceAsk";
 import { GiveMind } from "./screens/Welcome";
 
 type View =
-  | { name: "tab"; tab: Tab }
+  | { name: "tab"; tab: Tab; above?: true }
   | { name: "offer" }
   | { name: "thisPhone" }
   | { name: "calendar" }
@@ -357,9 +357,14 @@ export function HomeApp({
     [go],
   );
 
+  // Journal and Ask sit one step above Today, so Back goes to Today and Back on Today leaves.
   const toTab = (next: Tab) => {
-    if (view.name === "tab") replace({ name: "tab", tab: next });
-    else go({ name: "tab", tab: next });
+    if (view.name !== "tab") return go({ name: "tab", tab: next });
+    if (view.above && next === "today") return history.back();
+    if (view.above) return replace({ name: "tab", tab: next, above: true });
+    if (view.tab === "today" && next !== "today")
+      return go({ name: "tab", tab: next, above: true });
+    replace({ name: "tab", tab: next });
   };
   const thisPhone = () => go({ name: "thisPhone" });
   const bar = (forTab: Tab, action?: ReactNode) => (
