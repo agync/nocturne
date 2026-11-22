@@ -806,6 +806,7 @@ export class FakeComputer {
         return;
       case "cancelAsk":
       case "disconnect":
+      case "seeOnlineChange":
         return ctx.reply({ type: "done" });
       case "keepCheckIn": {
         const earlier = this.checkIns.get(call.clientId);

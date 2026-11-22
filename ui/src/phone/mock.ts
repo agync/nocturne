@@ -45,6 +45,10 @@ export interface MockScript {
   answeredElsewhere?: boolean;
   /** The computer refuses an answer to the page's question. */
   answerRefused?: boolean;
+  /** Online answers' one-time notice waits: a question that would go online is not started. */
+  onlineChanged?: boolean;
+  /** Saving that the notice was seen fails. */
+  seeFails?: boolean;
   now?: () => number;
 }
 
@@ -304,6 +308,7 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
   };
   let stopped = false;
   let kept = 0;
+  let noticeDue = script.onlineChanged ?? false;
   const answer: AnswerState = { choice: null, line: null, clients: new Set() };
   const pageOf = (date: string | undefined): PageView => {
     if (date === "2026-11-12") return page("2026-11-12", "A quiet Wednesday.");
@@ -417,11 +422,12 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     async unkeep() {
       gate();
     },
-    async ask(question, onDelta) {
+    async ask(question, onDelta, place) {
       gate();
       stopped = false;
       const q = question.toLowerCase();
       if (q.includes("too many")) throw new PhoneRequestError("tooMany");
+      if (noticeDue && place !== "thisComputer") throw new PhoneRequestError("onlineChanged");
       const emit = async (d: AskDelta) => {
         if (stopped) return;
         onDelta(d);
@@ -452,11 +458,14 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
             "The signed slip and £12 are due tomorrow. Bring a packed lunch in a bag you won’t need back.",
           ),
         );
-        const answeredBy: AskDelta["answeredBy"] = q.includes("online")
-          ? { type: "online", host: "api.example.test" }
-          : q.includes("on my computer")
-            ? { type: "computer", reason: null }
-            : null;
+        const answeredBy: AskDelta["answeredBy"] =
+          place === "thisComputer"
+            ? { type: "computer", reason: "chosen" }
+            : q.includes("online") || script.onlineChanged
+              ? { type: "online", host: "api.example.test" }
+              : q.includes("on my computer")
+                ? { type: "computer", reason: null }
+                : null;
         await emit(
           delta("done", null, { receipts: [MOCK_RECEIPTS.letter, MOCK_RECEIPTS.chat], answeredBy }),
         );
@@ -465,6 +474,12 @@ export function createMockPhoneEngine(script: MockScript = {}): ConnectedEngine 
     },
     async cancelAsk() {
       stopped = true;
+    },
+    async seeOnlineChange() {
+      gate();
+      await sleep(pace);
+      if (script.seeFails) throw new PhoneRequestError("notReady");
+      noticeDue = false;
     },
     async getPage(date) {
       gate();

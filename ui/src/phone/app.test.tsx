@@ -623,6 +623,8 @@ function AskHarness({
       onStop={() => void ask.stop()}
       onOpen={onOpen}
       onBack={() => undefined}
+      onSeeChange={() => void ask.seeChange()}
+      onAskHere={() => void ask.askHere()}
     />
   );
 }
@@ -683,6 +685,61 @@ describe("ask", () => {
     expect(
       screen.getByText("Choose which is right on your computer and Nocturne will remember."),
     ).toBeInTheDocument();
+  });
+
+  it("online answers' notice: the question waits, Continue records it and sends it online", async () => {
+    const engine = engineWith({ pace: 5, onlineChanged: true });
+    const see = vi.spyOn(engine, "seeOnlineChange");
+    const asked = vi.spyOn(engine, "ask");
+    render(<AskHarness engine={engine} />);
+    await question("What do I need for Leo’s school trip?");
+    expect(
+      await screen.findByRole("heading", { name: "Online answers has changed" }),
+    ).toHaveFocus();
+    expect(
+      screen.getByText(/Nocturne no longer keeps back lines that look like health, money or ID/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Your question waits until you continue.")).toBeInTheDocument();
+    expect(screen.queryByText("Something wrong? Correct it on your computer.")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Online answers settings/ })).toBeNull();
+    await userEvent.click(button("Continue"));
+    expect(
+      await screen.findByText("Answered online by your provider (api.example.test)"),
+    ).toBeInTheDocument();
+    expect(see).toHaveBeenCalledTimes(1);
+    expect(asked).toHaveBeenCalledTimes(2);
+    expect(asked.mock.calls[1]?.[0]).toBe("What do I need for Leo’s school trip?");
+    expect(asked.mock.calls[1]?.[2]).toBeUndefined();
+    expect(screen.queryByRole("heading", { name: "Online answers has changed" })).toBeNull();
+  });
+
+  it("online answers' notice: Answer on your computer sends nothing online and records nothing", async () => {
+    const engine = engineWith({ pace: 5, onlineChanged: true });
+    const see = vi.spyOn(engine, "seeOnlineChange");
+    const asked = vi.spyOn(engine, "ask");
+    render(<AskHarness engine={engine} />);
+    await question("What do I need for Leo’s school trip?");
+    await userEvent.click(await screen.findByRole("button", { name: "Answer on your computer" }));
+    expect(await screen.findByText("Answered on your computer")).toBeInTheDocument();
+    expect(asked.mock.calls[1]?.[2]).toBe("thisComputer");
+    expect(see).not.toHaveBeenCalled();
+    await question("And the slip?");
+    expect(
+      await screen.findByRole("heading", { name: "Online answers has changed" }),
+    ).toBeInTheDocument();
+  });
+
+  it("online answers' notice: a failed save says so and sends nothing", async () => {
+    const engine = engineWith({ pace: 5, onlineChanged: true, seeFails: true });
+    const asked = vi.spyOn(engine, "ask");
+    render(<AskHarness engine={engine} />);
+    await question("What do I need for Leo’s school trip?");
+    await userEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Nocturne couldn’t save this, so your question hasn’t been sent. Try again.",
+    );
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Continue" })).not.toHaveAttribute("aria-disabled");
   });
 
   it("ask.too_many_questions", async () => {

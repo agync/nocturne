@@ -208,7 +208,10 @@ fn keep_bytes_marked(
 fn ask(c: &mut PhoneClient, q: &str) -> Vec<(Instant, nocturne_contract::AskDelta)> {
     let id = block_within(
         "the question to be sent",
-        c.request(RemoteCall::Ask { question: q.into() }),
+        c.request(RemoteCall::Ask {
+            question: q.into(),
+            place: None,
+        }),
     )
     .unwrap();
     let started = block_within("the answer to start", c.answer(id)).unwrap();
@@ -295,6 +298,8 @@ fn only_the_allowed_calls_parse() {
         json!({"cmd": "answerSameName", "questionId": "snq_1", "answer": {"type": "new"}}),
         json!({"cmd": "answerJournalQuestion", "pageDate": "2026-11-20", "choice": "fine", "clientId": "c"}),
         json!({"cmd": "answerJournalQuestion", "pageDate": "2026-11-20", "choice": "notYet", "line": "x", "clientId": "c"}),
+        json!({"cmd": "ask", "question": "x", "place": "thisComputer"}),
+        json!({"cmd": "seeOnlineChange"}),
     ];
     for call in &allowed {
         let req = json!({"id": 1, "call": call});
@@ -483,6 +488,7 @@ fn removed_phone_stream_closed_within_a_second() {
     let (keys, mut c) = p.session("Pixel");
     let id = block(c.request(RemoteCall::Ask {
         question: "When is the dentist?".into(),
+        place: None,
     }))
     .unwrap();
     assert!(matches!(
@@ -592,6 +598,7 @@ fn ask_stops_when_session_closes() {
     let (keys, mut c) = p.session("Pixel");
     let id = block(c.request(RemoteCall::Ask {
         question: "When is the dentist?".into(),
+        place: None,
     }))
     .unwrap();
     block(c.answer(id)).unwrap();
@@ -836,6 +843,7 @@ fn argument_caps() {
         (
             RemoteCall::Ask {
                 question: "x".repeat(MAX_QUESTION + 1),
+                place: None,
             },
             PhoneError::TooLarge,
         ),
@@ -1334,6 +1342,7 @@ fn asks_10_a_minute() {
             &mut c,
             RemoteCall::Ask {
                 question: "Anything?".into(),
+                place: None,
             },
         );
         if error_of(&a) == Some(PhoneError::TooMany) {
@@ -1652,6 +1661,7 @@ fn phone_ask_never_evicts_desktop_ask() {
     for _ in 0..3 {
         let id = block(c.request(RemoteCall::Ask {
             question: "Dentist?".into(),
+            place: None,
         }))
         .unwrap();
         block(c.answer(id)).unwrap();
@@ -1732,6 +1742,7 @@ fn audit_lists_actions_without_content() {
         &mut c,
         RemoteCall::Ask {
             question: "MARKER-7731?".into(),
+            place: None,
         },
     );
     let events: serde_json::Value = p.h.ok("list_remote_events", json!({"limit": 50}));
@@ -3437,4 +3448,144 @@ fn a_phone_answers_only_the_journal_question_on_a_page_it_reads() {
         assert_eq!(error_of(&a), Some(code), "{page_date} {choice:?} {client}");
     }
     assert_eq!(answer_rows(&p), 0);
+}
+
+// Online answers' one-time notice ------------------------------------------------------------
+
+/// Someone who turned Online answers on before only what is marked private was held back can
+/// see the notice from their phone: the question waits there, "Answer on your computer" keeps it
+/// here, and Continue records the change for every window and phone, then the question may go.
+#[test]
+fn a_phone_question_waits_for_the_online_notice_and_can_clear_it() {
+    use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
+    use nocturne_contract::{AnsweredBy, AskPlace, LocalReason};
+    let p = on();
+    let s = StandIn::start(&fake_provider());
+    let port = Arc::new(StandInPort::new(Some(s.port)));
+    nocturne_app_lib::online::manage_hub(
+        p.h.app.handle(),
+        port.clone(),
+        Arc::new(MemoryKeychain::default()),
+    )
+    .unwrap()
+    .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
+    p.h.learn(
+        "dentist",
+        "The dentist is on Thursday.",
+        "Dentist",
+        "Thursday",
+    );
+    let out = p.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://api.example.com/v1",
+                        "key": "sk-phone-notice-0123456789abcdefghij", "model": "stand-in-model"}}),
+    );
+    assert_eq!(out["type"], "works", "{out}");
+    p.h.ok(
+        "turn_on_online",
+        json!({"settings": {"phones": true,
+                            "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
+    );
+    assert_eq!(p.h.ok("get_online", json!({}))["changeNotice"], true);
+    let questions = || -> usize {
+        let all: Vec<serde_json::Value> = port.own(block(async {
+            reqwest::Client::new()
+                .get(s.url("/fake/requests"))
+                .send()
+                .await
+                .unwrap()
+                .json()
+                .await
+                .unwrap()
+        }));
+        all.iter()
+            .filter(|r| {
+                r["path"] == "/v1/chat/completions"
+                    && r["body"]["messages"]
+                        .as_array()
+                        .is_some_and(|m| m.len() == 2)
+            })
+            .count()
+    };
+    let (_, mut c) = p.session("Pixel");
+
+    let waits = call(
+        &mut c,
+        RemoteCall::Ask {
+            question: "When is the dentist?".into(),
+            place: None,
+        },
+    );
+    assert_eq!(error_of(&waits), Some(PhoneError::OnlineChanged));
+    assert_eq!(questions(), 0, "nothing went online");
+
+    let id = block(c.request(RemoteCall::Ask {
+        question: "When is the dentist?".into(),
+        place: Some(AskPlace::ThisComputer),
+    }))
+    .unwrap();
+    let started = block(c.answer(id)).unwrap();
+    assert!(
+        matches!(started, RemoteAnswer::AskStarted { .. }),
+        "{started:?}"
+    );
+    let last = loop {
+        match block_within("the answer", c.answer(id)).unwrap() {
+            RemoteAnswer::AskDelta { delta } if is_terminal(delta.phase) => break delta,
+            RemoteAnswer::AskDelta { .. } => {}
+            other => panic!("{other:?}"),
+        }
+    };
+    assert_eq!(
+        last.answered_by,
+        Some(AnsweredBy::Computer {
+            reason: Some(LocalReason::Chosen)
+        })
+    );
+    assert_eq!(questions(), 0, "answered on the computer, nothing sent");
+    assert_eq!(p.h.ok("get_online", json!({}))["changeNotice"], true);
+
+    assert_eq!(
+        call(&mut c, RemoteCall::SeeOnlineChange),
+        RemoteAnswer::Done
+    );
+    assert_eq!(p.h.ok("get_online", json!({}))["changeNotice"], false);
+    let deltas = ask(&mut c, "When is the dentist?");
+    assert_eq!(
+        deltas.last().unwrap().1.answered_by,
+        Some(AnsweredBy::Online {
+            host: "api.example.com".into()
+        })
+    );
+    assert_eq!(questions(), 1);
+}
+
+/// With "Questions from your phones" off, a phone question never goes online, so it never waits.
+#[test]
+fn a_phone_question_does_not_wait_when_phones_stay_off_online() {
+    use nocturne_app_lib::online::testing::{MemoryKeychain, StandIn, StandInPort, fake_provider};
+    let p = on();
+    let s = StandIn::start(&fake_provider());
+    let port = Arc::new(StandInPort::new(Some(s.port)));
+    nocturne_app_lib::online::manage_hub(
+        p.h.app.handle(),
+        port,
+        Arc::new(MemoryKeychain::default()),
+    )
+    .unwrap()
+    .set_confirm(nocturne_app_lib::online::testing::agree(Default::default()));
+    let out = p.h.ok(
+        "check_online",
+        json!({"form": {"baseUrl": "https://api.example.com/v1",
+                        "key": "sk-phone-notice-0123456789abcdefghij", "model": "stand-in-model"}}),
+    );
+    assert_eq!(out["type"], "works", "{out}");
+    p.h.ok(
+        "turn_on_online",
+        json!({"settings": {"phones": false,
+                            "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
+    );
+    let (_, mut c) = p.session("Pixel");
+    let deltas = ask(&mut c, "Anything?");
+    assert!(!deltas.is_empty());
 }

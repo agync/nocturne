@@ -62,7 +62,17 @@ export interface PhoneEngine {
     line?: string,
   ): Promise<PageView>;
   unkeep(id: string): Promise<void>;
-  ask(question: string, onDelta: (delta: AskDelta) => void): Promise<string>;
+  /**
+   * Fails with `onlineChanged`, starting nothing, while the question would go online and Online
+   * answers' one-time notice waits. `thisComputer` keeps the question on the computer.
+   */
+  ask(
+    question: string,
+    onDelta: (delta: AskDelta) => void,
+    place?: "thisComputer",
+  ): Promise<string>;
+  /** The person has seen that Online answers now holds back only what they mark private. */
+  seeOnlineChange(): Promise<void>;
   cancelAsk(askId: string): Promise<void>;
   getPage(date?: string): Promise<PageView>;
   listPages(): Promise<PageSummary[]>;

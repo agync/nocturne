@@ -6,18 +6,25 @@ import type { AnsweredBy, AskDelta, AskPhase, NearMatch, Receipt } from "../../e
 import { ConnectionError, type PhoneEngine, PhoneRequestError } from "../engine";
 import { receiptMeta } from "../labels";
 import { MAX_QUESTION } from "../protocol";
-import { BackBar, Icon, Page } from "./ui";
+import { BackBar, Button, Icon, Page } from "./ui";
 
 export type AskFailure = "tooMany" | "notReady" | "paused" | "failed";
 
+/**
+ * Online answers' one-time notice, while a question waits for it: shown, saving that it was
+ * seen, or saving failed.
+ */
+export type AskNotice = "shown" | "saving" | "failed";
+
 export interface AskModel {
   question: string | null;
-  phase: AskPhase | "starting" | "stopped";
+  phase: AskPhase | "starting" | "stopped" | "waiting";
   text: string;
   receipts: Receipt[];
   near: NearMatch[];
   failure: AskFailure | null;
   answeredBy: AnsweredBy | null;
+  notice: AskNotice | null;
 }
 
 const EMPTY: AskModel = {
@@ -28,6 +35,7 @@ const EMPTY: AskModel = {
   near: [],
   failure: null,
   answeredBy: null,
+  notice: null,
 };
 
 const encoder = new TextEncoder();
@@ -56,7 +64,7 @@ export function useAskSession(engine: PhoneEngine) {
   });
 
   const ask = useCallback(
-    async (question: string) => {
+    async (question: string, place?: "thisComputer") => {
       const run = { id: current.current.id + 1, askId: null as string | null, stopped: false };
       current.current = run;
       setModel({
@@ -67,6 +75,7 @@ export function useAskSession(engine: PhoneEngine) {
         near: [],
         failure: null,
         answeredBy: null,
+        notice: null,
       });
       const onDelta = (d: AskDelta) => {
         if (current.current.id !== run.id || run.stopped) return;
@@ -81,9 +90,13 @@ export function useAskSession(engine: PhoneEngine) {
         }));
       };
       try {
-        await engine.ask(question, onDelta);
+        await engine.ask(question, onDelta, place);
       } catch (e) {
         if (current.current.id !== run.id || run.stopped) return;
+        if (e instanceof PhoneRequestError && e.code === "onlineChanged") {
+          setModel((m) => ({ ...m, phase: "waiting", notice: "shown" }));
+          return;
+        }
         let failure: AskFailure = "failed";
         if (e instanceof PhoneRequestError) {
           if (e.code === "tooMany" || e.code === "busy") failure = "tooMany";
@@ -105,7 +118,28 @@ export function useAskSession(engine: PhoneEngine) {
     if (run.askId) await engine.cancelAsk(run.askId).catch(() => undefined);
   }, [engine]);
 
-  return { model, ask, stop };
+  /** Continue: records that the notice was seen, then the question that waited goes on. */
+  const seeChange = useCallback(async () => {
+    const run = current.current;
+    const question = model.question;
+    if (question === null || model.notice === "saving") return;
+    setModel((m) => ({ ...m, notice: "saving" }));
+    try {
+      await engine.seeOnlineChange();
+    } catch (e) {
+      if (!(e instanceof PhoneRequestError || e instanceof ConnectionError)) throw e;
+      if (current.current === run) setModel((m) => ({ ...m, notice: "failed" }));
+      return;
+    }
+    if (current.current === run) await ask(question);
+  }, [engine, ask, model.question, model.notice]);
+
+  /** "Answer on your computer": the question that waited, kept on the computer. */
+  const askHere = useCallback(async () => {
+    if (model.question !== null) await ask(model.question, "thisComputer");
+  }, [ask, model.question]);
+
+  return { model, ask, stop, seeChange, askHere };
 }
 
 const UNIQUE = (receipts: Receipt[]): Receipt[] => {
@@ -143,6 +177,49 @@ function ReceiptCard({
   );
 }
 
+/**
+ * Shown once, in place of the answer, to someone who turned Online answers on before only what
+ * they mark private was held back. The question waits until they continue.
+ */
+function ChangeNotice({
+  notice,
+  onContinue,
+  onAskHere,
+}: {
+  notice: AskNotice;
+  onContinue(): void;
+  onAskHere(): void;
+}) {
+  const title = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    title.current?.focus({ preventScroll: true });
+  }, []);
+  return (
+    <section className="ph-changed" aria-labelledby="ph-changed-title">
+      <h3 id="ph-changed-title" className="ph-changed-title" ref={title} tabIndex={-1}>
+        <Icon name="lock" size={18} />
+        {t("ask.changed.title")}
+      </h3>
+      <p className="ph-body">{t("ask.changed.body")}</p>
+      <p className="ph-body">{t("ask.changed.private")}</p>
+      <p className="ph-hint ph-hint--ink2">{t("ask.changed.waits")}</p>
+      {notice === "failed" && (
+        <p className="ph-error" role="alert">
+          {t("ask.changed.failed")}
+        </p>
+      )}
+      <div className="ph-stack">
+        <Button kind="primary" disabled={notice === "saving"} onClick={onContinue}>
+          {t("ask.changed.continue")}
+        </Button>
+        <Button kind="quiet" disabled={notice === "saving"} onClick={onAskHere}>
+          {t("phone.ask.changed.computer")}
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 interface AskProps {
   model: AskModel;
   connected: boolean;
@@ -150,9 +227,22 @@ interface AskProps {
   onStop(): void;
   onOpen(receipt: Receipt): void;
   onBack(): void;
+  /** Continue, from Online answers' one-time notice. */
+  onSeeChange(): void;
+  /** "Answer on your computer", from the same notice. */
+  onAskHere(): void;
 }
 
-export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProps) {
+export function Ask({
+  model,
+  connected,
+  onAsk,
+  onStop,
+  onOpen,
+  onBack,
+  onSeeChange,
+  onAskHere,
+}: AskProps) {
   const [draft, setDraft] = useState("");
   const working =
     model.phase === "starting" ||
@@ -168,9 +258,12 @@ export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProp
   const answerRef = useRef<HTMLHeadingElement>(null);
   const receipts = UNIQUE(model.receipts);
 
+  // The notice takes focus itself, so its heading is read first.
   useEffect(() => {
-    if (model.question && !working) answerRef.current?.focus({ preventScroll: true });
-  }, [model.question, working]);
+    if (model.question && !working && !model.notice) {
+      answerRef.current?.focus({ preventScroll: true });
+    }
+  }, [model.question, working, model.notice]);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -220,7 +313,9 @@ export function Ask({ model, connected, onAsk, onStop, onOpen, onBack }: AskProp
               {t("phone.ask.question", { question: model.question })}
             </h2>
 
-            {model.failure ? (
+            {model.notice ? (
+              <ChangeNotice notice={model.notice} onContinue={onSeeChange} onAskHere={onAskHere} />
+            ) : model.failure ? (
               <p
                 className="ph-error"
                 role="alert"

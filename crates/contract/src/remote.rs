@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::{
-    AskDelta, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay, PageSummary, PageView, Period,
-    QuestionChoice, ReflectionView, SameNameAnswer, SameNameAnswered,
+    AskDelta, AskPlace, CheckIn, CheckInInput, Feeling, ItemKind, JournalDay, PageSummary,
+    PageView, Period, QuestionChoice, ReflectionView, SameNameAnswer, SameNameAnswered,
 };
 
 /// How phones reach the computer: Simple goes through Cloudflare, Most private through the
@@ -354,6 +354,9 @@ pub enum PhoneError {
     Busy,
     Revoked,
     SessionExpired,
+    /// The question would go online, but the person has not yet seen that Online answers now
+    /// holds back only what they mark private. Nothing was started; the phone shows the notice.
+    OnlineChanged,
 }
 
 /// Everything a phone may ask for: the allowed calls, the journal calls and the two phone
@@ -415,6 +418,10 @@ pub enum RemoteCall {
     },
     Ask {
         question: String,
+        /// `thisComputer` when the person chose to have this question answered on the computer.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        place: Option<AskPlace>,
     },
     CancelAsk {
         ask_id: String,
@@ -466,6 +473,9 @@ pub enum RemoteCall {
         line: Option<String>,
         client_id: String,
     },
+    /// The person has seen that Online answers now holds back only what they mark private.
+    /// Answered with `Done`.
+    SeeOnlineChange,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

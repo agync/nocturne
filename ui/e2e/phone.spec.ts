@@ -333,6 +333,23 @@ test("ask: streams, shows where it came from, opens the original and comes back 
   await expect(page.getByText("From 2 things you kept")).toBeVisible();
 });
 
+test("ask: Online answers' notice waits on the phone, and Continue sends the question", async ({
+  page,
+  phoneUrl,
+}) => {
+  await page.goto(`${phoneUrl}/?s=connected&onlineChanged=1`);
+  await page.getByRole("button", { name: /^Ask/ }).click();
+  await page.getByLabel("Your question").fill("What do I need for Leo’s school trip?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Online answers has changed" })).toBeFocused();
+  await expect(page.getByText("Your question waits until you continue.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Answer on your computer" })).toBeVisible();
+  await axeClean(page);
+  await page.getByRole("button", { name: "Continue" }).click();
+  await expect(page.getByText("Answered online by your provider (api.example.test)")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Online answers has changed" })).toHaveCount(0);
+});
+
 test("ask: not sure shows both, nothing and too many say so, stop cancels", async ({
   page,
   phoneUrl,

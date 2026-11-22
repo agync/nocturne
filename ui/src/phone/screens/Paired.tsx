@@ -316,6 +316,8 @@ export function Paired({ services, initial, onUnpaired, onRelink, deviceVersion 
         onStop={() => void ask.stop()}
         onOpen={open}
         onBack={back}
+        onSeeChange={() => void ask.seeChange()}
+        onAskHere={() => void ask.askHere()}
       />
     );
   }

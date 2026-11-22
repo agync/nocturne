@@ -227,6 +227,7 @@
   "phone.ask.mark.computer": "Answered on your computer",
   "phone.ask.mark.sent": "What was sent is listed on your computer. Choose {privacy}, then {seeWhatWasSent}.",
   "phone.ask.wrong": "Something wrong? Correct it on your computer.",
+  "phone.ask.changed.computer": "Answer on your computer",
   "phone.ask.question": "“{question}”",
   "phone.ask.notSure.lead": "Not sure. {count, plural, one {This comes} other {These come}} close, and they can’t all be right.",
   "phone.ask.notSure.hint": "Choose which is right on your computer and Nocturne will remember.",

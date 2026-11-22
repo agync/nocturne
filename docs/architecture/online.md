@@ -95,6 +95,9 @@ Ask picks the place for each question. A question goes online only when all of t
 - no download window is open and this month's limit is not reached;
 - the person has not chosen "answer on this computer" for this question (the choice resets after
   each question);
+- the person has seen that only what they mark private is held back, if they turned Online answers
+  on before that change; until then the question waits for a one-time notice, in the window or on
+  the phone that asked;
 - the question came from the desktop, or from a phone while the person has left "Questions from your
   phones" on (a phone asks only while Away from home is on; the switch is offered, and on by default,
   only when Away from home is on during setup);

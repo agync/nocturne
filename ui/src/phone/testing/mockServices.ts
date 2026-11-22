@@ -209,6 +209,7 @@ export async function mockServices(): Promise<Services> {
     answeredElsewhere: scenario === "pageElsewhere",
     answerRefused: scenario === "pageRefused",
     pace: Number(params.get("pace") ?? 60),
+    onlineChanged: params.get("onlineChanged") === "1",
     hello: { connection: scenario === "asleepMostPrivate" ? "mostPrivate" : "simple" },
   };
 
