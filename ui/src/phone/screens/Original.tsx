@@ -66,15 +66,18 @@ const HOW: Record<KeptHow, Parameters<typeof t>[0]> = {
   health: "phone.alone.kept.health",
 };
 
-/** "Kept" / "{how} · {day}, {time}": shown only when how it was kept is known. */
-function keptHint(kept: ItemKept, at: string): string | null {
+/**
+ * "Kept" / "{how} · {day}, {time}", where {how} is how it was kept here or "Kept on {device}"
+ * when its device's name travelled with it; with neither, "{day}, {time}" alone.
+ */
+export function keptHint(kept: ItemKept, at: string): string {
+  const when = { day: formatLongDay(at), time: formatTime12(at) };
   const how = kept.how
     ? t(HOW[kept.how])
     : kept.device
       ? t("phone.alone.kept.on", { device: kept.device })
       : null;
-  if (!how) return null;
-  return t("phone.alone.kept.hint", { how, day: formatLongDay(at), time: formatTime12(at) });
+  return how ? t("phone.alone.kept.hint", { how, ...when }) : t("moving.kept.when", when);
 }
 
 export function Original({ engine, itemId, quote, onBack, alone }: OriginalProps) {

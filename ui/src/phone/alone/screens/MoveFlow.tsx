@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useEffect, useRef, useState } from "react";
 import type { MemoryCounts } from "../../../engine/bindings";
 import {
+  type MoveEnded,
   type MoveFacts,
   MoveFailed,
   MoveFound,
@@ -20,7 +21,11 @@ export type MoveError =
   | "declined"
   | "stopped"
   | "full"
-  | "failed";
+  | "failed"
+  | "noRoom"
+  | "ranOutOfRoom"
+  | "notOpened"
+  | "stoppedThere";
 
 /** The phone's way to move its memory to the computer it has just paired with. */
 export interface MoveApi {
@@ -39,6 +44,16 @@ export interface MoveApi {
 }
 
 const errorOf = (e: unknown): MoveError => (typeof e === "string" ? (e as MoveError) : "failed");
+
+/** What the phone says for each way a move ends with nothing changed. */
+const ENDED: Partial<Record<MoveError, MoveEnded>> = {
+  notWhole: "notWhole",
+  computerOutdated: "outdated",
+  noRoom: "noRoom",
+  ranOutOfRoom: "ranOut",
+  notOpened: "notOpened",
+  stoppedThere: "stoppedThere",
+};
 
 /** The move through the app's own commands. */
 export const nativeMoveApi: MoveApi = {
@@ -67,7 +82,7 @@ type Step =
   | { name: "found" }
   | { name: "size" }
   | { name: "moving" }
-  | { name: "failed"; outdated: boolean }
+  | { name: "failed"; why: MoveEnded }
   | { name: "moved"; items: number; busy: boolean };
 
 /**
@@ -125,7 +140,7 @@ export function MoveFlow({
     } catch (e) {
       const why = errorOf(e);
       if (why === "declined" || why === "stopped") return exit(why === "declined");
-      setStep({ name: "failed", outdated: why === "computerOutdated" });
+      setStep({ name: "failed", why: ENDED[why] ?? "notWhole" });
     }
   };
 
@@ -161,7 +176,7 @@ export function MoveFlow({
       return (
         <MoveFailed
           computer={computer}
-          outdated={step.outdated}
+          why={step.why}
           onTryAgain={() => {
             offer.current = null;
             void move();

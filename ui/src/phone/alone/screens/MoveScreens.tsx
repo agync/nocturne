@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { formatBytes } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { MemoryCounts } from "../../../engine/bindings";
@@ -9,19 +9,26 @@ import { Button, Icon, Page } from "../../screens/ui";
 /** What would move: the store's counts, the first day something was kept, about how big. */
 export interface MoveFacts {
   counts: MemoryCounts;
+  /** Things kept, apart from the journal, check-ins, the calendar and readings. */
+  things: number;
+  /** Journal entries and good things. */
+  journal: number;
   since: string | null;
   bytes: number;
 }
 
-/** How the move goes: getting it ready, sending, the computer checking, or paused. */
+/**
+ * How the move goes: getting it ready, sending, the computer checking, paused, or finishing while
+ * Nocturne on the computer restarts to open it.
+ */
 export interface MoveProgress {
-  phase: "preparing" | "sending" | "checking" | "paused";
+  phase: "preparing" | "sending" | "checking" | "paused" | "finishing";
   done: number;
   total: number;
 }
 
-/** The pace "About {minutes} minutes" is worked out at, in bytes a second. */
-const ASSUMED_PACE = 2_000_000;
+/** How long the move is measured before it says how long is left. */
+export const MEASURE_MS = 10_000;
 
 const count = (n: number) => new Intl.NumberFormat("en-GB").format(n);
 
@@ -31,9 +38,9 @@ const dayAndMonth = (day: string) =>
     new Date(`${day}T12:00:00Z`),
   );
 
-/** Whole minutes a move of `bytes` takes at the assumed pace, never less than one. */
-export function moveMinutes(bytes: number): number {
-  return Math.max(1, Math.ceil(bytes / ASSUMED_PACE / 60));
+/** Whole minutes left for `left` bytes at `perSecond`, never less than one. */
+export function minutesLeft(left: number, perSecond: number): number {
+  return Math.max(1, Math.ceil(left / perSecond / 60));
 }
 
 function Hero({ title, icon }: { title: string; icon?: "laptop" | "check" }) {
@@ -92,7 +99,7 @@ export function MoveSize({
   onMove(): void;
   onBack(): void;
 }) {
-  const { counts, since, bytes } = facts;
+  const { counts, things, journal, since, bytes } = facts;
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14, paddingTop: 32 }}>
@@ -101,19 +108,20 @@ export function MoveSize({
           {since ? (
             <li>
               {t("moving.phone.size.kept", {
-                count: count(counts.items),
+                count: count(things),
                 date: dayAndMonth(since),
               })}
             </li>
+          ) : null}
+          {journal > 0 ? (
+            <li>{t("moving.phone.size.journal", { count: count(journal) })}</li>
           ) : null}
           {counts.pages > 0 ? (
             <li>{t("moving.phone.size.pages", { count: count(counts.pages) })}</li>
           ) : null}
           <li>{t("moving.phone.size.bytes", { size: formatBytes(bytes) })}</li>
         </ul>
-        <p className="ph-small">
-          {t("moving.phone.size.time", { minutes: String(moveMinutes(bytes)) })}
-        </p>
+        <p className="ph-small">{t("moving.phone.size.open")}</p>
         <p className="ph-body">{t("moving.phone.size.after")}</p>
       </main>
       <footer className="ph-foot">
@@ -128,21 +136,46 @@ export function MoveSize({
   );
 }
 
-/** "Moving your memory": how far, kept things waiting, and Stop with its question. */
+/**
+ * How long is left, once the move has been measured for `MEASURE_MS`: none before, since the
+ * speed isn't known yet.
+ */
+function useLeft(progress: MoveProgress | null, now: () => number): number | null {
+  const start = useRef<{ at: number; done: number } | null>(null);
+  if (progress?.phase !== "sending") return null;
+  if (!start.current) start.current = { at: now(), done: progress.done };
+  const elapsed = now() - start.current.at;
+  const gone = progress.done - start.current.done;
+  if (elapsed < MEASURE_MS || gone <= 0) return null;
+  return minutesLeft(progress.total - progress.done, (gone * 1000) / elapsed);
+}
+
+/**
+ * "Moving your memory": how far and, once measured, how long is left; kept things waiting; Stop
+ * with its question. While the computer restarts to open it, it says so, and there is nothing
+ * left to stop.
+ */
 export function MoveMoving({
   computer,
   progress,
   onStop,
+  now = Date.now,
 }: {
   computer: string;
   progress: MoveProgress | null;
   onStop(): void;
+  now?: () => number;
 }) {
   const [asking, setAsking] = useState(false);
   const title = t("moving.phone.moving.title");
   const sent = progress && progress.phase !== "preparing" ? progress : null;
   const share = sent && sent.total > 0 ? Math.min(1, sent.done / sent.total) : 0;
   const paused = progress?.phase === "paused";
+  const finishing = progress?.phase === "finishing";
+  const left = useLeft(progress, now);
+  useEffect(() => {
+    if (finishing) setAsking(false);
+  }, [finishing]);
   return (
     <Page bar={null}>
       <main className="ph-main" aria-busy="true" style={{ gap: 14 }}>
@@ -160,12 +193,18 @@ export function MoveMoving({
         >
           <span style={{ width: `${Math.round(share * 100)}%` }} />
         </div>
-        {sent && !paused ? (
+        {sent && !paused && !finishing ? (
           <p className="ph-small">
             {t("moving.phone.moving.progress", {
               done: formatBytes(sent.done),
               size: formatBytes(sent.total),
             })}
+            {left !== null ? (
+              <>
+                <br />
+                {t("moving.phone.moving.left", { minutes: String(left) })}
+              </>
+            ) : null}
           </p>
         ) : null}
         {paused ? (
@@ -173,20 +212,28 @@ export function MoveMoving({
             {t("moving.phone.paused", { computer })}
           </p>
         ) : null}
-        <p className="ph-small">{t("moving.phone.moving.note")}</p>
+        {finishing ? (
+          <p className="ph-body" role="status">
+            {t("moving.phone.moving.finishing", { computer })}
+          </p>
+        ) : (
+          <p className="ph-small">{t("moving.phone.moving.note")}</p>
+        )}
       </main>
-      <footer className="ph-foot">
-        <Button onClick={() => setAsking(true)}>{t("moving.phone.moving.stop")}</Button>
-      </footer>
+      {finishing ? null : (
+        <footer className="ph-foot">
+          <Button onClick={() => setAsking(true)}>{t("moving.phone.moving.stop")}</Button>
+        </footer>
+      )}
       {asking ? (
         <BottomSheet label={t("moving.phone.moving.stop")} onClose={() => setAsking(false)}>
           <div className="ph-sheet-body ph-stack" style={{ gap: 16 }}>
             <p className="ph-body">{t("moving.phone.moving.stopAsk", { computer })}</p>
-            <Button kind="primary" onClick={onStop}>
-              {t("moving.phone.moving.stop")}
+            <Button kind="danger" onClick={onStop}>
+              {t("moving.phone.moving.stopMoving")}
             </Button>
             <button type="button" className="ph-textbtn" onClick={() => setAsking(false)}>
-              {t("moving.phone.back")}
+              {t("moving.phone.moving.keepMoving")}
             </button>
           </div>
         </BottomSheet>
@@ -195,19 +242,39 @@ export function MoveMoving({
   );
 }
 
-/** A move that did not finish: nothing changed, and it can be tried again. */
+/** Why a move ended with nothing changed, as the phone says it. */
+export type MoveEnded =
+  | "notWhole"
+  | "outdated"
+  | "noRoom"
+  | "ranOut"
+  | "notOpened"
+  | "stoppedThere";
+
+/**
+ * A move that ended with nothing changed: why, and "Try again" with "Not now", or "OK" when the
+ * person on the computer stopped it.
+ */
 export function MoveFailed({
   computer,
-  outdated,
+  why,
   onTryAgain,
   onBack,
 }: {
   computer: string;
-  outdated: boolean;
+  why: MoveEnded;
   onTryAgain(): void;
   onBack(): void;
 }) {
-  const line = outdated ? t("moving.phone.outdated", { computer }) : t("moving.phone.notWhole");
+  const line = {
+    notWhole: t("moving.phone.notWhole"),
+    outdated: t("moving.phone.outdated", { computer }),
+    noRoom: t("moving.phone.noRoom", { computer }),
+    ranOut: t("moving.phone.ranOut", { computer }),
+    notOpened: t("moving.phone.notOpened", { computer }),
+    stoppedThere: t("moving.phone.stoppedThere", { computer }),
+  }[why];
+  const final = why === "stoppedThere";
   return (
     <Page bar={null}>
       <main className="ph-main" style={{ gap: 14, paddingTop: 72 }}>
@@ -217,14 +284,22 @@ export function MoveFailed({
         </p>
       </main>
       <footer className="ph-foot">
-        {outdated ? null : (
-          <Button kind="primary" onClick={onTryAgain}>
-            {t("moving.phone.tryAgain")}
+        {final ? (
+          <Button kind="primary" onClick={onBack}>
+            {t("moving.phone.ok")}
           </Button>
+        ) : (
+          <>
+            {why === "outdated" ? null : (
+              <Button kind="primary" onClick={onTryAgain}>
+                {t("moving.phone.tryAgain")}
+              </Button>
+            )}
+            <button type="button" className="ph-textbtn" onClick={onBack}>
+              {t("moving.phone.notNow")}
+            </button>
+          </>
         )}
-        <button type="button" className="ph-textbtn" onClick={onBack}>
-          {t("moving.phone.back")}
-        </button>
       </footer>
     </Page>
   );
