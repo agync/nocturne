@@ -15,6 +15,7 @@ use crate::sync::{
     Access, Availability, Changes, Device, FullRead, Granted, Instances, LedgerFile, Link,
     SourceError, SourceStatus, Syncer, batches, calendar, hash, health,
 };
+use crate::sync::{ChannelSink, EngineSink, LocalStore};
 
 const BOTH: [PhoneFeature; 2] = [PhoneFeature::Calendar, PhoneFeature::Health];
 
@@ -1171,4 +1172,174 @@ fn where_refusals_are_hidden_a_missing_reading_is_not_removed() {
             kind: ReadingKind::BloodPressure
         }]
     );
+}
+
+/// A stand-in for the engine's own store: keeps what it took by phone id, as the engine does.
+#[derive(Default)]
+struct FakeStore {
+    calendar: Mutex<BTreeMap<String, String>>,
+    readings: Mutex<BTreeMap<String, String>>,
+}
+
+impl LocalStore for &FakeStore {
+    fn take_calendar(
+        &self,
+        batch: nocturne_contract::CalendarBatch,
+    ) -> Result<SyncReceipt, PhoneError> {
+        let mut have = self.calendar.lock().unwrap();
+        let mut receipt = SyncReceipt {
+            taken: 0,
+            unchanged: 0,
+            refused: 0,
+            stopped: false,
+            too_many: false,
+        };
+        for c in batch.changes {
+            match c {
+                CalendarChange::Upsert { entry } => {
+                    let h = hash(&entry);
+                    if have.get(&entry.phone_id) == Some(&h) {
+                        receipt.unchanged += 1;
+                    } else {
+                        have.insert(entry.phone_id, h);
+                        receipt.taken += 1;
+                    }
+                }
+                CalendarChange::Removed { phone_id } => {
+                    have.remove(&phone_id);
+                    receipt.taken += 1;
+                }
+            }
+        }
+        Ok(receipt)
+    }
+
+    fn take_readings(
+        &self,
+        batch: nocturne_contract::ReadingBatch,
+    ) -> Result<SyncReceipt, PhoneError> {
+        let mut have = self.readings.lock().unwrap();
+        let mut taken = 0;
+        for c in batch.changes {
+            if let ReadingChange::Upsert { reading } = c {
+                have.insert(reading.phone_id.clone(), hash(&reading));
+                taken += 1;
+            }
+        }
+        Ok(SyncReceipt {
+            taken,
+            unchanged: 0,
+            refused: 0,
+            stopped: false,
+            too_many: false,
+        })
+    }
+}
+
+fn sync_to<K: crate::sync::Sink>(
+    s: &Syncer,
+    d: &FakeDevice,
+    sink: &K,
+) -> Option<crate::sync::SyncReport> {
+    block(s.sync_to(d, sink, &BOTH, "2026-11-21T08:00:00Z".into()))
+}
+
+fn two_entries(d: &FakeDevice) {
+    *d.entries.lock().unwrap() = vec![entry("a", "2026-11-21", "1"), entry("b", "2026-11-23", "1")];
+}
+
+#[test]
+fn the_local_store_takes_a_batch() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    bring_health(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    *d.readings.lock().unwrap() = vec![steps("2026-11-21", 900)];
+    let store = FakeStore::default();
+    let report = sync_to(&s, &d, &EngineSink(&store)).unwrap();
+    assert_eq!(report.calendar.unwrap().taken, 2);
+    assert_eq!(report.health.unwrap().taken, 1);
+    assert_eq!(store.calendar.lock().unwrap().len(), 2);
+    assert_eq!(store.readings.lock().unwrap().len(), 1);
+    assert_eq!(s.ledger.get().last_sent.unwrap().calendar_changes, 2);
+}
+
+#[test]
+fn a_resend_into_the_local_store_changes_nothing() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    let store = FakeStore::default();
+    let sink = EngineSink(&store);
+    sync_to(&s, &d, &sink);
+
+    // The ledger lost: everything goes again and the store says it already has it.
+    s.ledger.forget_sends();
+    let report = sync_to(&s, &d, &sink).unwrap();
+    let receipt = report.calendar.unwrap();
+    assert_eq!((receipt.taken, receipt.unchanged), (0, 2));
+    assert_eq!(store.calendar.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn an_entry_removed_on_the_phone_closes_in_the_local_store() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    *d.entries.lock().unwrap() = vec![
+        entry("a", "2026-11-21", "1"),
+        entry("b", "2026-11-23", "1"),
+        entry("c", "2026-11-24", "1"),
+    ];
+    let store = FakeStore::default();
+    let sink = EngineSink(&store);
+    sync_to(&s, &d, &sink);
+    d.entries.lock().unwrap().remove(2);
+    sync_to(&s, &d, &sink);
+    let have: Vec<String> = store.calendar.lock().unwrap().keys().cloned().collect();
+    assert_eq!(have, vec!["a".to_string(), "b".to_string()]);
+}
+
+#[test]
+fn switching_the_sink_keeps_what_was_sent() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    let store = FakeStore::default();
+    sync_to(&s, &d, &EngineSink(&store));
+
+    // Moved to a computer: what already went is not sent again, only what changed since.
+    let link = FakeLink::new(Mode::Take);
+    let channel = ChannelSink(&link);
+    assert_eq!(sync_to(&s, &d, &channel).unwrap().calendar, None);
+    assert!(link.calls.lock().unwrap().is_empty());
+    d.entries
+        .lock()
+        .unwrap()
+        .push(entry("c", "2026-11-24", "1"));
+    let report = sync_to(&s, &d, &channel).unwrap();
+    assert_eq!(report.calendar.unwrap().taken, 1);
+    assert_eq!(ids(&link.calendar_changes()), vec![("c".into(), true)]);
+}
+
+#[test]
+fn the_channel_sink_sends_as_the_link_does() {
+    let (_dir, s) = syncer();
+    bring_calendar(&s);
+    let d = FakeDevice::new();
+    two_entries(&d);
+    let link = FakeLink::new(Mode::Busy(2));
+    let report = sync_to(&s, &d, &ChannelSink(&link)).unwrap();
+    assert_eq!(report.calendar.unwrap().taken, 2);
+    assert_eq!(*link.pauses.lock().unwrap(), 2);
+
+    let (_dir2, s2) = syncer();
+    bring_calendar(&s2);
+    let away = FakeLink::new(Mode::Away);
+    let report = sync_to(&s2, &d, &ChannelSink(&away)).unwrap();
+    assert_eq!(report.calendar, None);
+    assert_eq!(s2.ledger.get().calendar.pending.len(), 2);
 }
