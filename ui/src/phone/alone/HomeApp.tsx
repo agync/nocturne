@@ -1,4 +1,12 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
 import { localDay } from "../../copy/format";
 import { t } from "../../copy/t";
@@ -95,7 +103,9 @@ function useView(first: View) {
     if (first.name === "offer") return first;
     return ownView(history.state) ?? first;
   });
-  useEffect(() => {
+  // Recorded as the screen first commits, before a tap can push the next entry: a later
+  // record would overwrite that entry and send the back gesture to the wrong screen.
+  useLayoutEffect(() => {
     history.replaceState({ view }, "");
     const onPop = (e: PopStateEvent) => {
       depth.current = Math.max(0, depth.current - 1);
