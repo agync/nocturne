@@ -167,6 +167,75 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-delete-${scheme}`);
     });
 
+    test("Welcome after Delete everything", async ({ page }) => {
+      await page.goto("/?m=kept&s=welcome");
+      await page.getByRole("button", { name: "This phone" }).click();
+      await page.getByRole("button", { name: "Delete everything…" }).click();
+      await page.getByLabel("Type “delete everything” to go ahead").fill("delete everything");
+      await page.getByRole("button", { name: "Delete everything", exact: true }).click();
+      await expect(page.getByText("Everything was deleted from this phone.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Start on this phone" })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-deleted-${scheme}`);
+    });
+
+    test("Today, Keep and This phone when the phone is nearly full", async ({ page }) => {
+      await page.goto("/?m=full");
+      await expect(page.getByText("This phone is nearly full.")).toBeVisible();
+      await clean(page);
+      await shot(page, `after-full-${scheme}`);
+      await page.getByRole("button", { name: "Keep" }).click();
+      await expect(page.getByText("This phone is nearly full.")).toBeVisible();
+      await clean(page);
+      await shot(page, `after-keep-nearly-full-${scheme}`);
+      await page.goto("/?m=full&v=thisPhone");
+      await expect(page.getByRole("region", { name: "Your memory" })).toContainText(
+        "This phone is nearly full.",
+      );
+      await clean(page);
+      await shot(page, `after-this-phone-full-${scheme}`);
+    });
+
+    test("what was put aside, brought back or deleted", async ({ page }) => {
+      await toThisPhone(page, "aside");
+      await expect(page.getByRole("button", { name: /^Put aside .*…$/ })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-this-phone-aside-${scheme}`);
+      await page.getByRole("button", { name: /^Put aside .*…$/ }).click();
+      await expect(page.getByRole("button", { name: "Bring it back…" })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-put-aside-${scheme}`);
+      await page.getByRole("button", { name: "Bring it back…" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Go back to what was here before?" }),
+      ).toBeVisible();
+      await clean(page);
+      await shot(page, `after-bring-back-${scheme}`);
+      await page.getByRole("button", { name: "Not now" }).click();
+      await page.getByRole("button", { name: "Delete it…" }).click();
+      await expect(page.getByRole("heading", { name: "Delete what was put aside?" })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-delete-put-aside-${scheme}`);
+    });
+
+    test("Delete what was kept, from This phone and the calendar", async ({ page }) => {
+      await toThisPhone(page, "kept");
+      await page.getByRole("button", { name: "Delete what was kept…" }).click();
+      await expect(page.getByText(/6 appointments from your calendar/)).toBeVisible();
+      await clean(page);
+      await shot(page, `after-delete-kept-${scheme}`);
+    });
+
+    test("Forget and Delete from an item's page", async ({ page }) => {
+      await page.goto("/?m=kept");
+      await page.getByRole("button", { name: /Ask about the swap/ }).click();
+      await expect(page.getByRole("button", { name: "Forget…" })).toBeVisible();
+      await page.getByRole("button", { name: "Delete…" }).click();
+      await expect(page.getByRole("heading", { name: "Delete 1 thing?" })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-item-delete-${scheme}`);
+    });
+
     test("an item's page with its private switch", async ({ page }) => {
       await page.goto("/?m=kept");
       await page.getByRole("button", { name: /Ask about the swap/ }).click();
@@ -246,6 +315,8 @@ test.describe("200 per cent text", () => {
     ["today", "/?m=reminder"],
     ["ask", "/?m=fresh&v=ask"],
     ["this-phone", "/?m=fresh&v=thisPhone"],
+    ["this-phone-aside", "/?m=aside&v=thisPhone"],
+    ["full", "/?m=full"],
     ["damaged", "/?m=damaged"],
   ] as const) {
     test(name, async ({ page }) => {
