@@ -3,7 +3,6 @@
 //! async workers.
 
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
 
 use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::MAX_QUESTION;
@@ -42,6 +41,7 @@ pub(crate) fn code(e: &nocturne_engine::Error) -> HomeError {
         Error::NotABackup => HomeError::NotABackup,
         Error::BackupTooNew => HomeError::NewerBackup,
         Error::BackupDamaged => HomeError::DamagedBackup,
+        Error::Cancelled => HomeError::Stopped,
         e if is_full(e) => HomeError::Full,
         _ => HomeError::Failed,
     }
@@ -153,11 +153,10 @@ impl Home {
             return Err(HomeError::Invalid);
         }
         let _job = self.begin_job()?;
-        let cancel = AtomicBool::new(false);
         let run = BackupRun {
             extras: &[],
             progress,
-            cancel: &cancel,
+            cancel: &self.stop,
             started: &|_| {},
             work_factor: self.work_factor,
         };
@@ -214,11 +213,11 @@ impl Home {
             return Err(HomeError::Invalid);
         }
         let _job = self.begin_job()?;
-        let cancel = AtomicBool::new(false);
         let scratch = self.check_dir();
         clear(&scratch);
-        let checked =
-            nocturne_engine::check_backup_counted(file, passphrase, &scratch, &progress, &cancel);
+        let checked = nocturne_engine::check_backup_counted(
+            file, passphrase, &scratch, &progress, &self.stop,
+        );
         clear(&scratch);
         let (summary, backup) = checked.map_err(|e| code(&e))?;
         let (here, here_counts) = {
@@ -260,10 +259,10 @@ impl Home {
         if holds && !replace {
             return Err(HomeError::Invalid);
         }
-        let cancel = AtomicBool::new(false);
         let stage = self.stage_dir();
         clear(&stage);
-        if let Err(e) = nocturne_engine::unpack_backup(file, passphrase, &stage, &progress, &cancel)
+        if let Err(e) =
+            nocturne_engine::unpack_backup(file, passphrase, &stage, &progress, &self.stop)
         {
             clear(&stage);
             return Err(code(&e));
