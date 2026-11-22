@@ -6,16 +6,21 @@
 use std::time::{Duration, Instant};
 
 use nocturne_channel::client::{CallError, Connection, Phone};
-use nocturne_contract::{PhoneCalendar, PhoneFeature, ReadingKind, RemoteAnswer, RemoteCall};
+use nocturne_contract::{
+    CalendarBatch, PhoneCalendar, PhoneError, PhoneFeature, PhoneMode, ReadingBatch, ReadingKind,
+    RemoteAnswer, RemoteCall, SyncReceipt,
+};
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, Runtime, State};
 use tauri_plugin_nocturne_calendar::{self as calendar, CalendarExt};
 use tauri_plugin_nocturne_health::{self as health, HealthExt};
 
+use crate::home::Home;
 use crate::state::AppState;
 use crate::sync::{
-    Access, Availability, CalendarSettings, Changes, Device, FullRead, Granted, HealthSettings,
-    Instances, LastSent, Link, SourceError, SyncReport, ThisPhoneSources,
+    Access, Availability, CalendarSettings, Changes, Device, EngineSink, FullRead, Granted,
+    HealthSettings, Instances, LastSent, Link, LocalStore, SourceError, SyncReport,
+    ThisPhoneSources,
 };
 
 /// A send started on its own within this long of the last is skipped.
@@ -164,35 +169,97 @@ fn now() -> String {
     jiff::Timestamp::now().to_string()
 }
 
-/// Send what changed, if the phone is paired and the computer answers. `asked`: the screens asked
-/// for it, so it runs even right after another and opens a session if none is open.
+/// This phone's own memory as the place a send lands. A memory that is not there to take the
+/// batch answers `Busy` and the send is tried again after a pause; once the phone is no longer
+/// alone it answers `SessionExpired`, which ends the send at once with the changes still
+/// waiting. Nothing is refused or dropped either way.
+impl LocalStore for Home {
+    fn take_calendar(&self, batch: CalendarBatch) -> Result<SyncReceipt, PhoneError> {
+        self.with_local(|o| o.engine.take_calendar(&o.device, batch))
+            .ok_or_else(|| self.not_there())?
+            .map_err(|_| PhoneError::Invalid)
+    }
+
+    fn take_readings(&self, batch: ReadingBatch) -> Result<SyncReceipt, PhoneError> {
+        self.with_local(|o| o.engine.take_readings(&o.device, batch))
+            .ok_or_else(|| self.not_there())?
+            .map_err(|_| PhoneError::Invalid)
+    }
+}
+
+impl Home {
+    fn not_there(&self) -> PhoneError {
+        match self.mode_file() {
+            Some(f) if f.mode == PhoneMode::Alone => PhoneError::Busy,
+            _ => PhoneError::SessionExpired,
+        }
+    }
+}
+
+/// The managed [`Home`], as a store a send can own.
+pub struct HomeStore<R: Runtime>(pub AppHandle<R>);
+
+impl<R: Runtime> LocalStore for HomeStore<R> {
+    fn take_calendar(&self, batch: CalendarBatch) -> Result<SyncReceipt, PhoneError> {
+        self.0.state::<Home>().inner().take_calendar(batch)
+    }
+
+    fn take_readings(&self, batch: ReadingBatch) -> Result<SyncReceipt, PhoneError> {
+        self.0.state::<Home>().inner().take_readings(batch)
+    }
+}
+
+/// Whether a send that was not asked for is too soon after the last.
+fn too_soon(state: &AppState, asked: bool) -> bool {
+    let mut last = state.last_send.lock().unwrap();
+    if !asked && last.is_some_and(|t| t.elapsed() < QUIET) {
+        return true;
+    }
+    *last = Some(Instant::now());
+    false
+}
+
+/// Send what changed: into this phone's own memory while it is alone, else to the computer if
+/// the phone is paired and the computer answers. `asked`: the screens asked for it, so it runs
+/// even right after another and opens a session if none is open. The mode is read at each send,
+/// so after a move the next send uses the other sink and the same ledger.
 pub async fn send<R: Runtime>(app: &AppHandle<R>, asked: bool) -> Option<SyncReport> {
     let state = app.state::<AppState>();
-    let phone = state.phone(app)?;
-    let connection = match phone.state() {
-        connected @ Connection::Connected { .. } => connected,
-        _ if asked => phone.connect().await,
-        _ => return None,
-    };
-    let Connection::Connected { hello, .. } = connection else {
-        return None;
-    };
-    {
-        let mut last = state.last_send.lock().unwrap();
-        if !asked && last.is_some_and(|t| t.elapsed() < QUIET) {
+    let alone =
+        app.state::<Home>().mode(state.store.identity().is_some()) == Some(PhoneMode::Alone);
+    let report = if alone {
+        if too_soon(&state, asked) {
             return None;
         }
-        *last = Some(Instant::now());
-    }
-    let report = state
-        .syncer
-        .sync(
-            &Plugins(app.clone()),
-            &PhoneLink(phone),
-            &hello.features,
-            now(),
-        )
-        .await?;
+        let sink = EngineSink::new(HomeStore(app.clone()));
+        let takes = takes(app, &state);
+        state
+            .syncer
+            .sync_to(&Plugins(app.clone()), &sink, &takes, now())
+            .await?
+    } else {
+        let phone = state.phone(app)?;
+        let connection = match phone.state() {
+            connected @ Connection::Connected { .. } => connected,
+            _ if asked => phone.connect().await,
+            _ => return None,
+        };
+        let Connection::Connected { hello, .. } = connection else {
+            return None;
+        };
+        if too_soon(&state, asked) {
+            return None;
+        }
+        state
+            .syncer
+            .sync(
+                &Plugins(app.clone()),
+                &PhoneLink(phone),
+                &hello.features,
+                now(),
+            )
+            .await?
+    };
     let _ = app.emit("sync-report", &report);
     Some(report)
 }
@@ -205,13 +272,22 @@ pub fn start<R: Runtime>(app: &AppHandle<R>) {
     });
 }
 
-fn takes(state: &AppState) -> Vec<PhoneFeature> {
+/// What the memory takes: everything while it lives on this phone, else what the computer says.
+fn takes<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> Vec<PhoneFeature> {
+    if alone(app, state) {
+        return vec![PhoneFeature::Calendar, PhoneFeature::Health];
+    }
     state.store.meta().features
+}
+
+fn alone<R: Runtime>(app: &AppHandle<R>, state: &AppState) -> bool {
+    app.state::<Home>().mode(state.store.identity().is_some()) == Some(PhoneMode::Alone)
 }
 
 #[tauri::command]
 pub fn sources<R: Runtime>(app: AppHandle<R>, state: State<'_, AppState>) -> ThisPhoneSources {
-    state.syncer.sources(&Plugins(app), &takes(&state))
+    let takes = takes(&app, &state);
+    state.syncer.sources(&Plugins(app), &takes)
 }
 
 #[tauri::command]
@@ -261,7 +337,8 @@ pub async fn calendar_save<R: Runtime>(
     if state.syncer.ledger.get().calendar.settings.bring {
         start_asked(&app);
     }
-    Ok(state.syncer.sources(&Plugins(app.clone()), &takes(&state)))
+    let takes = takes(&app, &state);
+    Ok(state.syncer.sources(&Plugins(app.clone()), &takes))
 }
 
 #[tauri::command]
@@ -309,7 +386,8 @@ pub async fn health_save<R: Runtime>(
     if state.syncer.ledger.get().health.settings.bring {
         start_asked(&app);
     }
-    Ok(state.syncer.sources(&Plugins(app.clone()), &takes(&state)))
+    let takes = takes(&app, &state);
+    Ok(state.syncer.sources(&Plugins(app.clone()), &takes))
 }
 
 fn start_asked<R: Runtime>(app: &AppHandle<R>) {
