@@ -2,6 +2,7 @@
 import type { CalendarDetail } from "./CalendarDetail";
 import type { CheckIn } from "./CheckIn";
 import type { CouldntReadReason } from "./CouldntReadReason";
+import type { HeardBy } from "./HeardBy";
 import type { ItemKind } from "./ItemKind";
 import type { ItemStatus } from "./ItemStatus";
 import type { JournalRole } from "./JournalRole";
@@ -45,4 +46,8 @@ checkin?: CheckIn,
 /**
  * An appointment from a phone's calendar, for its own page.
  */
-calendar?: CalendarDetail, };
+calendar?: CalendarDetail, 
+/**
+ * Who made the words of a voice note, while the phone's words stand.
+ */
+heardBy?: HeardBy, };

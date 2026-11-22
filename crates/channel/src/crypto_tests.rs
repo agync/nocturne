@@ -366,6 +366,7 @@ fn positive(v: &Vectors, p: &Vector<'_>) {
                     truncated: true,
                     private: false,
                     journal: None,
+                    heard_by: None,
                 };
                 let reply = nocturne_contract::RemoteReply {
                     id: u32::MAX,

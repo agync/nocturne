@@ -375,6 +375,11 @@ pub struct PhoneItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub journal: Option<crate::JournalRole>,
+    /// Who made the words of a voice note, when it was the phone itself: the screens say
+    /// "Heard by this phone". Never sent by a computer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub heard_by: Option<crate::HeardBy>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

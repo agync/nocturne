@@ -161,9 +161,9 @@ pub(crate) fn load_items(
     let to_view = item_view(originals);
     let rows = stmt.query_map(params_from_iter(args.iter()), |r| {
         let view = to_view(r)?;
-        let meta: String = r.get(20 + 1)?;
-        let left_out: bool = r.get(20 + 2)?;
-        let trusted: bool = r.get(20 + 3)?;
+        let meta: String = r.get(21 + 1)?;
+        let left_out: bool = r.get(21 + 2)?;
+        let trusted: bool = r.get(21 + 3)?;
         Ok(JItem {
             view,
             meta: serde_json::from_str(&meta).unwrap_or(Value::Null),

@@ -71,6 +71,16 @@ pub enum CouldntReadReason {
     MindUnavailable,
 }
 
+/// Who turned a voice note into words, when it was not the mind that reads what is kept.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum HeardBy {
+    /// The phone's own speech reader, with no network. A computer's reader keeps these words and
+    /// reads from them; a mind's own transcription of the recording replaces them.
+    Phone,
+}
+
 /// Something the person kept.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "camelCase")]
@@ -115,6 +125,10 @@ pub struct ItemView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub calendar: Option<crate::CalendarDetail>,
+    /// Who made the words of a voice note, while the phone's words stand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub heard_by: Option<HeardBy>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

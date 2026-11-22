@@ -3,7 +3,9 @@ mod common;
 use std::time::Duration;
 
 use common::*;
-use nocturne_contract::{CouldntReadReason, ItemFilter, ItemKind, ItemStatus, Kept, Source, Trust};
+use nocturne_contract::{
+    CouldntReadReason, HeardBy, ItemFilter, ItemKind, ItemStatus, Kept, Source, Trust,
+};
 use nocturne_engine::{RecordOutcome, Transcript, Understanding};
 
 fn new_item(k: Kept) -> nocturne_contract::ItemView {
@@ -157,6 +159,65 @@ fn kind_follows_extension() {
         assert_eq!(item.kind, *kind, "{name}");
         assert_eq!(item.status, ItemStatus::Kept, "{name}");
     }
+}
+
+#[test]
+fn words_a_phone_heard_are_marked_and_a_mind_replaces_them() {
+    let f = fixture();
+    let src = tempfile::tempdir().unwrap();
+    let note = new_item(
+        f.engine
+            .keep_file(
+                &write_file(src.path(), "note.wav", b"audio"),
+                Source::Recording,
+            )
+            .unwrap(),
+    );
+    assert_eq!(f.engine.get_item(&note.id).unwrap().heard_by, None);
+    let words = |text: &str| Transcript {
+        text: text.into(),
+        duration_ms: 1000,
+        ..Default::default()
+    };
+    let lease = || {
+        f.engine
+            .lease_item(&note.id, Duration::from_secs(60))
+            .unwrap()
+            .lease
+    };
+
+    let l = lease();
+    f.engine
+        .record_phone_transcript(&note.id, &l, words("the purple giraffe"))
+        .unwrap();
+    f.engine.release_lease(&note.id, &l, false).unwrap();
+    let heard = f.engine.get_item(&note.id).unwrap();
+    assert_eq!(heard.text.as_deref(), Some("the purple giraffe"));
+    assert_eq!(heard.heard_by, Some(HeardBy::Phone));
+    assert_eq!(heard.status, ItemStatus::Kept, "a mind still reads it");
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE json_extract(metadata, '$.heardBy') = 'phone'"
+        ),
+        1
+    );
+
+    let l = lease();
+    f.engine
+        .record_transcript(&note.id, &l, words("the purple giraffes"))
+        .unwrap();
+    let read = f.engine.get_item(&note.id).unwrap();
+    assert_eq!(read.text.as_deref(), Some("the purple giraffes"));
+    assert_eq!(read.heard_by, None, "the phone's mark goes with its words");
+    assert_eq!(
+        sql_count(
+            f.dir.path(),
+            "SELECT COUNT(*) FROM items WHERE json_type(metadata, '$.heardBy') IS NOT NULL"
+        ),
+        0,
+        "the key is gone, not null"
+    );
 }
 
 #[test]
