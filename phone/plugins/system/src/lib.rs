@@ -1,8 +1,9 @@
 //! The phone's own bits Nocturne needs: the screen insets as CSS variables (the app draws edge
 //! to edge), the phone's name for the default device name, this app's settings page for a
 //! camera turned off there, and what the app was opened for from outside (a shortcut on its
-//! icon, or another app's share menu), and on an iPhone a folder kept out of its backup. On a
-//! computer every command answers a stand-in.
+//! icon, or another app's share menu), the phone's own sheets to save a file and to choose one,
+//! and on an iPhone a folder kept out of its backup. On a computer every command answers a
+//! stand-in.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -81,8 +82,45 @@ struct Named {
 #[derive(Debug, Serialize)]
 pub struct Error(String);
 
-/// The Android side, the shared folder, and the iPhone side, which so far only keeps folders out
-/// of the backup: every other command answers its stand-in there.
+/// A file the person chose through the phone's open sheet, copied into the app's own space.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct Chosen {
+    /// Where the copy is.
+    pub path: String,
+    /// Its own name, as the place it came from gives it.
+    pub name: String,
+    pub size: u64,
+    /// When it last changed there, in milliseconds since 1970, when that place says.
+    #[serde(default)]
+    pub modified: Option<i64>,
+}
+
+/// What came of one of the phone's sheets.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(tag = "outcome", rename_all = "camelCase")]
+pub enum Sheet {
+    Saved,
+    Chosen(Chosen),
+    /// The person closed the sheet.
+    Cancelled,
+    /// The place had no room for the file.
+    Full,
+    Failed,
+}
+
+#[derive(Debug, Serialize)]
+struct SaveFile<'a> {
+    path: &'a str,
+    name: &'a str,
+}
+
+fn plain(path: &Path) -> Result<&str, Error> {
+    path.to_str()
+        .ok_or_else(|| Error("not a plain path".into()))
+}
+
+/// The Android side, the shared folder, and the iPhone side, which keeps folders out of the
+/// backup and shows the save and open sheets: every other command answers its stand-in there.
 pub struct System<R: Runtime>(
     Option<PluginHandle<R>>,
     Mutex<Option<PathBuf>>,
@@ -113,12 +151,50 @@ impl<R: Runtime> System<R> {
         Ok(None)
     }
 
+    /// Whichever side this phone has, for what both sides answer.
+    #[cfg(mobile)]
+    fn native<T: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        args: impl Serialize,
+    ) -> Result<Option<T>, Error> {
+        let Some(handle) = self.0.as_ref().or(self.2.as_ref()) else {
+            return Ok(None);
+        };
+        handle
+            .run_mobile_plugin(method, args)
+            .map(Some)
+            .map_err(|e| Error(e.to_string()))
+    }
+
+    #[cfg(not(mobile))]
+    fn native<T>(&self, _method: &str, _args: impl Serialize) -> Result<Option<T>, Error> {
+        let _ = (&self.0, &self.2);
+        Ok(None)
+    }
+
+    /// The phone's save sheet for the file at `src`, offered under `name`, so the person chooses
+    /// where it goes. Blocks until the sheet closes and the file is written there: call it off
+    /// the main thread. `Sheet::Failed` on a computer.
+    pub fn save_file(&self, src: &Path, name: &str) -> Result<Sheet, Error> {
+        let args = SaveFile {
+            path: plain(src)?,
+            name,
+        };
+        Ok(self.native("saveFile", args)?.unwrap_or(Sheet::Failed))
+    }
+
+    /// The phone's open sheet; the chosen file is copied into `dir`, replacing the copy there.
+    /// Blocks like [`System::save_file`]. `Sheet::Failed` on a computer.
+    pub fn choose_file(&self, dir: &Path) -> Result<Sheet, Error> {
+        let sheet = self.native("chooseFile", Folder { path: plain(dir)? })?;
+        Ok(sheet.unwrap_or(Sheet::Failed))
+    }
+
     /// Keep a folder of the app's out of the phone's own backup. Only an iPhone needs asking:
     /// Android's backup rules already leave out every folder of the app.
     pub fn exclude_from_backup(&self, path: &Path) -> Result<(), Error> {
-        let path = path
-            .to_str()
-            .ok_or_else(|| Error("not a plain path".into()))?;
+        let path = plain(path)?;
         #[cfg(mobile)]
         if let Some(handle) = self.2.as_ref() {
             return handle
@@ -258,6 +334,33 @@ mod tests {
         for bad in ["", "..", ".hidden", "../key", "a/b", "a\\b"] {
             assert_eq!(inside(dir, bad), None, "{bad}");
         }
+    }
+
+    #[test]
+    fn every_sheet_outcome_reads_from_the_phone() {
+        let read = |json: &str| serde_json::from_str::<Sheet>(json).unwrap();
+        assert_eq!(read(r#"{"outcome":"saved"}"#), Sheet::Saved);
+        assert_eq!(read(r#"{"outcome":"cancelled"}"#), Sheet::Cancelled);
+        assert_eq!(read(r#"{"outcome":"full"}"#), Sheet::Full);
+        assert_eq!(read(r#"{"outcome":"failed"}"#), Sheet::Failed);
+        let chosen = read(
+            r#"{"outcome":"chosen","path":"/c/backup-in/chosen","name":"Nocturne backup.nocturne",
+            "size":2048,"modified":1763800000000}"#,
+        );
+        assert_eq!(
+            chosen,
+            Sheet::Chosen(Chosen {
+                path: "/c/backup-in/chosen".into(),
+                name: "Nocturne backup.nocturne".into(),
+                size: 2048,
+                modified: Some(1_763_800_000_000),
+            })
+        );
+        let undated = read(r#"{"outcome":"chosen","path":"/c/x","name":"","size":1}"#);
+        assert!(matches!(
+            undated,
+            Sheet::Chosen(Chosen { modified: None, .. })
+        ));
     }
 
     #[test]

@@ -8,8 +8,8 @@ use std::sync::atomic::AtomicBool;
 use nocturne_channel::crypto::check_id;
 use nocturne_channel::protocol::MAX_QUESTION;
 use nocturne_contract::{
-    BackupPhase, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, MemoryCounts, PhoneMode,
-    RestoreCheck,
+    BackupPhase, BackupReport, Holdings, HomeAnswer, HomeCall, HomeError, HomeStats, MemoryCounts,
+    PhoneMode, RestoreCheck,
 };
 use nocturne_engine::{BackupRun, DELETE_PHRASE, Engine, FIND_CAP};
 
@@ -19,7 +19,7 @@ use super::{Home, io_full, is_full};
 pub type Progress<'a> = &'a (dyn Fn(BackupPhase, u64, u64) + Sync);
 
 /// Remove a folder of scratch or of copies, if it is there.
-fn clear(path: &Path) {
+pub(crate) fn clear(path: &Path) {
     match std::fs::remove_dir_all(path) {
         Ok(()) => {}
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
@@ -71,9 +71,12 @@ impl Home {
                     })
                     .map_err(|e| code(&e))
             }),
-            HomeCall::SaveBackup { dest, passphrase } => {
-                self.save_backup(Path::new(&dest), &passphrase, progress)
-            }
+            HomeCall::SaveBackup { dest, passphrase } => self
+                .make_backup(Path::new(&dest), &passphrase, progress)
+                .map(|report| {
+                    self.note_backup(report.bytes);
+                    HomeAnswer::BackupSaved { report }
+                }),
             HomeCall::CheckBackup { file, passphrase } => {
                 self.check_backup(Path::new(&file), &passphrase, paired, progress)
             }
@@ -117,12 +120,14 @@ impl Home {
         })
     }
 
-    fn save_backup(
+    /// Write a locked backup to `dest`. It is not noted as the last backup: the caller does that
+    /// once the file is where the person wanted it.
+    pub(crate) fn make_backup(
         &self,
         dest: &Path,
         passphrase: &str,
         progress: Progress<'_>,
-    ) -> Result<HomeAnswer, HomeError> {
+    ) -> Result<BackupReport, HomeError> {
         let (_use, open) = self.using()?;
         if self.among_own_files(dest) {
             return Err(HomeError::Invalid);
@@ -136,12 +141,9 @@ impl Home {
             started: &|_| {},
             work_factor: self.work_factor,
         };
-        let report = open
-            .engine
+        open.engine
             .backup_to(dest, passphrase, &run)
-            .map_err(|e| code(&e))?;
-        self.note_backup(report.bytes);
-        Ok(HomeAnswer::BackupSaved { report })
+            .map_err(|e| code(&e))
     }
 
     /// Whether the phone holds anything of the person's now. A store that cannot be opened

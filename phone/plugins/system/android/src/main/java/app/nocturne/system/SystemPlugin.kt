@@ -3,19 +3,35 @@ package app.nocturne.system
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.StatFs
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.webkit.WebView
+import androidx.activity.result.ActivityResult
 import androidx.core.content.IntentCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
+import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSArray
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import java.io.File
+
+@InvokeArg
+class SaveArgs {
+    var path: String = ""
+    var name: String = ""
+}
+
+@InvokeArg
+class FolderArgs {
+    var path: String = ""
+}
 
 /**
  * The app draws edge to edge, and the web view reports no safe area for the system bars. This
@@ -207,5 +223,101 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
             if (total > MAX_FILE) return -1
             output.write(buffer, 0, n)
         }
+    }
+
+    private fun outcome(invoke: Invoke, outcome: FileOutcome) =
+        invoke.resolve(JSObject().put("outcome", outcome.wire))
+
+    /** The phone's save sheet, so the person chooses where a file of the app's goes. */
+    @Command
+    fun saveFile(invoke: Invoke) {
+        val args = invoke.parseArgs(SaveArgs::class.java)
+        if (!File(args.path).isFile) return outcome(invoke, FileOutcome.Failed)
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("application/octet-stream")
+            .putExtra(Intent.EXTRA_TITLE, args.name)
+        startActivityForResult(invoke, intent, "saveChosen")
+    }
+
+    @ActivityCallback
+    fun saveChosen(invoke: Invoke, result: ActivityResult) {
+        val uri = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            return outcome(invoke, FileOutcome.Cancelled)
+        }
+        val source = File(invoke.parseArgs(SaveArgs::class.java).path)
+        Thread {
+            val resolver = activity.contentResolver
+            try {
+                val written = resolver.openOutputStream(uri, "wt")?.use { output ->
+                    source.inputStream().use { input -> Files.copy(input, output) }
+                }
+                if (written == source.length()) return@Thread outcome(invoke, FileOutcome.Saved)
+                throw java.io.IOException("short write")
+            } catch (e: Exception) {
+                // The empty or half file the sheet made is no backup: it goes.
+                try {
+                    DocumentsContract.deleteDocument(resolver, uri)
+                } catch (_: Exception) {
+                }
+                outcome(invoke, if (Files.isFull(e)) FileOutcome.Full else FileOutcome.Failed)
+            }
+        }.start()
+    }
+
+    /** The phone's open sheet; the chosen file is copied into the folder the app names. */
+    @Command
+    fun chooseFile(invoke: Invoke) {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")
+        startActivityForResult(invoke, intent, "fileChosen")
+    }
+
+    @ActivityCallback
+    fun fileChosen(invoke: Invoke, result: ActivityResult) {
+        val uri = result.data?.data
+        if (result.resultCode != Activity.RESULT_OK || uri == null) {
+            return outcome(invoke, FileOutcome.Cancelled)
+        }
+        val dir = File(invoke.parseArgs(FolderArgs::class.java).path)
+        Thread {
+            val target = File(dir, Files.CHOSEN)
+            try {
+                val resolver = activity.contentResolver
+                var name: String? = null
+                var size = -1L
+                var modified: Long? = null
+                resolver.query(uri, null, null, null, null)?.use { c ->
+                    if (c.moveToFirst()) {
+                        val n = c.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                        val s = c.getColumnIndex(OpenableColumns.SIZE)
+                        val m = c.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+                        if (n >= 0) name = c.getString(n)
+                        if (s >= 0 && !c.isNull(s)) size = c.getLong(s)
+                        if (m >= 0 && !c.isNull(m)) modified = Files.modified(c.getLong(m))
+                    }
+                }
+                dir.mkdirs()
+                if (!Files.fits(size, StatFs(dir.path).availableBytes)) {
+                    return@Thread outcome(invoke, FileOutcome.Full)
+                }
+                val copied = resolver.openInputStream(uri)?.use { input ->
+                    target.outputStream().use { output -> Files.copy(input, output) }
+                } ?: throw java.io.IOException("unreadable")
+                invoke.resolve(
+                    JSObject()
+                        .put("outcome", FileOutcome.Chosen.wire)
+                        .put("path", target.absolutePath)
+                        .put("name", name ?: "")
+                        .put("size", copied)
+                        .put("modified", modified)
+                )
+            } catch (e: Exception) {
+                target.delete()
+                outcome(invoke, if (Files.isFull(e)) FileOutcome.Full else FileOutcome.Failed)
+            }
+        }.start()
     }
 }
