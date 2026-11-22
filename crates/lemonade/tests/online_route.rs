@@ -850,7 +850,7 @@ async fn real_engine_takes_the_key_at_run_time() {
             "entityId": null, "predicate": "scheduled", "object": "Tuesday", "certainty": "sure",
             "status": "active", "validFrom": null, "validTo": null, "due": null,
             "learnedAt": "2026-11-10T09:30:00+00:00", "lastUsed": null, "letGoAt": null,
-            "keepForever": false, "private": false, "suggestPrivate": false, "was": null,
+            "keepForever": false, "private": false, "was": null,
             "receipts": [],
         }))
         .unwrap(),

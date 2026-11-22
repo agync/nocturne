@@ -52,8 +52,6 @@ pub struct MemoryView {
     pub let_go_at: Option<String>,
     pub keep_forever: bool,
     pub private: bool,
-    /// Health, money or ID content: the interface may suggest marking it private.
-    pub suggest_private: bool,
     /// The previous value when this memory replaced an older one ("was Wed").
     pub was: Option<String>,
     /// What the memory was first filed under, when the person moved it to another person,

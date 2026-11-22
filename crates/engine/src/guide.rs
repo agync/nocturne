@@ -559,7 +559,6 @@ impl Guide {
             let_go_at: None,
             keep_forever: false,
             private: false,
-            suggest_private: false,
             was: None,
             moved_from: None,
             receipts: Vec::new(),

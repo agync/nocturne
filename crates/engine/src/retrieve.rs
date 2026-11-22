@@ -879,7 +879,6 @@ fn line_hit(source: &LineSource, n: usize, line: String) -> Hit {
             let_go_at: None,
             keep_forever: false,
             private: false,
-            suggest_private: false,
             was: None,
             moved_from: None,
             receipts: vec![receipt],

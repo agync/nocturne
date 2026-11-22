@@ -114,7 +114,8 @@ describe("What Nocturne remembers", () => {
       "Is this about something else?",
       "Delete…",
     ]);
-    expect(within(bar).getByText(/health, money or ID information/)).toBeInTheDocument();
+    expect(screen.queryByText(/health, money or ID/)).toBeNull();
+    expect(screen.queryByText(/You may want to mark it private/)).toBeNull();
     await userEvent.keyboard("{Escape}");
     expect(row).toHaveAttribute("aria-expanded", "false");
     expect(row).toHaveFocus();

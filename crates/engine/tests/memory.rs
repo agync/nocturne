@@ -1288,7 +1288,7 @@ fn certainty_mapping() {
 }
 
 #[test]
-fn safety_memories_are_keep_forever_and_suggest_private() {
+fn safety_memories_are_kept_forever_and_never_hidden() {
     let f = fixture();
     learn(
         &f.engine,
@@ -1316,7 +1316,6 @@ fn safety_memories_are_keep_forever_and_suggest_private() {
     for m in all(&f) {
         let safety = m.object != "jam";
         assert_eq!(m.keep_forever, safety, "{}", m.sentence);
-        assert_eq!(m.suggest_private, safety, "{}", m.sentence);
         assert!(!m.private, "never hidden silently");
     }
 }

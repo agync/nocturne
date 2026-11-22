@@ -666,7 +666,6 @@ export class MockEngine implements EngineClient {
       letGoAt: null,
       keepForever: false,
       private: false,
-      suggestPrivate: false,
       was: null,
       movedFrom: null,
       receipts: [

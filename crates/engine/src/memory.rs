@@ -1737,8 +1737,8 @@ fn apply_one(
     tx.execute(
         "INSERT INTO memories(id, subject, subject_key, entity_id, predicate, object, object_key, \
          sentence, valid_from, valid_to, due, recorded_at, confidence, status, keep_forever, \
-         suggest_private, tags) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?15, ?16)",
+         tags) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
             id,
             c.subject.trim(),
@@ -2288,10 +2288,10 @@ impl Engine {
             tx.execute(
                 "INSERT INTO memories(id, subject, subject_key, entity_id, predicate, object, \
                  object_key, sentence, valid_from, valid_to, due, recorded_at, confidence, status, \
-                 confirmed, last_used, done, keep_forever, private, suggest_private, tags) \
+                 confirmed, last_used, done, keep_forever, private, tags) \
                  SELECT ?2, subject, subject_key, entity_id, predicate, ?3, ?4, ?5, valid_from, \
                  valid_to, due, ?6, 1.0, 'active', 1, ?6, done, keep_forever, private, \
-                 suggest_private, tags FROM memories WHERE id = ?1",
+                 tags FROM memories WHERE id = ?1",
                 params![id, new_id, new_object, key_of(&new_object), sentence, now],
             )?;
             for (column, value) in [

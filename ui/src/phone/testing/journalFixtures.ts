@@ -577,7 +577,6 @@ const WEEK_RECAP: Recap = {
       letGoAt: null,
       keepForever: false,
       private: false,
-      suggestPrivate: false,
       was: null,
       movedFrom: null,
       receipts: [],
