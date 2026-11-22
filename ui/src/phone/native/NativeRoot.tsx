@@ -144,13 +144,14 @@ export function NativeRoot({ services }: { services: NativeServices }) {
   };
 
   // The rationale reads without pairing; the calendar and Health need a computer to go to.
-  if (route === "rationale") return <Rationale onBack={leave} />;
+  if (route === "rationale") return <Rationale onBack={leave} alone={screen.name === "alone"} />;
   const homed = screen.name === "paired" || screen.name === "alone";
   if (homed && route === "calendar")
     return (
       <CalendarConnect channel={nativeChannel} onDone={leave} alone={screen.name === "alone"} />
     );
-  if (homed && route === "health") return <HealthConnect channel={nativeChannel} onDone={leave} />;
+  if (homed && route === "health")
+    return <HealthConnect channel={nativeChannel} onDone={leave} alone={screen.name === "alone"} />;
 
   const scan = async () => {
     const got = await scanCode();

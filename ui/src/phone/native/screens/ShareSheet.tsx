@@ -122,6 +122,7 @@ export function ShareSheet({
   now,
   onQueued,
   onClose,
+  alone = false,
 }: {
   shared: Shared;
   engine: PhoneEngine;
@@ -130,6 +131,8 @@ export function ShareSheet({
   now(): number;
   onQueued(): void;
   onClose(): void;
+  /** A phone alone: kept into its own memory, with no computer to read it. */
+  alone?: boolean;
 }) {
   const [state, setState] = useState<State>({ name: "compose" });
   const [note, setNote] = useState("");
@@ -240,7 +243,9 @@ export function ShareSheet({
           <>
             <p className="ph-body" role="status">
               {state.name === "kept"
-                ? t("phone.journal.keep.body")
+                ? alone
+                  ? t("phone.alone.share.kept")
+                  : t("phone.journal.keep.body")
                 : state.name === "waiting" && state.newer
                   ? t("phone.app.value.needsNewer")
                   : t("phone.keep.waiting.body")}

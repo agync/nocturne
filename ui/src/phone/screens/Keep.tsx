@@ -37,7 +37,7 @@ type State =
       marked: boolean;
     }
   | { name: "waiting"; kind: Kind; title: string; at: number; url: string | null }
-  | { name: "problem"; kind: "big" | "failed" | "kind" };
+  | { name: "problem"; kind: "big" | "failed" | "kind" | "full" };
 
 const KIND_LABEL: Record<
   Kind,
@@ -87,6 +87,20 @@ interface KeepProps {
    * the microphone starts only when it is tapped.
    */
   recording?: boolean;
+  /**
+   * A phone alone keeps into its own memory: the lines about a computer are left out, and the
+   * screen may say why before the phone first asks for the microphone.
+   */
+  alone?: AloneKeep;
+}
+
+export interface AloneKeep {
+  /** Runs before Record first opens the microphone; the recording starts once it resolves. */
+  beforeRecord?(): Promise<void>;
+  /** A thing was kept. */
+  onKept?(kind: "text" | "photo" | "recording"): void;
+  /** Opens the phone's settings for Nocturne, where the microphone is turned back on. */
+  onSettings?(): void;
 }
 
 export interface Recording {
@@ -144,6 +158,7 @@ export function Keep({
   draft,
   recorder = browserRecorder,
   recording = false,
+  alone,
 }: KeepProps) {
   const [state, setState] = useState<State>({ name: "compose" });
   const record = useRef<HTMLButtonElement>(null);
@@ -241,6 +256,7 @@ export function Keep({
             : engine.keepRecording(body.blob as Blob, keep.clientId, marks),
       );
       await drop();
+      alone?.onKept?.(kind);
       setState({
         name: "kept",
         kind,
@@ -261,6 +277,7 @@ export function Keep({
         // Busy, rate limited or not ready: the keep goes back to waiting, to be sent again.
         if (WAIT_CODES.has(e.code)) return wait();
         await drop();
+        if (e.code === "full") return setState({ name: "problem", kind: "full" });
         if (e.code === "tooLarge") return setState({ name: "problem", kind: "big" });
         if (e.code === "invalid") return setState({ name: "problem", kind: "kind" });
         return setState({ name: "problem", kind: "failed" });
@@ -360,8 +377,9 @@ export function Keep({
                 ref={record}
                 type="button"
                 className={`ph-source${recording ? " ph-source--ready" : ""}`}
-                onClick={() => {
+                onClick={async () => {
                   setMicError(null);
+                  await alone?.beforeRecord?.();
                   setState({ name: "recording" });
                 }}
               >
@@ -371,9 +389,18 @@ export function Keep({
             </div>
             {micError && (
               <p className="ph-error" role="alert">
-                {micError === "denied" ? t("phone.keep.micDenied") : t("phone.keep.micNone")}
+                {micError === "denied"
+                  ? alone
+                    ? t("phone.alone.keep.micDenied")
+                    : t("phone.keep.micDenied")
+                  : t("phone.keep.micNone")}
               </p>
             )}
+            {micError === "denied" && alone?.onSettings ? (
+              <Button kind="quiet" onClick={alone.onSettings}>
+                {t("phone.sources.openPhoneSettings")}
+              </Button>
+            ) : null}
             <input
               ref={take}
               type="file"
@@ -401,7 +428,9 @@ export function Keep({
             />
             <FeelingPick pick={feel} onPick={setFeel} onMore={(part) => onMoreWords?.(part)} />
             <GoodSwitch on={good} onChange={setGood} />
-            <p className="ph-hint">{t("phone.keep.fromName", { name: deviceName })}</p>
+            {alone ? null : (
+              <p className="ph-hint">{t("phone.keep.fromName", { name: deviceName })}</p>
+            )}
             <div className="ph-spacer ph-pin">
               <Button kind="primary" type="submit" disabled={text.trim() === ""}>
                 {t("phone.keep.submit")}
@@ -481,11 +510,19 @@ export function Keep({
   }
 
   if (state.name === "problem") {
-    const copy = {
-      big: ["phone.keep.big.title", "phone.keep.big.body"],
-      failed: ["phone.keep.failed.title", "phone.keep.failed.body"],
-      kind: ["phone.keep.kind.title", "phone.keep.kind.body"],
-    } as const;
+    const copy = alone
+      ? ({
+          big: ["phone.keep.big.title", "phone.alone.keep.big.body"],
+          failed: ["phone.alone.keep.failed.title", "phone.alone.keep.failed.body"],
+          kind: ["phone.keep.kind.title", "phone.keep.kind.body"],
+          full: ["phone.alone.keep.failed.title", "phone.alone.keep.full"],
+        } as const)
+      : ({
+          big: ["phone.keep.big.title", "phone.keep.big.body"],
+          failed: ["phone.keep.failed.title", "phone.keep.failed.body"],
+          kind: ["phone.keep.kind.title", "phone.keep.kind.body"],
+          full: ["phone.keep.failed.title", "phone.keep.failed.body"],
+        } as const);
     const [titleId, bodyId] = copy[state.kind];
     return (
       <Page bar={bar}>
@@ -498,7 +535,9 @@ export function Keep({
           </div>
           <div className="ph-spacer ph-stack">
             <Button kind="primary" onClick={() => setState({ name: "compose" })}>
-              {state.kind === "failed" ? t("phone.tryAgain") : t("phone.keep.another")}
+              {state.kind === "failed" || state.kind === "full"
+                ? t("phone.tryAgain")
+                : t("phone.keep.another")}
             </Button>
             <Button kind="quiet" onClick={onHome}>
               {t("phone.home")}
@@ -567,16 +606,31 @@ export function Keep({
           </h1>
         </div>
         <p className="ph-body">
-          {kept.marked ? t("phone.journal.keep.body") : t("phone.keep.kept.body")}
+          {alone
+            ? kept.kind === "text"
+              ? t("phone.alone.keep.kept.note")
+              : kept.kept.item.heardBy === "phone"
+                ? t("phone.alone.keep.kept.heard")
+                : t("phone.alone.keep.kept.waiting")
+            : kept.marked
+              ? t("phone.journal.keep.body")
+              : t("phone.keep.kept.body")}
         </p>
         <KeptCard
           kind={kept.kind}
           title={kept.kept.item.title}
-          line={t("phone.keep.kept.from", {
-            kind: t(KIND_LABEL[kept.kind]),
-            time: formatTime(kept.kept.item.keptAt),
-            name: deviceName,
-          })}
+          line={
+            alone
+              ? t("phone.alone.keep.kept.from", {
+                  kind: t(KIND_LABEL[kept.kind]),
+                  time: formatTime(kept.kept.item.keptAt),
+                })
+              : t("phone.keep.kept.from", {
+                  kind: t(KIND_LABEL[kept.kind]),
+                  time: formatTime(kept.kept.item.keptAt),
+                  name: deviceName,
+                })
+          }
           url={kept.url}
         />
         <div className="ph-row-between">
@@ -585,13 +639,17 @@ export function Keep({
               {t("phone.keep.undone")}
             </span>
           ) : kept.late ? (
-            <span className="ph-rc" role="status">
-              {t("phone.keep.undo.late")}
-            </span>
+            alone ? null : (
+              <span className="ph-rc" role="status">
+                {t("phone.keep.undo.late")}
+              </span>
+            )
           ) : (
             <>
               <span className="ph-rc">
-                {t("phone.keep.undo", { time: formatTime(kept.kept.takeBackUntil) })}
+                {alone
+                  ? t("phone.alone.keep.undo")
+                  : t("phone.keep.undo", { time: formatTime(kept.kept.takeBackUntil) })}
               </span>
               <button
                 type="button"
