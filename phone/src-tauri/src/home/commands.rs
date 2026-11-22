@@ -346,3 +346,14 @@ pub fn let_go_backup_file<R: Runtime>(app: AppHandle<R>) {
         super::calls::clear(&dir);
     }
 }
+
+/// The bytes free on the phone where the memory is, for the "nearly full" banner. `None` where
+/// the phone does not say.
+#[tauri::command]
+pub async fn free_space<R: Runtime>(app: AppHandle<R>) -> Option<f64> {
+    let dir = app.path().app_data_dir().ok()?;
+    blocking(move || app.system().free_space(&dir).ok().flatten())
+        .await
+        .flatten()
+        .map(|b| b as f64)
+}

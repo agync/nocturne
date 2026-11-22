@@ -225,6 +225,17 @@ class SystemPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /** Bytes free on the volume that holds the folder, as an app may use them. */
+    @Command
+    fun freeSpace(invoke: Invoke) {
+        val path = invoke.parseArgs(FolderArgs::class.java).path
+        try {
+            invoke.resolve(JSObject().put("bytes", StatFs(path).availableBytes))
+        } catch (e: IllegalArgumentException) {
+            invoke.resolve(JSObject().put("bytes", null))
+        }
+    }
+
     private fun outcome(invoke: Invoke, outcome: FileOutcome) =
         invoke.resolve(JSObject().put("outcome", outcome.wire))
 

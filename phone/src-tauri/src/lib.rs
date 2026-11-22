@@ -84,6 +84,7 @@ pub fn run() {
             home::commands::save_backup_file,
             home::commands::choose_backup_file,
             home::commands::let_go_backup_file,
+            home::commands::free_space,
         ])
         .build(tauri::generate_context!())
         .expect("the phone app runs")
