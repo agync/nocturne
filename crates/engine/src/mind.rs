@@ -235,12 +235,14 @@ pub struct ReflectItem {
     /// Local time of day, for example "7:52 am".
     pub at: String,
     /// What it is, in plain words: "note", "voice note", "photo", "today's entry",
-    /// "good thing", "document", "web page".
+    /// "good thing", "document", "web page", "appointment".
     pub label: String,
     /// The person's words, a transcript, or what a photo or document shows.
     pub text: String,
     /// Kept from elsewhere: the reflection treats it as background.
     pub background: bool,
+    /// An appointment from a phone's calendar: planned, not kept, and always background.
+    pub calendar: bool,
 }
 
 /// What a day's reflection is written from. Check-ins and items left out of reflections are
@@ -711,6 +713,7 @@ mod reflect_tests {
             label: "note".into(),
             text: text.into(),
             background,
+            calendar: false,
         };
         ReflectInput {
             day: "2026-11-14".parse().unwrap(),

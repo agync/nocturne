@@ -546,6 +546,7 @@ Rules:\n\
 - End each sentence with the number of the item it comes from, like [i1].\n\
 - Put the words you took from an item in bold, with two stars on each side, right before its number.\n\
 - An item marked as background is only background. Mention it briefly, never as the main thing.\n\
+- An item from the calendar was only planned. Say what the calendar had in a short clause, like \"..., and your calendar had the dentist at 9:00\", and never that the person went or that it happened.\n\
 - Never give advice. Never say what the person should feel or guess how they felt. Never score the day or compare it with anyone.\n\
 - Never name an illness or a condition. Never write about other days.\n{}",
         untrusted("items", nonce)
@@ -562,6 +563,7 @@ Rules:\n\
 - Put the words you took from an item in bold with **, directly before that item's marker. \
 For example: You wrote that **the walk was slow but good** [i1], and later met Alex at **the old station** [i2].\n\
 - An item marked as background was kept from elsewhere. Mention it only as background, in a short clause, never as the main thing of a sentence.\n\
+- An item from the calendar was only planned. Say what the calendar had in a short clause, like \"..., and your calendar had the dentist at 9:00\", and never that the person went, that it happened, or how it went.\n\
 - Copy times, numbers, names and dates exactly as the items write them.\n\
 - Never give advice or say what the person should do.\n\
 - Never diagnose, and never name an illness or a condition.\n\
@@ -582,7 +584,12 @@ fn one_line(text: &str) -> String {
 pub fn reflect_user(_tier: Tier, input: &ReflectInput, nonce: &str) -> String {
     let mut list = String::new();
     for (i, item) in input.items.iter().enumerate() {
-        let label = if item.background {
+        let label = if item.calendar {
+            format!(
+                "{} (from the calendar, planned: mention only as background, never as something that happened)",
+                one_line(&item.label)
+            )
+        } else if item.background {
             format!(
                 "{} (kept from elsewhere: mention only as background)",
                 one_line(&item.label)
@@ -758,6 +765,7 @@ mod tests {
             label: label.into(),
             text: text.into(),
             background,
+            calendar: false,
         }
     }
 
@@ -803,6 +811,27 @@ mod tests {
             reflect_user(Tier::Standard, &so_far, "n")
                 .contains("The day is still going; write about it so far.")
         );
+    }
+
+    #[test]
+    fn a_calendar_item_is_marked_as_planned() {
+        let mut dentist =
+            reflect_item("9:00 am", "appointment", "Dentist, at Harbour Clinic", true);
+        dentist.calendar = true;
+        let input = ReflectInput {
+            day: "2026-11-14".parse().unwrap(),
+            so_far: false,
+            items: vec![dentist],
+        };
+        let user = reflect_user(Tier::Standard, &input, "n");
+        assert!(user.contains(
+            "[i1] 9:00 am, appointment (from the calendar, planned: mention only as background, never as something that happened): Dentist, at Harbour Clinic\n"
+        ));
+        for tier in [Tier::Tiny, Tier::Standard] {
+            assert!(
+                reflect_system(tier, "n").contains("and your calendar had the dentist at 9:00")
+            );
+        }
     }
 
     fn fact(id: &str, sentence: &str, extra: serde_json::Value) -> Fact {

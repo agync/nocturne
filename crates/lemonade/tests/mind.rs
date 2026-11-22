@@ -2264,6 +2264,7 @@ fn reflect_input() -> ReflectInput {
         label: label.into(),
         text: text.into(),
         background,
+        calendar: false,
     };
     ReflectInput {
         day: "2026-11-14".parse().unwrap(),

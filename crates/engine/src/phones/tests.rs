@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use crate::WrittenSentence;
 use jiff::civil::Date;
 use nocturne_contract::{
     CalendarBatch, CalendarChange, CalendarEntry, CameInTag, CheckInInput, Edition, Feeling,
@@ -1789,4 +1790,194 @@ fn calendar_entries_sharing_words_are_never_a_question() {
         .take_calendar(&f.phone, batch("s1", changes))
         .unwrap();
     assert_eq!(count(&f, "SELECT COUNT(*) FROM conflicts"), 0);
+}
+
+fn kept_note(f: &Fx, text: &str) -> String {
+    let id = match f.engine.keep_text(text, Source::QuickCapture).unwrap() {
+        nocturne_contract::Kept::New { item } | nocturne_contract::Kept::Duplicate { item } => {
+            item.id
+        }
+    };
+    let lease = f
+        .engine
+        .lease_item(&id, std::time::Duration::from_secs(60))
+        .unwrap()
+        .lease;
+    f.engine.apply_candidates(&id, &lease, Vec::new()).unwrap();
+    id
+}
+
+fn today_period(f: &Fx) -> nocturne_contract::Period {
+    f.engine
+        .period_of(nocturne_contract::PeriodKind::Day, date("2026-11-20"))
+        .unwrap()
+}
+
+#[test]
+fn a_reflection_is_shown_the_days_appointments_as_background() {
+    let f = fx();
+    let note = kept_note(&f, "Slow start, then the walk");
+    let mut dentist = entry(
+        "ev1",
+        "Dentist",
+        "2026-11-20T09:00:00Z",
+        "2026-11-20T09:30:00Z",
+    );
+    dentist.place = Some("Harbour Clinic".into());
+    let mut holiday = entry("ev2", "School holiday", "2026-11-20", "2026-11-21");
+    holiday.all_day = true;
+    holiday.time_zone = None;
+    holiday.calendar_id = "c2".into();
+    let cancelled = entry(
+        "ev3",
+        "Cancelled lunch",
+        "2026-11-20T12:00:00Z",
+        "2026-11-20T13:00:00Z",
+    );
+    let secret = entry(
+        "ev4",
+        "Clinic",
+        "2026-11-20T15:00:00Z",
+        "2026-11-20T16:00:00Z",
+    );
+    let elsewhere = entry(
+        "ev5",
+        "Next week",
+        "2026-11-27T09:00:00Z",
+        "2026-11-27T10:00:00Z",
+    );
+    let mut cb = batch(
+        "s1",
+        vec![
+            upsert(dentist),
+            upsert(holiday),
+            upsert(cancelled),
+            upsert(secret),
+            upsert(elsewhere),
+        ],
+    );
+    cb.calendars.push(PhoneCalendar {
+        id: "c2".into(),
+        name: "Holidays".into(),
+        colour: None,
+    });
+    f.engine.take_calendar(&f.phone, cb).unwrap();
+    f.engine
+        .set_item_private(&record_item(&f, "ev4"), true)
+        .unwrap();
+    f.clock.set_str("2026-11-20T05:10:00Z");
+    f.engine
+        .take_calendar(
+            &f.phone,
+            batch(
+                "s2",
+                vec![CalendarChange::Removed {
+                    phone_id: "ev3".into(),
+                }],
+            ),
+        )
+        .unwrap();
+
+    let period = today_period(&f);
+    let input = f.engine.reflection_input(&period).unwrap();
+    let shown: Vec<(&str, &str, &str, bool, bool)> = input
+        .items
+        .iter()
+        .map(|i| {
+            (
+                i.at.as_str(),
+                i.label.as_str(),
+                i.text.as_str(),
+                i.background,
+                i.calendar,
+            )
+        })
+        .collect();
+    assert_eq!(
+        shown,
+        vec![
+            ("all day", "appointment", "School holiday", true, true),
+            ("5:00 am", "note", "Slow start, then the walk", false, false),
+            (
+                "9:00 am",
+                "appointment",
+                "Dentist, at Harbour Clinic",
+                true,
+                true
+            ),
+        ],
+        "every calendar alike, in order, with nothing cancelled, private or on another day"
+    );
+
+    let written = f
+        .engine
+        .save_day_reflection(
+            &period,
+            &input,
+            &[WrittenSentence {
+                text: "You wrote **Slow start** and your calendar had **the dentist at 9:00**."
+                    .into(),
+                cites: vec![1, 2],
+            }],
+            nocturne_contract::WrittenWhen::OnDemand,
+        )
+        .unwrap();
+    assert_eq!(written.from_count, 1, "only the note was kept");
+    let receipts = &written.the_day[0].receipts;
+    assert_eq!(receipts[0].item_id, note);
+    assert_eq!(receipts[1].item_id, record_item(&f, "ev1"));
+    assert_eq!(receipts[1].calendar.as_deref(), Some("Home"));
+}
+
+#[test]
+fn a_day_of_only_appointments_has_nothing_to_look_back_on() {
+    let f = fx();
+    f.engine
+        .take_calendar(
+            &f.phone,
+            batch(
+                "s1",
+                vec![upsert(entry(
+                    "ev1",
+                    "Dentist",
+                    "2026-11-20T09:00:00Z",
+                    "2026-11-20T09:30:00Z",
+                ))],
+            ),
+        )
+        .unwrap();
+    f.clock.set_str("2026-11-21T07:00:00Z");
+    assert!(f.engine.reflections_due(3).unwrap().is_empty());
+    let input = f.engine.reflection_input(&today_period(&f)).unwrap();
+    assert!(input.items.iter().all(|i| i.calendar && i.background));
+}
+
+#[test]
+fn an_entry_from_an_earlier_day_is_until_when_it_ends_today_and_all_day_when_it_spans() {
+    let f = fx();
+    let late = entry(
+        "ev1",
+        "Night shift",
+        "2026-11-19T22:00:00Z",
+        "2026-11-20T01:00:00Z",
+    );
+    let trip = entry(
+        "ev2",
+        "Trip",
+        "2026-11-19T10:00:00Z",
+        "2026-11-21T10:00:00Z",
+    );
+    f.engine
+        .take_calendar(&f.phone, batch("s1", vec![upsert(late), upsert(trip)]))
+        .unwrap();
+    let input = f.engine.reflection_input(&today_period(&f)).unwrap();
+    let shown: Vec<(&str, &str)> = input
+        .items
+        .iter()
+        .map(|i| (i.at.as_str(), i.text.as_str()))
+        .collect();
+    assert_eq!(
+        shown,
+        vec![("all day", "Trip"), ("until 1:00 am", "Night shift")]
+    );
 }

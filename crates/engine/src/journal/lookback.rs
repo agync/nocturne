@@ -45,6 +45,8 @@ const TOGETHER_DAYS: u32 = 3;
 const CHANGED_CAP: usize = 20;
 /// Characters of one item a reflection is shown.
 const REFLECT_TEXT_CAP: usize = 1200;
+/// Appointments a reflection is shown, earliest first.
+const REFLECT_APPOINTMENTS: usize = 8;
 
 fn left_out_ids(conn: &Connection) -> Result<HashSet<String>> {
     let mut stmt = conn.prepare("SELECT id FROM items WHERE left_out = 1")?;
@@ -149,6 +151,11 @@ fn day_reflection(
     );
     let ids: Vec<String> = items.iter().map(|i| i.id().to_string()).collect();
     r.still_open = open_memories(conn, &ids)?;
+    for receipt in r.the_day.iter_mut().flat_map(|l| l.receipts.iter_mut()) {
+        if receipt.kind == ItemKind::Calendar {
+            receipt.calendar = crate::phones::read::calendar_of(conn, &receipt.item_id)?;
+        }
+    }
     Ok(r)
 }
 
@@ -547,7 +554,12 @@ fn reflect_text(item: &JItem) -> String {
     }
 }
 
-fn reflect_items(conn: &Connection, ctx: &Ctx, g: &Gathered) -> Result<Vec<ReflectItem>> {
+fn reflect_items(
+    conn: &Connection,
+    ctx: &Ctx,
+    g: &Gathered,
+    day: Date,
+) -> Result<Vec<ReflectItem>> {
     let mut items: Vec<&JItem> = Vec::new();
     for i in g
         .usable()
@@ -563,20 +575,84 @@ fn reflect_items(conn: &Connection, ctx: &Ctx, g: &Gathered) -> Result<Vec<Refle
             .then(a.block().cmp(&b.block()))
             .then(a.id().cmp(b.id()))
     });
-    let mut out = Vec::new();
+    let mut out: Vec<(String, ReflectItem)> = Vec::new();
     for i in items {
         let text = reflect_text(i);
         if text.is_empty() {
             continue;
         }
-        out.push(ReflectItem {
-            id: i.id().to_string(),
-            at: clock_label(&ctx.tz, parse_ts(i.saved_at())?),
-            label: reflect_label(i).to_string(),
-            text,
-            background: is_background(i),
-        });
+        out.push((
+            i.saved_at().to_string(),
+            ReflectItem {
+                id: i.id().to_string(),
+                at: clock_label(&ctx.tz, parse_ts(i.saved_at())?),
+                label: reflect_label(i).to_string(),
+                text,
+                background: is_background(i),
+                calendar: false,
+            },
+        ));
     }
+    for (key, item) in appointments(conn, ctx, day)? {
+        let at = out.partition_point(|(k, _)| *k <= key);
+        out.insert(at, (key, item));
+    }
+    Ok(out.into_iter().map(|(_, i)| i).collect())
+}
+
+/// The day's calendar entries as a reflection is shown them, with the instant each sorts at:
+/// background only, with a time and a place, from every calendar alike. What the person keeps
+/// private, leaves out of reflections or is forgetting never reaches the mind.
+fn appointments(conn: &Connection, ctx: &Ctx, day: Date) -> Result<Vec<(String, ReflectItem)>> {
+    let left = left_out_ids(conn)?;
+    let mut out = Vec::new();
+    for c in crate::phones::read::calendar_entries(conn, day)? {
+        let title = c.entry.title.trim();
+        if title.is_empty()
+            || left.contains(&c.item_id)
+            || crate::capture::in_forget_job(conn, &c.item_id)?
+            || crate::remote::withheld_from_phones(conn, &c.item_id)?
+        {
+            continue;
+        }
+        let starts_today =
+            !c.entry.all_day && crate::phones::calendar::entry_day(&c.entry, &ctx.tz) == Some(day);
+        let (key, at) = if starts_today {
+            let start = parse_ts(&c.entry.start)?;
+            (fmt_ts(start), clock_label(&ctx.tz, start))
+        } else {
+            // An entry that began on an earlier day: "until" when it ends on this one.
+            let until = if c.entry.all_day {
+                None
+            } else {
+                let end = parse_ts(&c.entry.end)?;
+                let z = end.to_zoned(ctx.tz.clone());
+                let at_midnight = z.hour() == 0 && z.minute() == 0 && z.second() == 0;
+                (z.date() == day && !at_midnight).then(|| clock_label(&ctx.tz, end))
+            };
+            (
+                fmt_ts(day.to_zoned(ctx.tz.clone())?.timestamp()),
+                until.map_or_else(|| "all day".to_string(), |t| format!("until {t}")),
+            )
+        };
+        let text = match c.entry.place.as_deref().map(str::trim) {
+            Some(place) if !place.is_empty() => format!("{title}, at {place}"),
+            _ => title.to_string(),
+        };
+        out.push((
+            key,
+            ReflectItem {
+                id: c.item_id,
+                at,
+                label: "appointment".to_string(),
+                text,
+                background: true,
+                calendar: true,
+            },
+        ));
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.truncate(REFLECT_APPOINTMENTS);
     Ok(out)
 }
 
@@ -1059,7 +1135,7 @@ fn day_input(conn: &Connection, ctx: &Ctx, day: Date, g: &Gathered) -> Result<Re
     Ok(ReflectInput {
         day,
         so_far: !ctx.ended(day)?,
-        items: reflect_items(conn, ctx, g)?,
+        items: reflect_items(conn, ctx, g, day)?,
     })
 }
 
@@ -1176,7 +1252,7 @@ impl Engine {
                 written_at: now.clone(),
                 written,
                 so_far: input.so_far,
-                from_count: input.items.len() as u32,
+                from_count: input.items.iter().filter(|i| !i.calendar).count() as u32,
                 the_day: lines,
                 felt: Vec::new(),
                 good: Vec::new(),
@@ -1327,7 +1403,11 @@ impl Engine {
                     }
                     if kind == PeriodKind::Day {
                         let g = Gathered::load(conn, &ctx, &originals, &period)?;
-                        if day_input(conn, &ctx, day, &g)?.items.is_empty() {
+                        if day_input(conn, &ctx, day, &g)?
+                            .items
+                            .iter()
+                            .all(|i| i.calendar)
+                        {
                             continue;
                         }
                     }
