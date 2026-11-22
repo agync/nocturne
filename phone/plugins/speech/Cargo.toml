@@ -1,0 +1,20 @@
+[package]
+name = "tauri-plugin-nocturne-speech"
+description = "The phone's own speech reader: a kept voice note in words, on the phone"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+links = "tauri-plugin-nocturne-speech"
+publish = false
+
+[dependencies]
+tauri.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[lints]
+workspace = true
