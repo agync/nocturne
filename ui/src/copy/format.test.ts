@@ -9,7 +9,9 @@ import {
   formatEta,
   formatLongDay,
   formatTime,
+  isAfterMidnight,
   isDay,
+  journalDay,
   localDay,
 } from "./format";
 
@@ -78,5 +80,22 @@ describe("format", () => {
     expect(isDay("2026-11-13")).toBe(true);
     expect(isDay("2026-02-29")).toBe(false);
     expect(isDay("not-a-date")).toBe(false);
+  });
+});
+
+describe("the journal day on a phone alone", () => {
+  it("runs from 4 in the morning to 4 the next morning", () => {
+    expect(journalDay(new Date(2026, 10, 23, 0, 8))).toBe("2026-11-22");
+    expect(journalDay(new Date(2026, 10, 23, 3, 59))).toBe("2026-11-22");
+    expect(journalDay(new Date(2026, 10, 23, 4, 0))).toBe("2026-11-23");
+    expect(journalDay(new Date(2026, 10, 23, 23, 59))).toBe("2026-11-23");
+    expect(journalDay(new Date(2026, 0, 1, 1, 0))).toBe("2025-12-31");
+  });
+
+  it("is after midnight only before 4 am", () => {
+    expect(isAfterMidnight(new Date(2026, 10, 23, 0, 0))).toBe(true);
+    expect(isAfterMidnight(new Date(2026, 10, 23, 3, 59))).toBe(true);
+    expect(isAfterMidnight(new Date(2026, 10, 23, 4, 0))).toBe(false);
+    expect(isAfterMidnight("nonsense")).toBe(false);
   });
 });

@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { readingDay } from "../../components/ReceiptChip/receiptPath";
-import { localDay } from "../../copy/format";
+import { journalDay } from "../../copy/format";
 import { t } from "../../copy/t";
 import type {
   FeelingPart,
@@ -613,6 +613,7 @@ export function HomeApp({
             key={fresh}
             engine={engine}
             bar={bar("today")}
+            now={services.now}
             calendarOn={calendarOn}
             stats={stats}
             reminderDue={due}
@@ -643,7 +644,7 @@ export function HomeApp({
           <HomeFind
             bar={bar("ask")}
             empty={empty}
-            today={localDay(new Date(services.now()))}
+            today={journalDay(new Date(services.now()))}
             find={home.find}
             onOpen={openFound}
             onMind={toMind}

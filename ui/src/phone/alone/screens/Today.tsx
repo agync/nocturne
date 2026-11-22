@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
-import { formatLongDay, formatTime12 } from "../../../copy/format";
+import { formatLongDay, formatTime12, isAfterMidnight } from "../../../copy/format";
 import { t } from "../../../copy/t";
 import type { HomeStats, JournalDay, PageView, TimelineRow } from "../../../engine/bindings";
 import type { PhoneEngine } from "../../engine";
@@ -26,6 +26,7 @@ type Load =
 export interface HomeTodayProps {
   engine: PhoneEngine;
   bar: ReactNode;
+  now(): number;
   /** Whether the calendar is brought, so an empty one can say so. */
   calendarOn(): Promise<boolean>;
   stats(): Promise<HomeStats>;
@@ -99,7 +100,11 @@ export function HomeToday(p: HomeTodayProps) {
     const calendar = page?.calendarToday ?? [];
     body = (
       <>
-        <p className="ph-lbl">{formatLongDay(day.day)}</p>
+        <p className="ph-lbl">
+          {isAfterMidnight(new Date(p.now()))
+            ? t("phone.alone.today.afterMidnight", { day: formatLongDay(day.day) })
+            : formatLongDay(day.day)}
+        </p>
         {reminder ? (
           <div className="ph-reminder">
             <p>{t("phone.alone.reminder.body")}</p>

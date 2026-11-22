@@ -112,6 +112,22 @@ describe("Today on a phone alone", () => {
     expect(screen.queryByText(/No backup yet/)).toBeNull();
   });
 
+  it("says after midnight on the date line until the journal day starts at 4 am", async () => {
+    history.replaceState(null, "", "/?m=fresh");
+    const services = await nativeMockServices();
+    services.now = () => new Date(2026, 10, 21, 0, 30).getTime();
+    render(<NativeRoot services={services} />);
+    expect(await screen.findByText("Saturday 21 November, after midnight")).toBeInTheDocument();
+  });
+
+  it("has no after midnight once the journal day has started", async () => {
+    history.replaceState(null, "", "/?m=fresh");
+    const services = await nativeMockServices();
+    services.now = () => new Date(2026, 10, 21, 4, 0).getTime();
+    render(<NativeRoot services={services} />);
+    expect(await screen.findByText("Saturday 21 November")).toBeInTheDocument();
+  });
+
   it("lists what was kept today, with what waits to be read", async () => {
     await app("m=kept");
     expect(await screen.findByRole("heading", { name: "Kept today · 2" })).toBeInTheDocument();
