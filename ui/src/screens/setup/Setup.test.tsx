@@ -149,12 +149,26 @@ describe("the welcome", () => {
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Get started" }));
     expect(
+      await screen.findByRole("heading", { level: 1, name: "Already use Nocturne on your phone?" }),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "No, start fresh" }));
+    expect(
       await screen.findByRole("heading", { level: 1, name: "Checking this computer…" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(/computer memory and free space/).closest("[role=status]"),
     ).not.toBeNull();
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
+  });
+
+  it("asks first whether a phone already holds a memory, and Yes goes to adding a phone", async () => {
+    await open("notStarted");
+    await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    await screen.findByRole("heading", { level: 1, name: "Already use Nocturne on your phone?" });
+    const names = screen.getAllByRole("button").map((button) => button.textContent);
+    expect(names).toEqual(["Yes, bring my memory here", "No, start fresh"]);
+    await userEvent.click(screen.getByRole("button", { name: "Yes, bring my memory here" }));
+    await waitFor(() => expect(window.location.hash).toBe("#/settings/away/add"));
   });
 
   it("puts Get started before Restore from a backup", async () => {
@@ -328,6 +342,12 @@ describe("what this computer can run", () => {
   it("puts focus on the new step's heading after Get started and after Set up", async () => {
     await open("choosing", "#/setup");
     await userEvent.click(await screen.findByRole("button", { name: "Get started" }));
+    const question = await screen.findByRole("heading", {
+      level: 1,
+      name: "Already use Nocturne on your phone?",
+    });
+    await waitFor(() => expect(question).toHaveFocus());
+    await userEvent.click(screen.getByRole("button", { name: "No, start fresh" }));
     const choosing = await screen.findByRole("heading", { level: 1, name: /lighter mind/ });
     await waitFor(() => expect(choosing).toHaveFocus());
     await userEvent.click(screen.getByRole("button", { name: /^Set up · / }));

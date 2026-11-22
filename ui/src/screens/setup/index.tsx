@@ -11,6 +11,7 @@ import { Checking } from "./Checking";
 import { Choosing } from "./Choosing";
 import { Done } from "./Done";
 import { GettingReady } from "./GettingReady";
+import { PhoneQuestion } from "./PhoneQuestion";
 import styles from "./Setup.module.css";
 import { useNight } from "./useNight";
 import { Welcome } from "./Welcome";
@@ -22,6 +23,7 @@ export default function Setup() {
   const step = useQueryParam("step");
   const [begun, setBegun] = useState(false);
   const [restoring, setRestoring] = useState(false);
+  const [asking, setAsking] = useState(false);
   const [restored, setRestored] = useState<RestoredView | null>(null);
   const query = useQuery({ queryKey: ["setup"], queryFn: () => engine.getSetup() });
   const view = query.data;
@@ -93,8 +95,18 @@ export default function Setup() {
         break;
       default:
         // notStarted, checking, choosing
-        if (!begun && step !== "choosing") {
-          body = <Welcome onStart={() => setBegun(true)} onRestore={() => setRestoring(true)} />;
+        if (!begun && step !== "choosing" && asking) {
+          body = (
+            <PhoneQuestion
+              onYes={() => goTo("/settings/away/add")}
+              onNo={() => {
+                setAsking(false);
+                setBegun(true);
+              }}
+            />
+          );
+        } else if (!begun && step !== "choosing") {
+          body = <Welcome onStart={() => setAsking(true)} onRestore={() => setRestoring(true)} />;
         } else if (view.phase === "choosing") {
           body = <Choosing view={view} onStarted={() => goTo("/setup")} />;
         } else {
