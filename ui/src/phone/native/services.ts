@@ -3,6 +3,8 @@
 
 import { Channel, invoke } from "@tauri-apps/api/core";
 import type { OpenFailure } from "../channel";
+import { createHomeApi, type HomeApi } from "../alone/api";
+import { createLocalEngine } from "../alone/engine";
 import { PairingError, type PairingResult } from "../pairing";
 import { idbQueue } from "../queue";
 import type { RelinkResult } from "../relink";
@@ -77,10 +79,15 @@ function whyFor(e: unknown): OpenFailure {
 
 export interface NativeServices extends Services {
   store: NativeKeyStore;
+  /** The phone's own memory, when it is a phone alone. */
+  home: HomeApi;
 }
 
 export function nativeServices(): NativeServices {
   const store = nativeKeyStore();
+  const home = createHomeApi();
+  const version = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "development";
+  let name = "";
   let address = "";
   const remember = (d: { address: string } | null) => {
     if (d) address = d.address;
@@ -91,10 +98,19 @@ export function nativeServices(): NativeServices {
   void onIphone().then((ios) => {
     platform.ios = ios;
   });
+  const deviceName = () =>
+    invoke<string | null>("plugin:nocturne-system|device_name").catch(() => null);
+  void deviceName().then((n) => {
+    name = n ?? "";
+  });
   return {
     store,
+    home,
     queue: idbQueue(),
-    engineFor: () => createNativeEngine({ onForgotten: () => store.changed() }),
+    engineFor: () =>
+      home.known() === "alone"
+        ? createLocalEngine({ deviceName: () => name, version })
+        : createNativeEngine({ onForgotten: () => store.changed() }),
     pairFromLink: () => Promise.reject(new PairingError("badCode")),
     pairFromCode: async (typed) => {
       const device = await store.device();
@@ -121,9 +137,9 @@ export function nativeServices(): NativeServices {
       return address ? `https://${address}` : "";
     },
     now: () => Date.now(),
-    version: typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "development",
+    version,
     scripted: false,
     location: { pathname: "/", hash: "", search: "" },
-    deviceName: () => invoke<string | null>("plugin:nocturne-system|device_name").catch(() => null),
+    deviceName,
   };
 }

@@ -61,7 +61,7 @@ const once = async <K extends RemoteAnswer["type"]>(call: RemoteCall, kind: K) =
   expect(await run<RemoteAnswer>("call", { call }), kind);
 
 /** The allowed type for a blob, from its own type or, failing that, its first bytes. */
-async function mimeOf(blob: Blob): Promise<string> {
+export async function mimeOf(blob: Blob): Promise<string> {
   const head = new Uint8Array(await blob.slice(0, 32).arrayBuffer());
   const declared = (blob.type.split(";")[0] ?? "").trim().toLowerCase();
   const mime = P.MIME_MAGIC.some((m) => m.mime === declared) ? declared : sniffMime(head);
@@ -75,7 +75,7 @@ async function mimeOf(blob: Blob): Promise<string> {
   return mime;
 }
 
-function marked(marks: KeepMarks | undefined) {
+export function marked(marks: KeepMarks | undefined) {
   const out: {
     feeling?: KeepMarks["feeling"];
     good?: boolean;

@@ -1,9 +1,19 @@
 // The phone app's scripted build for the browser tests: the scripted phone engine, and the app's
 // native side answered in the page. `?s=` picks the connection as on the phone page, `?n=` what
-// the phone's own side says, and `?v=` the screen it opens on. Nothing here is in the shipped app.
+// the phone's own side says, `?v=` the screen it opens on, and `?m=` what a phone alone holds.
+// Nothing here is in the shipped app.
 
 import { mockIPC } from "@tauri-apps/api/mocks";
 import type { PhoneCalendar } from "../../engine/bindings";
+import { createHomeApi } from "../alone/api";
+import { createLocalEngine } from "../alone/engine";
+import {
+  type HomeScenario,
+  homeState,
+  scriptedFiles,
+  scriptedNotes,
+  seedReminder,
+} from "../alone/testing/homeMock";
 import type { CalendarSettings, HealthSettings, ThisPhoneSources } from "../native/api";
 import type { Shared } from "../native/launch";
 import type { NativeServices } from "../native/services";
@@ -81,7 +91,10 @@ function sharedFor(n: NativeScenario): Shared | null {
 }
 
 /** The app's native side, answered in the page. */
-export function installNativeIpc(n: NativeScenario): void {
+export function installNativeIpc(
+  n: NativeScenario,
+  home?: (cmd: string, args: Record<string, unknown>) => unknown,
+): void {
   const sources = sourcesFor(n);
   let calendar: CalendarSettings = {
     bring: sources.calendar !== "notBrought",
@@ -147,7 +160,7 @@ export function installNativeIpc(n: NativeScenario): void {
         case "plugin:nocturne-system|shared_file":
           return Array.from(PNG);
         default:
-          return null;
+          return home?.(cmd, a) ?? null;
       }
     },
     { shouldMockEvents: true },
@@ -157,7 +170,12 @@ export function installNativeIpc(n: NativeScenario): void {
 /** The scripted services, as the app's: the same engine, with a store that says when it changed. */
 export async function nativeMockServices(): Promise<NativeServices> {
   const params = new URLSearchParams(location.search);
-  installNativeIpc((params.get("n") ?? "full") as NativeScenario);
+  const alone = params.get("m") as HomeScenario | null;
+  installNativeIpc(
+    (params.get("n") ?? "full") as NativeScenario,
+    alone ? homeState(alone).answer : undefined,
+  );
+  const home = createHomeApi(scriptedFiles, scriptedNotes);
   const view = params.get("v");
   if (view)
     history.replaceState(
@@ -168,6 +186,7 @@ export async function nativeMockServices(): Promise<NativeServices> {
       "",
     );
   const base = await mockServices();
+  if (alone === "reminder") seedReminder(base.now());
   const listeners = new Set<() => void>();
   const store: NativeKeyStore = {
     device: () => base.store.device(),
@@ -187,7 +206,10 @@ export async function nativeMockServices(): Promise<NativeServices> {
   return {
     ...base,
     store,
+    home,
     engineFor: (address) => {
+      if (home.known() === "alone")
+        return createLocalEngine({ deviceName: () => "Maya’s phone", version: base.version });
       const engine = base.engineFor(address);
       return {
         ...engine,
@@ -199,6 +221,6 @@ export async function nativeMockServices(): Promise<NativeServices> {
       };
     },
     platform: { ios: false, standalone: true, native: true },
-    deviceName: async () => "Pixel 8",
+    deviceName: async () => (alone ? "Maya’s phone" : "Pixel 8"),
   };
 }
