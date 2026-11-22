@@ -16,6 +16,7 @@ mod poll;
 mod session;
 mod ws;
 
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, SystemTime};
@@ -519,7 +520,8 @@ impl Phone {
         }
     }
 
-    /// A call answered once: everything but `ask`, `getOriginal` and the keeps with bytes.
+    /// A call answered once: everything but `ask`, `getOriginal`, the keeps with bytes and the
+    /// memory's upload.
     pub async fn call(&self, call: RemoteCall) -> Result<RemoteAnswer, CallError> {
         if matches!(
             call,
@@ -527,6 +529,7 @@ impl Phone {
                 | RemoteCall::GetOriginal { .. }
                 | RemoteCall::KeepBytes { .. }
                 | RemoteCall::KeepRecording { .. }
+                | RemoteCall::MemoryDone { .. }
         ) {
             return Err(invalid());
         }
@@ -587,6 +590,40 @@ impl Phone {
             }
         }
         Err(gone(Reach::Asleep))
+    }
+
+    /// A memory moving to the computer (`memoryDone`): the call, then the backup file at `file`
+    /// in chunks, read as they go and never held whole. `sent` hears the bytes gone so far. It
+    /// waits its turn behind any other upload, and is not tried again on a new session: the
+    /// computer may be checking what arrived, so the phone offers its memory again instead.
+    pub async fn upload_memory(
+        &self,
+        call: RemoteCall,
+        file: &Path,
+        sent: impl Fn(u64) + Send + Sync,
+    ) -> Result<RemoteAnswer, CallError> {
+        let RemoteCall::MemoryDone { size, .. } = &call else {
+            return Err(invalid());
+        };
+        let len = std::fs::metadata(file).map_err(|_| invalid())?.len();
+        if len == 0 || *size != len as f64 || len > MAX_MEMORY_BYTES {
+            return Err(invalid());
+        }
+        let source = std::fs::File::open(file).map_err(|_| invalid())?;
+        let _one = self.inner.upload.lock().await;
+        let s = self.ensure().await?;
+        if needs_build(&call) > self.agreed_build() {
+            return Err(CallError::Phone {
+                code: PhoneError::ComputerOutdated,
+            });
+        }
+        match memory_once(&s, call, source, len, &sent).await {
+            Ok(a) => Ok(a),
+            Err(f) => {
+                self.after(&s, f, false).await?;
+                Err(gone(Reach::Asleep))
+            }
+        }
     }
 
     /// An item's original: its type, from the allowlist, and its bytes.
@@ -690,6 +727,50 @@ async fn upload_once(s: &Session, call: RemoteCall, bytes: &[u8]) -> Result<Remo
             .await?;
     }
     let out = session::next(&mut rx).await;
+    s.finish(id);
+    match out? {
+        Down::Answer(a) => Ok(a),
+        Down::Chunk(_) => Err(Fault::Closed),
+        Down::Unreadable => Err(Fault::Phone(PhoneError::Unknown)),
+    }
+}
+
+async fn memory_once(
+    s: &Session,
+    call: RemoteCall,
+    mut source: std::fs::File,
+    len: u64,
+    sent: &(impl Fn(u64) + Send + Sync),
+) -> Result<RemoteAnswer, Fault> {
+    use std::io::Read;
+    let (id, mut rx) = s.request(call).await?;
+    let step = CHUNK.min(MAX_CHUNK_PAYLOAD);
+    let mut buf = vec![0u8; step];
+    let (mut done, mut seq) = (0u64, 0u32);
+    let mut failed = None;
+    while done < len {
+        // An answer before the last chunk (a refusal) ends the upload.
+        if !rx.is_empty() {
+            break;
+        }
+        let want = step.min((len - done) as usize);
+        if source.read_exact(&mut buf[..want]).is_err() {
+            // The file changed under the move: the computer drops what it has.
+            failed = Some(Fault::Phone(PhoneError::Invalid));
+            break;
+        }
+        done += want as u64;
+        if let Err(f) = s.chunk(id, seq, done == len, &buf[..want]).await {
+            failed = Some(f);
+            break;
+        }
+        seq += 1;
+        sent(done);
+    }
+    let out = match failed {
+        Some(f) => Err(f),
+        None => session::next(&mut rx).await,
+    };
     s.finish(id);
     match out? {
         Down::Answer(a) => Ok(a),
