@@ -17,6 +17,7 @@ mod clock;
 mod entity;
 mod error;
 mod export;
+mod find;
 mod forget;
 mod fsutil;
 pub mod guide;
@@ -50,6 +51,7 @@ pub use capture::{MAX_AUDIO_MS, MAX_FAILURES, MAX_PAGES, kind_for_ext, text_titl
 pub use clock::{Clock, ManualClock, SystemClock};
 pub use error::{Error, Result};
 pub use export::DELETE_PHRASE;
+pub use find::{ExcerptPart, FIND_CAP, FoundItem};
 pub use guide::{Guide, GuideMatch, GuideSource, is_guide_section};
 pub use journal::keep::KeepPlace;
 pub use mind::{

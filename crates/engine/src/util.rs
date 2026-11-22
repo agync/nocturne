@@ -152,14 +152,17 @@ const STOPWORDS: &[&str] = &[
     "that", "me", "i", "about", "how",
 ];
 
-/// An FTS5 query where any word may match (ranking sorts out relevance), stop words dropped.
-pub(crate) fn fts_or(q: &str) -> Option<String> {
+/// The words of a query that count: stop words dropped, unless nothing else is left.
+pub(crate) fn fts_terms(q: &str) -> Vec<String> {
     let mut words = fts_words(q);
     let all = words.clone();
     words.retain(|w| !STOPWORDS.contains(&w.as_str()));
-    if words.is_empty() {
-        words = all;
-    }
+    if words.is_empty() { all } else { words }
+}
+
+/// An FTS5 query where any word may match (ranking sorts out relevance), stop words dropped.
+pub(crate) fn fts_or(q: &str) -> Option<String> {
+    let words = fts_terms(q);
     if words.is_empty() {
         return None;
     }
