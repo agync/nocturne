@@ -24,16 +24,13 @@ In `docs/design/mockups/phone-parity/`.
 
 | Screen | File and states | Renders |
 |---|---|---|
-| Joining, on the phone | `household.html`: `found`, `see`, `words`, `joined` | `household-found-light.png`, `household-see-light.png`, `household-words-light.png`, `household-joined-light.png` |
+| Joining, on the phone | `household.html`: `found`, `see`, `words`, `joined`; `passphrase` for [making it your home](#making-a-household-computer-your-home) | `household-found-light.png`, `household-see-light.png`, `household-words-light.png`, `household-joined-light.png`, `household-passphrase-light.png` |
 | The mind is away, removed | `away.html`: `today`, `journal`, `back`, `removed` | `away-today-light.png`, `away-today-dark.png`, `away-journal-light.png`, `away-back-light.png`, `away-removed-light.png` |
 | This phone, in a household | `this-phone.html`: `guest`, `member` | `this-phone-guest-light.png`, `this-phone-member-light.png` |
 | The household, on the computer | `desktop-household.html`: `household`, `add`, `allow`, `remove`, `off` | `desktop-household-light.png`, `desktop-household-dark.png`, `desktop-household-add-light.png`, `desktop-household-allow-light.png`, `desktop-household-remove-light.png`, `desktop-household-off-light.png` |
 
-The owner's decisions changed this page after the mockups were drawn. Until they are redrawn, the
-words here win where a mockup differs: `household.html` `choose` and `passphrase` are superseded
-(joining has no choice; a passphrase belongs to [making it your home](#making-a-household-computer-your-home)),
-and the use counts on borrowing phones in `desktop-household.html` and the "how much" line in
-`household-see` are gone.
+The found screen for a home and the household computer as someone's home on the phone are
+described here in words; they reuse the joining and companion layouts.
 
 ## Borrowing, and a home
 
