@@ -163,7 +163,6 @@ pub struct OnlineView {
     pub model: Option<String>,
     pub phones: bool,
     pub phones_available: bool,
-    pub send_sensitive: bool,
     /// Online answers is on and the person agreed before only what they mark private was held
     /// back: the next question that would go online waits for the one-time notice.
     pub change_notice: bool,
@@ -236,7 +235,6 @@ pub enum CheckOutcome {
 #[ts(export)]
 pub struct OnlineSettings {
     pub phones: bool,
-    pub send_sensitive: bool,
     pub limit: OnlineLimit,
 }
 
@@ -245,7 +243,6 @@ pub struct OnlineSettings {
 #[ts(export)]
 pub struct OnlineSettingsPatch {
     pub phones: Option<bool>,
-    pub send_sensitive: Option<bool>,
     pub limit: Option<OnlineLimit>,
 }
 

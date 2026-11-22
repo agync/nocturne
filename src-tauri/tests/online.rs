@@ -87,7 +87,7 @@ impl Lab {
         assert_eq!(self.check(KEY)["type"], "works");
         self.h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": true, "sendSensitive": false,
+            json!({"settings": {"phones": true,
                                 "limit": {"kind": "questions", "questions": questions, "usd": null}}}),
         )
     }
@@ -287,7 +287,7 @@ fn leaving_before_consent_forgets_key_and_route() {
     assert_eq!(
         l.h.code(
             "turn_on_online",
-            json!({"settings": {"phones": true, "sendSensitive": false,
+            json!({"settings": {"phones": true,
             "limit": {"kind": "questions", "questions": 200, "usd": null}}})
         ),
         "unavailable",
@@ -327,7 +327,7 @@ fn turn_off_keeps_key_forget_removes_it() {
     // On again without a new check: the kept key is used.
     let v = l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     assert_eq!(v["state"]["type"], "on");
@@ -675,7 +675,7 @@ fn a_server_on_this_computer_works_over_plain_http() {
     assert_eq!(out["host"], format!("localhost:{}", l.s.port));
     l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     let route = nocturne_app_lib::online::route_at_launch(l.h.app.handle()).unwrap();
@@ -727,7 +727,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
     assert_eq!(out["type"], "works");
     l.h.ok(
         "turn_on_online",
-        json!({"settings": {"phones": true, "sendSensitive": false,
+        json!({"settings": {"phones": true,
                             "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
     );
     let other = StandIn::start(&fake_provider());
@@ -774,7 +774,7 @@ fn a_blank_key_never_reaches_a_second_stand_in() {
 }
 
 fn settings() -> Value {
-    json!({"settings": {"phones": true, "sendSensitive": false,
+    json!({"settings": {"phones": true,
                         "limit": {"kind": "questions", "questions": 200, "usd": null}}})
 }
 

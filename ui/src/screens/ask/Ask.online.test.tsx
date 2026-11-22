@@ -128,14 +128,9 @@ describe("what was left out of an online question", () => {
       "private",
       "Some things you marked private were left out. Ask on this computer to include them.",
     ],
-    [
-      "sensitive",
-      "Some health, money or ID details were left out. Ask on this computer to include them.",
-    ],
-    [
-      "both",
-      "Some things you marked private, and some health, money or ID details, were left out. Ask on this computer to include them.",
-    ],
+    // Written only by earlier versions: said without naming what kind of thing it was.
+    ["sensitive", "Some things were left out. Ask on this computer to include them."],
+    ["both", "Some things were left out. Ask on this computer to include them."],
   ];
 
   it.each(NOTES)("says so for %s and offers to ask here", async (leftOut, words) => {

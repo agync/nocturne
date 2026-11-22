@@ -90,7 +90,7 @@ impl Lab {
         assert_eq!(out["type"], "works");
         self.h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": true, "sendSensitive": false,
+            json!({"settings": {"phones": true,
                                 "limit": {"kind": "questions", "questions": 200, "usd": null}}}),
         )
     }

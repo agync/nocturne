@@ -39,7 +39,6 @@ async function open(online: OnlineAdvanced | null, seedKey = false) {
     await engine.checkOnline(form);
     await engine.turnOnOnline({
       phones: false,
-      sendSensitive: false,
       limit: { kind: "questions", questions: 200, usd: null },
     });
   }

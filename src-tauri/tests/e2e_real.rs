@@ -1838,7 +1838,7 @@ fn the_whole_product_works_with_real_models() {
         h.ok("see_online_change", json!({}));
         let on = h.ok(
             "turn_on_online",
-            json!({"settings": {"phones": false, "sendSensitive": false,
+            json!({"settings": {"phones": false,
                                 "limit": {"kind": "questions", "questions": 500, "usd": null}}}),
         );
         run.check(

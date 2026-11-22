@@ -181,7 +181,6 @@ pub fn off_view() -> OnlineView {
         model: None,
         phones: true,
         phones_available: false,
-        send_sensitive: false,
         change_notice: false,
         limit: OnlineLimit::default(),
         questions_this_month: 0,

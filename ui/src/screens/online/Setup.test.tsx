@@ -146,7 +146,7 @@ describe("setup", () => {
       "What you need",
     ]);
     expect(
-      inside.getByText(/Nocturne also keeps back lines that look like health, money or ID details/),
+      inside.getByText(/Nocturne doesn’t guess what is private, so mark anything you never want/),
     ).toBeInTheDocument();
     expect(
       inside.getByText(
@@ -341,9 +341,10 @@ describe("setup", () => {
     expect(chipsIn(lead)).toEqual(["Settings", "Online answers"]);
   });
 
-  it("sensitive_off_by_default: health, money and ID stay here until switched on", async () => {
+  it("no_judging: no switch for health, money or ID; private things are never sent", async () => {
     await toSend();
-    expect(screen.getByRole("switch", { name: "Health, money and ID details" })).not.toBeChecked();
+    expect(screen.queryByRole("switch", { name: /Health, money and ID/ })).toBeNull();
+    expect(screen.queryByText(/health, money/i)).toBeNull();
     expect(screen.getByText("Private things are never sent")).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: /Private things/ })).toBeNull();
   });
@@ -445,7 +446,6 @@ describe("setup", () => {
 
   it("consent_lists_choices: every choice is listed, with a way to change each", async () => {
     await toSend("offBefore");
-    await userEvent.click(screen.getByRole("switch", { name: "Health, money and ID details" }));
     await userEvent.click(screen.getByRole("switch", { name: "Questions from your phones" }));
     await click("Continue");
     await heading(STEP4);
@@ -461,6 +461,13 @@ describe("setup", () => {
     expect(text).toContain("May be sent");
     expect(text).toContain("Never sent");
     expect(text).toContain("200 questions");
+    expect(text).not.toMatch(/health, money/i);
+    expect(
+      screen.getByText(
+        "Nocturne doesn’t guess what is private. Mark anything you never want sent as private.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/looks? like health, money or ID/)).toBeNull();
     expect(screen.getByText(/exactly what happens/)).toBeInTheDocument();
     expect(screen.getByText(/can see each question, the lines sent with it/)).toBeInTheDocument();
     expect(screen.getByText(/Nocturne can’t check what the service keeps/)).toBeInTheDocument();
@@ -517,7 +524,6 @@ describe("setup", () => {
     expect(engine.online.view().changeNotice).toBe(false);
     expect(on).toHaveBeenCalledWith({
       phones: false,
-      sendSensitive: false,
       limit: { kind: "none", questions: 200, usd: null },
     });
     expect(await screen.findByRole("switch", { name: "Online answers are on" })).toBeChecked();

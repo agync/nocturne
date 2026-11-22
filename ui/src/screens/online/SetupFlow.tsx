@@ -20,7 +20,6 @@ export function SetupFlow({ view, start }: { view: OnlineView; start: Step | nul
   const [passed] = useState<Provider | null>(passedCheck);
   const [draft, setDraft] = useState<Draft>({
     phones: view.phonesAvailable ? view.phones : false,
-    sendSensitive: view.sendSensitive,
     limit: view.limit,
   });
   const checked = useRef(passed !== null);

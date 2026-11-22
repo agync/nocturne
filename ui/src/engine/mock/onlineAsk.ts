@@ -38,7 +38,6 @@ export function onlineViewOn(overrides: Partial<OnlineView> = {}): OnlineView {
     model: "llama-3.3-70b-instruct",
     phones: true,
     phonesAvailable: false,
-    sendSensitive: false,
     changeNotice: false,
     limit: { kind: "questions", questions: 200, usd: null },
     questionsThisMonth: 38,

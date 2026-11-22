@@ -1911,7 +1911,10 @@ fn get_online_is_off_on_a_fresh_store() {
     assert_eq!(view["state"], json!({"type": "off"}));
     assert_eq!(view["setUp"], false);
     assert_eq!(view["phones"], true);
-    assert_eq!(view["sendSensitive"], false);
+    assert!(
+        view.get("sendSensitive").is_none(),
+        "no switch for health, money or ID"
+    );
     assert_eq!(
         view["limit"],
         json!({"kind": "none", "questions": 200, "usd": null})
@@ -1925,7 +1928,7 @@ fn get_online_is_off_on_a_fresh_store() {
         json!({"form": {"baseUrl": "https://api.example.com/v1", "key": "sk-never-0123456789", "model": "m"}}),
     );
     assert!(!format!("{reply:?}").contains("sk-never-0123456789"));
-    assert_eq!(h.code("turn_on_online", json!({"settings": {"phones": true, "sendSensitive": false, "limit": {"kind": "questions", "questions": 200, "usd": null}}})), "unavailable");
+    assert_eq!(h.code("turn_on_online", json!({"settings": {"phones": true, "limit": {"kind": "questions", "questions": 200, "usd": null}}})), "unavailable");
 }
 
 #[test]

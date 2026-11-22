@@ -11,7 +11,6 @@ const form = (patch: Partial<OnlineForm> = {}): OnlineForm => ({
 
 const settings = {
   phones: true,
-  sendSensitive: false,
   limit: { kind: "questions" as const, questions: 200, usd: null },
 };
 
@@ -111,13 +110,11 @@ describe("mock.online", () => {
     const online = sim("limit");
     const lifted = await online.update({
       phones: null,
-      sendSensitive: null,
       limit: { kind: "questions", questions: 500, usd: null },
     });
     expect(lifted.state).toEqual({ type: "on" });
     const paused = await online.update({
       phones: null,
-      sendSensitive: null,
       limit: { kind: "questions", questions: 100, usd: null },
     });
     expect(paused.state.type).toBe("paused");
