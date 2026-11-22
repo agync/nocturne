@@ -167,6 +167,55 @@ for (const scheme of ["light", "dark"] as const) {
       await shot(page, `after-delete-${scheme}`);
     });
 
+    test("an item's page with its private switch", async ({ page }) => {
+      await page.goto("/?m=kept");
+      await page.getByRole("button", { name: /Ask about the swap/ }).click();
+      await expect(page.getByRole("switch", { name: /Private/ })).toBeVisible();
+      await clean(page);
+      await shot(page, `after-item-${scheme}`);
+    });
+
+    test("keeping, kept, and no room", async ({ page }) => {
+      await page.goto("/?m=fresh");
+      await page.getByRole("button", { name: "Keep" }).click();
+      await page.getByLabel(/Type something to keep/).fill("Bins go out on Tuesday");
+      await page.getByRole("button", { name: "Keep", exact: true }).click();
+      await expect(
+        page.getByText("It’s on today’s journal, and Ask can find it by its words."),
+      ).toBeVisible();
+      await clean(page);
+      await shot(page, `after-kept-${scheme}`);
+      await page.goto("/?m=fresh&v=keep");
+      await page.getByLabel(/Type something to keep/).fill("no room left");
+      await page.getByRole("button", { name: "Keep", exact: true }).click();
+      await expect(
+        page.getByText("There wasn’t room to keep this. Free some room and try again."),
+      ).toBeVisible();
+      await clean(page);
+      await shot(page, `after-keep-full-${scheme}`);
+    });
+
+    test("the line before the microphone prompt", async ({ page }) => {
+      await page.goto("/?m=fresh&v=keep");
+      await page.getByRole("button", { name: /Record/ }).click();
+      await expect(page.getByText(/^Next, Android asks/)).toBeVisible();
+      await clean(page);
+      await shot(page, `after-voice-ask-${scheme}`);
+    });
+
+    test("Replace what's on this phone?", async ({ page }) => {
+      await page.goto("/?m=first&s=welcome");
+      await page.getByRole("button", { name: "I have a backup" }).click();
+      await page.getByRole("button", { name: "Choose the file" }).click();
+      await page.getByLabel("Passphrase for this backup").fill("already here");
+      await page.getByRole("button", { name: "Bring it back" }).click();
+      await expect(
+        page.getByRole("heading", { name: "Replace what’s on this phone?" }),
+      ).toBeVisible();
+      await clean(page);
+      await shot(page, `after-replace-${scheme}`);
+    });
+
     test("the memory can't be opened, then bringing back a backup", async ({ page }) => {
       await page.goto("/?m=damaged");
       await expect(
