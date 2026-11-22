@@ -215,6 +215,23 @@ export function homeState(scenario: HomeScenario) {
           },
         };
       }
+      case "keepCheckIn":
+        return {
+          type: "checkIn",
+          checkin: {
+            id: call.clientId,
+            keptAt: at("09:30"),
+            day: HOME_DAY,
+            feeling: call.input.feeling,
+            line: call.input.line,
+            urge: call.input.urge,
+            about: null,
+            tried: [],
+            fromDevice: null,
+            mentions: [],
+            leftOut: false,
+          },
+        };
       case "unkeep":
         rows = rows.filter((r) => r.item.id !== call.id);
         return { type: "done" };

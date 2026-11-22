@@ -395,6 +395,21 @@ describe("keeping and an item on a phone alone", () => {
     expect(screen.queryByText(/computer/)).toBeNull();
   });
 
+  it("says a saved check-in is on the phone, with no name and no time to change its mind", async () => {
+    await app("m=fresh");
+    fireEvent.click(
+      await screen.findByRole("button", { name: /^How are you feeling\?\s*Check in$/ }),
+    );
+    fireEvent.click(await screen.findByRole("radio", { name: "Settled" }));
+    const sheet = await screen.findByRole("dialog", { name: "Words for Settled" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "relieved" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    await screen.findByText(/^Check-in · /);
+    expect(screen.getByText(/^Check-in · \d{1,2}:\d{2}( am| pm)?$/)).toBeInTheDocument();
+    expect(screen.getByText("Changed your mind?")).toBeInTheDocument();
+    expect(screen.queryByText(/kept from|Until|too late|computer/)).toBeNull();
+  }, 15_000);
+
   it("says when there was no room to keep it", async () => {
     await app("m=fresh");
     fireEvent.click(await screen.findByRole("button", { name: "Keep" }));

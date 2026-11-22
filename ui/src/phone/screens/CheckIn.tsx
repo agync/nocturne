@@ -66,6 +66,8 @@ interface CheckInProps {
   onQueued(): void;
   /** The app: "Last night: {asleep} asleep" above the field, once the night has come in. */
   lastNight?: boolean;
+  /** A phone alone: no computer, so no phone name, no time limit on changing its mind. */
+  alone?: boolean;
 }
 
 /** A light tap of vibration, only where the phone has one and the person has not asked for less motion. */
@@ -237,6 +239,7 @@ export function CheckIn({
   onBack,
   onQueued,
   lastNight = false,
+  alone = false,
 }: CheckInProps) {
   const [state, setState] = useState<State>({ name: "compose" });
   const [mode, setMode] = useState<Mode>("field");
@@ -361,9 +364,11 @@ export function CheckIn({
         <main className="ph-main">
           <div className="ph-live" role="alert" style={{ flex: "none" }}>
             <h1 className="ph-h1" tabIndex={-1} ref={heading}>
-              {t("phone.keep.failed.title")}
+              {t(alone ? "phone.alone.keep.failed.title" : "phone.keep.failed.title")}
             </h1>
-            <p className="ph-body">{t("phone.keep.failed.body")}</p>
+            <p className="ph-body">
+              {t(alone ? "phone.alone.keep.failed.body" : "phone.keep.failed.body")}
+            </p>
           </div>
           <div className="ph-spacer ph-stack">
             <Button kind="primary" onClick={() => setState({ name: "compose" })}>
@@ -430,10 +435,12 @@ export function CheckIn({
           </p>
           <p className="ph-body">{t("journal.quick.keptMessage")}</p>
           <p className="ph-rc" style={{ color: "var(--ink2)" }}>
-            {t("phone.journal.checkin.from", {
-              time: formatTime12(checkin.keptAt),
-              name: deviceName,
-            })}
+            {alone
+              ? t("phone.alone.checkin.from", { time: formatTime12(checkin.keptAt) })
+              : t("phone.journal.checkin.from", {
+                  time: formatTime12(checkin.keptAt),
+                  name: deviceName,
+                })}
           </p>
           <div className="ph-card" style={{ gap: 10 }}>
             {state.undone ? (
@@ -441,13 +448,17 @@ export function CheckIn({
                 {t("phone.keep.undone")}
               </span>
             ) : state.late ? (
-              <span className="ph-rc" role="status">
-                {t("phone.keep.undo.late")}
-              </span>
+              alone ? null : (
+                <span className="ph-rc" role="status">
+                  {t("phone.keep.undo.late")}
+                </span>
+              )
             ) : (
               <>
                 <span className="ph-card-title">
-                  {t("phone.keep.undo", { time: formatTime12(until) })}
+                  {alone
+                    ? t("phone.alone.keep.undo")
+                    : t("phone.keep.undo", { time: formatTime12(until) })}
                 </span>
                 <Button
                   kind="quiet"
